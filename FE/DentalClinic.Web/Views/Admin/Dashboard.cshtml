@@ -1,0 +1,128 @@
+@model DashboardViewModel
+@{
+    ViewData["Title"] = "Admin Console";
+}
+
+<div class="container-fluid p-0">
+    <!-- Page Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge-dc badge-role-systemadministrator">System Administrator</span>
+                <span class="badge bg-white text-muted border small">01 Central Clinic</span>
+            </div>
+            <h1 class="page-title">@Model.Title</h1>
+            <p class="page-subtitle">@Model.Subtitle</p>
+        </div>
+        <div class="page-actions">
+            <button type="button" class="btn btn-dc-outline" onclick="alert('Connects to Audit Log Export API.');">
+                <i class="bi bi-file-earmark-arrow-down me-1"></i> Export Logs
+            </button>
+            <button type="button" class="btn btn-dc-primary" onclick="alert('Connects to Staff Provisioning API.');">
+                <i class="bi bi-person-plus me-1"></i> Create Staff Account
+            </button>
+        </div>
+    </div>
+
+    <!-- 4 KPI Stat Cards (No Fake System Status) -->
+    <div class="row g-3 mb-4">
+        @foreach (var stat in Model.StatCards)
+        {
+            <div class="col-sm-6 col-xl-3">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">@stat.Title</span>
+                        <div class="stat-icon-box stat-icon-@stat.ColorClass">
+                            <i class="bi @stat.Icon"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="stat-value">@stat.Value</div>
+                        <div class="stat-note">
+                            <i class="bi bi-info-circle"></i> @stat.Note
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Administrative Quick Action Cards Section -->
+    <div class="mb-4">
+        <h5 class="font-heading fs-6 fw-bold text-dark mb-3">System Administration & Provisioning</h5>
+        <div class="row g-3">
+            @foreach (var card in Model.Cards)
+            {
+                <div class="col-md-6 col-lg-4 col-xl-3">
+                    <div class="card-quick-action">
+                        <div>
+                            <div class="quick-icon-box quick-icon-@card.ColorClass">
+                                <i class="bi @card.Icon"></i>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1">@card.Title</h6>
+                            <p class="text-muted small mb-3">@card.Description</p>
+                        </div>
+                        <div>
+                            <a href="@card.ActionUrl" class="btn btn-light btn-sm text-primary w-100 fw-semibold border" onclick="alert('Feature will connect to admin backend API according to project milestones.'); return false;">
+                                @card.ActionText <i class="bi bi-arrow-right ms-1"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Audit Logs Section with Filter Bar -->
+    <div class="card-dc mb-4">
+        <div class="card-dc-header">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-shield-check text-primary"></i>
+                <span>Recent System & Security Audit Logs</span>
+            </div>
+            <span class="badge bg-light text-muted border small">Immutable Records</span>
+        </div>
+        <div class="card-dc-body p-3">
+            <div class="filter-bar-dc">
+                <div class="filter-group">
+                    <div class="filter-search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" placeholder="Search audit logs by actor, event type, or entity ID..." />
+                    </div>
+                    <select class="form-select filter-select" style="width: auto;">
+                        <option value="">All Event Categories</option>
+                        <option value="Auth">Authentication</option>
+                        <option value="Account">Account Status Change</option>
+                        <option value="Department">Department Structure</option>
+                        <option value="Clinic">Clinic Configuration</option>
+                    </select>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-dc-outline btn-sm">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table-dc">
+                    <thead>
+                        <tr>
+                            <th>Timestamp (UTC)</th>
+                            <th>Actor (Account)</th>
+                            <th>Event Type</th>
+                            <th>Target Entity</th>
+                            <th>IP Address</th>
+                            <th>Outcome</th>
+                            <th class="text-end">Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Dynamically populated from backend audit log service -->
+                    </tbody>
+                </table>
+            </div>
+            <partial name="_EmptyState" model="Model.EmptyState" />
+        </div>
+    </div>
+</div>

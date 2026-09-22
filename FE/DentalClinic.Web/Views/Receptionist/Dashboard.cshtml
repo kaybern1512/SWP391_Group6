@@ -1,0 +1,141 @@
+@model DashboardViewModel
+@{
+    ViewData["Title"] = "Reception Desk";
+}
+
+<div class="container-fluid p-0">
+    <!-- Page Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge-dc badge-role-receptionist">Receptionist</span>
+                @if (!string.IsNullOrEmpty(Model.Code))
+                {
+                    <span class="badge bg-white text-muted border small">Staff: @Model.Code</span>
+                }
+            </div>
+            <h1 class="page-title">@Model.Title</h1>
+            <p class="page-subtitle">@Model.Subtitle</p>
+        </div>
+        <div class="page-actions">
+            <button type="button" class="btn btn-dc-outline" onclick="alert('Feature connects to Patient Registry API.');">
+                <i class="bi bi-search me-1"></i> Find Patient
+            </button>
+            <button type="button" class="btn btn-dc-primary" onclick="alert('Feature connects to Check-in API.');">
+                <i class="bi bi-person-check me-1"></i> Check In Patient
+            </button>
+        </div>
+    </div>
+
+    <!-- 4 KPI Stat Cards (No Fake Numbers) -->
+    <div class="row g-3 mb-4">
+        @foreach (var stat in Model.StatCards)
+        {
+            <div class="col-sm-6 col-xl-3">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">@stat.Title</span>
+                        <div class="stat-icon-box stat-icon-@stat.ColorClass">
+                            <i class="bi @stat.Icon"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="stat-value">@stat.Value</div>
+                        <div class="stat-note">
+                            <i class="bi bi-info-circle"></i> @stat.Note
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Quick Action Cards Section -->
+    <div class="mb-4">
+        <h5 class="font-heading fs-6 fw-bold text-dark mb-3">Front Desk Workflows</h5>
+        <div class="row g-3">
+            @foreach (var card in Model.Cards)
+            {
+                <div class="col-md-6 col-lg-4 col-xl">
+                    <div class="card-quick-action">
+                        <div>
+                            <div class="quick-icon-box quick-icon-@card.ColorClass">
+                                <i class="bi @card.Icon"></i>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1">@card.Title</h6>
+                            <p class="text-muted small mb-3">@card.Description</p>
+                        </div>
+                        <div>
+                            <a href="@card.ActionUrl" class="btn btn-light btn-sm text-primary w-100 fw-semibold border" onclick="alert('Feature will connect to front-desk API according to project milestones.'); return false;">
+                                @card.ActionText <i class="bi bi-arrow-right ms-1"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Appointment Requests Section with Table & Filter Bar -->
+    <div class="card-dc mb-4">
+        <div class="card-dc-header">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-calendar-check text-primary"></i>
+                <span>Today's Appointment Triage & Check-in Queue</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge-dc badge-status-waiting">Queue Active</span>
+            </div>
+        </div>
+        <div class="card-dc-body p-3">
+            <!-- Reusable Filter Bar -->
+            <div class="filter-bar-dc">
+                <div class="filter-group">
+                    <div class="filter-search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" placeholder="Search by patient name, phone, or code..." />
+                    </div>
+                    <select class="form-select filter-select" style="width: auto;">
+                        <option value="">All Statuses</option>
+                        <option value="Confirmed">Confirmed</option>
+                        <option value="Waiting">Waiting Check-in</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                    <select class="form-select filter-select" style="width: auto;">
+                        <option value="">All Departments</option>
+                        <option value="General">General Dentistry</option>
+                        <option value="Orthodontics">Orthodontics</option>
+                        <option value="Endodontics">Endodontics</option>
+                        <option value="Prosthodontics">Prosthodontics</option>
+                    </select>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-dc-outline btn-sm">
+                        <i class="bi bi-x-circle me-1"></i> Clear
+                    </button>
+                </div>
+            </div>
+
+            <!-- Table Container with Empty State -->
+            <div class="table-responsive">
+                <table class="table-dc">
+                    <thead>
+                        <tr>
+                            <th>Queue #</th>
+                            <th>Patient Name</th>
+                            <th>Specialty / Dept</th>
+                            <th>Attending Dentist</th>
+                            <th>Time Slot</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- When connected to API, rows render dynamically. Shows empty state when empty: -->
+                    </tbody>
+                </table>
+            </div>
+            <partial name="_EmptyState" model="Model.EmptyState" />
+        </div>
+    </div>
+</div>

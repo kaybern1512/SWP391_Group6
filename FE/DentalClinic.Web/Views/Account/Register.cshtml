@@ -1,0 +1,107 @@
+@model RegisterViewModel
+@{
+    Layout = "_AuthLayout";
+    ViewData["Title"] = "Register Patient Account";
+}
+
+<div class="auth-card-header">
+    <h2 class="auth-card-title">Patient Registration</h2>
+    <p class="auth-card-subtitle">Create a patient profile to book appointments and monitor dental care</p>
+</div>
+
+<form asp-controller="Account" asp-action="Register" method="post" novalidate>
+    @Html.AntiForgeryToken()
+
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small mb-3"></div>
+
+    <div class="mb-3">
+        <label asp-for="FullName" class="form-label">Full Name</label>
+        <div class="input-group">
+            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person"></i></span>
+            <input asp-for="FullName" class="form-control border-start-0" placeholder="e.g. John Doe" />
+        </div>
+        <span asp-validation-for="FullName" class="text-danger small"></span>
+    </div>
+
+    <div class="mb-3">
+        <label asp-for="Email" class="form-label">Email Address</label>
+        <div class="input-group">
+            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
+            <input asp-for="Email" type="email" class="form-control border-start-0" placeholder="name@domain.com" />
+        </div>
+        <span asp-validation-for="Email" class="text-danger small"></span>
+    </div>
+
+    <div class="row g-2 mb-3">
+        <div class="col-md-7">
+            <label asp-for="PhoneNumber" class="form-label">Phone Number</label>
+            <div class="input-group">
+                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-telephone"></i></span>
+                <input asp-for="PhoneNumber" class="form-control border-start-0" placeholder="0912345678" />
+            </div>
+            <span asp-validation-for="PhoneNumber" class="text-danger small"></span>
+        </div>
+        <div class="col-md-5">
+            <label asp-for="Gender" class="form-label">Gender</label>
+            <select asp-for="Gender" class="form-select">
+                <option value="">Select</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+            </select>
+            <span asp-validation-for="Gender" class="text-danger small"></span>
+        </div>
+    </div>
+
+    <div class="mb-3">
+        <label asp-for="DateOfBirth" class="form-label">Date of Birth</label>
+        <div class="input-group">
+            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-calendar"></i></span>
+            <input asp-for="DateOfBirth" type="date" class="form-control border-start-0" />
+        </div>
+        <span asp-validation-for="DateOfBirth" class="text-danger small"></span>
+    </div>
+
+    <div class="mb-3">
+        <label asp-for="Password" class="form-label">Password</label>
+        <div class="input-password-wrapper">
+            <input asp-for="Password" type="password" id="registerPasswordInput" class="form-control pe-5" placeholder="Minimum 8 characters (uppercase, lowercase, number, symbol)" />
+            <button type="button" class="password-toggle-btn" data-target="registerPasswordInput" title="Toggle password visibility">
+                <i class="bi bi-eye"></i>
+            </button>
+        </div>
+        <span asp-validation-for="Password" class="text-danger small"></span>
+    </div>
+
+    <div class="mb-3">
+        <label asp-for="ConfirmPassword" class="form-label">Confirm Password</label>
+        <div class="input-password-wrapper">
+            <input asp-for="ConfirmPassword" type="password" id="registerConfirmPasswordInput" class="form-control pe-5" placeholder="Re-enter your password" />
+            <button type="button" class="password-toggle-btn" data-target="registerConfirmPasswordInput" title="Toggle password visibility">
+                <i class="bi bi-eye"></i>
+            </button>
+        </div>
+        <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+    </div>
+
+    <div class="form-check mb-4">
+        <input asp-for="AgreeTerms" class="form-check-input" id="agreeCheck" />
+        <label class="form-check-label small text-muted" for="agreeCheck">
+            I agree to the <a href="#" class="text-primary text-decoration-none">Terms of Service</a> and <a href="#" class="text-primary text-decoration-none">Medical Privacy Policy</a>.
+        </label>
+        <div><span asp-validation-for="AgreeTerms" class="text-danger small"></span></div>
+    </div>
+
+    <button type="submit" class="btn btn-dc-primary w-100 py-2 fs-6">
+        <i class="bi bi-check2-circle me-1"></i> Complete Registration
+    </button>
+
+    <div class="text-center mt-3 small text-muted">
+        Already have a clinic account?
+        <a asp-controller="Account" asp-action="Login" class="text-primary fw-semibold text-decoration-none">Sign In</a>
+    </div>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

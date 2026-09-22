@@ -1,0 +1,260 @@
+/* ==========================================================================
+   DentalCare CMS - Modern Enterprise Auth Styling
+   ========================================================================== */
+
+.auth-wrapper {
+  min-height: 100vh;
+  display: flex;
+  background-color: var(--dc-bg);
+}
+
+/* Left Hero Banner (Medical Enterprise Theme) */
+.auth-sidebar {
+  flex: 1;
+  background: linear-gradient(155deg, #0f172a 0%, #1e293b 50%, #0f766e 100%);
+  color: #ffffff;
+  padding: 4.5rem 3.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-sidebar::before {
+  content: '';
+  position: absolute;
+  top: -15%;
+  right: -15%;
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.15) 0%, rgba(15, 23, 42, 0) 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 3.5rem;
+}
+
+.auth-brand-logo {
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 1.5rem;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.auth-brand-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.15;
+}
+
+.auth-brand-subtitle {
+  font-size: 0.725rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.auth-hero-headline {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 2.15rem;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.25;
+  margin-bottom: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.auth-hero-description {
+  color: #94a3b8;
+  font-size: 1rem;
+  line-height: 1.6;
+  max-width: 460px;
+  margin-bottom: 2.5rem;
+}
+
+/* Feature Benefits (No Fake Metrics) */
+.auth-benefits-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  margin-top: auto;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.auth-benefit-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.auth-benefit-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--dc-radius-sm);
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #60a5fa;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.auth-benefit-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 2px;
+}
+
+.auth-benefit-desc {
+  font-size: 0.8125rem;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+/* Right Content Area */
+.auth-main {
+  flex: 1.15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3.5rem 2.5rem;
+  background-color: #ffffff;
+  overflow-y: auto;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 460px;
+}
+
+.auth-card-header {
+  margin-bottom: 2rem;
+}
+
+.auth-card-title {
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: var(--dc-navy-primary);
+  margin-bottom: 0.4rem;
+  letter-spacing: -0.02em;
+}
+
+.auth-card-subtitle {
+  color: var(--dc-text-muted);
+  font-size: 0.9375rem;
+}
+
+/* Social Google Button */
+.btn-google {
+  background-color: #ffffff;
+  border: 1px solid var(--dc-border);
+  color: #334155;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0.65rem 1rem;
+  border-radius: var(--dc-radius-sm);
+  width: 100%;
+  transition: all 0.15s ease;
+}
+
+.btn-google:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 1.5rem 0;
+  color: var(--dc-text-light);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.auth-divider::before, .auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background-color: var(--dc-border);
+}
+
+.auth-divider span {
+  padding: 0 0.85rem;
+}
+
+/* Password Visibility Toggle */
+.input-password-wrapper {
+  position: relative;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  z-index: 5;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s ease;
+}
+
+.password-toggle-btn:hover {
+  color: var(--dc-medical-blue);
+}
+
+/* OTP Code Box */
+.otp-input-field {
+  letter-spacing: 0.45em;
+  font-size: 1.75rem;
+  font-weight: 700;
+  text-align: center;
+  height: 56px;
+  border-radius: var(--dc-radius-md);
+}
+
+@media (max-width: 992px) {
+  .auth-sidebar {
+    display: none;
+  }
+  
+  .auth-main {
+    padding: 2.5rem 1.25rem;
+    background-color: var(--dc-bg);
+  }
+  
+  .auth-card {
+    background-color: #ffffff;
+    padding: 2.25rem 1.75rem;
+    border-radius: var(--dc-radius-lg);
+    border: 1px solid var(--dc-border);
+    box-shadow: var(--dc-shadow-card);
+  }
+}

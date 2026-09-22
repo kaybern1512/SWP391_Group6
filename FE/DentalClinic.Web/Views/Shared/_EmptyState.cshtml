@@ -1,0 +1,15 @@
+@model DentalClinic.Web.ViewModels.Dashboard.EmptyStateViewModel
+
+<div class="empty-state-dc">
+    <div class="empty-state-icon-box">
+        <i class="bi @(string.IsNullOrEmpty(Model.Icon) ? "bi-inbox" : Model.Icon)"></i>
+    </div>
+    <h5 class="empty-state-title">@Model.Title</h5>
+    <p class="empty-state-desc">@Model.Description</p>
+    @if (!string.IsNullOrEmpty(Model.ActionUrl) && !string.IsNullOrEmpty(Model.ActionText) && Model.ActionUrl != "#")
+    {
+        <a href="@Model.ActionUrl" class="btn btn-dc-primary btn-sm">
+            @Model.ActionText
+        </a>
+    }
+</div>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - DentalCare Clinic Management System</title>
+    
+    <!-- Google Fonts: Plus Jakarta Sans (Headings) & Inter (Body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Bootstrap 5 CSS & Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+
+    <!-- Application Theme Stylesheets -->
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/dashboard.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/profile.css" asp-append-version="true" />
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body>
+@if (User.Identity?.IsAuthenticated == true)
+{
+    <div class="app-wrapper">
+        <partial name="_Sidebar" />
+        <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+        <div class="app-main">
+            <partial name="_Navbar" />
+            <main class="app-content">
+                <partial name="_AlertMessage" />
+                @RenderBody()
+            </main>
+            <footer class="app-footer">
+                <div>
+                    &copy; @DateTime.UtcNow.Year <strong>DentalCare</strong> &bull; Multi-Specialty Dental Clinic Management System
+                </div>
+                <div class="text-muted small">
+                    Clinical Enterprise Edition &bull; Safe & Confidential EMR
+                </div>
+            </footer>
+        </div>
+    </div>
+}
+else
+{
+    <!-- Public Header for Landing Pages -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top py-3">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center gap-2" asp-controller="Home" asp-action="Index">
+                <div class="clinic-brand-logo" style="width: 36px; height: 36px;">
+                    <i class="bi bi-hospital"></i>
+                </div>
+                <div class="clinic-brand-text">
+                    <span class="clinic-name text-dark fs-5">DentalCare</span>
+                    <span class="badge badge-dc badge-role-patient ms-1" style="font-size: 0.65rem;">Clinic MS</span>
+                </div>
+            </a>
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#publicNavbar" aria-controls="publicNavbar" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="publicNavbar">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-4">
+                    <li class="nav-item">
+                        <a class="nav-link text-dark fw-semibold" asp-controller="Home" asp-action="Index">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-muted" href="#specialties">Specialties</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-muted" href="#features">Digital Records</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-muted" href="#clinic-info">Clinic Info</a>
+                    </li>
+                </ul>
+                <div class="d-flex align-items-center gap-2">
+                    <partial name="_UserMenu" />
+                </div>
+            </div>
+        </div>
+    </nav>
+    <main>
+        <div class="container pt-3">
+            <partial name="_AlertMessage" />
+        </div>
+        @RenderBody()
+    </main>
+    <footer class="bg-white border-top py-4 mt-5">
+        <div class="container text-center small text-muted">
+            <div class="mb-2">
+                <strong class="text-dark">DentalCare</strong> &bull; Multi-Specialty Dental Clinic Management System
+            </div>
+            <div>
+                &copy; @DateTime.UtcNow.Year DentalCare. Centralized electronic dental records and multi-specialty care coordination.
+            </div>
+        </div>
+    </footer>
+}
+
+<!-- Bootstrap 5 JS Bundle -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Application JS -->
+<script src="~/js/site.js" asp-append-version="true"></script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

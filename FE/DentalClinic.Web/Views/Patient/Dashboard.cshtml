@@ -1,0 +1,130 @@
+@model DashboardViewModel
+@{
+    ViewData["Title"] = "Patient Portal";
+}
+
+<div class="container-fluid p-0">
+    <!-- Page Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge-dc badge-role-patient">Patient</span>
+                @if (!string.IsNullOrEmpty(Model.Code))
+                {
+                    <span class="badge bg-white text-muted border small">ID: @Model.Code</span>
+                }
+            </div>
+            <h1 class="page-title">Welcome back, @Model.FullName</h1>
+            <p class="page-subtitle">@Model.Subtitle</p>
+        </div>
+        <div class="page-actions">
+            <a asp-controller="Profile" asp-action="Index" class="btn btn-dc-outline">
+                <i class="bi bi-person-circle me-1"></i> My Profile
+            </a>
+            <button type="button" class="btn btn-dc-primary" onclick="alert('Online appointment booking connects to Appointment API.');">
+                <i class="bi bi-calendar-plus me-1"></i> Book Appointment
+            </button>
+        </div>
+    </div>
+
+    <!-- 4 KPI Stat Cards (No Fake Numbers) -->
+    <div class="row g-3 mb-4">
+        @foreach (var stat in Model.StatCards)
+        {
+            <div class="col-sm-6 col-xl-3">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">@stat.Title</span>
+                        <div class="stat-icon-box stat-icon-@stat.ColorClass">
+                            <i class="bi @stat.Icon"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="stat-value">@stat.Value</div>
+                        <div class="stat-note">
+                            <i class="bi bi-info-circle"></i> @stat.Note
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Quick Action Cards Section -->
+    <div class="mb-4">
+        <h5 class="font-heading fs-6 fw-bold text-dark mb-3">Quick Clinical Actions</h5>
+        <div class="row g-3">
+            @foreach (var card in Model.Cards)
+            {
+                <div class="col-md-6 col-lg-4 col-xl">
+                    <div class="card-quick-action">
+                        <div>
+                            <div class="quick-icon-box quick-icon-@card.ColorClass">
+                                <i class="bi @card.Icon"></i>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1">@card.Title</h6>
+                            <p class="text-muted small mb-3">@card.Description</p>
+                        </div>
+                        <div>
+                            <a href="@card.ActionUrl" class="btn btn-light btn-sm text-primary w-100 fw-semibold border" onclick="alert('Feature will connect to backend API according to project milestones.'); return false;">
+                                @card.ActionText <i class="bi bi-arrow-right ms-1"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Two-Column Context Workspace -->
+    <div class="row g-4">
+        <!-- Upcoming Visits & Treatment Schedule -->
+        <div class="col-lg-8">
+            <div class="card-dc">
+                <div class="card-dc-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-calendar-event text-primary"></i>
+                        <span>Upcoming Appointments & Clinical Schedule</span>
+                    </div>
+                    <span class="badge-dc badge-status-neutral">Live Feed</span>
+                </div>
+                <div class="card-dc-body p-0">
+                    <partial name="_EmptyState" model="Model.EmptyState" />
+                </div>
+            </div>
+        </div>
+
+        <!-- Invoices & Billing Summary -->
+        <div class="col-lg-4">
+            <div class="card-dc mb-4">
+                <div class="card-dc-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-receipt text-warning"></i>
+                        <span>Billing & Invoices</span>
+                    </div>
+                </div>
+                <div class="card-dc-body p-4 text-center">
+                    <div class="empty-state-icon-box mb-2" style="width: 48px; height: 48px; font-size: 1.25rem;">
+                        <i class="bi bi-check2-circle text-success"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-1">No Pending Invoices</h6>
+                    <p class="text-muted small mb-0">All previous clinical consultations and procedures are up to date.</p>
+                </div>
+            </div>
+
+            <!-- Clinic Contact Notice -->
+            <div class="card-dc bg-light border">
+                <div class="card-dc-body p-3">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-hospital text-primary"></i>
+                        <span class="fw-semibold text-dark small">DentalCare Clinic Center</span>
+                    </div>
+                    <p class="text-muted small mb-2">Need to reschedule or request emergency dental assistance? Contact front desk reception.</p>
+                    <a href="tel:19001234" class="btn btn-dc-outline btn-sm w-100">
+                        <i class="bi bi-telephone me-1"></i> Support Desk
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

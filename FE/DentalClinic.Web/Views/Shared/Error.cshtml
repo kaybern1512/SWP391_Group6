@@ -1,0 +1,30 @@
+@{
+    ViewData["Title"] = "System Error";
+    var statusCode = ViewBag.StatusCode as int?;
+}
+
+<div class="container py-5 text-center">
+    <div class="card-dc p-5 mx-auto" style="max-width: 580px;">
+        <div class="empty-state-icon-box mx-auto mb-3" style="width: 64px; height: 64px; background-color: var(--dc-danger-bg); color: var(--dc-danger);">
+            <i class="bi bi-exclamation-octagon fs-2"></i>
+        </div>
+        <h2 class="fw-bold text-dark mb-2">
+            @(statusCode.HasValue ? $"Error {statusCode.Value}" : "An Error Occurred")
+        </h2>
+        <p class="text-muted mb-4">
+            @(statusCode == 404
+                ? "The requested page or resource could not be found or may have been moved."
+                : statusCode == 403
+                    ? "You do not possess the necessary permissions to access this clinical area."
+                    : "The system encountered an unexpected issue while processing your request. Please try again shortly or contact the administrator.")
+        </p>
+        <div class="d-flex justify-content-center gap-2">
+            <a asp-controller="Home" asp-action="Index" class="btn btn-dc-primary">
+                <i class="bi bi-house-door me-1"></i> Return Home
+            </a>
+            <button onclick="history.back()" class="btn btn-dc-outline">
+                <i class="bi bi-arrow-left me-1"></i> Go Back
+            </button>
+        </div>
+    </div>
+</div>

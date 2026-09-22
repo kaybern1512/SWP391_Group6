@@ -1,0 +1,127 @@
+@model EditProfileViewModel
+@{
+    ViewData["Title"] = "Edit Profile";
+}
+
+<div class="container-fluid p-0" style="max-width: 860px;">
+    <!-- Breadcrumb -->
+    <ul class="breadcrumb-dc mb-3">
+        <li><a asp-controller="Profile" asp-action="Index">Profile</a></li>
+        <li class="separator">/</li>
+        <li class="active">Edit Profile</li>
+    </ul>
+
+    <div class="card-dc">
+        <div class="card-dc-header">
+            <div>
+                <div class="fs-6 fw-bold text-dark">Edit Profile</div>
+                <div class="text-muted small">Update your personal demographics and contact records</div>
+            </div>
+            @if (!string.IsNullOrEmpty(Model.Code))
+            {
+                <span class="badge bg-light text-primary border">ID: @Model.Code</span>
+            }
+        </div>
+
+        <div class="card-dc-body p-4">
+            <form asp-controller="Profile" asp-action="Edit" method="post" novalidate>
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="Role" />
+                <input type="hidden" asp-for="Code" />
+
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small mb-4"></div>
+
+                <!-- Readonly Login Identity -->
+                <div class="mb-4 pb-3 border-bottom">
+                    <label asp-for="Email" class="form-label">Email Address</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
+                        <input asp-for="Email" class="form-control bg-light text-muted border-start-0" readonly />
+                        <span class="input-group-text bg-light small text-muted">Fixed Login ID</span>
+                    </div>
+                    <small class="text-muted d-block mt-1">Your registered email address serves as your primary security identity and cannot be edited directly.</small>
+                </div>
+
+                <!-- Section 1: Personal Information -->
+                <div class="form-section-title">
+                    <i class="bi bi-person text-primary"></i> Personal Information
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label asp-for="FullName" class="form-label">Full Legal Name</label>
+                        <input asp-for="FullName" class="form-control" placeholder="e.g. John Doe" />
+                        <span asp-validation-for="FullName" class="text-danger small"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="DateOfBirth" class="form-label">Date of Birth</label>
+                        <input asp-for="DateOfBirth" type="date" class="form-control" />
+                        <span asp-validation-for="DateOfBirth" class="text-danger small"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="PhoneNumber" class="form-label">Contact Phone</label>
+                        <input asp-for="PhoneNumber" class="form-control" placeholder="0912345678" />
+                        <span asp-validation-for="PhoneNumber" class="text-danger small"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="Gender" class="form-label">Gender</label>
+                        <select asp-for="Gender" class="form-select">
+                            <option value="">Select Gender</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                        </select>
+                        <span asp-validation-for="Gender" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <!-- Section 2: Contact Information -->
+                <div class="form-section-title">
+                    <i class="bi bi-geo-alt text-teal"></i> Contact Information
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-12">
+                        <label asp-for="Address" class="form-label">Residential Address</label>
+                        <input asp-for="Address" class="form-control" placeholder="Street number, Ward, District, City" />
+                        <span asp-validation-for="Address" class="text-danger small"></span>
+                    </div>
+                    <div class="col-12">
+                        <label asp-for="EmergencyContact" class="form-label">Emergency Contact</label>
+                        <input asp-for="EmergencyContact" class="form-control" placeholder="e.g. Relative Name - 0987654321" />
+                        <span asp-validation-for="EmergencyContact" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <!-- Section 3: Insurance & Identification -->
+                <div class="form-section-title">
+                    <i class="bi bi-shield-check text-info"></i> Insurance & Identification
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label asp-for="NationalId" class="form-label">National ID Number (CCCD)</label>
+                        <input asp-for="NationalId" class="form-control" placeholder="12-digit ID" />
+                        <span asp-validation-for="NationalId" class="text-danger small"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="HealthInsuranceNumber" class="form-label">Health Insurance Number (BHYT)</label>
+                        <input asp-for="HealthInsuranceNumber" class="form-control" placeholder="e.g. DN4012345678901" />
+                        <span asp-validation-for="HealthInsuranceNumber" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 pt-3 border-top">
+                    <a asp-controller="Profile" asp-action="Index" class="btn btn-dc-outline">Cancel</a>
+                    <button type="submit" class="btn btn-dc-primary">
+                        <i class="bi bi-check-lg me-1"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

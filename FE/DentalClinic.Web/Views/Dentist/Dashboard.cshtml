@@ -1,0 +1,123 @@
+@model DashboardViewModel
+@{
+    ViewData["Title"] = "Dentist Clinical Workspace";
+}
+
+<div class="container-fluid p-0">
+    <!-- Page Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge-dc badge-role-dentist">Dentist</span>
+                <span class="badge-dc badge-status-confirmed">
+                    <i class="bi bi-circle-fill" style="font-size: 0.5rem;"></i> Available on Chair
+                </span>
+                @if (!string.IsNullOrEmpty(Model.Code))
+                {
+                    <span class="badge bg-white text-muted border small">License: @Model.Code</span>
+                }
+            </div>
+            <h1 class="page-title">Good morning, Dr. @Model.FullName</h1>
+            <p class="page-subtitle">@Model.Subtitle</p>
+        </div>
+        <div class="page-actions">
+            <button type="button" class="btn btn-dc-outline" onclick="alert('Feature connects to Dentist Availability API.');">
+                <i class="bi bi-toggle-on me-1"></i> Update Status
+            </button>
+            <button type="button" class="btn btn-dc-primary" onclick="alert('Feature connects to Clinical Consultation API.');">
+                <i class="bi bi-clipboard2-pulse me-1"></i> Call Next Patient
+            </button>
+        </div>
+    </div>
+
+    <!-- 4 KPI Stat Cards (No Fake Numbers) -->
+    <div class="row g-3 mb-4">
+        @foreach (var stat in Model.StatCards)
+        {
+            <div class="col-sm-6 col-xl-3">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">@stat.Title</span>
+                        <div class="stat-icon-box stat-icon-@stat.ColorClass">
+                            <i class="bi @stat.Icon"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="stat-value">@stat.Value</div>
+                        <div class="stat-note">
+                            <i class="bi bi-info-circle"></i> @stat.Note
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Quick Action Cards Section -->
+    <div class="mb-4">
+        <h5 class="font-heading fs-6 fw-bold text-dark mb-3">Clinical Operations & Procedures</h5>
+        <div class="row g-3">
+            @foreach (var card in Model.Cards)
+            {
+                <div class="col-md-6 col-lg-3">
+                    <div class="card-quick-action">
+                        <div>
+                            <div class="quick-icon-box quick-icon-@card.ColorClass">
+                                <i class="bi @card.Icon"></i>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1">@card.Title</h6>
+                            <p class="text-muted small mb-3">@card.Description</p>
+                        </div>
+                        <div>
+                            <a href="@card.ActionUrl" class="btn btn-light btn-sm text-primary w-100 fw-semibold border" onclick="alert('Feature will connect to clinical backend API according to project milestones.'); return false;">
+                                @card.ActionText <i class="bi bi-arrow-right ms-1"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Clinical Workspace: Next Patient Card + Chair Timeline -->
+    <div class="row g-4">
+        <!-- Next Patient in Chair Card -->
+        <div class="col-lg-5">
+            <div class="card-dc h-100">
+                <div class="card-dc-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-person-fill text-primary"></i>
+                        <span>Next Patient in Chair</span>
+                    </div>
+                    <span class="badge-dc badge-status-waiting">Queued</span>
+                </div>
+                <div class="card-dc-body p-4 text-center">
+                    <div class="empty-state-icon-box mb-2" style="width: 52px; height: 52px; font-size: 1.35rem;">
+                        <i class="bi bi-person-slash text-muted"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-1">Chair Currently Available</h6>
+                    <p class="text-muted small mb-3">No patient has been checked into this operating chair yet. Once admitted from the front desk, patient details, chief complaint, and FDI Odontogram will appear here.</p>
+                    <button type="button" class="btn btn-dc-outline btn-sm" onclick="alert('Connects to front desk check-in queue.');">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Refresh Queue
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Today's Clinical Schedule Timeline -->
+        <div class="col-lg-7">
+            <div class="card-dc h-100">
+                <div class="card-dc-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-clock-history text-teal"></i>
+                        <span>Today's Treatment Schedule</span>
+                    </div>
+                    <span class="badge bg-light text-muted border small">Clinical Roster</span>
+                </div>
+                <div class="card-dc-body p-0">
+                    <partial name="_EmptyState" model="Model.EmptyState" />
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

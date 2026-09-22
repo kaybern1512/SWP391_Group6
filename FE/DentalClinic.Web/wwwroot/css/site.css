@@ -1,0 +1,608 @@
+/* ==========================================================================
+   DentalCare CMS - Modern Premium Design System
+   Multi-Specialty Dental Clinic Management System
+   ========================================================================== */
+
+:root {
+  /* Brand Medical Palette */
+  --dc-navy-primary: #0f172a;
+  --dc-navy-secondary: #1e293b;
+  --dc-navy-sidebar: #0f172a;
+  --dc-medical-blue: #2563eb;
+  --dc-medical-blue-hover: #1d4ed8;
+  --dc-medical-teal: #0f766e;
+  --dc-medical-teal-hover: #115e59;
+  --dc-light-blue: #eff6ff;
+  --dc-light-teal: #f0fdfa;
+  
+  /* Neutral Palette */
+  --dc-bg: #f8fafc;
+  --dc-card-bg: #ffffff;
+  --dc-border: #e2e8f0;
+  --dc-border-subtle: #f1f5f9;
+  --dc-text-main: #0f172a;
+  --dc-text-muted: #64748b;
+  --dc-text-light: #94a3b8;
+  
+  /* Semantic Status Colors (Clean & Professional) */
+  --dc-success: #16a34a;
+  --dc-success-bg: #f0fdf4;
+  --dc-success-border: #bbf7d0;
+  --dc-warning: #d97706;
+  --dc-warning-bg: #fffbeb;
+  --dc-warning-border: #fde68a;
+  --dc-danger: #dc2626;
+  --dc-danger-bg: #fef2f2;
+  --dc-danger-border: #fecaca;
+  --dc-info: #0284c7;
+  --dc-info-bg: #f0f9ff;
+  --dc-info-border: #bae6fd;
+  
+  /* Geometry & Elevation */
+  --dc-radius-sm: 8px;
+  --dc-radius-md: 12px;
+  --dc-radius-lg: 16px;
+  --dc-shadow-subtle: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  --dc-shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 2px 4px -1px rgb(0 0 0 / 0.03);
+  --dc-shadow-hover: 0 4px 12px -2px rgb(0 0 0 / 0.08), 0 2px 6px -2px rgb(0 0 0 / 0.04);
+}
+
+/* Base Document Typography & Layout */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 0.9375rem; /* 15px */
+  line-height: 1.55;
+  color: var(--dc-text-main);
+  background-color: var(--dc-bg);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6,
+.font-heading {
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 700;
+  color: var(--dc-text-main);
+  letter-spacing: -0.02em;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: var(--dc-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ==========================================================================
+   Page Header Component
+   ========================================================================== */
+.page-header-dc {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.page-title {
+  font-size: 1.75rem; /* 28px */
+  font-weight: 700;
+  color: var(--dc-navy-primary);
+  margin-bottom: 0.25rem;
+  line-height: 1.25;
+}
+
+.page-subtitle {
+  color: var(--dc-text-muted);
+  font-size: 0.9375rem;
+  margin-bottom: 0;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   Cards Component
+   ========================================================================== */
+.card-dc {
+  background-color: var(--dc-card-bg);
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-lg);
+  box-shadow: var(--dc-shadow-card);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  position: relative;
+}
+
+.card-dc:hover {
+  box-shadow: var(--dc-shadow-hover);
+  border-color: #cbd5e1;
+}
+
+.card-dc-header {
+  background-color: transparent;
+  border-bottom: 1px solid var(--dc-border);
+  padding: 1.125rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--dc-text-main);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-dc-body {
+  padding: 1.5rem;
+}
+
+.card-dc-footer {
+  background-color: transparent;
+  border-top: 1px solid var(--dc-border);
+  padding: 1rem 1.5rem;
+}
+
+/* ==========================================================================
+   KPI / Stat Cards
+   ========================================================================== */
+.stat-card {
+  background: var(--dc-card-bg);
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-lg);
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--dc-shadow-subtle);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--dc-shadow-hover);
+}
+
+.stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--dc-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stat-icon-box {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--dc-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+
+.stat-icon-primary { background-color: var(--dc-light-blue); color: var(--dc-medical-blue); }
+.stat-icon-teal { background-color: var(--dc-light-teal); color: var(--dc-medical-teal); }
+.stat-icon-warning { background-color: var(--dc-warning-bg); color: var(--dc-warning); }
+.stat-icon-danger { background-color: var(--dc-danger-bg); color: var(--dc-danger); }
+.stat-icon-info { background-color: var(--dc-info-bg); color: var(--dc-info); }
+.stat-icon-success { background-color: var(--dc-success-bg); color: var(--dc-success); }
+
+.stat-value {
+  font-size: 1.875rem; /* 30px */
+  font-weight: 700;
+  color: var(--dc-text-main);
+  line-height: 1.15;
+  margin-bottom: 0.35rem;
+}
+
+.stat-note {
+  font-size: 0.8125rem;
+  color: var(--dc-text-light);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* ==========================================================================
+   Button System
+   ========================================================================== */
+.btn {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 0.55rem 1.15rem;
+  border-radius: var(--dc-radius-sm);
+  transition: all 0.15s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.btn-dc-primary {
+  background-color: var(--dc-medical-blue);
+  border: 1px solid var(--dc-medical-blue);
+  color: #ffffff;
+}
+.btn-dc-primary:hover, .btn-dc-primary:focus {
+  background-color: var(--dc-medical-blue-hover);
+  border-color: var(--dc-medical-blue-hover);
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.22);
+}
+
+.btn-dc-secondary {
+  background-color: var(--dc-navy-secondary);
+  border: 1px solid var(--dc-navy-secondary);
+  color: #ffffff;
+}
+.btn-dc-secondary:hover {
+  background-color: var(--dc-navy-primary);
+  border-color: var(--dc-navy-primary);
+  color: #ffffff;
+}
+
+.btn-dc-teal {
+  background-color: var(--dc-medical-teal);
+  border: 1px solid var(--dc-medical-teal);
+  color: #ffffff;
+}
+.btn-dc-teal:hover {
+  background-color: var(--dc-medical-teal-hover);
+  border-color: var(--dc-medical-teal-hover);
+  color: #ffffff;
+}
+
+.btn-dc-outline {
+  background-color: #ffffff;
+  border: 1px solid var(--dc-border);
+  color: var(--dc-navy-secondary);
+}
+.btn-dc-outline:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  color: var(--dc-medical-blue);
+}
+
+.btn-dc-danger {
+  background-color: #ffffff;
+  border: 1px solid var(--dc-danger-border);
+  color: var(--dc-danger);
+}
+.btn-dc-danger:hover {
+  background-color: var(--dc-danger-bg);
+  border-color: var(--dc-danger);
+  color: var(--dc-danger);
+}
+
+/* ==========================================================================
+   Badges (Role & Medical Status)
+   ========================================================================== */
+.badge-dc {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.32em 0.75em;
+  font-size: 0.775rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.badge-role-patient { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+.badge-role-dentist { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+.badge-role-receptionist { background-color: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe; }
+.badge-role-departmentmanager { background-color: #ccfbf1; color: #0f766e; border: 1px solid #99f6e4; }
+.badge-role-systemadministrator { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+/* Status Badges */
+.badge-status-confirmed, .badge-status-active, .badge-status-completed {
+  background-color: var(--dc-success-bg);
+  color: var(--dc-success);
+  border: 1px solid var(--dc-success-border);
+}
+
+.badge-status-pending, .badge-status-waiting {
+  background-color: var(--dc-warning-bg);
+  color: var(--dc-warning);
+  border: 1px solid var(--dc-warning-border);
+}
+
+.badge-status-cancelled, .badge-status-locked {
+  background-color: var(--dc-danger-bg);
+  color: var(--dc-danger);
+  border: 1px solid var(--dc-danger-border);
+}
+
+.badge-status-neutral {
+  background-color: #f1f5f9;
+  color: var(--dc-text-muted);
+  border: 1px solid var(--dc-border);
+}
+
+/* ==========================================================================
+   Tables Redesign
+   ========================================================================== */
+.table-dc-container {
+  background: var(--dc-card-bg);
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--dc-shadow-card);
+}
+
+.table-dc {
+  width: 100%;
+  margin-bottom: 0;
+  vertical-align: middle;
+  border-collapse: collapse;
+}
+
+.table-dc thead th {
+  background-color: #f8fafc;
+  color: #475569;
+  font-size: 0.775rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--dc-border);
+  white-space: nowrap;
+}
+
+.table-dc tbody td {
+  padding: 0.95rem 1.25rem;
+  color: var(--dc-text-main);
+  border-bottom: 1px solid var(--dc-border-subtle);
+  font-size: 0.9125rem;
+}
+
+.table-dc tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.table-dc tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.table-dc tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ==========================================================================
+   Filter Bar Component
+   ========================================================================== */
+.filter-bar-dc {
+  background: var(--dc-card-bg);
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  padding: 0.875rem 1.25rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.filter-search-box {
+  position: relative;
+  min-width: 260px;
+  flex: 1;
+}
+
+.filter-search-box i {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--dc-text-light);
+  pointer-events: none;
+}
+
+.filter-search-box input {
+  padding-left: 36px;
+  height: 40px;
+  border-radius: var(--dc-radius-sm);
+  border: 1px solid var(--dc-border);
+  font-size: 0.875rem;
+  width: 100%;
+}
+
+.filter-search-box input:focus {
+  border-color: var(--dc-medical-blue);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  outline: none;
+}
+
+.filter-select {
+  height: 40px;
+  border-radius: var(--dc-radius-sm);
+  border: 1px solid var(--dc-border);
+  font-size: 0.875rem;
+  color: var(--dc-text-main);
+  padding: 0 2rem 0 0.85rem;
+}
+
+/* ==========================================================================
+   Forms & Inputs
+   ========================================================================== */
+.form-section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--dc-navy-primary);
+  padding-bottom: 0.65rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--dc-border);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 0.35rem;
+}
+
+.form-control, .form-select {
+  height: 46px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  font-size: 0.9375rem;
+  color: var(--dc-text-main);
+  padding: 0.6rem 0.95rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: var(--dc-medical-blue);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.form-control::placeholder {
+  color: #94a3b8;
+}
+
+/* ==========================================================================
+   Empty State Component
+   ========================================================================== */
+.empty-state-dc {
+  text-align: center;
+  padding: 3.5rem 1.75rem;
+}
+
+.empty-state-icon-box {
+  width: 64px;
+  height: 64px;
+  background-color: #f1f5f9;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 1.85rem;
+  margin-bottom: 1.25rem;
+}
+
+.empty-state-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--dc-text-main);
+  margin-bottom: 0.35rem;
+}
+
+.empty-state-desc {
+  color: var(--dc-text-muted);
+  font-size: 0.9125rem;
+  max-width: 440px;
+  margin: 0 auto 1.25rem auto;
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+   Quick Action Cards (Role Workspaces)
+   ========================================================================== */
+.card-quick-action {
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-lg);
+  background: var(--dc-card-bg);
+  padding: 1.35rem;
+  transition: all 0.2s ease;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.card-quick-action:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--dc-shadow-hover);
+  border-color: #cbd5e1;
+}
+
+.quick-icon-box {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--dc-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  margin-bottom: 1rem;
+}
+
+.quick-icon-primary { background-color: var(--dc-light-blue); color: var(--dc-medical-blue); }
+.quick-icon-teal { background-color: var(--dc-light-teal); color: var(--dc-medical-teal); }
+.quick-icon-warning { background-color: var(--dc-warning-bg); color: var(--dc-warning); }
+.quick-icon-danger { background-color: var(--dc-danger-bg); color: var(--dc-danger); }
+.quick-icon-success { background-color: var(--dc-success-bg); color: var(--dc-success); }
+.quick-icon-info { background-color: var(--dc-info-bg); color: var(--dc-info); }
+
+/* ==========================================================================
+   Breadcrumbs
+   ========================================================================== */
+.breadcrumb-dc {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8125rem;
+  color: var(--dc-text-muted);
+  margin-bottom: 0.75rem;
+  list-style: none;
+  padding: 0;
+}
+
+.breadcrumb-dc a {
+  color: var(--dc-text-muted);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.breadcrumb-dc a:hover {
+  color: var(--dc-medical-blue);
+}
+
+.breadcrumb-dc .separator {
+  color: #cbd5e1;
+}
+
+.breadcrumb-dc .active {
+  color: var(--dc-text-main);
+  font-weight: 600;
+}

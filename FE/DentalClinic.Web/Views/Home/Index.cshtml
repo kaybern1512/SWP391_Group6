@@ -1,0 +1,261 @@
+@{
+    ViewData["Title"] = "DentalCare - Multi-Specialty Dental Clinic Management System";
+}
+
+<!-- Hero Section -->
+<section class="py-5 bg-white border-bottom">
+    <div class="container py-4">
+        <div class="row align-items-center g-5">
+            <div class="col-lg-7">
+                <span class="badge-dc badge-role-patient mb-3">
+                    <i class="bi bi-hospital"></i> Multi-Specialty Dental Care Management
+                </span>
+                <h1 class="display-5 fw-bold text-dark mb-3 lh-sm">
+                    Comprehensive Clinical <br />
+                    <span class="text-primary">Dental Care Management</span>
+                </h1>
+                <p class="lead text-muted mb-4 fs-6 lh-base">
+                    Centralized platform for electronic dental records, FDI Odontogram chart tracking, inter-department specialty referrals, and integrated appointment management.
+                </p>
+                <div class="d-flex flex-wrap gap-3">
+                    @if (User.Identity?.IsAuthenticated == true)
+                    {
+                        var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                        var dashboardAction = role switch
+                        {
+                            "Patient" => "/Patient/Dashboard",
+                            "Receptionist" => "/Receptionist/Dashboard",
+                            "Dentist" => "/Dentist/Dashboard",
+                            "DepartmentManager" => "/Department/Dashboard",
+                            "SystemAdministrator" => "/Admin/Dashboard",
+                            _ => "/Profile"
+                        };
+                        <a href="@dashboardAction" class="btn btn-dc-primary btn-lg fs-6">
+                            <i class="bi bi-grid-1x2 me-1"></i> Open Workspace (@role)
+                        </a>
+                    }
+                    else
+                    {
+                        <a asp-controller="Account" asp-action="Register" class="btn btn-dc-primary btn-lg fs-6">
+                            <i class="bi bi-calendar-plus me-1"></i> Register as Patient
+                        </a>
+                        <a asp-controller="Account" asp-action="Login" class="btn btn-dc-outline btn-lg fs-6">
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Sign In to Portal
+                        </a>
+                    }
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="card-dc p-4 bg-light border">
+                    <div class="d-flex align-items-center gap-3 mb-4">
+                        <div class="clinic-brand-logo" style="width: 44px; height: 44px;">
+                            <i class="bi bi-hospital fs-4"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0 text-dark">DentalCare Central</h5>
+                            <span class="small text-muted">Single Clinic Multi-Specialty System</span>
+                        </div>
+                    </div>
+                    <ul class="list-unstyled mb-0">
+                        <li class="d-flex align-items-center gap-3 mb-3">
+                            <div class="stat-icon-box stat-icon-primary" style="width: 32px; height: 32px; font-size: 1rem;">
+                                <i class="bi bi-check-lg"></i>
+                            </div>
+                            <span class="small fw-medium text-dark">Electronic Dental Records (EMR)</span>
+                        </li>
+                        <li class="d-flex align-items-center gap-3 mb-3">
+                            <div class="stat-icon-box stat-icon-teal" style="width: 32px; height: 32px; font-size: 1rem;">
+                                <i class="bi bi-check-lg"></i>
+                            </div>
+                            <span class="small fw-medium text-dark">Standard FDI Odontogram chart tracking</span>
+                        </li>
+                        <li class="d-flex align-items-center gap-3 mb-3">
+                            <div class="stat-icon-box stat-icon-info" style="width: 32px; height: 32px; font-size: 1rem;">
+                                <i class="bi bi-check-lg"></i>
+                            </div>
+                            <span class="small fw-medium text-dark">Multi-stage treatment plans & billing</span>
+                        </li>
+                        <li class="d-flex align-items-center gap-3">
+                            <div class="stat-icon-box stat-icon-success" style="width: 32px; height: 32px; font-size: 1rem;">
+                                <i class="bi bi-check-lg"></i>
+                            </div>
+                            <span class="small fw-medium text-dark">Inter-specialty referral coordination</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Specialties Section -->
+<section id="specialties" class="py-5">
+    <div class="container py-3">
+        <div class="text-center mx-auto mb-5" style="max-width: 600px;">
+            <span class="badge-dc badge-role-patient mb-2">Clinical Departments</span>
+            <h2 class="fw-bold text-dark">Dental Specialties</h2>
+            <p class="text-muted">Managed and triaged by specialized dental practitioners</p>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-md-6 col-lg-4">
+                <div class="card-dc h-100 p-4">
+                    <div class="quick-icon-box quick-icon-primary mb-3">
+                        <i class="bi bi-gem"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-2">Prosthodontics & Esthetics</h5>
+                    <p class="text-muted small mb-0">
+                        Ceramic veneers, crowns, bridges, and comprehensive full-mouth functional restorations.
+                    </p>
+                </div>
+            </div>
+
+            <div class="col-md-6 col-lg-4">
+                <div class="card-dc h-100 p-4">
+                    <div class="quick-icon-box quick-icon-teal mb-3">
+                        <i class="bi bi-diagram-3"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-2">Orthodontics</h5>
+                    <p class="text-muted small mb-0">
+                        Corrective dental alignments, fixed bracket mechanics, and clear aligner therapies.
+                    </p>
+                </div>
+            </div>
+
+            <div class="col-md-6 col-lg-4">
+                <div class="card-dc h-100 p-4">
+                    <div class="quick-icon-box quick-icon-warning mb-3">
+                        <i class="bi bi-shield-plus"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-2">Implantology</h5>
+                    <p class="text-muted small mb-0">
+                        Surgical dental implant placements and prosthetic abutment restorations for tooth loss.
+                    </p>
+                </div>
+            </div>
+
+            <div class="col-md-6 col-lg-4">
+                <div class="card-dc h-100 p-4">
+                    <div class="quick-icon-box quick-icon-danger mb-3">
+                        <i class="bi bi-activity"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-2">Endodontics</h5>
+                    <p class="text-muted small mb-0">
+                        Root canal therapy, pulpal diagnosis, and therapeutic preservation of natural dentition.
+                    </p>
+                </div>
+            </div>
+
+            <div class="col-md-6 col-lg-4">
+                <div class="card-dc h-100 p-4">
+                    <div class="quick-icon-box quick-icon-info mb-3">
+                        <i class="bi bi-heart-pulse"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-2">Oral Surgery</h5>
+                    <p class="text-muted small mb-0">
+                        Surgical tooth extractions, impacted third molar management, and alveolar bone care.
+                    </p>
+                </div>
+            </div>
+
+            <div class="col-md-6 col-lg-4">
+                <div class="card-dc h-100 p-4">
+                    <div class="quick-icon-box quick-icon-success mb-3">
+                        <i class="bi bi-emoji-smile"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-2">Pediatric Dentistry</h5>
+                    <p class="text-muted small mb-0">
+                        Preventive dental sealants, fluoride treatments, and gentle pediatric tooth care.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Features Section -->
+<section id="features" class="py-5 bg-white border-top border-bottom">
+    <div class="container py-3">
+        <div class="text-center mx-auto mb-5" style="max-width: 600px;">
+            <span class="badge-dc badge-role-patient mb-2">Platform Capabilities</span>
+            <h2 class="fw-bold text-dark">Digitized Clinical Workflows</h2>
+            <p class="text-muted">Structured tools supporting clinical coordination and patient records</p>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card-dc p-4 h-100">
+                    <div class="quick-icon-box quick-icon-primary mb-3">
+                        <i class="bi bi-journal-medical"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-2">FDI Odontogram Charting</h5>
+                    <p class="text-muted small mb-0">
+                        Tooth-by-tooth historical condition tracking, completed restorations, and future procedures mapped to international tooth numbering standards.
+                    </p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card-dc p-4 h-100">
+                    <div class="quick-icon-box quick-icon-teal mb-3">
+                        <i class="bi bi-arrow-left-right"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-2">Cross-Specialty Referrals</h5>
+                    <p class="text-muted small mb-0">
+                        Integrated inter-department referrals enabling dentists to transfer patient cases directly to orthodontic or surgical specialists.
+                    </p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card-dc p-4 h-100">
+                    <div class="quick-icon-box quick-icon-info mb-3">
+                        <i class="bi bi-file-earmark-check"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-2">Treatment Plan Staging</h5>
+                    <p class="text-muted small mb-0">
+                        Multi-phase clinical plans detailing procedures, scheduled appointments, itemized estimated costs, and physician notes.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Clinic Info & Operating Hours -->
+<section id="clinic-info" class="py-5">
+    <div class="container py-3">
+        <div class="row align-items-center g-4">
+            <div class="col-lg-6">
+                <span class="badge-dc badge-role-patient mb-2">Clinic Information</span>
+                <h3 class="fw-bold text-dark mb-3">Central Dental Care Facility</h3>
+                <p class="text-muted small mb-4">
+                    Dedicated facility coordinating clinical care departments and dental specialties within a unified management system.
+                </p>
+                <div class="d-flex flex-column gap-2 small">
+                    <div><i class="bi bi-geo-alt-fill text-primary me-2"></i> High-Tech Zone, Thu Duc City, Ho Chi Minh City</div>
+                    <div><i class="bi bi-telephone-fill text-primary me-2"></i> Central Reception: <strong>1900 1234</strong></div>
+                    <div><i class="bi bi-envelope-fill text-primary me-2"></i> Inquiries: contact@dentalclinic.edu.vn</div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card-dc p-4 bg-white border">
+                    <h5 class="fw-bold text-dark mb-2">Clinic Consultation Schedule</h5>
+                    <p class="text-muted small mb-3">Official consultation hours across clinical departments:</p>
+                    <ul class="list-unstyled mb-0 small">
+                        <li class="d-flex justify-content-between py-2 border-bottom">
+                            <span>Monday &ndash; Friday:</span>
+                            <strong class="text-dark">08:00 &ndash; 20:00</strong>
+                        </li>
+                        <li class="d-flex justify-content-between py-2 border-bottom">
+                            <span>Saturday:</span>
+                            <strong class="text-dark">08:00 &ndash; 18:00</strong>
+                        </li>
+                        <li class="d-flex justify-content-between py-2">
+                            <span>Sunday & Holidays:</span>
+                            <strong class="text-dark">08:00 &ndash; 12:00</strong>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

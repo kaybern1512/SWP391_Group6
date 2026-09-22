@@ -1,0 +1,241 @@
+@using System.Security.Claims
+@{
+    var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "Patient";
+    var fullName = User.FindFirst(ClaimTypes.Name)?.Value ?? "User";
+    var avatarUrl = User.FindFirst("AvatarUrl")?.Value;
+    if (string.IsNullOrEmpty(avatarUrl) || avatarUrl == "/images/default-avatar.png")
+    {
+        avatarUrl = "/images/default-avatar.svg";
+    }
+    var currentCtrl = ViewContext.RouteData.Values["controller"]?.ToString();
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString();
+}
+
+<aside class="app-sidebar" id="appSidebar">
+    <!-- Brand Header -->
+    <div class="sidebar-header">
+        <div class="clinic-brand-logo">
+            <i class="bi bi-hospital"></i>
+        </div>
+        <div class="clinic-brand-text">
+            <div class="clinic-name">DentalCare</div>
+            <span class="clinic-tagline">Clinic Management System</span>
+        </div>
+    </div>
+
+    <!-- Navigation Groups -->
+    <div class="sidebar-nav">
+        @if (role == "Patient")
+        {
+            <div class="nav-group-title">Overview</div>
+            <a class="sidebar-link @(currentCtrl == "PatientDashboard" ? "active" : "")" asp-controller="PatientDashboard" asp-action="Dashboard">
+                <i class="bi bi-grid-1x2"></i>
+                <span>Patient Portal</span>
+            </a>
+
+            <div class="nav-group-title">Clinical & Care</div>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Appointment backend API.'); return false;">
+                <i class="bi bi-calendar-plus"></i>
+                <span>Book Appointment</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to EMR backend API.'); return false;">
+                <i class="bi bi-journal-medical"></i>
+                <span>Medical Record</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Treatment backend API.'); return false;">
+                <i class="bi bi-card-checklist"></i>
+                <span>Treatment Plans</span>
+            </a>
+
+            <div class="nav-group-title">Management</div>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Invoice backend API.'); return false;">
+                <i class="bi bi-receipt"></i>
+                <span>Invoices & Payments</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Notification backend API.'); return false;">
+                <i class="bi bi-bell"></i>
+                <span>Notifications</span>
+            </a>
+        }
+        else if (role == "Receptionist")
+        {
+            <div class="nav-group-title">Overview</div>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistDashboard" ? "active" : "")" asp-controller="ReceptionistDashboard" asp-action="Dashboard">
+                <i class="bi bi-grid-1x2"></i>
+                <span>Reception Desk</span>
+            </a>
+
+            <div class="nav-group-title">Clinical Intake</div>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Check-in API.'); return false;">
+                <i class="bi bi-person-check"></i>
+                <span>Check In Patient</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Appointment triage API.'); return false;">
+                <i class="bi bi-calendar-check"></i>
+                <span>Appointment Requests</span>
+            </a>
+
+            <div class="nav-group-title">Management</div>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Patient records API.'); return false;">
+                <i class="bi bi-search"></i>
+                <span>Find Patient</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Patient registration API.'); return false;">
+                <i class="bi bi-person-plus"></i>
+                <span>Create Patient</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Billing invoice API.'); return false;">
+                <i class="bi bi-file-earmark-text"></i>
+                <span>Pending Invoices</span>
+            </a>
+        }
+        else if (role == "Dentist")
+        {
+            <div class="nav-group-title">Overview</div>
+            <a class="sidebar-link @(currentCtrl == "DentistDashboard" ? "active" : "")" asp-controller="DentistDashboard" asp-action="Dashboard">
+                <i class="bi bi-grid-1x2"></i>
+                <span>Clinical Workspace</span>
+            </a>
+
+            <div class="nav-group-title">Clinical Procedures</div>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Patient EMR API.'); return false;">
+                <i class="bi bi-journal-medical"></i>
+                <span>Medical Records & EMR</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Treatment Plan API.'); return false;">
+                <i class="bi bi-diagram-3"></i>
+                <span>Treatment Plans</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Treatment Session API.'); return false;">
+                <i class="bi bi-clipboard2-check"></i>
+                <span>Record Session</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Prescription API.'); return false;">
+                <i class="bi bi-capsule"></i>
+                <span>Prescriptions</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Department Referral API.'); return false;">
+                <i class="bi bi-arrow-left-right"></i>
+                <span>Department Referrals</span>
+            </a>
+
+            <div class="nav-group-title">Management</div>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Work Schedule API.'); return false;">
+                <i class="bi bi-calendar-week"></i>
+                <span>View Work Schedule</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Availability API.'); return false;">
+                <i class="bi bi-toggle-on"></i>
+                <span>Update Availability</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Follow-up API.'); return false;">
+                <i class="bi bi-clock-history"></i>
+                <span>Follow-up Schedules</span>
+            </a>
+        }
+        else if (role == "DepartmentManager")
+        {
+            <div class="nav-group-title">Overview</div>
+            <a class="sidebar-link @(currentCtrl == "DepartmentDashboard" ? "active" : "")" asp-controller="DepartmentDashboard" asp-action="Dashboard">
+                <i class="bi bi-grid-1x2"></i>
+                <span>Department Console</span>
+            </a>
+
+            <div class="nav-group-title">Clinical Allocation</div>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Appointment triage API.'); return false;">
+                <i class="bi bi-check2-square"></i>
+                <span>Assignment Queue</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Referral processing API.'); return false;">
+                <i class="bi bi-arrow-left-right"></i>
+                <span>Process Referrals</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Treatment progress API.'); return false;">
+                <i class="bi bi-graph-up"></i>
+                <span>Treatment Progress</span>
+            </a>
+
+            <div class="nav-group-title">Department Management</div>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Staff allocation API.'); return false;">
+                <i class="bi bi-person-plus"></i>
+                <span>Assign Dentists</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Schedule API.'); return false;">
+                <i class="bi bi-calendar-range"></i>
+                <span>Department Schedule</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Service catalog API.'); return false;">
+                <i class="bi bi-tags"></i>
+                <span>Services & Pricing</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Performance report API.'); return false;">
+                <i class="bi bi-file-earmark-bar-graph"></i>
+                <span>Performance Report</span>
+            </a>
+        }
+        else if (role == "SystemAdministrator")
+        {
+            <div class="nav-group-title">Overview</div>
+            <a class="sidebar-link @(currentCtrl == "AdminDashboard" ? "active" : "")" asp-controller="AdminDashboard" asp-action="Dashboard">
+                <i class="bi bi-grid-1x2"></i>
+                <span>Admin Console</span>
+            </a>
+
+            <div class="nav-group-title">Management</div>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Staff Provisioning API.'); return false;">
+                <i class="bi bi-person-badge"></i>
+                <span>Create Staff Account</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Account Status API.'); return false;">
+                <i class="bi bi-person-lock"></i>
+                <span>Update Account Status</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Department API.'); return false;">
+                <i class="bi bi-hospital"></i>
+                <span>Department Management</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Clinic Information API.'); return false;">
+                <i class="bi bi-building-gear"></i>
+                <span>Clinic Information</span>
+            </a>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Report API.'); return false;">
+                <i class="bi bi-bar-chart-line"></i>
+                <span>Performance Report</span>
+            </a>
+
+            <div class="nav-group-title">Security & Audit</div>
+            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Audit Log API.'); return false;">
+                <i class="bi bi-shield-check"></i>
+                <span>Audit Logs</span>
+            </a>
+        }
+
+        <!-- Account Section Shared Across Roles -->
+        <div class="nav-group-title">Account</div>
+        <a class="sidebar-link @(currentCtrl == "Profile" ? "active" : "")" asp-controller="Profile" asp-action="Index">
+            <i class="bi bi-person-circle"></i>
+            <span>My Profile</span>
+        </a>
+        <a class="sidebar-link @(currentCtrl == "Account" && currentAction == "ChangePassword" ? "active" : "")" asp-controller="Account" asp-action="ChangePassword">
+            <i class="bi bi-key"></i>
+            <span>Change Password</span>
+        </a>
+    </div>
+
+    <!-- Mini Profile Footer -->
+    <div class="sidebar-footer">
+        <div class="sidebar-mini-profile">
+            <img src="@avatarUrl" alt="Avatar" class="sidebar-avatar" onerror="this.src='/images/default-avatar.svg'" />
+            <div class="sidebar-user-meta">
+                <div class="sidebar-user-name" title="@fullName">@fullName</div>
+                <div class="sidebar-user-role">@role</div>
+            </div>
+        </div>
+        <form method="post" asp-controller="Account" asp-action="Logout" class="m-0 p-0 d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-link text-secondary p-0 border-0" title="Sign Out" data-confirm="Are you sure you want to sign out of the clinic portal?">
+                <i class="bi bi-box-arrow-right fs-6"></i>
+            </button>
+        </form>
+    </div>
+</aside>

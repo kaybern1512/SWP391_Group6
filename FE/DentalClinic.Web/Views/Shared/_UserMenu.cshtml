@@ -1,0 +1,77 @@
+@using System.Security.Claims
+@{
+    var isAuthenticated = User.Identity?.IsAuthenticated == true;
+    var fullName = User.FindFirst(ClaimTypes.Name)?.Value ?? "Account";
+    var email = User.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty;
+    var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "Patient";
+    var avatarUrl = User.FindFirst("AvatarUrl")?.Value;
+    if (string.IsNullOrEmpty(avatarUrl) || avatarUrl == "/images/default-avatar.png")
+    {
+        avatarUrl = "/images/default-avatar.svg";
+    }
+
+    var roleBadgeClass = role.ToLowerInvariant() switch
+    {
+        "patient" => "badge-role-patient",
+        "dentist" => "badge-role-dentist",
+        "receptionist" => "badge-role-receptionist",
+        "departmentmanager" => "badge-role-departmentmanager",
+        "systemadministrator" => "badge-role-systemadministrator",
+        _ => "badge-role-patient"
+    };
+}
+
+@if (isAuthenticated)
+{
+    <div class="dropdown">
+        <button class="user-menu-btn" type="button" id="userMenuDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+            <img src="@avatarUrl" alt="Avatar" class="user-avatar-top" onerror="this.src='/images/default-avatar.svg'" />
+            <div class="user-text-top d-none d-md-block">
+                <div class="user-name-top">@fullName</div>
+                <div class="user-role-top">
+                    <span class="badge-dc @roleBadgeClass" style="font-size: 0.675rem; padding: 0.2em 0.55em;">@role</span>
+                </div>
+            </div>
+            <i class="bi bi-chevron-down text-muted fs-7 ms-1"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end shadow-sm border py-2" aria-labelledby="userMenuDropdown" style="min-width: 230px;">
+            <li class="px-3 py-2 border-bottom mb-1">
+                <div class="fw-bold text-dark text-truncate">@fullName</div>
+                <div class="small text-muted text-truncate">@email</div>
+            </li>
+            <li>
+                <a class="dropdown-item py-2 d-flex align-items-center gap-2" asp-controller="Profile" asp-action="Index">
+                    <i class="bi bi-person-circle text-primary"></i>
+                    <span>My Profile</span>
+                </a>
+            </li>
+            <li>
+                <a class="dropdown-item py-2 d-flex align-items-center gap-2" asp-controller="Account" asp-action="ChangePassword">
+                    <i class="bi bi-key text-warning"></i>
+                    <span>Change Password</span>
+                </a>
+            </li>
+            <li><hr class="dropdown-divider my-1"></li>
+            <li>
+                <form method="post" asp-controller="Account" asp-action="Logout" class="px-2 pt-1">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-danger w-100 btn-sm d-flex align-items-center justify-content-center gap-2" data-confirm="Are you sure you want to sign out of the clinic portal?">
+                        <i class="bi bi-box-arrow-right"></i>
+                        <span>Sign Out</span>
+                    </button>
+                </form>
+            </li>
+        </ul>
+    </div>
+}
+else
+{
+    <div class="d-flex align-items-center gap-2">
+        <a asp-controller="Account" asp-action="Login" class="btn btn-dc-outline btn-sm">
+            <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+        </a>
+        <a asp-controller="Account" asp-action="Register" class="btn btn-dc-primary btn-sm">
+            <i class="bi bi-person-plus me-1"></i> Register
+        </a>
+    </div>
+}

@@ -1,0 +1,368 @@
+/* ==========================================================================
+   DentalCare CMS - Dashboard App Shell & Layout
+   ========================================================================== */
+
+.app-wrapper {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--dc-bg);
+}
+
+/* ==========================================================================
+   Sidebar Component (Desktop & Offcanvas)
+   ========================================================================== */
+.app-sidebar {
+  width: 260px;
+  background-color: #0f172a;
+  color: #f8fafc;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 1040;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-header {
+  padding: 1.25rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.clinic-brand-logo {
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 1.3rem;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  flex-shrink: 0;
+}
+
+.clinic-brand-text {
+  line-height: 1.15;
+}
+
+.clinic-name {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+
+.clinic-tagline {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  display: block;
+  margin-top: 2px;
+}
+
+/* Sidebar Navigation Area */
+.sidebar-nav {
+  padding: 1rem 0.75rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.nav-group-title {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  font-weight: 700;
+  padding: 0.85rem 0.85rem 0.35rem 0.85rem;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0.65rem 0.85rem;
+  color: #94a3b8;
+  text-decoration: none;
+  border-radius: var(--dc-radius-sm);
+  font-weight: 500;
+  font-size: 0.875rem;
+  margin-bottom: 3px;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.sidebar-link i {
+  font-size: 1.1rem;
+  color: #94a3b8;
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-link:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+}
+
+.sidebar-link:hover i {
+  color: #ffffff;
+}
+
+.sidebar-link.active {
+  background-color: rgba(37, 99, 235, 0.16);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.sidebar-link.active i {
+  color: #60a5fa;
+}
+
+.sidebar-link.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 15%;
+  bottom: 15%;
+  width: 3px;
+  background-color: #3b82f6;
+  border-radius: 0 3px 3px 0;
+}
+
+/* Sidebar Footer Profile Area */
+.sidebar-footer {
+  padding: 0.85rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-mini-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sidebar-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.sidebar-user-meta {
+  min-width: 0;
+}
+
+.sidebar-user-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.sidebar-user-role {
+  font-size: 0.6875rem;
+  color: #94a3b8;
+}
+
+/* ==========================================================================
+   Main Layout Container
+   ========================================================================== */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background-color: var(--dc-bg);
+}
+
+/* ==========================================================================
+   Topbar Component
+   ========================================================================== */
+.app-navbar {
+  background-color: #ffffff;
+  border-bottom: 1px solid var(--dc-border);
+  height: 64px;
+  padding: 0 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+}
+
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.navbar-context-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--dc-navy-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.btn-nav-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--dc-radius-sm);
+  background-color: #f8fafc;
+  border: 1px solid var(--dc-border);
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.btn-nav-icon:hover {
+  background-color: #f1f5f9;
+  color: var(--dc-navy-primary);
+}
+
+.nav-unread-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  background-color: var(--dc-danger);
+  border-radius: 50%;
+  border: 1.5px solid #ffffff;
+}
+
+/* Topbar User Menu */
+.user-menu-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--dc-radius-md);
+  background: transparent;
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+}
+
+.user-menu-btn:hover {
+  background-color: #f1f5f9;
+}
+
+.user-avatar-top {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--dc-border);
+  object-fit: cover;
+}
+
+.user-text-top {
+  text-align: left;
+  line-height: 1.2;
+}
+
+.user-name-top {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--dc-text-main);
+}
+
+.user-role-top {
+  font-size: 0.725rem;
+  color: var(--dc-text-muted);
+}
+
+/* ==========================================================================
+   Content Canvas
+   ========================================================================== */
+.app-content {
+  padding: 2rem 2.25rem;
+  flex: 1;
+  max-width: 1600px;
+  width: 100%;
+}
+
+.app-footer {
+  background-color: #ffffff;
+  border-top: 1px solid var(--dc-border);
+  padding: 1rem 2.25rem;
+  font-size: 0.8125rem;
+  color: var(--dc-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* ==========================================================================
+   Mobile Responsive Adjustments
+   ========================================================================== */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 1035;
+}
+
+@media (max-width: 992px) {
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+  }
+  
+  .app-sidebar.show {
+    transform: translateX(0);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+  }
+
+  .sidebar-backdrop.show {
+    display: block;
+  }
+
+  .app-navbar {
+    padding: 0 1rem;
+  }
+
+  .app-content {
+    padding: 1.25rem 1rem;
+  }
+
+  .app-footer {
+    padding: 1rem;
+  }
+}
