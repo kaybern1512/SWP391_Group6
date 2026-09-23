@@ -15,6 +15,11 @@
     </p>
 </div>
 
+<div class="alert alert-info py-2 small mb-3 text-start">
+    <i class="bi bi-info-circle me-1"></i>
+    <strong>Lưu ý kiểm thử (Development):</strong> Mã xác thực OTP gồm 6 chữ số được in trực tiếp trong cửa sổ Terminal của <code>Backend API</code> (dòng <code>[DEV OTP NOTIFICATION]</code>).
+</div>
+
 <form asp-controller="Account" asp-action="VerifyEmail" method="post" novalidate>
     @Html.AntiForgeryToken()
     <input type="hidden" asp-for="Email" />

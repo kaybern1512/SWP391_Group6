@@ -162,10 +162,16 @@ public class AuthService : IAuthService
                 // Commit DB transaction BEFORE sending email to avoid SQL locks during external network call
                 await tx.CommitAsync(ct);
 
-                // DB committed successfully, now dispatch email
-                await _emailService.SendEmailVerificationOtpAsync(email, request.FullName.Trim(), otpCode, ct);
-
-                await _auditLogService.LogAsync(userAccount.UserId, "REGISTER", "UserAccount", userAccount.UserId.ToString(), ct: ct);
+                try
+                {
+                    // DB committed successfully, now dispatch email
+                    await _emailService.SendEmailVerificationOtpAsync(email, request.FullName.Trim(), otpCode, ct);
+                    await _auditLogService.LogAsync(userAccount.UserId, "REGISTER", "UserAccount", userAccount.UserId.ToString(), ct: ct);
+                }
+                catch (Exception emailEx)
+                {
+                    _logger.LogError(emailEx, "Failed to dispatch verification email to {Email}", email);
+                }
 
                 return ApiResponse.Ok(null, "Đăng ký tài khoản thành công! Vui lòng kiểm tra email để lấy mã xác thực kích hoạt tài khoản.");
             }

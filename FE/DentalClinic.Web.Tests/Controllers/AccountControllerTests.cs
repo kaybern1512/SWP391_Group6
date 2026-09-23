@@ -94,6 +94,57 @@ public class AccountControllerTests
     }
 
     [Fact]
+    public async Task Register_Post_ApiFailureWithMessage_AddsModelErrorWithApiMessage()
+    {
+        // Arrange
+        var model = new RegisterViewModel
+        {
+            FullName = "Nguyen Van A",
+            Email = "vana@dental.vn",
+            Password = "Password123!",
+            ConfirmPassword = "Password123!",
+            AgreeTerms = true
+        };
+
+        _authApiMock.Setup(x => x.RegisterAsync(It.IsAny<RegisterRequest>()))
+            .ReturnsAsync(ApiResult.Failure("Email này đã được sử dụng bởi một tài khoản khác."));
+
+        // Act
+        var result = await _controller.Register(model) as ViewResult;
+
+        // Assert
+        result.Should().NotBeNull();
+        _controller.ModelState.IsValid.Should().BeFalse();
+        _controller.ModelState[string.Empty]!.Errors.Should().Contain(e => e.ErrorMessage == "Email này đã được sử dụng bởi một tài khoản khác.");
+    }
+
+    [Fact]
+    public async Task Register_Post_ApiUnverified_RedirectsToVerifyEmailWithWarning()
+    {
+        // Arrange
+        var model = new RegisterViewModel
+        {
+            FullName = "Nguyen Van A",
+            Email = "unverified@dental.vn",
+            Password = "Password123!",
+            ConfirmPassword = "Password123!",
+            AgreeTerms = true
+        };
+
+        _authApiMock.Setup(x => x.RegisterAsync(It.IsAny<RegisterRequest>()))
+            .ReturnsAsync(ApiResult.Failure("Email chưa xác thực.", isUnverified: true));
+
+        // Act
+        var result = await _controller.Register(model) as RedirectToActionResult;
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.ActionName.Should().Be("VerifyEmail");
+        result.RouteValues!["email"].Should().Be(model.Email);
+        _controller.TempData["WarningMessage"].Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task Login_Post_InvalidModelState_ReturnsViewWithModel()
     {
         // Arrange

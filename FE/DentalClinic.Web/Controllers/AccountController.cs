@@ -64,9 +64,22 @@ public class AccountController : Controller
             return RedirectToAction(nameof(VerifyEmail), new { email = model.Email });
         }
 
-        foreach (var err in result.Errors)
+        if (result.IsUnverified)
         {
-            ModelState.AddModelError(string.Empty, err);
+            TempData["WarningMessage"] = "Email này đã được đăng ký nhưng chưa được kích hoạt. Vui lòng nhập mã OTP để kích hoạt tài khoản.";
+            return RedirectToAction(nameof(VerifyEmail), new { email = model.Email });
+        }
+
+        if (result.Errors != null && result.Errors.Any())
+        {
+            foreach (var err in result.Errors)
+            {
+                ModelState.AddModelError(string.Empty, err);
+            }
+        }
+        else
+        {
+            ModelState.AddModelError(string.Empty, result.Message ?? "Đăng ký không thành công. Vui lòng thử lại.");
         }
 
         return View(model);
