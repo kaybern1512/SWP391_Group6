@@ -22,7 +22,7 @@ public static class DependencyInjection
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IGoogleAuthService, GoogleAuthService>();
-        services.AddScoped<IFileStorageService, LocalFileStorageService>();
+        services.AddScoped<IImageStorageService, CloudinaryImageStorageService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
 
         services.AddScoped<IAuthService, AuthService>();

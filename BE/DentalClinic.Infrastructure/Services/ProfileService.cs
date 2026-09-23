@@ -16,18 +16,18 @@ namespace DentalClinic.Infrastructure.Services;
 public class ProfileService : IProfileService
 {
     private readonly DentalClinicDbContext _dbContext;
-    private readonly IFileStorageService _fileStorageService;
+    private readonly IImageStorageService _imageStorageService;
     private readonly IAuditLogService _auditLogService;
     private readonly ILogger<ProfileService> _logger;
 
     public ProfileService(
         DentalClinicDbContext dbContext,
-        IFileStorageService fileStorageService,
+        IImageStorageService imageStorageService,
         IAuditLogService auditLogService,
         ILogger<ProfileService> logger)
     {
         _dbContext = dbContext;
-        _fileStorageService = fileStorageService;
+        _imageStorageService = imageStorageService;
         _auditLogService = auditLogService;
         _logger = logger;
     }
@@ -158,10 +158,11 @@ public class ProfileService : IProfileService
         string avatarUrl;
         try
         {
-            avatarUrl = await _fileStorageService.SaveAvatarAsync(fileStream, originalFileName, contentType, ct);
+            avatarUrl = await _imageStorageService.UploadAvatarAsync(userId, fileStream, originalFileName, contentType, ct);
         }
-        catch (ArgumentException ex)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to upload avatar for userId: {UserId}", userId);
             return ApiResponse<AvatarUploadResponse>.Fail(ex.Message);
         }
 

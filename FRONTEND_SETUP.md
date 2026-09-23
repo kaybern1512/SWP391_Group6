@@ -59,7 +59,7 @@ D:\SWP391\SWP391_Group6\
 │   │   │   └── images/ (clinic-logo.svg, default-avatar.svg)
 │   │   ├── Program.cs                               # Cấu hình Cookie Auth, Session, HttpClients, Pipeline
 │   │   └── appsettings.json                         # BaseUrl API & Google settings
-│   └── DentalClinic.Web.Tests/                      # Dự án xUnit Tests (31 test cases pass 100%)
+│   └── DentalClinic.Web.Tests/                      # Dự án xUnit Tests (74 test cases pass 100%)
 └── FRONTEND_SETUP.md                                # Tài liệu hướng dẫn này
 ```
 
@@ -145,17 +145,17 @@ dotnet user-secrets set "Authentication:Google:ClientSecret" "YOUR_ACTUAL_GOOGLE
 
 ---
 
-## 8. Danh Sách Tài Khoản Mẫu (Dự Kiến Cho Demo)
+## 8. Danh Sách Tài Khoản Mẫu Đã Seed Trong Database
 
-Sau khi Backend API nạp dữ liệu khởi tạo (Seed data) theo 5 role chính:
+Tất cả tài khoản mẫu dưới đây đã được kích hoạt trong cơ sở dữ liệu `DentalClinicManagementDB` qua file `DB/Seed_Staff_Test_Accounts.sql`:
 
-| Vai trò (Role) | Email Đăng Nhập | Mật Khẩu Mẫu | Chức Năng Chính |
-| :--- | :--- | :--- | :--- |
-| **Patient** | `patient@dentalclinic.vn` | `Patient@123` | Xem bệnh án, sơ đồ răng, đặt lịch khám |
-| **Receptionist** | `receptionist@dentalclinic.vn` | `Reception@123` | Tiếp đón check-in, duyệt lịch, thu ngân |
-| **Dentist** | `dentist@dentalclinic.vn` | `Dentist@123` | Bàn làm việc bác sĩ, chẩn đoán Odontogram, kê đơn |
-| **DepartmentManager** | `manager@dentalclinic.vn` | `Manager@123` | Phân công lịch trực, hội chẩn chuyển tuyến khoa |
-| **SystemAdministrator**| `admin@dentalclinic.vn` | `Admin@123` | Quản lý người dùng, phân quyền, nhật ký kiểm toán |
+| Vai trò (Role) | Email Đăng Nhập | Mật Khẩu Mẫu | Mã Hồ Sơ | Họ Và Tên | Ghi Chú / Chuyên Khoa |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **SystemAdministrator**| `admin@dentalcare.com` | `Password123@` | `EMP-ADM-001` | Quản Trị Viên Hệ Thống | Quản lý toàn bộ hệ thống |
+| **Receptionist** | `receptionist@dentalcare.com` | `Password123@` | `EMP-REC-001` | Lễ Tân Nguyễn Thị Mai | Tiếp đón check-in, duyệt lịch, thu ngân |
+| **Dentist** | `dentist@dentalcare.com` | `Password123@` | `EMP-DEN-001` | Bác Sĩ Trần Văn Hùng | Khoa Phẫu Thuật Miệng & Cấy Ghép Implant |
+| **DepartmentManager** | `manager@dentalcare.com` | `Password123@` | `EMP-MGR-001` | Trưởng Khoa Lê Hoàng Nam | Trưởng Khoa Phẫu Thuật Miệng |
+| **Patient** | `lehoangminh.test@dentalcare.com` | `Password123@` | `PAT-202609-0001` | Lê Hoàng Minh | Bệnh nhân cá nhân (hoặc tự Đăng ký mới) |
 
 ---
 

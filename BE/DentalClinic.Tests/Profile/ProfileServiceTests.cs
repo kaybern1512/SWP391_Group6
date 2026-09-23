@@ -18,7 +18,7 @@ namespace DentalClinic.Tests.Profile;
 
 public class ProfileServiceTests
 {
-    private readonly Mock<IFileStorageService> _mockFileStorage = new();
+    private readonly Mock<IImageStorageService> _mockImageStorage = new();
     private readonly Mock<ILogger<ProfileService>> _mockLogger = new();
     private readonly Mock<ILogger<AuditLogService>> _mockAuditLogger = new();
 
@@ -34,7 +34,7 @@ public class ProfileServiceTests
     private ProfileService CreateProfileService(DentalClinicDbContext dbContext)
     {
         var auditService = new AuditLogService(dbContext, _mockAuditLogger.Object);
-        return new ProfileService(dbContext, _mockFileStorage.Object, auditService, _mockLogger.Object);
+        return new ProfileService(dbContext, _mockImageStorage.Object, auditService, _mockLogger.Object);
     }
 
     [Fact]
@@ -211,8 +211,10 @@ public class ProfileServiceTests
         db.UserAccounts.Add(user);
         await db.SaveChangesAsync();
 
-        _mockFileStorage.Setup(f => f.SaveAvatarAsync(It.IsAny<Stream>(), "avatar.png", "image/png", default))
-            .ReturnsAsync("https://localhost:7350/uploads/avatars/test-avatar-guid.png");
+        const string expectedCloudinaryUrl = "https://res.cloudinary.com/dentalcare/image/upload/v1234567/dental-clinic/avatars/user_1.webp";
+
+        _mockImageStorage.Setup(f => f.UploadAvatarAsync(user.UserId, It.IsAny<Stream>(), "avatar.png", "image/png", default))
+            .ReturnsAsync(expectedCloudinaryUrl);
 
         var service = CreateProfileService(db);
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes("fake-image-bytes"));
@@ -221,9 +223,9 @@ public class ProfileServiceTests
 
         Assert.True(result.Success);
         Assert.NotNull(result.Data);
-        Assert.Equal("https://localhost:7350/uploads/avatars/test-avatar-guid.png", result.Data.AvatarUrl);
+        Assert.Equal(expectedCloudinaryUrl, result.Data.AvatarUrl);
 
         var updatedUser = await db.UserAccounts.FindAsync(user.UserId);
-        Assert.Equal("https://localhost:7350/uploads/avatars/test-avatar-guid.png", updatedUser!.AvatarUrl);
+        Assert.Equal(expectedCloudinaryUrl, updatedUser!.AvatarUrl);
     }
 }

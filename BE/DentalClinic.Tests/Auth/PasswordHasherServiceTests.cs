@@ -10,9 +10,10 @@ public class PasswordHasherServiceTests
     [Fact]
     public void HashPassword_ShouldReturnNonEmptyHash()
     {
-        var hash = _hasher.HashPassword("P@ssword123!");
+        var hash = _hasher.HashPassword("Password123@");
         Assert.False(string.IsNullOrWhiteSpace(hash));
-        Assert.NotEqual("P@ssword123!", hash);
+        Assert.NotEqual("Password123@", hash);
+        Assert.True(_hasher.VerifyPassword(hash, "Password123@"));
     }
 
     [Fact]

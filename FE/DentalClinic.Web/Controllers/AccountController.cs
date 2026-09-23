@@ -1,3 +1,4 @@
+using DentalClinic.Web.Helpers;
 using DentalClinic.Web.Models.ApiDtos;
 using DentalClinic.Web.Services;
 using DentalClinic.Web.ViewModels.Account;
@@ -361,14 +362,7 @@ public class AccountController : Controller
 
     private IActionResult RedirectToRoleDashboard(string? role)
     {
-        return role switch
-        {
-            "Patient" => RedirectToAction("Dashboard", "PatientDashboard"),
-            "Receptionist" => RedirectToAction("Dashboard", "ReceptionistDashboard"),
-            "Dentist" => RedirectToAction("Dashboard", "DentistDashboard"),
-            "DepartmentManager" => RedirectToAction("Dashboard", "DepartmentDashboard"),
-            "SystemAdministrator" => RedirectToAction("Dashboard", "AdminDashboard"),
-            _ => RedirectToAction("Index", "Home")
-        };
+        var route = RoleRouteHelper.GetDashboardRoute(role);
+        return RedirectToAction(route.Action, route.Controller);
     }
 }

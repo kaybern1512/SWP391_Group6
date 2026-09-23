@@ -396,4 +396,49 @@ public class AuthServiceTests
         var activeSession = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == "session1");
         Assert.NotNull(activeSession!.RevokedAt);
     }
+
+    [Theory]
+    [InlineData("admin@dentalcare.com", UserRole.SystemAdministrator, "EMP-ADM-001", "Admin Quản Trị")]
+    [InlineData("receptionist@dentalcare.com", UserRole.Receptionist, "EMP-REC-001", "Lễ Tân Mai")]
+    [InlineData("dentist@dentalcare.com", UserRole.Dentist, "EMP-DEN-001", "Bác Sĩ Hùng")]
+    [InlineData("manager@dentalcare.com", UserRole.DepartmentManager, "EMP-MGR-001", "Trưởng Khoa Nam")]
+    public async Task LoginAsync_StaffRoles_ReturnsCorrectRoleAndEmployeeCode(string email, string role, string empCode, string fullName)
+    {
+        using var db = CreateDbContext("StaffLogin_" + role);
+        var user = new UserAccount
+        {
+            Email = email,
+            PasswordHash = _passwordHasher.HashPassword("Password123@"),
+            Role = role,
+            Status = AccountStatus.Active,
+            EmailVerifiedAt = DateTime.UtcNow
+        };
+        db.UserAccounts.Add(user);
+        await db.SaveChangesAsync();
+
+        db.StaffProfiles.Add(new StaffProfile
+        {
+            UserId = user.UserId,
+            EmployeeCode = empCode,
+            FullName = fullName,
+            StaffType = role,
+            Status = "Active"
+        });
+        await db.SaveChangesAsync();
+
+        var authService = CreateAuthService(db);
+        var result = await authService.LoginAsync(new LoginRequest
+        {
+            Email = email,
+            Password = "Password123@"
+        }, "127.0.0.1", "TestClient");
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.NotNull(result.Data.User);
+        Assert.Equal(role, result.Data.User.Role);
+        Assert.Equal(empCode, result.Data.User.UserCode);
+        Assert.Equal(fullName, result.Data.User.FullName);
+        Assert.NotEmpty(result.Data.AccessToken);
+    }
 }
