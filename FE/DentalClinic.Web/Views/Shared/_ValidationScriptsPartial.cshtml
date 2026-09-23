@@ -1,3 +1,25 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.20.0/jquery.validate.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validation-unobtrusive/4.0.0/jquery.validate.unobtrusive.min.js"></script>
+<script>
+    if (window.jQuery && window.jQuery.validator) {
+        // Support custom mustbetrue validation for terms agreement checkboxes
+        if (window.jQuery.validator.unobtrusive) {
+            jQuery.validator.addMethod("mustbetrue", function (value, element, param) {
+                return element.checked;
+            });
+            jQuery.validator.unobtrusive.adapters.addBool("mustbetrue");
+        }
+
+        // Patch range validation if applied to boolean checkbox elements
+        var originalRange = jQuery.validator.methods.range;
+        if (originalRange) {
+            jQuery.validator.addMethod("range", function (value, element, param) {
+                if (element.type === "checkbox") {
+                    return element.checked;
+                }
+                return originalRange.call(this, value, element, param);
+            });
+        }
+    }
+</script>

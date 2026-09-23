@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using DentalClinic.Web.Attributes;
 
 namespace DentalClinic.Web.ViewModels.Account;
 
@@ -58,7 +59,7 @@ public class RegisterViewModel
     [Display(Name = "Xác nhận mật khẩu")]
     public string ConfirmPassword { get; set; } = string.Empty;
 
-    [Range(typeof(bool), "true", "true", ErrorMessage = "Bạn phải đồng ý với điều khoản sử dụng.")]
+    [MustBeTrue(ErrorMessage = "Bạn phải đồng ý với điều khoản sử dụng.")]
     [Display(Name = "Tôi đồng ý với các điều khoản và chính sách của phòng khám")]
     public bool AgreeTerms { get; set; }
 }

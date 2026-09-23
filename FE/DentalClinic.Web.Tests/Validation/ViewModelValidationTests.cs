@@ -34,6 +34,23 @@ public class ViewModelValidationTests
     }
 
     [Fact]
+    public void RegisterViewModel_AgreeTermsFalse_FailsValidation()
+    {
+        var model = new RegisterViewModel
+        {
+            FullName = "Nguyen Van A",
+            Email = "vana@dental.vn",
+            PhoneNumber = "0912345678",
+            Password = "Password123!",
+            ConfirmPassword = "Password123!",
+            AgreeTerms = false
+        };
+
+        var results = ValidateModel(model);
+        results.Should().Contain(x => x.MemberNames.Contains("AgreeTerms"));
+    }
+
+    [Fact]
     public void RegisterViewModel_WeakPassword_FailsValidation()
     {
         var model = new RegisterViewModel
