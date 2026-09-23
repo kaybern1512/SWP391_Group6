@@ -89,19 +89,31 @@ builder.Services.AddTransient<ApiAuthorizationHandler>();
 // Configure Base API URL
 var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7350";
 
+HttpMessageHandler CreatePrimaryHttpHandler()
+{
+    var handler = new HttpClientHandler();
+    if (builder.Environment.IsDevelopment())
+    {
+        handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+    }
+    return handler;
+}
+
 // Raw HttpClient for token refresh without ApiAuthorizationHandler (prevents recursion)
 builder.Services.AddHttpClient("RawApiClient", client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
-});
+})
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
 // Auth API client (without delegating handler since auth endpoints do not need bearer tokens)
 builder.Services.AddHttpClient<IAuthApiService, AuthApiService>(client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
-});
+})
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
 // Profile API client with ApiAuthorizationHandler (attaches Bearer and handles 401 refresh retry)
 builder.Services.AddHttpClient<IProfileApiService, ProfileApiService>(client =>
@@ -109,7 +121,8 @@ builder.Services.AddHttpClient<IProfileApiService, ProfileApiService>(client =>
     client.BaseAddress = new Uri(apiBaseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 })
-.AddHttpMessageHandler<ApiAuthorizationHandler>();
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
 var app = builder.Build();
 
