@@ -66,4 +66,31 @@ public class CloudinaryImageStorageServiceTests
 
         Assert.Contains("Dịch vụ lưu trữ Cloudinary chưa được cấu hình", ex.Message);
     }
+
+    [Fact]
+    public async Task UploadAvatarAsync_WithUserSecrets_UploadsSuccessfully()
+    {
+        var config = new ConfigurationBuilder()
+            .AddUserSecrets<DentalClinic.Api.Controllers.AuthController>(optional: true)
+            .Build();
+
+        var cloudName = config["Cloudinary:CloudName"];
+        var apiKey = config["Cloudinary:ApiKey"];
+        var apiSecret = config["Cloudinary:ApiSecret"];
+
+        if (string.IsNullOrWhiteSpace(cloudName) || string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(apiSecret))
+        {
+            return; // Skip if user secrets are not configured in test environment
+        }
+
+        var service = new CloudinaryImageStorageService(config, _mockLogger.Object);
+        byte[] pngBytes = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=");
+        using var stream = new MemoryStream(pngBytes);
+
+        var url = await service.UploadAvatarAsync(999, stream, "test_avatar.png", "image/png");
+
+        Assert.NotNull(url);
+        Assert.StartsWith("https://res.cloudinary.com/", url);
+        Assert.Contains("dental-clinic/avatars/user_999", url);
+    }
 }
