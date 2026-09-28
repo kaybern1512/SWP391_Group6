@@ -1,4 +1,4 @@
--- =====================================================================
+﻿-- =====================================================================
 -- Seed Script: Multi-Specialty Dental Clinic Management System
 -- Purpose: Provision staff test accounts for all roles with valid hashed passwords
 -- Password for all accounts: Password123@
@@ -20,28 +20,56 @@ BEGIN TRY
     ---------------------------------------------------------------------
     -- 1. SEED DEPARTMENTS
     ---------------------------------------------------------------------
-    IF NOT EXISTS (SELECT 1 FROM Departments WHERE Name = N'Khoa Răng Tổng Quát & Nội Nha')
+    IF NOT EXISTS (SELECT 1 FROM Departments WHERE DepartmentId = 1 OR Name = N'Khoa Răng Tổng Quát & Nội Nha')
     BEGIN
         INSERT INTO Departments (Name, Description, Status, CreatedAt)
         VALUES (N'Khoa Răng Tổng Quát & Nội Nha', N'Chuyên khám, chữa tủy và điều trị các bệnh lý răng tổng quát.', 'Active', @Now);
+    END
+    ELSE
+    BEGIN
+        UPDATE Departments 
+        SET Name = N'Khoa Răng Tổng Quát & Nội Nha',
+            Description = N'Chuyên khám, chữa tủy và điều trị các bệnh lý răng tổng quát.'
+        WHERE DepartmentId = 1 OR Name LIKE N'%Khoa R%ng T%ng Qu%t%';
     END;
 
-    IF NOT EXISTS (SELECT 1 FROM Departments WHERE Name = N'Khoa Chỉnh Nha & Thẩm Mỹ')
+    IF NOT EXISTS (SELECT 1 FROM Departments WHERE DepartmentId = 2 OR Name = N'Khoa Chỉnh Nha & Thẩm Mỹ')
     BEGIN
         INSERT INTO Departments (Name, Description, Status, CreatedAt)
         VALUES (N'Khoa Chỉnh Nha & Thẩm Mỹ', N'Chuyên niềng răng, bọc răng sứ và thẩm mỹ nụ cười công nghệ cao.', 'Active', @Now);
+    END
+    ELSE
+    BEGIN
+        UPDATE Departments 
+        SET Name = N'Khoa Chỉnh Nha & Thẩm Mỹ',
+            Description = N'Chuyên niềng răng, bọc răng sứ và thẩm mỹ nụ cười công nghệ cao.'
+        WHERE DepartmentId = 2 OR Name LIKE N'%Khoa Ch%nh Nha%';
     END;
 
-    IF NOT EXISTS (SELECT 1 FROM Departments WHERE Name = N'Khoa Phẫu Thuật Miệng & Cấy Ghép Implant')
+    IF NOT EXISTS (SELECT 1 FROM Departments WHERE DepartmentId = 3 OR Name = N'Khoa Phẫu Thuật Miệng & Cấy Ghép Implant')
     BEGIN
         INSERT INTO Departments (Name, Description, Status, CreatedAt)
         VALUES (N'Khoa Phẫu Thuật Miệng & Cấy Ghép Implant', N'Chuyên tiểu phẫu răng khôn, ghép xương và cấy ghép Implant chuyên sâu.', 'Active', @Now);
+    END
+    ELSE
+    BEGIN
+        UPDATE Departments 
+        SET Name = N'Khoa Phẫu Thuật Miệng & Cấy Ghép Implant',
+            Description = N'Chuyên tiểu phẫu răng khôn, ghép xương và cấy ghép Implant chuyên sâu.'
+        WHERE DepartmentId = 3 OR Name LIKE N'%Khoa Ph%u Thu%t%';
     END;
 
-    IF NOT EXISTS (SELECT 1 FROM Departments WHERE Name = N'Khoa Răng Trẻ Em')
+    IF NOT EXISTS (SELECT 1 FROM Departments WHERE DepartmentId = 4 OR Name = N'Khoa Răng Trẻ Em')
     BEGIN
         INSERT INTO Departments (Name, Description, Status, CreatedAt)
         VALUES (N'Khoa Răng Trẻ Em', N'Chăm sóc sức khỏe răng miệng chuyên biệt và điều trị nha khoa cho trẻ em.', 'Active', @Now);
+    END
+    ELSE
+    BEGIN
+        UPDATE Departments 
+        SET Name = N'Khoa Răng Trẻ Em',
+            Description = N'Chăm sóc sức khỏe răng miệng chuyên biệt và điều trị nha khoa cho trẻ em.'
+        WHERE DepartmentId = 4 OR Name LIKE N'%Khoa R%ng Tr% Em%';
     END;
 
     ---------------------------------------------------------------------
@@ -65,6 +93,10 @@ BEGIN TRY
         UPDATE UserAccounts 
         SET PasswordHash = @PasswordHash, Status = 'Active', EmailVerifiedAt = ISNULL(EmailVerifiedAt, @Now)
         WHERE UserId = @AdminUserId;
+
+        UPDATE StaffProfiles
+        SET FullName = N'Quản Trị Viên Hệ Thống'
+        WHERE UserId = @AdminUserId;
     END;
 
     ---------------------------------------------------------------------
@@ -87,6 +119,10 @@ BEGIN TRY
         SELECT @ReceptionistUserId = UserId FROM UserAccounts WHERE Email = 'receptionist@dentalcare.com';
         UPDATE UserAccounts 
         SET PasswordHash = @PasswordHash, Status = 'Active', EmailVerifiedAt = ISNULL(EmailVerifiedAt, @Now)
+        WHERE UserId = @ReceptionistUserId;
+
+        UPDATE StaffProfiles
+        SET FullName = N'Lễ Tân Nguyễn Thị Mai'
         WHERE UserId = @ReceptionistUserId;
     END;
 
@@ -131,6 +167,17 @@ BEGIN TRY
         UPDATE UserAccounts 
         SET PasswordHash = @PasswordHash, Status = 'Active', EmailVerifiedAt = ISNULL(EmailVerifiedAt, @Now)
         WHERE UserId = @DentistUserId;
+
+        SELECT @DentistStaffId = StaffId FROM StaffProfiles WHERE UserId = @DentistUserId;
+
+        UPDATE StaffProfiles
+        SET FullName = N'Bác Sĩ Trần Văn Hùng'
+        WHERE StaffId = @DentistStaffId;
+
+        UPDATE DentistProfiles
+        SET Qualification = N'Thạc sĩ Răng Hàm Mặt, ĐHYD TP.HCM',
+            Biography = N'Bác sĩ chuyên khoa Phục hình và Cấy ghép Implant chuyên sâu với hơn 8 năm kinh nghiệm lâm sàng.'
+        WHERE StaffId = @DentistStaffId;
     END;
 
     ---------------------------------------------------------------------
@@ -164,6 +211,10 @@ BEGIN TRY
         SELECT @ManagerUserId = UserId FROM UserAccounts WHERE Email = 'manager@dentalcare.com';
         UPDATE UserAccounts 
         SET PasswordHash = @PasswordHash, Status = 'Active', EmailVerifiedAt = ISNULL(EmailVerifiedAt, @Now)
+        WHERE UserId = @ManagerUserId;
+
+        UPDATE StaffProfiles
+        SET FullName = N'Trưởng Khoa Lê Hoàng Nam'
         WHERE UserId = @ManagerUserId;
     END;
 
