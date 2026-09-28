@@ -93,7 +93,8 @@ public class ResetPasswordRequestValidator : AbstractValidator<ResetPasswordRequ
             .EmailAddress().WithMessage("Địa chỉ email không đúng định dạng.");
 
         RuleFor(x => x.Token)
-            .NotEmpty().WithMessage("Token đặt lại mật khẩu không được để trống.");
+            .NotEmpty().WithMessage("Mã xác thực OTP không được để trống.")
+            .MinimumLength(4).WithMessage("Mã xác thực OTP không hợp lệ.");
 
         RuleFor(x => x.NewPassword)
             .NotEmpty().WithMessage("Mật khẩu mới không được để trống.")
@@ -105,6 +106,30 @@ public class ResetPasswordRequestValidator : AbstractValidator<ResetPasswordRequ
 
         RuleFor(x => x.ConfirmPassword)
             .Equal(x => x.NewPassword).WithMessage("Xác nhận mật khẩu mới không khớp.");
+    }
+}
+
+public class VerifyPhoneRequestValidator : AbstractValidator<VerifyPhoneRequest>
+{
+    public VerifyPhoneRequestValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("Email không được để trống.")
+            .EmailAddress().WithMessage("Địa chỉ email không đúng định dạng.");
+
+        RuleFor(x => x.Code)
+            .NotEmpty().WithMessage("Mã xác thực không được để trống.")
+            .Length(4, 10).WithMessage("Mã xác thực không hợp lệ.");
+    }
+}
+
+public class ResendPhoneVerificationRequestValidator : AbstractValidator<ResendPhoneVerificationRequest>
+{
+    public ResendPhoneVerificationRequestValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("Email không được để trống.")
+            .EmailAddress().WithMessage("Địa chỉ email không đúng định dạng.");
     }
 }
 

@@ -10,8 +10,10 @@ namespace DentalClinic.Web.Services;
 public interface IAuthApiService
 {
     Task<ApiResult> RegisterAsync(RegisterRequest request);
-    Task<ApiResult> VerifyEmailAsync(VerifyEmailRequest request);
+    Task<ApiResult<VerifyEmailResponse>> VerifyEmailAsync(VerifyEmailRequest request);
     Task<ApiResult> ResendVerificationAsync(ResendVerificationRequest request);
+    Task<ApiResult> VerifyPhoneAsync(VerifyPhoneRequest request);
+    Task<ApiResult> ResendPhoneVerificationAsync(ResendPhoneVerificationRequest request);
     Task<ApiResult<LoginResponse>> LoginAsync(LoginRequest request);
     Task<ApiResult<LoginResponse>> GoogleLoginAsync(string idToken);
     Task<ApiResult> LogoutAsync(string refreshToken);
@@ -37,14 +39,24 @@ public class AuthApiService : IAuthApiService
         return await SendPostAsync("/api/auth/register", request);
     }
 
-    public async Task<ApiResult> VerifyEmailAsync(VerifyEmailRequest request)
+    public async Task<ApiResult<VerifyEmailResponse>> VerifyEmailAsync(VerifyEmailRequest request)
     {
-        return await SendPostAsync("/api/auth/verify-email", request);
+        return await SendPostWithResultAsync<VerifyEmailRequest, VerifyEmailResponse>("/api/auth/verify-email", request);
     }
 
     public async Task<ApiResult> ResendVerificationAsync(ResendVerificationRequest request)
     {
         return await SendPostAsync("/api/auth/resend-verification", request);
+    }
+
+    public async Task<ApiResult> VerifyPhoneAsync(VerifyPhoneRequest request)
+    {
+        return await SendPostAsync("/api/auth/verify-phone", request);
+    }
+
+    public async Task<ApiResult> ResendPhoneVerificationAsync(ResendPhoneVerificationRequest request)
+    {
+        return await SendPostAsync("/api/auth/resend-phone-verification", request);
     }
 
     public async Task<ApiResult<LoginResponse>> LoginAsync(LoginRequest request)

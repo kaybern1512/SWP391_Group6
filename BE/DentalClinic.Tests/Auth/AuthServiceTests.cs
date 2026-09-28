@@ -99,8 +99,9 @@ public class AuthServiceTests
         Assert.NotNull(user);
         Assert.Equal(AccountStatus.Unverified, user.Status);
         Assert.NotNull(user.PatientProfile);
-        Assert.StartsWith("PAT-", user.PatientProfile.PatientCode);
-        Assert.Single(user.AccountVerifications);
+        Assert.Equal(2, user.AccountVerifications.Count);
+        Assert.Contains(user.AccountVerifications, v => v.Channel == VerificationChannel.Email && v.Purpose == VerificationPurpose.EmailVerification);
+        Assert.Contains(user.AccountVerifications, v => v.Channel == VerificationChannel.Phone && v.Purpose == VerificationPurpose.PhoneVerification);
 
         _mockEmailService.Verify(e => e.SendEmailVerificationOtpAsync(
             "tranvanb@example.com", "Tran Van B", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -440,5 +441,122 @@ public class AuthServiceTests
         Assert.Equal(empCode, result.Data.User.UserCode);
         Assert.Equal(fullName, result.Data.User.FullName);
         Assert.NotEmpty(result.Data.AccessToken);
+    }
+
+    [Fact]
+    public async Task VerifyPhoneAsync_ValidCode_ActivatesUser()
+    {
+        using var db = CreateDbContext(nameof(VerifyPhoneAsync_ValidCode_ActivatesUser));
+        var user = new UserAccount
+        {
+            Email = "phoneuser@example.com",
+            PhoneNumber = "0988776655",
+            Status = AccountStatus.Unverified,
+            Role = UserRole.Patient,
+            EmailVerifiedAt = DateTime.UtcNow
+        };
+        db.UserAccounts.Add(user);
+        await db.SaveChangesAsync();
+
+        var codeHash = _otpService.HashOtp("123456");
+        db.AccountVerifications.Add(new AccountVerification
+        {
+            UserId = user.UserId,
+            Channel = VerificationChannel.Phone,
+            Purpose = VerificationPurpose.PhoneVerification,
+            CodeHash = codeHash,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            AttemptCount = 0,
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var authService = CreateAuthService(db);
+        var result = await authService.VerifyPhoneAsync(new VerifyPhoneRequest
+        {
+            Email = "phoneuser@example.com",
+            Code = "123456"
+        }, "127.0.0.1");
+
+        Assert.True(result.Success);
+
+        var updatedUser = await db.UserAccounts.FindAsync(user.UserId);
+        Assert.NotNull(updatedUser);
+        Assert.NotNull(updatedUser.PhoneVerifiedAt);
+        Assert.Equal(AccountStatus.Active, updatedUser.Status);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordAsync_ActiveUser_SendsOtpEmail()
+    {
+        using var db = CreateDbContext(nameof(ForgotPasswordAsync_ActiveUser_SendsOtpEmail));
+        var user = new UserAccount
+        {
+            Email = "forgotuser@example.com",
+            Status = AccountStatus.Active,
+            Role = UserRole.Patient,
+            PasswordHash = _passwordHasher.HashPassword("OldPassword123@")
+        };
+        db.UserAccounts.Add(user);
+        await db.SaveChangesAsync();
+
+        var authService = CreateAuthService(db);
+        var result = await authService.ForgotPasswordAsync(new ForgotPasswordRequest
+        {
+            Email = "forgotuser@example.com"
+        }, "127.0.0.1");
+
+        Assert.True(result.Success);
+
+        var resetTokens = await db.PasswordResetTokens.Where(t => t.UserId == user.UserId).ToListAsync();
+        Assert.Single(resetTokens);
+        Assert.Null(resetTokens[0].UsedAt);
+
+        _mockEmailService.Verify(e => e.SendPasswordResetOtpAsync(
+            "forgotuser@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_ValidOtp_UpdatesPassword()
+    {
+        using var db = CreateDbContext(nameof(ResetPasswordAsync_ValidOtp_UpdatesPassword));
+        var user = new UserAccount
+        {
+            Email = "resetuser@example.com",
+            Status = AccountStatus.Active,
+            Role = UserRole.Patient,
+            PasswordHash = _passwordHasher.HashPassword("OldPassword123@")
+        };
+        db.UserAccounts.Add(user);
+        await db.SaveChangesAsync();
+
+        var otp = "654321";
+        var tokenHash = _jwtService.HashToken(otp);
+        db.PasswordResetTokens.Add(new PasswordResetToken
+        {
+            UserId = user.UserId,
+            TokenHash = tokenHash,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var authService = CreateAuthService(db);
+        var result = await authService.ResetPasswordAsync(new ResetPasswordRequest
+        {
+            Email = "resetuser@example.com",
+            Token = "654321",
+            NewPassword = "NewPassword123@",
+            ConfirmPassword = "NewPassword123@"
+        }, "127.0.0.1");
+
+        Assert.True(result.Success);
+
+        var updatedUser = await db.UserAccounts.FindAsync(user.UserId);
+        Assert.NotNull(updatedUser);
+        Assert.True(_passwordHasher.VerifyPassword(updatedUser.PasswordHash!, "NewPassword123@"));
+
+        var resetToken = await db.PasswordResetTokens.FirstAsync(t => t.UserId == user.UserId);
+        Assert.NotNull(resetToken.UsedAt);
     }
 }

@@ -22,13 +22,30 @@ public class ForgotPasswordViewModel
     public string Email { get; set; } = string.Empty;
 }
 
-public class ResetPasswordViewModel
+public class VerifyPhoneViewModel
 {
-    [Required]
-    [EmailAddress]
+    [Required(ErrorMessage = "Email không được để trống.")]
+    [EmailAddress(ErrorMessage = "Địa chỉ Email không đúng định dạng.")]
     public string Email { get; set; } = string.Empty;
 
-    [Required]
+    [Display(Name = "Số điện thoại")]
+    public string? PhoneNumber { get; set; }
+
+    [Required(ErrorMessage = "Vui lòng nhập mã xác thực OTP SMS.")]
+    [StringLength(10, MinimumLength = 4, ErrorMessage = "Mã xác thực không hợp lệ.")]
+    [Display(Name = "Mã xác thực OTP")]
+    public string Code { get; set; } = string.Empty;
+}
+
+public class ResetPasswordViewModel
+{
+    [Required(ErrorMessage = "Email không được để trống.")]
+    [EmailAddress(ErrorMessage = "Địa chỉ Email không đúng định dạng.")]
+    public string Email { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Vui lòng nhập mã OTP đặt lại mật khẩu.")]
+    [StringLength(10, MinimumLength = 4, ErrorMessage = "Mã xác thực không hợp lệ.")]
+    [Display(Name = "Mã OTP xác thực")]
     public string Token { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Vui lòng nhập mật khẩu mới.")]

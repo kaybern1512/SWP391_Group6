@@ -7,4 +7,5 @@ public interface IEmailService
 {
     Task SendEmailVerificationOtpAsync(string toEmail, string fullName, string otp, CancellationToken ct = default);
     Task SendPasswordResetAsync(string toEmail, string fullName, string resetUrl, CancellationToken ct = default);
+    Task SendPasswordResetOtpAsync(string toEmail, string fullName, string otp, CancellationToken ct = default);
 }

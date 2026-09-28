@@ -1,0 +1,56 @@
+@model VerifyPhoneViewModel
+@{
+    Layout = "_AuthLayout";
+    ViewData["Title"] = "Verify Phone Number";
+}
+
+<div class="auth-card-header text-center">
+    <div class="empty-state-icon-box mx-auto mb-3" style="width: 54px; height: 54px;">
+        <i class="bi bi-phone text-primary fs-3"></i>
+    </div>
+    <h2 class="auth-card-title">Verify Phone Number</h2>
+    <p class="auth-card-subtitle">
+        Enter the 6-digit SMS verification code sent to your phone number: <br />
+        <strong class="text-dark">@(string.IsNullOrEmpty(Model.PhoneNumber) ? "your phone number" : Model.PhoneNumber)</strong>
+    </p>
+</div>
+
+<div class="alert alert-info py-2 small mb-3 text-start">
+    <i class="bi bi-info-circle me-1"></i>
+    <strong>Lưu ý kiểm thử (Development):</strong> Mã xác thực SMS OTP gồm 6 chữ số được in trực tiếp trong cửa sổ Terminal của <code>Backend API</code> (dòng <code>[DEV SMS OTP NOTIFICATION]</code>).
+</div>
+
+<form asp-controller="Account" asp-action="VerifyPhone" method="post" novalidate>
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Email" />
+    <input type="hidden" asp-for="PhoneNumber" />
+
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small mb-3"></div>
+
+    <div class="mb-4">
+        <label asp-for="Code" class="form-label text-center d-block">SMS OTP Verification Code</label>
+        <input asp-for="Code" class="form-control otp-input-field" maxlength="10" placeholder="------" autocomplete="off" autofocus />
+        <span asp-validation-for="Code" class="text-danger small text-center d-block mt-1"></span>
+    </div>
+
+    <button type="submit" class="btn btn-dc-primary w-100 py-2 fs-6 mb-3">
+        <i class="bi bi-patch-check me-1"></i> Confirm Phone Number
+    </button>
+</form>
+
+<div class="d-flex justify-content-between align-items-center border-top pt-3 mt-4 small">
+    <form asp-controller="Account" asp-action="ResendPhoneVerification" method="post" class="d-inline">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="email" value="@Model.Email" />
+        <button type="submit" class="btn btn-link p-0 text-decoration-none text-primary small">
+            <i class="bi bi-arrow-repeat me-1"></i> Resend SMS code
+        </button>
+    </form>
+    <a asp-controller="Account" asp-action="Login" class="text-decoration-none text-muted">
+        Back to Sign In
+    </a>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

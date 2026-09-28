@@ -157,6 +157,24 @@ public class AuthService : IAuthService
                 };
 
                 _dbContext.AccountVerifications.Add(verification);
+
+                string? phoneOtpCode = null;
+                if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+                {
+                    phoneOtpCode = _otpService.GenerateNumericOtp(6);
+                    var phoneVerification = new AccountVerification
+                    {
+                        UserId = userAccount.UserId,
+                        Channel = VerificationChannel.Phone,
+                        Purpose = VerificationPurpose.PhoneVerification,
+                        CodeHash = _otpService.HashOtp(phoneOtpCode),
+                        ExpiresAt = now.AddMinutes(15),
+                        AttemptCount = 0,
+                        CreatedAt = now
+                    };
+                    _dbContext.AccountVerifications.Add(phoneVerification);
+                }
+
                 await _dbContext.SaveChangesAsync(ct);
 
                 // Commit DB transaction BEFORE sending email to avoid SQL locks during external network call
@@ -166,6 +184,10 @@ public class AuthService : IAuthService
                 {
                     // DB committed successfully, now dispatch email
                     await _emailService.SendEmailVerificationOtpAsync(email, request.FullName.Trim(), otpCode, ct);
+                    if (!string.IsNullOrWhiteSpace(phoneOtpCode))
+                    {
+                        _logger.LogInformation("\n======================================================\n[DEV SMS OTP NOTIFICATION]\nPURPOSE: PHONE VERIFICATION\nTO PHONE: {PhoneNumber} ({FullName})\nSMS OTP CODE: {PhoneOtpCode}\nEXPIRES IN: 15 minutes\n======================================================\n", request.PhoneNumber, request.FullName.Trim(), phoneOtpCode);
+                    }
                     await _auditLogService.LogAsync(userAccount.UserId, "REGISTER", "UserAccount", userAccount.UserId.ToString(), ct: ct);
                 }
                 catch (Exception emailEx)
@@ -239,13 +261,29 @@ public class AuthService : IAuthService
 
         verification.VerifiedAt = DateTime.UtcNow;
         user.EmailVerifiedAt = DateTime.UtcNow;
-        user.Status = AccountStatus.Active;
+
+        var requiresPhoneVerification = !string.IsNullOrWhiteSpace(user.PhoneNumber) && user.PhoneVerifiedAt == null;
+        if (!requiresPhoneVerification)
+        {
+            user.Status = AccountStatus.Active;
+        }
         user.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);
         await _auditLogService.LogAsync(user.UserId, "VERIFY_EMAIL", "UserAccount", user.UserId.ToString(), ct: ct);
 
-        return ApiResponse.Ok(null, "Xác thực email thành công! Tài khoản của bạn đã được kích hoạt. Hãy đăng nhập để tiếp tục.");
+        if (requiresPhoneVerification)
+        {
+            var responseData = new VerifyEmailResponse
+            {
+                RequiresPhoneVerification = true,
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber
+            };
+            return ApiResponse.Ok(responseData, "Xác thực email thành công! Vui lòng xác thực số điện thoại để hoàn tất kích hoạt tài khoản.");
+        }
+
+        return ApiResponse.Ok(new VerifyEmailResponse { RequiresPhoneVerification = false, Email = user.Email }, "Xác thực email thành công! Tài khoản của bạn đã được kích hoạt. Hãy đăng nhập để tiếp tục.");
     }
 
     public async Task<ApiResponse> ResendVerificationAsync(ResendVerificationRequest request, string? ipAddress, CancellationToken ct = default)
@@ -296,6 +334,116 @@ public class AuthService : IAuthService
         await _emailService.SendEmailVerificationOtpAsync(email, recipientName, otpCode, ct);
 
         return ApiResponse.Ok(null, "Mã xác thực mới đã được gửi đến email của bạn.");
+    }
+
+    public async Task<ApiResponse> VerifyPhoneAsync(VerifyPhoneRequest request, string? ipAddress, CancellationToken ct = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+
+        var user = await _dbContext.UserAccounts
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, ct);
+
+        if (user == null)
+        {
+            return ApiResponse.Fail("Tài khoản không tồn tại trong hệ thống.");
+        }
+
+        if (user.PhoneVerifiedAt != null && user.Status == AccountStatus.Active)
+        {
+            return ApiResponse.Ok(null, "Số điện thoại của bạn đã được xác thực trước đó. Vui lòng đăng nhập.");
+        }
+
+        var verification = await _dbContext.AccountVerifications
+            .Where(v => v.UserId == user.UserId && v.Purpose == VerificationPurpose.PhoneVerification && v.VerifiedAt == null)
+            .OrderByDescending(v => v.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (verification == null)
+        {
+            return ApiResponse.Fail("Không tìm thấy mã xác thực hợp lệ. Vui lòng yêu cầu gửi lại mã mới.");
+        }
+
+        if (verification.ExpiresAt < DateTime.UtcNow)
+        {
+            return ApiResponse.Fail("Mã xác thực đã hết hạn. Vui lòng yêu cầu gửi lại mã mới.");
+        }
+
+        if (verification.AttemptCount >= 5)
+        {
+            return ApiResponse.Fail("Bạn đã nhập sai mã xác thực quá số lần quy định (5 lần). Vui lòng yêu cầu mã xác thực mới.");
+        }
+
+        var isOtpValid = _otpService.VerifyOtp(request.Code.Trim(), verification.CodeHash);
+        if (!isOtpValid)
+        {
+            verification.AttemptCount++;
+            await _dbContext.SaveChangesAsync(ct);
+            var remaining = Math.Max(0, 5 - verification.AttemptCount);
+            return ApiResponse.Fail($"Mã xác thực không chính xác. Bạn còn {remaining} lần thử.");
+        }
+
+        verification.VerifiedAt = DateTime.UtcNow;
+        user.PhoneVerifiedAt = DateTime.UtcNow;
+        user.Status = AccountStatus.Active;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(ct);
+        await _auditLogService.LogAsync(user.UserId, "VERIFY_PHONE", "UserAccount", user.UserId.ToString(), ct: ct);
+
+        return ApiResponse.Ok(null, "Xác thực số điện thoại thành công! Tài khoản của bạn đã được kích hoạt hoàn toàn.");
+    }
+
+    public async Task<ApiResponse> ResendPhoneVerificationAsync(ResendPhoneVerificationRequest request, string? ipAddress, CancellationToken ct = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+
+        var user = await _dbContext.UserAccounts
+            .Include(u => u.PatientProfile)
+            .Include(u => u.StaffProfile)
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, ct);
+
+        if (user == null || (user.PhoneVerifiedAt != null && user.Status == AccountStatus.Active))
+        {
+            return ApiResponse.Ok(null, "Nếu tài khoản tồn tại và chưa xác thực số điện thoại, mã xác thực mới đã được gửi đến số điện thoại của bạn.");
+        }
+
+        if (string.IsNullOrWhiteSpace(user.PhoneNumber))
+        {
+            return ApiResponse.Fail("Tài khoản này chưa đăng ký số điện thoại.");
+        }
+
+        var lastVerification = await _dbContext.AccountVerifications
+            .Where(v => v.UserId == user.UserId && v.Purpose == VerificationPurpose.PhoneVerification)
+            .OrderByDescending(v => v.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (lastVerification != null && (DateTime.UtcNow - lastVerification.CreatedAt).TotalSeconds < 60)
+        {
+            var waitSec = 60 - (int)(DateTime.UtcNow - lastVerification.CreatedAt).TotalSeconds;
+            return ApiResponse.Fail($"Vui lòng đợi {waitSec} giây trước khi yêu cầu gửi lại mã xác thực.");
+        }
+
+        var otpCode = _otpService.GenerateNumericOtp(6);
+        var codeHash = _otpService.HashOtp(otpCode);
+
+        var verification = new AccountVerification
+        {
+            UserId = user.UserId,
+            Channel = VerificationChannel.Phone,
+            Purpose = VerificationPurpose.PhoneVerification,
+            CodeHash = codeHash,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            AttemptCount = 0,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _dbContext.AccountVerifications.Add(verification);
+        await _dbContext.SaveChangesAsync(ct);
+
+        var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email;
+        _logger.LogInformation("\n======================================================\n[DEV SMS OTP NOTIFICATION]\nPURPOSE: RESEND PHONE VERIFICATION\nTO PHONE: {PhoneNumber} ({FullName})\nSMS OTP CODE: {PhoneOtpCode}\nEXPIRES IN: 15 minutes\n======================================================\n", user.PhoneNumber, fullName, otpCode);
+
+        return ApiResponse.Ok(null, "Mã xác thực mới đã được gửi đến số điện thoại của bạn.");
     }
 
     public async Task<ApiResponse<LoginResponse>> LoginAsync(LoginRequest request, string? ipAddress, string? deviceInfo, CancellationToken ct = default)
@@ -704,30 +852,34 @@ public class AuthService : IAuthService
             t.UsedAt = DateTime.UtcNow;
         }
 
-        // Generate secure high-entropy token
-        var rawResetToken = $"{Guid.NewGuid():N}{Guid.NewGuid():N}";
-        var tokenHash = _jwtTokenService.HashToken(rawResetToken);
+        // Generate secure 6-digit numeric OTP code for password reset
+        var otpCode = _otpService.GenerateNumericOtp(6);
+        var tokenHash = _jwtTokenService.HashToken(otpCode);
 
         var resetTokenRecord = new PasswordResetToken
         {
             UserId = user.UserId,
             TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(60),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
             CreatedAt = DateTime.UtcNow
         };
 
         _dbContext.PasswordResetTokens.Add(resetTokenRecord);
         await _dbContext.SaveChangesAsync(ct);
 
-        var frontendBaseUrl = _configuration["Frontend:BaseUrl"] ?? "https://localhost:7129";
-        var resetUrl = $"{frontendBaseUrl.TrimEnd('/')}/Account/ResetPassword?email={Uri.EscapeDataString(user.Email)}&token={Uri.EscapeDataString(rawResetToken)}";
-
         var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email;
-        await _emailService.SendPasswordResetAsync(user.Email, fullName, resetUrl, ct);
+        try
+        {
+            await _emailService.SendPasswordResetOtpAsync(user.Email, fullName, otpCode, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send password reset OTP to {Email}", user.Email);
+        }
 
         await _auditLogService.LogAsync(user.UserId, "FORGOT_PASSWORD", "UserAccount", user.UserId.ToString(), ct: ct);
 
-        return ApiResponse.Ok(null, "Nếu email của bạn tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đến hộp thư của bạn.");
+        return ApiResponse.Ok(null, "Mã xác thực OTP đặt lại mật khẩu đã được gửi đến email của bạn. Vui lòng kiểm tra hộp thư.");
     }
 
     public async Task<ApiResponse> ResetPasswordAsync(ResetPasswordRequest request, string? ipAddress, CancellationToken ct = default)
@@ -742,14 +894,14 @@ public class AuthService : IAuthService
             return ApiResponse.Fail("Yêu cầu đặt lại mật khẩu không hợp lệ.");
         }
 
-        var tokenHash = _jwtTokenService.HashToken(request.Token);
+        var tokenHash = _jwtTokenService.HashToken(request.Token.Trim());
 
         var resetToken = await _dbContext.PasswordResetTokens
             .FirstOrDefaultAsync(t => t.UserId == user.UserId && t.TokenHash == tokenHash && t.UsedAt == null, ct);
 
         if (resetToken == null || resetToken.ExpiresAt < DateTime.UtcNow)
         {
-            return ApiResponse.Fail("Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn. Vui lòng gửi lại yêu cầu quên mật khẩu.");
+            return ApiResponse.Fail("Mã xác thực OTP không chính xác hoặc đã hết hạn. Vui lòng kiểm tra lại mã hoặc gửi yêu cầu mới.");
         }
 
         // Mark token as used

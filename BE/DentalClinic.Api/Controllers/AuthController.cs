@@ -73,6 +73,34 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("verify-phone")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> VerifyPhone([FromBody] VerifyPhoneRequest request, CancellationToken ct)
+    {
+        var result = await _authService.VerifyPhoneAsync(request, GetClientIpAddress(), ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("resend-phone-verification")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResendPhoneVerification([FromBody] ResendPhoneVerificationRequest request, CancellationToken ct)
+    {
+        var result = await _authService.ResendPhoneVerificationAsync(request, GetClientIpAddress(), ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
     [HttpPost("login")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status200OK)]

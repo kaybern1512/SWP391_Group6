@@ -62,6 +62,38 @@ public class EmailService : IEmailService
         await SendEmailAsync(toEmail, fullName, subject, htmlBody, otp, isOtp: true, ct);
     }
 
+    public async Task SendPasswordResetOtpAsync(string toEmail, string fullName, string otp, CancellationToken ct = default)
+    {
+        var subject = "Mã OTP đặt lại mật khẩu - DentalCare Clinic";
+        var htmlBody = $@"
+<div style=""font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #ffffff;"">
+    <div style=""text-align: center; margin-bottom: 24px;"">
+        <h1 style=""color: #0A2540; font-size: 22px; margin: 0;"">NHA KHOA ĐA CHUYÊN KHOA DENTALCARE</h1>
+        <p style=""color: #64748b; font-size: 14px; margin-top: 4px;"">Hệ Thống Chăm Sóc Sức Khỏe Răng Hàm Mặt</p>
+    </div>
+    <div style=""border-top: 2px solid #0066cc; padding-top: 20px;"">
+        <p style=""font-size: 15px; color: #1e293b;"">Xin chào <strong>{WebUtility.HtmlEncode(fullName)}</strong>,</p>
+        <p style=""font-size: 14px; color: #334155; line-height: 1.6;"">
+            Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản DentalCare của bạn. Dưới đây là mã xác thực OTP của bạn:
+        </p>
+        <div style=""background-color: #f0f7ff; border: 2px dashed #0066cc; border-radius: 8px; padding: 20px; text-align: center; margin: 24px 0;"">
+            <span style=""font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #0066cc; font-family: monospace;"">{otp}</span>
+        </div>
+        <p style=""font-size: 13px; color: #64748b;"">
+            Mã OTP này có hiệu lực trong vòng <strong>15 phút</strong>. Tuyệt đối không chia sẻ mã này cho bất kỳ ai vì lý do an toàn tài khoản.
+        </p>
+        <p style=""font-size: 13px; color: #64748b;"">
+            Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email và mật khẩu của bạn vẫn được an toàn.
+        </p>
+    </div>
+    <div style=""border-top: 1px solid #e2e8f0; margin-top: 30px; padding-top: 16px; text-align: center; color: #94a3b8; font-size: 12px;"">
+        &copy; {DateTime.UtcNow.Year} DentalCare Clinic. All rights reserved.
+    </div>
+</div>";
+
+        await SendEmailAsync(toEmail, fullName, subject, htmlBody, otp, isOtp: true, ct);
+    }
+
     public async Task SendPasswordResetAsync(string toEmail, string fullName, string resetUrl, CancellationToken ct = default)
     {
         var subject = "Yêu cầu đặt lại mật khẩu - DentalCare Clinic";

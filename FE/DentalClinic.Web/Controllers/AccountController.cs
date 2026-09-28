@@ -109,6 +109,12 @@ public class AccountController : Controller
         var result = await _authApiService.VerifyEmailAsync(request);
         if (result.IsSuccess)
         {
+            if (result.Data?.RequiresPhoneVerification == true)
+            {
+                TempData["SuccessMessage"] = "Xác thực email thành công! Vui lòng xác thực số điện thoại để hoàn tất kích hoạt tài khoản.";
+                return RedirectToAction(nameof(VerifyPhone), new { email = model.Email, phone = result.Data.PhoneNumber });
+            }
+
             TempData["SuccessMessage"] = "Xác thực email thành công! Bạn có thể đăng nhập vào hệ thống ngay bây giờ.";
             return RedirectToAction(nameof(Login), new { email = model.Email });
         }
@@ -138,6 +144,61 @@ public class AccountController : Controller
         }
 
         return RedirectToAction(nameof(VerifyEmail), new { email });
+    }
+
+    [HttpGet]
+    public IActionResult VerifyPhone(string? email, string? phone)
+    {
+        return View(new VerifyPhoneViewModel { Email = email ?? string.Empty, PhoneNumber = phone });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> VerifyPhone(VerifyPhoneViewModel model)
+    {
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        var request = new VerifyPhoneRequest
+        {
+            Email = model.Email,
+            Code = model.Code.Trim()
+        };
+
+        var result = await _authApiService.VerifyPhoneAsync(request);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Xác thực số điện thoại và kích hoạt tài khoản thành công! Bạn có thể đăng nhập ngay bây giờ.";
+            return RedirectToAction(nameof(Login), new { email = model.Email });
+        }
+
+        ModelState.AddModelError(string.Empty, result.Message ?? "Mã xác thực số điện thoại không hợp lệ hoặc đã hết hạn.");
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResendPhoneVerification(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            TempData["ErrorMessage"] = "Vui lòng cung cấp địa chỉ email hợp lệ.";
+            return RedirectToAction(nameof(VerifyPhone));
+        }
+
+        var result = await _authApiService.ResendPhoneVerificationAsync(new ResendPhoneVerificationRequest { Email = email });
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Mã xác thực mới đã được gửi đến số điện thoại của bạn.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể gửi lại mã xác thực số điện thoại lúc này.";
+        }
+
+        return RedirectToAction(nameof(VerifyPhone), new { email });
     }
 
     [HttpGet]
@@ -172,7 +233,13 @@ public class AccountController : Controller
         {
             if (result.IsUnverified)
             {
-                TempData["WarningMessage"] = "Tài khoản của bạn chưa được kích hoạt. Vui lòng xác thực email để tiếp tục.";
+                if (result.Message?.Contains("số điện thoại", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    TempData["WarningMessage"] = result.Message;
+                    return RedirectToAction(nameof(VerifyPhone), new { email = model.Email });
+                }
+
+                TempData["WarningMessage"] = result.Message ?? "Tài khoản của bạn chưa được kích hoạt. Vui lòng xác thực email để tiếp tục.";
                 return RedirectToAction(nameof(VerifyEmail), new { email = model.Email });
             }
 
@@ -272,24 +339,27 @@ public class AccountController : Controller
             return View(model);
         }
 
-        await _authApiService.ForgotPasswordAsync(new ForgotPasswordRequest { Email = model.Email });
+        var result = await _authApiService.ForgotPasswordAsync(new ForgotPasswordRequest { Email = model.Email });
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Mã xác thực OTP đặt lại mật khẩu đã được gửi đến email của bạn.";
+            return RedirectToAction(nameof(ResetPassword), new { email = model.Email });
+        }
 
-        // Always display security-compliant message
-        ViewBag.Submitted = true;
-        ViewBag.SubmittedEmail = model.Email;
+        ModelState.AddModelError(string.Empty, result.Message ?? "Không thể gửi mã xác thực lúc này. Vui lòng thử lại sau.");
         return View(model);
     }
 
     [HttpGet]
     public IActionResult ResetPassword(string? email, string? token)
     {
-        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(token))
+        if (string.IsNullOrEmpty(email))
         {
-            TempData["ErrorMessage"] = "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.";
+            TempData["ErrorMessage"] = "Vui lòng nhập địa chỉ email trước khi đặt lại mật khẩu.";
             return RedirectToAction(nameof(ForgotPassword));
         }
 
-        return View(new ResetPasswordViewModel { Email = email, Token = token });
+        return View(new ResetPasswordViewModel { Email = email, Token = token ?? string.Empty });
     }
 
     [HttpPost]
@@ -304,7 +374,7 @@ public class AccountController : Controller
         var request = new ResetPasswordRequest
         {
             Email = model.Email,
-            Token = model.Token,
+            Token = model.Token.Trim(),
             NewPassword = model.NewPassword,
             ConfirmPassword = model.ConfirmPassword
         };
@@ -313,10 +383,10 @@ public class AccountController : Controller
         if (result.IsSuccess)
         {
             TempData["SuccessMessage"] = "Đặt lại mật khẩu thành công! Bạn có thể đăng nhập ngay với mật khẩu mới.";
-            return RedirectToAction(nameof(Login));
+            return RedirectToAction(nameof(Login), new { email = model.Email });
         }
 
-        ModelState.AddModelError(string.Empty, result.Message ?? "Không thể đặt lại mật khẩu. Liên kết có thể đã hết hạn.");
+        ModelState.AddModelError(string.Empty, result.Message ?? "Không thể đặt lại mật khẩu. Mã xác thực OTP có thể không chính xác hoặc đã hết hạn.");
         return View(model);
     }
 

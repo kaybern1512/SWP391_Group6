@@ -10,6 +10,8 @@ public interface IAuthService
     Task<ApiResponse> RegisterAsync(RegisterRequest request, string? ipAddress, CancellationToken ct = default);
     Task<ApiResponse> VerifyEmailAsync(VerifyEmailRequest request, string? ipAddress, CancellationToken ct = default);
     Task<ApiResponse> ResendVerificationAsync(ResendVerificationRequest request, string? ipAddress, CancellationToken ct = default);
+    Task<ApiResponse> VerifyPhoneAsync(VerifyPhoneRequest request, string? ipAddress, CancellationToken ct = default);
+    Task<ApiResponse> ResendPhoneVerificationAsync(ResendPhoneVerificationRequest request, string? ipAddress, CancellationToken ct = default);
     Task<ApiResponse<LoginResponse>> LoginAsync(LoginRequest request, string? ipAddress, string? deviceInfo, CancellationToken ct = default);
     Task<ApiResponse<LoginResponse>> GoogleLoginAsync(GoogleLoginRequest request, string? ipAddress, string? deviceInfo, CancellationToken ct = default);
     Task<ApiResponse<RefreshTokenResponse>> RefreshTokenAsync(RefreshTokenRequest request, string? ipAddress, string? deviceInfo, CancellationToken ct = default);

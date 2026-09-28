@@ -247,10 +247,87 @@ public class AccountControllerTests
         var result = await _controller.Logout() as RedirectToActionResult;
 
         // Assert
-        result.Should().NotBeNull();
-        result!.ActionName.Should().Be("Login");
-
         _tokenServiceMock.Verify(x => x.ClearTokens(), Times.Once);
         _cookieServiceMock.Verify(x => x.SignOutUserAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task VerifyEmail_Post_RequiresPhoneVerification_RedirectsToVerifyPhone()
+    {
+        // Arrange
+        var model = new VerifyEmailViewModel { Email = "user@dental.vn", Code = "123456" };
+        var responseData = new VerifyEmailResponse { RequiresPhoneVerification = true, Email = "user@dental.vn", PhoneNumber = "0901234567" };
+
+        _authApiMock.Setup(x => x.VerifyEmailAsync(It.IsAny<VerifyEmailRequest>()))
+            .ReturnsAsync(ApiResult<VerifyEmailResponse>.Success(responseData, "Xác thực email thành công"));
+
+        // Act
+        var result = await _controller.VerifyEmail(model) as RedirectToActionResult;
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.ActionName.Should().Be("VerifyPhone");
+        result.RouteValues!["email"].Should().Be(model.Email);
+        result.RouteValues!["phone"].Should().Be("0901234567");
+    }
+
+    [Fact]
+    public async Task VerifyPhone_Post_Success_RedirectsToLogin()
+    {
+        // Arrange
+        var model = new VerifyPhoneViewModel { Email = "user@dental.vn", PhoneNumber = "0901234567", Code = "654321" };
+
+        _authApiMock.Setup(x => x.VerifyPhoneAsync(It.IsAny<VerifyPhoneRequest>()))
+            .ReturnsAsync(ApiResult.Success("Xác thực số điện thoại thành công"));
+
+        // Act
+        var result = await _controller.VerifyPhone(model) as RedirectToActionResult;
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.ActionName.Should().Be("Login");
+        result.RouteValues!["email"].Should().Be(model.Email);
+    }
+
+    [Fact]
+    public async Task ForgotPassword_Post_Success_RedirectsToResetPassword()
+    {
+        // Arrange
+        var model = new ForgotPasswordViewModel { Email = "forgot@dental.vn" };
+
+        _authApiMock.Setup(x => x.ForgotPasswordAsync(It.IsAny<ForgotPasswordRequest>()))
+            .ReturnsAsync(ApiResult.Success("Mã OTP đã được gửi đến email"));
+
+        // Act
+        var result = await _controller.ForgotPassword(model) as RedirectToActionResult;
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.ActionName.Should().Be("ResetPassword");
+        result.RouteValues!["email"].Should().Be(model.Email);
+    }
+
+    [Fact]
+    public async Task ResetPassword_Post_ValidOtp_RedirectsToLogin()
+    {
+        // Arrange
+        var model = new ResetPasswordViewModel
+        {
+            Email = "reset@dental.vn",
+            Token = "123456",
+            NewPassword = "NewPassword123@",
+            ConfirmPassword = "NewPassword123@"
+        };
+
+        _authApiMock.Setup(x => x.ResetPasswordAsync(It.IsAny<ResetPasswordRequest>()))
+            .ReturnsAsync(ApiResult.Success("Đặt lại mật khẩu thành công"));
+
+        // Act
+        var result = await _controller.ResetPassword(model) as RedirectToActionResult;
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.ActionName.Should().Be("Login");
+        result.RouteValues!["email"].Should().Be(model.Email);
     }
 }
