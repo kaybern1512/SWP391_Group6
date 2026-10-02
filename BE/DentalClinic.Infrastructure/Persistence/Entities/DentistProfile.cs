@@ -5,9 +5,7 @@ namespace DentalClinic.Infrastructure.Persistence.Entities;
 
 public partial class DentistProfile
 {
-    public long DentistId { get; set; }
-
-    public long StaffId { get; set; }
+    public long UserId { get; set; }
 
     public string? LicenseNumber { get; set; }
 
@@ -17,11 +15,11 @@ public partial class DentistProfile
 
     public string? Biography { get; set; }
 
-    public virtual ICollection<Appointment> AppointmentAssignedDentists { get; set; } = new List<Appointment>();
+    public virtual ICollection<Appointment> AppointmentAssignedDentistUsers { get; set; } = new List<Appointment>();
 
     public virtual ICollection<AppointmentChangeProposal> AppointmentChangeProposals { get; set; } = new List<AppointmentChangeProposal>();
 
-    public virtual ICollection<Appointment> AppointmentRequestedDentists { get; set; } = new List<Appointment>();
+    public virtual ICollection<Appointment> AppointmentRequestedDentistUsers { get; set; } = new List<Appointment>();
 
     public virtual ICollection<ClinicalEntry> ClinicalEntries { get; set; } = new List<ClinicalEntry>();
 
@@ -31,15 +29,7 @@ public partial class DentistProfile
 
     public virtual ICollection<DentistWorkSchedule> DentistWorkSchedules { get; set; } = new List<DentistWorkSchedule>();
 
-    public virtual ICollection<DepartmentReferral> DepartmentReferralAssignedDentists { get; set; } = new List<DepartmentReferral>();
-
-    public virtual ICollection<DepartmentReferral> DepartmentReferralFromDentists { get; set; } = new List<DepartmentReferral>();
-
-    public virtual ICollection<FollowUpSchedule> FollowUpSchedules { get; set; } = new List<FollowUpSchedule>();
-
-    public virtual ICollection<Prescription> Prescriptions { get; set; } = new List<Prescription>();
-
-    public virtual StaffProfile Staff { get; set; } = null!;
+    public virtual ICollection<DepartmentReferral> DepartmentReferrals { get; set; } = new List<DepartmentReferral>();
 
     public virtual ICollection<TreatmentPlanItem> TreatmentPlanItems { get; set; } = new List<TreatmentPlanItem>();
 
@@ -47,5 +37,5 @@ public partial class DentistProfile
 
     public virtual ICollection<TreatmentSession> TreatmentSessions { get; set; } = new List<TreatmentSession>();
 
-    public virtual ICollection<VisitFeedback> VisitFeedbacks { get; set; } = new List<VisitFeedback>();
+    public virtual StaffProfile User { get; set; } = null!;
 }

@@ -11,7 +11,7 @@ public partial class Department
 
     public string? Description { get; set; }
 
-    public long? ManagerStaffId { get; set; }
+    public long? ManagerUserId { get; set; }
 
     public string Status { get; set; } = null!;
 
@@ -35,7 +35,7 @@ public partial class Department
 
     public virtual ICollection<DepartmentWorkSchedule> DepartmentWorkSchedules { get; set; } = new List<DepartmentWorkSchedule>();
 
-    public virtual StaffProfile? ManagerStaff { get; set; }
+    public virtual StaffProfile? ManagerUser { get; set; }
 
     public virtual ICollection<TreatmentPlan> TreatmentPlans { get; set; } = new List<TreatmentPlan>();
 }

@@ -7,7 +7,7 @@ public partial class DentistAvailability
 {
     public long AvailabilityId { get; set; }
 
-    public long DentistId { get; set; }
+    public long DentistUserId { get; set; }
 
     public DateTime StartDateTime { get; set; }
 
@@ -19,5 +19,5 @@ public partial class DentistAvailability
 
     public DateTime CreatedAt { get; set; }
 
-    public virtual DentistProfile Dentist { get; set; } = null!;
+    public virtual DentistProfile DentistUser { get; set; } = null!;
 }

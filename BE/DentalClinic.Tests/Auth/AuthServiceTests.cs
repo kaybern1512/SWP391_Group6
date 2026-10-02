@@ -10,6 +10,7 @@ using DentalClinic.Infrastructure.Persistence.Entities;
 using DentalClinic.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -26,6 +27,7 @@ public class AuthServiceTests
     private readonly IOtpService _otpService;
     private readonly IJwtTokenService _jwtService;
     private readonly IConfiguration _config;
+    private readonly IMemoryCache _memoryCache;
 
     public AuthServiceTests()
     {
@@ -44,6 +46,7 @@ public class AuthServiceTests
 
         _otpService = new OtpService(_config);
         _jwtService = new JwtTokenService(_config);
+        _memoryCache = new MemoryCache(new MemoryCacheOptions());
     }
 
     private DentalClinicDbContext CreateDbContext(string dbName)
@@ -68,6 +71,7 @@ public class AuthServiceTests
             _mockEmailService.Object,
             _mockGoogleAuth.Object,
             auditService,
+            _memoryCache,
             _config,
             _mockLogger.Object);
     }
@@ -93,15 +97,15 @@ public class AuthServiceTests
 
         var user = await db.UserAccounts
             .Include(u => u.PatientProfile)
-            .Include(u => u.AccountVerifications)
             .FirstOrDefaultAsync(u => u.Email == "tranvanb@example.com");
 
         Assert.NotNull(user);
         Assert.Equal(AccountStatus.Unverified, user.Status);
         Assert.NotNull(user.PatientProfile);
-        Assert.Equal(2, user.AccountVerifications.Count);
-        Assert.Contains(user.AccountVerifications, v => v.Channel == VerificationChannel.Email && v.Purpose == VerificationPurpose.EmailVerification);
-        Assert.Contains(user.AccountVerifications, v => v.Channel == VerificationChannel.Phone && v.Purpose == VerificationPurpose.PhoneVerification);
+
+        // Verify OTP is cached in IMemoryCache
+        Assert.True(_memoryCache.TryGetValue($"email-verify:{user.UserId}", out _));
+        Assert.True(_memoryCache.TryGetValue($"phone-verify:{user.UserId}", out _));
 
         _mockEmailService.Verify(e => e.SendEmailVerificationOtpAsync(
             "tranvanb@example.com", "Tran Van B", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -145,17 +149,14 @@ public class AuthServiceTests
         db.UserAccounts.Add(user);
         await db.SaveChangesAsync();
 
+        // Seed OTP in cache
         var otpCode = "123456";
-        db.AccountVerifications.Add(new AccountVerification
-        {
-            UserId = user.UserId,
-            Channel = VerificationChannel.Email,
-            Purpose = VerificationPurpose.EmailVerification,
-            CodeHash = _otpService.HashOtp(otpCode),
-            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
-            CreatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        var cacheEntry = Activator.CreateInstance(
+            typeof(AuthService).GetNestedType("OtpCacheEntry", System.Reflection.BindingFlags.NonPublic)!);
+        cacheEntry!.GetType().GetProperty("CodeHash")!.SetValue(cacheEntry, _otpService.HashOtp(otpCode));
+        cacheEntry.GetType().GetProperty("AttemptCount")!.SetValue(cacheEntry, 0);
+
+        _memoryCache.Set($"email-verify:{user.UserId}", cacheEntry, TimeSpan.FromMinutes(5));
 
         var authService = CreateAuthService(db);
         var result = await authService.VerifyEmailAsync(new VerifyEmailRequest { Email = "verify@example.com", Code = "123456" }, "127.0.0.1");
@@ -180,25 +181,20 @@ public class AuthServiceTests
         db.UserAccounts.Add(user);
         await db.SaveChangesAsync();
 
-        db.AccountVerifications.Add(new AccountVerification
-        {
-            UserId = user.UserId,
-            Channel = VerificationChannel.Email,
-            Purpose = VerificationPurpose.EmailVerification,
-            CodeHash = _otpService.HashOtp("123456"),
-            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
-            AttemptCount = 0,
-            CreatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        var cacheEntry = Activator.CreateInstance(
+            typeof(AuthService).GetNestedType("OtpCacheEntry", System.Reflection.BindingFlags.NonPublic)!);
+        cacheEntry!.GetType().GetProperty("CodeHash")!.SetValue(cacheEntry, _otpService.HashOtp("123456"));
+        cacheEntry.GetType().GetProperty("AttemptCount")!.SetValue(cacheEntry, 0);
+
+        _memoryCache.Set($"email-verify:{user.UserId}", cacheEntry, TimeSpan.FromMinutes(5));
 
         var authService = CreateAuthService(db);
         var result = await authService.VerifyEmailAsync(new VerifyEmailRequest { Email = "wrongcode@example.com", Code = "999999" }, "127.0.0.1");
 
         Assert.False(result.Success);
-
-        var verification = await db.AccountVerifications.FirstAsync(v => v.UserId == user.UserId);
-        Assert.Equal(1, verification.AttemptCount);
+        Assert.True(_memoryCache.TryGetValue($"email-verify:{user.UserId}", out var storedEntry));
+        var attemptCount = (int)storedEntry!.GetType().GetProperty("AttemptCount")!.GetValue(storedEntry)!;
+        Assert.Equal(1, attemptCount);
     }
 
     [Fact]
@@ -240,6 +236,10 @@ public class AuthServiceTests
         var updatedUser = await db.UserAccounts.FindAsync(user.UserId);
         Assert.Equal(0, updatedUser!.FailedLoginCount);
         Assert.NotNull(updatedUser.LastLoginAt);
+
+        // Check refresh token in cache
+        Assert.True(_memoryCache.TryGetValue($"refresh-token:{result.Data.RefreshToken}", out long cachedUserId));
+        Assert.Equal(user.UserId, cachedUserId);
     }
 
     [Fact]
@@ -286,16 +286,7 @@ public class AuthServiceTests
         await db.SaveChangesAsync();
 
         var rawToken = _jwtService.GenerateRefreshToken();
-        var tokenHash = _jwtService.HashToken(rawToken);
-
-        db.RefreshTokens.Add(new RefreshToken
-        {
-            UserId = user.UserId,
-            TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddDays(7),
-            CreatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        _memoryCache.Set($"refresh-token:{rawToken}", user.UserId, TimeSpan.FromDays(7));
 
         var authService = CreateAuthService(db);
         var result = await authService.RefreshTokenAsync(new RefreshTokenRequest { RefreshToken = rawToken }, "127.0.0.1", "Firefox");
@@ -304,9 +295,11 @@ public class AuthServiceTests
         Assert.NotNull(result.Data);
         Assert.NotEqual(rawToken, result.Data.RefreshToken);
 
-        var oldToken = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == tokenHash);
-        Assert.NotNull(oldToken!.RevokedAt);
-        Assert.Equal("Rotated", oldToken.RevocationReason);
+        // Old token should be removed from cache
+        Assert.False(_memoryCache.TryGetValue($"refresh-token:{rawToken}", out _));
+        // New token should be present in cache
+        Assert.True(_memoryCache.TryGetValue($"refresh-token:{result.Data.RefreshToken}", out long newUserId));
+        Assert.Equal(user.UserId, newUserId);
     }
 
     [Fact]
@@ -323,24 +316,13 @@ public class AuthServiceTests
         await db.SaveChangesAsync();
 
         var rawToken = _jwtService.GenerateRefreshToken();
-        var tokenHash = _jwtService.HashToken(rawToken);
-
-        db.RefreshTokens.Add(new RefreshToken
-        {
-            UserId = user.UserId,
-            TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddDays(7),
-            CreatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        _memoryCache.Set($"refresh-token:{rawToken}", user.UserId, TimeSpan.FromDays(7));
 
         var authService = CreateAuthService(db);
         var result = await authService.LogoutAsync(new LogoutRequest { RefreshToken = rawToken }, "127.0.0.1");
 
         Assert.True(result.Success);
-
-        var token = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == tokenHash);
-        Assert.NotNull(token!.RevokedAt);
+        Assert.False(_memoryCache.TryGetValue($"refresh-token:{rawToken}", out _));
     }
 
     [Fact]
@@ -357,32 +339,19 @@ public class AuthServiceTests
         db.UserAccounts.Add(user);
         await db.SaveChangesAsync();
 
-        var rawToken = "ResetToken123456";
-        var tokenHash = _jwtService.HashToken(rawToken);
+        var rawOtp = "123456";
+        var cacheEntry = Activator.CreateInstance(
+            typeof(AuthService).GetNestedType("OtpCacheEntry", System.Reflection.BindingFlags.NonPublic)!);
+        cacheEntry!.GetType().GetProperty("CodeHash")!.SetValue(cacheEntry, _otpService.HashOtp(rawOtp));
+        cacheEntry.GetType().GetProperty("AttemptCount")!.SetValue(cacheEntry, 0);
 
-        db.PasswordResetTokens.Add(new PasswordResetToken
-        {
-            UserId = user.UserId,
-            TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(60),
-            CreatedAt = DateTime.UtcNow
-        });
-
-        db.RefreshTokens.Add(new RefreshToken
-        {
-            UserId = user.UserId,
-            TokenHash = "session1",
-            ExpiresAt = DateTime.UtcNow.AddDays(1),
-            CreatedAt = DateTime.UtcNow
-        });
-
-        await db.SaveChangesAsync();
+        _memoryCache.Set($"password-reset:{user.UserId}", cacheEntry, TimeSpan.FromMinutes(10));
 
         var authService = CreateAuthService(db);
         var result = await authService.ResetPasswordAsync(new ResetPasswordRequest
         {
             Email = "resetuser@example.com",
-            Token = rawToken,
+            Token = rawOtp,
             NewPassword = "NewSecretPassword2026!"
         }, "127.0.0.1");
 
@@ -391,11 +360,8 @@ public class AuthServiceTests
         var updatedUser = await db.UserAccounts.FindAsync(user.UserId);
         Assert.True(_passwordHasher.VerifyPassword(updatedUser!.PasswordHash!, "NewSecretPassword2026!"));
 
-        var resetTokenRecord = await db.PasswordResetTokens.FirstOrDefaultAsync(t => t.TokenHash == tokenHash);
-        Assert.NotNull(resetTokenRecord!.UsedAt);
-
-        var activeSession = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == "session1");
-        Assert.NotNull(activeSession!.RevokedAt);
+        // Cache entry should be removed
+        Assert.False(_memoryCache.TryGetValue($"password-reset:{user.UserId}", out _));
     }
 
     [Theory]
@@ -422,8 +388,7 @@ public class AuthServiceTests
             UserId = user.UserId,
             EmployeeCode = empCode,
             FullName = fullName,
-            StaffType = role,
-            Status = "Active"
+            EmploymentStatus = "Active"
         });
         await db.SaveChangesAsync();
 
@@ -458,18 +423,12 @@ public class AuthServiceTests
         db.UserAccounts.Add(user);
         await db.SaveChangesAsync();
 
-        var codeHash = _otpService.HashOtp("123456");
-        db.AccountVerifications.Add(new AccountVerification
-        {
-            UserId = user.UserId,
-            Channel = VerificationChannel.Phone,
-            Purpose = VerificationPurpose.PhoneVerification,
-            CodeHash = codeHash,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
-            AttemptCount = 0,
-            CreatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        var cacheEntry = Activator.CreateInstance(
+            typeof(AuthService).GetNestedType("OtpCacheEntry", System.Reflection.BindingFlags.NonPublic)!);
+        cacheEntry!.GetType().GetProperty("CodeHash")!.SetValue(cacheEntry, _otpService.HashOtp("123456"));
+        cacheEntry.GetType().GetProperty("AttemptCount")!.SetValue(cacheEntry, 0);
+
+        _memoryCache.Set($"phone-verify:{user.UserId}", cacheEntry, TimeSpan.FromMinutes(5));
 
         var authService = CreateAuthService(db);
         var result = await authService.VerifyPhoneAsync(new VerifyPhoneRequest
@@ -482,7 +441,6 @@ public class AuthServiceTests
 
         var updatedUser = await db.UserAccounts.FindAsync(user.UserId);
         Assert.NotNull(updatedUser);
-        Assert.NotNull(updatedUser.PhoneVerifiedAt);
         Assert.Equal(AccountStatus.Active, updatedUser.Status);
     }
 
@@ -508,9 +466,8 @@ public class AuthServiceTests
 
         Assert.True(result.Success);
 
-        var resetTokens = await db.PasswordResetTokens.Where(t => t.UserId == user.UserId).ToListAsync();
-        Assert.Single(resetTokens);
-        Assert.Null(resetTokens[0].UsedAt);
+        // Check OTP is in cache
+        Assert.True(_memoryCache.TryGetValue($"password-reset:{user.UserId}", out _));
 
         _mockEmailService.Verify(e => e.SendPasswordResetOtpAsync(
             "forgotuser@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -531,15 +488,12 @@ public class AuthServiceTests
         await db.SaveChangesAsync();
 
         var otp = "654321";
-        var tokenHash = _jwtService.HashToken(otp);
-        db.PasswordResetTokens.Add(new PasswordResetToken
-        {
-            UserId = user.UserId,
-            TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
-            CreatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        var cacheEntry = Activator.CreateInstance(
+            typeof(AuthService).GetNestedType("OtpCacheEntry", System.Reflection.BindingFlags.NonPublic)!);
+        cacheEntry!.GetType().GetProperty("CodeHash")!.SetValue(cacheEntry, _otpService.HashOtp(otp));
+        cacheEntry.GetType().GetProperty("AttemptCount")!.SetValue(cacheEntry, 0);
+
+        _memoryCache.Set($"password-reset:{user.UserId}", cacheEntry, TimeSpan.FromMinutes(10));
 
         var authService = CreateAuthService(db);
         var result = await authService.ResetPasswordAsync(new ResetPasswordRequest
@@ -556,7 +510,6 @@ public class AuthServiceTests
         Assert.NotNull(updatedUser);
         Assert.True(_passwordHasher.VerifyPassword(updatedUser.PasswordHash!, "NewPassword123@"));
 
-        var resetToken = await db.PasswordResetTokens.FirstAsync(t => t.UserId == user.UserId);
-        Assert.NotNull(resetToken.UsedAt);
+        Assert.False(_memoryCache.TryGetValue($"password-reset:{user.UserId}", out _));
     }
 }

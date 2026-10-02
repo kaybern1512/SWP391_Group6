@@ -7,11 +7,7 @@ public partial class FollowUpSchedule
 {
     public long FollowUpId { get; set; }
 
-    public long PatientId { get; set; }
-
-    public long? TreatmentPlanId { get; set; }
-
-    public long DentistId { get; set; }
+    public long TreatmentSessionId { get; set; }
 
     public DateTime RecommendedDate { get; set; }
 
@@ -23,9 +19,5 @@ public partial class FollowUpSchedule
 
     public virtual Appointment? Appointment { get; set; }
 
-    public virtual DentistProfile Dentist { get; set; } = null!;
-
-    public virtual PatientProfile Patient { get; set; } = null!;
-
-    public virtual TreatmentPlan? TreatmentPlan { get; set; }
+    public virtual TreatmentSession TreatmentSession { get; set; } = null!;
 }

@@ -9,10 +9,6 @@ public partial class VisitFeedback
 
     public long AppointmentId { get; set; }
 
-    public long PatientId { get; set; }
-
-    public long DentistId { get; set; }
-
     public byte DentistRating { get; set; }
 
     public byte ClinicRating { get; set; }
@@ -22,8 +18,4 @@ public partial class VisitFeedback
     public DateTime CreatedAt { get; set; }
 
     public virtual Appointment Appointment { get; set; } = null!;
-
-    public virtual DentistProfile Dentist { get; set; } = null!;
-
-    public virtual PatientProfile Patient { get; set; } = null!;
 }

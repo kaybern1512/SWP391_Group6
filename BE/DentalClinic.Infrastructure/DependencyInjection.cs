@@ -17,6 +17,8 @@ public static class DependencyInjection
         services.AddDbContext<DentalClinicDbContext>(options =>
             options.UseSqlServer(connectionString));
 
+        services.AddMemoryCache();
+
         services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
         services.AddSingleton<IOtpService, OtpService>();
         services.AddSingleton<IJwtTokenService, JwtTokenService>();

@@ -7,7 +7,7 @@ public partial class DentistDepartment
 {
     public long DentistDepartmentId { get; set; }
 
-    public long DentistId { get; set; }
+    public long DentistUserId { get; set; }
 
     public long DepartmentId { get; set; }
 
@@ -15,7 +15,7 @@ public partial class DentistDepartment
 
     public DateTime AssignedAt { get; set; }
 
-    public virtual DentistProfile Dentist { get; set; } = null!;
+    public virtual DentistProfile DentistUser { get; set; } = null!;
 
     public virtual Department Department { get; set; } = null!;
 }

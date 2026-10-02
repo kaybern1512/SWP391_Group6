@@ -7,13 +7,11 @@ public partial class TreatmentSession
 {
     public long TreatmentSessionId { get; set; }
 
-    public long? TreatmentPlanId { get; set; }
+    public long TreatmentPlanItemId { get; set; }
 
-    public long? TreatmentPlanItemId { get; set; }
+    public long AppointmentId { get; set; }
 
-    public long? AppointmentId { get; set; }
-
-    public long DentistId { get; set; }
+    public long DentistUserId { get; set; }
 
     public DateTime SessionDate { get; set; }
 
@@ -21,17 +19,17 @@ public partial class TreatmentSession
 
     public string? ClinicalNote { get; set; }
 
-    public virtual Appointment? Appointment { get; set; }
+    public virtual Appointment Appointment { get; set; } = null!;
 
-    public virtual DentistProfile Dentist { get; set; } = null!;
+    public virtual DentistProfile DentistUser { get; set; } = null!;
 
     public virtual ICollection<DepartmentReferral> DepartmentReferrals { get; set; } = new List<DepartmentReferral>();
 
+    public virtual ICollection<FollowUpSchedule> FollowUpSchedules { get; set; } = new List<FollowUpSchedule>();
+
     public virtual ICollection<PerformedService> PerformedServices { get; set; } = new List<PerformedService>();
 
-    public virtual ICollection<Prescription> Prescriptions { get; set; } = new List<Prescription>();
+    public virtual Prescription? Prescription { get; set; }
 
-    public virtual TreatmentPlan? TreatmentPlan { get; set; }
-
-    public virtual TreatmentPlanItem? TreatmentPlanItem { get; set; }
+    public virtual TreatmentPlanItem TreatmentPlanItem { get; set; } = null!;
 }

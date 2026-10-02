@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,6 +10,7 @@ using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -23,8 +25,16 @@ public class AuthService : IAuthService
     private readonly IEmailService _emailService;
     private readonly IGoogleAuthService _googleAuthService;
     private readonly IAuditLogService _auditLogService;
+    private readonly IMemoryCache _cache;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthService> _logger;
+
+    private class OtpCacheEntry
+    {
+        public string CodeHash { get; set; } = string.Empty;
+        public int AttemptCount { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
 
     public AuthService(
         DentalClinicDbContext dbContext,
@@ -34,6 +44,7 @@ public class AuthService : IAuthService
         IEmailService emailService,
         IGoogleAuthService googleAuthService,
         IAuditLogService auditLogService,
+        IMemoryCache cache,
         IConfiguration configuration,
         ILogger<AuthService> logger)
     {
@@ -44,6 +55,7 @@ public class AuthService : IAuthService
         _emailService = emailService;
         _googleAuthService = googleAuthService;
         _auditLogService = auditLogService;
+        _cache = cache;
         _configuration = configuration;
         _logger = logger;
     }
@@ -54,7 +66,7 @@ public class AuthService : IAuthService
 
         // 1. Check existing email
         var existingUser = await _dbContext.UserAccounts
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, ct);
+            .FirstOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email, ct);
 
         if (existingUser != null)
         {
@@ -77,7 +89,7 @@ public class AuthService : IAuthService
             }
         }
 
-        // 3. Generate OTP & Hash
+        // 3. Generate OTP
         var otpCode = _otpService.GenerateNumericOtp(6);
         var codeHash = _otpService.HashOtp(otpCode);
 
@@ -92,7 +104,6 @@ public class AuthService : IAuthService
             using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
             try
             {
-                // Find highest existing patient code for this month
                 var prefix = $"PAT-{yearMonth}-";
                 var lastCode = await _dbContext.PatientProfiles
                     .Where(p => p.PatientCode.StartsWith(prefix))
@@ -131,7 +142,7 @@ public class AuthService : IAuthService
                 _dbContext.UserAccounts.Add(userAccount);
                 await _dbContext.SaveChangesAsync(ct);
 
-                // Create PatientProfile
+                // Create PatientProfile (PK = UserId)
                 var patientProfile = new PatientProfile
                 {
                     UserId = userAccount.UserId,
@@ -143,50 +154,38 @@ public class AuthService : IAuthService
                 };
 
                 _dbContext.PatientProfiles.Add(patientProfile);
+                await _dbContext.SaveChangesAsync(ct);
 
-                // Create AccountVerification
-                var verification = new AccountVerification
+                await tx.CommitAsync(ct);
+
+                // Save OTP to IMemoryCache (5 minutes expiration)
+                var cacheEntry = new OtpCacheEntry
                 {
-                    UserId = userAccount.UserId,
-                    Channel = VerificationChannel.Email,
-                    Purpose = VerificationPurpose.EmailVerification,
                     CodeHash = codeHash,
-                    ExpiresAt = now.AddMinutes(15),
                     AttemptCount = 0,
                     CreatedAt = now
                 };
-
-                _dbContext.AccountVerifications.Add(verification);
+                _cache.Set($"email-verify:{userAccount.UserId}", cacheEntry, TimeSpan.FromMinutes(5));
 
                 string? phoneOtpCode = null;
                 if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
                 {
                     phoneOtpCode = _otpService.GenerateNumericOtp(6);
-                    var phoneVerification = new AccountVerification
+                    var phoneCacheEntry = new OtpCacheEntry
                     {
-                        UserId = userAccount.UserId,
-                        Channel = VerificationChannel.Phone,
-                        Purpose = VerificationPurpose.PhoneVerification,
                         CodeHash = _otpService.HashOtp(phoneOtpCode),
-                        ExpiresAt = now.AddMinutes(15),
                         AttemptCount = 0,
                         CreatedAt = now
                     };
-                    _dbContext.AccountVerifications.Add(phoneVerification);
+                    _cache.Set($"phone-verify:{userAccount.UserId}", phoneCacheEntry, TimeSpan.FromMinutes(5));
                 }
-
-                await _dbContext.SaveChangesAsync(ct);
-
-                // Commit DB transaction BEFORE sending email to avoid SQL locks during external network call
-                await tx.CommitAsync(ct);
 
                 try
                 {
-                    // DB committed successfully, now dispatch email
                     await _emailService.SendEmailVerificationOtpAsync(email, request.FullName.Trim(), otpCode, ct);
                     if (!string.IsNullOrWhiteSpace(phoneOtpCode))
                     {
-                        _logger.LogInformation("\n======================================================\n[DEV SMS OTP NOTIFICATION]\nPURPOSE: PHONE VERIFICATION\nTO PHONE: {PhoneNumber} ({FullName})\nSMS OTP CODE: {PhoneOtpCode}\nEXPIRES IN: 15 minutes\n======================================================\n", request.PhoneNumber, request.FullName.Trim(), phoneOtpCode);
+                        _logger.LogInformation("\n======================================================\n[DEV SMS OTP NOTIFICATION]\nPURPOSE: PHONE VERIFICATION\nTO PHONE: {PhoneNumber} ({FullName})\nSMS OTP CODE: {PhoneOtpCode}\nEXPIRES IN: 5 minutes\n======================================================\n", request.PhoneNumber, request.FullName.Trim(), phoneOtpCode);
                     }
                     await _auditLogService.LogAsync(userAccount.UserId, "REGISTER", "UserAccount", userAccount.UserId.ToString(), ct: ct);
                 }
@@ -218,7 +217,7 @@ public class AuthService : IAuthService
         var email = request.Email.Trim().ToLowerInvariant();
 
         var user = await _dbContext.UserAccounts
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, ct);
+            .FirstOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email, ct);
 
         if (user == null)
         {
@@ -227,63 +226,38 @@ public class AuthService : IAuthService
 
         if (user.Status == AccountStatus.Active)
         {
-            return ApiResponse.Ok(null, "Tài khoản của bạn đã được xác thực trước đó. Vui lòng đăng nhập.");
+            return ApiResponse.Ok(new VerifyEmailResponse { RequiresPhoneVerification = false, Email = user.Email ?? string.Empty }, "Tài khoản của bạn đã được xác thực trước đó. Vui lòng đăng nhập.");
         }
 
-        var verification = await _dbContext.AccountVerifications
-            .Where(v => v.UserId == user.UserId && v.Purpose == VerificationPurpose.EmailVerification && v.VerifiedAt == null)
-            .OrderByDescending(v => v.CreatedAt)
-            .FirstOrDefaultAsync(ct);
-
-        if (verification == null)
+        if (!_cache.TryGetValue($"email-verify:{user.UserId}", out OtpCacheEntry? cacheEntry) || cacheEntry == null)
         {
-            return ApiResponse.Fail("Không tìm thấy mã xác thực hợp lệ. Vui lòng yêu cầu gửi lại mã mới.");
+            return ApiResponse.Fail("Mã xác thực đã hết hạn hoặc không tồn tại. Vui lòng yêu cầu gửi lại mã mới.");
         }
 
-        if (verification.ExpiresAt < DateTime.UtcNow)
-        {
-            return ApiResponse.Fail("Mã xác thực đã hết hạn. Vui lòng yêu cầu gửi mã mới.");
-        }
-
-        if (verification.AttemptCount >= 5)
+        if (cacheEntry.AttemptCount >= 5)
         {
             return ApiResponse.Fail("Bạn đã nhập sai mã xác thực quá số lần quy định (5 lần). Vui lòng yêu cầu mã xác thực mới.");
         }
 
-        var isOtpValid = _otpService.VerifyOtp(request.Code, verification.CodeHash);
+        var isOtpValid = _otpService.VerifyOtp(request.Code.Trim(), cacheEntry.CodeHash);
         if (!isOtpValid)
         {
-            verification.AttemptCount++;
-            await _dbContext.SaveChangesAsync(ct);
-            var remaining = Math.Max(0, 5 - verification.AttemptCount);
+            cacheEntry.AttemptCount++;
+            var remaining = Math.Max(0, 5 - cacheEntry.AttemptCount);
             return ApiResponse.Fail($"Mã xác thực không chính xác. Bạn còn {remaining} lần thử.");
         }
 
-        verification.VerifiedAt = DateTime.UtcNow;
-        user.EmailVerifiedAt = DateTime.UtcNow;
+        // OTP verified successfully
+        _cache.Remove($"email-verify:{user.UserId}");
 
-        var requiresPhoneVerification = !string.IsNullOrWhiteSpace(user.PhoneNumber) && user.PhoneVerifiedAt == null;
-        if (!requiresPhoneVerification)
-        {
-            user.Status = AccountStatus.Active;
-        }
+        user.Status = AccountStatus.Active;
+        user.EmailVerifiedAt = DateTime.UtcNow;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);
         await _auditLogService.LogAsync(user.UserId, "VERIFY_EMAIL", "UserAccount", user.UserId.ToString(), ct: ct);
 
-        if (requiresPhoneVerification)
-        {
-            var responseData = new VerifyEmailResponse
-            {
-                RequiresPhoneVerification = true,
-                Email = user.Email,
-                PhoneNumber = user.PhoneNumber
-            };
-            return ApiResponse.Ok(responseData, "Xác thực email thành công! Vui lòng xác thực số điện thoại để hoàn tất kích hoạt tài khoản.");
-        }
-
-        return ApiResponse.Ok(new VerifyEmailResponse { RequiresPhoneVerification = false, Email = user.Email }, "Xác thực email thành công! Tài khoản của bạn đã được kích hoạt. Hãy đăng nhập để tiếp tục.");
+        return ApiResponse.Ok(new VerifyEmailResponse { RequiresPhoneVerification = false, Email = user.Email ?? string.Empty }, "Xác thực email thành công! Tài khoản của bạn đã được kích hoạt. Hãy đăng nhập để tiếp tục.");
     }
 
     public async Task<ApiResponse> ResendVerificationAsync(ResendVerificationRequest request, string? ipAddress, CancellationToken ct = default)
@@ -293,44 +267,31 @@ public class AuthService : IAuthService
         var user = await _dbContext.UserAccounts
             .Include(u => u.PatientProfile)
             .Include(u => u.StaffProfile)
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, ct);
+            .FirstOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email, ct);
 
         if (user == null || user.Status == AccountStatus.Active)
         {
-            // Consistent response to avoid disclosing account presence
             return ApiResponse.Ok(null, "Nếu tài khoản tồn tại và chưa được kích hoạt, mã xác thực mới đã được gửi đến email của bạn.");
         }
 
-        // Rate limiting: 60s cooldown
-        var lastVerification = await _dbContext.AccountVerifications
-            .Where(v => v.UserId == user.UserId && v.Purpose == VerificationPurpose.EmailVerification)
-            .OrderByDescending(v => v.CreatedAt)
-            .FirstOrDefaultAsync(ct);
-
-        if (lastVerification != null && (DateTime.UtcNow - lastVerification.CreatedAt).TotalSeconds < 60)
+        // Rate limiting: 60s cooldown via cache
+        if (_cache.TryGetValue($"resend-cooldown:email:{user.UserId}", out _))
         {
-            var waitSec = 60 - (int)(DateTime.UtcNow - lastVerification.CreatedAt).TotalSeconds;
-            return ApiResponse.Fail($"Vui lòng đợi {waitSec} giây trước khi yêu cầu gửi lại mã xác thực.");
+            return ApiResponse.Fail("Vui lòng đợi 60 giây trước khi yêu cầu gửi lại mã xác thực.");
         }
 
         var otpCode = _otpService.GenerateNumericOtp(6);
-        var codeHash = _otpService.HashOtp(otpCode);
-
-        var verification = new AccountVerification
+        var cacheEntry = new OtpCacheEntry
         {
-            UserId = user.UserId,
-            Channel = VerificationChannel.Email,
-            Purpose = VerificationPurpose.EmailVerification,
-            CodeHash = codeHash,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            CodeHash = _otpService.HashOtp(otpCode),
             AttemptCount = 0,
             CreatedAt = DateTime.UtcNow
         };
 
-        _dbContext.AccountVerifications.Add(verification);
-        await _dbContext.SaveChangesAsync(ct);
+        _cache.Set($"email-verify:{user.UserId}", cacheEntry, TimeSpan.FromMinutes(5));
+        _cache.Set($"resend-cooldown:email:{user.UserId}", true, TimeSpan.FromSeconds(60));
 
-        var recipientName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email;
+        var recipientName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email ?? "Quý khách";
         await _emailService.SendEmailVerificationOtpAsync(email, recipientName, otpCode, ct);
 
         return ApiResponse.Ok(null, "Mã xác thực mới đã được gửi đến email của bạn.");
@@ -341,49 +302,38 @@ public class AuthService : IAuthService
         var email = request.Email.Trim().ToLowerInvariant();
 
         var user = await _dbContext.UserAccounts
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, ct);
+            .FirstOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email, ct);
 
         if (user == null)
         {
             return ApiResponse.Fail("Tài khoản không tồn tại trong hệ thống.");
         }
 
-        if (user.PhoneVerifiedAt != null && user.Status == AccountStatus.Active)
+        if (user.Status == AccountStatus.Active)
         {
             return ApiResponse.Ok(null, "Số điện thoại của bạn đã được xác thực trước đó. Vui lòng đăng nhập.");
         }
 
-        var verification = await _dbContext.AccountVerifications
-            .Where(v => v.UserId == user.UserId && v.Purpose == VerificationPurpose.PhoneVerification && v.VerifiedAt == null)
-            .OrderByDescending(v => v.CreatedAt)
-            .FirstOrDefaultAsync(ct);
-
-        if (verification == null)
+        if (!_cache.TryGetValue($"phone-verify:{user.UserId}", out OtpCacheEntry? cacheEntry) || cacheEntry == null)
         {
-            return ApiResponse.Fail("Không tìm thấy mã xác thực hợp lệ. Vui lòng yêu cầu gửi lại mã mới.");
+            return ApiResponse.Fail("Mã xác thực đã hết hạn hoặc không tồn tại. Vui lòng yêu cầu gửi lại mã mới.");
         }
 
-        if (verification.ExpiresAt < DateTime.UtcNow)
-        {
-            return ApiResponse.Fail("Mã xác thực đã hết hạn. Vui lòng yêu cầu gửi lại mã mới.");
-        }
-
-        if (verification.AttemptCount >= 5)
+        if (cacheEntry.AttemptCount >= 5)
         {
             return ApiResponse.Fail("Bạn đã nhập sai mã xác thực quá số lần quy định (5 lần). Vui lòng yêu cầu mã xác thực mới.");
         }
 
-        var isOtpValid = _otpService.VerifyOtp(request.Code.Trim(), verification.CodeHash);
+        var isOtpValid = _otpService.VerifyOtp(request.Code.Trim(), cacheEntry.CodeHash);
         if (!isOtpValid)
         {
-            verification.AttemptCount++;
-            await _dbContext.SaveChangesAsync(ct);
-            var remaining = Math.Max(0, 5 - verification.AttemptCount);
+            cacheEntry.AttemptCount++;
+            var remaining = Math.Max(0, 5 - cacheEntry.AttemptCount);
             return ApiResponse.Fail($"Mã xác thực không chính xác. Bạn còn {remaining} lần thử.");
         }
 
-        verification.VerifiedAt = DateTime.UtcNow;
-        user.PhoneVerifiedAt = DateTime.UtcNow;
+        _cache.Remove($"phone-verify:{user.UserId}");
+
         user.Status = AccountStatus.Active;
         user.UpdatedAt = DateTime.UtcNow;
 
@@ -400,9 +350,9 @@ public class AuthService : IAuthService
         var user = await _dbContext.UserAccounts
             .Include(u => u.PatientProfile)
             .Include(u => u.StaffProfile)
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, ct);
+            .FirstOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email, ct);
 
-        if (user == null || (user.PhoneVerifiedAt != null && user.Status == AccountStatus.Active))
+        if (user == null || user.Status == AccountStatus.Active)
         {
             return ApiResponse.Ok(null, "Nếu tài khoản tồn tại và chưa xác thực số điện thoại, mã xác thực mới đã được gửi đến số điện thoại của bạn.");
         }
@@ -412,36 +362,24 @@ public class AuthService : IAuthService
             return ApiResponse.Fail("Tài khoản này chưa đăng ký số điện thoại.");
         }
 
-        var lastVerification = await _dbContext.AccountVerifications
-            .Where(v => v.UserId == user.UserId && v.Purpose == VerificationPurpose.PhoneVerification)
-            .OrderByDescending(v => v.CreatedAt)
-            .FirstOrDefaultAsync(ct);
-
-        if (lastVerification != null && (DateTime.UtcNow - lastVerification.CreatedAt).TotalSeconds < 60)
+        if (_cache.TryGetValue($"resend-cooldown:phone:{user.UserId}", out _))
         {
-            var waitSec = 60 - (int)(DateTime.UtcNow - lastVerification.CreatedAt).TotalSeconds;
-            return ApiResponse.Fail($"Vui lòng đợi {waitSec} giây trước khi yêu cầu gửi lại mã xác thực.");
+            return ApiResponse.Fail("Vui lòng đợi 60 giây trước khi yêu cầu gửi lại mã xác thực.");
         }
 
         var otpCode = _otpService.GenerateNumericOtp(6);
-        var codeHash = _otpService.HashOtp(otpCode);
-
-        var verification = new AccountVerification
+        var cacheEntry = new OtpCacheEntry
         {
-            UserId = user.UserId,
-            Channel = VerificationChannel.Phone,
-            Purpose = VerificationPurpose.PhoneVerification,
-            CodeHash = codeHash,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            CodeHash = _otpService.HashOtp(otpCode),
             AttemptCount = 0,
             CreatedAt = DateTime.UtcNow
         };
 
-        _dbContext.AccountVerifications.Add(verification);
-        await _dbContext.SaveChangesAsync(ct);
+        _cache.Set($"phone-verify:{user.UserId}", cacheEntry, TimeSpan.FromMinutes(5));
+        _cache.Set($"resend-cooldown:phone:{user.UserId}", true, TimeSpan.FromSeconds(60));
 
-        var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email;
-        _logger.LogInformation("\n======================================================\n[DEV SMS OTP NOTIFICATION]\nPURPOSE: RESEND PHONE VERIFICATION\nTO PHONE: {PhoneNumber} ({FullName})\nSMS OTP CODE: {PhoneOtpCode}\nEXPIRES IN: 15 minutes\n======================================================\n", user.PhoneNumber, fullName, otpCode);
+        var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email ?? "Quý khách";
+        _logger.LogInformation("\n======================================================\n[DEV SMS OTP NOTIFICATION]\nPURPOSE: RESEND PHONE VERIFICATION\nTO PHONE: {PhoneNumber} ({FullName})\nSMS OTP CODE: {PhoneOtpCode}\nEXPIRES IN: 5 minutes\n======================================================\n", user.PhoneNumber, fullName, otpCode);
 
         return ApiResponse.Ok(null, "Mã xác thực mới đã được gửi đến số điện thoại của bạn.");
     }
@@ -453,7 +391,7 @@ public class AuthService : IAuthService
         var user = await _dbContext.UserAccounts
             .Include(u => u.PatientProfile)
             .Include(u => u.StaffProfile)
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, ct);
+            .FirstOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email, ct);
 
         if (user == null)
         {
@@ -511,27 +449,17 @@ public class AuthService : IAuthService
         user.LockoutEnd = null;
         user.LastLoginAt = DateTime.UtcNow;
 
-        var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email;
+        var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email ?? string.Empty;
         var userCode = user.PatientProfile?.PatientCode ?? user.StaffProfile?.EmployeeCode;
 
         // Generate tokens
-        var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Email, user.Role, fullName, user.AvatarUrl);
+        var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Email ?? string.Empty, user.Role, fullName, user.AvatarUrl);
         var rawRefreshToken = _jwtTokenService.GenerateRefreshToken();
-        var refreshTokenHash = _jwtTokenService.HashToken(rawRefreshToken);
 
-        var refreshToken = new RefreshToken
-        {
-            UserId = user.UserId,
-            TokenHash = refreshTokenHash,
-            ExpiresAt = _jwtTokenService.GetRefreshTokenExpiration(),
-            CreatedAt = DateTime.UtcNow,
-            CreatedByIp = ipAddress,
-            DeviceInfo = deviceInfo
-        };
+        // Store refresh token in IMemoryCache (7 days expiration)
+        _cache.Set($"refresh-token:{rawRefreshToken}", user.UserId, TimeSpan.FromDays(7));
 
-        _dbContext.RefreshTokens.Add(refreshToken);
         await _dbContext.SaveChangesAsync(ct);
-
         await _auditLogService.LogAsync(user.UserId, "LOGIN", "UserAccount", user.UserId.ToString(), ct: ct);
 
         var response = new LoginResponse
@@ -542,7 +470,7 @@ public class AuthService : IAuthService
             User = new UserInfoDto
             {
                 UserId = user.UserId,
-                Email = user.Email,
+                Email = user.Email ?? string.Empty,
                 FullName = fullName,
                 Role = user.Role,
                 Status = user.Status,
@@ -565,109 +493,72 @@ public class AuthService : IAuthService
 
         var googleEmail = googleUser.Email.Trim().ToLowerInvariant();
 
-        // Check if external login already linked
-        var externalLogin = await _dbContext.ExternalLogins
-            .Include(el => el.User)
-                .ThenInclude(u => u.PatientProfile)
-            .Include(el => el.User)
-                .ThenInclude(u => u.StaffProfile)
-            .FirstOrDefaultAsync(el => el.Provider == "Google" && el.ProviderKey == googleUser.Subject, ct);
+        // Check if user exists by email
+        var user = await _dbContext.UserAccounts
+            .Include(u => u.PatientProfile)
+            .Include(u => u.StaffProfile)
+            .FirstOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == googleEmail, ct);
 
-        UserAccount user;
-
-        if (externalLogin != null)
+        if (user != null)
         {
-            user = externalLogin.User;
+            if (user.Status == AccountStatus.Unverified)
+            {
+                user.Status = AccountStatus.Active;
+                user.EmailVerifiedAt = DateTime.UtcNow;
+            }
+
+            if (string.IsNullOrEmpty(user.AvatarUrl) && !string.IsNullOrEmpty(googleUser.Picture))
+            {
+                user.AvatarUrl = googleUser.Picture;
+            }
         }
         else
         {
-            // Check if user exists by email
-            var existingUser = await _dbContext.UserAccounts
-                .Include(u => u.PatientProfile)
-                .Include(u => u.StaffProfile)
-                .FirstOrDefaultAsync(u => u.Email.ToLower() == googleEmail, ct);
+            // Auto create new Patient account without ExternalLogins
+            var now = DateTime.UtcNow;
+            var yearMonth = now.ToString("yyyyMM");
+            var prefix = $"PAT-{yearMonth}-";
+            var lastCode = await _dbContext.PatientProfiles
+                .Where(p => p.PatientCode.StartsWith(prefix))
+                .OrderByDescending(p => p.PatientCode)
+                .Select(p => p.PatientCode)
+                .FirstOrDefaultAsync(ct);
 
-            if (existingUser != null)
+            int nextSeq = 1;
+            if (!string.IsNullOrEmpty(lastCode) && lastCode.Length >= prefix.Length + 4)
             {
-                user = existingUser;
-
-                // Link google external login
-                _dbContext.ExternalLogins.Add(new ExternalLogin
+                var seqStr = lastCode.Substring(prefix.Length);
+                if (int.TryParse(seqStr, out var currentSeq))
                 {
-                    UserId = user.UserId,
-                    Provider = "Google",
-                    ProviderKey = googleUser.Subject,
-                    ProviderEmail = googleUser.Email,
-                    CreatedAt = DateTime.UtcNow
-                });
-
-                if (user.Status == AccountStatus.Unverified)
-                {
-                    user.Status = AccountStatus.Active;
-                    user.EmailVerifiedAt = DateTime.UtcNow;
-                }
-
-                if (string.IsNullOrEmpty(user.AvatarUrl) && !string.IsNullOrEmpty(googleUser.Picture))
-                {
-                    user.AvatarUrl = googleUser.Picture;
+                    nextSeq = currentSeq + 1;
                 }
             }
-            else
+            var patientCode = $"{prefix}{nextSeq:D4}";
+
+            user = new UserAccount
             {
-                // Auto create new Patient account
-                var now = DateTime.UtcNow;
-                var yearMonth = now.ToString("yyyyMM");
-                var prefix = $"PAT-{yearMonth}-";
-                var lastCode = await _dbContext.PatientProfiles
-                    .Where(p => p.PatientCode.StartsWith(prefix))
-                    .OrderByDescending(p => p.PatientCode)
-                    .Select(p => p.PatientCode)
-                    .FirstOrDefaultAsync(ct);
+                Email = googleEmail,
+                Role = UserRole.Patient,
+                Status = AccountStatus.Active,
+                EmailVerifiedAt = now,
+                AvatarUrl = googleUser.Picture,
+                CreatedAt = now,
+                FailedLoginCount = 0
+            };
 
-                int nextSeq = 1;
-                if (!string.IsNullOrEmpty(lastCode) && lastCode.Length >= prefix.Length + 4)
-                {
-                    var seqStr = lastCode.Substring(prefix.Length);
-                    if (int.TryParse(seqStr, out var currentSeq))
-                    {
-                        nextSeq = currentSeq + 1;
-                    }
-                }
-                var patientCode = $"{prefix}{nextSeq:D4}";
+            _dbContext.UserAccounts.Add(user);
+            await _dbContext.SaveChangesAsync(ct);
 
-                user = new UserAccount
-                {
-                    Email = googleEmail,
-                    Role = UserRole.Patient,
-                    Status = AccountStatus.Active,
-                    EmailVerifiedAt = now,
-                    AvatarUrl = googleUser.Picture,
-                    CreatedAt = now,
-                    FailedLoginCount = 0
-                };
+            var patientProfile = new PatientProfile
+            {
+                UserId = user.UserId,
+                PatientCode = patientCode,
+                FullName = string.IsNullOrWhiteSpace(googleUser.Name) ? googleEmail : googleUser.Name,
+                CreatedAt = now
+            };
 
-                _dbContext.UserAccounts.Add(user);
-                await _dbContext.SaveChangesAsync(ct);
-
-                var patientProfile = new PatientProfile
-                {
-                    UserId = user.UserId,
-                    PatientCode = patientCode,
-                    FullName = string.IsNullOrWhiteSpace(googleUser.Name) ? googleEmail : googleUser.Name,
-                    CreatedAt = now
-                };
-
-                _dbContext.PatientProfiles.Add(patientProfile);
-
-                _dbContext.ExternalLogins.Add(new ExternalLogin
-                {
-                    UserId = user.UserId,
-                    Provider = "Google",
-                    ProviderKey = googleUser.Subject,
-                    ProviderEmail = googleUser.Email,
-                    CreatedAt = now
-                });
-            }
+            _dbContext.PatientProfiles.Add(patientProfile);
+            await _dbContext.SaveChangesAsync(ct);
         }
 
         // Check account status
@@ -689,23 +580,13 @@ public class AuthService : IAuthService
         var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? googleUser.Name;
         var userCode = user.PatientProfile?.PatientCode ?? user.StaffProfile?.EmployeeCode;
 
-        var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Email, user.Role, fullName, user.AvatarUrl);
+        var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Email ?? googleEmail, user.Role, fullName, user.AvatarUrl);
         var rawRefreshToken = _jwtTokenService.GenerateRefreshToken();
-        var refreshTokenHash = _jwtTokenService.HashToken(rawRefreshToken);
 
-        var refreshToken = new RefreshToken
-        {
-            UserId = user.UserId,
-            TokenHash = refreshTokenHash,
-            ExpiresAt = _jwtTokenService.GetRefreshTokenExpiration(),
-            CreatedAt = DateTime.UtcNow,
-            CreatedByIp = ipAddress,
-            DeviceInfo = deviceInfo
-        };
+        // Store refresh token in IMemoryCache (7 days expiration)
+        _cache.Set($"refresh-token:{rawRefreshToken}", user.UserId, TimeSpan.FromDays(7));
 
-        _dbContext.RefreshTokens.Add(refreshToken);
         await _dbContext.SaveChangesAsync(ct);
-
         await _auditLogService.LogAsync(user.UserId, "GOOGLE_LOGIN", "UserAccount", user.UserId.ToString(), ct: ct);
 
         var response = new LoginResponse
@@ -716,7 +597,7 @@ public class AuthService : IAuthService
             User = new UserInfoDto
             {
                 UserId = user.UserId,
-                Email = user.Email,
+                Email = user.Email ?? googleEmail,
                 FullName = fullName,
                 Role = user.Role,
                 Status = user.Status,
@@ -736,64 +617,30 @@ public class AuthService : IAuthService
             return ApiResponse<RefreshTokenResponse>.Fail("Refresh token không được để trống.");
         }
 
-        var tokenHash = _jwtTokenService.HashToken(request.RefreshToken);
-
-        var storedToken = await _dbContext.RefreshTokens
-            .Include(t => t.User)
-                .ThenInclude(u => u.PatientProfile)
-            .Include(t => t.User)
-                .ThenInclude(u => u.StaffProfile)
-            .FirstOrDefaultAsync(t => t.TokenHash == tokenHash, ct);
-
-        if (storedToken == null)
+        if (!_cache.TryGetValue($"refresh-token:{request.RefreshToken}", out long userId))
         {
-            return ApiResponse<RefreshTokenResponse>.Fail("Phiên làm việc không hợp lệ.");
-        }
-
-        if (storedToken.RevokedAt != null)
-        {
-            // Token reuse detection: Security alert
-            _logger.LogWarning("Potential token reuse detected for user {UserId} with revoked token {TokenHash}", storedToken.UserId, tokenHash);
             return ApiResponse<RefreshTokenResponse>.Fail("Phiên làm việc đã bị thu hồi hoặc đã hết hạn. Vui lòng đăng nhập lại.");
         }
 
-        if (storedToken.ExpiresAt < DateTime.UtcNow)
-        {
-            return ApiResponse<RefreshTokenResponse>.Fail("Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.");
-        }
+        // Revoke current refresh token
+        _cache.Remove($"refresh-token:{request.RefreshToken}");
 
-        var user = storedToken.User;
-        if (user.Status != AccountStatus.Active)
+        var user = await _dbContext.UserAccounts
+            .Include(u => u.PatientProfile)
+            .Include(u => u.StaffProfile)
+            .FirstOrDefaultAsync(u => u.UserId == userId, ct);
+
+        if (user == null || user.Status != AccountStatus.Active)
         {
             return ApiResponse<RefreshTokenResponse>.Fail("Tài khoản không hoạt động hoặc đã bị khóa.");
         }
 
-        // Token rotation: Revoke current token
-        storedToken.RevokedAt = DateTime.UtcNow;
-        storedToken.RevokedByIp = ipAddress;
-        storedToken.RevocationReason = "Rotated";
-
-        // Issue new refresh token
+        // Issue new tokens
         var newRawRefreshToken = _jwtTokenService.GenerateRefreshToken();
-        var newHash = _jwtTokenService.HashToken(newRawRefreshToken);
-        storedToken.ReplacedByTokenHash = newHash;
+        _cache.Set($"refresh-token:{newRawRefreshToken}", user.UserId, TimeSpan.FromDays(7));
 
-        var newRefreshToken = new RefreshToken
-        {
-            UserId = user.UserId,
-            TokenHash = newHash,
-            ExpiresAt = _jwtTokenService.GetRefreshTokenExpiration(),
-            CreatedAt = DateTime.UtcNow,
-            CreatedByIp = ipAddress,
-            DeviceInfo = deviceInfo
-        };
-
-        _dbContext.RefreshTokens.Add(newRefreshToken);
-
-        var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email;
-        var newAccessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Email, user.Role, fullName, user.AvatarUrl);
-
-        await _dbContext.SaveChangesAsync(ct);
+        var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email ?? string.Empty;
+        var newAccessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Email ?? string.Empty, user.Role, fullName, user.AvatarUrl);
 
         var response = new RefreshTokenResponse
         {
@@ -809,18 +656,10 @@ public class AuthService : IAuthService
     {
         if (!string.IsNullOrWhiteSpace(request.RefreshToken))
         {
-            var tokenHash = _jwtTokenService.HashToken(request.RefreshToken);
-            var token = await _dbContext.RefreshTokens
-                .FirstOrDefaultAsync(t => t.TokenHash == tokenHash && t.RevokedAt == null, ct);
-
-            if (token != null)
+            if (_cache.TryGetValue($"refresh-token:{request.RefreshToken}", out long userId))
             {
-                token.RevokedAt = DateTime.UtcNow;
-                token.RevokedByIp = ipAddress;
-                token.RevocationReason = "User Logout";
-                await _dbContext.SaveChangesAsync(ct);
-
-                await _auditLogService.LogAsync(token.UserId, "LOGOUT", "RefreshToken", token.RefreshTokenId.ToString(), ct: ct);
+                _cache.Remove($"refresh-token:{request.RefreshToken}");
+                await _auditLogService.LogAsync(userId, "LOGOUT", "UserAccount", userId.ToString(), ct: ct);
             }
         }
 
@@ -834,7 +673,7 @@ public class AuthService : IAuthService
         var user = await _dbContext.UserAccounts
             .Include(u => u.PatientProfile)
             .Include(u => u.StaffProfile)
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, ct);
+            .FirstOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email, ct);
 
         // Security best practice: Always return generic success message to prevent user enumeration
         if (user == null || user.Status != AccountStatus.Active)
@@ -842,35 +681,22 @@ public class AuthService : IAuthService
             return ApiResponse.Ok(null, "Nếu email của bạn tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đến hộp thư của bạn.");
         }
 
-        // Invalidate any previous unused reset tokens
-        var previousTokens = await _dbContext.PasswordResetTokens
-            .Where(t => t.UserId == user.UserId && t.UsedAt == null)
-            .ToListAsync(ct);
-
-        foreach (var t in previousTokens)
-        {
-            t.UsedAt = DateTime.UtcNow;
-        }
-
         // Generate secure 6-digit numeric OTP code for password reset
         var otpCode = _otpService.GenerateNumericOtp(6);
-        var tokenHash = _jwtTokenService.HashToken(otpCode);
-
-        var resetTokenRecord = new PasswordResetToken
+        var cacheEntry = new OtpCacheEntry
         {
-            UserId = user.UserId,
-            TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            CodeHash = _otpService.HashOtp(otpCode),
+            AttemptCount = 0,
             CreatedAt = DateTime.UtcNow
         };
 
-        _dbContext.PasswordResetTokens.Add(resetTokenRecord);
-        await _dbContext.SaveChangesAsync(ct);
+        // Cache reset OTP for 10 minutes in IMemoryCache
+        _cache.Set($"password-reset:{user.UserId}", cacheEntry, TimeSpan.FromMinutes(10));
 
-        var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email;
+        var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email ?? "Quý khách";
         try
         {
-            await _emailService.SendPasswordResetOtpAsync(user.Email, fullName, otpCode, ct);
+            await _emailService.SendPasswordResetOtpAsync(user.Email!, fullName, otpCode, ct);
         }
         catch (Exception ex)
         {
@@ -887,43 +713,39 @@ public class AuthService : IAuthService
         var email = request.Email.Trim().ToLowerInvariant();
 
         var user = await _dbContext.UserAccounts
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, ct);
+            .FirstOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email, ct);
 
         if (user == null)
         {
             return ApiResponse.Fail("Yêu cầu đặt lại mật khẩu không hợp lệ.");
         }
 
-        var tokenHash = _jwtTokenService.HashToken(request.Token.Trim());
-
-        var resetToken = await _dbContext.PasswordResetTokens
-            .FirstOrDefaultAsync(t => t.UserId == user.UserId && t.TokenHash == tokenHash && t.UsedAt == null, ct);
-
-        if (resetToken == null || resetToken.ExpiresAt < DateTime.UtcNow)
+        if (!_cache.TryGetValue($"password-reset:{user.UserId}", out OtpCacheEntry? cacheEntry) || cacheEntry == null)
         {
             return ApiResponse.Fail("Mã xác thực OTP không chính xác hoặc đã hết hạn. Vui lòng kiểm tra lại mã hoặc gửi yêu cầu mới.");
         }
 
-        // Mark token as used
-        resetToken.UsedAt = DateTime.UtcNow;
+        if (cacheEntry.AttemptCount >= 5)
+        {
+            return ApiResponse.Fail("Bạn đã nhập sai mã xác thực quá số lần quy định (5 lần). Vui lòng yêu cầu mã xác thực mới.");
+        }
+
+        var isOtpValid = _otpService.VerifyOtp(request.Token.Trim(), cacheEntry.CodeHash);
+        if (!isOtpValid)
+        {
+            cacheEntry.AttemptCount++;
+            var remaining = Math.Max(0, 5 - cacheEntry.AttemptCount);
+            return ApiResponse.Fail($"Mã xác thực không chính xác. Bạn còn {remaining} lần thử.");
+        }
+
+        // Mark OTP as used by removing from cache
+        _cache.Remove($"password-reset:{user.UserId}");
 
         // Hash new password and update user
         user.PasswordHash = _passwordHasher.HashPassword(request.NewPassword);
         user.UpdatedAt = DateTime.UtcNow;
         user.FailedLoginCount = 0;
         user.LockoutEnd = null;
-
-        // Invalidate all active refresh tokens for security
-        var activeTokens = await _dbContext.RefreshTokens
-            .Where(t => t.UserId == user.UserId && t.RevokedAt == null)
-            .ToListAsync(ct);
-
-        foreach (var t in activeTokens)
-        {
-            t.RevokedAt = DateTime.UtcNow;
-            t.RevokedByIp = ipAddress;
-            t.RevocationReason = "Password Reset";
-        }
 
         await _dbContext.SaveChangesAsync(ct);
         await _auditLogService.LogAsync(user.UserId, "RESET_PASSWORD", "UserAccount", user.UserId.ToString(), ct: ct);
@@ -952,18 +774,6 @@ public class AuthService : IAuthService
 
         user.PasswordHash = _passwordHasher.HashPassword(request.NewPassword);
         user.UpdatedAt = DateTime.UtcNow;
-
-        // Revoke active refresh tokens
-        var activeTokens = await _dbContext.RefreshTokens
-            .Where(t => t.UserId == user.UserId && t.RevokedAt == null)
-            .ToListAsync(ct);
-
-        foreach (var t in activeTokens)
-        {
-            t.RevokedAt = DateTime.UtcNow;
-            t.RevokedByIp = ipAddress;
-            t.RevocationReason = "Password Changed";
-        }
 
         await _dbContext.SaveChangesAsync(ct);
         await _auditLogService.LogAsync(user.UserId, "CHANGE_PASSWORD", "UserAccount", user.UserId.ToString(), ct: ct);

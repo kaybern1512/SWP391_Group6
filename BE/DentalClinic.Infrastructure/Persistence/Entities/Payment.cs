@@ -9,7 +9,7 @@ public partial class Payment
 
     public long InvoiceId { get; set; }
 
-    public long PaidByUserId { get; set; }
+    public long PaidByPatientUserId { get; set; }
 
     public string Method { get; set; } = null!;
 
@@ -25,5 +25,5 @@ public partial class Payment
 
     public virtual Invoice Invoice { get; set; } = null!;
 
-    public virtual UserAccount PaidByUser { get; set; } = null!;
+    public virtual PatientProfile PaidByPatientUser { get; set; } = null!;
 }

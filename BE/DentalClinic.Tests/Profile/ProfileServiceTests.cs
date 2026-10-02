@@ -93,8 +93,7 @@ public class ProfileServiceTests
             UserId = user.UserId,
             EmployeeCode = "EMP-001",
             FullName = "Dr. Hoang Minh",
-            StaffType = StaffType.Dentist,
-            Status = "Active"
+            EmploymentStatus = "Active"
         };
         db.StaffProfiles.Add(staff);
         await db.SaveChangesAsync();
@@ -109,7 +108,7 @@ public class ProfileServiceTests
 
         var dentist = new DentistProfile
         {
-            StaffId = staff.StaffId,
+            UserId = staff.UserId,
             LicenseNumber = "LIC-99999",
             Qualification = "Tiến sĩ Răng Hàm Mặt",
             YearsOfExperience = 12,
@@ -120,7 +119,7 @@ public class ProfileServiceTests
 
         db.DentistDepartments.Add(new DentistDepartment
         {
-            DentistId = dentist.DentistId,
+            DentistUserId = dentist.UserId,
             DepartmentId = dept.DepartmentId,
             Status = "Active"
         });

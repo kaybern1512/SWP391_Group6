@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -7,16 +7,10 @@ namespace DentalClinic.Infrastructure.Persistence;
 
 public partial class DentalClinicDbContext : DbContext
 {
-    public DentalClinicDbContext()
-    {
-    }
-
     public DentalClinicDbContext(DbContextOptions<DentalClinicDbContext> options)
         : base(options)
     {
     }
-
-    public virtual DbSet<AccountVerification> AccountVerifications { get; set; }
 
     public virtual DbSet<Appointment> Appointments { get; set; }
 
@@ -50,8 +44,6 @@ public partial class DentalClinicDbContext : DbContext
 
     public virtual DbSet<DepartmentWorkSchedule> DepartmentWorkSchedules { get; set; }
 
-    public virtual DbSet<ExternalLogin> ExternalLogins { get; set; }
-
     public virtual DbSet<FollowUpSchedule> FollowUpSchedules { get; set; }
 
     public virtual DbSet<ImagingRecord> ImagingRecords { get; set; }
@@ -64,8 +56,6 @@ public partial class DentalClinicDbContext : DbContext
 
     public virtual DbSet<OdontogramEntry> OdontogramEntries { get; set; }
 
-    public virtual DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
-
     public virtual DbSet<PatientProfile> PatientProfiles { get; set; }
 
     public virtual DbSet<Payment> Payments { get; set; }
@@ -75,8 +65,6 @@ public partial class DentalClinicDbContext : DbContext
     public virtual DbSet<Prescription> Prescriptions { get; set; }
 
     public virtual DbSet<PrescriptionItem> PrescriptionItems { get; set; }
-
-    public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
 
     public virtual DbSet<Room> Rooms { get; set; }
 
@@ -92,56 +80,23 @@ public partial class DentalClinicDbContext : DbContext
 
     public virtual DbSet<VisitFeedback> VisitFeedbacks { get; set; }
 
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        if (!optionsBuilder.IsConfigured)
-        {
-            optionsBuilder.UseSqlServer("Server=.\\SQLEXPRESS;Database=DentalClinicManagementDB;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true");
-        }
-    }
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<AccountVerification>(entity =>
-        {
-            entity.HasKey(e => e.VerificationId).HasName("PK__AccountV__306D4907410BB7A8");
-
-            entity.HasIndex(e => new { e.UserId, e.Purpose, e.ExpiresAt }, "IX_AccountVerifications_User_Purpose_Expires");
-
-            entity.Property(e => e.Channel)
-                .HasMaxLength(20)
-                .IsUnicode(false)
-                .HasDefaultValue("Email");
-            entity.Property(e => e.CodeHash)
-                .HasMaxLength(255)
-                .IsUnicode(false);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.Purpose)
-                .HasMaxLength(40)
-                .IsUnicode(false)
-                .HasDefaultValue("EmailVerification");
-
-            entity.HasOne(d => d.User).WithMany(p => p.AccountVerifications)
-                .HasForeignKey(d => d.UserId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_AccountVerifications_UserAccounts");
-        });
-
         modelBuilder.Entity<Appointment>(entity =>
         {
-            entity.HasKey(e => e.AppointmentId).HasName("PK__Appointm__8ECDFCC216706A28");
+            entity.HasKey(e => e.AppointmentId).HasName("PK__Appointm__8ECDFCC2D0A60E8D");
 
-            entity.HasIndex(e => new { e.AssignedDentistId, e.ScheduledStart }, "IX_Appointments_AssignedDentist_Start");
+            entity.HasIndex(e => new { e.AssignedDentistUserId, e.ScheduledStart }, "IX_Appointments_AssignedDentist_Start");
 
             entity.HasIndex(e => new { e.DentalChairId, e.ScheduledStart }, "IX_Appointments_Chair_Start").HasFilter("([DentalChairId] IS NOT NULL)");
 
             entity.HasIndex(e => new { e.DepartmentId, e.ScheduledStart, e.Status }, "IX_Appointments_Department_Start_Status");
 
-            entity.HasIndex(e => new { e.PatientId, e.Status }, "IX_Appointments_Patient_Status");
+            entity.HasIndex(e => new { e.PatientUserId, e.Status }, "IX_Appointments_Patient_Status");
 
             entity.HasIndex(e => new { e.RoomId, e.ScheduledStart }, "IX_Appointments_Room_Start").HasFilter("([RoomId] IS NOT NULL)");
 
-            entity.HasIndex(e => e.AppointmentCode, "UQ__Appointm__F67FE26FECBC7753").IsUnique();
+            entity.HasIndex(e => e.AppointmentCode, "UQ__Appointm__F67FE26FBAC67A99").IsUnique();
 
             entity.Property(e => e.AppointmentCode)
                 .HasMaxLength(30)
@@ -154,17 +109,14 @@ public partial class DentalClinicDbContext : DbContext
             entity.Property(e => e.QueueNumber)
                 .HasMaxLength(30)
                 .IsUnicode(false);
-            entity.Property(e => e.QueueStatus)
-                .HasMaxLength(30)
-                .IsUnicode(false);
             entity.Property(e => e.ReasonForVisit).HasMaxLength(1000);
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .IsUnicode(false)
                 .HasDefaultValue("PendingReceptionReview");
 
-            entity.HasOne(d => d.AssignedDentist).WithMany(p => p.AppointmentAssignedDentists)
-                .HasForeignKey(d => d.AssignedDentistId)
+            entity.HasOne(d => d.AssignedDentistUser).WithMany(p => p.AppointmentAssignedDentistUsers)
+                .HasForeignKey(d => d.AssignedDentistUserId)
                 .HasConstraintName("FK_Appointments_AssignedDentist");
 
             entity.HasOne(d => d.CreatedByUser).WithMany(p => p.Appointments)
@@ -179,13 +131,13 @@ public partial class DentalClinicDbContext : DbContext
                 .HasForeignKey(d => d.DepartmentId)
                 .HasConstraintName("FK_Appointments_Department");
 
-            entity.HasOne(d => d.Patient).WithMany(p => p.Appointments)
-                .HasForeignKey(d => d.PatientId)
+            entity.HasOne(d => d.PatientUser).WithMany(p => p.Appointments)
+                .HasForeignKey(d => d.PatientUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Appointments_Patient");
 
-            entity.HasOne(d => d.RequestedDentist).WithMany(p => p.AppointmentRequestedDentists)
-                .HasForeignKey(d => d.RequestedDentistId)
+            entity.HasOne(d => d.RequestedDentistUser).WithMany(p => p.AppointmentRequestedDentistUsers)
+                .HasForeignKey(d => d.RequestedDentistUserId)
                 .HasConstraintName("FK_Appointments_RequestedDentist");
 
             entity.HasOne(d => d.RequestedService).WithMany(p => p.Appointments)
@@ -199,7 +151,9 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<AppointmentChangeProposal>(entity =>
         {
-            entity.HasKey(e => e.ProposalId).HasName("PK__Appointm__6F39E12081C6BDBB");
+            entity.HasKey(e => e.ProposalId).HasName("PK__Appointm__6F39E12052FCB839");
+
+            entity.HasIndex(e => new { e.AppointmentId, e.Status }, "IX_AppointmentChangeProposals_Appointment_Status");
 
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.Reason).HasMaxLength(1000);
@@ -218,8 +172,8 @@ public partial class DentalClinicDbContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_AppointmentChangeProposals_User");
 
-            entity.HasOne(d => d.ProposedDentist).WithMany(p => p.AppointmentChangeProposals)
-                .HasForeignKey(d => d.ProposedDentistId)
+            entity.HasOne(d => d.ProposedDentistUser).WithMany(p => p.AppointmentChangeProposals)
+                .HasForeignKey(d => d.ProposedDentistUserId)
                 .HasConstraintName("FK_AppointmentChangeProposals_Dentist");
 
             entity.HasOne(d => d.ProposedDepartment).WithMany(p => p.AppointmentChangeProposals)
@@ -229,7 +183,9 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<AppointmentStatusHistory>(entity =>
         {
-            entity.HasKey(e => e.HistoryId).HasName("PK__Appointm__4D7B4ABD9EE689F3");
+            entity.HasKey(e => e.HistoryId).HasName("PK__Appointm__4D7B4ABD901B18CA");
+
+            entity.HasIndex(e => new { e.AppointmentId, e.ChangedAt }, "IX_AppointmentStatusHistories_Appointment_ChangedAt");
 
             entity.Property(e => e.ChangedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.NewStatus)
@@ -252,7 +208,9 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<AuditLog>(entity =>
         {
-            entity.HasKey(e => e.AuditLogId).HasName("PK__AuditLog__EB5F6CBD7A2EA716");
+            entity.HasKey(e => e.AuditLogId).HasName("PK__AuditLog__EB5F6CBDD32FB1C1");
+
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt }, "IX_AuditLogs_User_CreatedAt");
 
             entity.Property(e => e.Action)
                 .HasMaxLength(100)
@@ -291,7 +249,9 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<ClinicalEntry>(entity =>
         {
-            entity.HasKey(e => e.ClinicalEntryId).HasName("PK__Clinical__24C1C1291B122D21");
+            entity.HasKey(e => e.ClinicalEntryId).HasName("PK__Clinical__24C1C1291375360B");
+
+            entity.HasIndex(e => new { e.MedicalRecordId, e.CreatedAt }, "IX_ClinicalEntries_Record_CreatedAt");
 
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
 
@@ -299,8 +259,8 @@ public partial class DentalClinicDbContext : DbContext
                 .HasForeignKey(d => d.AppointmentId)
                 .HasConstraintName("FK_ClinicalEntries_Appointment");
 
-            entity.HasOne(d => d.Dentist).WithMany(p => p.ClinicalEntries)
-                .HasForeignKey(d => d.DentistId)
+            entity.HasOne(d => d.DentistUser).WithMany(p => p.ClinicalEntries)
+                .HasForeignKey(d => d.DentistUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_ClinicalEntries_Dentist");
 
@@ -312,7 +272,7 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<DentalChair>(entity =>
         {
-            entity.HasKey(e => e.DentalChairId).HasName("PK__DentalCh__6070B172FEA7E5B3");
+            entity.HasKey(e => e.DentalChairId).HasName("PK__DentalCh__6070B172E58B5977");
 
             entity.HasIndex(e => new { e.RoomId, e.ChairCode }, "UQ_DentalChairs").IsUnique();
 
@@ -332,25 +292,25 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<DentalMedicalRecord>(entity =>
         {
-            entity.HasKey(e => e.MedicalRecordId).HasName("PK__DentalMe__4411BA22E59D2CFD");
+            entity.HasKey(e => e.MedicalRecordId).HasName("PK__DentalMe__4411BA22C7212C56");
 
-            entity.HasIndex(e => e.PatientId, "UQ__DentalMe__970EC3678E8A6C54").IsUnique();
+            entity.HasIndex(e => e.PatientUserId, "UQ__DentalMe__DB241FF50DC748A2").IsUnique();
 
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
 
-            entity.HasOne(d => d.Patient).WithOne(p => p.DentalMedicalRecord)
-                .HasForeignKey<DentalMedicalRecord>(d => d.PatientId)
+            entity.HasOne(d => d.PatientUser).WithOne(p => p.DentalMedicalRecord)
+                .HasForeignKey<DentalMedicalRecord>(d => d.PatientUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_DentalMedicalRecords_Patient");
         });
 
         modelBuilder.Entity<DentistAvailability>(entity =>
         {
-            entity.HasKey(e => e.AvailabilityId).HasName("PK__DentistA__DA3979B15C1FCDEF");
+            entity.HasKey(e => e.AvailabilityId).HasName("PK__DentistA__DA3979B1DCE3FD5C");
 
             entity.ToTable("DentistAvailability");
 
-            entity.HasIndex(e => new { e.DentistId, e.StartDateTime, e.EndDateTime }, "IX_DentistAvailability_Dentist_Time");
+            entity.HasIndex(e => new { e.DentistUserId, e.StartDateTime, e.EndDateTime }, "IX_DentistAvailability_Dentist_Time");
 
             entity.Property(e => e.AvailabilityStatus)
                 .HasMaxLength(30)
@@ -358,17 +318,19 @@ public partial class DentalClinicDbContext : DbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.Reason).HasMaxLength(500);
 
-            entity.HasOne(d => d.Dentist).WithMany(p => p.DentistAvailabilities)
-                .HasForeignKey(d => d.DentistId)
+            entity.HasOne(d => d.DentistUser).WithMany(p => p.DentistAvailabilities)
+                .HasForeignKey(d => d.DentistUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_DentistAvailability_Dentist");
         });
 
         modelBuilder.Entity<DentistDepartment>(entity =>
         {
-            entity.HasKey(e => e.DentistDepartmentId).HasName("PK__DentistD__2D1E0826BD01D8D6");
+            entity.HasKey(e => e.DentistDepartmentId).HasName("PK__DentistD__2D1E0826CF17DB3F");
 
-            entity.HasIndex(e => new { e.DentistId, e.DepartmentId }, "UQ_DentistDepartments").IsUnique();
+            entity.HasIndex(e => new { e.DepartmentId, e.Status }, "IX_DentistDepartments_Department_Status");
+
+            entity.HasIndex(e => new { e.DentistUserId, e.DepartmentId }, "UQ_DentistDepartments").IsUnique();
 
             entity.Property(e => e.AssignedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.Status)
@@ -376,8 +338,8 @@ public partial class DentalClinicDbContext : DbContext
                 .IsUnicode(false)
                 .HasDefaultValue("Active");
 
-            entity.HasOne(d => d.Dentist).WithMany(p => p.DentistDepartments)
-                .HasForeignKey(d => d.DentistId)
+            entity.HasOne(d => d.DentistUser).WithMany(p => p.DentistDepartments)
+                .HasForeignKey(d => d.DentistUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_DentistDepartments_Dentist");
 
@@ -389,27 +351,32 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<DentistProfile>(entity =>
         {
-            entity.HasKey(e => e.DentistId).HasName("PK__DentistP__9157308FADD8D0E7");
+            entity.HasKey(e => e.UserId);
 
-            entity.HasIndex(e => e.StaffId, "UQ__DentistP__96D4AB16FE824CD3").IsUnique();
+            entity.HasIndex(e => e.LicenseNumber, "UX_DentistProfiles_LicenseNumber_NotNull")
+                .IsUnique()
+                .HasFilter("([LicenseNumber] IS NOT NULL)");
 
+            entity.Property(e => e.UserId).ValueGeneratedNever();
             entity.Property(e => e.Biography).HasMaxLength(1000);
             entity.Property(e => e.LicenseNumber)
                 .HasMaxLength(80)
                 .IsUnicode(false);
             entity.Property(e => e.Qualification).HasMaxLength(300);
 
-            entity.HasOne(d => d.Staff).WithOne(p => p.DentistProfile)
-                .HasForeignKey<DentistProfile>(d => d.StaffId)
+            entity.HasOne(d => d.User).WithOne(p => p.DentistProfile)
+                .HasForeignKey<DentistProfile>(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_DentistProfiles_StaffProfiles");
         });
 
         modelBuilder.Entity<DentistWorkSchedule>(entity =>
         {
-            entity.HasKey(e => e.DentistScheduleId).HasName("PK__DentistW__D15F7FAA2E2EF799");
+            entity.HasKey(e => e.DentistScheduleId).HasName("PK__DentistW__D15F7FAA488F3795");
 
-            entity.HasIndex(e => new { e.DentistId, e.DepartmentId, e.WorkDate, e.StartTime, e.EndTime }, "UQ_DentistWorkSchedules").IsUnique();
+            entity.HasIndex(e => new { e.DentistUserId, e.WorkDate }, "IX_DentistWorkSchedules_Dentist_Date");
+
+            entity.HasIndex(e => new { e.DentistUserId, e.DepartmentId, e.WorkDate, e.StartTime, e.EndTime }, "UQ_DentistWorkSchedules").IsUnique();
 
             entity.Property(e => e.Note).HasMaxLength(500);
             entity.Property(e => e.Status)
@@ -417,8 +384,8 @@ public partial class DentalClinicDbContext : DbContext
                 .IsUnicode(false)
                 .HasDefaultValue("Scheduled");
 
-            entity.HasOne(d => d.Dentist).WithMany(p => p.DentistWorkSchedules)
-                .HasForeignKey(d => d.DentistId)
+            entity.HasOne(d => d.DentistUser).WithMany(p => p.DentistWorkSchedules)
+                .HasForeignKey(d => d.DentistUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_DentistWorkSchedules_Dentist");
 
@@ -430,9 +397,9 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<Department>(entity =>
         {
-            entity.HasKey(e => e.DepartmentId).HasName("PK__Departme__B2079BED4238A726");
+            entity.HasKey(e => e.DepartmentId).HasName("PK__Departme__B2079BED03A46DCB");
 
-            entity.HasIndex(e => e.Name, "UQ__Departme__737584F6444B3456").IsUnique();
+            entity.HasIndex(e => e.Name, "UQ__Departme__737584F6CE5CCD25").IsUnique();
 
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.Description).HasMaxLength(1000);
@@ -442,14 +409,14 @@ public partial class DentalClinicDbContext : DbContext
                 .IsUnicode(false)
                 .HasDefaultValue("Active");
 
-            entity.HasOne(d => d.ManagerStaff).WithMany(p => p.Departments)
-                .HasForeignKey(d => d.ManagerStaffId)
-                .HasConstraintName("FK_Departments_ManagerStaff");
+            entity.HasOne(d => d.ManagerUser).WithMany(p => p.Departments)
+                .HasForeignKey(d => d.ManagerUserId)
+                .HasConstraintName("FK_Departments_ManagerUser");
         });
 
         modelBuilder.Entity<DepartmentReferral>(entity =>
         {
-            entity.HasKey(e => e.ReferralId).HasName("PK__Departme__A2C4A9661D6C1F37");
+            entity.HasKey(e => e.ReferralId).HasName("PK__Departme__A2C4A966FB302BB3");
 
             entity.HasIndex(e => new { e.ToDepartmentId, e.Status }, "IX_DepartmentReferrals_ToDepartment_Status");
 
@@ -460,50 +427,33 @@ public partial class DentalClinicDbContext : DbContext
                 .IsUnicode(false)
                 .HasDefaultValue("Pending");
 
-            entity.HasOne(d => d.Appointment).WithMany(p => p.DepartmentReferrals)
-                .HasForeignKey(d => d.AppointmentId)
-                .HasConstraintName("FK_DepartmentReferrals_Appointment");
-
-            entity.HasOne(d => d.AssignedDentist).WithMany(p => p.DepartmentReferralAssignedDentists)
-                .HasForeignKey(d => d.AssignedDentistId)
+            entity.HasOne(d => d.AssignedDentistUser).WithMany(p => p.DepartmentReferrals)
+                .HasForeignKey(d => d.AssignedDentistUserId)
                 .HasConstraintName("FK_DepartmentReferrals_AssignedDentist");
-
-            entity.HasOne(d => d.FromDentist).WithMany(p => p.DepartmentReferralFromDentists)
-                .HasForeignKey(d => d.FromDentistId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_DepartmentReferrals_FromDentist");
 
             entity.HasOne(d => d.FromDepartment).WithMany(p => p.DepartmentReferralFromDepartments)
                 .HasForeignKey(d => d.FromDepartmentId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_DepartmentReferrals_FromDepartment");
 
-            entity.HasOne(d => d.Patient).WithMany(p => p.DepartmentReferrals)
-                .HasForeignKey(d => d.PatientId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_DepartmentReferrals_Patient");
-
-            entity.HasOne(d => d.ReviewedByStaff).WithMany(p => p.DepartmentReferrals)
-                .HasForeignKey(d => d.ReviewedByStaffId)
-                .HasConstraintName("FK_DepartmentReferrals_Reviewer");
+            entity.HasOne(d => d.ReviewedByUser).WithMany(p => p.DepartmentReferrals)
+                .HasForeignKey(d => d.ReviewedByUserId)
+                .HasConstraintName("FK_DepartmentReferrals_ReviewedByUser");
 
             entity.HasOne(d => d.ToDepartment).WithMany(p => p.DepartmentReferralToDepartments)
                 .HasForeignKey(d => d.ToDepartmentId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_DepartmentReferrals_ToDepartment");
 
-            entity.HasOne(d => d.TreatmentPlan).WithMany(p => p.DepartmentReferrals)
-                .HasForeignKey(d => d.TreatmentPlanId)
-                .HasConstraintName("FK_DepartmentReferrals_TreatmentPlan");
-
             entity.HasOne(d => d.TreatmentSession).WithMany(p => p.DepartmentReferrals)
                 .HasForeignKey(d => d.TreatmentSessionId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_DepartmentReferrals_TreatmentSession");
         });
 
         modelBuilder.Entity<DepartmentService>(entity =>
         {
-            entity.HasKey(e => e.DepartmentServiceId).HasName("PK__Departme__D80524D349FF92B9");
+            entity.HasKey(e => e.DepartmentServiceId).HasName("PK__Departme__D80524D3F37DBA6D");
 
             entity.HasIndex(e => new { e.DepartmentId, e.ServiceName }, "UQ_DepartmentServices").IsUnique();
 
@@ -523,7 +473,9 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<DepartmentWorkSchedule>(entity =>
         {
-            entity.HasKey(e => e.DepartmentScheduleId).HasName("PK__Departme__5252B08AA7816CE5");
+            entity.HasKey(e => e.DepartmentScheduleId).HasName("PK__Departme__5252B08A780D9174");
+
+            entity.HasIndex(e => new { e.DepartmentId, e.DayOfWeek, e.StartTime, e.EndTime }, "UQ_DepartmentWorkSchedules").IsUnique();
 
             entity.Property(e => e.IsActive).HasDefaultValue(true);
 
@@ -533,36 +485,11 @@ public partial class DentalClinicDbContext : DbContext
                 .HasConstraintName("FK_DepartmentWorkSchedules_Department");
         });
 
-        modelBuilder.Entity<ExternalLogin>(entity =>
-        {
-            entity.HasKey(e => e.ExternalLoginId).HasName("PK__External__A8FDB3AED9729F41");
-
-            entity.HasIndex(e => e.UserId, "IX_ExternalLogins_User");
-
-            entity.HasIndex(e => new { e.Provider, e.ProviderKey }, "UQ_ExternalLogins_ProviderKey").IsUnique();
-
-            entity.HasIndex(e => new { e.UserId, e.Provider }, "UQ_ExternalLogins_UserProvider").IsUnique();
-
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.Provider)
-                .HasMaxLength(30)
-                .IsUnicode(false);
-            entity.Property(e => e.ProviderEmail)
-                .HasMaxLength(150)
-                .IsUnicode(false);
-            entity.Property(e => e.ProviderKey)
-                .HasMaxLength(200)
-                .IsUnicode(false);
-
-            entity.HasOne(d => d.User).WithMany(p => p.ExternalLogins)
-                .HasForeignKey(d => d.UserId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_ExternalLogins_UserAccounts");
-        });
-
         modelBuilder.Entity<FollowUpSchedule>(entity =>
         {
-            entity.HasKey(e => e.FollowUpId).HasName("PK__FollowUp__D507D6388C776A7E");
+            entity.HasKey(e => e.FollowUpId).HasName("PK__FollowUp__D507D6388F77801D");
+
+            entity.HasIndex(e => new { e.Status, e.RecommendedDate }, "IX_FollowUpSchedules_Status_Date");
 
             entity.Property(e => e.Reason).HasMaxLength(500);
             entity.Property(e => e.Status)
@@ -574,24 +501,15 @@ public partial class DentalClinicDbContext : DbContext
                 .HasForeignKey(d => d.AppointmentId)
                 .HasConstraintName("FK_FollowUpSchedules_Appointment");
 
-            entity.HasOne(d => d.Dentist).WithMany(p => p.FollowUpSchedules)
-                .HasForeignKey(d => d.DentistId)
+            entity.HasOne(d => d.TreatmentSession).WithMany(p => p.FollowUpSchedules)
+                .HasForeignKey(d => d.TreatmentSessionId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_FollowUpSchedules_Dentist");
-
-            entity.HasOne(d => d.Patient).WithMany(p => p.FollowUpSchedules)
-                .HasForeignKey(d => d.PatientId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_FollowUpSchedules_Patient");
-
-            entity.HasOne(d => d.TreatmentPlan).WithMany(p => p.FollowUpSchedules)
-                .HasForeignKey(d => d.TreatmentPlanId)
-                .HasConstraintName("FK_FollowUpSchedules_Plan");
+                .HasConstraintName("FK_FollowUpSchedules_TreatmentSession");
         });
 
         modelBuilder.Entity<ImagingRecord>(entity =>
         {
-            entity.HasKey(e => e.ImagingRecordId).HasName("PK__ImagingR__454FF48BB8D33C61");
+            entity.HasKey(e => e.ImagingRecordId).HasName("PK__ImagingR__454FF48B48686B9C");
 
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.FileUrl).HasMaxLength(500);
@@ -607,44 +525,38 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<Invoice>(entity =>
         {
-            entity.HasKey(e => e.InvoiceId).HasName("PK__Invoices__D796AAB514AE5EC0");
+            entity.HasKey(e => e.InvoiceId).HasName("PK__Invoices__D796AAB5BB82EF24");
 
-            entity.HasIndex(e => new { e.PatientId, e.Status }, "IX_Invoices_Patient_Status");
+            entity.HasIndex(e => e.InvoiceCode, "UQ__Invoices__0D9D7FF306260EDD").IsUnique();
 
-            entity.HasIndex(e => e.InvoiceCode, "UQ__Invoices__0D9D7FF374D2031B").IsUnique();
+            entity.HasIndex(e => e.AppointmentId, "UQ__Invoices__8ECDFCC3EE915E62").IsUnique();
 
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.InvoiceCode)
                 .HasMaxLength(30)
                 .IsUnicode(false);
-            entity.Property(e => e.OutstandingAmount)
-                .HasComputedColumnSql("([TotalAmount]-[PaidAmount])", true)
-                .HasColumnType("decimal(19, 2)");
-            entity.Property(e => e.PaidAmount).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.Status)
                 .HasMaxLength(30)
                 .IsUnicode(false)
                 .HasDefaultValue("Unpaid");
             entity.Property(e => e.TotalAmount).HasColumnType("decimal(18, 2)");
 
-            entity.HasOne(d => d.Appointment).WithMany(p => p.Invoices)
-                .HasForeignKey(d => d.AppointmentId)
+            entity.HasOne(d => d.Appointment).WithOne(p => p.Invoice)
+                .HasForeignKey<Invoice>(d => d.AppointmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Invoices_Appointment");
 
-            entity.HasOne(d => d.GeneratedByStaff).WithMany(p => p.Invoices)
-                .HasForeignKey(d => d.GeneratedByStaffId)
+            entity.HasOne(d => d.GeneratedByUser).WithMany(p => p.Invoices)
+                .HasForeignKey(d => d.GeneratedByUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Invoices_GeneratedBy");
-
-            entity.HasOne(d => d.Patient).WithMany(p => p.Invoices)
-                .HasForeignKey(d => d.PatientId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Invoices_Patient");
+                .HasConstraintName("FK_Invoices_GeneratedByUser");
         });
 
         modelBuilder.Entity<InvoiceItem>(entity =>
         {
-            entity.HasKey(e => e.InvoiceItemId).HasName("PK__InvoiceI__478FE09C0E820552");
+            entity.HasKey(e => e.InvoiceItemId).HasName("PK__InvoiceI__478FE09C8C832207");
+
+            entity.HasIndex(e => e.InvoiceId, "IX_InvoiceItems_Invoice");
 
             entity.Property(e => e.Amount)
                 .HasComputedColumnSql("([Quantity]*[UnitPrice])", true)
@@ -665,9 +577,9 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<Notification>(entity =>
         {
-            entity.HasKey(e => e.NotificationId).HasName("PK__Notifica__20CF2E12D7CFE91D");
+            entity.HasKey(e => e.NotificationId).HasName("PK__Notifica__20CF2E12254E4A34");
 
-            entity.HasIndex(e => new { e.UserId, e.ReadAt }, "IX_Notifications_User_Read");
+            entity.HasIndex(e => new { e.UserId, e.ReadAt }, "IX_Notifications_User_ReadAt");
 
             entity.Property(e => e.Channel)
                 .HasMaxLength(30)
@@ -694,7 +606,7 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<OdontogramEntry>(entity =>
         {
-            entity.HasKey(e => e.OdontogramEntryId).HasName("PK__Odontogr__2DCE5CAB718BF4EB");
+            entity.HasKey(e => e.OdontogramEntryId).HasName("PK__Odontogr__2DCE5CAB3ECBB5C7");
 
             entity.Property(e => e.Condition).HasMaxLength(200);
             entity.Property(e => e.Note).HasMaxLength(500);
@@ -711,35 +623,13 @@ public partial class DentalClinicDbContext : DbContext
                 .HasConstraintName("FK_OdontogramEntries_ClinicalEntry");
         });
 
-        modelBuilder.Entity<PasswordResetToken>(entity =>
-        {
-            entity.HasKey(e => e.PasswordResetTokenId).HasName("PK__Password__160661285DD37809");
-
-            entity.HasIndex(e => new { e.UserId, e.ExpiresAt }, "IX_PasswordResetTokens_User_Expires");
-
-            entity.HasIndex(e => e.TokenHash, "UQ_PasswordResetTokens_TokenHash").IsUnique();
-
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.TokenHash)
-                .HasMaxLength(128)
-                .IsUnicode(false);
-
-            entity.HasOne(d => d.User).WithMany(p => p.PasswordResetTokens)
-                .HasForeignKey(d => d.UserId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_PasswordResetTokens_UserAccounts");
-        });
-
         modelBuilder.Entity<PatientProfile>(entity =>
         {
-            entity.HasKey(e => e.PatientId).HasName("PK__PatientP__970EC366C5059AB1");
+            entity.HasKey(e => e.UserId);
 
-            entity.HasIndex(e => e.PatientCode, "UQ__PatientP__B9C66DFE39A926D4").IsUnique();
+            entity.HasIndex(e => e.PatientCode, "UQ__PatientP__B9C66DFEB8F35C02").IsUnique();
 
-            entity.HasIndex(e => e.UserId, "UX_PatientProfiles_User_NotNull")
-                .IsUnique()
-                .HasFilter("([UserId] IS NOT NULL)");
-
+            entity.Property(e => e.UserId).ValueGeneratedNever();
             entity.Property(e => e.Address).HasMaxLength(300);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.EmergencyContact).HasMaxLength(150);
@@ -759,12 +649,13 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasOne(d => d.User).WithOne(p => p.PatientProfile)
                 .HasForeignKey<PatientProfile>(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_PatientProfiles_UserAccounts");
         });
 
         modelBuilder.Entity<Payment>(entity =>
         {
-            entity.HasKey(e => e.PaymentId).HasName("PK__Payments__9B556A38C42044DD");
+            entity.HasKey(e => e.PaymentId).HasName("PK__Payments__9B556A38F3A3541C");
 
             entity.HasIndex(e => new { e.InvoiceId, e.Status }, "IX_Payments_Invoice_Status");
 
@@ -786,15 +677,17 @@ public partial class DentalClinicDbContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Payments_Invoice");
 
-            entity.HasOne(d => d.PaidByUser).WithMany(p => p.Payments)
-                .HasForeignKey(d => d.PaidByUserId)
+            entity.HasOne(d => d.PaidByPatientUser).WithMany(p => p.Payments)
+                .HasForeignKey(d => d.PaidByPatientUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Payments_PaidBy");
+                .HasConstraintName("FK_Payments_Patient");
         });
 
         modelBuilder.Entity<PerformedService>(entity =>
         {
-            entity.HasKey(e => e.PerformedServiceId).HasName("PK__Performe__F406F5C5AE222163");
+            entity.HasKey(e => e.PerformedServiceId).HasName("PK__Performe__F406F5C5C7580EC6");
+
+            entity.HasIndex(e => e.TreatmentSessionId, "IX_PerformedServices_Session");
 
             entity.Property(e => e.Amount)
                 .HasComputedColumnSql("([Quantity]*[UnitPrice])", true)
@@ -815,32 +708,21 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<Prescription>(entity =>
         {
-            entity.HasKey(e => e.PrescriptionId).HasName("PK__Prescrip__401308328B2A8334");
+            entity.HasKey(e => e.PrescriptionId).HasName("PK__Prescrip__401308326DA13637");
+
+            entity.HasIndex(e => e.TreatmentSessionId, "UQ__Prescrip__3FFB2E2176B9A738").IsUnique();
 
             entity.Property(e => e.IssuedAt).HasDefaultValueSql("(sysdatetime())");
 
-            entity.HasOne(d => d.Appointment).WithMany(p => p.Prescriptions)
-                .HasForeignKey(d => d.AppointmentId)
-                .HasConstraintName("FK_Prescriptions_Appointment");
-
-            entity.HasOne(d => d.Dentist).WithMany(p => p.Prescriptions)
-                .HasForeignKey(d => d.DentistId)
+            entity.HasOne(d => d.TreatmentSession).WithOne(p => p.Prescription)
+                .HasForeignKey<Prescription>(d => d.TreatmentSessionId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Prescriptions_Dentist");
-
-            entity.HasOne(d => d.Patient).WithMany(p => p.Prescriptions)
-                .HasForeignKey(d => d.PatientId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Prescriptions_Patient");
-
-            entity.HasOne(d => d.TreatmentSession).WithMany(p => p.Prescriptions)
-                .HasForeignKey(d => d.TreatmentSessionId)
                 .HasConstraintName("FK_Prescriptions_TreatmentSession");
         });
 
         modelBuilder.Entity<PrescriptionItem>(entity =>
         {
-            entity.HasKey(e => e.PrescriptionItemId).HasName("PK__Prescrip__1AADD9FA996D6EAF");
+            entity.HasKey(e => e.PrescriptionItemId).HasName("PK__Prescrip__1AADD9FACC991C2B");
 
             entity.Property(e => e.Dosage).HasMaxLength(100);
             entity.Property(e => e.Duration).HasMaxLength(100);
@@ -854,41 +736,11 @@ public partial class DentalClinicDbContext : DbContext
                 .HasConstraintName("FK_PrescriptionItems_Prescription");
         });
 
-        modelBuilder.Entity<RefreshToken>(entity =>
-        {
-            entity.HasKey(e => e.RefreshTokenId).HasName("PK__RefreshT__F5845E399835B0D1");
-
-            entity.HasIndex(e => new { e.UserId, e.ExpiresAt }, "IX_RefreshTokens_User_Expires");
-
-            entity.HasIndex(e => e.TokenHash, "UQ_RefreshTokens_TokenHash").IsUnique();
-
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.CreatedByIp)
-                .HasMaxLength(64)
-                .IsUnicode(false);
-            entity.Property(e => e.DeviceInfo).HasMaxLength(500);
-            entity.Property(e => e.ReplacedByTokenHash)
-                .HasMaxLength(128)
-                .IsUnicode(false);
-            entity.Property(e => e.RevocationReason).HasMaxLength(250);
-            entity.Property(e => e.RevokedByIp)
-                .HasMaxLength(64)
-                .IsUnicode(false);
-            entity.Property(e => e.TokenHash)
-                .HasMaxLength(128)
-                .IsUnicode(false);
-
-            entity.HasOne(d => d.User).WithMany(p => p.RefreshTokens)
-                .HasForeignKey(d => d.UserId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_RefreshTokens_UserAccounts");
-        });
-
         modelBuilder.Entity<Room>(entity =>
         {
-            entity.HasKey(e => e.RoomId).HasName("PK__Rooms__32863939A7D05B0F");
+            entity.HasKey(e => e.RoomId).HasName("PK__Rooms__32863939A3A9C036");
 
-            entity.HasIndex(e => e.RoomCode, "UQ__Rooms__4F9D52313F69CCDF").IsUnique();
+            entity.HasIndex(e => e.RoomCode, "UQ__Rooms__4F9D5231B639C39D").IsUnique();
 
             entity.Property(e => e.RoomCode)
                 .HasMaxLength(30)
@@ -902,24 +754,20 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<StaffProfile>(entity =>
         {
-            entity.HasKey(e => e.StaffId).HasName("PK__StaffPro__96D4AB17882A3F75");
+            entity.HasKey(e => e.UserId);
 
-            entity.HasIndex(e => e.UserId, "UQ__StaffPro__1788CC4D20B0FBF8").IsUnique();
+            entity.HasIndex(e => e.EmployeeCode, "UQ__StaffPro__1F6425482AD69A68").IsUnique();
 
-            entity.HasIndex(e => e.EmployeeCode, "UQ__StaffPro__1F642548D74FB3C9").IsUnique();
-
+            entity.Property(e => e.UserId).ValueGeneratedNever();
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.EmployeeCode)
                 .HasMaxLength(30)
                 .IsUnicode(false);
-            entity.Property(e => e.FullName).HasMaxLength(150);
-            entity.Property(e => e.StaffType)
-                .HasMaxLength(40)
-                .IsUnicode(false);
-            entity.Property(e => e.Status)
+            entity.Property(e => e.EmploymentStatus)
                 .HasMaxLength(30)
                 .IsUnicode(false)
                 .HasDefaultValue("Active");
+            entity.Property(e => e.FullName).HasMaxLength(150);
 
             entity.HasOne(d => d.User).WithOne(p => p.StaffProfile)
                 .HasForeignKey<StaffProfile>(d => d.UserId)
@@ -929,9 +777,9 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<TreatmentPlan>(entity =>
         {
-            entity.HasKey(e => e.TreatmentPlanId).HasName("PK__Treatmen__4E46B5AC0E64CDDA");
+            entity.HasKey(e => e.TreatmentPlanId).HasName("PK__Treatmen__4E46B5AC9569554F");
 
-            entity.HasIndex(e => new { e.PatientId, e.Status }, "IX_TreatmentPlans_Patient_Status");
+            entity.HasIndex(e => new { e.PatientUserId, e.Status }, "IX_TreatmentPlans_Patient_Status");
 
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.EstimatedTotal).HasColumnType("decimal(18, 2)");
@@ -940,8 +788,8 @@ public partial class DentalClinicDbContext : DbContext
                 .IsUnicode(false)
                 .HasDefaultValue("Planned");
 
-            entity.HasOne(d => d.CreatedByDentist).WithMany(p => p.TreatmentPlans)
-                .HasForeignKey(d => d.CreatedByDentistId)
+            entity.HasOne(d => d.CreatedByDentistUser).WithMany(p => p.TreatmentPlans)
+                .HasForeignKey(d => d.CreatedByDentistUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_TreatmentPlans_Dentist");
 
@@ -950,15 +798,17 @@ public partial class DentalClinicDbContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_TreatmentPlans_Department");
 
-            entity.HasOne(d => d.Patient).WithMany(p => p.TreatmentPlans)
-                .HasForeignKey(d => d.PatientId)
+            entity.HasOne(d => d.PatientUser).WithMany(p => p.TreatmentPlans)
+                .HasForeignKey(d => d.PatientUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_TreatmentPlans_Patient");
         });
 
         modelBuilder.Entity<TreatmentPlanItem>(entity =>
         {
-            entity.HasKey(e => e.TreatmentPlanItemId).HasName("PK__Treatmen__1D6ACBC1722FE2A3");
+            entity.HasKey(e => e.TreatmentPlanItemId).HasName("PK__Treatmen__1D6ACBC11DB7EE62");
+
+            entity.HasIndex(e => new { e.TreatmentPlanId, e.SequenceNo }, "UQ_TreatmentPlanItems_Sequence").IsUnique();
 
             entity.Property(e => e.EstimatedCost).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.Note).HasMaxLength(500);
@@ -970,8 +820,8 @@ public partial class DentalClinicDbContext : DbContext
                 .HasMaxLength(10)
                 .IsUnicode(false);
 
-            entity.HasOne(d => d.AssignedDentist).WithMany(p => p.TreatmentPlanItems)
-                .HasForeignKey(d => d.AssignedDentistId)
+            entity.HasOne(d => d.AssignedDentistUser).WithMany(p => p.TreatmentPlanItems)
+                .HasForeignKey(d => d.AssignedDentistUserId)
                 .HasConstraintName("FK_TreatmentPlanItems_Dentist");
 
             entity.HasOne(d => d.DepartmentService).WithMany(p => p.TreatmentPlanItems)
@@ -986,33 +836,35 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<TreatmentSession>(entity =>
         {
-            entity.HasKey(e => e.TreatmentSessionId).HasName("PK__Treatmen__3FFB2E208A820AB0");
+            entity.HasKey(e => e.TreatmentSessionId).HasName("PK__Treatmen__3FFB2E20B4C5D183");
+
+            entity.HasIndex(e => e.AppointmentId, "IX_TreatmentSessions_Appointment");
 
             entity.Property(e => e.SessionDate).HasDefaultValueSql("(sysdatetime())");
 
             entity.HasOne(d => d.Appointment).WithMany(p => p.TreatmentSessions)
                 .HasForeignKey(d => d.AppointmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_TreatmentSessions_Appointment");
 
-            entity.HasOne(d => d.Dentist).WithMany(p => p.TreatmentSessions)
-                .HasForeignKey(d => d.DentistId)
+            entity.HasOne(d => d.DentistUser).WithMany(p => p.TreatmentSessions)
+                .HasForeignKey(d => d.DentistUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_TreatmentSessions_Dentist");
 
-            entity.HasOne(d => d.TreatmentPlan).WithMany(p => p.TreatmentSessions)
-                .HasForeignKey(d => d.TreatmentPlanId)
-                .HasConstraintName("FK_TreatmentSessions_Plan");
-
             entity.HasOne(d => d.TreatmentPlanItem).WithMany(p => p.TreatmentSessions)
                 .HasForeignKey(d => d.TreatmentPlanItemId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_TreatmentSessions_Item");
         });
 
         modelBuilder.Entity<UserAccount>(entity =>
         {
-            entity.HasKey(e => e.UserId).HasName("PK__UserAcco__1788CC4C4E40FB28");
+            entity.HasKey(e => e.UserId).HasName("PK__UserAcco__1788CC4CC78B5434");
 
-            entity.HasIndex(e => e.Email, "UX_UserAccounts_Email").IsUnique();
+            entity.HasIndex(e => e.Email, "UX_UserAccounts_Email_NotNull")
+                .IsUnique()
+                .HasFilter("([Email] IS NOT NULL)");
 
             entity.HasIndex(e => e.PhoneNumber, "UX_UserAccounts_Phone_NotNull")
                 .IsUnique()
@@ -1040,11 +892,11 @@ public partial class DentalClinicDbContext : DbContext
 
         modelBuilder.Entity<VisitFeedback>(entity =>
         {
-            entity.HasKey(e => e.FeedbackId).HasName("PK__VisitFee__6A4BEDD606B7C8E9");
+            entity.HasKey(e => e.FeedbackId).HasName("PK__VisitFee__6A4BEDD6AA4B7859");
 
             entity.ToTable("VisitFeedback");
 
-            entity.HasIndex(e => e.AppointmentId, "UQ__VisitFee__8ECDFCC35028FCEE").IsUnique();
+            entity.HasIndex(e => e.AppointmentId, "UQ__VisitFee__8ECDFCC3A0942984").IsUnique();
 
             entity.Property(e => e.Comment).HasMaxLength(1000);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
@@ -1053,16 +905,6 @@ public partial class DentalClinicDbContext : DbContext
                 .HasForeignKey<VisitFeedback>(d => d.AppointmentId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_VisitFeedback_Appointment");
-
-            entity.HasOne(d => d.Dentist).WithMany(p => p.VisitFeedbacks)
-                .HasForeignKey(d => d.DentistId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_VisitFeedback_Dentist");
-
-            entity.HasOne(d => d.Patient).WithMany(p => p.VisitFeedbacks)
-                .HasForeignKey(d => d.PatientId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_VisitFeedback_Patient");
         });
 
         OnModelCreatingPartial(modelBuilder);

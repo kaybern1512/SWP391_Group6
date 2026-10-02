@@ -5,9 +5,7 @@ namespace DentalClinic.Infrastructure.Persistence.Entities;
 
 public partial class PatientProfile
 {
-    public long PatientId { get; set; }
-
-    public long? UserId { get; set; }
+    public long UserId { get; set; }
 
     public string PatientCode { get; set; } = null!;
 
@@ -33,17 +31,9 @@ public partial class PatientProfile
 
     public virtual DentalMedicalRecord? DentalMedicalRecord { get; set; }
 
-    public virtual ICollection<DepartmentReferral> DepartmentReferrals { get; set; } = new List<DepartmentReferral>();
-
-    public virtual ICollection<FollowUpSchedule> FollowUpSchedules { get; set; } = new List<FollowUpSchedule>();
-
-    public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
-
-    public virtual ICollection<Prescription> Prescriptions { get; set; } = new List<Prescription>();
+    public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
     public virtual ICollection<TreatmentPlan> TreatmentPlans { get; set; } = new List<TreatmentPlan>();
 
-    public virtual UserAccount? User { get; set; }
-
-    public virtual ICollection<VisitFeedback> VisitFeedbacks { get; set; } = new List<VisitFeedback>();
+    public virtual UserAccount User { get; set; } = null!;
 }

@@ -7,7 +7,7 @@ public partial class DentistWorkSchedule
 {
     public long DentistScheduleId { get; set; }
 
-    public long DentistId { get; set; }
+    public long DentistUserId { get; set; }
 
     public long DepartmentId { get; set; }
 
@@ -21,7 +21,7 @@ public partial class DentistWorkSchedule
 
     public string? Note { get; set; }
 
-    public virtual DentistProfile Dentist { get; set; } = null!;
+    public virtual DentistProfile DentistUser { get; set; } = null!;
 
     public virtual Department Department { get; set; } = null!;
 }

@@ -13,7 +13,7 @@ public partial class AppointmentChangeProposal
 
     public long? ProposedDepartmentId { get; set; }
 
-    public long? ProposedDentistId { get; set; }
+    public long? ProposedDentistUserId { get; set; }
 
     public DateTime? ProposedStart { get; set; }
 
@@ -31,7 +31,7 @@ public partial class AppointmentChangeProposal
 
     public virtual UserAccount ProposedByUser { get; set; } = null!;
 
-    public virtual DentistProfile? ProposedDentist { get; set; }
+    public virtual DentistProfile? ProposedDentistUser { get; set; }
 
     public virtual Department? ProposedDepartment { get; set; }
 }

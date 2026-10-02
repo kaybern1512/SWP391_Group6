@@ -11,7 +11,7 @@ public partial class ClinicalEntry
 
     public long? AppointmentId { get; set; }
 
-    public long DentistId { get; set; }
+    public long DentistUserId { get; set; }
 
     public string? Symptoms { get; set; }
 
@@ -29,7 +29,7 @@ public partial class ClinicalEntry
 
     public virtual Appointment? Appointment { get; set; }
 
-    public virtual DentistProfile Dentist { get; set; } = null!;
+    public virtual DentistProfile DentistUser { get; set; } = null!;
 
     public virtual ICollection<ImagingRecord> ImagingRecords { get; set; } = new List<ImagingRecord>();
 

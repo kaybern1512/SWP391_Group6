@@ -11,7 +11,7 @@ public partial class TreatmentPlanItem
 
     public long? DepartmentServiceId { get; set; }
 
-    public long? AssignedDentistId { get; set; }
+    public long? AssignedDentistUserId { get; set; }
 
     public string? ToothNumber { get; set; }
 
@@ -25,7 +25,7 @@ public partial class TreatmentPlanItem
 
     public string? Note { get; set; }
 
-    public virtual DentistProfile? AssignedDentist { get; set; }
+    public virtual DentistProfile? AssignedDentistUser { get; set; }
 
     public virtual DepartmentService? DepartmentService { get; set; }
 

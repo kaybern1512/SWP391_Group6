@@ -9,15 +9,15 @@ public partial class Appointment
 
     public string AppointmentCode { get; set; } = null!;
 
-    public long PatientId { get; set; }
+    public long PatientUserId { get; set; }
 
     public long? DepartmentId { get; set; }
 
     public long? RequestedServiceId { get; set; }
 
-    public long? RequestedDentistId { get; set; }
+    public long? RequestedDentistUserId { get; set; }
 
-    public long? AssignedDentistId { get; set; }
+    public long? AssignedDentistUserId { get; set; }
 
     public long? RoomId { get; set; }
 
@@ -32,8 +32,6 @@ public partial class Appointment
     public string BookingSource { get; set; } = null!;
 
     public string? QueueNumber { get; set; }
-
-    public string? QueueStatus { get; set; }
 
     public string Status { get; set; } = null!;
 
@@ -57,7 +55,7 @@ public partial class Appointment
 
     public virtual ICollection<AppointmentStatusHistory> AppointmentStatusHistories { get; set; } = new List<AppointmentStatusHistory>();
 
-    public virtual DentistProfile? AssignedDentist { get; set; }
+    public virtual DentistProfile? AssignedDentistUser { get; set; }
 
     public virtual ICollection<ClinicalEntry> ClinicalEntries { get; set; } = new List<ClinicalEntry>();
 
@@ -67,19 +65,15 @@ public partial class Appointment
 
     public virtual Department? Department { get; set; }
 
-    public virtual ICollection<DepartmentReferral> DepartmentReferrals { get; set; } = new List<DepartmentReferral>();
-
     public virtual ICollection<FollowUpSchedule> FollowUpSchedules { get; set; } = new List<FollowUpSchedule>();
 
-    public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
+    public virtual Invoice? Invoice { get; set; }
 
     public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 
-    public virtual PatientProfile Patient { get; set; } = null!;
+    public virtual PatientProfile PatientUser { get; set; } = null!;
 
-    public virtual ICollection<Prescription> Prescriptions { get; set; } = new List<Prescription>();
-
-    public virtual DentistProfile? RequestedDentist { get; set; }
+    public virtual DentistProfile? RequestedDentistUser { get; set; }
 
     public virtual DepartmentService? RequestedService { get; set; }
 
