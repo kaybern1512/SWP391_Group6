@@ -1,0 +1,634 @@
+@model DentalClinic.Web.ViewModels.Appointments.PatientBookViewModel
+@{
+    ViewData["Title"] = "Đặt lịch khám mới";
+}
+
+<div class="container-fluid px-0">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">Đặt Lịch Khám Nha Khoa</h1>
+            <p class="text-muted mb-0">Hệ thống phòng khám đa chuyên khoa DentalCare &bull; Đặt lịch hẹn trực tuyến nhanh chóng và thuận tiện</p>
+        </div>
+        <div>
+            <a asp-action="Index" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Danh sách lịch hẹn
+            </a>
+        </div>
+    </div>
+
+    <!-- Stepper Navigation -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-center text-center position-relative">
+                <div class="step-item active" id="step-nav-1">
+                    <div class="step-circle"><i class="bi bi-building"></i></div>
+                    <div class="step-label">1. Chuyên khoa</div>
+                </div>
+                <div class="step-line"></div>
+                <div class="step-item" id="step-nav-2">
+                    <div class="step-circle"><i class="bi bi-heart-pulse"></i></div>
+                    <div class="step-label">2. Dịch vụ</div>
+                </div>
+                <div class="step-line"></div>
+                <div class="step-item" id="step-nav-3">
+                    <div class="step-circle"><i class="bi bi-calendar2-date"></i></div>
+                    <div class="step-label">3. Bác sĩ & Ngày</div>
+                </div>
+                <div class="step-line"></div>
+                <div class="step-item" id="step-nav-4">
+                    <div class="step-circle"><i class="bi bi-clock"></i></div>
+                    <div class="step-label">4. Khung giờ</div>
+                </div>
+                <div class="step-line"></div>
+                <div class="step-item" id="step-nav-5">
+                    <div class="step-circle"><i class="bi bi-card-text"></i></div>
+                    <div class="step-label">5. Lý do</div>
+                </div>
+                <div class="step-line"></div>
+                <div class="step-item" id="step-nav-6">
+                    <div class="step-circle"><i class="bi bi-check-circle"></i></div>
+                    <div class="step-label">6. Xác nhận</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form asp-action="Book" method="post" id="bookingForm">
+        @Html.AntiForgeryToken()
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-4" role="alert"></div>
+
+        <input type="hidden" asp-for="DepartmentId" id="hiddenDepartmentId" />
+        <input type="hidden" asp-for="RequestedServiceId" id="hiddenServiceId" />
+        <input type="hidden" asp-for="RequestedDentistUserId" id="hiddenDentistId" />
+        <input type="hidden" asp-for="ScheduledStart" id="hiddenScheduledStart" />
+
+        <!-- STEP 1: CHỌN KHOA -->
+        <div class="step-panel" id="step-panel-1">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0 fw-semibold text-primary">
+                        <i class="bi bi-building me-2"></i>Bước 1: Chọn chuyên khoa điều trị
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <p class="text-muted mb-4">Vui lòng lựa chọn chuyên khoa phù hợp với nhu cầu khám hoặc điều trị của bạn:</p>
+                    <div class="row g-3" id="departmentGrid">
+                        @foreach (var dept in Model.Departments)
+                        {
+                            <div class="col-md-6 col-lg-3">
+                                <div class="card h-100 selection-card p-3" data-id="@dept.DepartmentId" data-name="@dept.Name" onclick="selectDepartment(@dept.DepartmentId, '@dept.Name')">
+                                    <div class="d-flex align-items-center gap-3 mb-2">
+                                        <div class="selection-icon bg-primary-subtle text-primary">
+                                            <i class="bi bi-hospital fs-4"></i>
+                                        </div>
+                                        <h6 class="fw-bold mb-0">@dept.Name</h6>
+                                    </div>
+                                    <p class="text-muted small mb-0 flex-grow-1">@(string.IsNullOrWhiteSpace(dept.Description) ? "Dịch vụ nha khoa tiêu chuẩn chuyên sâu." : dept.Description)</p>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="card-footer bg-white text-end py-3">
+                    <button type="button" class="btn btn-primary px-4" id="btnNext1" disabled onclick="goToStep(2)">
+                        Tiếp tục: Chọn dịch vụ <i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 2: CHỌN DỊCH VỤ -->
+        <div class="step-panel d-none" id="step-panel-2">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0 fw-semibold text-primary">
+                        <i class="bi bi-heart-pulse me-2"></i>Bước 2: Chọn dịch vụ khám trong khoa
+                    </h5>
+                    <span class="badge bg-primary-subtle text-primary px-3 py-2 fs-6" id="badgeSelectedDept"></span>
+                </div>
+                <div class="card-body p-4">
+                    <div id="serviceLoading" class="text-center py-5 d-none">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 text-muted">Đang tải danh mục dịch vụ...</p>
+                    </div>
+                    <div class="row g-3" id="servicesGrid"></div>
+                </div>
+                <div class="card-footer bg-white d-flex justify-content-between py-3">
+                    <button type="button" class="btn btn-outline-secondary" onclick="goToStep(1)">
+                        <i class="bi bi-arrow-left me-1"></i> Quay lại
+                    </button>
+                    <button type="button" class="btn btn-primary px-4" id="btnNext2" disabled onclick="goToStep(3)">
+                        Tiếp tục: Bác sĩ & Ngày <i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 3: BÁC SĨ & NGÀY -->
+        <div class="step-panel d-none" id="step-panel-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0 fw-semibold text-primary">
+                        <i class="bi bi-calendar2-date me-2"></i>Bước 3: Chọn ngày hẹn và Bác sĩ khám
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-4">
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold">1. Chọn ngày bạn muốn đến khám:</label>
+                            <input type="date" asp-for="AppointmentDate" id="inputAppointmentDate" class="form-control form-control-lg" min="@DateTime.Today.ToString("yyyy-MM-dd")" onchange="onDateOrDentistChange()" />
+                            <small class="text-muted mt-1 d-block"><i class="bi bi-info-circle me-1"></i>Phòng khám làm việc từ Thứ 2 đến Chủ nhật.</small>
+                        </div>
+                        <div class="col-md-7">
+                            <label class="form-label fw-semibold">2. Chọn Bác sĩ phụ trách (Tùy chọn):</label>
+                            <div class="row g-2" id="dentistOptionsGrid">
+                                <div class="col-12">
+                                    <div class="card selection-card p-3 active" data-dentist-id="" onclick="selectDentist(null, 'Bất kỳ bác sĩ khả dụng')">
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="selection-icon bg-info-subtle text-info">
+                                                <i class="bi bi-people-fill fs-4"></i>
+                                            </div>
+                                            <div>
+                                                <div class="fw-bold">Bác sĩ khả dụng bất kỳ (Hệ thống điều phối tối ưu)</div>
+                                                <small class="text-muted">Trưởng khoa sẽ tự động sắp xếp bác sĩ chuyên khoa còn trống lịch sớm nhất.</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12" id="dentistDynamicList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-white d-flex justify-content-between py-3">
+                    <button type="button" class="btn btn-outline-secondary" onclick="goToStep(2)">
+                        <i class="bi bi-arrow-left me-1"></i> Quay lại
+                    </button>
+                    <button type="button" class="btn btn-primary px-4" id="btnNext3" onclick="goToStep(4)">
+                        Tiếp tục: Chọn giờ khám <i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 4: CHỌN TIME SLOT -->
+        <div class="step-panel d-none" id="step-panel-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0 fw-semibold text-primary">
+                        <i class="bi bi-clock me-2"></i>Bước 4: Chọn khung giờ khám khả dụng
+                    </h5>
+                    <span class="text-muted small" id="slotFilterSummary"></span>
+                </div>
+                <div class="card-body p-4">
+                    <div id="slotsLoading" class="text-center py-5 d-none">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 text-muted">Đang tra cứu lịch làm việc và khung giờ trống...</p>
+                    </div>
+                    <div id="noSlotsMessage" class="alert alert-warning d-none text-center py-4">
+                        <i class="bi bi-exclamation-triangle fs-3 d-block mb-2 text-warning"></i>
+                        <h5>Không tìm thấy khung giờ khám khả dụng</h5>
+                        <p class="mb-0">Trong ngày đã chọn, bác sĩ hoặc khoa không còn khung giờ trống. Vui lòng quay lại bước 3 để chọn ngày khác hoặc chọn tùy chọn "Bất kỳ bác sĩ khả dụng".</p>
+                    </div>
+                    <div class="row g-3" id="slotsGrid"></div>
+                </div>
+                <div class="card-footer bg-white d-flex justify-content-between py-3">
+                    <button type="button" class="btn btn-outline-secondary" onclick="goToStep(3)">
+                        <i class="bi bi-arrow-left me-1"></i> Quay lại
+                    </button>
+                    <button type="button" class="btn btn-primary px-4" id="btnNext4" disabled onclick="goToStep(5)">
+                        Tiếp tục: Nhập lý do khám <i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 5: LÝ DO KHÁM -->
+        <div class="step-panel d-none" id="step-panel-5">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0 fw-semibold text-primary">
+                        <i class="bi bi-card-text me-2"></i>Bước 5: Lý do khám / Mô tả triệu chứng
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="mb-3">
+                        <label asp-for="ReasonForVisit" class="form-label fw-semibold">Mô tả lý do khám hoặc các triệu chứng bạn đang gặp phải <span class="text-danger">*</span></label>
+                        <textarea asp-for="ReasonForVisit" id="inputReasonForVisit" class="form-control" rows="4" placeholder="Ví dụ: Đau nhức răng hàm dưới bên trái khi ăn đồ nóng lạnh, muốn cạo vôi và kiểm tra tổng quát định kỳ..."></textarea>
+                        <span asp-validation-for="ReasonForVisit" class="text-danger small"></span>
+                        <div class="form-text">Mô tả chi tiết giúp đội ngũ bác sĩ chuẩn bị chu đáo trang thiết bị và dự kiến thời gian thăm khám hiệu quả nhất cho bạn.</div>
+                    </div>
+                </div>
+                <div class="card-footer bg-white d-flex justify-content-between py-3">
+                    <button type="button" class="btn btn-outline-secondary" onclick="goToStep(4)">
+                        <i class="bi bi-arrow-left me-1"></i> Quay lại
+                    </button>
+                    <button type="button" class="btn btn-primary px-4" id="btnNext5" onclick="goToStep(6)">
+                        Tiếp tục: Xem lại & Xác nhận <i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 6: XÁC NHẬN VÀ GỬI YÊU CẦU -->
+        <div class="step-panel d-none" id="step-panel-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0 fw-semibold text-success">
+                        <i class="bi bi-check-circle me-2"></i>Bước 6: Kiểm tra thông tin & Gửi yêu cầu đặt lịch
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="alert alert-info border-0 mb-4">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-info-circle-fill fs-5"></i>
+                            <div><strong>Quy trình tiếp nhận:</strong> Sau khi bạn gửi yêu cầu, Bộ phận Lễ tân và Trưởng khoa sẽ tiếp nhận, phê duyệt lịch hẹn và cấp số thứ tự vào viện (Queue Number).</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="border rounded p-3 bg-light-subtle h-100">
+                                <h6 class="fw-bold text-muted text-uppercase small mb-3">Thông tin dịch vụ & Địa điểm</h6>
+                                <table class="table table-borderless table-sm mb-0">
+                                    <tr>
+                                        <td class="text-muted" style="width: 140px;">Chuyên khoa:</td>
+                                        <td class="fw-bold" id="summaryDept">--</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted">Dịch vụ:</td>
+                                        <td class="fw-bold" id="summaryService">--</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted">Thời lượng dự kiến:</td>
+                                        <td id="summaryDuration">-- phút</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted">Giá dịch vụ:</td>
+                                        <td class="fw-bold text-primary" id="summaryPrice">-- đ</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="border rounded p-3 bg-light-subtle h-100">
+                                <h6 class="fw-bold text-muted text-uppercase small mb-3">Thời gian & Bác sĩ</h6>
+                                <table class="table table-borderless table-sm mb-0">
+                                    <tr>
+                                        <td class="text-muted" style="width: 140px;">Ngày khám:</td>
+                                        <td class="fw-bold text-success" id="summaryDate">--</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted">Giờ hẹn:</td>
+                                        <td class="fw-bold text-success fs-5" id="summarySlot">--</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted">Bác sĩ mong muốn:</td>
+                                        <td class="fw-bold" id="summaryDentist">Bất kỳ bác sĩ khả dụng</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-muted">Lý do khám:</td>
+                                        <td class="fst-italic" id="summaryReason">--</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-white d-flex justify-content-between py-3">
+                    <button type="button" class="btn btn-outline-secondary" onclick="goToStep(5)">
+                        <i class="bi bi-arrow-left me-1"></i> Sửa lại thông tin
+                    </button>
+                    <button type="submit" class="btn btn-success btn-lg px-5 shadow-sm fw-bold">
+                        <i class="bi bi-send-check me-2"></i> Xác Nhận Đặt Lịch Khám
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<style>
+.step-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 2;
+    cursor: pointer;
+}
+.step-circle {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background-color: #e9ecef;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    margin-bottom: 6px;
+    transition: all 0.3s ease;
+}
+.step-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #6c757d;
+}
+.step-item.active .step-circle {
+    background-color: #0d6efd;
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(13, 110, 253, 0.35);
+}
+.step-item.active .step-label {
+    color: #0d6efd;
+}
+.step-item.completed .step-circle {
+    background-color: #198754;
+    color: #fff;
+}
+.step-line {
+    flex-grow: 1;
+    height: 3px;
+    background-color: #e9ecef;
+    margin: 0 10px;
+    position: relative;
+    top: -15px;
+    z-index: 1;
+}
+.selection-card {
+    cursor: pointer;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    transition: all 0.2s ease-in-out;
+}
+.selection-card:hover {
+    border-color: #0d6efd;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+.selection-card.active {
+    border-color: #0d6efd;
+    background-color: #f0f7ff;
+}
+.selection-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.slot-card {
+    border: 1.5px solid #dee2e6;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #fff;
+}
+.slot-card:hover {
+    border-color: #0d6efd;
+    background-color: #f8fbff;
+}
+.slot-card.active {
+    border-color: #0d6efd;
+    background-color: #0d6efd;
+    color: #fff !important;
+}
+.slot-card.active .text-muted,
+.slot-card.active .badge {
+    color: #fff !important;
+}
+</style>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        let currentStep = 1;
+        let selectedDept = { id: 0, name: '' };
+        let selectedService = { id: 0, name: '', duration: 30, price: 0 };
+        let selectedDentist = { id: null, name: 'Bất kỳ bác sĩ khả dụng' };
+        let selectedSlot = null;
+
+        function goToStep(step) {
+            if (step > currentStep) {
+                if (currentStep === 1 && selectedDept.id === 0) return;
+                if (currentStep === 2 && selectedService.id === 0) return;
+                if (currentStep === 4 && !selectedSlot) return;
+                if (currentStep === 5) {
+                    const reason = document.getElementById('inputReasonForVisit').value.trim();
+                    if (reason.length < 5) {
+                        alert('Vui lòng nhập lý do khám tối thiểu 5 ký tự.');
+                        return;
+                    }
+                    updateSummary();
+                }
+            }
+
+            for (let i = 1; i <= 6; i++) {
+                document.getElementById(`step-panel-${i}`).classList.add('d-none');
+                const nav = document.getElementById(`step-nav-${i}`);
+                nav.classList.remove('active');
+                if (i < step) {
+                    nav.classList.add('completed');
+                } else {
+                    nav.classList.remove('completed');
+                }
+            }
+
+            document.getElementById(`step-panel-${step}`).classList.remove('d-none');
+            document.getElementById(`step-nav-${step}`).classList.add('active');
+            currentStep = step;
+
+            if (step === 4) {
+                loadSlots();
+            }
+        }
+
+        function selectDepartment(id, name) {
+            selectedDept = { id, name };
+            document.getElementById('hiddenDepartmentId').value = id;
+            document.querySelectorAll('#departmentGrid .selection-card').forEach(c => {
+                c.classList.toggle('active', parseInt(c.getAttribute('data-id')) === id);
+            });
+            document.getElementById('btnNext1').disabled = false;
+            document.getElementById('badgeSelectedDept').innerText = name;
+
+            // Load services & dentists for dept
+            loadServices(id);
+            loadDentists(id);
+        }
+
+        async function loadServices(departmentId) {
+            const loading = document.getElementById('serviceLoading');
+            const grid = document.getElementById('servicesGrid');
+            loading.classList.remove('d-none');
+            grid.innerHTML = '';
+            document.getElementById('btnNext2').disabled = true;
+
+            try {
+                const res = await fetch(`/Patient/Appointment/GetServices?departmentId=${departmentId}`);
+                const services = await res.json();
+                loading.classList.add('d-none');
+
+                if (services.length === 0) {
+                    grid.innerHTML = '<div class="col-12 text-center text-muted py-4">Khoa hiện chưa có dịch vụ đang hoạt động.</div>';
+                    return;
+                }
+
+                services.forEach(s => {
+                    const priceFormatted = new Intl.NumberFormat('vi-VN').format(s.price || 0);
+                    const col = document.createElement('div');
+                    col.className = 'col-md-6 col-lg-4';
+                    col.innerHTML = `
+                        <div class="card h-100 selection-card p-3" data-id="${s.departmentServiceId}" onclick="selectService(${s.departmentServiceId}, '${s.serviceName}', ${s.durationMinutes || 30}, ${s.price || 0})">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="fw-bold mb-0 text-dark">${s.serviceName}</h6>
+                                <span class="badge bg-primary text-white">${priceFormatted} đ</span>
+                            </div>
+                            <p class="text-muted small mb-2 flex-grow-1">${s.description || 'Quy trình chuẩn hóa chuyên sâu.'}</p>
+                            <div class="text-secondary small">
+                                <i class="bi bi-clock me-1"></i>Thời lượng: <strong>${s.durationMinutes || 30} phút</strong>
+                            </div>
+                        </div>
+                    `;
+                    grid.appendChild(col);
+                });
+            } catch (err) {
+                loading.classList.add('d-none');
+                grid.innerHTML = '<div class="col-12 text-danger text-center">Lỗi tải danh sách dịch vụ.</div>';
+            }
+        }
+
+        function selectService(id, name, duration, price) {
+            selectedService = { id, name, duration, price };
+            document.getElementById('hiddenServiceId').value = id;
+            document.querySelectorAll('#servicesGrid .selection-card').forEach(c => {
+                c.classList.toggle('active', parseInt(c.getAttribute('data-id')) === id);
+            });
+            document.getElementById('btnNext2').disabled = false;
+        }
+
+        async function loadDentists(departmentId) {
+            const list = document.getElementById('dentistDynamicList');
+            list.innerHTML = '';
+
+            try {
+                const res = await fetch(`/Patient/Appointment/GetDentists?departmentId=${departmentId}`);
+                const dentists = await res.json();
+
+                dentists.forEach(d => {
+                    const row = document.createElement('div');
+                    row.className = 'mt-2';
+                    row.innerHTML = `
+                        <div class="card selection-card p-3" data-dentist-id="${d.dentistUserId}" onclick="selectDentist(${d.dentistUserId}, '${d.fullName}')">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="selection-icon bg-light text-primary">
+                                    <i class="bi bi-person-badge fs-4"></i>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold text-dark">${d.fullName} <span class="badge bg-light text-muted border ms-1">${d.employeeCode || ''}</span></div>
+                                    <small class="text-muted">${d.specialization || 'Bác sĩ chuyên khoa'}</small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    list.appendChild(row);
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function selectDentist(id, name) {
+            selectedDentist = { id, name };
+            document.getElementById('hiddenDentistId').value = id || '';
+            document.querySelectorAll('#dentistOptionsGrid .selection-card').forEach(c => {
+                const cId = c.getAttribute('data-dentist-id');
+                if ((!id && !cId) || (id && cId === id.toString())) {
+                    c.classList.add('active');
+                } else {
+                    c.classList.remove('active');
+                }
+            });
+        }
+
+        function onDateOrDentistChange() {
+            selectedSlot = null;
+            document.getElementById('hiddenScheduledStart').value = '';
+            document.getElementById('btnNext4').disabled = true;
+        }
+
+        async function loadSlots() {
+            const loading = document.getElementById('slotsLoading');
+            const noSlots = document.getElementById('noSlotsMessage');
+            const grid = document.getElementById('slotsGrid');
+            const summary = document.getElementById('slotFilterSummary');
+
+            const date = document.getElementById('inputAppointmentDate').value;
+            summary.innerText = `Ngày: ${date} | Bác sĩ: ${selectedDentist.name}`;
+
+            loading.classList.remove('d-none');
+            noSlots.classList.add('d-none');
+            grid.innerHTML = '';
+            selectedSlot = null;
+            document.getElementById('btnNext4').disabled = true;
+
+            const dentistParam = selectedDentist.id ? `&dentistUserId=${selectedDentist.id}` : '';
+            try {
+                const url = `/Patient/Appointment/GetSlots?departmentId=${selectedDept.id}&serviceId=${selectedService.id}&date=${date}${dentistParam}`;
+                const res = await fetch(url);
+                const slots = await res.json();
+                loading.classList.add('d-none');
+
+                if (!slots || slots.length === 0) {
+                    noSlots.classList.remove('d-none');
+                    return;
+                }
+
+                slots.forEach(slot => {
+                    const col = document.createElement('div');
+                    col.className = 'col-6 col-md-4 col-lg-3';
+                    const start = new Date(slot.startTime);
+                    const timeStr = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
+                    const recDentist = slot.recommendedDentistName ? `<div class="small text-muted mt-1"><i class="bi bi-person me-1"></i>${slot.recommendedDentistName}</div>` : '';
+
+                    col.innerHTML = `
+                        <div class="slot-card" data-start="${slot.startTime}" onclick="selectSlot('${slot.startTime}', '${slot.timeDisplay}')">
+                            <div class="fw-bold fs-5">${timeStr}</div>
+                            <div class="small text-muted">${slot.timeDisplay}</div>
+                            ${recDentist}
+                        </div>
+                    `;
+                    grid.appendChild(col);
+                });
+            } catch (err) {
+                loading.classList.add('d-none');
+                noSlots.classList.remove('d-none');
+            }
+        }
+
+        function selectSlot(startTime, display) {
+            selectedSlot = { startTime, display };
+            document.getElementById('hiddenScheduledStart').value = startTime;
+            document.querySelectorAll('#slotsGrid .slot-card').forEach(s => {
+                s.classList.toggle('active', s.getAttribute('data-start') === startTime);
+            });
+            document.getElementById('btnNext4').disabled = false;
+        }
+
+        function updateSummary() {
+            document.getElementById('summaryDept').innerText = selectedDept.name;
+            document.getElementById('summaryService').innerText = selectedService.name;
+            document.getElementById('summaryDuration').innerText = `${selectedService.duration} phút`;
+            document.getElementById('summaryPrice').innerText = `${new Intl.NumberFormat('vi-VN').format(selectedService.price)} đ`;
+            document.getElementById('summaryDate').innerText = document.getElementById('inputAppointmentDate').value;
+            document.getElementById('summarySlot').innerText = selectedSlot ? selectedSlot.display : '--';
+            document.getElementById('summaryDentist').innerText = selectedDentist.name;
+            document.getElementById('summaryReason').innerText = document.getElementById('inputReasonForVisit').value.trim();
+        }
+    </script>
+}

@@ -124,6 +124,15 @@ builder.Services.AddHttpClient<IProfileApiService, ProfileApiService>(client =>
 .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
+// Appointment & Booking API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IAppointmentApiService, AppointmentApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 var app = builder.Build();
 
 // Configure HTTP request pipeline

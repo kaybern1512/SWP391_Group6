@@ -1,0 +1,200 @@
+@model DentalClinic.Web.ViewModels.Appointments.ReceptionistTodayCheckInViewModel
+@{
+    ViewData["Title"] = "Thủ tục Check-in Bệnh nhân Hôm nay";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">Check-in Bệnh Nhân Hôm Nay</h1>
+            <p class="text-muted mb-0">Ngày: <strong class="text-primary">@DateTime.Today.ToString("dd/MM/yyyy")</strong> &bull; Quầy tiếp đón và quản lý số thứ tự khám (Queue Number)</p>
+        </div>
+        <div>
+            <a asp-action="Requests" class="btn btn-outline-secondary">
+                <i class="bi bi-inbox me-1"></i> Yêu cầu mới chờ duyệt
+            </a>
+        </div>
+    </div>
+
+    <!-- Search Form -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-3">
+            <form asp-action="TodayCheckIn" method="get" class="row g-2 align-items-center">
+                <div class="col-md-9">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" name="search" value="@Model.SearchQuery" class="form-control form-control-lg" placeholder="Tìm theo Mã hẹn, Mã bệnh nhân, Họ tên hoặc Số điện thoại..." />
+                    </div>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-lg flex-grow-1">
+                        Tìm kiếm
+                    </button>
+                    @if (!string.IsNullOrWhiteSpace(Model.SearchQuery))
+                    {
+                        <a asp-action="TodayCheckIn" class="btn btn-light btn-lg">
+                            <i class="bi bi-x-lg"></i>
+                        </a>
+                    }
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (Model.ConfirmedAppointments.Count == 0)
+    {
+        <div class="card border-0 shadow-sm text-center py-5">
+            <div class="card-body">
+                <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
+                    <i class="bi bi-calendar-check fs-2 text-muted"></i>
+                </div>
+                <h5 class="fw-bold text-dark">Chưa có lịch khám nào cho ngày hôm nay</h5>
+                <p class="text-muted mb-0">Không tìm thấy bệnh nhân nào có lịch khám đã xác nhận trong ngày hôm nay.</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0 fw-bold text-dark">
+                    <i class="bi bi-list-check me-2 text-success"></i>Danh sách lượt khám trong ngày (@Model.ConfirmedAppointments.Count lượt)
+                </h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3 text-center" style="width: 100px;">STT</th>
+                            <th>Mã Hẹn</th>
+                            <th>Bệnh Nhân</th>
+                            <th>Dịch Vụ & Khoa</th>
+                            <th>Khung Giờ</th>
+                            <th>Bác Sĩ & Vị Trí</th>
+                            <th>Trạng Thái</th>
+                            <th class="text-end pe-3">Check-In</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var appt in Model.ConfirmedAppointments)
+                        {
+                            <tr>
+                                <td class="ps-3 text-center">
+                                    @if (!string.IsNullOrEmpty(appt.QueueNumber))
+                                    {
+                                        <div class="badge bg-primary fs-5 px-3 py-2 font-monospace shadow-sm">
+                                            @appt.QueueNumber
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">--</span>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="fw-bold font-monospace text-dark">@appt.AppointmentCode</span>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">@appt.PatientName</div>
+                                    <div class="text-muted small">Mã: @appt.PatientCode &bull; SĐT: <strong>@(appt.PatientPhone ?? "N/A")</strong></div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">@appt.ServiceName</div>
+                                    <div class="text-muted small"><i class="bi bi-building me-1"></i>@appt.DepartmentName</div>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-success fs-6">
+                                        @(appt.ScheduledStart?.ToString("HH:mm") ?? "--") - @(appt.ScheduledEnd?.ToString("HH:mm") ?? "--")
+                                    </div>
+                                    <div class="text-muted small">Thời lượng: @(appt.DurationMinutes ?? 30) phút</div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-primary"><i class="bi bi-person me-1"></i>@(appt.AssignedDentistName ?? "Chưa phân bổ")</div>
+                                    <div class="text-muted small">
+                                        <i class="bi bi-geo-alt me-1"></i>@(appt.RoomName ?? "--") &bull; Ghế @(appt.DentalChairName ?? "--")
+                                    </div>
+                                </td>
+                                <td>
+                                    @if (appt.Status == "CheckedIn")
+                                    {
+                                        <span class="badge bg-success px-3 py-2">
+                                            <i class="bi bi-check-all me-1"></i>Đã Check-in
+                                        </span>
+                                        <div class="text-muted small mt-1">
+                                            Lúc: @(appt.CheckedInAt?.ToString("HH:mm") ?? "--")
+                                        </div>
+                                    }
+                                    else if (appt.Status == "Waiting")
+                                    {
+                                        <span class="badge bg-warning text-dark px-3 py-2">
+                                            <i class="bi bi-hourglass-split me-1"></i>Đang chờ vào khám
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-info text-dark px-3 py-2">
+                                            <i class="bi bi-clock me-1"></i>Chờ đến phòng khám
+                                        </span>
+                                    }
+                                </td>
+                                <td class="text-end pe-3">
+                                    @if (appt.Status == "Confirmed")
+                                    {
+                                        <button type="button" class="btn btn-success btn-sm px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#checkInModal-@appt.AppointmentId">
+                                            <i class="bi bi-person-check-fill me-1"></i> Check-in
+                                        </button>
+
+                                        <!-- CheckIn Modal -->
+                                        <div class="modal fade text-start" id="checkInModal-@appt.AppointmentId" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <form asp-action="CheckIn" asp-route-id="@appt.AppointmentId" method="post" class="modal-content">
+                                                    @Html.AntiForgeryToken()
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title">Xác Nhận Check-in Bệnh Nhân</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <div class="p-3 bg-light rounded mb-3">
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Số thứ tự:</span>
+                                                                <span class="fw-bold fs-5 text-primary">@appt.QueueNumber</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Bệnh nhân:</span>
+                                                                <span class="fw-bold">@appt.PatientName (@appt.PatientCode)</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Dịch vụ:</span>
+                                                                <span>@appt.ServiceName</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between">
+                                                                <span class="text-muted">Bác sĩ & Phòng:</span>
+                                                                <span class="fw-semibold">@appt.AssignedDentistName &bull; @appt.RoomName</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label">Ghi chú tiếp đón:</label>
+                                                            <input type="text" name="note" class="form-control" placeholder="Bệnh nhân đã đến sảnh, sẵn sàng vào phòng khám..." />
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                                                        <button type="submit" class="btn btn-success fw-bold">Hoàn Tất Check-In</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small"><i class="bi bi-check-circle-fill text-success me-1"></i>Đã xử lý</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>

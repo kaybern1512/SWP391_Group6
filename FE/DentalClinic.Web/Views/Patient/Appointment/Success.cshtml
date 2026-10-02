@@ -1,0 +1,76 @@
+@model DentalClinic.Web.Models.ApiDtos.AppointmentDto
+@{
+    ViewData["Title"] = "Đặt lịch thành công";
+}
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm text-center p-4 p-md-5 mb-4">
+                <div class="mb-4">
+                    <div class="rounded-circle bg-success-subtle text-success d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+                        <i class="bi bi-check-lg fs-1"></i>
+                    </div>
+                </div>
+
+                <h2 class="fw-bold text-dark mb-2">Gửi Yêu Cầu Đặt Lịch Thành Công!</h2>
+                <p class="text-muted mb-4">Yêu cầu đặt lịch khám của bạn đã được ghi nhận vào hệ thống phòng khám DentalCare.</p>
+
+                <div class="bg-light-subtle border rounded-3 p-4 text-start mb-4">
+                    <div class="row g-3">
+                        <div class="col-sm-6">
+                            <span class="text-muted small">Mã lịch hẹn:</span>
+                            <div class="fw-bold fs-5 text-primary">@Model.AppointmentCode</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <span class="text-muted small">Trạng thái hiện tại:</span>
+                            <div>
+                                <span class="badge bg-warning text-dark px-3 py-2">
+                                    <i class="bi bi-hourglass-split me-1"></i>Chờ Lễ Tân Tiếp Nhận
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <span class="text-muted small">Chuyên khoa:</span>
+                            <div class="fw-semibold">@Model.DepartmentName</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <span class="text-muted small">Dịch vụ yêu cầu:</span>
+                            <div class="fw-semibold">@Model.ServiceName</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <span class="text-muted small">Thời gian khám:</span>
+                            <div class="fw-bold text-success">
+                                @(Model.ScheduledStart?.ToString("dd/MM/yyyy HH:mm") ?? "--")
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <span class="text-muted small">Bác sĩ phụ trách:</span>
+                            <div class="fw-semibold">
+                                @(string.IsNullOrWhiteSpace(Model.RequestedDentistName) ? "Bất kỳ bác sĩ khả dụng" : Model.RequestedDentistName)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-info border-0 text-start mb-4">
+                    <h6 class="fw-bold mb-2"><i class="bi bi-info-circle-fill me-2"></i>Quy trình xử lý tiếp theo:</h6>
+                    <ol class="mb-0 ps-3 small text-secondary">
+                        <li class="mb-1"><strong>Lễ tân rà soát:</strong> Tiếp nhận thông tin bệnh nhân và chuyển tiếp chuyên khoa.</li>
+                        <li class="mb-1"><strong>Trưởng khoa phân bổ:</strong> Xem xét lịch làm việc, chỉ định Bác sĩ, Phòng khám và Ghế điều trị phù hợp nhất.</li>
+                        <li><strong>Cấp số thứ tự khám (Queue Number):</strong> Khi lịch hẹn được xác nhận, hệ thống sẽ cấp mã số thứ tự để bạn tiện theo dõi khi đến phòng khám.</li>
+                    </ol>
+                </div>
+
+                <div class="d-flex justify-content-center gap-3">
+                    <a asp-action="Detail" asp-route-id="@Model.AppointmentId" class="btn btn-primary px-4 py-2">
+                        <i class="bi bi-eye me-1"></i> Xem chi tiết lịch hẹn
+                    </a>
+                    <a asp-action="Index" class="btn btn-outline-secondary px-4 py-2">
+                        <i class="bi bi-calendar3 me-1"></i> Lịch hẹn của tôi
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

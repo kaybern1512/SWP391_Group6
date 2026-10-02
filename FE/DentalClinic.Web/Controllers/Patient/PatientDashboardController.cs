@@ -65,7 +65,7 @@ public class PatientDashboardController : Controller
                     ColorClass = "primary",
                     Description = "Schedule a dental checkup or specialty consultation with clinic dentists.",
                     ActionText = "Book Now",
-                    ActionUrl = "#"
+                    ActionUrl = "/Patient/Appointment/Book"
                 },
                 new()
                 {
@@ -110,7 +110,7 @@ public class PatientDashboardController : Controller
                 Description = "You currently have no upcoming dental visits or active treatment sessions. Schedule an appointment to get started.",
                 Icon = "bi-calendar-check",
                 ActionText = "Book Appointment",
-                ActionUrl = "#"
+                ActionUrl = "/Patient/Appointment/Book"
             }
         };
 

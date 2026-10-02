@@ -1,0 +1,154 @@
+@model DentalClinic.Web.ViewModels.Appointments.ReceptionistRequestsViewModel
+@{
+    ViewData["Title"] = "Tiếp nhận yêu cầu đặt lịch khám";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">Hàng Đợi Tiếp Nhận Lịch Khám</h1>
+            <p class="text-muted mb-0">Quầy Lễ Tân &bull; Rà soát và chuyển tiếp các yêu cầu đặt lịch khám từ bệnh nhân</p>
+        </div>
+        <div>
+            <a asp-action="TodayCheckIn" class="btn btn-outline-primary">
+                <i class="bi bi-person-check me-1"></i> Check-in hôm nay
+            </a>
+        </div>
+    </div>
+
+    @if (Model.Requests.Count == 0)
+    {
+        <div class="card border-0 shadow-sm text-center py-5">
+            <div class="card-body">
+                <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
+                    <i class="bi bi-inbox fs-2 text-muted"></i>
+                </div>
+                <h5 class="fw-bold text-dark">Không có yêu cầu chờ xử lý</h5>
+                <p class="text-muted mb-0">Hiện tại không có bệnh nhân nào đang chờ tiếp nhận lịch khám.</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0 fw-bold text-dark">
+                    <i class="bi bi-hourglass-split me-2 text-warning"></i>Danh sách chờ tiếp nhận (@Model.Requests.Count yêu cầu)
+                </h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">Mã Hẹn</th>
+                            <th>Bệnh Nhân</th>
+                            <th>Khoa & Dịch Vụ</th>
+                            <th>Thời Gian Khám</th>
+                            <th>Bác Sĩ Yêu Cầu</th>
+                            <th>Lý Do Khám</th>
+                            <th class="text-end pe-3">Thao Tác Tiếp Nhận</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var req in Model.Requests)
+                        {
+                            <tr>
+                                <td class="ps-3">
+                                    <span class="fw-bold text-primary font-monospace">@req.AppointmentCode</span>
+                                    <div class="text-muted small">@req.CreatedAt.ToString("dd/MM HH:mm")</div>
+                                </td>
+                                <td>
+                                    <div class="fw-bold">@req.PatientName</div>
+                                    <div class="text-muted small">Mã: @req.PatientCode &bull; SĐT: @(req.PatientPhone ?? "N/A")</div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">@req.ServiceName</div>
+                                    <div class="text-muted small"><i class="bi bi-building me-1"></i>@req.DepartmentName</div>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">@(req.ScheduledStart?.ToString("dd/MM/yyyy HH:mm") ?? "--")</div>
+                                    <div class="text-muted small">Thời lượng: @(req.DurationMinutes ?? 30) phút</div>
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(req.RequestedDentistName))
+                                    {
+                                        <span class="badge bg-light text-dark border">
+                                            <i class="bi bi-person me-1"></i>@req.RequestedDentistName
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small fst-italic">Bất kỳ bác sĩ</span>
+                                    }
+                                </td>
+                                <td style="max-width: 200px;">
+                                    <div class="small text-truncate" title="@req.ReasonForVisit">
+                                        @req.ReasonForVisit
+                                    </div>
+                                </td>
+                                <td class="text-end pe-3">
+                                    <div class="btn-group">
+                                        <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#forwardModal-@req.AppointmentId">
+                                            <i class="bi bi-arrow-right-circle me-1"></i> Chuyển Trưởng Khoa
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectModal-@req.AppointmentId">
+                                            <i class="bi bi-x-circle"></i> Từ Chối
+                                        </button>
+                                    </div>
+
+                                    <!-- Forward Modal -->
+                                    <div class="modal fade text-start" id="forwardModal-@req.AppointmentId" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <form asp-action="Forward" asp-route-id="@req.AppointmentId" method="post" class="modal-content">
+                                                @Html.AntiForgeryToken()
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Chuyển Tiếp Yêu Cầu Sang Trưởng Khoa</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Chuyển yêu cầu <strong>@req.AppointmentCode</strong> của bệnh nhân <strong>@req.PatientName</strong> sang Khoa <strong>@req.DepartmentName</strong> để phân bổ Bác sĩ và Ghế điều trị.</p>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Ghi chú của Lễ tân (Tùy chọn):</label>
+                                                        <textarea name="note" class="form-control" rows="3" placeholder="Ghi chú thêm cho Trưởng khoa nếu có..."></textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                                                    <button type="submit" class="btn btn-success">Xác Nhận Chuyển Khoa</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+
+                                    <!-- Reject Modal -->
+                                    <div class="modal fade text-start" id="rejectModal-@req.AppointmentId" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <form asp-action="Reject" asp-route-id="@req.AppointmentId" method="post" class="modal-content">
+                                                @Html.AntiForgeryToken()
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title text-danger">Từ Chối Yêu Cầu Đặt Lịch</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Từ chối yêu cầu của bệnh nhân <strong>@req.PatientName</strong> (Mã hẹn: @req.AppointmentCode).</p>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Lý do từ chối <span class="text-danger">*</span>:</label>
+                                                        <textarea name="reason" class="form-control" rows="3" required placeholder="Ví dụ: Thông tin liên lạc không chính xác, khoa tạm dừng dịch vụ trong ngày..."></textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                                                    <button type="submit" class="btn btn-danger">Xác Nhận Từ Chối</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>

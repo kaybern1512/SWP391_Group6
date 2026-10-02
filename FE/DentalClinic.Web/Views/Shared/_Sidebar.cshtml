@@ -34,9 +34,13 @@
             </a>
 
             <div class="nav-group-title">Clinical & Care</div>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Appointment backend API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "PatientAppointment" && currentAction == "Book" ? "active" : "")" asp-controller="PatientAppointment" asp-action="Book">
                 <i class="bi bi-calendar-plus"></i>
                 <span>Book Appointment</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "PatientAppointment" && currentAction != "Book" ? "active" : "")" asp-controller="PatientAppointment" asp-action="Index">
+                <i class="bi bi-calendar3"></i>
+                <span>My Appointments</span>
             </a>
             <a class="sidebar-link" href="#" onclick="alert('Feature will connect to EMR backend API.'); return false;">
                 <i class="bi bi-journal-medical"></i>
@@ -66,11 +70,11 @@
             </a>
 
             <div class="nav-group-title">Clinical Intake</div>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Check-in API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "ReceptionistAppointment" && currentAction == "TodayCheckIn" ? "active" : "")" asp-controller="ReceptionistAppointment" asp-action="TodayCheckIn">
                 <i class="bi bi-person-check"></i>
                 <span>Check In Patient</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Appointment triage API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "ReceptionistAppointment" && currentAction == "Requests" ? "active" : "")" asp-controller="ReceptionistAppointment" asp-action="Requests">
                 <i class="bi bi-calendar-check"></i>
                 <span>Appointment Requests</span>
             </a>
@@ -98,6 +102,10 @@
             </a>
 
             <div class="nav-group-title">Clinical Procedures</div>
+            <a class="sidebar-link @(currentCtrl == "DentistAppointment" ? "active" : "")" asp-controller="DentistAppointment" asp-action="Today">
+                <i class="bi bi-calendar-check"></i>
+                <span>Today's Appointments</span>
+            </a>
             <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Patient EMR API.'); return false;">
                 <i class="bi bi-journal-medical"></i>
                 <span>Medical Records & EMR</span>
@@ -142,7 +150,7 @@
             </a>
 
             <div class="nav-group-title">Clinical Allocation</div>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Appointment triage API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "DepartmentAppointment" ? "active" : "")" asp-controller="DepartmentAppointment" asp-action="Requests">
                 <i class="bi bi-check2-square"></i>
                 <span>Assignment Queue</span>
             </a>

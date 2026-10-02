@@ -1,0 +1,130 @@
+@model DentalClinic.Web.ViewModels.Appointments.DentistTodayAppointmentsViewModel
+@{
+    ViewData["Title"] = "Lịch khám hôm nay của Bác sĩ";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">Lịch Thăm Khám Hôm Nay</h1>
+            <p class="text-muted mb-0">Hôm nay: <strong class="text-primary">@DateTime.Today.ToString("dd/MM/yyyy")</strong> &bull; Bác sĩ chuyên khoa phụ trách điều trị</p>
+        </div>
+        <div>
+            <span class="badge bg-primary fs-6 px-3 py-2">
+                Tổng cộng: @Model.Appointments.Count ca khám
+            </span>
+        </div>
+    </div>
+
+    @if (Model.Appointments.Count == 0)
+    {
+        <div class="card border-0 shadow-sm text-center py-5">
+            <div class="card-body">
+                <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
+                    <i class="bi bi-calendar-event fs-2 text-muted"></i>
+                </div>
+                <h5 class="fw-bold text-dark">Hôm nay không có ca khám nào</h5>
+                <p class="text-muted mb-0">Bạn hiện không có lịch hẹn khám nào được phân bổ trong ngày hôm nay.</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0 fw-bold text-dark">
+                    <i class="bi bi-person-workspace me-2 text-primary"></i>Danh sách bệnh nhân tiếp nhận hôm nay
+                </h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3 text-center" style="width: 90px;">STT</th>
+                            <th>Mã Hẹn</th>
+                            <th>Bệnh Nhân</th>
+                            <th>Dịch Vụ Khám</th>
+                            <th>Khung Giờ</th>
+                            <th>Vị Trí Ghế</th>
+                            <th>Lý Do Khám</th>
+                            <th class="text-end pe-3">Trạng Thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var appt in Model.Appointments)
+                        {
+                            <tr>
+                                <td class="ps-3 text-center">
+                                    @if (!string.IsNullOrEmpty(appt.QueueNumber))
+                                    {
+                                        <div class="badge bg-primary fs-5 px-3 py-2 font-monospace shadow-sm">
+                                            @appt.QueueNumber
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">--</span>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="fw-bold font-monospace text-dark">@appt.AppointmentCode</span>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">@appt.PatientName</div>
+                                    <div class="text-muted small">Mã: @appt.PatientCode &bull; SĐT: @(appt.PatientPhone ?? "N/A")</div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-primary">@appt.ServiceName</div>
+                                    <div class="text-muted small">@appt.DepartmentName</div>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-success fs-6">
+                                        @(appt.ScheduledStart?.ToString("HH:mm") ?? "--") - @(appt.ScheduledEnd?.ToString("HH:mm") ?? "--")
+                                    </div>
+                                    <div class="text-muted small">Thời lượng: @(appt.DurationMinutes ?? 30) phút</div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark"><i class="bi bi-geo-alt me-1 text-danger"></i>@(appt.RoomName ?? "--")</div>
+                                    <div class="text-muted small">Ghế: @(appt.DentalChairName ?? "--")</div>
+                                </td>
+                                <td style="max-width: 220px;">
+                                    <div class="small text-truncate" title="@appt.ReasonForVisit">
+                                        @appt.ReasonForVisit
+                                    </div>
+                                </td>
+                                <td class="text-end pe-3">
+                                    @switch (appt.Status)
+                                    {
+                                        case "CheckedIn":
+                                            <span class="badge bg-success px-3 py-2">
+                                                <i class="bi bi-person-check me-1"></i>Đã Check-in
+                                            </span>
+                                            break;
+                                        case "Confirmed":
+                                            <span class="badge bg-info text-dark px-3 py-2">
+                                                <i class="bi bi-clock me-1"></i>Chờ đến phòng khám
+                                            </span>
+                                            break;
+                                        case "InService":
+                                            <span class="badge bg-primary px-3 py-2">
+                                                <i class="bi bi-activity me-1"></i>Đang điều trị
+                                            </span>
+                                            break;
+                                        case "Completed":
+                                            <span class="badge bg-secondary px-3 py-2">
+                                                <i class="bi bi-check-all me-1"></i>Đã xong
+                                            </span>
+                                            break;
+                                        default:
+                                            <span class="badge bg-light text-dark border px-3 py-2">@appt.Status</span>
+                                            break;
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>

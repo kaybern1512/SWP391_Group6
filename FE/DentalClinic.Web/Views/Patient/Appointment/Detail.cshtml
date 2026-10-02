@@ -1,0 +1,302 @@
+@model DentalClinic.Web.ViewModels.Appointments.AppointmentDetailViewModel
+@{
+    ViewData["Title"] = $"Chi tiết lịch hẹn {Model.Appointment.AppointmentCode}";
+    var appt = Model.Appointment;
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left"></i>
+                </a>
+                <h1 class="h3 fw-bold text-dark mb-0">Lịch Hẹn: <span class="text-primary font-monospace">@appt.AppointmentCode</span></h1>
+            </div>
+            <p class="text-muted mb-0">Tạo ngày: @appt.CreatedAt.ToString("dd/MM/yyyy HH:mm")</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            @if (!string.IsNullOrEmpty(appt.QueueNumber))
+            {
+                <div class="badge bg-success-subtle text-success fs-5 px-3 py-2 border border-success">
+                    STT: @appt.QueueNumber
+                </div>
+            }
+            <div>
+                @switch (appt.Status)
+                {
+                    case "PendingReceptionReview":
+                        <span class="badge bg-warning text-dark fs-6 px-3 py-2">Chờ Lễ Tân Tiếp Nhận</span>
+                        break;
+                    case "PendingDepartmentReview":
+                        <span class="badge bg-info text-dark fs-6 px-3 py-2">Chờ Trưởng Khoa Phân Bổ</span>
+                        break;
+                    case "AwaitingPatientResponse":
+                        <span class="badge bg-primary fs-6 px-3 py-2">Chờ Bạn Phản Hồi Đề Xuất</span>
+                        break;
+                    case "Confirmed":
+                        <span class="badge bg-success fs-6 px-3 py-2">Đã Xác Nhận</span>
+                        break;
+                    case "CheckedIn":
+                        <span class="badge bg-teal text-white fs-6 px-3 py-2" style="background-color: #0d9488;">Đã Check-in</span>
+                        break;
+                    case "Completed":
+                        <span class="badge bg-secondary fs-6 px-3 py-2">Đã Hoàn Thành</span>
+                        break;
+                    case "Cancelled":
+                    case "Rejected":
+                        <span class="badge bg-danger fs-6 px-3 py-2">@appt.Status</span>
+                        break;
+                    default:
+                        <span class="badge bg-light text-dark fs-6 px-3 py-2 border">@appt.Status</span>
+                        break;
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- PROPOSAL BANNER IF AWAITING PATIENT RESPONSE -->
+    @if (appt.Status == "AwaitingPatientResponse" && Model.ActiveProposal != null)
+    {
+        var p = Model.ActiveProposal;
+        <div class="card border-primary shadow-sm mb-4">
+            <div class="card-header bg-primary text-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-bell-fill me-2"></i>Đề Xuất Điều Chỉnh Lịch Hẹn Từ Trưởng Khoa</h5>
+                <span class="badge bg-white text-primary">Cần phản hồi</span>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-dark mb-3">Do điều kiện phòng khám hoặc lịch khám của bác sĩ, Trưởng khoa đã đề xuất phương án điều chỉnh sau:</p>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded">
+                            <span class="text-muted small">Bác sĩ phụ trách đề xuất:</span>
+                            <div class="fw-bold fs-6 text-primary">@(p.ProposedDentistName ?? "Bác sĩ chuyên khoa tương đương")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded">
+                            <span class="text-muted small">Thời gian đề xuất:</span>
+                            <div class="fw-bold fs-6 text-success">@(p.ProposedStart?.ToString("dd/MM/yyyy HH:mm") ?? "Giữ nguyên")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded">
+                            <span class="text-muted small">Lý do điều chỉnh:</span>
+                            <div class="fw-semibold text-danger">@p.Reason</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-3 justify-content-end">
+                    <form asp-action="RejectProposal" asp-route-id="@appt.AppointmentId" method="post" onsubmit="return confirm('Bạn có chắc chắn muốn từ chối đề xuất này? Lịch hẹn sẽ được gửi lại cho Trưởng khoa.');">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-outline-danger px-4">
+                            <i class="bi bi-x-circle me-1"></i> Từ chối đề xuất
+                        </button>
+                    </form>
+                    <form asp-action="AcceptProposal" asp-route-id="@appt.AppointmentId" method="post">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-success px-4 fw-bold">
+                            <i class="bi bi-check2-circle me-1"></i> Đồng ý phương án này
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- MAIN APPOINTMENT DETAILS -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0 fw-semibold text-dark">
+                        <i class="bi bi-info-circle me-2 text-primary"></i>Thông Tin Chi Tiết Lịch Hẹn
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="text-muted small">Chuyên khoa:</label>
+                            <div class="fw-bold fs-6">@appt.DepartmentName</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">Dịch vụ yêu cầu:</label>
+                            <div class="fw-bold fs-6 text-primary">@appt.ServiceName</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">Giá dịch vụ niêm yết:</label>
+                            <div class="fw-semibold">@(appt.ServicePrice.HasValue ? appt.ServicePrice.Value.ToString("N0") + " đ" : "--")</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">Thời lượng dự kiến:</label>
+                            <div class="fw-semibold">@(appt.DurationMinutes ?? 30) phút</div>
+                        </div>
+
+                        <hr class="my-3" />
+
+                        <div class="col-md-6">
+                            <label class="text-muted small">Bác sĩ mong muốn (Yêu cầu lúc đặt):</label>
+                            <div>@(appt.RequestedDentistName ?? "Bất kỳ bác sĩ khả dụng")</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">Bác sĩ phụ trách chính thức:</label>
+                            <div class="fw-bold text-success fs-6">@(appt.AssignedDentistName ?? "(Chờ Trưởng khoa phân bổ)")</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="text-muted small">Phòng khám điều trị:</label>
+                            <div class="fw-semibold">@(appt.RoomName ?? "(Chưa xếp phòng)")</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">Ghế nha khoa:</label>
+                            <div class="fw-semibold">@(appt.DentalChairName ?? "(Chưa xếp ghế)")</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="text-muted small">Thời gian bắt đầu dự kiến:</label>
+                            <div class="fw-bold text-primary">@(appt.ScheduledStart?.ToString("dd/MM/yyyy HH:mm") ?? "--")</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small">Thời gian kết thúc dự kiến:</label>
+                            <div class="fw-bold text-primary">@(appt.ScheduledEnd?.ToString("dd/MM/yyyy HH:mm") ?? "--")</div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="text-muted small">Lý do khám / Triệu chứng:</label>
+                            <div class="p-3 bg-light rounded fst-italic">@appt.ReasonForVisit</div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(appt.CancellationReason))
+                        {
+                            <div class="col-12">
+                                <label class="text-muted small text-danger">Lý do hủy / từ chối:</label>
+                                <div class="p-3 bg-danger-subtle text-danger rounded">@appt.CancellationReason</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- STATUS HISTORY TIMELINE -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0 fw-semibold text-dark">
+                        <i class="bi bi-clock-history me-2 text-primary"></i>Lịch Sử Trạng Thái Lịch Hẹn
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    @if (Model.StatusHistories.Count == 0)
+                    {
+                        <p class="text-muted mb-0">Chưa có lịch sử trạng thái.</p>
+                    }
+                    else
+                    {
+                        <div class="timeline">
+                            @foreach (var h in Model.StatusHistories)
+                            {
+                                <div class="timeline-item mb-3 pb-3 border-bottom">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="badge bg-light text-dark border fw-bold">@h.NewStatus</span>
+                                        <small class="text-muted">@h.ChangedAt.ToString("dd/MM/yyyy HH:mm:ss")</small>
+                                    </div>
+                                    <div class="small text-secondary">
+                                        Thực hiện bởi: <strong>@(h.ChangedByName ?? "Hệ thống")</strong>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(h.Note))
+                                    {
+                                        <div class="mt-1 small bg-light p-2 rounded">
+                                            @h.Note
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- ACTIONS SIDEBAR -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0 fw-semibold text-dark">Thao Tác</h5>
+                </div>
+                <div class="card-body p-3">
+                    @if (appt.Status == "PendingReceptionReview" || appt.Status == "PendingDepartmentReview")
+                    {
+                        <button type="button" class="btn btn-outline-danger w-100 mb-2" data-bs-toggle="modal" data-bs-target="#withdrawModal">
+                            <i class="bi bi-x-circle me-1"></i> Thu Hồi Yêu Cầu Đặt Lịch
+                        </button>
+                        <small class="text-muted d-block text-center">Bạn có thể thu hồi khi yêu cầu chưa được xác nhận.</small>
+                    }
+                    else if (appt.Status == "Confirmed")
+                    {
+                        <button type="button" class="btn btn-outline-danger w-100 mb-2" data-bs-toggle="modal" data-bs-target="#cancelModal">
+                            <i class="bi bi-calendar-x me-1"></i> Hủy Lịch Hẹn Đã Xác Nhận
+                        </button>
+                        <small class="text-muted d-block text-center">Vui lòng thông báo hủy sớm để phòng khám sắp xếp lịch.</small>
+                    }
+                    else
+                    {
+                        <p class="text-muted mb-0 text-center py-2">Không có hành động khả dụng ở trạng thái này.</p>
+                    }
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm bg-primary-subtle text-primary p-3">
+                <h6 class="fw-bold"><i class="bi bi-shield-check me-2"></i>Quy định thăm khám</h6>
+                <p class="small mb-0">Quý khách vui lòng đến trước giờ hẹn 10 - 15 phút và trình diện tại Quầy Lễ Tân để làm thủ tục Check-in nhận phòng khám.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- WITHDRAW MODAL -->
+<div class="modal fade" id="withdrawModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form asp-action="Withdraw" asp-route-id="@appt.AppointmentId" method="post" class="modal-content">
+            @Html.AntiForgeryToken()
+            <div class="modal-header">
+                <h5 class="modal-title">Thu Hồi Yêu Cầu Đặt Lịch</h5>
+                <button type="button" class="btn-close" data-bs-toggle="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Bạn có chắc chắn muốn thu hồi yêu cầu đặt lịch khám này không?</p>
+                <div class="mb-3">
+                    <label class="form-label">Lý do thu hồi (không bắt buộc):</label>
+                    <textarea name="reason" class="form-control" rows="3" placeholder="Nhập lý do..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="submit" class="btn btn-danger">Xác Nhận Thu Hồi</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- CANCEL MODAL -->
+<div class="modal fade" id="cancelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form asp-action="Cancel" asp-route-id="@appt.AppointmentId" method="post" class="modal-content">
+            @Html.AntiForgeryToken()
+            <div class="modal-header">
+                <h5 class="modal-title">Hủy Lịch Hẹn Đã Xác Nhận</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-danger fw-semibold">Lưu ý: Lịch hẹn này đã được phòng khám xác nhận và phân bổ nhân sự, trang thiết bị.</p>
+                <div class="mb-3">
+                    <label class="form-label">Vui lòng cung cấp lý do hủy hẹn <span class="text-danger">*</span>:</label>
+                    <textarea name="reason" class="form-control" rows="3" required placeholder="Ví dụ: Bận việc đột xuất, đổi lịch công tác..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="submit" class="btn btn-danger">Xác Nhận Hủy Lịch Hẹn</button>
+            </div>
+        </form>
+    </div>
+</div>

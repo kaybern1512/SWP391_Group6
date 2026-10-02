@@ -1,0 +1,153 @@
+@model DentalClinic.Web.ViewModels.Appointments.AppointmentListViewModel
+@{
+    ViewData["Title"] = "Lịch hẹn của tôi";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">Lịch Hẹn Khám Răng</h1>
+            <p class="text-muted mb-0">Theo dõi toàn bộ lịch hẹn, trạng thái duyệt và phản hồi từ phòng khám</p>
+        </div>
+        <div>
+            <a asp-action="Book" class="btn btn-primary px-3 py-2 shadow-sm">
+                <i class="bi bi-calendar-plus me-1"></i> + Đặt lịch khám mới
+            </a>
+        </div>
+    </div>
+
+    <!-- Status Filters -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-2">
+            <div class="d-flex flex-wrap gap-2">
+                <a asp-action="Index" class="btn btn-sm @(string.IsNullOrEmpty(Model.SelectedStatus) ? "btn-dark" : "btn-light")">
+                    Tất cả (@Model.Appointments.Count)
+                </a>
+                <a asp-action="Index" asp-route-status="PendingReceptionReview" class="btn btn-sm @(Model.SelectedStatus == "PendingReceptionReview" ? "btn-warning text-dark" : "btn-light")">
+                    Chờ Lễ Tân
+                </a>
+                <a asp-action="Index" asp-route-status="PendingDepartmentReview" class="btn btn-sm @(Model.SelectedStatus == "PendingDepartmentReview" ? "btn-info text-dark" : "btn-light")">
+                    Chờ Trưởng Khoa
+                </a>
+                <a asp-action="Index" asp-route-status="AwaitingPatientResponse" class="btn btn-sm @(Model.SelectedStatus == "AwaitingPatientResponse" ? "btn-primary" : "btn-light")">
+                    Cần bạn phản hồi
+                </a>
+                <a asp-action="Index" asp-route-status="Confirmed" class="btn btn-sm @(Model.SelectedStatus == "Confirmed" ? "btn-success" : "btn-light")">
+                    Đã xác nhận
+                </a>
+                <a asp-action="Index" asp-route-status="CheckedIn" class="btn btn-sm @(Model.SelectedStatus == "CheckedIn" ? "btn-success" : "btn-light")">
+                    Đã check-in
+                </a>
+                <a asp-action="Index" asp-route-status="Completed" class="btn btn-sm @(Model.SelectedStatus == "Completed" ? "btn-secondary" : "btn-light")">
+                    Đã hoàn thành
+                </a>
+                <a asp-action="Index" asp-route-status="Cancelled" class="btn btn-sm @(Model.SelectedStatus == "Cancelled" ? "btn-danger" : "btn-light")">
+                    Đã hủy / Từ chối
+                </a>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.Appointments.Count == 0)
+    {
+        <div class="card border-0 shadow-sm text-center py-5">
+            <div class="card-body">
+                <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
+                    <i class="bi bi-calendar-x fs-2 text-muted"></i>
+                </div>
+                <h5 class="fw-bold text-dark">Chưa có lịch hẹn nào</h5>
+                <p class="text-muted mb-4">Bạn chưa có lịch hẹn khám nào trong danh mục này.</p>
+                <a asp-action="Book" class="btn btn-primary px-4">
+                    <i class="bi bi-calendar-plus me-1"></i> Đặt lịch khám ngay
+                </a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var appt in Model.Appointments)
+            {
+                <div class="col-md-6 col-xl-4">
+                    <div class="card border-0 shadow-sm h-100 position-relative">
+                        <div class="card-header bg-white border-bottom-0 pt-3 pb-0 d-flex justify-content-between align-items-center">
+                            <span class="fw-bold text-primary font-monospace">@appt.AppointmentCode</span>
+                            @if (!string.IsNullOrEmpty(appt.QueueNumber))
+                            {
+                                <span class="badge bg-success-subtle text-success fs-6 border border-success">
+                                    STT: @appt.QueueNumber
+                                </span>
+                            }
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <h5 class="fw-bold mb-1 text-dark">@appt.ServiceName</h5>
+                                <div class="text-muted small">
+                                    <i class="bi bi-building me-1"></i>@appt.DepartmentName
+                                </div>
+                            </div>
+
+                            <div class="bg-light-subtle rounded p-2 mb-3 small">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Thời gian:</span>
+                                    <span class="fw-semibold">
+                                        @(appt.ScheduledStart?.ToString("dd/MM/yyyy HH:mm") ?? "Chưa xếp")
+                                    </span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Bác sĩ:</span>
+                                    <span class="fw-semibold">
+                                        @(string.IsNullOrWhiteSpace(appt.AssignedDentistName) ? (appt.RequestedDentistName ?? "Bất kỳ") : appt.AssignedDentistName)
+                                    </span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(appt.RoomName))
+                                {
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Phòng & Ghế:</span>
+                                        <span class="fw-semibold">@appt.RoomName - Ghế @(appt.DentalChairName ?? "--")</span>
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    @switch (appt.Status)
+                                    {
+                                        case "PendingReceptionReview":
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Chờ Lễ Tân</span>
+                                            break;
+                                        case "PendingDepartmentReview":
+                                            <span class="badge bg-info text-dark"><i class="bi bi-hourglass-split me-1"></i>Chờ Trưởng Khoa</span>
+                                            break;
+                                        case "AwaitingPatientResponse":
+                                            <span class="badge bg-primary animate-pulse"><i class="bi bi-bell me-1"></i>Đề xuất thay đổi</span>
+                                            break;
+                                        case "Confirmed":
+                                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Đã xác nhận</span>
+                                            break;
+                                        case "CheckedIn":
+                                            <span class="badge bg-teal text-white" style="background-color: #0d9488;"><i class="bi bi-person-check me-1"></i>Đã Check-in</span>
+                                            break;
+                                        case "Completed":
+                                            <span class="badge bg-secondary"><i class="bi bi-check-all me-1"></i>Đã hoàn thành</span>
+                                            break;
+                                        case "Cancelled":
+                                        case "Rejected":
+                                            <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>@appt.Status</span>
+                                            break;
+                                        default:
+                                            <span class="badge bg-light text-dark border">@appt.Status</span>
+                                            break;
+                                    }
+                                </div>
+                                <a asp-action="Detail" asp-route-id="@appt.AppointmentId" class="btn btn-outline-primary btn-sm">
+                                    Chi tiết <i class="bi bi-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
