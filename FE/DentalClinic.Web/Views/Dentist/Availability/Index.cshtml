@@ -100,7 +100,7 @@
                                         @a.CreatedAt.ToString("dd/MM/yyyy HH:mm")
                                     </td>
                                     <td class="text-end text-nowrap">
-                                        <form asp-controller="DentistSchedule" asp-action="DeleteAvailability" asp-route-id="@a.AvailabilityId" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn xóa bản ghi trạng thái này?');">
+                                        <form asp-controller="DentistSchedule" asp-action="DeleteAvailability" asp-route-id="@a.AvailabilityId" method="post" class="d-inline" data-confirm="Bạn có chắc chắn muốn xóa bản ghi trạng thái này?">
                                             @Html.AntiForgeryToken()
                                             <button type="submit" class="btn btn-sm btn-outline-danger">
                                                 <i class="bi bi-trash"></i> Xóa
