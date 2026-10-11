@@ -188,6 +188,15 @@ builder.Services.AddHttpClient<ITreatmentApiService, TreatmentApiService>(client
 .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
+// Notification API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<INotificationApiService, NotificationApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 var app = builder.Build();
 
 // Configure HTTP request pipeline

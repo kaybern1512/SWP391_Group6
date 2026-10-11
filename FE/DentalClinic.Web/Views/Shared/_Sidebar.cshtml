@@ -60,7 +60,7 @@
                 <i class="bi bi-receipt"></i>
                 <span>Invoices & Payments</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Notification backend API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "Notification" ? "active" : "")" asp-controller="Notification" asp-action="Index">
                 <i class="bi bi-bell"></i>
                 <span>Notifications</span>
             </a>

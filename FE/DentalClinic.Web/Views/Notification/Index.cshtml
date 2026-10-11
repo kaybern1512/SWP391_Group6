@@ -1,0 +1,195 @@
+@model DentalClinic.Web.ViewModels.Notification.NotificationListViewModel
+@{
+    ViewData["Title"] = "Trung Tâm Thông Báo";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-bell me-2 text-primary"></i>Trung Tâm Thông Báo
+            </h1>
+            <p class="text-muted mb-0">Theo dõi thông tin cập nhật lịch hẹn, kế hoạch điều trị, đơn thuốc và hoạt động tài khoản.</p>
+        </div>
+        <div class="d-flex gap-2">
+            @if (Model.Summary.UnreadCount > 0)
+            {
+                <form method="post" asp-action="MarkAllAsRead">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="bi bi-check2-all me-1"></i>Đánh Dấu Tất Cả Đã Đọc
+                    </button>
+                </form>
+            }
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Filter Tabs -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-2">
+            <ul class="nav nav-pills">
+                <li class="nav-item">
+                    <a class="nav-link @(string.IsNullOrEmpty(Model.FilterType) && Model.UnreadOnly != true ? "active" : "")" 
+                       asp-action="Index">
+                        Tất cả (@Model.Summary.Notifications.Count)
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(Model.UnreadOnly == true ? "active" : "")" 
+                       asp-action="Index" asp-route-unreadOnly="true">
+                        Chưa đọc (@Model.Summary.UnreadCount)
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(Model.FilterType == "Appointment" ? "active" : "")" 
+                       asp-action="Index" asp-route-type="Appointment">
+                        <i class="bi bi-calendar3 me-1"></i>Lịch Hẹn
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(Model.FilterType == "Treatment" ? "active" : "")" 
+                       asp-action="Index" asp-route-type="Treatment">
+                        <i class="bi bi-diagram-3 me-1"></i>Điều Trị
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(Model.FilterType == "Prescription" ? "active" : "")" 
+                       asp-action="Index" asp-route-type="Prescription">
+                        <i class="bi bi-capsule me-1"></i>Đơn Thuốc
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Notifications List -->
+    <div class="card border-0 shadow-sm">
+        @if (Model.Summary.Notifications == null || Model.Summary.Notifications.Count == 0)
+        {
+            <div class="text-center py-5">
+                <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
+                    <i class="bi bi-bell-slash fs-2 text-muted"></i>
+                </div>
+                <h5 class="fw-bold text-dark">Không có thông báo nào</h5>
+                <p class="text-muted mb-0">Hộp thư thông báo của bạn hiện đang trống.</p>
+            </div>
+        }
+        else
+        {
+            <div class="list-group list-group-flush">
+                @foreach (var n in Model.Summary.Notifications)
+                {
+                    <div class="list-group-item p-3 @(!n.IsRead ? "bg-light bg-opacity-50" : "") transition hover-bg">
+                        <div class="d-flex align-items-start gap-3">
+                            <!-- Type Icon -->
+                            <div class="rounded-circle p-2 d-flex align-items-center justify-content-center text-white" 
+                                 style="width: 44px; height: 44px; background-color: @(n.Type == "Appointment" ? "#0d6efd" : n.Type == "Treatment" ? "#198754" : n.Type == "Prescription" ? "#0dcaf0" : "#6c757d");">
+                                @switch (n.Type)
+                                {
+                                    case "Appointment":
+                                        <i class="bi bi-calendar-check fs-5"></i>
+                                        break;
+                                    case "Treatment":
+                                        <i class="bi bi-diagram-3 fs-5"></i>
+                                        break;
+                                    case "Prescription":
+                                        <i class="bi bi-capsule fs-5"></i>
+                                        break;
+                                    case "Billing":
+                                        <i class="bi bi-receipt fs-5"></i>
+                                        break;
+                                    default:
+                                        <i class="bi bi-info-circle fs-5"></i>
+                                        break;
+                                }
+                            </div>
+
+                            <!-- Content -->
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <h6 class="fw-bold text-dark mb-0 @(!n.IsRead ? "fw-bolder" : "")">
+                                        @(string.IsNullOrEmpty(n.Subject) ? "Thông báo từ DentalCare" : n.Subject)
+                                        @if (!n.IsRead)
+                                        {
+                                            <span class="badge bg-primary ms-2" style="font-size: 0.7rem;">Mới</span>
+                                        }
+                                    </h6>
+                                    <span class="text-muted small">
+                                        <i class="bi bi-clock me-1"></i>@n.TimeAgo
+                                    </span>
+                                </div>
+
+                                <p class="text-muted mb-2 small" style="white-space: pre-line;">
+                                    @n.Content
+                                </p>
+
+                                <div class="d-flex gap-2">
+                                    @if (!string.IsNullOrEmpty(n.TargetUrl))
+                                    {
+                                        <a href="@n.TargetUrl" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.8rem;">
+                                            <i class="bi bi-arrow-right me-1"></i>Xem chi tiết
+                                        </a>
+                                    }
+
+                                    @if (!n.IsRead)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-link text-decoration-none text-muted py-0 px-2" 
+                                                onclick="markAsReadItem(@n.NotificationId, this)" style="font-size: 0.8rem;">
+                                            <i class="bi bi-check2 me-1"></i>Đánh dấu đã đọc
+                                        </button>
+                                    }
+
+                                    <form method="post" asp-action="Delete" asp-route-id="@n.NotificationId" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-link text-decoration-none text-danger py-0 px-2" 
+                                                onclick="return confirm('Bạn có chắc chắn muốn xóa thông báo này?');" style="font-size: 0.8rem;">
+                                            <i class="bi bi-trash me-1"></i>Xóa
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function markAsReadItem(id, btn) {
+        fetch(`/Notification/MarkAsRead/${id}`, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const item = btn.closest('.list-group-item');
+                item.classList.remove('bg-light', 'bg-opacity-50');
+                const badge = item.querySelector('.badge.bg-primary');
+                if (badge) badge.remove();
+                btn.remove();
+            }
+        });
+    }
+</script>
+}

@@ -14,26 +14,45 @@
         @if (User.Identity?.IsAuthenticated == true)
         {
             <!-- Help Tooltip -->
-            <a href="#" class="btn-nav-icon text-decoration-none d-none d-sm-flex" title="Help & Documentation" onclick="alert('DentalCare Help: Refer to FRONTEND_SETUP.md for deployment and clinical workflows.'); return false;">
+            <a href="#" class="btn-nav-icon text-decoration-none d-none d-sm-flex" title="Help & Documentation" onclick="alert('DentalCare Help: Hệ thống quản lý phòng khám chuyên khoa Răng Hàm Mặt DentalCare.'); return false;">
                 <i class="bi bi-question-circle"></i>
             </a>
 
             <!-- Notification Bell -->
-            <div class="dropdown">
-                <button class="btn-nav-icon" type="button" id="notifDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="Notifications">
+            <div class="dropdown" id="notificationDropdownContainer">
+                <button class="btn-nav-icon position-relative" type="button" id="notifDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="Thông báo hệ thống">
                     <i class="bi bi-bell"></i>
-                    <span class="nav-unread-dot"></span>
+                    <span id="notifBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size: 0.65rem; padding: 0.25em 0.45em;">
+                        0
+                    </span>
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm border py-2" aria-labelledby="notifDropdown" style="min-width: 290px;">
-                    <li class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
-                        <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.05em;">Notifications</span>
-                        <span class="badge bg-light text-muted border small">0 new</span>
-                    </li>
-                    <li class="px-3 py-4 text-center text-muted small">
-                        <i class="bi bi-bell-slash fs-4 d-block mb-1 text-secondary"></i>
-                        No new notifications
-                    </li>
-                </ul>
+                <div class="dropdown-menu dropdown-menu-end shadow border-0 py-0" aria-labelledby="notifDropdown" style="width: 340px; border-radius: 10px; overflow: hidden;">
+                    <!-- Dropdown Header -->
+                    <div class="px-3 py-2 bg-light border-bottom d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.05em;">Thông Báo</span>
+                            <span id="notifHeaderCount" class="badge bg-primary ms-1" style="font-size: 0.7rem;">0 mới</span>
+                        </div>
+                        <button type="button" id="markAllReadBtn" class="btn btn-link btn-sm text-decoration-none text-primary p-0 small" style="font-size: 0.75rem;">
+                            Đã đọc tất cả
+                        </button>
+                    </div>
+
+                    <!-- Dropdown Items Container (Scrollable) -->
+                    <div id="notifItemsContainer" class="list-group list-group-flush" style="max-height: 320px; overflow-y: auto;">
+                        <div class="px-3 py-4 text-center text-muted small" id="notifLoading">
+                            <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+                            <div>Đang tải thông báo...</div>
+                        </div>
+                    </div>
+
+                    <!-- Dropdown Footer -->
+                    <div class="p-2 bg-light text-center border-top">
+                        <a asp-controller="Notification" asp-action="Index" class="text-decoration-none small text-primary fw-semibold d-block py-1">
+                            Xem tất cả thông báo <i class="bi bi-arrow-right ms-1"></i>
+                        </a>
+                    </div>
+                </div>
             </div>
         }
 
@@ -41,3 +60,113 @@
         <partial name="_UserMenu" />
     </div>
 </nav>
+
+@if (User.Identity?.IsAuthenticated == true)
+{
+    <script>
+        (function () {
+            const badge = document.getElementById('notifBadge');
+            const headerCount = document.getElementById('notifHeaderCount');
+            const container = document.getElementById('notifItemsContainer');
+            const markAllBtn = document.getElementById('markAllReadBtn');
+            const dropdownBtn = document.getElementById('notifDropdown');
+
+            function getIconForType(type) {
+                switch (type) {
+                    case 'Appointment': return '<i class="bi bi-calendar-check text-primary"></i>';
+                    case 'Treatment': return '<i class="bi bi-diagram-3 text-success"></i>';
+                    case 'Prescription': return '<i class="bi bi-capsule text-info"></i>';
+                    case 'Billing': return '<i class="bi bi-receipt text-warning"></i>';
+                    default: return '<i class="bi bi-bell text-secondary"></i>';
+                }
+            }
+
+            function loadNotifications() {
+                fetch('/Notification/GetSummary?limit=6', {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data || !data.success) return;
+
+                    const count = data.unreadCount || 0;
+                    if (count > 0) {
+                        badge.textContent = count > 99 ? '99+' : count;
+                        badge.classList.remove('d-none');
+                        headerCount.textContent = count + ' mới';
+                        headerCount.className = 'badge bg-danger ms-1';
+                    } else {
+                        badge.classList.add('d-none');
+                        headerCount.textContent = '0 mới';
+                        headerCount.className = 'badge bg-secondary ms-1';
+                    }
+
+                    const items = data.notifications || [];
+                    if (items.length === 0) {
+                        container.innerHTML = `
+                            <div class="px-3 py-4 text-center text-muted small">
+                                <i class="bi bi-bell-slash fs-4 d-block mb-1 text-secondary"></i>
+                                Không có thông báo mới
+                            </div>`;
+                        return;
+                    }
+
+                    let html = '';
+                    items.forEach(n => {
+                        const bgClass = !n.isRead ? 'bg-light bg-opacity-75' : '';
+                        const unreadDot = !n.isRead ? '<span class="badge bg-primary rounded-pill p-1 ms-1"> </span>' : '';
+                        const icon = getIconForType(n.type);
+
+                        html += `
+                            <a href="${n.targetUrl || '/Notification'}" class="list-group-item list-group-item-action p-2 border-bottom notif-item ${bgClass}" data-id="${n.notificationId}">
+                                <div class="d-flex align-items-start gap-2">
+                                    <div class="fs-5 pt-1">${icon}</div>
+                                    <div class="flex-grow-1" style="min-width: 0;">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <div class="fw-semibold text-dark text-truncate small">${n.subject || 'Thông báo mới'} ${unreadDot}</div>
+                                            <small class="text-muted" style="font-size: 0.7rem;">${n.timeAgo}</small>
+                                        </div>
+                                        <div class="text-muted small text-truncate" style="font-size: 0.75rem;">${n.content}</div>
+                                    </div>
+                                </div>
+                            </a>`;
+                    });
+                    container.innerHTML = html;
+
+                    // Add click handlers to mark as read
+                    container.querySelectorAll('.notif-item').forEach(el => {
+                        el.addEventListener('click', function () {
+                            const id = this.getAttribute('data-id');
+                            if (id) {
+                                fetch(`/Notification/MarkAsRead/${id}`, { method: 'POST' });
+                            }
+                        });
+                    });
+                })
+                .catch(() => {
+                    // Ignore background poll errors
+                });
+            }
+
+            if (markAllBtn) {
+                markAllBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    fetch('/Notification/MarkAllAsReadAjax', { method: 'POST' })
+                        .then(() => loadNotifications());
+                });
+            }
+
+            if (dropdownBtn) {
+                dropdownBtn.addEventListener('show.bs.dropdown', function () {
+                    loadNotifications();
+                });
+            }
+
+            // Initial load
+            loadNotifications();
+
+            // Background polling every 60 seconds
+            setInterval(loadNotifications, 60000);
+        })();
+    </script>
+}
