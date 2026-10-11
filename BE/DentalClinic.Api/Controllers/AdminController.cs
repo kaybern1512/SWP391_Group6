@@ -44,7 +44,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("reports/revenue")]
-    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<RevenueReportDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetRevenueReport([FromQuery] int? year, CancellationToken ct)
     {
@@ -53,7 +53,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("reports/appointments")]
-    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<AppointmentReportDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAppointmentReport(CancellationToken ct)
     {

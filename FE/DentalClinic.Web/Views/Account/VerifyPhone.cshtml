@@ -1,17 +1,17 @@
 @model VerifyPhoneViewModel
 @{
     Layout = "_AuthLayout";
-    ViewData["Title"] = "Verify Phone Number";
+    ViewData["Title"] = "Xác Thực Số Điện Thoại";
 }
 
 <div class="auth-card-header text-center">
     <div class="empty-state-icon-box mx-auto mb-3" style="width: 54px; height: 54px;">
         <i class="bi bi-phone text-primary fs-3"></i>
     </div>
-    <h2 class="auth-card-title">Verify Phone Number</h2>
+    <h2 class="auth-card-title">Xác Thực Số Điện Thoại</h2>
     <p class="auth-card-subtitle">
-        Enter the 6-digit SMS verification code sent to your phone number: <br />
-        <strong class="text-dark">@(string.IsNullOrEmpty(Model.PhoneNumber) ? "your phone number" : Model.PhoneNumber)</strong>
+        Nhập mã xác thực SMS OTP 6 chữ số được gửi đến số điện thoại: <br />
+        <strong class="text-dark">@(string.IsNullOrEmpty(Model.PhoneNumber) ? "số điện thoại của bạn" : Model.PhoneNumber)</strong>
     </p>
 </div>
 
@@ -28,13 +28,13 @@
     <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small mb-3"></div>
 
     <div class="mb-4">
-        <label asp-for="Code" class="form-label text-center d-block">SMS OTP Verification Code</label>
+        <label asp-for="Code" class="form-label text-center d-block">Mã Xác Thực SMS OTP</label>
         <input asp-for="Code" class="form-control otp-input-field" maxlength="10" placeholder="------" autocomplete="off" autofocus />
         <span asp-validation-for="Code" class="text-danger small text-center d-block mt-1"></span>
     </div>
 
     <button type="submit" class="btn btn-dc-primary w-100 py-2 fs-6 mb-3">
-        <i class="bi bi-patch-check me-1"></i> Confirm Phone Number
+        <i class="bi bi-patch-check me-1"></i> Xác Nhận Số Điện Thoại
     </button>
 </form>
 
@@ -43,11 +43,11 @@
         @Html.AntiForgeryToken()
         <input type="hidden" name="email" value="@Model.Email" />
         <button type="submit" class="btn btn-link p-0 text-decoration-none text-primary small">
-            <i class="bi bi-arrow-repeat me-1"></i> Resend SMS code
+            <i class="bi bi-arrow-repeat me-1"></i> Gửi lại mã SMS
         </button>
     </form>
     <a asp-controller="Account" asp-action="Login" class="text-decoration-none text-muted">
-        Back to Sign In
+        Quay lại Đăng nhập
     </a>
 </div>
 

@@ -1,13 +1,13 @@
 @model LoginViewModel
 @{
     Layout = "_AuthLayout";
-    ViewData["Title"] = "Sign In";
+    ViewData["Title"] = "Đăng Nhập";
     var returnUrl = ViewData["ReturnUrl"] as string;
 }
 
 <div class="auth-card-header">
-    <h2 class="auth-card-title">Welcome Back</h2>
-    <p class="auth-card-subtitle">Sign in to access your clinical portal and records</p>
+    <h2 class="auth-card-title">Chào Mừng Trở Lại</h2>
+    <p class="auth-card-subtitle">Đăng nhập để truy cập cổng khám chữa bệnh và quản trị DentalCare</p>
 </div>
 
 <!-- Social Google Sign-In -->
@@ -21,12 +21,12 @@
             <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
             <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
         </svg>
-        <span>Continue with Google</span>
+        <span>Tiếp tục với Google</span>
     </button>
 </form>
 
 <div class="auth-divider">
-    <span>or sign in with email</span>
+    <span>hoặc đăng nhập bằng email</span>
 </div>
 
 <form asp-controller="Account" asp-action="Login" asp-route-returnUrl="@returnUrl" method="post" novalidate>
@@ -35,24 +35,24 @@
     <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small mb-3"></div>
 
     <div class="mb-3">
-        <label asp-for="Email" class="form-label">Email Address</label>
+        <label asp-for="Email" class="form-label">Địa Chỉ Email</label>
         <div class="input-group">
             <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
-            <input asp-for="Email" type="email" class="form-control border-start-0" placeholder="name@domain.com" autofocus />
+            <input asp-for="Email" type="email" class="form-control border-start-0" placeholder="ten@domain.com" autofocus />
         </div>
         <span asp-validation-for="Email" class="text-danger small"></span>
     </div>
 
     <div class="mb-3">
         <div class="d-flex justify-content-between align-items-center mb-1">
-            <label asp-for="Password" class="form-label mb-0">Password</label>
+            <label asp-for="Password" class="form-label mb-0">Mật Khẩu</label>
             <a asp-controller="Account" asp-action="ForgotPassword" class="small text-primary text-decoration-none">
-                Forgot password?
+                Quên mật khẩu?
             </a>
         </div>
         <div class="input-password-wrapper">
-            <input asp-for="Password" type="password" id="loginPasswordInput" class="form-control pe-5" placeholder="Enter your password" />
-            <button type="button" class="password-toggle-btn" data-target="loginPasswordInput" title="Toggle password visibility">
+            <input asp-for="Password" type="password" id="loginPasswordInput" class="form-control pe-5" placeholder="Nhập mật khẩu của bạn" />
+            <button type="button" class="password-toggle-btn" data-target="loginPasswordInput" title="Hiển thị/Ẩn mật khẩu">
                 <i class="bi bi-eye"></i>
             </button>
         </div>
@@ -62,17 +62,17 @@
     <div class="form-check mb-4">
         <input asp-for="RememberMe" class="form-check-input" id="rememberMeCheck" />
         <label asp-for="RememberMe" class="form-check-label small text-muted" for="rememberMeCheck">
-            Remember me on this browser
+            Ghi nhớ đăng nhập trên trình duyệt này
         </label>
     </div>
 
     <button type="submit" class="btn btn-dc-primary w-100 py-2 fs-6">
-        <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+        <i class="bi bi-box-arrow-in-right me-1"></i> Đăng Nhập
     </button>
 
     <div class="text-center mt-4 small text-muted">
-        Don't have an account?
-        <a asp-controller="Account" asp-action="Register" class="text-primary fw-semibold text-decoration-none">Register a new patient profile</a>
+        Chưa có tài khoản?
+        <a asp-controller="Account" asp-action="Register" class="text-primary fw-semibold text-decoration-none">Đăng ký hồ sơ bệnh nhân mới</a>
     </div>
 </form>
 

@@ -1,6 +1,6 @@
 @model ProfileViewModel
 @{
-    ViewData["Title"] = "My Profile";
+    ViewData["Title"] = "Hồ Sơ Cá Nhân";
     var avatarUrl = Model.AvatarUrl;
     if (string.IsNullOrEmpty(avatarUrl) || avatarUrl == "/images/default-avatar.png")
     {
@@ -15,14 +15,30 @@
         "systemadministrator" => "badge-role-systemadministrator",
         _ => "badge-role-patient"
     };
+    var roleDisplayName = Model.Role.ToLowerInvariant() switch
+    {
+        "patient" => "Bệnh nhân",
+        "dentist" => "Bác sĩ",
+        "receptionist" => "Lễ tân",
+        "departmentmanager" => "Trưởng khoa",
+        "systemadministrator" => "Quản trị viên",
+        _ => Model.Role
+    };
+    var genderDisplayName = Model.Gender?.ToLowerInvariant() switch
+    {
+        "male" => "Nam",
+        "female" => "Nữ",
+        "other" => "Khác",
+        _ => Model.Gender ?? "Chưa xác định"
+    };
 }
 
 <div class="container-fluid p-0" style="max-width: 1080px;">
     <!-- Breadcrumb -->
     <ul class="breadcrumb-dc mb-3">
-        <li><a asp-controller="Home" asp-action="Index">Home</a></li>
+        <li><a asp-controller="Home" asp-action="Index">Trang chủ</a></li>
         <li class="separator">/</li>
-        <li class="active">My Profile</li>
+        <li class="active">Hồ Sơ Cá Nhân</li>
     </ul>
 
     @if (ViewBag.ApiNotice != null)
@@ -38,7 +54,7 @@
         <div class="profile-cover"></div>
         <div class="profile-avatar-wrapper">
             <img src="@avatarUrl" alt="Avatar" class="profile-avatar-img" id="currentAvatarImg" onerror="this.src='/images/default-avatar.svg'" />
-            <button type="button" class="avatar-edit-overlay" data-bs-toggle="modal" data-bs-target="#uploadAvatarModal" title="Upload new photo">
+            <button type="button" class="avatar-edit-overlay" data-bs-toggle="modal" data-bs-target="#uploadAvatarModal" title="Tải ảnh mới">
                 <i class="bi bi-camera-fill"></i>
             </button>
         </div>
@@ -47,17 +63,17 @@
             <div>
                 <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
                     <h2 class="profile-name mb-0">@Model.FullName</h2>
-                    <span class="badge-dc @roleBadgeClass">@Model.Role</span>
+                    <span class="badge-dc @roleBadgeClass">@roleDisplayName</span>
                     @if (Model.IsEmailVerified)
                     {
                         <span class="badge-dc badge-status-confirmed">
-                            <i class="bi bi-check2-circle"></i> Verified Email
+                            <i class="bi bi-check2-circle"></i> Đã Xác Minh Email
                         </span>
                     }
                     else
                     {
                         <span class="badge-dc badge-status-pending">
-                            <i class="bi bi-exclamation-circle"></i> Unverified Email
+                            <i class="bi bi-exclamation-circle"></i> Chưa Xác Minh Email
                         </span>
                     }
                 </div>
@@ -65,7 +81,7 @@
                     <span><i class="bi bi-envelope me-1"></i> @Model.Email</span>
                     @if (!string.IsNullOrEmpty(Model.Code))
                     {
-                        <span><i class="bi bi-upc-scan me-1"></i> Code: <strong>@Model.Code</strong></span>
+                        <span><i class="bi bi-upc-scan me-1"></i> Mã: <strong>@Model.Code</strong></span>
                     }
                     @if (!string.IsNullOrEmpty(Model.PhoneNumber))
                     {
@@ -76,10 +92,10 @@
 
             <div class="d-flex gap-2 mt-2 mt-sm-0">
                 <a asp-controller="Profile" asp-action="Edit" class="btn btn-dc-primary btn-sm">
-                    <i class="bi bi-pencil-square me-1"></i> Edit Profile
+                    <i class="bi bi-pencil-square me-1"></i> Chỉnh Sửa Hồ Sơ
                 </a>
                 <a asp-controller="Account" asp-action="ChangePassword" class="btn btn-dc-outline btn-sm">
-                    <i class="bi bi-key me-1"></i> Change Password
+                    <i class="bi bi-key me-1"></i> Đổi Mật Khẩu
                 </a>
             </div>
         </div>
@@ -92,40 +108,40 @@
                 <div class="card-dc-header">
                     <div class="d-flex align-items-center gap-2">
                         <i class="bi bi-person-lines-fill text-primary"></i>
-                        <span>Personal Demographics & Contact</span>
+                        <span>Thông Tin Cá Nhân & Liên Hệ</span>
                     </div>
                 </div>
                 <div class="card-dc-body p-4">
                     <dl class="row profile-details-list mb-0">
-                        <dt class="col-sm-4">Full Legal Name</dt>
+                        <dt class="col-sm-4">Họ và Tên</dt>
                         <dd class="col-sm-8">@Model.FullName</dd>
 
-                        <dt class="col-sm-4">Email Address</dt>
+                        <dt class="col-sm-4">Địa Chỉ Email</dt>
                         <dd class="col-sm-8">
                             @Model.Email
-                            <span class="text-muted ms-1 small">(Primary Login ID)</span>
+                            <span class="text-muted ms-1 small">(Tài khoản đăng nhập chính)</span>
                         </dd>
 
-                        <dt class="col-sm-4">Contact Phone</dt>
-                        <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.PhoneNumber) ? "Not provided" : Model.PhoneNumber)</dd>
+                        <dt class="col-sm-4">Số Điện Thoại</dt>
+                        <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.PhoneNumber) ? "Chưa cung cấp" : Model.PhoneNumber)</dd>
 
-                        <dt class="col-sm-4">Date of Birth</dt>
-                        <dd class="col-sm-8">@(Model.DateOfBirth.HasValue ? Model.DateOfBirth.Value.ToString("yyyy-MM-dd") : "Not provided")</dd>
+                        <dt class="col-sm-4">Ngày Sinh</dt>
+                        <dd class="col-sm-8">@(Model.DateOfBirth.HasValue ? Model.DateOfBirth.Value.ToString("dd/MM/yyyy") : "Chưa cung cấp")</dd>
 
-                        <dt class="col-sm-4">Gender</dt>
-                        <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.Gender) ? "Not specified" : Model.Gender)</dd>
+                        <dt class="col-sm-4">Giới Tính</dt>
+                        <dd class="col-sm-8">@genderDisplayName</dd>
 
-                        <dt class="col-sm-4">Residential Address</dt>
-                        <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.Address) ? "Not provided" : Model.Address)</dd>
+                        <dt class="col-sm-4">Địa Chỉ Thường Trú</dt>
+                        <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.Address) ? "Chưa cung cấp" : Model.Address)</dd>
 
-                        <dt class="col-sm-4">National ID (CCCD)</dt>
-                        <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.NationalId) ? "Not provided" : Model.NationalId)</dd>
+                        <dt class="col-sm-4">Số CCCD / CMND</dt>
+                        <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.NationalId) ? "Chưa cung cấp" : Model.NationalId)</dd>
 
-                        <dt class="col-sm-4">Health Insurance (BHYT)</dt>
-                        <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.HealthInsuranceNumber) ? "No insurance on file" : Model.HealthInsuranceNumber)</dd>
+                        <dt class="col-sm-4">Bảo Hiểm Y Tế (BHYT)</dt>
+                        <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.HealthInsuranceNumber) ? "Chưa có thông tin BHYT" : Model.HealthInsuranceNumber)</dd>
 
-                        <dt class="col-sm-4">Emergency Contact</dt>
-                        <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.EmergencyContact) ? "Not provided" : Model.EmergencyContact)</dd>
+                        <dt class="col-sm-4">Người Liên Hệ Khẩn Cấp</dt>
+                        <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.EmergencyContact) ? "Chưa cung cấp" : Model.EmergencyContact)</dd>
                     </dl>
                 </div>
             </div>
@@ -136,25 +152,25 @@
                     <div class="card-dc-header">
                         <div class="d-flex align-items-center gap-2">
                             <i class="bi bi-award text-teal"></i>
-                            <span>Clinical Practice Credentials</span>
+                            <span>Chứng Chỉ & Bằng Cấp Chuyên Môn</span>
                         </div>
                     </div>
                     <div class="card-dc-body p-4">
                         <dl class="row profile-details-list mb-0">
-                            <dt class="col-sm-4">Practicing License #</dt>
-                            <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.LicenseNumber) ? "Pending verification" : Model.LicenseNumber)</dd>
+                            <dt class="col-sm-4">Số Chứng Chỉ Hành Nghề</dt>
+                            <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.LicenseNumber) ? "Đang xác minh" : Model.LicenseNumber)</dd>
 
-                            <dt class="col-sm-4">Qualification Degree</dt>
-                            <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.Qualification) ? "Doctor of Dental Surgery (DDS)" : Model.Qualification)</dd>
+                            <dt class="col-sm-4">Học Vị / Bằng Cấp</dt>
+                            <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.Qualification) ? "Bác sĩ Răng Hàm Mặt (BS.CK)" : Model.Qualification)</dd>
 
-                            <dt class="col-sm-4">Clinical Experience</dt>
-                            <dd class="col-sm-8">@(Model.YearsOfExperience.HasValue ? $"{Model.YearsOfExperience.Value} years" : "Not specified")</dd>
+                            <dt class="col-sm-4">Kinh Nghiệm Lâm Sàng</dt>
+                            <dd class="col-sm-8">@(Model.YearsOfExperience.HasValue ? $"{Model.YearsOfExperience.Value} năm" : "Chưa xác định")</dd>
 
-                            <dt class="col-sm-4">Assigned Department</dt>
-                            <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.DepartmentName) ? "General Dentistry" : Model.DepartmentName)</dd>
+                            <dt class="col-sm-4">Khoa Trực Thuộc</dt>
+                            <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.DepartmentName) ? "Răng Hàm Mặt Tổng Quát" : Model.DepartmentName)</dd>
 
-                            <dt class="col-sm-4">Professional Bio</dt>
-                            <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.Biography) ? "No professional summary provided." : Model.Biography)</dd>
+                            <dt class="col-sm-4">Giới Thiệu Bản Thân</dt>
+                            <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.Biography) ? "Chưa có giới thiệu chuyên môn." : Model.Biography)</dd>
                         </dl>
                     </div>
                 </div>
@@ -167,30 +183,30 @@
                 <div class="card-dc-header">
                     <div class="d-flex align-items-center gap-2">
                         <i class="bi bi-shield-check text-primary"></i>
-                        <span>Account Parameters</span>
+                        <span>Thông Tin Tài Khoản</span>
                     </div>
                 </div>
                 <div class="card-dc-body p-4">
                     <ul class="list-unstyled mb-0 small">
                         <li class="d-flex justify-content-between py-2 border-bottom">
-                            <span class="text-muted">Account Status:</span>
-                            <span class="fw-semibold text-success"><i class="bi bi-dot fs-5"></i> Active</span>
+                            <span class="text-muted">Trạng Thái:</span>
+                            <span class="fw-semibold text-success"><i class="bi bi-dot fs-5"></i> Đang hoạt động</span>
                         </li>
                         <li class="d-flex justify-content-between py-2 border-bottom">
-                            <span class="text-muted">Assigned Role:</span>
-                            <span class="fw-semibold text-dark">@Model.Role</span>
+                            <span class="text-muted">Vai Trò:</span>
+                            <span class="fw-semibold text-dark">@roleDisplayName</span>
                         </li>
                         <li class="d-flex justify-content-between py-2 border-bottom">
-                            <span class="text-muted">Identifier Code:</span>
+                            <span class="text-muted">Mã Định Danh:</span>
                             <span class="fw-bold text-primary">@(string.IsNullOrEmpty(Model.Code) ? $"UID-{Model.UserId}" : Model.Code)</span>
                         </li>
                         <li class="d-flex justify-content-between py-2 border-bottom">
-                            <span class="text-muted">Registration Date:</span>
-                            <span class="fw-semibold text-dark">@(Model.CreatedAt != default ? Model.CreatedAt.ToString("yyyy-MM-dd") : "Today")</span>
+                            <span class="text-muted">Ngày Đăng Ký:</span>
+                            <span class="fw-semibold text-dark">@(Model.CreatedAt != default ? Model.CreatedAt.ToString("dd/MM/yyyy") : "Hôm nay")</span>
                         </li>
                         <li class="d-flex justify-content-between py-2">
-                            <span class="text-muted">Two-Factor Auth:</span>
-                            <span class="fw-semibold text-muted">Disabled</span>
+                            <span class="text-muted">Xác Thực 2 Bước (2FA):</span>
+                            <span class="fw-semibold text-muted">Đã tắt</span>
                         </li>
                     </ul>
                 </div>
@@ -199,12 +215,12 @@
             <div class="card-dc bg-light border">
                 <div class="card-dc-body p-4 text-center">
                     <i class="bi bi-hospital fs-1 text-primary mb-2 d-inline-block"></i>
-                    <h6 class="fw-bold mb-1">Clinic Support</h6>
+                    <h6 class="fw-bold mb-1">Hỗ Trợ Phòng Khám</h6>
                     <p class="text-muted small mb-3">
-                        Need assistance updating clinical insurance records or identity verification? Contact the front desk.
+                        Cần hỗ trợ cập nhật thông tin bảo hiểm y tế hoặc xác thực danh tính? Vui lòng liên hệ quầy tiếp tân.
                     </p>
                     <a href="tel:19001234" class="btn btn-dc-outline btn-sm rounded-pill px-3">
-                        <i class="bi bi-telephone me-1"></i> Front Desk Assistance
+                        <i class="bi bi-telephone me-1"></i> Tổng Đài Tiếp Tân
                     </a>
                 </div>
             </div>
@@ -217,7 +233,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
             <div class="modal-header border-bottom">
-                <h5 class="modal-title fs-6 fw-bold" id="uploadAvatarModalLabel">Update Profile Photo</h5>
+                <h5 class="modal-title fs-6 fw-bold" id="uploadAvatarModalLabel">Cập Nhật Ảnh Đại Diện</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form asp-controller="Profile" asp-action="UploadAvatar" method="post" enctype="multipart/form-data">
@@ -227,17 +243,17 @@
                         <img src="@avatarUrl" id="avatarPreviewImg" class="rounded-circle border" style="width: 110px; height: 110px; object-fit: cover;" onerror="this.src='/images/default-avatar.svg'" />
                     </div>
                     <div class="mb-3 text-start">
-                        <label class="form-label" for="avatarFileInput">Choose image file (JPG, PNG, WEBP, max 5 MB):</label>
+                        <label class="form-label" for="avatarFileInput">Chọn tệp hình ảnh (JPG, PNG, WEBP, tối đa 5 MB):</label>
                         <input type="file" name="avatarFile" id="avatarFileInput" class="form-control" accept=".jpg,.jpeg,.png,.webp" required />
                     </div>
                     <p class="text-muted small mb-0">
-                        The uploaded photo is securely stored and synchronized with your clinical profile.
+                        Ảnh tải lên được lưu trữ an toàn và đồng bộ với hồ sơ phòng khám của bạn.
                     </p>
                 </div>
                 <div class="modal-footer border-top">
-                    <button type="button" class="btn btn-dc-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-dc-outline btn-sm" data-bs-dismiss="modal">Hủy</button>
                     <button type="submit" class="btn btn-dc-primary btn-sm">
-                        <i class="bi bi-cloud-arrow-up me-1"></i> Upload & Save
+                        <i class="bi bi-cloud-arrow-up me-1"></i> Tải Lên & Lưu
                     </button>
                 </div>
             </form>

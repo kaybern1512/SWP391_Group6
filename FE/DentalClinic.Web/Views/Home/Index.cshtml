@@ -1,5 +1,5 @@
 @{
-    ViewData["Title"] = "DentalCare - Multi-Specialty Dental Clinic Management System";
+    ViewData["Title"] = "Trang Chủ - Hệ Thống Quản Lý Phòng Khám Nha Khoa DentalCare";
 }
 
 <!-- Hero Section -->
@@ -8,14 +8,14 @@
         <div class="row align-items-center g-5">
             <div class="col-lg-7">
                 <span class="badge-dc badge-role-patient mb-3">
-                    <i class="bi bi-hospital"></i> Multi-Specialty Dental Care Management
+                    <i class="bi bi-hospital"></i> Quản Lý Nha Khoa Đa Chuyên Khoa
                 </span>
                 <h1 class="display-5 fw-bold text-dark mb-3 lh-sm">
-                    Comprehensive Clinical <br />
-                    <span class="text-primary">Dental Care Management</span>
+                    Hệ Thống Quản Lý <br />
+                    <span class="text-primary">Nha Khoa Chuyên Nghiệp</span>
                 </h1>
                 <p class="lead text-muted mb-4 fs-6 lh-base">
-                    Centralized platform for electronic dental records, FDI Odontogram chart tracking, inter-department specialty referrals, and integrated appointment management.
+                    Nền tảng số hóa hồ sơ bệnh án điện tử (EMR), sơ đồ răng chuẩn FDI, điều phối chuyển viện chuyên khoa và quản lý lịch hẹn thông minh.
                 </p>
                 <div class="d-flex flex-wrap gap-3">
                     @if (User.Identity?.IsAuthenticated == true)
@@ -30,17 +30,26 @@
                             "SystemAdministrator" => "/Admin/Dashboard",
                             _ => "/Profile"
                         };
+                        var roleLabel = role switch
+                        {
+                            "Patient" => "Bệnh nhân",
+                            "Receptionist" => "Lễ tân",
+                            "Dentist" => "Bác sĩ",
+                            "DepartmentManager" => "Trưởng khoa",
+                            "SystemAdministrator" => "Quản trị viên",
+                            _ => role
+                        };
                         <a href="@dashboardAction" class="btn btn-dc-primary btn-lg fs-6">
-                            <i class="bi bi-grid-1x2 me-1"></i> Open Workspace (@role)
+                            <i class="bi bi-grid-1x2 me-1"></i> Bàn Làm Việc (@roleLabel)
                         </a>
                     }
                     else
                     {
                         <a asp-controller="Account" asp-action="Register" class="btn btn-dc-primary btn-lg fs-6">
-                            <i class="bi bi-calendar-plus me-1"></i> Register as Patient
+                            <i class="bi bi-calendar-plus me-1"></i> Đăng Ký Tài Khoản
                         </a>
                         <a asp-controller="Account" asp-action="Login" class="btn btn-dc-outline btn-lg fs-6">
-                            <i class="bi bi-box-arrow-in-right me-1"></i> Sign In to Portal
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Đăng Nhập Hệ Thống
                         </a>
                     }
                 </div>
@@ -52,8 +61,8 @@
                             <i class="bi bi-hospital fs-4"></i>
                         </div>
                         <div>
-                            <h5 class="fw-bold mb-0 text-dark">DentalCare Central</h5>
-                            <span class="small text-muted">Single Clinic Multi-Specialty System</span>
+                            <h5 class="fw-bold mb-0 text-dark">Nha Khoa DentalCare</h5>
+                            <span class="small text-muted">Hệ thống phòng khám đa chuyên khoa</span>
                         </div>
                     </div>
                     <ul class="list-unstyled mb-0">
@@ -61,25 +70,25 @@
                             <div class="stat-icon-box stat-icon-primary" style="width: 32px; height: 32px; font-size: 1rem;">
                                 <i class="bi bi-check-lg"></i>
                             </div>
-                            <span class="small fw-medium text-dark">Electronic Dental Records (EMR)</span>
+                            <span class="small fw-medium text-dark">Hồ sơ bệnh án nha khoa điện tử (EMR)</span>
                         </li>
                         <li class="d-flex align-items-center gap-3 mb-3">
                             <div class="stat-icon-box stat-icon-teal" style="width: 32px; height: 32px; font-size: 1rem;">
                                 <i class="bi bi-check-lg"></i>
                             </div>
-                            <span class="small fw-medium text-dark">Standard FDI Odontogram chart tracking</span>
+                            <span class="small fw-medium text-dark">Sơ đồ 32 răng theo chuẩn FDI quốc tế</span>
                         </li>
                         <li class="d-flex align-items-center gap-3 mb-3">
                             <div class="stat-icon-box stat-icon-info" style="width: 32px; height: 32px; font-size: 1rem;">
                                 <i class="bi bi-check-lg"></i>
                             </div>
-                            <span class="small fw-medium text-dark">Multi-stage treatment plans & billing</span>
+                            <span class="small fw-medium text-dark">Phác đồ điều trị đa giai đoạn & đơn thuốc điện tử</span>
                         </li>
                         <li class="d-flex align-items-center gap-3">
                             <div class="stat-icon-box stat-icon-success" style="width: 32px; height: 32px; font-size: 1rem;">
                                 <i class="bi bi-check-lg"></i>
                             </div>
-                            <span class="small fw-medium text-dark">Inter-specialty referral coordination</span>
+                            <span class="small fw-medium text-dark">Điều phối chuyển chuyên khoa và hội chẩn thuận tiện</span>
                         </li>
                     </ul>
                 </div>
@@ -92,9 +101,9 @@
 <section id="specialties" class="py-5">
     <div class="container py-3">
         <div class="text-center mx-auto mb-5" style="max-width: 600px;">
-            <span class="badge-dc badge-role-patient mb-2">Clinical Departments</span>
-            <h2 class="fw-bold text-dark">Dental Specialties</h2>
-            <p class="text-muted">Managed and triaged by specialized dental practitioners</p>
+            <span class="badge-dc badge-role-patient mb-2">Khoa Lâm Sàng</span>
+            <h2 class="fw-bold text-dark">Các Chuyên Khoa Điều Trị</h2>
+            <p class="text-muted">Đội ngũ bác sĩ chuyên môn sâu trực tiếp thăm khám và điều trị</p>
         </div>
 
         <div class="row g-4">
@@ -103,9 +112,9 @@
                     <div class="quick-icon-box quick-icon-primary mb-3">
                         <i class="bi bi-gem"></i>
                     </div>
-                    <h5 class="fw-bold text-dark mb-2">Prosthodontics & Esthetics</h5>
+                    <h5 class="fw-bold text-dark mb-2">Phục Hình & Thẩm Mỹ</h5>
                     <p class="text-muted small mb-0">
-                        Ceramic veneers, crowns, bridges, and comprehensive full-mouth functional restorations.
+                        Dán sứ veneer, bọc răng sứ thẩm mỹ, cầu răng và phục hình chức năng ăn nhai toàn diện.
                     </p>
                 </div>
             </div>
@@ -115,9 +124,9 @@
                     <div class="quick-icon-box quick-icon-teal mb-3">
                         <i class="bi bi-diagram-3"></i>
                     </div>
-                    <h5 class="fw-bold text-dark mb-2">Orthodontics</h5>
+                    <h5 class="fw-bold text-dark mb-2">Chỉnh Nha - Niềng Răng</h5>
                     <p class="text-muted small mb-0">
-                        Corrective dental alignments, fixed bracket mechanics, and clear aligner therapies.
+                        Nắn chỉnh răng lệch lạc, niềng răng mắc cài thẩm mỹ và khay niềng trong suốt hiện đại.
                     </p>
                 </div>
             </div>
@@ -127,9 +136,9 @@
                     <div class="quick-icon-box quick-icon-warning mb-3">
                         <i class="bi bi-shield-plus"></i>
                     </div>
-                    <h5 class="fw-bold text-dark mb-2">Implantology</h5>
+                    <h5 class="fw-bold text-dark mb-2">Cấy Ghép Implant</h5>
                     <p class="text-muted small mb-0">
-                        Surgical dental implant placements and prosthetic abutment restorations for tooth loss.
+                        Cấy ghép trụ Implant nha khoa cao cấp và phục hình răng sứ tái lập răng mất an toàn.
                     </p>
                 </div>
             </div>
@@ -139,9 +148,9 @@
                     <div class="quick-icon-box quick-icon-danger mb-3">
                         <i class="bi bi-activity"></i>
                     </div>
-                    <h5 class="fw-bold text-dark mb-2">Endodontics</h5>
+                    <h5 class="fw-bold text-dark mb-2">Điều Trị Nội Nha (Chữa Tủy)</h5>
                     <p class="text-muted small mb-0">
-                        Root canal therapy, pulpal diagnosis, and therapeutic preservation of natural dentition.
+                        Chữa tủy bằng máy vi phẫu, làm sạch ống tủy triệt để và bảo tồn răng thật tối đa.
                     </p>
                 </div>
             </div>
@@ -151,9 +160,9 @@
                     <div class="quick-icon-box quick-icon-info mb-3">
                         <i class="bi bi-heart-pulse"></i>
                     </div>
-                    <h5 class="fw-bold text-dark mb-2">Oral Surgery</h5>
+                    <h5 class="fw-bold text-dark mb-2">Tiểu Phẫu & Nhổ Răng Khôn</h5>
                     <p class="text-muted small mb-0">
-                        Surgical tooth extractions, impacted third molar management, and alveolar bone care.
+                        Nhổ răng khôn không đau bằng công nghệ sóng siêu âm Piezotome và phẫu thuật tạo hình nướu.
                     </p>
                 </div>
             </div>
@@ -163,9 +172,9 @@
                     <div class="quick-icon-box quick-icon-success mb-3">
                         <i class="bi bi-emoji-smile"></i>
                     </div>
-                    <h5 class="fw-bold text-dark mb-2">Pediatric Dentistry</h5>
+                    <h5 class="fw-bold text-dark mb-2">Nha Khoa Trẻ Em</h5>
                     <p class="text-muted small mb-0">
-                        Preventive dental sealants, fluoride treatments, and gentle pediatric tooth care.
+                        Trám răng phòng ngừa, bôi vecni fluor ngừa sâu răng và chăm sóc nha chu dịu nhẹ cho bé.
                     </p>
                 </div>
             </div>
@@ -177,9 +186,9 @@
 <section id="features" class="py-5 bg-white border-top border-bottom">
     <div class="container py-3">
         <div class="text-center mx-auto mb-5" style="max-width: 600px;">
-            <span class="badge-dc badge-role-patient mb-2">Platform Capabilities</span>
-            <h2 class="fw-bold text-dark">Digitized Clinical Workflows</h2>
-            <p class="text-muted">Structured tools supporting clinical coordination and patient records</p>
+            <span class="badge-dc badge-role-patient mb-2">Quy Trình Chuẩn Hóa</span>
+            <h2 class="fw-bold text-dark">Quy Trình Khám Chữa Bệnh Số Hóa</h2>
+            <p class="text-muted">Bộ công cụ chuyên sâu tối ưu hóa quy trình điều trị và hồ sơ bệnh nhân</p>
         </div>
 
         <div class="row g-4">
@@ -188,9 +197,9 @@
                     <div class="quick-icon-box quick-icon-primary mb-3">
                         <i class="bi bi-journal-medical"></i>
                     </div>
-                    <h5 class="fw-bold text-dark mb-2">FDI Odontogram Charting</h5>
+                    <h5 class="fw-bold text-dark mb-2">Sơ Đồ Răng FDI Trực Quan</h5>
                     <p class="text-muted small mb-0">
-                        Tooth-by-tooth historical condition tracking, completed restorations, and future procedures mapped to international tooth numbering standards.
+                        Ghi nhận tình trạng 32 răng chuẩn FDI (sâu răng, đã trám, mất răng, răng sứ) tương tác tức thì ngay trên hồ sơ bệnh án.
                     </p>
                 </div>
             </div>
@@ -199,9 +208,9 @@
                     <div class="quick-icon-box quick-icon-teal mb-3">
                         <i class="bi bi-arrow-left-right"></i>
                     </div>
-                    <h5 class="fw-bold text-dark mb-2">Cross-Specialty Referrals</h5>
+                    <h5 class="fw-bold text-dark mb-2">Phác Đồ & Đơn Thuốc Điện Tử</h5>
                     <p class="text-muted small mb-0">
-                        Integrated inter-department referrals enabling dentists to transfer patient cases directly to orthodontic or surgical specialists.
+                        Kê đơn thuốc chuẩn y khoa với liều dùng và lời dặn cụ thể, theo dõi kế hoạch điều trị qua từng buổi hẹn.
                     </p>
                 </div>
             </div>
@@ -210,9 +219,9 @@
                     <div class="quick-icon-box quick-icon-info mb-3">
                         <i class="bi bi-file-earmark-check"></i>
                     </div>
-                    <h5 class="fw-bold text-dark mb-2">Treatment Plan Staging</h5>
+                    <h5 class="fw-bold text-dark mb-2">Hội Chẩn & Điều Phối Khoa</h5>
                     <p class="text-muted small mb-0">
-                        Multi-phase clinical plans detailing procedures, scheduled appointments, itemized estimated costs, and physician notes.
+                        Dễ dàng chuyển tiếp ca bệnh phức tạp sang bác sĩ chuyên khoa phù hợp với đầy đủ lịch sử khám và chẩn đoán.
                     </p>
                 </div>
             </div>
@@ -225,32 +234,32 @@
     <div class="container py-3">
         <div class="row align-items-center g-4">
             <div class="col-lg-6">
-                <span class="badge-dc badge-role-patient mb-2">Clinic Information</span>
-                <h3 class="fw-bold text-dark mb-3">Central Dental Care Facility</h3>
+                <span class="badge-dc badge-role-patient mb-2">Thông Tin Liên Hệ</span>
+                <h3 class="fw-bold text-dark mb-3">Trung Tâm Nha Khoa Kỹ Thuật Cao</h3>
                 <p class="text-muted small mb-4">
-                    Dedicated facility coordinating clinical care departments and dental specialties within a unified management system.
+                    Cơ sở nha khoa hiện đại quy tụ đầy đủ các chuyên khoa với hệ thống trang thiết bị chẩn đoán hình ảnh tiên tiến.
                 </p>
                 <div class="d-flex flex-column gap-2 small">
-                    <div><i class="bi bi-geo-alt-fill text-primary me-2"></i> High-Tech Zone, Thu Duc City, Ho Chi Minh City</div>
-                    <div><i class="bi bi-telephone-fill text-primary me-2"></i> Central Reception: <strong>1900 1234</strong></div>
-                    <div><i class="bi bi-envelope-fill text-primary me-2"></i> Inquiries: contact@dentalclinic.edu.vn</div>
+                    <div><i class="bi bi-geo-alt-fill text-primary me-2"></i> Khu Công Nghệ Cao, TP. Thủ Đức, TP. Hồ Chí Minh</div>
+                    <div><i class="bi bi-telephone-fill text-primary me-2"></i> Tổng đài tiếp tân: <strong>1900 1234</strong></div>
+                    <div><i class="bi bi-envelope-fill text-primary me-2"></i> Email hỗ trợ: contact@dentalclinic.edu.vn</div>
                 </div>
             </div>
             <div class="col-lg-6">
                 <div class="card-dc p-4 bg-white border">
-                    <h5 class="fw-bold text-dark mb-2">Clinic Consultation Schedule</h5>
-                    <p class="text-muted small mb-3">Official consultation hours across clinical departments:</p>
+                    <h5 class="fw-bold text-dark mb-2">Lịch Làm Việc Phòng Khám</h5>
+                    <p class="text-muted small mb-3">Khung giờ phục vụ bệnh nhân tại tất cả các chuyên khoa:</p>
                     <ul class="list-unstyled mb-0 small">
                         <li class="d-flex justify-content-between py-2 border-bottom">
-                            <span>Monday &ndash; Friday:</span>
+                            <span>Thứ Hai &ndash; Thứ Sáu:</span>
                             <strong class="text-dark">08:00 &ndash; 20:00</strong>
                         </li>
                         <li class="d-flex justify-content-between py-2 border-bottom">
-                            <span>Saturday:</span>
+                            <span>Thứ Bảy:</span>
                             <strong class="text-dark">08:00 &ndash; 18:00</strong>
                         </li>
                         <li class="d-flex justify-content-between py-2">
-                            <span>Sunday & Holidays:</span>
+                            <span>Chủ Nhật & Ngày Lễ:</span>
                             <strong class="text-dark">08:00 &ndash; 12:00</strong>
                         </li>
                     </ul>

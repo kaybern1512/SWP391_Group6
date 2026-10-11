@@ -1,17 +1,17 @@
 @model VerifyEmailViewModel
 @{
     Layout = "_AuthLayout";
-    ViewData["Title"] = "Verify Email Address";
+    ViewData["Title"] = "Xác Thực Địa Chỉ Email";
 }
 
 <div class="auth-card-header text-center">
     <div class="empty-state-icon-box mx-auto mb-3" style="width: 54px; height: 54px;">
         <i class="bi bi-envelope-check text-primary fs-3"></i>
     </div>
-    <h2 class="auth-card-title">Verify Email Address</h2>
+    <h2 class="auth-card-title">Xác Thực Địa Chỉ Email</h2>
     <p class="auth-card-subtitle">
-        Enter the 6-character verification code sent to: <br />
-        <strong class="text-dark">@(string.IsNullOrEmpty(Model.Email) ? "your email" : Model.Email)</strong>
+        Nhập mã xác thực 6 ký tự được gửi đến hộp thư: <br />
+        <strong class="text-dark">@(string.IsNullOrEmpty(Model.Email) ? "email của bạn" : Model.Email)</strong>
     </p>
 </div>
 
@@ -27,13 +27,13 @@
     <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small mb-3"></div>
 
     <div class="mb-4">
-        <label asp-for="Code" class="form-label text-center d-block">OTP Verification Code</label>
+        <label asp-for="Code" class="form-label text-center d-block">Mã Xác Thực OTP</label>
         <input asp-for="Code" class="form-control otp-input-field" maxlength="10" placeholder="------" autocomplete="off" autofocus />
         <span asp-validation-for="Code" class="text-danger small text-center d-block mt-1"></span>
     </div>
 
     <button type="submit" class="btn btn-dc-primary w-100 py-2 fs-6 mb-3">
-        <i class="bi bi-patch-check me-1"></i> Verify Account
+        <i class="bi bi-patch-check me-1"></i> Xác Thực Tài Khoản
     </button>
 </form>
 
@@ -42,11 +42,11 @@
         @Html.AntiForgeryToken()
         <input type="hidden" name="email" value="@Model.Email" />
         <button type="submit" class="btn btn-link p-0 text-decoration-none text-primary small">
-            <i class="bi bi-arrow-repeat me-1"></i> Resend code
+            <i class="bi bi-arrow-repeat me-1"></i> Gửi lại mã
         </button>
     </form>
     <a asp-controller="Account" asp-action="Login" class="text-decoration-none text-muted">
-        Back to Sign In
+        Quay lại Đăng nhập
     </a>
 </div>
 

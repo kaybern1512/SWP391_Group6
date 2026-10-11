@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const file = e.target.files[0];
       if (file) {
         if (file.size > 5 * 1024 * 1024) {
-          alert('Image file size must not exceed 5 MB.');
+          alert('Kích thước tệp hình ảnh không được vượt quá 5 MB.');
           this.value = '';
           return;
         }
@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const confirmButtons = document.querySelectorAll('[data-confirm]');
   confirmButtons.forEach(btn => {
     btn.addEventListener('click', function (e) {
-      const message = this.getAttribute('data-confirm') || 'Are you sure you want to proceed with this action?';
+      const message = this.getAttribute('data-confirm') || 'Bạn có chắc chắn muốn thực hiện thao tác này không?';
       if (!confirm(message)) {
         e.preventDefault();
       }

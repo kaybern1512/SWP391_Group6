@@ -8,6 +8,7 @@ namespace DentalClinic.Web.Controllers.Patient;
 
 [Authorize(Roles = "Patient")]
 [Route("Patient/MedicalRecord")]
+[Route("Patient/MedicalRecords")]
 public class PatientMedicalRecordController : Controller
 {
     private readonly IMedicalRecordApiService _medicalRecordApi;

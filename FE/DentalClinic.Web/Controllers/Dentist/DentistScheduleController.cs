@@ -134,6 +134,7 @@ public class DentistScheduleController : Controller
     // ==========================================
 
     [HttpGet("Availability")]
+    [HttpGet("Schedule/Availability")]
     public async Task<IActionResult> Availability()
     {
         var result = await _scheduleApi.GetMyAvailabilitiesAsync();
@@ -200,6 +201,7 @@ public class DentistScheduleController : Controller
     // ==========================================
 
     [HttpGet("Feedback")]
+    [HttpGet("Schedule/Feedback")]
     public async Task<IActionResult> Feedback()
     {
         var currentUserId = GetCurrentUserId();

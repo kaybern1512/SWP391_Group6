@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DentalClinic.Web.Controllers.Admin;
 
-[Authorize(Roles = "SystemAdministrator")]
+[Authorize(Roles = "SystemAdministrator,DepartmentManager")]
 [Route("Admin")]
 public class AdminDashboardController : Controller
 {
@@ -20,6 +20,7 @@ public class AdminDashboardController : Controller
         _adminApi = adminApi;
     }
 
+    [Authorize(Roles = "SystemAdministrator")]
     [HttpGet("")]
     [HttpGet("Dashboard")]
     public async Task<IActionResult> Dashboard()

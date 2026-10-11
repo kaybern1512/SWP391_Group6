@@ -13,10 +13,10 @@
     <div class="navbar-right">
         @if (User.Identity?.IsAuthenticated == true)
         {
-            <!-- Help Tooltip -->
-            <a href="#" class="btn-nav-icon text-decoration-none d-none d-sm-flex" title="Hướng dẫn & Trợ giúp" onclick="alert('DentalCare Help: Hệ thống quản lý phòng khám chuyên khoa Răng Hàm Mặt DentalCare.'); return false;">
+            <!-- Help Tooltip Modal Trigger -->
+            <button type="button" class="btn-nav-icon text-decoration-none d-none d-sm-flex border-0 bg-transparent" title="Hướng dẫn & Trợ giúp hệ thống" data-bs-toggle="modal" data-bs-target="#helpGuideModal">
                 <i class="bi bi-question-circle"></i>
-            </a>
+            </button>
 
             <!-- Notification Bell -->
             <div class="dropdown" id="notificationDropdownContainer">
@@ -169,4 +169,64 @@
             setInterval(loadNotifications, 60000);
         })();
     </script>
+
+    <!-- MODAL: HƯỚNG DẪN & TRỢ GIÚP HỆ THỐNG -->
+    <div class="modal fade" id="helpGuideModal" tabindex="-1" aria-labelledby="helpGuideModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="helpGuideModalLabel">
+                        <i class="bi bi-question-circle me-2"></i> Hướng Dẫn & Hỗ Trợ Kỹ Thuật DentalCare
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="text-center mb-3">
+                        <div class="avatar-lg bg-primary-subtle text-primary rounded-circle d-inline-flex align-items-center justify-content-center p-3 mb-2">
+                            <i class="bi bi-hospital fs-1"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark">Hệ Thống Quản Lý Phòng Khám Nha Khoa DentalCare</h6>
+                        <p class="text-muted small">Phiên bản chuyên môn lâm sàng & quản trị tập trung</p>
+                    </div>
+
+                    <div class="list-group list-group-flush mb-3">
+                        <div class="list-group-item d-flex align-items-center gap-3 px-0 py-2">
+                            <i class="bi bi-telephone-fill text-primary fs-5"></i>
+                            <div>
+                                <div class="fw-semibold text-dark small">Tổng đài hỗ trợ kỹ thuật:</div>
+                                <div class="text-primary fw-bold">1900 1234 (Nhánh 1)</div>
+                            </div>
+                        </div>
+                        <div class="list-group-item d-flex align-items-center gap-3 px-0 py-2">
+                            <i class="bi bi-envelope-fill text-teal fs-5"></i>
+                            <div>
+                                <div class="fw-semibold text-dark small">Email liên hệ chuyên môn:</div>
+                                <div class="text-dark small">contact@dentalclinic.edu.vn</div>
+                            </div>
+                        </div>
+                        <div class="list-group-item d-flex align-items-center gap-3 px-0 py-2">
+                            <i class="bi bi-geo-alt-fill text-danger fs-5"></i>
+                            <div>
+                                <div class="fw-semibold text-dark small">Địa chỉ phòng khám:</div>
+                                <div class="text-muted small">Khu Công Nghệ Cao, TP. Thủ Đức, TP. Hồ Chí Minh</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-light rounded-3 border">
+                        <div class="fw-bold small text-dark mb-1"><i class="bi bi-info-circle me-1 text-primary"></i> Quy trình thao tác nhanh:</div>
+                        <ul class="small text-muted mb-0 ps-3">
+                            <li><strong>Bệnh nhân:</strong> Đặt lịch khám, tra cứu hồ sơ bệnh án, xem đơn thuốc.</li>
+                            <li><strong>Lễ tân:</strong> Check-in tại quầy, tiếp nhận và tra cứu sổ bệnh nhân.</li>
+                            <li><strong>Bác sĩ:</strong> Xem ca khám hôm nay, chẩn đoán sơ đồ 32 răng, kê đơn thuốc, lên phác đồ điều trị.</li>
+                            <li><strong>Trưởng khoa:</strong> Xếp lịch trực bác sĩ hàng tháng, phân bổ ca khám, quản lý danh mục dịch vụ & bảng giá khoa.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
 }

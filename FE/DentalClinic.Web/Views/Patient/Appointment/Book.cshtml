@@ -216,6 +216,7 @@
                     <div class="mb-3">
                         <label asp-for="ReasonForVisit" class="form-label fw-semibold">Mô tả lý do khám hoặc các triệu chứng bạn đang gặp phải <span class="text-danger">*</span></label>
                         <textarea asp-for="ReasonForVisit" id="inputReasonForVisit" class="form-control" rows="4" placeholder="Ví dụ: Đau nhức răng hàm dưới bên trái khi ăn đồ nóng lạnh, muốn cạo vôi và kiểm tra tổng quát định kỳ..."></textarea>
+                        <div id="reasonErrorMsg" class="text-danger small mt-1 d-none"><i class="bi bi-exclamation-circle me-1"></i>Vui lòng nhập lý do khám tối thiểu 5 ký tự.</div>
                         <span asp-validation-for="ReasonForVisit" class="text-danger small"></span>
                         <div class="form-text">Mô tả chi tiết giúp đội ngũ bác sĩ chuẩn bị chu đáo trang thiết bị và dự kiến thời gian thăm khám hiệu quả nhất cho bạn.</div>
                     </div>
@@ -420,10 +421,18 @@
                 if (currentStep === 4 && !selectedSlot) return;
                 if (currentStep === 5) {
                     const reason = document.getElementById('inputReasonForVisit').value.trim();
+                    const reasonError = document.getElementById('reasonErrorMsg');
+                    const reasonInput = document.getElementById('inputReasonForVisit');
                     if (reason.length < 5) {
-                        alert('Vui lòng nhập lý do khám tối thiểu 5 ký tự.');
+                        if (reasonError) reasonError.classList.remove('d-none');
+                        if (reasonInput) {
+                            reasonInput.classList.add('is-invalid');
+                            reasonInput.focus();
+                        }
                         return;
                     }
+                    if (reasonError) reasonError.classList.add('d-none');
+                    if (reasonInput) reasonInput.classList.remove('is-invalid');
                     updateSummary();
                 }
             }
