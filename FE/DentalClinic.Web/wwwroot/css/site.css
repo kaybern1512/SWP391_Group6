@@ -606,3 +606,43 @@ h1, h2, h3, h4, h5, h6,
   color: var(--dc-text-main);
   font-weight: 600;
 }
+
+/* ==========================================================================
+   DentalCare Toast & Confirmation Modal System
+   ========================================================================== */
+#appToastContainer {
+  pointer-events: none;
+  max-width: 420px;
+  width: 100%;
+}
+
+.dc-toast {
+  pointer-events: auto;
+  border-radius: var(--dc-radius-md) !important;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.08) !important;
+  border-top: 1px solid rgba(226, 232, 240, 0.8) !important;
+  border-right: 1px solid rgba(226, 232, 240, 0.8) !important;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8) !important;
+  animation: dcToastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+@keyframes dcToastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.dc-toast.border-success { border-left-color: #10b981 !important; }
+.dc-toast.border-danger { border-left-color: #ef4444 !important; }
+.dc-toast.border-warning { border-left-color: #f59e0b !important; }
+.dc-toast.border-info { border-left-color: #0ea5e9 !important; }
+
+#appConfirmModal .modal-content {
+  border-radius: var(--dc-radius-lg) !important;
+}

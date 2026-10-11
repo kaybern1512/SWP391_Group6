@@ -213,7 +213,7 @@
                                         <a asp-controller="DepartmentSchedule" asp-action="Index" asp-route-departmentId="@a.DepartmentId" asp-route-dentistUserId="@a.DentistUserId" class="btn btn-sm btn-outline-primary me-1" title="Xem lịch trực của bác sĩ">
                                             <i class="bi bi-calendar3 me-1"></i> Lịch trực
                                         </a>
-                                        <form asp-controller="DepartmentDentist" asp-action="ToggleStatus" asp-route-id="@a.DentistDepartmentId" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn thay đổi trạng thái phân bổ của bác sĩ này?');">
+                                        <form asp-controller="DepartmentDentist" asp-action="ToggleStatus" asp-route-id="@a.DentistDepartmentId" method="post" class="d-inline" data-confirm="Bạn có chắc chắn muốn thay đổi trạng thái phân bổ của bác sĩ này?">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="returnDepartmentId" value="@Model.DepartmentId" />
                                             <button type="submit" class="btn btn-sm @(a.Status == "Active" ? "btn-outline-warning" : "btn-outline-success")">

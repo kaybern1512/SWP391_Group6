@@ -120,4 +120,35 @@ public class SmokeTests : IClassFixture<WebApplicationFactory<Program>>
         // Assert
         html.Should().Contain("__RequestVerificationToken");
     }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/Account/Login")]
+    [InlineData("/Account/Register")]
+    public async Task Pages_ContainToastContainerAndConfirmModal(string url)
+    {
+        // Act
+        var response = await _client.GetAsync(url);
+        var html = await response.Content.ReadAsStringAsync();
+
+        // Assert
+        html.Should().Contain("appToastContainer");
+        html.Should().Contain("appConfirmModal");
+    }
+
+    [Fact]
+    public async Task SiteJs_ContainsToastSystemAndConfirmModalHandler()
+    {
+        // Act
+        var response = await _client.GetAsync("/js/site.js");
+        var js = await response.Content.ReadAsStringAsync();
+
+        // Assert
+        js.Should().Contain("showToast");
+        js.Should().Contain("appToastContainer");
+        js.Should().Contain("appConfirmModal");
+        js.Should().Contain("toastSuccess");
+        js.Should().NotContain("alert('");
+        js.Should().NotContain("confirm('");
+    }
 }

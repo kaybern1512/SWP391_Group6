@@ -197,7 +197,7 @@
                                                 onclick="openEditServiceModal(@s.DepartmentServiceId, @s.DepartmentId, '@Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(s.ServiceName))', @s.Price, @(s.DurationMinutes ?? 0), '@Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(s.Description ?? ""))', '@s.Status')">
                                             <i class="bi bi-pencil-square me-1"></i> Sửa
                                         </button>
-                                        <form asp-controller="DepartmentService" asp-action="ToggleStatus" asp-route-id="@s.DepartmentServiceId" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn thay đổi trạng thái kích hoạt dịch vụ này?');">
+                                        <form asp-controller="DepartmentService" asp-action="ToggleStatus" asp-route-id="@s.DepartmentServiceId" method="post" class="d-inline" data-confirm="Bạn có chắc chắn muốn thay đổi trạng thái kích hoạt dịch vụ này?">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="returnDepartmentId" value="@Model.DepartmentId" />
                                             <button type="submit" class="btn btn-sm @(s.Status == "Active" ? "btn-outline-warning" : "btn-outline-success")">

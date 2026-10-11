@@ -1,0 +1,24 @@
+<!-- Universal App Confirmation Modal (Eliminates browser native "localhost says" popups) -->
+<div class="modal fade" id="appConfirmModal" tabindex="-1" aria-labelledby="appConfirmModalLabel" aria-hidden="true" style="z-index: 1090;">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-body p-4 text-center">
+                <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3" id="appConfirmIconWrapper" style="width: 56px; height: 56px; background-color: #fef2f2; color: #dc2626;">
+                    <i class="bi bi-exclamation-triangle fs-3" id="appConfirmIcon"></i>
+                </div>
+                <h5 class="fw-bold text-dark mb-2" id="appConfirmTitle">Xác Nhận Thao Tác</h5>
+                <p class="text-secondary mb-4 small" id="appConfirmMessage" style="line-height: 1.55;">
+                    Bạn có chắc chắn muốn thực hiện thao tác này không?
+                </p>
+                <div class="d-flex gap-2 justify-content-center">
+                    <button type="button" class="btn btn-light border px-4 py-2 rounded-3 fw-semibold small text-secondary" data-bs-dismiss="modal" id="appConfirmCancelBtn">
+                        Hủy Bỏ
+                    </button>
+                    <button type="button" class="btn btn-danger px-4 py-2 rounded-3 fw-semibold small shadow-sm" id="appConfirmProceedBtn">
+                        Xác Nhận
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

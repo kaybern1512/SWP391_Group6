@@ -492,7 +492,7 @@
                                         <td class="text-end text-nowrap">
                                             @if (s.Status == "Scheduled")
                                             {
-                                                <form asp-controller="DepartmentSchedule" asp-action="Cancel" asp-route-id="@s.DentistScheduleId" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn hủy ca trực này của bác sĩ?');">
+                                                <form asp-controller="DepartmentSchedule" asp-action="Cancel" asp-route-id="@s.DentistScheduleId" method="post" class="d-inline" data-confirm="Bạn có chắc chắn muốn hủy ca trực này của bác sĩ?">
                                                     @Html.AntiForgeryToken()
                                                     <input type="hidden" name="returnDepartmentId" value="@Model.DepartmentId" />
                                                     <input type="hidden" name="returnDentistUserId" value="@Model.SelectedDentistUserId" />
@@ -782,7 +782,7 @@
                 let cancelBtn = '';
                 if (!isCancelled) {
                     cancelBtn = `
-                        <form action="/Department/Schedule/Cancel/${s.DentistScheduleId}" method="post" class="m-0" onsubmit="return confirm('Bạn có chắc chắn muốn hủy ca trực này của bác sĩ?');">
+                        <form action="/Department/Schedule/Cancel/${s.DentistScheduleId}" method="post" class="m-0" data-confirm="Bạn có chắc chắn muốn hủy ca trực này của bác sĩ?">
                             @Html.AntiForgeryToken()
                             <input type="hidden" name="returnDepartmentId" value="@Model.DepartmentId" />
                             <input type="hidden" name="returnDentistUserId" value="@Model.SelectedDentistUserId" />
