@@ -166,6 +166,7 @@ builder.Services.AddHttpClient<IInvoiceApiClient, InvoiceApiClient>(client =>
     client.BaseAddress = new Uri(apiBaseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 })
+ .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
 builder.Services.AddHttpClient<IClinicalCoreApiClient, ClinicalCoreApiClient>(client =>

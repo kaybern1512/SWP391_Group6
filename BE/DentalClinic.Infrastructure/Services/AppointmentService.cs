@@ -70,31 +70,53 @@ public class AppointmentService : IAppointmentService
         }
 
         // 4. Validate Datetime
-        if (request.ScheduledStart < DateTime.Now.AddMinutes(-5))
+        if (request.ScheduledStart <= DateTime.Now)
         {
             return ApiResponse<AppointmentDto>.Fail("Thời gian khám không được nằm trong quá khứ.");
         }
 
-        // 5. Validate Requested Dentist if specified
-        if (request.RequestedDentistUserId.HasValue)
-        {
-            var isDentistInDept = await _dbContext.DentistDepartments
-                .AsNoTracking()
-                .AnyAsync(dd => dd.DentistUserId == request.RequestedDentistUserId.Value &&
-                                dd.DepartmentId == request.DepartmentId &&
-                                dd.Status == "Active", ct);
-
-            if (!isDentistInDept)
-            {
-                return ApiResponse<AppointmentDto>.Fail("Bác sĩ được yêu cầu không thuộc chuyên khoa đã chọn.");
-            }
-        }
-
-        // Calculate end time
         var duration = service.DurationMinutes.HasValue && service.DurationMinutes.Value > 0
             ? service.DurationMinutes.Value
             : 30;
         var scheduledEnd = request.ScheduledStart.AddMinutes(duration);
+
+        // 5. Validate dentist membership, working hours, availability and appointment conflicts.
+        var candidateDentistIds = await _dbContext.DentistDepartments
+            .AsNoTracking()
+            .Where(dd => dd.DepartmentId == request.DepartmentId &&
+                         dd.Status == "Active" &&
+                         dd.DentistUser.User.EmploymentStatus == "Active" &&
+                         dd.DentistUser.User.User.Status == AccountStatus.Active)
+            .Where(dd => !request.RequestedDentistUserId.HasValue ||
+                         dd.DentistUserId == request.RequestedDentistUserId.Value)
+            .Select(dd => dd.DentistUserId)
+            .ToListAsync(ct);
+
+        if (request.RequestedDentistUserId.HasValue && candidateDentistIds.Count == 0)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Bác sĩ được yêu cầu không hoạt động hoặc không thuộc chuyên khoa này.");
+        }
+
+        var hasAvailableDentist = false;
+        foreach (var dentistId in candidateDentistIds)
+        {
+            if (await IsDentistAvailableForSlotAsync(
+                    dentistId,
+                    request.DepartmentId,
+                    request.ScheduledStart,
+                    scheduledEnd,
+                    excludedAppointmentId: null,
+                    ct))
+            {
+                hasAvailableDentist = true;
+                break;
+            }
+        }
+
+        if (!hasAvailableDentist)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Khung giờ không thuộc lịch làm việc của chuyên khoa và bác sĩ khả dụng.");
+        }
 
         // Generate Unique AppointmentCode (APP-yyyyMMdd-XXXXXX)
         var code = await GenerateUniqueAppointmentCodeAsync(ct);
@@ -972,6 +994,52 @@ public class AppointmentService : IAppointmentService
                 return ApiResponse<AppointmentDto>.Fail("Thời gian khám không hợp lệ.");
             }
 
+            if (finalStart.Value <= DateTime.Now || finalEnd.Value <= finalStart.Value)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Thời gian khám phải hợp lệ và nằm trong tương lai.");
+            }
+
+            var service = await _dbContext.DepartmentServices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.DepartmentServiceId == appointment.RequestedServiceId &&
+                                          s.DepartmentId == appointment.DepartmentId &&
+                                          s.Status == "Active", ct);
+            if (service == null)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Dịch vụ của lịch hẹn không còn hoạt động.");
+            }
+
+            var duration = service.DurationMinutes.HasValue && service.DurationMinutes.Value > 0
+                ? service.DurationMinutes.Value
+                : 30;
+            if (finalEnd.Value != finalStart.Value.AddMinutes(duration))
+            {
+                return ApiResponse<AppointmentDto>.Fail("Thời lượng lịch hẹn không khớp với dịch vụ đã chọn.");
+            }
+
+            var assignedDentistIsActive = await _dbContext.DentistDepartments
+                .AsNoTracking()
+                .AnyAsync(dd => dd.DentistUserId == request.AssignedDentistUserId &&
+                                dd.DepartmentId == appointment.DepartmentId &&
+                                dd.Status == "Active" &&
+                                dd.DentistUser.User.EmploymentStatus == "Active" &&
+                                dd.DentistUser.User.User.Status == AccountStatus.Active, ct);
+            if (!assignedDentistIsActive)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Bác sĩ được phân công không hoạt động hoặc không thuộc chuyên khoa này.");
+            }
+
+            if (!await IsDentistAvailableForSlotAsync(
+                    request.AssignedDentistUserId,
+                    appointment.DepartmentId!.Value,
+                    finalStart.Value,
+                    finalEnd.Value,
+                    appointmentId,
+                    ct))
+            {
+                return ApiResponse<AppointmentDto>.Fail("Bác sĩ đã có lịch hẹn khác hoặc không có ca làm phù hợp trong khung giờ này.");
+            }
+
             var occupiedStatuses = new[]
             {
                 AppointmentStatus.Confirmed,
@@ -1202,6 +1270,85 @@ public class AppointmentService : IAppointmentService
         }
 
         return ApiResponse<List<AppointmentDto>>.Ok(list);
+    }
+
+    private async Task<bool> IsDentistAvailableForSlotAsync(
+        long dentistUserId,
+        long departmentId,
+        DateTime start,
+        DateTime end,
+        long? excludedAppointmentId,
+        CancellationToken ct)
+    {
+        var targetDate = DateOnly.FromDateTime(start);
+        var dayOfWeek = start.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)start.DayOfWeek;
+        var departmentSchedules = await _dbContext.DepartmentWorkSchedules
+            .AsNoTracking()
+            .Where(schedule => schedule.DepartmentId == departmentId &&
+                               schedule.DayOfWeek == dayOfWeek &&
+                               schedule.IsActive)
+            .ToListAsync(ct);
+        var dentistSchedules = await _dbContext.DentistWorkSchedules
+            .AsNoTracking()
+            .Where(schedule => schedule.DentistUserId == dentistUserId &&
+                               schedule.DepartmentId == departmentId &&
+                               schedule.WorkDate == targetDate &&
+                               schedule.Status == "Scheduled")
+            .ToListAsync(ct);
+
+        var hasWorkingSlot = departmentSchedules.Any(departmentSchedule =>
+            dentistSchedules.Any(dentistSchedule =>
+            {
+                var overlapStart = start.Date.Add(
+                    departmentSchedule.StartTime > dentistSchedule.StartTime
+                        ? departmentSchedule.StartTime.ToTimeSpan()
+                        : dentistSchedule.StartTime.ToTimeSpan());
+                var overlapEnd = start.Date.Add(
+                    departmentSchedule.EndTime < dentistSchedule.EndTime
+                        ? departmentSchedule.EndTime.ToTimeSpan()
+                        : dentistSchedule.EndTime.ToTimeSpan());
+
+                return start >= overlapStart &&
+                       end <= overlapEnd &&
+                       (start - start.Date.Add(departmentSchedule.StartTime.ToTimeSpan())).TotalMinutes % 30 == 0;
+            }));
+
+        if (!hasWorkingSlot)
+        {
+            return false;
+        }
+
+        var isUnavailable = await _dbContext.DentistAvailabilities
+            .AsNoTracking()
+            .AnyAsync(availability => availability.DentistUserId == dentistUserId &&
+                                      availability.AvailabilityStatus != DentistAvailabilityStatus.Available &&
+                                      availability.StartDateTime < end &&
+                                      (availability.EndDateTime == null || availability.EndDateTime > start), ct);
+        if (isUnavailable)
+        {
+            return false;
+        }
+
+        var reservingStatuses = new[]
+        {
+            AppointmentStatus.PendingReceptionReview,
+            AppointmentStatus.PendingDepartmentReview,
+            AppointmentStatus.AwaitingPatientResponse,
+            AppointmentStatus.Confirmed,
+            AppointmentStatus.CheckedIn,
+            AppointmentStatus.Waiting,
+            AppointmentStatus.Called,
+            AppointmentStatus.InService
+        };
+
+        return !await _dbContext.Appointments
+            .AsNoTracking()
+            .AnyAsync(appointment => appointment.AppointmentId != excludedAppointmentId &&
+                                     reservingStatuses.Contains(appointment.Status) &&
+                                     appointment.ScheduledStart < end &&
+                                     appointment.ScheduledEnd > start &&
+                                     (appointment.AssignedDentistUserId == dentistUserId ||
+                                      appointment.RequestedDentistUserId == dentistUserId), ct);
     }
 
     private async Task<string> GenerateUniqueAppointmentCodeAsync(CancellationToken ct)

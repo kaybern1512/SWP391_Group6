@@ -27,6 +27,11 @@ public class InvoiceService : IInvoiceService
 
     public async Task<ApiResponse<List<InvoiceDto>>> GetInvoicesAsync(long? currentUserId = null, string? currentRole = null, CancellationToken ct = default)
     {
+        if (!CanViewInvoices(currentRole) || (string.Equals(currentRole, UserRole.Patient, StringComparison.OrdinalIgnoreCase) && currentUserId is null))
+        {
+            return ApiResponse<List<InvoiceDto>>.Fail("Bạn không có quyền xem danh sách hóa đơn.");
+        }
+
         await EnsureInvoicesExistAsync(ct);
 
         var query = _dbContext.Invoices
@@ -164,6 +169,11 @@ public class InvoiceService : IInvoiceService
 
     public async Task<ApiResponse<InvoiceReportDto>> GetInvoiceReportAsync(long? currentUserId = null, string? currentRole = null, CancellationToken ct = default)
     {
+        if (!CanViewInvoices(currentRole) || (string.Equals(currentRole, UserRole.Patient, StringComparison.OrdinalIgnoreCase) && currentUserId is null))
+        {
+            return ApiResponse<InvoiceReportDto>.Fail("Bạn không có quyền xem báo cáo hóa đơn.");
+        }
+
         var query = _dbContext.Invoices
             .AsNoTracking()
             .Include(i => i.Appointment)
@@ -281,9 +291,14 @@ public class InvoiceService : IInvoiceService
         }
 
         return role.Equals(UserRole.Receptionist, StringComparison.OrdinalIgnoreCase)
-            || role.Equals(UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase)
-            || role.Equals(UserRole.DepartmentManager, StringComparison.OrdinalIgnoreCase)
-            || role.Equals(UserRole.Dentist, StringComparison.OrdinalIgnoreCase);
+            || role.Equals(UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool CanViewInvoices(string? role)
+    {
+        return string.Equals(role, UserRole.Patient, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, UserRole.Receptionist, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool CanConfirmPayment(string? role)

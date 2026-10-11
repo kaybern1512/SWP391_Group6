@@ -34,6 +34,7 @@ public class InvoicesController : ControllerBase
     }
 
     [HttpGet("api/invoices")]
+    [Authorize(Roles = $"{UserRole.Patient},{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<System.Collections.Generic.List<InvoiceDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetInvoices(CancellationToken ct)
     {
@@ -49,6 +50,7 @@ public class InvoicesController : ControllerBase
     }
 
     [HttpGet("api/invoices/report")]
+    [Authorize(Roles = $"{UserRole.Patient},{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<InvoiceReportDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetInvoiceReport(CancellationToken ct)
     {
@@ -64,6 +66,7 @@ public class InvoicesController : ControllerBase
     }
 
     [HttpGet("api/invoices/{invoiceId:long}")]
+    [Authorize(Roles = $"{UserRole.Patient},{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     public async Task<IActionResult> GetInvoiceById(long invoiceId, CancellationToken ct)
     {
         var currentUserId = GetCurrentUserId();
@@ -84,6 +87,7 @@ public class InvoicesController : ControllerBase
     }
 
     [HttpPost("api/invoices/{invoiceId:long}/confirm-payment")]
+    [Authorize(Roles = $"{UserRole.Patient},{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<InvoiceDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<InvoiceDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ConfirmPayment(long invoiceId, [FromBody] ConfirmPaymentRequest request, CancellationToken ct)

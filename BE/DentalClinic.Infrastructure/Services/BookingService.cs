@@ -148,7 +148,9 @@ public class BookingService : IBookingService
                 .AsNoTracking()
                 .AnyAsync(dd => dd.DentistUserId == dentistId &&
                                 dd.DepartmentId == query.DepartmentId &&
-                                dd.Status == "Active", ct);
+                                dd.Status == "Active" &&
+                                dd.DentistUser.User.EmploymentStatus == "Active" &&
+                                dd.DentistUser.User.User.Status == AccountStatus.Active, ct);
 
             if (!isAssigned)
             {
@@ -167,6 +169,7 @@ public class BookingService : IBookingService
             var dentistSchedules = await _dbContext.DentistWorkSchedules
                 .AsNoTracking()
                 .Where(ws => ws.DentistUserId == dentistId &&
+                             ws.DepartmentId == query.DepartmentId &&
                              ws.WorkDate == targetDateOnly &&
                              ws.Status == "Scheduled")
                 .ToListAsync(ct);
@@ -190,6 +193,9 @@ public class BookingService : IBookingService
             // Existing active appointments for dentist on target date
             var occupiedStatuses = new[]
             {
+                AppointmentStatus.PendingReceptionReview,
+                AppointmentStatus.PendingDepartmentReview,
+                AppointmentStatus.AwaitingPatientResponse,
                 AppointmentStatus.Confirmed,
                 AppointmentStatus.CheckedIn,
                 AppointmentStatus.Waiting,
@@ -208,47 +214,60 @@ public class BookingService : IBookingService
                 .ToListAsync(ct);
 
             // Generate slots within dentist schedule intervals
-            foreach (var sched in dentistSchedules)
+            foreach (var deptSched in deptSchedules)
             {
-                var currentSlotStart = targetDate.Add(sched.StartTime.ToTimeSpan());
-                var schedEnd = targetDate.Add(sched.EndTime.ToTimeSpan());
+                var departmentStart = targetDate.Add(deptSched.StartTime.ToTimeSpan());
+                var departmentEnd = targetDate.Add(deptSched.EndTime.ToTimeSpan());
 
-                while (currentSlotStart.AddMinutes(durationMinutes) <= schedEnd)
+                foreach (var dentistSched in dentistSchedules)
                 {
-                    var currentSlotEnd = currentSlotStart.AddMinutes(durationMinutes);
+                    var dentistStart = targetDate.Add(dentistSched.StartTime.ToTimeSpan());
+                    var dentistEnd = targetDate.Add(dentistSched.EndTime.ToTimeSpan());
+                    var currentSlotStart = departmentStart;
+                    var schedEnd = departmentEnd < dentistEnd ? departmentEnd : dentistEnd;
 
-                    // Skip past slots if target date is today
-                    if (targetDate == DateTime.Today && currentSlotStart <= DateTime.Now.AddMinutes(15))
+                    while (currentSlotStart < dentistStart)
                     {
                         currentSlotStart = currentSlotStart.AddMinutes(slotStepMinutes);
-                        continue;
                     }
 
-                    // Check unavailabilities
-                    bool isUnavailable = unavailabilities.Any(u =>
-                        u.StartDateTime < currentSlotEnd &&
-                        (u.EndDateTime == null || u.EndDateTime > currentSlotStart));
-
-                    if (!isUnavailable)
+                    while (currentSlotStart.AddMinutes(durationMinutes) <= schedEnd)
                     {
-                        // Check appointment conflicts: existing.ScheduledStart < slotEnd && existing.ScheduledEnd > slotStart
-                        bool hasConflict = existingAppointments.Any(a =>
-                            a.ScheduledStart!.Value < currentSlotEnd &&
-                            a.ScheduledEnd!.Value > currentSlotStart);
+                        var currentSlotEnd = currentSlotStart.AddMinutes(durationMinutes);
 
-                        if (!hasConflict)
+                        // Skip past slots if target date is today
+                        if (targetDate == DateTime.Today && currentSlotStart <= DateTime.Now.AddMinutes(15))
                         {
-                            availableSlots.Add(new AvailableSlotDto
-                            {
-                                StartTime = currentSlotStart,
-                                EndTime = currentSlotEnd,
-                                DentistUserId = dentistId,
-                                DentistName = dentistName
-                            });
+                            currentSlotStart = currentSlotStart.AddMinutes(slotStepMinutes);
+                            continue;
                         }
-                    }
 
-                    currentSlotStart = currentSlotStart.AddMinutes(slotStepMinutes);
+                        // Check unavailabilities
+                        bool isUnavailable = unavailabilities.Any(u =>
+                            u.StartDateTime < currentSlotEnd &&
+                            (u.EndDateTime == null || u.EndDateTime > currentSlotStart));
+
+                        if (!isUnavailable)
+                        {
+                            // Check appointment conflicts: existing.ScheduledStart < slotEnd && existing.ScheduledEnd > slotStart
+                            bool hasConflict = existingAppointments.Any(a =>
+                                a.ScheduledStart!.Value < currentSlotEnd &&
+                                a.ScheduledEnd!.Value > currentSlotStart);
+
+                            if (!hasConflict)
+                            {
+                                availableSlots.Add(new AvailableSlotDto
+                                {
+                                    StartTime = currentSlotStart,
+                                    EndTime = currentSlotEnd,
+                                    DentistUserId = dentistId,
+                                    DentistName = dentistName
+                                });
+                            }
+                        }
+
+                        currentSlotStart = currentSlotStart.AddMinutes(slotStepMinutes);
+                    }
                 }
             }
         }
@@ -261,6 +280,8 @@ public class BookingService : IBookingService
             var departmentDentistIds = await _dbContext.DentistDepartments
                 .AsNoTracking()
                 .Where(dd => dd.DepartmentId == query.DepartmentId && dd.Status == "Active")
+                .Where(dd => dd.DentistUser.User.EmploymentStatus == "Active" &&
+                             dd.DentistUser.User.User.Status == AccountStatus.Active)
                 .Select(dd => dd.DentistUserId)
                 .ToListAsync(ct);
 
@@ -275,6 +296,7 @@ public class BookingService : IBookingService
             var dentistSchedules = await _dbContext.DentistWorkSchedules
                 .AsNoTracking()
                 .Where(ws => departmentDentistIds.Contains(ws.DentistUserId) &&
+                             ws.DepartmentId == query.DepartmentId &&
                              ws.WorkDate == targetDateOnly &&
                              ws.Status == "Scheduled")
                 .ToListAsync(ct);
@@ -289,6 +311,9 @@ public class BookingService : IBookingService
 
             var occupiedStatuses = new[]
             {
+                AppointmentStatus.PendingReceptionReview,
+                AppointmentStatus.PendingDepartmentReview,
+                AppointmentStatus.AwaitingPatientResponse,
                 AppointmentStatus.Confirmed,
                 AppointmentStatus.CheckedIn,
                 AppointmentStatus.Waiting,
@@ -302,8 +327,10 @@ public class BookingService : IBookingService
                             a.ScheduledEnd != null &&
                             a.ScheduledStart.Value.Date == targetDate &&
                             occupiedStatuses.Contains(a.Status) &&
-                            a.AssignedDentistUserId != null &&
-                            departmentDentistIds.Contains(a.AssignedDentistUserId.Value))
+                            ((a.AssignedDentistUserId.HasValue &&
+                              departmentDentistIds.Contains(a.AssignedDentistUserId.Value)) ||
+                             (a.RequestedDentistUserId.HasValue &&
+                              departmentDentistIds.Contains(a.RequestedDentistUserId.Value))))
                 .ToListAsync(ct);
 
             // Iterate through department working schedule blocks
@@ -344,7 +371,7 @@ public class BookingService : IBookingService
 
                         // Dentist must have no overlapping appointments
                         bool hasConflict = existingAppointments.Any(a =>
-                            a.AssignedDentistUserId == dId &&
+                            (a.AssignedDentistUserId == dId || a.RequestedDentistUserId == dId) &&
                             a.ScheduledStart!.Value < currentSlotEnd &&
                             a.ScheduledEnd!.Value > currentSlotStart);
 
@@ -371,6 +398,10 @@ public class BookingService : IBookingService
             }
         }
 
-        return ApiResponse<List<AvailableSlotDto>>.Ok(availableSlots);
+        return ApiResponse<List<AvailableSlotDto>>.Ok(availableSlots
+            .GroupBy(slot => slot.StartTime)
+            .Select(group => group.First())
+            .OrderBy(slot => slot.StartTime)
+            .ToList());
     }
 }

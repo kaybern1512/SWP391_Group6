@@ -80,30 +80,25 @@ public class InvoiceService : IInvoiceService
 
     public bool TryConfirmPayment(int id, string paymentMethod, string? transactionReference, out BillingInvoiceRecordViewModel? invoice)
     {
-        invoice = GetById(id);
-        if (invoice == null)
-        {
-            return false;
-        }
-
+        invoice = null;
         if (string.IsNullOrWhiteSpace(paymentMethod))
         {
             return false;
         }
 
-        if (_apiClient != null)
+        if (_apiClient is null)
         {
-            var apiResult = _apiClient.ConfirmPayment(id, paymentMethod.Trim(), transactionReference).GetAwaiter().GetResult();
-            if (apiResult.IsSuccess && apiResult.Data != null)
-            {
-                invoice = apiResult.Data;
-                return true;
-            }
+            return false;
         }
 
-        BillingSeedData.MarkAsPaid(id, paymentMethod.Trim(), transactionReference);
-        invoice = BillingSeedData.GetById(id);
-        return invoice != null;
+        var apiResult = _apiClient.ConfirmPayment(id, paymentMethod.Trim(), transactionReference).GetAwaiter().GetResult();
+        if (!apiResult.IsSuccess || apiResult.Data is null)
+        {
+            return false;
+        }
+
+        invoice = apiResult.Data;
+        return true;
     }
 
     private List<BillingInvoiceRecordViewModel>? TryGetFromApi()

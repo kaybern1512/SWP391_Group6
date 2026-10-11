@@ -1,15 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Features.Appointments.DTOs;
+using DentalClinic.Application.Features.Booking.DTOs;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using DentalClinic.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
@@ -235,6 +238,35 @@ public class AppointmentFlowTests
             Status = "Active"
         });
 
+        for (byte day = 1; day <= 7; day++)
+        {
+            db.DepartmentWorkSchedules.Add(new DepartmentWorkSchedule
+            {
+                DepartmentId = 1,
+                DayOfWeek = day,
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(18, 0),
+                IsActive = true
+            });
+        }
+
+        for (var dayOffset = 0; dayOffset <= 30; dayOffset++)
+        {
+            var workDate = DateOnly.FromDateTime(DateTime.Today.AddDays(dayOffset));
+            foreach (var dentistId in new long[] { 401, 402 })
+            {
+                db.DentistWorkSchedules.Add(new DentistWorkSchedule
+                {
+                    DentistUserId = dentistId,
+                    DepartmentId = 1,
+                    WorkDate = workDate,
+                    StartTime = new TimeOnly(8, 0),
+                    EndTime = new TimeOnly(18, 0),
+                    Status = "Scheduled"
+                });
+            }
+        }
+
         // Rooms & Chairs
         var room = new Room
         {
@@ -355,6 +387,146 @@ public class AppointmentFlowTests
 
         Assert.False(result.Success);
         Assert.Contains("quá khứ", result.Message);
+    }
+
+    [Fact]
+    public async Task Booking_OutsideDepartmentHours_IsRejected()
+    {
+        using var db = CreateDbContext(nameof(Booking_OutsideDepartmentHours_IsRejected));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var result = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            RequestedDentistUserId = 401,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(7),
+            ReasonForVisit = "Khám ngoài giờ"
+        });
+
+        Assert.False(result.Success);
+        Assert.Contains("Khung giờ", result.Message);
+    }
+
+    [Fact]
+    public async Task Booking_WhenRequestedDentistAlreadyReserved_IsRejected()
+    {
+        using var db = CreateDbContext(nameof(Booking_WhenRequestedDentistAlreadyReserved_IsRejected));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var slot = DateTime.Today.AddDays(2).AddHours(9);
+
+        var firstBooking = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            RequestedDentistUserId = 401,
+            ScheduledStart = slot,
+            ReasonForVisit = "Cuộc hẹn đầu"
+        });
+        Assert.True(firstBooking.Success);
+
+        var secondBooking = await service.CreatePatientAppointmentAsync(102, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            RequestedDentistUserId = 401,
+            ScheduledStart = slot,
+            ReasonForVisit = "Cuộc hẹn trùng"
+        });
+
+        Assert.False(secondBooking.Success);
+        Assert.Contains("Khung giờ", secondBooking.Message);
+    }
+
+    [Fact]
+    public async Task ManagerConfirm_WhenAssignedDentistIsNotInDepartment_IsRejected()
+    {
+        using var db = CreateDbContext(nameof(ManagerConfirm_WhenAssignedDentistIsNotInDepartment_IsRejected));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var slot = DateTime.Today.AddDays(2).AddHours(9);
+
+        var booking = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = slot,
+            ReasonForVisit = "Khám"
+        });
+        await service.ReceptionistForwardAsync(booking.Data!.AppointmentId, 201, null);
+
+        var confirmation = await service.ManagerConfirmAsync(booking.Data.AppointmentId, 301, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 403,
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = slot,
+            ScheduledEnd = slot.AddMinutes(30)
+        });
+
+        Assert.False(confirmation.Success);
+        Assert.Contains("không hoạt động hoặc không thuộc", confirmation.Message);
+    }
+
+    [Fact]
+    public async Task ManagerConfirm_WhenDurationDoesNotMatchService_IsRejected()
+    {
+        using var db = CreateDbContext(nameof(ManagerConfirm_WhenDurationDoesNotMatchService_IsRejected));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var slot = DateTime.Today.AddDays(2).AddHours(9);
+
+        var booking = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = slot,
+            ReasonForVisit = "Khám"
+        });
+        await service.ReceptionistForwardAsync(booking.Data!.AppointmentId, 201, null);
+
+        var confirmation = await service.ManagerConfirmAsync(booking.Data.AppointmentId, 301, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = slot,
+            ScheduledEnd = slot.AddMinutes(60)
+        });
+
+        Assert.False(confirmation.Success);
+        Assert.Contains("Thời lượng", confirmation.Message);
+    }
+
+    [Fact]
+    public async Task SpecificDentistSlots_AreLimitedToDepartmentHours()
+    {
+        using var db = CreateDbContext(nameof(SpecificDentistSlots_AreLimitedToDepartmentHours));
+        await SeedBasicDataAsync(db);
+        var targetDate = DateTime.Today.AddDays(2);
+        var workDate = DateOnly.FromDateTime(targetDate);
+        var departmentSchedule = await db.DepartmentWorkSchedules.FirstAsync(schedule =>
+            schedule.DepartmentId == 1 && schedule.DayOfWeek == (targetDate.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)targetDate.DayOfWeek));
+        departmentSchedule.StartTime = new TimeOnly(10, 0);
+        departmentSchedule.EndTime = new TimeOnly(12, 0);
+        await db.SaveChangesAsync();
+
+        var bookingService = new BookingService(db, NullLogger<BookingService>.Instance);
+        var result = await bookingService.GetAvailableSlotsAsync(new AvailableSlotsQuery
+        {
+            DepartmentId = 1,
+            ServiceId = 10,
+            Date = targetDate,
+            DentistUserId = 401
+        });
+
+        Assert.True(result.Success);
+        Assert.NotEmpty(result.Data!);
+        Assert.All(result.Data!, slot => Assert.True(slot.StartTime >= targetDate.AddHours(10) &&
+                                                     slot.EndTime <= targetDate.AddHours(12)));
+        Assert.Equal(targetDate.AddHours(10), result.Data!.First().StartTime);
     }
 
     [Fact]
@@ -802,7 +974,7 @@ public class AppointmentFlowTests
         {
             DepartmentId = 1,
             RequestedServiceId = 10,
-            ScheduledStart = DateTime.Now.AddHours(2),
+            ScheduledStart = DateTime.Today.AddDays(1).AddHours(9),
             ReasonForVisit = "Khám hôm nay"
         });
         var apptId = bookResult.Data!.AppointmentId;

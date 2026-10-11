@@ -196,6 +196,32 @@ public class InvoiceServiceTests
     }
 
     [Fact]
+    public async Task GetInvoicesAsync_ForDentist_IsDenied()
+    {
+        var db = CreateDbContext(nameof(GetInvoicesAsync_ForDentist_IsDenied));
+        await SeedInvoicesAsync(db);
+        var service = new InvoiceService(db, NullLogger<InvoiceService>.Instance);
+
+        var result = await service.GetInvoicesAsync(currentUserId: 401, currentRole: UserRole.Dentist);
+
+        Assert.False(result.Success);
+        Assert.Contains("không có quyền", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetInvoiceReportAsync_ForDepartmentManager_IsDenied()
+    {
+        var db = CreateDbContext(nameof(GetInvoiceReportAsync_ForDepartmentManager_IsDenied));
+        await SeedInvoicesAsync(db);
+        var service = new InvoiceService(db, NullLogger<InvoiceService>.Instance);
+
+        var result = await service.GetInvoiceReportAsync(currentUserId: 301, currentRole: UserRole.DepartmentManager);
+
+        Assert.False(result.Success);
+        Assert.Contains("không có quyền", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task GetInvoiceByIdAsync_WhenPatientDoesNotOwnInvoice_ReturnsFailure()
     {
         var db = CreateDbContext(nameof(GetInvoiceByIdAsync_WhenPatientDoesNotOwnInvoice_ReturnsFailure));
