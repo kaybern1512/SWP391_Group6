@@ -35,7 +35,7 @@ public class TreatmentService : ITreatmentService
                 .ThenInclude(tpi => tpi.DepartmentService)
             .Include(tp => tp.TreatmentPlanItems)
                 .ThenInclude(tpi => tpi.AssignedDentistUser)
-                    .ThenInclude(d => d.User)
+                    .ThenInclude(d => d!.User)
             .AsQueryable();
 
         if (dentistId > 0)
@@ -79,11 +79,11 @@ public class TreatmentService : ITreatmentService
                 .ThenInclude(tpi => tpi.DepartmentService)
             .Include(tp => tp.TreatmentPlanItems)
                 .ThenInclude(tpi => tpi.AssignedDentistUser)
-                    .ThenInclude(d => d.User)
+                    .ThenInclude(d => d!.User)
             .Include(tp => tp.TreatmentPlanItems)
                 .ThenInclude(tpi => tpi.TreatmentSessions)
                     .ThenInclude(ts => ts.DentistUser)
-                        .ThenInclude(d => d.User)
+                        .ThenInclude(d => d!.User)
             .Include(tp => tp.TreatmentPlanItems)
                 .ThenInclude(tpi => tpi.TreatmentSessions)
                     .ThenInclude(ts => ts.Appointment)
@@ -218,7 +218,7 @@ public class TreatmentService : ITreatmentService
             .AsNoTracking()
             .Include(i => i.DepartmentService)
             .Include(i => i.AssignedDentistUser)
-                .ThenInclude(d => d.User)
+                .ThenInclude(d => d!.User)
             .FirstOrDefaultAsync(i => i.TreatmentPlanItemId == item.TreatmentPlanItemId, ct);
 
         return ApiResponse<TreatmentPlanItemDto>.Ok(MapItemToDto(createdItem!));
@@ -446,7 +446,7 @@ public class TreatmentService : ITreatmentService
                 .ThenInclude(tpi => tpi.DepartmentService)
             .Include(tp => tp.TreatmentPlanItems)
                 .ThenInclude(tpi => tpi.AssignedDentistUser)
-                    .ThenInclude(d => d.User)
+                    .ThenInclude(d => d!.User)
             .Where(tp => managedDeptIds.Contains(tp.DepartmentId));
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -514,11 +514,11 @@ public class TreatmentService : ITreatmentService
                 .ThenInclude(tpi => tpi.DepartmentService)
             .Include(tp => tp.TreatmentPlanItems)
                 .ThenInclude(tpi => tpi.AssignedDentistUser)
-                    .ThenInclude(d => d.User)
+                    .ThenInclude(d => d!.User)
             .Include(tp => tp.TreatmentPlanItems)
                 .ThenInclude(tpi => tpi.TreatmentSessions)
                     .ThenInclude(ts => ts.DentistUser)
-                        .ThenInclude(d => d.User)
+                        .ThenInclude(d => d!.User)
             .Include(tp => tp.TreatmentPlanItems)
                 .ThenInclude(tpi => tpi.TreatmentSessions)
                     .ThenInclude(ts => ts.PerformedServices)
