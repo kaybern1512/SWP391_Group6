@@ -558,6 +558,9 @@
                 });
             } catch (err) {
                 console.error(err);
+                if (window.toastError) {
+                    window.toastError('Không thể tải danh sách bác sĩ của chuyên khoa.', 'Lỗi Tải Dữ Liệu');
+                }
             }
         }
 

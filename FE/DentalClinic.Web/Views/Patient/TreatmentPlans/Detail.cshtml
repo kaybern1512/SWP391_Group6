@@ -31,6 +31,12 @@
                             case "Completed":
                                 <span class="badge bg-success px-3 py-2"><i class="bi bi-check-all me-1"></i>Đã hoàn thành</span>
                                 break;
+                            case "Draft":
+                                <span class="badge bg-secondary px-3 py-2"><i class="bi bi-pencil-square me-1"></i>Bản nháp</span>
+                                break;
+                            case "Cancelled":
+                                <span class="badge bg-danger px-3 py-2"><i class="bi bi-x-circle me-1"></i>Đã hủy</span>
+                                break;
                             default:
                                 <span class="badge bg-light text-dark border px-3 py-2">@Model.Plan.Status</span>
                                 break;
@@ -108,6 +114,9 @@
                                     break;
                                 case "Pending":
                                     <span class="badge bg-secondary px-3 py-2"><i class="bi bi-hourglass me-1"></i>Chờ thực hiện</span>
+                                    break;
+                                case "Cancelled":
+                                    <span class="badge bg-danger px-3 py-2"><i class="bi bi-x-circle me-1"></i>Đã hủy</span>
                                     break;
                                 default:
                                     <span class="badge bg-light text-dark border px-3 py-2">@phase.Status</span>

@@ -204,7 +204,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // Intercept click on [data-confirm] buttons / links (Only actionable elements, NEVER generic containers or inputs)
   document.addEventListener('click', function (e) {
     const trigger = e.target.closest('button[data-confirm], a[data-confirm], input[type="submit"][data-confirm], input[type="button"][data-confirm]');
-    if (!trigger) return;
+    if (!trigger || trigger.dataset.confirmBypassed === 'true') return;
 
     const message = trigger.getAttribute('data-confirm');
     const form = trigger.closest('form');
@@ -213,6 +213,7 @@ document.addEventListener('DOMContentLoaded', function () {
     e.stopPropagation();
 
     openConfirmModal(message, function () {
+      trigger.dataset.confirmBypassed = 'true';
       if (trigger.tagName === 'A' && trigger.href) {
         window.location.href = trigger.href;
       } else if (form) {

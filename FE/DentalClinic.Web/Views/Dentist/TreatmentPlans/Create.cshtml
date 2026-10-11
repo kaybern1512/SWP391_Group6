@@ -16,13 +16,6 @@
         </a>
     </div>
 
-    @if (TempData["ErrorMessage"] != null)
-    {
-        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    }
 
     <form method="post" asp-action="Create" id="createPlanForm">
         @Html.AntiForgeryToken()
@@ -120,7 +113,7 @@
     </form>
 </div>
 
-<!-- Datalist dịch vụ để JavaScript clone -->
+@section Scripts {
 <script>
     const availableServices = [
         @foreach (var s in Model.Services)
@@ -225,3 +218,4 @@
         }
     });
 </script>
+}
