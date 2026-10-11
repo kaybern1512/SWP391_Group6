@@ -416,9 +416,18 @@
 
         function goToStep(step) {
             if (step > currentStep) {
-                if (currentStep === 1 && selectedDept.id === 0) return;
-                if (currentStep === 2 && selectedService.id === 0) return;
-                if (currentStep === 4 && !selectedSlot) return;
+                if (currentStep === 1 && selectedDept.id === 0) {
+                    window.toastWarning('Vui lòng chọn một chuyên khoa khám bệnh để tiếp tục.', 'Yêu Cầu Chọn');
+                    return;
+                }
+                if (currentStep === 2 && selectedService.id === 0) {
+                    window.toastWarning('Vui lòng chọn một dịch vụ nha khoa để tiếp tục.', 'Yêu Cầu Chọn');
+                    return;
+                }
+                if (currentStep === 4 && !selectedSlot) {
+                    window.toastWarning('Vui lòng chọn một khung giờ hẹn còn trống để tiếp tục.', 'Yêu Cầu Chọn');
+                    return;
+                }
                 if (currentStep === 5) {
                     const reason = document.getElementById('inputReasonForVisit').value.trim();
                     const reasonError = document.getElementById('reasonErrorMsg');

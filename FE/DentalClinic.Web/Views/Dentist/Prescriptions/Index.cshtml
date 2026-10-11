@@ -160,7 +160,7 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form asp-action="Create" method="post">
+            <form asp-action="Create" method="post" onsubmit="return preparePrescriptionJson()">
                 @Html.AntiForgeryToken()
                 <input type="hidden" id="prescriptionItemsJsonInput" name="ItemsJson" value="[]" />
 
@@ -212,7 +212,7 @@
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy Bỏ</button>
-                    <button type="submit" class="btn btn-primary px-4 fw-medium" onclick="preparePrescriptionJson()">
+                    <button type="submit" class="btn btn-primary px-4 fw-medium">
                         <i class="bi bi-check-circle me-1"></i> Hoàn Tất & Lưu Đơn Thuốc
                     </button>
                 </div>
@@ -279,7 +279,14 @@
                 });
             }
         });
+
+        if (list.length === 0) {
+            window.toastWarning('Vui lòng thêm ít nhất một loại thuốc hợp lệ vào đơn thuốc trước khi hoàn tất.', 'Thiếu Danh Mục Thuốc');
+            return false;
+        }
+
         document.getElementById("prescriptionItemsJsonInput").value = JSON.stringify(list);
+        return true;
     }
 
     document.addEventListener("DOMContentLoaded", function () {
