@@ -9,6 +9,7 @@ namespace DentalClinic.Web.Services;
 public interface IAuthCookieService
 {
     Task SignInUserAsync(UserInfoDto userInfo, bool isPersistent = false);
+    Task SignInUserAsync(UserInfoDto userInfo, bool isPersistent, string? accessToken, string? refreshToken);
     Task UpdateUserClaimsAsync(string? newFullName = null, string? newAvatarUrl = null);
     Task SignOutUserAsync();
 }
@@ -25,7 +26,15 @@ public class AuthCookieService : IAuthCookieService
     private HttpContext HttpContext => _httpContextAccessor.HttpContext
         ?? throw new InvalidOperationException("HttpContext is not accessible.");
 
-    public async Task SignInUserAsync(UserInfoDto userInfo, bool isPersistent = false)
+    public Task SignInUserAsync(UserInfoDto userInfo, bool isPersistent = false)
+    {
+        var session = _httpContextAccessor.HttpContext?.Session;
+        var token = session?.GetString("DentalClinic_AccessToken");
+        var refresh = session?.GetString("DentalClinic_RefreshToken");
+        return SignInUserAsync(userInfo, isPersistent, token, refresh);
+    }
+
+    public async Task SignInUserAsync(UserInfoDto userInfo, bool isPersistent, string? accessToken, string? refreshToken)
     {
         var claims = new List<Claim>
         {
@@ -47,6 +56,16 @@ public class AuthCookieService : IAuthCookieService
             ExpiresUtc = isPersistent ? DateTimeOffset.UtcNow.AddDays(14) : DateTimeOffset.UtcNow.AddHours(4),
             AllowRefresh = true
         };
+
+        if (!string.IsNullOrEmpty(accessToken) || !string.IsNullOrEmpty(refreshToken))
+        {
+            var tokens = new List<AuthenticationToken>();
+            if (!string.IsNullOrEmpty(accessToken))
+                tokens.Add(new AuthenticationToken { Name = "access_token", Value = accessToken });
+            if (!string.IsNullOrEmpty(refreshToken))
+                tokens.Add(new AuthenticationToken { Name = "refresh_token", Value = refreshToken });
+            authProperties.StoreTokens(tokens);
+        }
 
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, authProperties);
     }

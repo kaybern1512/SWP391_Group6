@@ -107,12 +107,13 @@ builder.Services.AddHttpClient("RawApiClient", client =>
 })
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
-// Auth API client (without delegating handler since auth endpoints do not need bearer tokens)
+// Auth API client with ApiAuthorizationHandler (attaches Bearer token for endpoints like change-password)
 builder.Services.AddHttpClient<IAuthApiService, AuthApiService>(client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 })
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
 // Profile API client with ApiAuthorizationHandler (attaches Bearer and handles 401 refresh retry)

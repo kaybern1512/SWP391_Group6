@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 
 namespace DentalClinic.Web.Services;
@@ -29,12 +31,38 @@ public class TokenService : ITokenService
 
     public string? GetAccessToken()
     {
-        return Session?.GetString(AccessTokenKey);
+        var token = Session?.GetString(AccessTokenKey);
+        if (!string.IsNullOrEmpty(token)) return token;
+
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext?.User.Identity?.IsAuthenticated == true)
+        {
+            var cookieToken = httpContext.GetTokenAsync(CookieAuthenticationDefaults.AuthenticationScheme, "access_token").GetAwaiter().GetResult();
+            if (!string.IsNullOrEmpty(cookieToken))
+            {
+                try { Session?.SetString(AccessTokenKey, cookieToken); } catch { }
+                return cookieToken;
+            }
+        }
+        return null;
     }
 
     public string? GetRefreshToken()
     {
-        return Session?.GetString(RefreshTokenKey);
+        var token = Session?.GetString(RefreshTokenKey);
+        if (!string.IsNullOrEmpty(token)) return token;
+
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext?.User.Identity?.IsAuthenticated == true)
+        {
+            var cookieToken = httpContext.GetTokenAsync(CookieAuthenticationDefaults.AuthenticationScheme, "refresh_token").GetAwaiter().GetResult();
+            if (!string.IsNullOrEmpty(cookieToken))
+            {
+                try { Session?.SetString(RefreshTokenKey, cookieToken); } catch { }
+                return cookieToken;
+            }
+        }
+        return null;
     }
 
     public DateTime? GetTokenExpiry()
