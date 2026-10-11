@@ -235,7 +235,7 @@
                             <div class="border-top pt-3">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <span class="fw-semibold text-dark small text-uppercase">
-                                        <i class="bi bi-clock-history me-1 text-primary"></i>Lịch sử các buổi thực hiện (@phase.Sessions.Count buổi)
+                                        <i class="bi bi-clock-history me-1 text-primary"></i>Lịch sử các buổi thực hiện (@(phase.Sessions?.Count ?? 0) buổi)
                                     </span>
                                 </div>
 
@@ -346,7 +346,7 @@
                         </div>
                         <div class="col-12 col-md-4">
                             <label class="form-label fw-bold">Thứ Tự Giai Đoạn</label>
-                            <input type="number" name="SequenceNo" class="form-control" value="@(Model.Plan.Items.Count + 1)" min="1" />
+                            <input type="number" name="SequenceNo" class="form-control" value="@((Model.Plan?.Items?.Count ?? 0) + 1)" min="1" />
                         </div>
                         <div class="col-12 col-md-4">
                             <label class="form-label fw-bold">Ngày Dự Kiến Thực Hiện</label>
@@ -359,7 +359,7 @@
                         <div class="col-12 col-md-6">
                             <label class="form-label fw-bold">Bác Sĩ Phụ Trách</label>
                             <select name="AssignedDentistUserId" class="form-select">
-                                <option value="@Model.Plan.CreatedByDentistUserId">-- Giữ nguyên bác sĩ lập (@Model.Plan.CreatedByDentistName) --</option>
+                                <option value="@(Model.Plan?.CreatedByDentistUserId ?? 0)">-- Giữ nguyên bác sĩ lập (@(Model.Plan?.CreatedByDentistName ?? "Bác sĩ")) --</option>
                                 @foreach (var d in Model.Dentists)
                                 {
                                     <option value="@d.DentistUserId">@d.FullName @(string.IsNullOrEmpty(d.Specialization) ? "" : $"({d.Specialization})")</option>

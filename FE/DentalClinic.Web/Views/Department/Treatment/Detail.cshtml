@@ -164,7 +164,7 @@
                         <!-- Session history under this phase -->
                         <div class="border-top pt-3">
                             <span class="fw-semibold text-dark small text-uppercase mb-2 d-block">
-                                <i class="bi bi-clock-history me-1 text-primary"></i>Nhật ký điều trị lâm sàng (@phase.Sessions.Count buổi đã thực hiện)
+                                <i class="bi bi-clock-history me-1 text-primary"></i>Nhật ký điều trị lâm sàng (@(phase.Sessions?.Count ?? 0) buổi đã thực hiện)
                             </span>
 
                             @if (phase.Sessions == null || phase.Sessions.Count == 0)
