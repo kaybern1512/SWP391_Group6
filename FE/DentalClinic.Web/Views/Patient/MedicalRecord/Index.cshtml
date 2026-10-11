@@ -1,0 +1,123 @@
+@model PatientMedicalRecordViewModel
+@{
+    ViewData["Title"] = "Hồ sơ bệnh án";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <h1 class="h3 fw-bold mb-1"><i class="bi bi-journal-medical text-primary me-2"></i>Hồ sơ bệnh án</h1>
+            <p class="text-muted mb-0">Hồ sơ của bạn ở chế độ chỉ xem. Liên hệ phòng khám nếu cần bổ sung thông tin.</p>
+        </div>
+        @if (Model.MedicalRecord != null)
+        {
+            <button class="btn btn-outline-primary" type="button" onclick="window.print()">
+                <i class="bi bi-printer me-1"></i>In hồ sơ
+            </button>
+        }
+    </div>
+
+    @if (Model.MedicalRecord == null)
+    {
+        <div class="alert @(string.IsNullOrWhiteSpace(Model.Message) ? "alert-info" : "alert-warning")" role="status">
+            <i class="bi bi-info-circle me-2"></i>
+            @(Model.Message ?? "Hồ sơ bệnh án chưa được tạo.")
+        </div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body d-flex flex-wrap justify-content-between gap-3">
+                <div>
+                    <div class="text-muted small">Bệnh nhân</div>
+                    <div class="fw-bold fs-5">@Model.MedicalRecord.PatientName</div>
+                    <div class="text-muted">Mã bệnh nhân: @Model.MedicalRecord.PatientCode</div>
+                </div>
+                <div>
+                    <div class="text-muted small">Mã hồ sơ</div>
+                    <div class="fw-semibold">#@Model.MedicalRecord.MedicalRecordId</div>
+                </div>
+                <div>
+                    <div class="text-muted small">Ngày lập</div>
+                    <div class="fw-semibold">@Model.MedicalRecord.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy")</div>
+                </div>
+                <div>
+                    <div class="text-muted small">Cập nhật gần nhất</div>
+                    <div class="fw-semibold">@(Model.MedicalRecord.UpdatedAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "—")</div>
+                </div>
+            </div>
+        </div>
+
+        @if (Model.MedicalRecord.ClinicalEntries.Count == 0)
+        {
+            <div class="card border-0 shadow-sm text-center py-5">
+                <div class="card-body">
+                    <i class="bi bi-clipboard2-pulse fs-1 text-muted"></i>
+                    <h5 class="mt-3">Chưa có lần khám nào được ghi nhận</h5>
+                    <p class="text-muted mb-0">Thông tin sẽ xuất hiện tại đây sau khi bác sĩ cập nhật hồ sơ.</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <h2 class="h5 fw-bold mb-3">Lịch sử khám (@Model.MedicalRecord.ClinicalEntries.Count)</h2>
+            @foreach (var entry in Model.MedicalRecord.ClinicalEntries.OrderByDescending(e => e.CreatedAt))
+            {
+                <article class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-white d-flex flex-wrap justify-content-between gap-2 py-3">
+                        <strong><i class="bi bi-calendar-event text-primary me-2"></i>@entry.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</strong>
+                        <span class="text-muted">Bác sĩ: @(string.IsNullOrWhiteSpace(entry.DentistName) ? "Chưa cập nhật" : entry.DentistName)
+                            @if (entry.AppointmentId.HasValue) { <text> · Lịch hẹn #@entry.AppointmentId</text> }
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6"><div class="small text-muted">Triệu chứng</div><div>@(entry.Symptoms ?? "—")</div></div>
+                            <div class="col-md-6"><div class="small text-muted">Khám lâm sàng</div><div>@(entry.ClinicalFindings ?? "—")</div></div>
+                            <div class="col-md-6"><div class="small text-muted">Chẩn đoán</div><div>@(entry.Diagnosis ?? "—")</div></div>
+                            <div class="col-md-6"><div class="small text-muted">Tình trạng răng</div><div>@(entry.DentalConditions ?? "—")</div></div>
+                            <div class="col-12"><div class="small text-muted">Ghi chú</div><div>@(entry.ClinicalNotes ?? "—")</div></div>
+                        </div>
+
+                        @if (entry.OdontogramEntries.Count > 0)
+                        {
+                            <hr />
+                            <h3 class="h6 fw-bold">Sơ đồ răng FDI</h3>
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (var tooth in entry.OdontogramEntries)
+                                {
+                                    <span class="badge text-bg-light border py-2 px-3">
+                                        Răng @tooth.ToothNumber · @tooth.Condition
+                                        @if (!string.IsNullOrWhiteSpace(tooth.Surface)) { <text> · @tooth.Surface</text> }
+                                    </span>
+                                }
+                            </div>
+                        }
+
+                        @if (entry.ImagingRecords.Count > 0)
+                        {
+                            <hr />
+                            <h3 class="h6 fw-bold">Chẩn đoán hình ảnh</h3>
+                            <div class="row g-3">
+                                @foreach (var image in entry.ImagingRecords)
+                                {
+                                    <div class="col-md-6">
+                                        <div class="border rounded p-3 h-100">
+                                            <div class="fw-semibold">@image.ImagingType</div>
+                                            <p class="small text-muted mb-2">@image.ResultSummary</p>
+                                            @if (Uri.TryCreate(image.FileUrl, UriKind.Absolute, out var imageUri)
+                                                && (imageUri.Scheme == Uri.UriSchemeHttps || imageUri.Scheme == Uri.UriSchemeHttp))
+                                            {
+                                                <a href="@image.FileUrl" target="_blank" rel="noopener noreferrer">Mở tệp hình ảnh <i class="bi bi-box-arrow-up-right"></i></a>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </article>
+            }
+        }
+    }
+</div>

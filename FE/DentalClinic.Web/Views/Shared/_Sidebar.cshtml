@@ -42,17 +42,13 @@
                 <i class="bi bi-calendar3"></i>
                 <span>My Appointments</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to EMR backend API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "PatientMedicalRecord" ? "active" : "")" asp-controller="PatientMedicalRecord" asp-action="Index">
                 <i class="bi bi-journal-medical"></i>
                 <span>Medical Record</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Treatment backend API.'); return false;">
-                <i class="bi bi-card-checklist"></i>
-                <span>Treatment Plans</span>
-            </a>
 
             <div class="nav-group-title">Management</div>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Invoice backend API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "PatientBilling" ? "active" : "")" asp-controller="PatientBilling" asp-action="Index">
                 <i class="bi bi-receipt"></i>
                 <span>Invoices & Payments</span>
             </a>
@@ -88,7 +84,7 @@
                 <i class="bi bi-person-plus"></i>
                 <span>Create Patient</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Billing invoice API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "ReceptionistBilling" ? "active" : "")" asp-controller="ReceptionistBilling" asp-action="Index">
                 <i class="bi bi-file-earmark-text"></i>
                 <span>Pending Invoices</span>
             </a>
@@ -106,25 +102,9 @@
                 <i class="bi bi-calendar-check"></i>
                 <span>Today's Appointments</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Patient EMR API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "DentistClinical" ? "active" : "")" asp-controller="DentistClinical" asp-action="Index">
                 <i class="bi bi-journal-medical"></i>
-                <span>Medical Records & EMR</span>
-            </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Treatment Plan API.'); return false;">
-                <i class="bi bi-diagram-3"></i>
-                <span>Treatment Plans</span>
-            </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Treatment Session API.'); return false;">
-                <i class="bi bi-clipboard2-check"></i>
-                <span>Record Session</span>
-            </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Prescription API.'); return false;">
-                <i class="bi bi-capsule"></i>
-                <span>Prescriptions</span>
-            </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Department Referral API.'); return false;">
-                <i class="bi bi-arrow-left-right"></i>
-                <span>Department Referrals</span>
+                <span>EMR & Treatment Workspace</span>
             </a>
 
             <div class="nav-group-title">Lịch trình & Đánh giá</div>

@@ -1,0 +1,108 @@
+@model DentalClinic.Web.ViewModels.Invoices.InvoiceReportViewModel
+@{
+    ViewData["Title"] = "Invoice Report";
+}
+
+<div class="container-fluid p-0">
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge-dc badge-role-receptionist">Reception</span>
+            </div>
+            <h1 class="page-title">Báo cáo doanh thu và hóa đơn</h1>
+            <p class="page-subtitle">Tổng quan nhanh về số hóa đơn, trạng thái thanh toán và doanh thu thực tế.</p>
+        </div>
+        <div class="page-actions">
+            <a asp-action="Index" class="btn btn-dc-outline">
+                <i class="bi bi-arrow-left me-1"></i> Quay lại danh sách
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-6 col-xl-3">
+            <div class="card-dc h-100">
+                <div class="card-dc-body">
+                    <div class="text-muted small">Tổng hóa đơn</div>
+                    <div class="fw-bold fs-3 mt-2">@Model.TotalInvoices</div>
+                    <div class="small text-muted">Số lượng hóa đơn đã tạo</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+            <div class="card-dc h-100">
+                <div class="card-dc-body">
+                    <div class="text-muted small">Đã thanh toán</div>
+                    <div class="fw-bold fs-3 mt-2 text-success">@Model.PaidInvoices</div>
+                    <div class="small text-muted">Hóa đơn đã xác nhận thanh toán</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+            <div class="card-dc h-100">
+                <div class="card-dc-body">
+                    <div class="text-muted small">Chờ thanh toán</div>
+                    <div class="fw-bold fs-3 mt-2 text-warning">@Model.PendingInvoices</div>
+                    <div class="small text-muted">Cần xử lý trong ngày</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+            <div class="card-dc h-100">
+                <div class="card-dc-body">
+                    <div class="text-muted small">Doanh thu</div>
+                    <div class="fw-bold fs-3 mt-2 text-primary">@Model.TotalRevenue.ToString("N0") đ</div>
+                    <div class="small text-muted">Tổng doanh thu đã thanh toán</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card-dc h-100">
+                <div class="card-dc-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-currency-dollar text-success"></i>
+                        <span>Doanh thu gần đây</span>
+                    </div>
+                </div>
+                <div class="card-dc-body">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Doanh thu 30 ngày</span>
+                        <strong class="text-success">@Model.RevenueThisMonth.ToString("N0") đ</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Chưa thanh toán</span>
+                        <strong class="text-warning">@Model.PendingAmount.ToString("N0") đ</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted">Hóa đơn mới nhất</span>
+                        <strong>@(Model.LatestInvoiceDate.HasValue ? Model.LatestInvoiceDate.Value.ToString("dd/MM/yyyy") : "-")</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card-dc h-100">
+                <div class="card-dc-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-download text-info"></i>
+                        <span>Thao tác nhanh</span>
+                    </div>
+                </div>
+                <div class="card-dc-body">
+                    <div class="d-grid gap-2">
+                        <a asp-action="Index" class="btn btn-dc-primary">
+                            <i class="bi bi-list-check me-1"></i> Xem hóa đơn chờ thanh toán
+                        </a>
+                        <button type="button" class="btn btn-dc-outline" onclick="window.print()">
+                            <i class="bi bi-printer me-1"></i> In báo cáo
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
+using System;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Services;
 using Microsoft.Extensions.Configuration;
@@ -75,5 +76,28 @@ public class JwtTokenServiceTests
 
         Assert.Equal(hash1, hash2);
         Assert.Equal(64, hash1.Length); // 32 bytes hex string = 64 characters
+    }
+
+    [Fact]
+    public void Constructor_WithoutConfiguredSecret_Throws()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>())
+            .Build();
+
+        Assert.Throws<InvalidOperationException>(() => new JwtTokenService(config));
+    }
+
+    [Fact]
+    public void Constructor_WithShortSecret_Throws()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["JwtSettings:Secret"] = "short"
+            })
+            .Build();
+
+        Assert.Throws<InvalidOperationException>(() => new JwtTokenService(config));
     }
 }

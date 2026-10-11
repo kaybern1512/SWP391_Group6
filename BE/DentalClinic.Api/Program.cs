@@ -7,6 +7,7 @@ using DentalClinic.Api.Middleware;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Validators;
 using DentalClinic.Infrastructure;
+using DentalClinic.Infrastructure.Services;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -64,7 +65,7 @@ builder.Services.AddCors(options =>
 });
 
 // 5. Configure JWT Authentication
-var jwtSecret = builder.Configuration["JwtSettings:Secret"] ?? "DentalClinicSuperSecretSecurityKey_GraduationProject_2026_SWP391_Group6#";
+var jwtSecret = JwtTokenService.GetRequiredSecret(builder.Configuration);
 var jwtIssuer = builder.Configuration["JwtSettings:Issuer"] ?? "DentalClinicApi";
 var jwtAudience = builder.Configuration["JwtSettings:Audience"] ?? "DentalClinicWeb";
 var key = Encoding.UTF8.GetBytes(jwtSecret);

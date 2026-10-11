@@ -22,11 +22,22 @@ public class JwtTokenService : IJwtTokenService
     public JwtTokenService(IConfiguration configuration)
     {
         _configuration = configuration;
-        _secret = configuration["JwtSettings:Secret"] ?? "DentalClinicVerySuperSecretKeyForJwtSigning_2026_SWP391_Group6!";
+        _secret = GetRequiredSecret(configuration);
         _issuer = configuration["JwtSettings:Issuer"] ?? "DentalClinicApi";
         _audience = configuration["JwtSettings:Audience"] ?? "DentalClinicWeb";
         _expirationMinutes = int.TryParse(configuration["JwtSettings:ExpirationMinutes"], out var exp) ? exp : 60;
         _refreshTokenExpirationDays = int.TryParse(configuration["JwtSettings:RefreshTokenExpirationDays"], out var rExp) ? rExp : 7;
+    }
+
+    public static string GetRequiredSecret(IConfiguration configuration)
+    {
+        var secret = configuration["JwtSettings:Secret"];
+        if (string.IsNullOrWhiteSpace(secret) || Encoding.UTF8.GetByteCount(secret) < 32)
+        {
+            throw new InvalidOperationException("JwtSettings:Secret must be configured with at least 32 UTF-8 bytes.");
+        }
+
+        return secret;
     }
 
     public string GenerateAccessToken(long userId, string email, string role, string fullName, string? avatarUrl)

@@ -92,7 +92,7 @@ public class PatientDashboardController : Controller
                     ColorClass = "success",
                     Description = "Review service invoices, billed procedures, and official receipts.",
                     ActionText = "View Invoices",
-                    ActionUrl = "#"
+                    ActionUrl = "/Patient/Invoices"
                 },
                 new()
                 {

@@ -35,6 +35,8 @@ public static class DependencyInjection
         services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<IDentistScheduleService, DentistScheduleService>();
         services.AddScoped<IFeedbackService, FeedbackService>();
+        services.AddScoped<IInvoiceService, InvoiceService>();
+        services.AddScoped<IClinicalCoreService, ClinicalCoreService>();
 
         return services;
     }

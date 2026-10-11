@@ -46,10 +46,11 @@ public class FeedbackController : ControllerBase
     }
 
     [HttpGet("appointment/{appointmentId}")]
+    [Authorize(Roles = UserRole.Patient)]
     [ProducesResponseType(typeof(ApiResponse<VisitFeedbackDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetFeedbackByAppointmentId(long appointmentId, CancellationToken ct)
     {
-        var result = await _feedbackService.GetFeedbackByAppointmentIdAsync(appointmentId, ct);
+        var result = await _feedbackService.GetFeedbackByAppointmentIdAsync(appointmentId, GetCurrentUserId(), ct);
         return Ok(result);
     }
 

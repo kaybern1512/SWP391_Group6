@@ -208,6 +208,47 @@ public class FeedbackServiceTests
     }
 
     [Fact]
+    public async Task GetFeedbackByAppointmentId_OwnerReceivesFeedback()
+    {
+        var db = CreateDbContext("Feedback_GetByAppointment_Owner");
+        await SeedDataAsync(db);
+        var service = new FeedbackService(db);
+        await service.CreateFeedbackAsync(new CreateFeedbackRequest
+        {
+            AppointmentId = 501,
+            DentistRating = 5,
+            ClinicRating = 4,
+            Comment = "Phản hồi riêng tư"
+        }, 100);
+
+        var result = await service.GetFeedbackByAppointmentIdAsync(501, 100);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.Equal("Phản hồi riêng tư", result.Data!.Comment);
+    }
+
+    [Fact]
+    public async Task GetFeedbackByAppointmentId_NonOwnerReceivesNoFeedback()
+    {
+        var db = CreateDbContext("Feedback_GetByAppointment_NonOwner");
+        await SeedDataAsync(db);
+        var service = new FeedbackService(db);
+        await service.CreateFeedbackAsync(new CreateFeedbackRequest
+        {
+            AppointmentId = 501,
+            DentistRating = 5,
+            ClinicRating = 4,
+            Comment = "Phản hồi riêng tư"
+        }, 100);
+
+        var result = await service.GetFeedbackByAppointmentIdAsync(501, 999);
+
+        Assert.True(result.Success);
+        Assert.Null(result.Data);
+    }
+
+    [Fact]
     public async Task GetDentistFeedbackSummary_ReturnsAccurateAverages()
     {
         var db = CreateDbContext("Feedback_Summary");

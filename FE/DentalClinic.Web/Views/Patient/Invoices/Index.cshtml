@@ -1,0 +1,75 @@
+@model DentalClinic.Web.ViewModels.Invoices.BillingInvoiceListViewModel
+@{
+    ViewData["Title"] = "Invoices & Payments";
+}
+
+<div class="container-fluid p-0">
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge-dc badge-role-patient">Patient</span>
+            </div>
+            <h1 class="page-title">Invoices & Payments</h1>
+            <p class="page-subtitle">Xem chi tiết hóa đơn, theo dõi trạng thái thanh toán và biên lai của bạn.</p>
+        </div>
+    </div>
+
+    <div class="card-dc">
+        <div class="card-dc-header">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-receipt text-success"></i>
+                <span>Danh sách hóa đơn</span>
+            </div>
+        </div>
+        <div class="card-dc-body p-0">
+            @if (!Model.Invoices.Any())
+            {
+                <div class="p-4 text-center">
+                    <div class="empty-state-icon-box mb-3" style="width: 56px; height: 56px; font-size: 1.4rem; margin: 0 auto;">
+                        <i class="bi bi-receipt-cutoff text-muted"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-1">Chưa có hóa đơn</h6>
+                    <p class="text-muted small mb-0">Bạn chưa có hóa đơn nào cần thanh toán hoặc đã được hoàn tất.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Mã hóa đơn</th>
+                                <th>Ngày khám</th>
+                                <th>Dịch vụ</th>
+                                <th>Tổng tiền</th>
+                                <th>Trạng thái</th>
+                                <th class="text-end">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var invoice in Model.Invoices)
+                            {
+                                <tr>
+                                    <td class="fw-semibold text-primary">@invoice.InvoiceCode</td>
+                                    <td>@invoice.AppointmentDate.ToString("dd/MM/yyyy")</td>
+                                    <td>@invoice.ServiceSummary</td>
+                                    <td class="fw-semibold">@invoice.TotalAmount.ToString("N0") đ</td>
+                                    <td>
+                                        <span class="badge @(invoice.PaymentStatus == "Paid" ? "bg-success" : "bg-warning text-dark")">
+                                            @(invoice.PaymentStatus == "Paid" ? "Đã thanh toán" : "Chờ thanh toán")
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <a asp-action="Detail" asp-route-id="@invoice.InvoiceId" class="btn btn-dc-outline btn-sm">
+                                            Xem chi tiết
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>

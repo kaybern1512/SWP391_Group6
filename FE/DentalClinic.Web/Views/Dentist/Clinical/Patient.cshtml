@@ -1,0 +1,408 @@
+@model DentistClinicalWorkspaceViewModel
+@{
+    ViewData["Title"] = "Hồ sơ điều trị";
+    var upperRight = new[] { 18, 17, 16, 15, 14, 13, 12, 11 };
+    var upperLeft = new[] { 21, 22, 23, 24, 25, 26, 27, 28 };
+    var lowerLeft = new[] { 31, 32, 33, 34, 35, 36, 37, 38 };
+    var lowerRight = new[] { 48, 47, 46, 45, 44, 43, 42, 41 };
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <a asp-action="Index" class="small text-decoration-none"><i class="bi bi-arrow-left me-1"></i>Tìm bệnh nhân khác</a>
+            <h1 class="h3 fw-bold mt-2 mb-1"><i class="bi bi-clipboard2-pulse text-primary me-2"></i>Hồ sơ điều trị</h1>
+            <p class="text-muted mb-0">Patient User ID: <strong>@Model.PatientUserId</strong>
+                @if (Model.MedicalRecord != null)
+                {
+                    <span> · @Model.MedicalRecord.PatientName (@Model.MedicalRecord.PatientCode)</span>
+                }
+            </p>
+        </div>
+        @if (Model.MedicalRecord != null)
+        {
+            <span class="badge text-bg-primary fs-6">Hồ sơ #@Model.MedicalRecord.MedicalRecordId</span>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.Message))
+    {
+        <div class="alert alert-warning" role="status"><i class="bi bi-exclamation-circle me-2"></i>@Model.Message</div>
+    }
+    @if (Model.LastCreatedTreatmentPlanItemId.HasValue || Model.LastCreatedTreatmentSessionId.HasValue)
+    {
+        <div class="alert alert-success">
+            <strong>IDs vừa tạo:</strong>
+            @if (Model.LastCreatedTreatmentPlanItemId.HasValue)
+            {
+                <span class="ms-2">Treatment Plan Item #@Model.LastCreatedTreatmentPlanItemId</span>
+            }
+            @if (Model.LastCreatedTreatmentSessionId.HasValue)
+            {
+                <span class="ms-2">Treatment Session #@Model.LastCreatedTreatmentSessionId</span>
+            }
+            <span class="small d-block mt-1">Các mã này được điền sẵn ở các biểu mẫu liên quan bên dưới.</span>
+        </div>
+    }
+    @if (Model.MedicalRecord == null)
+    {
+        <div class="alert alert-info" role="status">
+            Hồ sơ chưa được tạo. Khi lưu nội dung khám bên dưới, hệ thống sẽ tạo hồ sơ bệnh án nếu cần.
+        </div>
+    }
+
+    <div class="row g-4">
+        <div class="col-xl-7">
+            <section class="card border-0 shadow-sm mb-4" id="new-entry">
+                <div class="card-header bg-white py-3">
+                    <h2 class="h5 fw-bold mb-0"><i class="bi bi-file-earmark-medical text-primary me-2"></i>Ghi nhận lần khám</h2>
+                </div>
+                <div class="card-body">
+                    <form asp-action="CreateClinicalEntry" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="PatientUserId" value="@Model.PatientUserId" />
+                        <div class="mb-3">
+                            <label class="form-label" for="AppointmentId">Appointment ID <span class="text-danger">*</span></label>
+                            <input class="form-control" type="number" name="AppointmentId" id="AppointmentId" min="1" list="patientAppointments" required />
+                            <datalist id="patientAppointments">
+                                @foreach (var appointment in Model.Appointments)
+                                {
+                                    <option value="@appointment.AppointmentId">@appointment.AppointmentCode · @(appointment.ScheduledStart?.ToString("dd/MM HH:mm") ?? "Chưa có giờ") · @appointment.Status</option>
+                                }
+                            </datalist>
+                            <div class="form-text">Chọn lịch khám bệnh nhân trong danh sách hoặc nhập mã ID; API sẽ xác thực quyền sở hữu.</div>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6"><label class="form-label">Triệu chứng</label><textarea class="form-control" name="Symptoms" rows="2"></textarea></div>
+                            <div class="col-md-6"><label class="form-label">Khám lâm sàng</label><textarea class="form-control" name="ClinicalFindings" rows="2"></textarea></div>
+                            <div class="col-md-6"><label class="form-label">Chẩn đoán</label><textarea class="form-control" name="Diagnosis" rows="2"></textarea></div>
+                            <div class="col-md-6"><label class="form-label">Tình trạng răng</label><textarea class="form-control" name="DentalConditions" rows="2"></textarea></div>
+                            <div class="col-12"><label class="form-label">Ghi chú</label><textarea class="form-control" name="ClinicalNotes" rows="2"></textarea></div>
+                        </div>
+
+                        <hr class="my-4" />
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <h3 class="h6 fw-bold mb-1">Sơ đồ răng FDI</h3>
+                                <div class="small text-muted">Chọn một hoặc nhiều răng. Mã FDI 11–18, 21–28, 31–38, 41–48.</div>
+                            </div>
+                            <span class="badge text-bg-light border" id="selectedToothCount">0 răng</span>
+                        </div>
+                        <div class="odontogram-board border rounded p-3 bg-light-subtle">
+                            <div class="d-flex justify-content-center gap-1 mb-2">
+                                @foreach (var tooth in upperRight.Concat(upperLeft))
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary fdi-tooth" type="button" data-tooth="@tooth">@tooth</button>
+                                }
+                            </div>
+                            <div class="d-flex justify-content-center gap-1">
+                                @foreach (var tooth in lowerRight.Concat(lowerLeft))
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary fdi-tooth" type="button" data-tooth="@tooth">@tooth</button>
+                                }
+                            </div>
+                        </div>
+                        <div id="selectedTeeth" class="mt-3"></div>
+
+                        <hr class="my-4" />
+                        <h3 class="h6 fw-bold">Chẩn đoán hình ảnh</h3>
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label" for="imagingType">Loại ảnh</label>
+                                <select class="form-select" name="ImagingRecords[0].ImagingType" id="imagingType">
+                                    <option value="">Không thêm ảnh</option>
+                                    <option value="XRay">X-Ray</option>
+                                    <option value="CBCT">CBCT</option>
+                                    <option value="Other">Khác</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8"><label class="form-label" for="fileUrl">URL tệp</label><input class="form-control" type="url" name="ImagingRecords[0].FileUrl" id="fileUrl" /></div>
+                            <div class="col-12"><label class="form-label" for="resultSummary">Kết quả tóm tắt</label><input class="form-control" name="ImagingRecords[0].ResultSummary" id="resultSummary" maxlength="1000" /></div>
+                        </div>
+                        <div class="text-end mt-4">
+                            <button class="btn btn-primary" type="submit"><i class="bi bi-save me-1"></i>Lưu lần khám</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <section class="card border-0 shadow-sm mb-4" id="treatment-plan">
+                <div class="card-header bg-white py-3">
+                    <h2 class="h5 fw-bold mb-0"><i class="bi bi-diagram-3 text-primary me-2"></i>Lập kế hoạch điều trị</h2>
+                </div>
+                <div class="card-body">
+                    <form method="get" asp-action="Patient" asp-route-patientUserId="@Model.PatientUserId" class="row g-2 align-items-end mb-4">
+                        <div class="col-md-8">
+                            <label class="form-label" for="departmentId">Lọc dịch vụ theo khoa</label>
+                            <select class="form-select" id="departmentId" name="departmentId" onchange="this.form.submit()">
+                                <option value="">Chọn khoa để tải dịch vụ</option>
+                                @foreach (var department in Model.Departments)
+                                {
+                                    <option value="@department.DepartmentId" selected="@(Model.SelectedDepartmentId == department.DepartmentId)">@department.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4"><button class="btn btn-outline-primary w-100" type="submit">Tải dịch vụ</button></div>
+                    </form>
+
+                    @if (!Model.SelectedDepartmentId.HasValue || Model.Services.Count == 0)
+                    {
+                        <div class="alert alert-light border mb-0">Chọn khoa để tải danh mục dịch vụ hiện hành.</div>
+                    }
+                    else
+                    {
+                        <form asp-action="CreateTreatmentPlan" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="PatientUserId" value="@Model.PatientUserId" />
+                            <input type="hidden" name="DepartmentId" value="@Model.SelectedDepartmentId" />
+                            <div id="planItems">
+                                <div class="plan-item border rounded p-3 mb-3">
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Dịch vụ</label>
+                                            <select class="form-select service-select" name="Items[0].DepartmentServiceId" required>
+                                                <option value="">Chọn dịch vụ</option>
+                                                @foreach (var service in Model.Services)
+                                                {
+                                                    <option value="@service.DepartmentServiceId" data-price="@service.Price?.ToString(System.Globalization.CultureInfo.InvariantCulture)">@service.ServiceName (@(service.Price?.ToString("N0") ?? "—") ₫)</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3"><label class="form-label">Răng FDI</label><input class="form-control" name="Items[0].ToothNumber" pattern="(1[1-8]|2[1-8]|3[1-8]|4[1-8])" /></div>
+                                        <div class="col-md-3"><label class="form-label">Thứ tự</label><input class="form-control" type="number" min="1" name="Items[0].SequenceNo" value="1" required /></div>
+                                        <div class="col-md-4"><label class="form-label">Ngày dự kiến</label><input class="form-control" type="date" name="Items[0].ExpectedDate" /></div>
+                                        <div class="col-md-4"><label class="form-label">Chi phí dự kiến</label><input class="form-control" type="number" min="0" step="0.01" name="Items[0].EstimatedCost" /></div>
+                                        <div class="col-md-4"><label class="form-label">Ghi chú</label><input class="form-control" name="Items[0].Note" /></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="addPlanItem"><i class="bi bi-plus-lg me-1"></i>Thêm hạng mục</button>
+                                <button class="btn btn-primary" type="submit"><i class="bi bi-check2-square me-1"></i>Tạo kế hoạch</button>
+                            </div>
+                        </form>
+                    }
+                </div>
+            </section>
+        </div>
+
+        <div class="col-xl-5">
+            <section class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white py-3"><h2 class="h5 fw-bold mb-0"><i class="bi bi-clock-history text-primary me-2"></i>Lịch sử bệnh án</h2></div>
+                <div class="card-body">
+                    @if (Model.MedicalRecord?.ClinicalEntries.Count > 0)
+                    {
+                        @foreach (var entry in Model.MedicalRecord.ClinicalEntries.OrderByDescending(x => x.CreatedAt))
+                        {
+                            <div class="border-start border-3 border-primary ps-3 pb-3 mb-3">
+                                <div class="fw-semibold">@entry.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div>
+                                <div class="small text-muted">@(entry.Diagnosis ?? "Chưa ghi chẩn đoán")</div>
+                                <div class="small">@(entry.ClinicalNotes ?? entry.ClinicalFindings ?? "Không có ghi chú")</div>
+                                @if (entry.OdontogramEntries.Count > 0)
+                                {
+                                    <div class="mt-2 d-flex flex-wrap gap-1">
+                                        @foreach (var tooth in entry.OdontogramEntries)
+                                        {
+                                            <span class="badge text-bg-light border">@tooth.ToothNumber: @tooth.Condition</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-muted">Chưa có nội dung lâm sàng.</div>
+                    }
+                </div>
+            </section>
+
+            <section class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white py-3"><h2 class="h5 fw-bold mb-0"><i class="bi bi-clipboard2-check text-primary me-2"></i>Ghi nhận ca điều trị</h2></div>
+                <div class="card-body">
+                    <form asp-action="CreateTreatmentSession" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="PatientUserId" value="@Model.PatientUserId" />
+                        <div class="mb-2"><label class="form-label">Treatment Plan Item ID</label><input class="form-control" type="number" name="TreatmentPlanItemId" min="1" value="@Model.LastCreatedTreatmentPlanItemId" required /></div>
+                        <div class="mb-2"><label class="form-label">Appointment ID</label><input class="form-control" type="number" name="AppointmentId" min="1" list="patientAppointments" required /></div>
+                        <div class="mb-2"><label class="form-label">Dịch vụ đã thực hiện</label>
+                            <select class="form-select session-service-select" name="DepartmentServiceId" required>
+                                <option value="">Chọn khoa phía trên để tải dịch vụ</option>
+                                @foreach (var service in Model.Services)
+                                {
+                                    <option value="@service.DepartmentServiceId" data-price="@service.Price?.ToString(System.Globalization.CultureInfo.InvariantCulture)">@service.ServiceName</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6"><label class="form-label">Số lượng</label><input class="form-control" type="number" name="Quantity" value="1" min="1" required /></div>
+                            <div class="col-6"><label class="form-label">Giá dịch vụ hiện tại</label><input class="form-control" type="number" name="UnitPrice" min="0" step="0.01" readonly required /></div>
+                        </div>
+                        <div class="mt-2"><label class="form-label">Kết quả</label><textarea class="form-control" name="TreatmentResult" rows="2"></textarea></div>
+                        <div class="mt-2"><label class="form-label">Ghi chú lâm sàng</label><textarea class="form-control" name="ClinicalNote" rows="2"></textarea></div>
+                        <button class="btn btn-primary w-100 mt-3" type="submit">Lưu ca điều trị</button>
+                    </form>
+                </div>
+            </section>
+
+            <section class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white py-3"><h2 class="h5 fw-bold mb-0"><i class="bi bi-capsule text-primary me-2"></i>Kê đơn thuốc</h2></div>
+                <div class="card-body">
+                    <form asp-action="CreatePrescription" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="PatientUserId" value="@Model.PatientUserId" />
+                        <div class="mb-2"><label class="form-label">Treatment Session ID</label><input class="form-control" type="number" name="TreatmentSessionId" min="1" value="@Model.LastCreatedTreatmentSessionId" required /></div>
+                        <div class="mb-2"><label class="form-label">Tên thuốc</label><input class="form-control" name="Items[0].MedicationName" required maxlength="200" /></div>
+                        <div class="row g-2">
+                            <div class="col-6"><label class="form-label">Liều dùng</label><input class="form-control" name="Items[0].Dosage" /></div>
+                            <div class="col-6"><label class="form-label">Tần suất</label><input class="form-control" name="Items[0].Frequency" /></div>
+                            <div class="col-6"><label class="form-label">Thời gian</label><input class="form-control" name="Items[0].Duration" /></div>
+                            <div class="col-6"><label class="form-label">Hướng dẫn</label><input class="form-control" name="Items[0].Instructions" /></div>
+                        </div>
+                        <div class="mt-2"><label class="form-label">Dặn dò chung</label><textarea class="form-control" name="GeneralInstructions" rows="2"></textarea></div>
+                        <button class="btn btn-primary w-100 mt-3" type="submit">Tạo đơn thuốc</button>
+                    </form>
+                </div>
+            </section>
+
+            <section class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white py-3"><h2 class="h5 fw-bold mb-0"><i class="bi bi-arrow-left-right text-primary me-2"></i>Chuyển khoa</h2></div>
+                <div class="card-body">
+                    <form asp-action="CreateDepartmentReferral" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="PatientUserId" value="@Model.PatientUserId" />
+                        <div class="mb-2"><label class="form-label">Treatment Session ID</label><input class="form-control" type="number" name="TreatmentSessionId" min="1" value="@Model.LastCreatedTreatmentSessionId" required /></div>
+                        <div class="mb-2"><label class="form-label">Khoa gửi</label><select class="form-select" name="FromDepartmentId" required><option value="">Chọn khoa</option>@foreach (var dept in Model.Departments) { <option value="@dept.DepartmentId">@dept.Name</option> }</select></div>
+                        <div class="mb-2"><label class="form-label">Khoa nhận</label><select class="form-select" name="ToDepartmentId" required><option value="">Chọn khoa</option>@foreach (var dept in Model.Departments) { <option value="@dept.DepartmentId">@dept.Name</option> }</select></div>
+                        <div class="mb-2"><label class="form-label">Lý do</label><textarea class="form-control" name="Reason" required rows="2"></textarea></div>
+                        <button class="btn btn-outline-primary w-100" type="submit">Gửi chuyển khoa</button>
+                    </form>
+                </div>
+            </section>
+
+            <section class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white py-3"><h2 class="h5 fw-bold mb-0"><i class="bi bi-calendar2-plus text-primary me-2"></i>Đề xuất tái khám</h2></div>
+                <div class="card-body">
+                    <form asp-action="CreateFollowUp" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="PatientUserId" value="@Model.PatientUserId" />
+                        <div class="mb-2"><label class="form-label">Treatment Session ID</label><input class="form-control" type="number" name="TreatmentSessionId" min="1" value="@Model.LastCreatedTreatmentSessionId" required /></div>
+                        <div class="mb-2"><label class="form-label">Ngày giờ khuyến nghị</label><input class="form-control" type="datetime-local" name="RecommendedDate" required /></div>
+                        <div class="mb-2"><label class="form-label">Lý do</label><textarea class="form-control" name="Reason" rows="2"></textarea></div>
+                        <button class="btn btn-outline-primary w-100" type="submit">Lưu đề xuất</button>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const teethContainer = document.getElementById("selectedTeeth");
+            const count = document.getElementById("selectedToothCount");
+            const selectedTeeth = new Map();
+            const updateTeeth = () => {
+                teethContainer.replaceChildren();
+                let index = 0;
+                for (const [tooth, details] of selectedTeeth) {
+                    const row = document.createElement("div");
+                    row.className = "row g-2 align-items-end mb-2";
+                    const createColumn = (className, labelText, fieldName, inputType = "text") => {
+                        const column = document.createElement("div");
+                        column.className = className;
+                        const label = document.createElement("label");
+                        label.className = "form-label small";
+                        label.textContent = labelText;
+                        const input = document.createElement(inputType === "select" ? "select" : "input");
+                        input.className = inputType === "select" ? "form-select form-select-sm" : "form-control form-control-sm";
+                        input.name = fieldName;
+                        if (inputType !== "select") input.type = inputType;
+                        column.append(label, input);
+                        return { column, input };
+                    };
+                    const toothColumn = document.createElement("div");
+                    toothColumn.className = "col-2";
+                    const toothBadge = document.createElement("span");
+                    toothBadge.className = "badge text-bg-primary w-100 py-2";
+                    toothBadge.textContent = tooth;
+                    const toothInput = document.createElement("input");
+                    toothInput.type = "hidden";
+                    toothInput.name = `OdontogramEntries[${index}].ToothNumber`;
+                    toothInput.value = tooth;
+                    toothColumn.append(toothBadge, toothInput);
+                    row.appendChild(toothColumn);
+
+                    const surfaceField = createColumn("col-3", "Bề mặt", `OdontogramEntries[${index}].Surface`, "select");
+                    [["", "—"], ["Mesial", "Mesial"], ["Distal", "Distal"], ["Occlusal", "Occlusal"], ["Buccal", "Buccal"], ["Lingual", "Lingual"]]
+                        .forEach(([value, text]) => {
+                            const option = document.createElement("option");
+                            option.value = value;
+                            option.textContent = text;
+                            surfaceField.input.appendChild(option);
+                        });
+                        surfaceField.input.value = details.surface;
+                        surfaceField.input.addEventListener("change", () => details.surface = surfaceField.input.value);
+                        row.appendChild(surfaceField.column);
+
+                    const conditionField = createColumn("col-3", "Tình trạng", `OdontogramEntries[${index}].Condition`);
+                    conditionField.input.maxLength = 100;
+                    conditionField.input.required = true;
+                    conditionField.input.value = details.condition;
+                    row.appendChild(conditionField.column);
+
+                    const noteField = createColumn("col-4", "Ghi chú", `OdontogramEntries[${index}].Note`);
+                    noteField.input.maxLength = 500;
+                    noteField.input.value = details.note;
+                    noteField.input.addEventListener("input", () => details.note = noteField.input.value);
+                    row.appendChild(noteField.column);
+                    const condition = conditionField.input;
+                    condition.addEventListener("input", () => details.condition = condition.value);
+                    teethContainer.appendChild(row);
+                    index++;
+                }
+                count.textContent = `${selectedTeeth.size} răng`;
+            };
+            document.querySelectorAll(".fdi-tooth").forEach(button => {
+                button.addEventListener("click", () => {
+                    const tooth = button.dataset.tooth;
+                    if (selectedTeeth.has(tooth)) {
+                        selectedTeeth.delete(tooth);
+                        button.classList.remove("active", "btn-primary");
+                        button.classList.add("btn-outline-secondary");
+                    } else {
+                        selectedTeeth.set(tooth, { condition: "", surface: "", note: "" });
+                        button.classList.add("active", "btn-primary");
+                        button.classList.remove("btn-outline-secondary");
+                    }
+                    updateTeeth();
+                });
+            });
+
+            document.querySelectorAll(".session-service-select").forEach(select => {
+                select.addEventListener("change", () => {
+                    const price = select.selectedOptions[0]?.dataset.price;
+                    const priceInput = document.querySelector('[name="UnitPrice"]');
+                    if (price && priceInput) priceInput.value = price;
+                });
+            });
+
+            const addItem = document.getElementById("addPlanItem");
+            if (addItem) {
+                addItem.addEventListener("click", () => {
+                    const container = document.getElementById("planItems");
+                    const index = container.querySelectorAll(".plan-item").length;
+                    const template = container.querySelector(".plan-item");
+                    const clone = template.cloneNode(true);
+                    clone.querySelectorAll("[name]").forEach(field => {
+                        field.name = field.name.replace(/Items\[\d+\]/, `Items[${index}]`);
+                        if (field.name.endsWith(".SequenceNo")) field.value = index + 1;
+                        else field.value = "";
+                    });
+                    container.appendChild(clone);
+                });
+            }
+        })();
+    </script>
+}

@@ -1,0 +1,22 @@
+@{
+    ViewData["Title"] = "Hồ sơ lâm sàng";
+}
+
+<div class="container-fluid px-0">
+    <div class="mb-4">
+        <h1 class="h3 fw-bold mb-1"><i class="bi bi-journal-medical text-primary me-2"></i>Hồ sơ lâm sàng</h1>
+        <p class="text-muted">Mở hồ sơ bệnh nhân để xem lịch sử và ghi nhận thông tin điều trị.</p>
+    </div>
+    <div class="card border-0 shadow-sm" style="max-width: 680px;">
+        <div class="card-body p-4">
+            <form method="get" asp-controller="DentistClinical" asp-action="OpenPatient">
+                <label for="patientUserId" class="form-label fw-semibold">Mã tài khoản bệnh nhân</label>
+                <div class="input-group">
+                    <input type="number" min="1" class="form-control" id="patientUserId" name="patientUserId" required />
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>Mở hồ sơ</button>
+                </div>
+                <div class="form-text">Nhập User ID của bệnh nhân từ hệ thống. Không sử dụng mã hiển thị thay thế ID tài khoản.</div>
+            </form>
+        </div>
+    </div>
+</div>

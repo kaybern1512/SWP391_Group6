@@ -160,6 +160,25 @@ builder.Services.AddHttpClient<IFeedbackApiService, FeedbackApiService>(client =
 .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
+// Billing workflow for completed appointments and payment confirmation
+builder.Services.AddHttpClient<IInvoiceApiClient, InvoiceApiClient>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
+builder.Services.AddHttpClient<IClinicalCoreApiClient, ClinicalCoreApiClient>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
+builder.Services.AddSingleton<IReceiptPdfService, ReceiptPdfService>();
+builder.Services.AddSingleton<IInvoiceService, InvoiceService>();
+
 var app = builder.Build();
 
 // Configure HTTP request pipeline

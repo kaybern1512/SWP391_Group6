@@ -102,9 +102,23 @@ Tất cả tài khoản nhân viên dưới đây đều đã được kích ho�
 ## 5. Cấu Hình Bảo Mật & Quản Lý Secrets (Secret Management)
 
 > [!CAUTION]
-> **Quy định bảo mật**: Tuyệt đối **KHÔNG** commit các API Secret, Google Client Secret hoặc Cloudinary Secret vào file `appsettings.json` trong Git để tránh bị GitHub Push Protection từ chối commit. Tất cả secrets môi trường phát triển cục bộ phải được lưu qua công cụ `dotnet user-secrets`.
+> **Quy định bảo mật**: Tuyệt đối **KHÔNG** commit JWT signing keys, API secrets, Google Client Secrets hoặc Cloudinary Secrets vào file `appsettings.json`. Tất cả secrets môi trường phát triển cục bộ phải được lưu qua công cụ `dotnet user-secrets`.
 
-### 5.1. Cấu hình Cloudinary (Lưu trữ ảnh đại diện Avatar)
+### 5.1. Cấu hình khóa ký JWT
+API yêu cầu `JwtSettings:Secret` phải được cấu hình và có tối thiểu 32 byte UTF-8. Không sử dụng khóa mẫu, khóa đã công khai hoặc dùng lại khóa giữa các môi trường.
+```powershell
+cd D:\SWP391\SWP391_Group6\BE\DentalClinic.Api
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+$randomBytes = New-Object byte[] 48
+$rng.GetBytes($randomBytes)
+$jwtSecret = [Convert]::ToBase64String($randomBytes)
+$rng.Dispose()
+dotnet user-secrets set "JwtSettings:Secret" $jwtSecret
+Remove-Variable jwtSecret, randomBytes
+```
+Trong môi trường triển khai, cung cấp khóa qua secret manager hoặc biến môi trường `JwtSettings__Secret`. Xoay khóa sẽ làm token JWT hiện có không còn hợp lệ.
+
+### 5.2. Cấu hình Cloudinary (Lưu trữ ảnh đại diện Avatar)
 1. Đăng ký tài khoản miễn phí tại [Cloudinary.com](https://cloudinary.com).
 2. Lấy thông tin `CloudName`, `ApiKey` và `ApiSecret` trên Dashboard Cloudinary.
 3. Thiết lập user-secrets tại thư mục `BE/DentalClinic.Api`:
@@ -121,7 +135,7 @@ Tất cả tài khoản nhân viên dưới đây đều đã được kích ho�
    - Cờ: `Overwrite = true`, `Invalidate = true` (ghi đè và xóa cache CDN).
    - Biến đổi ảnh tự động: `500x500`, cắt `fill`, tiêu điểm nhận diện khuôn mặt `gravity: auto`, tối ưu chất lượng `quality: auto`, định dạng `fetch_format: auto`.
 
-### 5.2. Cấu hình Google OAuth
+### 5.3. Cấu hình Google OAuth
 Google Client ID và Client Secret đã được cấp phát cho đồ án:
 - **Client ID**: `482754989911-krfsu4jokuuqcttqbtmuh6bdal15a107.apps.googleusercontent.com`
 - Thiết lập tại Backend:

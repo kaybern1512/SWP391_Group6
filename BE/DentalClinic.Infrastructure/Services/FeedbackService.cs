@@ -99,10 +99,11 @@ public class FeedbackService : IFeedbackService
         return ApiResponse<VisitFeedbackDto>.Ok(dto, "Cảm ơn bạn đã gửi đánh giá và đóng góp ý kiến cho phòng khám!");
     }
 
-    public async Task<ApiResponse<VisitFeedbackDto?>> GetFeedbackByAppointmentIdAsync(long appointmentId, CancellationToken ct = default)
+    public async Task<ApiResponse<VisitFeedbackDto?>> GetFeedbackByAppointmentIdAsync(long appointmentId, long patientUserId, CancellationToken ct = default)
     {
         var feedback = await _dbContext.VisitFeedbacks
             .AsNoTracking()
+            .Where(f => f.AppointmentId == appointmentId && f.Appointment.PatientUserId == patientUserId)
             .Include(f => f.Appointment)
                 .ThenInclude(a => a.PatientUser)
             .Include(f => f.Appointment)

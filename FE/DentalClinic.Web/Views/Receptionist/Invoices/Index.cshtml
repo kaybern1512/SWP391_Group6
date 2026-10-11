@@ -1,0 +1,67 @@
+@model DentalClinic.Web.ViewModels.Invoices.BillingInvoiceListViewModel
+@{
+    ViewData["Title"] = "Pending Invoices";
+}
+
+<div class="container-fluid p-0">
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge-dc badge-role-receptionist">Receptionist</span>
+            </div>
+            <h1 class="page-title">Pending Invoices</h1>
+            <p class="page-subtitle">Theo dõi các ca khám đã hoàn thành và hóa đơn chưa thanh toán tại quầy.</p>
+        </div>
+        <div class="page-actions">
+            <a asp-action="Report" class="btn btn-dc-outline">
+                <i class="bi bi-bar-chart me-1"></i> Báo cáo doanh thu
+            </a>
+        </div>
+    </div>
+
+    <div class="card-dc">
+        <div class="card-dc-header">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-file-earmark-text text-warning"></i>
+                <span>Danh sách hóa đơn cần xử lý</span>
+            </div>
+        </div>
+        <div class="card-dc-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã hóa đơn</th>
+                            <th>Bệnh nhân</th>
+                            <th>Ngày khám</th>
+                            <th>Tổng tiền</th>
+                            <th>Trạng thái</th>
+                            <th class="text-end">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var invoice in Model.Invoices)
+                        {
+                            <tr>
+                                <td class="fw-semibold text-primary">@invoice.InvoiceCode</td>
+                                <td>@invoice.PatientName</td>
+                                <td>@invoice.AppointmentDate.ToString("dd/MM/yyyy")</td>
+                                <td class="fw-semibold">@invoice.TotalAmount.ToString("N0") đ</td>
+                                <td>
+                                    <span class="badge @(invoice.PaymentStatus == "Paid" ? "bg-success" : "bg-warning text-dark")">
+                                        @(invoice.PaymentStatus == "Paid" ? "Đã thanh toán" : "Chờ thanh toán")
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    <a asp-action="Detail" asp-route-id="@invoice.InvoiceId" class="btn btn-dc-outline btn-sm">
+                                        Xác nhận
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

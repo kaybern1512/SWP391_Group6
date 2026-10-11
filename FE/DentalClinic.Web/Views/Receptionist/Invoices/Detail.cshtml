@@ -1,0 +1,160 @@
+@model DentalClinic.Web.ViewModels.Invoices.BillingInvoiceDetailViewModel
+@{
+    ViewData["Title"] = "Invoice Detail";
+    var invoice = Model.Invoice;
+    var isPaid = string.Equals(invoice.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase);
+}
+
+<div class="container-fluid p-0">
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge-dc badge-role-receptionist">Receptionist</span>
+            </div>
+            <h1 class="page-title">Xác nhận thanh toán - @invoice.InvoiceCode</h1>
+            <p class="page-subtitle">Xem các dịch vụ đã thực hiện và ghi nhận thanh toán cho bệnh nhân.</p>
+        </div>
+        <div class="page-actions">
+            <a asp-action="Index" class="btn btn-dc-outline">
+                <i class="bi bi-arrow-left me-1"></i> Quay lại
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card-dc">
+                <div class="card-dc-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-file-earmark-text text-primary"></i>
+                        <span>Chi phí dịch vụ</span>
+                    </div>
+                </div>
+                <div class="card-dc-body p-0">
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Dịch vụ</th>
+                                    <th class="text-center">Số lượng</th>
+                                    <th class="text-end">Đơn giá</th>
+                                    <th class="text-end">Thành tiền</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in invoice.Items)
+                                {
+                                    <tr>
+                                        <td>@item.Description</td>
+                                        <td class="text-center">@item.Quantity</td>
+                                        <td class="text-end">@item.UnitPrice.ToString("N0") đ</td>
+                                        <td class="text-end fw-semibold">@item.Amount.ToString("N0") đ</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card-dc h-100">
+                <div class="card-dc-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-wallet2 text-warning"></i>
+                        <span>Thông tin thanh toán</span>
+                    </div>
+                </div>
+                <div class="card-dc-body">
+                    <div class="mb-3">
+                        <div class="text-muted small">Bệnh nhân</div>
+                        <div class="fw-semibold">@invoice.PatientName</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="text-muted small">Ngày khám</div>
+                        <div class="fw-semibold">@invoice.AppointmentDate.ToString("dd/MM/yyyy")</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="text-muted small">Tổng tiền</div>
+                        <div class="fw-bold fs-5 text-success">@invoice.TotalAmount.ToString("N0") đ</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="text-muted small">Trạng thái</div>
+                        <span class="badge @(isPaid ? "bg-success" : "bg-warning text-dark") mt-1">
+                            @(isPaid ? "Đã thanh toán" : "Chờ thanh toán")
+                        </span>
+                    </div>
+
+                    @if (!isPaid)
+                    {
+                        <form asp-action="ConfirmPayment" asp-route-id="@invoice.InvoiceId" method="post">
+                            @Html.AntiForgeryToken()
+                            <div class="mb-3">
+                                <label class="form-label">Phương thức thanh toán</label>
+                                <select class="form-select" name="paymentMethod" required>
+                                    <option value="">-- Chọn --</option>
+                                    <option value="Tiền mặt">Tiền mặt</option>
+                                    <option value="Chuyển khoản QR/Ngân hàng">Chuyển khoản QR/Ngân hàng</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Mã giao dịch</label>
+                                <input type="text" class="form-control" name="transactionReference" placeholder="VD: CASH-001 / BANK-INV-220" />
+                            </div>
+                            <button type="submit" class="btn btn-dc-primary w-100">
+                                <i class="bi bi-check2-circle me-1"></i> Xác Nhận Thanh Toán
+                            </button>
+                        </form>
+                    }
+                    else
+                    {
+                        <div class="alert alert-success mb-0">
+                            <div class="fw-semibold">Đã thanh toán quyết toán</div>
+                            <div class="small">Phương thức: @invoice.PaymentMethod</div>
+                            <div class="small">Mã GD: @invoice.PaymentReference</div>
+                        </div>
+                        <a asp-action="Receipt" asp-route-id="@invoice.InvoiceId" class="btn btn-outline-success w-100 mt-3">
+                            <i class="bi bi-printer me-1"></i> Xuất biên lai
+                        </a>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-dc mt-4">
+        <div class="card-dc-header">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-clock-history text-info"></i>
+                <span>Lịch sử thanh toán</span>
+            </div>
+        </div>
+        <div class="card-dc-body p-0">
+            @if (invoice.PaymentHistory.Any())
+            {
+                <div class="list-group list-group-flush">
+                    @foreach (var entry in invoice.PaymentHistory.OrderByDescending(x => x.At))
+                    {
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <div class="fw-semibold">@entry.Event</div>
+                                    <div class="small text-muted">@entry.Method · @entry.Reference</div>
+                                </div>
+                                <div class="text-end">
+                                    <div class="fw-semibold text-success">@((entry.Amount > 0 ? entry.Amount : invoice.TotalAmount).ToString("N0")) đ</div>
+                                    <div class="small text-muted">@entry.At.ToString("dd/MM/yyyy HH:mm")</div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="p-4 text-center text-muted small">Chưa có lịch sử thanh toán nào.</div>
+            }
+        </div>
+    </div>
+</div>

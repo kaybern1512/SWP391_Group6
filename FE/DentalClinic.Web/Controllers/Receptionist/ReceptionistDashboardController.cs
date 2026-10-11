@@ -101,7 +101,7 @@ public class ReceptionistDashboardController : Controller
                     ColorClass = "success",
                     Description = "Generate official itemized billing invoices for completed dental treatments.",
                     ActionText = "Generate Invoice",
-                    ActionUrl = "#"
+                    ActionUrl = "/Receptionist/Invoices"
                 }
             },
             EmptyState = new EmptyStateViewModel
