@@ -1,0 +1,342 @@
+@model AdminReportsViewModel
+@{
+    ViewData["Title"] = "Báo cáo Doanh thu & Ca khám";
+    var rev = Model.RevenueReport;
+    var appt = Model.AppointmentReport;
+}
+
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-controller="AdminDashboard" asp-action="Dashboard" class="text-decoration-none text-muted small">
+                    <i class="bi bi-chevron-left"></i> Tổng quan
+                </a>
+                <span class="text-muted small">&bull;</span>
+                <span class="badge-dc badge-role-systemadministrator">Thống kê & Báo cáo</span>
+            </div>
+            <h1 class="page-title">Báo cáo Doanh thu & Hiệu quả Hoạt động</h1>
+            <p class="page-subtitle">Phân tích tổng quan số liệu tài chính, phân bổ chuyên khoa và năng suất cung cấp dịch vụ khám chữa</p>
+        </div>
+        <div class="page-actions">
+            <!-- Year Selector Form -->
+            <form asp-controller="AdminDashboard" asp-action="Reports" method="get" class="d-flex align-items-center gap-2">
+                <label class="form-label small fw-semibold text-muted mb-0">Năm báo cáo:</label>
+                <select name="year" class="form-select form-select-sm" onchange="this.form.submit()" style="width: 120px;">
+                    @for (int y = DateTime.UtcNow.Year; y >= DateTime.UtcNow.Year - 4; y--)
+                    {
+                        <option value="@y" selected="@(Model.SelectedYear == y)">Năm @y</option>
+                    }
+                </select>
+            </form>
+        </div>
+    </div>
+
+    <!-- 4 Financial & Operational Metric Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Tổng doanh thu năm @Model.SelectedYear</span>
+                    <div class="stat-icon-box stat-icon-success">
+                        <i class="bi bi-cash-stack"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-value">@rev.TotalYearRevenue.ToString("N0") <small class="fs-6 fw-normal text-muted">đ</small></div>
+                    <div class="stat-note">
+                        <i class="bi bi-calendar-check text-success"></i> Từ các ca khám đã hoàn thành
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Tổng ca khám năm @Model.SelectedYear</span>
+                    <div class="stat-icon-box stat-icon-primary">
+                        <i class="bi bi-calendar-event"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-value">@rev.TotalYearAppointments</div>
+                    <div class="stat-note">
+                        <i class="bi bi-activity text-primary"></i> Toàn bộ lịch đặt trong năm
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Ca khám hoàn thành</span>
+                    <div class="stat-icon-box stat-icon-teal">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-value">@appt.CompletedCount</div>
+                    <div class="stat-note">
+                        <i class="bi bi-pie-chart text-teal"></i> Tỷ lệ đạt: @appt.CompletionRate.ToString("0.0")%
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Ca bị hủy hoặc vắng mặt</span>
+                    <div class="stat-icon-box stat-icon-warning">
+                        <i class="bi bi-x-circle"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-value">@appt.CancelledCount</div>
+                    <div class="stat-note">
+                        <i class="bi bi-info-circle text-warning"></i> Bao gồm hủy và không tới khám
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row g-3 mb-4">
+        <!-- Monthly Revenue Breakdown -->
+        <div class="col-lg-8">
+            <div class="card-dc h-100">
+                <div class="card-dc-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-graph-up text-primary"></i>
+                        <span class="fw-bold">Doanh thu & Số ca khám qua các tháng trong năm @Model.SelectedYear</span>
+                    </div>
+                </div>
+                <div class="card-dc-body p-3">
+                    <canvas id="monthlyReportChart" style="max-height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Appointment Outcomes Breakdown -->
+        <div class="col-lg-4">
+            <div class="card-dc h-100">
+                <div class="card-dc-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-pie-chart text-teal"></i>
+                        <span class="fw-bold">Trạng thái Ca khám</span>
+                    </div>
+                </div>
+                <div class="card-dc-body p-3">
+                    <canvas id="outcomeChart" style="max-height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tables Row: Department Breakdown & Top Services -->
+    <div class="row g-3 mb-4">
+        <!-- Department Breakdown Table -->
+        <div class="col-lg-6">
+            <div class="card-dc h-100">
+                <div class="card-dc-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-hospital text-info"></i>
+                        <span class="fw-bold">Hiệu quả theo Chuyên khoa</span>
+                    </div>
+                </div>
+                <div class="card-dc-body p-0">
+                    <div class="table-responsive">
+                        <table class="table-dc mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Chuyên khoa</th>
+                                    <th class="text-center">Số ca khám</th>
+                                    <th class="text-end">Doanh thu</th>
+                                    <th class="text-center">Tỷ trọng</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (rev.DepartmentBreakdown != null && rev.DepartmentBreakdown.Any())
+                                {
+                                    foreach (var d in rev.DepartmentBreakdown)
+                                    {
+                                        <tr>
+                                            <td class="fw-semibold text-dark">@d.DepartmentName</td>
+                                            <td class="text-center">@d.AppointmentCount</td>
+                                            <td class="text-end fw-bold text-success">@d.Revenue.ToString("N0") đ</td>
+                                            <td class="text-center">
+                                                <div class="d-flex align-items-center justify-content-center gap-1">
+                                                    <span class="badge bg-light text-dark border">@d.Percentage.ToString("0.0")%</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="4" class="text-center py-4 text-muted">
+                                            Chưa có dữ liệu thống kê chuyên khoa.
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Services Table -->
+        <div class="col-lg-6">
+            <div class="card-dc h-100">
+                <div class="card-dc-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-trophy text-warning"></i>
+                        <span class="fw-bold">Top Dịch vụ Thực hiện Nhiều Nhất</span>
+                    </div>
+                </div>
+                <div class="card-dc-body p-0">
+                    <div class="table-responsive">
+                        <table class="table-dc mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Dịch vụ</th>
+                                    <th>Chuyên khoa</th>
+                                    <th class="text-center">Lượt đặt</th>
+                                    <th class="text-end">Doanh thu đóng góp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (appt.TopServices != null && appt.TopServices.Any())
+                                {
+                                    foreach (var s in appt.TopServices)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="fw-semibold text-dark">@s.ServiceName</div>
+                                                <div class="text-muted small">@s.Price.ToString("N0") đ/lượt</div>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-primary border">@s.DepartmentName</span>
+                                            </td>
+                                            <td class="text-center fw-bold">@s.BookingCount</td>
+                                            <td class="text-end fw-bold text-success">@s.TotalRevenue.ToString("N0") đ</td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="4" class="text-center py-4 text-muted">
+                                            Chưa có dữ liệu dịch vụ nổi bật.
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Monthly Chart
+            const monthlyData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(rev.MonthlyBreakdown));
+            const months = monthlyData.map(m => m.MonthName || ('Tháng ' + m.Month));
+            const revenues = monthlyData.map(m => m.Revenue);
+            const counts = monthlyData.map(m => m.AppointmentCount);
+
+            const mCtx = document.getElementById('monthlyReportChart');
+            if (mCtx) {
+                new Chart(mCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: months,
+                        datasets: [
+                            {
+                                label: 'Doanh thu (VNĐ)',
+                                data: revenues,
+                                backgroundColor: 'rgba(37, 99, 235, 0.75)',
+                                borderColor: 'rgb(37, 99, 235)',
+                                borderWidth: 1,
+                                yAxisID: 'y'
+                            },
+                            {
+                                label: 'Số ca khám',
+                                data: counts,
+                                type: 'line',
+                                borderColor: 'rgb(15, 118, 110)',
+                                backgroundColor: 'rgb(15, 118, 110)',
+                                borderWidth: 2,
+                                yAxisID: 'y1'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                ticks: {
+                                    callback: function(val) {
+                                        return val.toLocaleString('vi-VN') + ' đ';
+                                    }
+                                }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                grid: {
+                                    drawOnChartArea: false
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Outcome Chart
+            const completed = @appt.CompletedCount;
+            const cancelled = @appt.CancelledCount;
+            const other = @Math.Max(0, appt.TotalAppointments - appt.CompletedCount - appt.CancelledCount);
+
+            const outCtx = document.getElementById('outcomeChart');
+            if (outCtx) {
+                new Chart(outCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Hoàn thành', 'Hủy/Vắng mặt', 'Đang xử lý / Khác'],
+                        datasets: [{
+                            data: [completed, cancelled, other],
+                            backgroundColor: ['#16a34a', '#dc2626', '#64748b']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+}

@@ -1,0 +1,301 @@
+@model ServiceManageViewModel
+@{
+    ViewData["Title"] = "Quản lý Bảng giá Dịch vụ";
+}
+
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-controller="AdminDashboard" asp-action="Dashboard" class="text-decoration-none text-muted small">
+                    <i class="bi bi-chevron-left"></i> Tổng quan
+                </a>
+                <span class="text-muted small">&bull;</span>
+                <span class="badge-dc badge-role-systemadministrator">Danh mục hệ thống</span>
+            </div>
+            <h1 class="page-title">Quản lý Danh mục & Bảng giá Dịch vụ</h1>
+            <p class="page-subtitle">Quản lý danh mục dịch vụ theo từng chuyên khoa, thời lượng khám dự kiến và đơn giá niêm yết</p>
+        </div>
+        <div class="page-actions">
+            <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createServiceModal">
+                <i class="bi bi-plus-lg me-1"></i> Thêm Dịch vụ Mới
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div class="card-dc mb-4">
+        <div class="card-dc-body p-3">
+            <form asp-controller="AdminService" asp-action="Index" method="get" class="row g-2 align-items-center">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold text-muted mb-1">Lọc theo chuyên khoa</label>
+                    <select name="departmentId" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- Tất cả các chuyên khoa --</option>
+                        @foreach (var dept in Model.Departments)
+                        {
+                            <option value="@dept.DepartmentId" selected="@(Model.SelectedDepartmentId == dept.DepartmentId)">
+                                @dept.Name
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small fw-semibold text-muted mb-1">Tìm kiếm dịch vụ</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" name="search" class="form-control" placeholder="Nhập tên dịch vụ hoặc mô tả..." value="@Model.SearchKeyword" />
+                    </div>
+                </div>
+                <div class="col-md-3 d-flex align-items-end gap-2 pt-3">
+                    <button type="submit" class="btn btn-sm btn-dc-primary">
+                        <i class="bi bi-filter me-1"></i> Áp dụng
+                    </button>
+                    <a asp-controller="AdminService" asp-action="Index" class="btn btn-sm btn-outline-secondary">
+                        Đặt lại
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Services Table -->
+    <div class="card-dc">
+        <div class="card-dc-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-tags text-teal"></i>
+                <span class="fw-bold">Danh sách Dịch vụ Nha khoa (@Model.Services.Count)</span>
+            </div>
+        </div>
+        <div class="card-dc-body p-0">
+            <div class="table-responsive">
+                <table class="table-dc mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>Tên Dịch vụ</th>
+                            <th>Chuyên khoa</th>
+                            <th>Mô tả</th>
+                            <th class="text-center">Thời lượng</th>
+                            <th class="text-end">Đơn giá niêm yết</th>
+                            <th>Trạng thái</th>
+                            <th class="text-end">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Services.Any())
+                        {
+                            int index = 1;
+                            foreach (var srv in Model.Services)
+                            {
+                                <tr>
+                                    <td class="text-muted fw-bold">@(index++)</td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@srv.ServiceName</div>
+                                        <div class="text-muted small">Mã: SRV-@srv.DepartmentServiceId</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-primary border">@srv.DepartmentName</span>
+                                    </td>
+                                    <td style="max-width: 250px;">
+                                        <span class="text-muted small text-truncate d-inline-block" style="max-width: 240px;">
+                                            @(string.IsNullOrEmpty(srv.Description) ? "—" : srv.Description)
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary-subtle text-secondary">
+                                            <i class="bi bi-clock me-1"></i>@(srv.DurationMinutes.HasValue ? srv.DurationMinutes + " phút" : "30 phút")
+                                        </span>
+                                    </td>
+                                    <td class="text-end fw-bold text-success">
+                                        @srv.Price.ToString("N0") đ
+                                    </td>
+                                    <td>
+                                        @if (srv.Status == "Active")
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                <i class="bi bi-check-circle me-1"></i> Hoạt động
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                                <i class="bi bi-pause-circle me-1"></i> Tạm ngưng
+                                            </span>
+                                        }
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary me-1 btn-edit-srv"
+                                                data-id="@srv.DepartmentServiceId"
+                                                data-deptid="@srv.DepartmentId"
+                                                data-name="@srv.ServiceName"
+                                                data-desc="@srv.Description"
+                                                data-duration="@srv.DurationMinutes"
+                                                data-price="@srv.Price"
+                                                data-status="@srv.Status">
+                                            <i class="bi bi-pencil-square"></i> Sửa
+                                        </button>
+                                        <form asp-controller="AdminService" asp-action="ToggleStatus" asp-route-id="@srv.DepartmentServiceId" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn thay đổi trạng thái dịch vụ này?');">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-sm @(srv.Status == "Active" ? "btn-outline-warning" : "btn-outline-success")">
+                                                <i class="bi @(srv.Status == "Active" ? "bi-pause" : "bi-play")"></i>
+                                                @(srv.Status == "Active" ? "Tạm dừng" : "Kích hoạt")
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="bi bi-tags fs-3 d-block mb-1"></i>
+                                    Không tìm thấy dịch vụ nào phù hợp với điều kiện tìm kiếm.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm Dịch vụ -->
+<div class="modal fade" id="createServiceModal" tabindex="-1" aria-labelledby="createServiceLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="AdminService" asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="createServiceLabel">
+                        <i class="bi bi-plus-circle text-teal me-2"></i>Thêm Mới Dịch Vụ Nha Khoa
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Thuộc chuyên khoa <span class="text-danger">*</span></label>
+                        <select name="DepartmentId" class="form-select" required>
+                            <option value="">-- Chọn chuyên khoa --</option>
+                            @foreach (var dept in Model.Departments)
+                            {
+                                <option value="@dept.DepartmentId" selected="@(Model.SelectedDepartmentId == dept.DepartmentId)">
+                                    @dept.Name
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tên dịch vụ <span class="text-danger">*</span></label>
+                        <input type="text" name="ServiceName" class="form-control" placeholder="Ví dụ: Cạo vôi răng, Nhổ răng khôn..." required maxlength="150" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mô tả dịch vụ</label>
+                        <textarea name="Description" class="form-control" rows="3" placeholder="Mô tả kỹ thuật, quy trình hoặc chỉ định..." maxlength="500"></textarea>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Thời lượng dự kiến (phút)</label>
+                            <input type="number" name="DurationMinutes" class="form-control" value="30" min="5" max="480" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Đơn giá (VNĐ) <span class="text-danger">*</span></label>
+                            <input type="number" name="Price" class="form-control" placeholder="0" min="0" step="1000" required />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trạng thái</label>
+                        <select name="Status" class="form-select">
+                            <option value="Active">Đang hoạt động (Active)</option>
+                            <option value="Inactive">Tạm dừng (Inactive)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Dịch Vụ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Sửa Dịch vụ -->
+<div class="modal fade" id="editServiceModal" tabindex="-1" aria-labelledby="editServiceLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="AdminService" asp-action="Edit" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="DepartmentServiceId" id="editSrvId" />
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="editServiceLabel">
+                        <i class="bi bi-pencil-square text-teal me-2"></i>Chỉnh Sửa Dịch Vụ
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Thuộc chuyên khoa <span class="text-danger">*</span></label>
+                        <select name="DepartmentId" id="editSrvDeptId" class="form-select" required>
+                            @foreach (var dept in Model.Departments)
+                            {
+                                <option value="@dept.DepartmentId">@dept.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tên dịch vụ <span class="text-danger">*</span></label>
+                        <input type="text" name="ServiceName" id="editSrvName" class="form-control" required maxlength="150" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mô tả dịch vụ</label>
+                        <textarea name="Description" id="editSrvDesc" class="form-control" rows="3" maxlength="500"></textarea>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Thời lượng dự kiến (phút)</label>
+                            <input type="number" name="DurationMinutes" id="editSrvDuration" class="form-control" min="5" max="480" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Đơn giá (VNĐ) <span class="text-danger">*</span></label>
+                            <input type="number" name="Price" id="editSrvPrice" class="form-control" min="0" step="1000" required />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trạng thái</label>
+                        <select name="Status" id="editSrvStatus" class="form-select">
+                            <option value="Active">Đang hoạt động (Active)</option>
+                            <option value="Inactive">Tạm dừng (Inactive)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Thay Đổi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const editModal = new bootstrap.Modal(document.getElementById('editServiceModal'));
+            document.querySelectorAll('.btn-edit-srv').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    document.getElementById('editSrvId').value = this.dataset.id;
+                    document.getElementById('editSrvDeptId').value = this.dataset.deptid;
+                    document.getElementById('editSrvName').value = this.dataset.name;
+                    document.getElementById('editSrvDesc').value = this.dataset.desc || '';
+                    document.getElementById('editSrvDuration').value = this.dataset.duration || 30;
+                    document.getElementById('editSrvPrice').value = this.dataset.price;
+                    document.getElementById('editSrvStatus').value = this.dataset.status || 'Active';
+                    editModal.show();
+                });
+            });
+        });
+    </script>
+}

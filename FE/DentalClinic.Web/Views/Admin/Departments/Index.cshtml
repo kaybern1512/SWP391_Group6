@@ -1,0 +1,277 @@
+@model DepartmentManageViewModel
+@{
+    ViewData["Title"] = "Quản lý Chuyên khoa";
+}
+
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-controller="AdminDashboard" asp-action="Dashboard" class="text-decoration-none text-muted small">
+                    <i class="bi bi-chevron-left"></i> Tổng quan
+                </a>
+                <span class="text-muted small">&bull;</span>
+                <span class="badge-dc badge-role-systemadministrator">Danh mục hệ thống</span>
+            </div>
+            <h1 class="page-title">Quản lý Chuyên khoa Nha khoa</h1>
+            <p class="page-subtitle">Quản lý cấu trúc chuyên khoa, người quản lý phụ trách và điều phối dịch vụ y tế</p>
+        </div>
+        <div class="page-actions">
+            <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createDepartmentModal">
+                <i class="bi bi-plus-lg me-1"></i> Thêm Chuyên khoa
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="card-dc mb-4">
+        <div class="card-dc-body p-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small fw-semibold">Lọc theo trạng thái:</span>
+                    <a asp-controller="AdminDepartment" asp-action="Index" class="btn btn-sm @(string.IsNullOrEmpty(Model.StatusFilter) ? "btn-primary" : "btn-outline-secondary")">
+                        Tất cả (@Model.Departments.Count)
+                    </a>
+                    <a asp-controller="AdminDepartment" asp-action="Index" asp-route-status="Active" class="btn btn-sm @(Model.StatusFilter == "Active" ? "btn-success" : "btn-outline-secondary")">
+                        Đang hoạt động
+                    </a>
+                    <a asp-controller="AdminDepartment" asp-action="Index" asp-route-status="Inactive" class="btn btn-sm @(Model.StatusFilter == "Inactive" ? "btn-secondary" : "btn-outline-secondary")">
+                        Tạm dừng
+                    </a>
+                </div>
+                <div class="text-muted small">
+                    Tổng số: <strong>@Model.Departments.Count</strong> chuyên khoa
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Departments Table -->
+    <div class="card-dc">
+        <div class="card-dc-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-hospital text-primary"></i>
+                <span class="fw-bold">Danh sách Chuyên khoa phòng khám</span>
+            </div>
+        </div>
+        <div class="card-dc-body p-0">
+            <div class="table-responsive">
+                <table class="table-dc mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>Tên Chuyên khoa</th>
+                            <th>Mô tả chức năng</th>
+                            <th>Trưởng khoa phụ trách</th>
+                            <th class="text-center">Số dịch vụ</th>
+                            <th class="text-center">Số bác sĩ</th>
+                            <th>Trạng thái</th>
+                            <th class="text-end">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Departments.Any())
+                        {
+                            int index = 1;
+                            foreach (var dept in Model.Departments)
+                            {
+                                <tr>
+                                    <td class="text-muted fw-bold">@(index++)</td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@dept.Name</div>
+                                        <div class="text-muted small">Mã: DEP-@dept.DepartmentId</div>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted small">@(string.IsNullOrEmpty(dept.Description) ? "Chưa có mô tả" : dept.Description)</span>
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(dept.ManagerName))
+                                        {
+                                            <div class="d-flex align-items-center gap-2">
+                                                <i class="bi bi-person-badge text-primary"></i>
+                                                <div>
+                                                    <div class="fw-semibold text-dark">@dept.ManagerName</div>
+                                                    <div class="text-muted small">@(dept.ManagerEmployeeCode ?? "Bác sĩ trưởng khoa")</div>
+                                                </div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-muted border">Chưa phân công</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        <a asp-controller="AdminService" asp-action="Index" asp-route-departmentId="@dept.DepartmentId" class="badge bg-info-subtle text-info border text-decoration-none">
+                                            @dept.ServicesCount dịch vụ
+                                        </a>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary-subtle text-secondary border">
+                                            @dept.DentistsCount bác sĩ
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (dept.Status == "Active")
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                <i class="bi bi-check-circle me-1"></i> Hoạt động
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                                <i class="bi bi-pause-circle me-1"></i> Tạm ngưng
+                                            </span>
+                                        }
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary me-1 btn-edit-dept"
+                                                data-id="@dept.DepartmentId"
+                                                data-name="@dept.Name"
+                                                data-desc="@dept.Description"
+                                                data-manager="@dept.ManagerUserId"
+                                                data-status="@dept.Status">
+                                            <i class="bi bi-pencil-square"></i> Sửa
+                                        </button>
+                                        <form asp-controller="AdminDepartment" asp-action="ToggleStatus" asp-route-id="@dept.DepartmentId" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn thay đổi trạng thái của chuyên khoa này?');">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-sm @(dept.Status == "Active" ? "btn-outline-warning" : "btn-outline-success")">
+                                                <i class="bi @(dept.Status == "Active" ? "bi-pause" : "bi-play")"></i>
+                                                @(dept.Status == "Active" ? "Tạm dừng" : "Kích hoạt")
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="bi bi-hospital fs-3 d-block mb-1"></i>
+                                    Không tìm thấy chuyên khoa nào phù hợp tiêu chí lọc.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm Chuyên khoa -->
+<div class="modal fade" id="createDepartmentModal" tabindex="-1" aria-labelledby="createDepartmentLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="AdminDepartment" asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="createDepartmentLabel">
+                        <i class="bi bi-plus-circle text-primary me-2"></i>Thêm Mới Chuyên Khoa
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tên chuyên khoa <span class="text-danger">*</span></label>
+                        <input type="text" name="Name" class="form-control" placeholder="Ví dụ: Răng Hàm Mặt, Chỉnh nha niềng răng..." required maxlength="100" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mô tả chức năng</label>
+                        <textarea name="Description" class="form-control" rows="3" placeholder="Mô tả phạm vi và nhiệm vụ của chuyên khoa..." maxlength="500"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trưởng khoa phụ trách</label>
+                        <select name="ManagerUserId" class="form-select">
+                            <option value="">-- Chưa chỉ định trưởng khoa --</option>
+                            @foreach (var user in Model.PotentialManagers)
+                            {
+                                <option value="@user.UserId">@user.FullName (@user.Role - @(user.Code ?? user.Email))</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trạng thái ban đầu</label>
+                        <select name="Status" class="form-select">
+                            <option value="Active">Đang hoạt động (Active)</option>
+                            <option value="Inactive">Tạm dừng (Inactive)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Chuyên Khoa</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Sửa Chuyên khoa -->
+<div class="modal fade" id="editDepartmentModal" tabindex="-1" aria-labelledby="editDepartmentLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="AdminDepartment" asp-action="Edit" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="DepartmentId" id="editDeptId" />
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="editDepartmentLabel">
+                        <i class="bi bi-pencil-square text-primary me-2"></i>Chỉnh Sửa Chuyên Khoa
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tên chuyên khoa <span class="text-danger">*</span></label>
+                        <input type="text" name="Name" id="editDeptName" class="form-control" required maxlength="100" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mô tả chức năng</label>
+                        <textarea name="Description" id="editDeptDesc" class="form-control" rows="3" maxlength="500"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trưởng khoa phụ trách</label>
+                        <select name="ManagerUserId" id="editDeptManager" class="form-select">
+                            <option value="">-- Chưa chỉ định trưởng khoa --</option>
+                            @foreach (var user in Model.PotentialManagers)
+                            {
+                                <option value="@user.UserId">@user.FullName (@user.Role - @(user.Code ?? user.Email))</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trạng thái</label>
+                        <select name="Status" id="editDeptStatus" class="form-select">
+                            <option value="Active">Đang hoạt động (Active)</option>
+                            <option value="Inactive">Tạm dừng (Inactive)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Thay Đổi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const editModal = new bootstrap.Modal(document.getElementById('editDepartmentModal'));
+            document.querySelectorAll('.btn-edit-dept').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    document.getElementById('editDeptId').value = this.dataset.id;
+                    document.getElementById('editDeptName').value = this.dataset.name;
+                    document.getElementById('editDeptDesc').value = this.dataset.desc || '';
+                    document.getElementById('editDeptManager').value = this.dataset.manager || '';
+                    document.getElementById('editDeptStatus').value = this.dataset.status || 'Active';
+                    editModal.show();
+                });
+            });
+        });
+    </script>
+}

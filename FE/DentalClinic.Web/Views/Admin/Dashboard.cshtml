@@ -1,128 +1,390 @@
-@model DashboardViewModel
+@model AdminDashboardPageViewModel
 @{
-    ViewData["Title"] = "Admin Console";
+    ViewData["Title"] = "Bảng điều khiển Quản trị viên";
+    var stats = Model.Stats;
 }
 
 <div class="container-fluid p-0">
-    <!-- Page Header -->
+    <!-- Header -->
     <div class="page-header-dc">
         <div>
             <div class="d-flex align-items-center gap-2 mb-1">
                 <span class="badge-dc badge-role-systemadministrator">System Administrator</span>
-                <span class="badge bg-white text-muted border small">01 Central Clinic</span>
+                <span class="badge bg-white text-muted border small">Hệ thống phòng khám đa khoa</span>
             </div>
-            <h1 class="page-title">@Model.Title</h1>
-            <p class="page-subtitle">@Model.Subtitle</p>
+            <h1 class="page-title">Trung tâm Quản trị & Điều hành Hệ thống</h1>
+            <p class="page-subtitle">Quản lý chuyên khoa, danh mục dịch vụ, phòng/ghế nha khoa, tài khoản người dùng và giám sát kiểm toán</p>
         </div>
-        <div class="page-actions">
-            <button type="button" class="btn btn-dc-outline" onclick="alert('Connects to Audit Log Export API.');">
-                <i class="bi bi-file-earmark-arrow-down me-1"></i> Export Logs
-            </button>
-            <button type="button" class="btn btn-dc-primary" onclick="alert('Connects to Staff Provisioning API.');">
-                <i class="bi bi-person-plus me-1"></i> Create Staff Account
-            </button>
+        <div class="page-actions d-flex gap-2">
+            <a asp-controller="AdminAuditLog" asp-action="Index" class="btn btn-dc-outline">
+                <i class="bi bi-shield-check me-1"></i> Nhật ký kiểm toán
+            </a>
+            <a asp-controller="AdminDashboard" asp-action="Reports" class="btn btn-dc-primary">
+                <i class="bi bi-bar-chart-line me-1"></i> Báo cáo tổng thể
+            </a>
         </div>
     </div>
 
-    <!-- 4 KPI Stat Cards (No Fake System Status) -->
+    <!-- 4 Primary KPI Stat Cards -->
     <div class="row g-3 mb-4">
-        @foreach (var stat in Model.StatCards)
-        {
-            <div class="col-sm-6 col-xl-3">
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span class="stat-label">@stat.Title</span>
-                        <div class="stat-icon-box stat-icon-@stat.ColorClass">
-                            <i class="bi @stat.Icon"></i>
-                        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Tổng doanh thu phòng khám</span>
+                    <div class="stat-icon-box stat-icon-success">
+                        <i class="bi bi-cash-stack"></i>
                     </div>
-                    <div>
-                        <div class="stat-value">@stat.Value</div>
-                        <div class="stat-note">
-                            <i class="bi bi-info-circle"></i> @stat.Note
-                        </div>
-                    </div>
-                </div>
-            </div>
-        }
-    </div>
-
-    <!-- Administrative Quick Action Cards Section -->
-    <div class="mb-4">
-        <h5 class="font-heading fs-6 fw-bold text-dark mb-3">System Administration & Provisioning</h5>
-        <div class="row g-3">
-            @foreach (var card in Model.Cards)
-            {
-                <div class="col-md-6 col-lg-4 col-xl-3">
-                    <div class="card-quick-action">
-                        <div>
-                            <div class="quick-icon-box quick-icon-@card.ColorClass">
-                                <i class="bi @card.Icon"></i>
-                            </div>
-                            <h6 class="fw-bold text-dark mb-1">@card.Title</h6>
-                            <p class="text-muted small mb-3">@card.Description</p>
-                        </div>
-                        <div>
-                            <a href="@card.ActionUrl" class="btn btn-light btn-sm text-primary w-100 fw-semibold border" onclick="alert('Feature will connect to admin backend API according to project milestones.'); return false;">
-                                @card.ActionText <i class="bi bi-arrow-right ms-1"></i>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            }
-        </div>
-    </div>
-
-    <!-- Audit Logs Section with Filter Bar -->
-    <div class="card-dc mb-4">
-        <div class="card-dc-header">
-            <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-shield-check text-primary"></i>
-                <span>Recent System & Security Audit Logs</span>
-            </div>
-            <span class="badge bg-light text-muted border small">Immutable Records</span>
-        </div>
-        <div class="card-dc-body p-3">
-            <div class="filter-bar-dc">
-                <div class="filter-group">
-                    <div class="filter-search-box">
-                        <i class="bi bi-search"></i>
-                        <input type="text" placeholder="Search audit logs by actor, event type, or entity ID..." />
-                    </div>
-                    <select class="form-select filter-select" style="width: auto;">
-                        <option value="">All Event Categories</option>
-                        <option value="Auth">Authentication</option>
-                        <option value="Account">Account Status Change</option>
-                        <option value="Department">Department Structure</option>
-                        <option value="Clinic">Clinic Configuration</option>
-                    </select>
                 </div>
                 <div>
-                    <button type="button" class="btn btn-dc-outline btn-sm">
-                        <i class="bi bi-arrow-clockwise me-1"></i> Refresh
-                    </button>
+                    <div class="stat-value">@stats.TotalRevenue.ToString("N0") <small class="fs-6 fw-normal text-muted">đ</small></div>
+                    <div class="stat-note">
+                        <i class="bi bi-check-circle text-success"></i> Từ các ca khám đã hoàn thành
+                    </div>
                 </div>
             </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Tổng số ca khám</span>
+                    <div class="stat-icon-box stat-icon-primary">
+                        <i class="bi bi-calendar-check"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-value">@stats.TotalAppointments</div>
+                    <div class="stat-note">
+                        <i class="bi bi-activity text-primary"></i> Hoàn thành: @stats.CompletedAppointments | Hủy: @stats.CancelledAppointments
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Tỷ lệ hoàn thành ca khám</span>
+                    <div class="stat-icon-box stat-icon-teal">
+                        <i class="bi bi-pie-chart"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-value">@stats.CompletionRate.ToString("0.0")%</div>
+                    <div class="stat-note">
+                        <i class="bi bi-arrow-down-right text-danger"></i> Tỷ lệ hủy lịch: @stats.CancellationRate.ToString("0.0")%
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Cơ sở vật chất & Quy mô</span>
+                    <div class="stat-icon-box stat-icon-info">
+                        <i class="bi bi-hospital"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-value">@stats.TotalDepartments <span class="fs-6 fw-normal text-muted">khoa</span></div>
+                    <div class="stat-note">
+                        <i class="bi bi-door-open text-info"></i> @stats.TotalRooms phòng | @stats.ActiveChairs/@stats.TotalChairs ghế hoạt động
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
+    <!-- Quick Navigation Management Cards -->
+    <div class="mb-4">
+        <h5 class="font-heading fs-6 fw-bold text-dark mb-3">Phân hệ Quản trị & Vận hành</h5>
+        <div class="row g-3">
+            <div class="col-md-6 col-lg-4 col-xl-2">
+                <div class="card-quick-action text-center h-100 p-3">
+                    <div class="quick-icon-box quick-icon-primary mx-auto mb-2">
+                        <i class="bi bi-hospital"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-1">Chuyên khoa</h6>
+                    <p class="text-muted small mb-3">@stats.TotalDepartments khoa đang vận hành</p>
+                    <a asp-controller="AdminDepartment" asp-action="Index" class="btn btn-light btn-sm text-primary w-100 fw-semibold border">
+                        Quản lý <i class="bi bi-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 col-xl-2">
+                <div class="card-quick-action text-center h-100 p-3">
+                    <div class="quick-icon-box quick-icon-teal mx-auto mb-2">
+                        <i class="bi bi-tags"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-1">Bảng giá dịch vụ</h6>
+                    <p class="text-muted small mb-3">Dịch vụ & thời lượng khám</p>
+                    <a asp-controller="AdminService" asp-action="Index" class="btn btn-light btn-sm text-teal w-100 fw-semibold border">
+                        Quản lý <i class="bi bi-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 col-xl-2">
+                <div class="card-quick-action text-center h-100 p-3">
+                    <div class="quick-icon-box quick-icon-info mx-auto mb-2">
+                        <i class="bi bi-door-open"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-1">Phòng & Ghế</h6>
+                    <p class="text-muted small mb-3">@stats.TotalRooms phòng &bull; @stats.TotalChairs ghế</p>
+                    <a asp-controller="AdminRoomChair" asp-action="Index" class="btn btn-light btn-sm text-info w-100 fw-semibold border">
+                        Quản lý <i class="bi bi-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 col-xl-2">
+                <div class="card-quick-action text-center h-100 p-3">
+                    <div class="quick-icon-box quick-icon-warning mx-auto mb-2">
+                        <i class="bi bi-people"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-1">Tài khoản & Phân quyền</h6>
+                    <p class="text-muted small mb-3">@stats.TotalStaff nhân sự, @stats.TotalDentists bác sĩ</p>
+                    <a asp-controller="AdminUser" asp-action="Index" class="btn btn-light btn-sm text-warning w-100 fw-semibold border">
+                        Quản lý <i class="bi bi-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 col-xl-2">
+                <div class="card-quick-action text-center h-100 p-3">
+                    <div class="quick-icon-box quick-icon-danger mx-auto mb-2">
+                        <i class="bi bi-shield-check"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-1">Audit Logs</h6>
+                    <p class="text-muted small mb-3">Truy vết thao tác hệ thống</p>
+                    <a asp-controller="AdminAuditLog" asp-action="Index" class="btn btn-light btn-sm text-danger w-100 fw-semibold border">
+                        Xem log <i class="bi bi-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 col-xl-2">
+                <div class="card-quick-action text-center h-100 p-3">
+                    <div class="quick-icon-box quick-icon-success mx-auto mb-2">
+                        <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-1">Báo cáo & Thống kê</h6>
+                    <p class="text-muted small mb-3">Biểu đồ doanh thu chi tiết</p>
+                    <a asp-controller="AdminDashboard" asp-action="Reports" class="btn btn-light btn-sm text-success w-100 fw-semibold border">
+                        Xem báo cáo <i class="bi bi-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row g-3 mb-4">
+        <div class="col-lg-8">
+            <div class="card-dc h-100">
+                <div class="card-dc-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-bar-chart text-primary"></i>
+                        <span class="fw-bold">Biểu đồ Doanh thu Theo Tháng (Năm @DateTime.UtcNow.Year)</span>
+                    </div>
+                    <span class="badge bg-light text-muted border">Đơn vị: VNĐ</span>
+                </div>
+                <div class="card-dc-body p-3">
+                    <canvas id="revenueChart" style="max-height: 280px;"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card-dc h-100">
+                <div class="card-dc-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-pie-chart text-teal"></i>
+                        <span class="fw-bold">Tỷ trọng Ca khám Theo Khoa</span>
+                    </div>
+                </div>
+                <div class="card-dc-body p-3">
+                    <canvas id="deptChart" style="max-height: 280px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Audit Logs Table -->
+    <div class="card-dc mb-4">
+        <div class="card-dc-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-clock-history text-danger"></i>
+                <span class="fw-bold">Nhật ký Thao tác Hệ thống Gần đây (Audit Trail)</span>
+            </div>
+            <a asp-controller="AdminAuditLog" asp-action="Index" class="btn btn-dc-outline btn-sm">
+                Xem tất cả nhật ký <i class="bi bi-arrow-right ms-1"></i>
+            </a>
+        </div>
+        <div class="card-dc-body p-0">
             <div class="table-responsive">
-                <table class="table-dc">
+                <table class="table-dc mb-0">
                     <thead>
                         <tr>
-                            <th>Timestamp (UTC)</th>
-                            <th>Actor (Account)</th>
-                            <th>Event Type</th>
-                            <th>Target Entity</th>
-                            <th>IP Address</th>
-                            <th>Outcome</th>
-                            <th class="text-end">Details</th>
+                            <th>Thời gian</th>
+                            <th>Người thực hiện</th>
+                            <th>Vai trò</th>
+                            <th>Hành động</th>
+                            <th>Đối tượng</th>
+                            <th>Mã bản ghi</th>
+                            <th>Chi tiết</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Dynamically populated from backend audit log service -->
+                        @if (stats.RecentAuditLogs != null && stats.RecentAuditLogs.Any())
+                        {
+                            foreach (var log in stats.RecentAuditLogs)
+                            {
+                                <tr>
+                                    <td class="text-nowrap small text-muted">
+                                        @log.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss")
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark">@(log.UserFullName ?? log.UserEmail ?? "System")</div>
+                                        @if (!string.IsNullOrEmpty(log.UserEmail))
+                                        {
+                                            <div class="text-muted small">@log.UserEmail</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border">@(log.UserRole ?? "System")</span>
+                                    </td>
+                                    <td>
+                                        @if (log.Action.Contains("CREATE") || log.Action.Contains("INSERT"))
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">@log.Action</span>
+                                        }
+                                        else if (log.Action.Contains("UPDATE") || log.Action.Contains("EDIT"))
+                                        {
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle">@log.Action</span>
+                                        }
+                                        else if (log.Action.Contains("LOCK") || log.Action.Contains("DELETE"))
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">@log.Action</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle">@log.Action</span>
+                                        }
+                                    </td>
+                                    <td><strong>@log.EntityName</strong></td>
+                                    <td><code>@(log.EntityId ?? "-")</code></td>
+                                    <td class="small text-muted" style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        @(log.NewValues ?? log.OldValues ?? "-")
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="7" class="text-center py-4 text-muted">
+                                    <i class="bi bi-inbox fs-3 d-block mb-1"></i>
+                                    Chưa có bản ghi nhật ký kiểm toán nào gần đây.
+                                </td>
+                            </tr>
+                        }
                     </tbody>
                 </table>
             </div>
-            <partial name="_EmptyState" model="Model.EmptyState" />
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Revenue Chart
+            const monthlyData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(stats.MonthlyRevenues));
+            const revLabels = monthlyData.map(m => m.MonthName || ('Tháng ' + m.Month));
+            const revValues = monthlyData.map(m => m.Revenue);
+            const apptCounts = monthlyData.map(m => m.AppointmentCount);
+
+            const revCtx = document.getElementById('revenueChart');
+            if (revCtx) {
+                new Chart(revCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: revLabels,
+                        datasets: [
+                            {
+                                label: 'Doanh thu (VNĐ)',
+                                data: revValues,
+                                backgroundColor: 'rgba(37, 99, 235, 0.75)',
+                                borderColor: 'rgb(37, 99, 235)',
+                                borderWidth: 1,
+                                yAxisID: 'y'
+                            },
+                            {
+                                label: 'Số ca khám',
+                                data: apptCounts,
+                                type: 'line',
+                                borderColor: 'rgb(15, 118, 110)',
+                                backgroundColor: 'rgb(15, 118, 110)',
+                                borderWidth: 2,
+                                yAxisID: 'y1'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                ticks: {
+                                    callback: function(val) {
+                                        return val.toLocaleString('vi-VN') + ' đ';
+                                    }
+                                }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                grid: {
+                                    drawOnChartArea: false
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Department Breakdown Doughnut Chart
+            const deptData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(stats.DepartmentStats));
+            const deptLabels = deptData.map(d => d.DepartmentName);
+            const deptCounts = deptData.map(d => d.AppointmentCount);
+
+            const deptCtx = document.getElementById('deptChart');
+            if (deptCtx) {
+                new Chart(deptCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: deptLabels.length > 0 ? deptLabels : ['Chưa có dữ liệu'],
+                        datasets: [{
+                            data: deptCounts.length > 0 ? deptCounts : [1],
+                            backgroundColor: [
+                                '#2563eb', '#0f766e', '#0284c7', '#d97706', '#8b5cf6', '#ec4899', '#64748b'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+}

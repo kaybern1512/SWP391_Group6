@@ -1,0 +1,525 @@
+@model RoomChairManageViewModel
+@{
+    ViewData["Title"] = "Quản lý Phòng khám & Ghế nha khoa";
+}
+
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-controller="AdminDashboard" asp-action="Dashboard" class="text-decoration-none text-muted small">
+                    <i class="bi bi-chevron-left"></i> Tổng quan
+                </a>
+                <span class="text-muted small">&bull;</span>
+                <span class="badge-dc badge-role-systemadministrator">Cơ sở vật chất</span>
+            </div>
+            <h1 class="page-title">Quản lý Phòng khám & Ghế nha khoa</h1>
+            <p class="page-subtitle">Quản trị phân bổ không gian khám chữa bệnh, trạng thái vận hành và bảo trì thiết bị ghế</p>
+        </div>
+        <div class="page-actions d-flex gap-2">
+            <button type="button" class="btn btn-dc-outline" data-bs-toggle="modal" data-bs-target="#createRoomModal">
+                <i class="bi bi-door-open me-1"></i> Thêm Phòng Khám
+            </button>
+            <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createChairModal">
+                <i class="bi bi-plus-lg me-1"></i> Thêm Ghế Nha Khoa
+            </button>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-pills mb-4" id="roomChairTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(Model.ActiveTab == "rooms" ? "active" : "") fw-semibold" id="rooms-tab" data-bs-toggle="tab" data-bs-target="#rooms-pane" type="button" role="tab">
+                <i class="bi bi-door-open me-1"></i> Danh sách Phòng khám (@Model.Rooms.Count)
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(Model.ActiveTab == "chairs" ? "active" : "") fw-semibold" id="chairs-tab" data-bs-toggle="tab" data-bs-target="#chairs-pane" type="button" role="tab">
+                <i class="bi bi-grid-3x3-gap me-1"></i> Ghế nha khoa (@Model.Chairs.Count)
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="roomChairTabContent">
+        <!-- PANE 1: PHÒNG KHÁM -->
+        <div class="tab-pane fade @(Model.ActiveTab == "rooms" ? "show active" : "")" id="rooms-pane" role="tabpanel">
+            <div class="card-dc">
+                <div class="card-dc-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-door-open text-primary"></i>
+                        <span class="fw-bold">Phòng khám trong cơ sở (@Model.Rooms.Count phòng)</span>
+                    </div>
+                </div>
+                <div class="card-dc-body p-0">
+                    <div class="table-responsive">
+                        <table class="table-dc mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;">#</th>
+                                    <th>Mã phòng</th>
+                                    <th>Tên phòng</th>
+                                    <th class="text-center">Số lượng ghế</th>
+                                    <th class="text-center">Ghế sẵn sàng</th>
+                                    <th>Trạng thái phòng</th>
+                                    <th class="text-end">Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.Rooms.Any())
+                                {
+                                    int rIdx = 1;
+                                    foreach (var rm in Model.Rooms)
+                                    {
+                                        <tr>
+                                            <td class="text-muted fw-bold">@(rIdx++)</td>
+                                            <td>
+                                                <div class="fw-bold text-dark">@rm.RoomCode</div>
+                                                <div class="text-muted small">ID: @rm.RoomId</div>
+                                            </td>
+                                            <td>
+                                                <span class="fw-semibold">@(string.IsNullOrEmpty(rm.RoomName) ? "Phòng " + rm.RoomCode : rm.RoomName)</span>
+                                            </td>
+                                            <td class="text-center">
+                                                <a asp-controller="AdminRoomChair" asp-action="Index" asp-route-tab="chairs" asp-route-roomId="@rm.RoomId" class="badge bg-light text-primary border text-decoration-none">
+                                                    @rm.ChairsCount ghế
+                                                </a>
+                                            </td>
+                                            <td class="text-center">
+                                                <span class="badge bg-success-subtle text-success border">
+                                                    @rm.ActiveChairsCount ghế hoạt động
+                                                </span>
+                                            </td>
+                                            <td>
+                                                @if (rm.Status == "Active")
+                                                {
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                        <i class="bi bi-check-circle me-1"></i> Sẵn sàng (Active)
+                                                    </span>
+                                                }
+                                                else if (rm.Status == "Maintenance")
+                                                {
+                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+                                                        <i class="bi bi-tools me-1"></i> Bảo trì (Maintenance)
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                                        <i class="bi bi-pause-circle me-1"></i> Tạm dừng (Inactive)
+                                                    </span>
+                                                }
+                                            </td>
+                                            <td class="text-end text-nowrap">
+                                                <button type="button" class="btn btn-sm btn-outline-primary me-1 btn-edit-room"
+                                                        data-id="@rm.RoomId"
+                                                        data-code="@rm.RoomCode"
+                                                        data-name="@rm.RoomName"
+                                                        data-status="@rm.Status">
+                                                    <i class="bi bi-pencil-square"></i> Sửa
+                                                </button>
+                                                <!-- Dropdown đổi nhanh trạng thái -->
+                                                <div class="btn-group">
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                                        Trạng thái
+                                                    </button>
+                                                    <ul class="dropdown-menu dropdown-menu-end">
+                                                        <li>
+                                                            <form asp-controller="AdminRoomChair" asp-action="UpdateRoomStatus" asp-route-id="@rm.RoomId" method="post">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="status" value="Active" />
+                                                                <button type="submit" class="dropdown-item text-success"><i class="bi bi-check-circle me-1"></i> Kích hoạt (Active)</button>
+                                                            </form>
+                                                        </li>
+                                                        <li>
+                                                            <form asp-controller="AdminRoomChair" asp-action="UpdateRoomStatus" asp-route-id="@rm.RoomId" method="post">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="status" value="Maintenance" />
+                                                                <button type="submit" class="dropdown-item text-warning"><i class="bi bi-tools me-1"></i> Bảo trì (Maintenance)</button>
+                                                            </form>
+                                                        </li>
+                                                        <li>
+                                                            <form asp-controller="AdminRoomChair" asp-action="UpdateRoomStatus" asp-route-id="@rm.RoomId" method="post">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="status" value="Inactive" />
+                                                                <button type="submit" class="dropdown-item text-secondary"><i class="bi bi-pause-circle me-1"></i> Tạm ngưng (Inactive)</button>
+                                                            </form>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="7" class="text-center py-4 text-muted">
+                                            <i class="bi bi-door-closed fs-3 d-block mb-1"></i>
+                                            Chưa có phòng khám nào được cấu hình trong hệ thống.
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANE 2: GHẾ NHA KHOA -->
+        <div class="tab-pane fade @(Model.ActiveTab == "chairs" ? "show active" : "")" id="chairs-pane" role="tabpanel">
+            <!-- Filter by Room for Chairs -->
+            <div class="card-dc mb-4">
+                <div class="card-dc-body p-3">
+                    <form asp-controller="AdminRoomChair" asp-action="Index" method="get" class="row g-2 align-items-center">
+                        <input type="hidden" name="tab" value="chairs" />
+                        <div class="col-md-5">
+                            <label class="form-label small fw-semibold text-muted mb-1">Lọc ghế theo phòng khám</label>
+                            <select name="roomId" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="">-- Tất cả phòng khám --</option>
+                                @foreach (var rm in Model.Rooms)
+                                {
+                                    <option value="@rm.RoomId" selected="@(Model.SelectedRoomId == rm.RoomId)">
+                                        Phòng @rm.RoomCode @(string.IsNullOrEmpty(rm.RoomName) ? "" : $"({rm.RoomName})")
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3 pt-3">
+                            <a asp-controller="AdminRoomChair" asp-action="Index" asp-route-tab="chairs" class="btn btn-sm btn-outline-secondary">
+                                Xem tất cả ghế
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card-dc">
+                <div class="card-dc-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-grid-3x3-gap text-teal"></i>
+                        <span class="fw-bold">Danh sách Ghế nha khoa (@Model.Chairs.Count ghế)</span>
+                    </div>
+                </div>
+                <div class="card-dc-body p-0">
+                    <div class="table-responsive">
+                        <table class="table-dc mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;">#</th>
+                                    <th>Mã ghế</th>
+                                    <th>Vị trí phòng</th>
+                                    <th>Trạng thái ghế</th>
+                                    <th class="text-end">Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.Chairs.Any())
+                                {
+                                    int cIdx = 1;
+                                    foreach (var chair in Model.Chairs)
+                                    {
+                                        <tr>
+                                            <td class="text-muted fw-bold">@(cIdx++)</td>
+                                            <td>
+                                                <div class="fw-bold text-dark">@chair.ChairCode</div>
+                                                <div class="text-muted small">ID: @chair.DentalChairId</div>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i class="bi bi-door-open text-primary"></i>
+                                                    <div>
+                                                        <div class="fw-semibold text-dark">Phòng @chair.RoomCode</div>
+                                                        @if (!string.IsNullOrEmpty(chair.RoomName))
+                                                        {
+                                                            <div class="text-muted small">@chair.RoomName</div>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                @if (chair.Status == "Active")
+                                                {
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                        <i class="bi bi-check-circle me-1"></i> Sẵn sàng sử dụng
+                                                    </span>
+                                                }
+                                                else if (chair.Status == "Maintenance")
+                                                {
+                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+                                                        <i class="bi bi-tools me-1"></i> Đang bảo trì
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                                        <i class="bi bi-pause-circle me-1"></i> Tạm dừng hoạt động
+                                                    </span>
+                                                }
+                                            </td>
+                                            <td class="text-end text-nowrap">
+                                                <button type="button" class="btn btn-sm btn-outline-primary me-1 btn-edit-chair"
+                                                        data-id="@chair.DentalChairId"
+                                                        data-roomid="@chair.RoomId"
+                                                        data-code="@chair.ChairCode"
+                                                        data-status="@chair.Status">
+                                                    <i class="bi bi-pencil-square"></i> Sửa
+                                                </button>
+                                                <!-- Dropdown đổi nhanh trạng thái ghế -->
+                                                <div class="btn-group">
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                                        Trạng thái
+                                                    </button>
+                                                    <ul class="dropdown-menu dropdown-menu-end">
+                                                        <li>
+                                                            <form asp-controller="AdminRoomChair" asp-action="UpdateChairStatus" asp-route-id="@chair.DentalChairId" method="post">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="status" value="Active" />
+                                                                <input type="hidden" name="roomId" value="@Model.SelectedRoomId" />
+                                                                <button type="submit" class="dropdown-item text-success"><i class="bi bi-check-circle me-1"></i> Kích hoạt (Active)</button>
+                                                            </form>
+                                                        </li>
+                                                        <li>
+                                                            <form asp-controller="AdminRoomChair" asp-action="UpdateChairStatus" asp-route-id="@chair.DentalChairId" method="post">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="status" value="Maintenance" />
+                                                                <input type="hidden" name="roomId" value="@Model.SelectedRoomId" />
+                                                                <button type="submit" class="dropdown-item text-warning"><i class="bi bi-tools me-1"></i> Bảo trì (Maintenance)</button>
+                                                            </form>
+                                                        </li>
+                                                        <li>
+                                                            <form asp-controller="AdminRoomChair" asp-action="UpdateChairStatus" asp-route-id="@chair.DentalChairId" method="post">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="status" value="Inactive" />
+                                                                <input type="hidden" name="roomId" value="@Model.SelectedRoomId" />
+                                                                <button type="submit" class="dropdown-item text-secondary"><i class="bi bi-pause-circle me-1"></i> Tạm ngưng (Inactive)</button>
+                                                            </form>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="5" class="text-center py-4 text-muted">
+                                            <i class="bi bi-grid-3x3 fs-3 d-block mb-1"></i>
+                                            Không tìm thấy ghế nha khoa nào theo điều kiện lọc.
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm Phòng -->
+<div class="modal fade" id="createRoomModal" tabindex="-1" aria-labelledby="createRoomLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="AdminRoomChair" asp-action="CreateRoom" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="createRoomLabel">
+                        <i class="bi bi-door-open text-primary me-2"></i>Thêm Mới Phòng Khám
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mã phòng <span class="text-danger">*</span></label>
+                        <input type="text" name="RoomCode" class="form-control" placeholder="Ví dụ: P101, P202, VIP-1..." required maxlength="20" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tên phòng khám</label>
+                        <input type="text" name="RoomName" class="form-control" placeholder="Ví dụ: Phòng Tiểu phẫu 1, Phòng Khám Tổng quát..." maxlength="100" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trạng thái ban đầu</label>
+                        <select name="Status" class="form-select">
+                            <option value="Active">Đang hoạt động (Active)</option>
+                            <option value="Maintenance">Đang bảo trì (Maintenance)</option>
+                            <option value="Inactive">Tạm dừng (Inactive)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Phòng Khám</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Sửa Phòng -->
+<div class="modal fade" id="editRoomModal" tabindex="-1" aria-labelledby="editRoomLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="AdminRoomChair" asp-action="EditRoom" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="RoomId" id="editRoomId" />
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="editRoomLabel">
+                        <i class="bi bi-pencil-square text-primary me-2"></i>Chỉnh Sửa Phòng Khám
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mã phòng <span class="text-danger">*</span></label>
+                        <input type="text" name="RoomCode" id="editRoomCode" class="form-control" required maxlength="20" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tên phòng khám</label>
+                        <input type="text" name="RoomName" id="editRoomName" class="form-control" maxlength="100" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trạng thái</label>
+                        <select name="Status" id="editRoomStatus" class="form-select">
+                            <option value="Active">Đang hoạt động (Active)</option>
+                            <option value="Maintenance">Đang bảo trì (Maintenance)</option>
+                            <option value="Inactive">Tạm dừng (Inactive)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Thay Đổi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm Ghế -->
+<div class="modal fade" id="createChairModal" tabindex="-1" aria-labelledby="createChairLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="AdminRoomChair" asp-action="CreateChair" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="createChairLabel">
+                        <i class="bi bi-plus-circle text-teal me-2"></i>Thêm Mới Ghế Nha Khoa
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Phòng đặt ghế <span class="text-danger">*</span></label>
+                        <select name="RoomId" class="form-select" required>
+                            <option value="">-- Chọn phòng khám --</option>
+                            @foreach (var rm in Model.Rooms)
+                            {
+                                <option value="@rm.RoomId" selected="@(Model.SelectedRoomId == rm.RoomId)">
+                                    Phòng @rm.RoomCode @(string.IsNullOrEmpty(rm.RoomName) ? "" : $"({rm.RoomName})")
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mã ghế nha khoa <span class="text-danger">*</span></label>
+                        <input type="text" name="ChairCode" class="form-control" placeholder="Ví dụ: G01, G02, CHAIR-1..." required maxlength="20" />
+                        <div class="form-text small">Mã ghế phải là duy nhất trong từng phòng khám.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trạng thái ban đầu</label>
+                        <select name="Status" class="form-select">
+                            <option value="Active">Sẵn sàng sử dụng (Active)</option>
+                            <option value="Maintenance">Đang bảo trì (Maintenance)</option>
+                            <option value="Inactive">Tạm dừng (Inactive)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Ghế</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Sửa Ghế -->
+<div class="modal fade" id="editChairModal" tabindex="-1" aria-labelledby="editChairLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="AdminRoomChair" asp-action="EditChair" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="DentalChairId" id="editChairId" />
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="editChairLabel">
+                        <i class="bi bi-pencil-square text-teal me-2"></i>Chỉnh Sửa Ghế Nha Khoa
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Phòng đặt ghế <span class="text-danger">*</span></label>
+                        <select name="RoomId" id="editChairRoomId" class="form-select" required>
+                            @foreach (var rm in Model.Rooms)
+                            {
+                                <option value="@rm.RoomId">
+                                    Phòng @rm.RoomCode @(string.IsNullOrEmpty(rm.RoomName) ? "" : $"({rm.RoomName})")
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mã ghế nha khoa <span class="text-danger">*</span></label>
+                        <input type="text" name="ChairCode" id="editChairCode" class="form-control" required maxlength="20" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trạng thái</label>
+                        <select name="Status" id="editChairStatus" class="form-select">
+                            <option value="Active">Sẵn sàng sử dụng (Active)</option>
+                            <option value="Maintenance">Đang bảo trì (Maintenance)</option>
+                            <option value="Inactive">Tạm dừng (Inactive)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Thay Đổi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Edit Room modal
+            const editRoomModal = new bootstrap.Modal(document.getElementById('editRoomModal'));
+            document.querySelectorAll('.btn-edit-room').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    document.getElementById('editRoomId').value = this.dataset.id;
+                    document.getElementById('editRoomCode').value = this.dataset.code;
+                    document.getElementById('editRoomName').value = this.dataset.name || '';
+                    document.getElementById('editRoomStatus').value = this.dataset.status || 'Active';
+                    editRoomModal.show();
+                });
+            });
+
+            // Edit Chair modal
+            const editChairModal = new bootstrap.Modal(document.getElementById('editChairModal'));
+            document.querySelectorAll('.btn-edit-chair').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    document.getElementById('editChairId').value = this.dataset.id;
+                    document.getElementById('editChairRoomId').value = this.dataset.roomid;
+                    document.getElementById('editChairCode').value = this.dataset.code;
+                    document.getElementById('editChairStatus').value = this.dataset.status || 'Active';
+                    editChairModal.show();
+                });
+            });
+        });
+    </script>
+}

@@ -133,6 +133,15 @@ builder.Services.AddHttpClient<IAppointmentApiService, AppointmentApiService>(cl
 .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
+// Admin API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IAdminApiService, AdminApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 var app = builder.Build();
 
 // Configure HTTP request pipeline

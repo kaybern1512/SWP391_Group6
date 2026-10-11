@@ -183,38 +183,40 @@
         }
         else if (role == "SystemAdministrator")
         {
-            <div class="nav-group-title">Overview</div>
-            <a class="sidebar-link @(currentCtrl == "AdminDashboard" ? "active" : "")" asp-controller="AdminDashboard" asp-action="Dashboard">
+            <div class="nav-group-title">Tổng quan</div>
+            <a class="sidebar-link @(currentCtrl == "AdminDashboard" && currentAction == "Dashboard" ? "active" : "")" asp-controller="AdminDashboard" asp-action="Dashboard">
                 <i class="bi bi-grid-1x2"></i>
                 <span>Admin Console</span>
             </a>
 
-            <div class="nav-group-title">Management</div>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Staff Provisioning API.'); return false;">
-                <i class="bi bi-person-badge"></i>
-                <span>Create Staff Account</span>
-            </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Account Status API.'); return false;">
-                <i class="bi bi-person-lock"></i>
-                <span>Update Account Status</span>
-            </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Department API.'); return false;">
+            <div class="nav-group-title">Quản trị Danh mục</div>
+            <a class="sidebar-link @(currentCtrl == "AdminDepartment" ? "active" : "")" asp-controller="AdminDepartment" asp-action="Index">
                 <i class="bi bi-hospital"></i>
-                <span>Department Management</span>
+                <span>Quản lý Chuyên khoa</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Clinic Information API.'); return false;">
-                <i class="bi bi-building-gear"></i>
-                <span>Clinic Information</span>
+            <a class="sidebar-link @(currentCtrl == "AdminService" ? "active" : "")" asp-controller="AdminService" asp-action="Index">
+                <i class="bi bi-tags"></i>
+                <span>Danh mục Dịch vụ</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Report API.'); return false;">
-                <i class="bi bi-bar-chart-line"></i>
-                <span>Performance Report</span>
+            <a class="sidebar-link @(currentCtrl == "AdminRoomChair" ? "active" : "")" asp-controller="AdminRoomChair" asp-action="Index">
+                <i class="bi bi-door-open"></i>
+                <span>Phòng & Ghế nha khoa</span>
             </a>
 
-            <div class="nav-group-title">Security & Audit</div>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Audit Log API.'); return false;">
+            <div class="nav-group-title">Người dùng & Phân quyền</div>
+            <a class="sidebar-link @(currentCtrl == "AdminUser" ? "active" : "")" asp-controller="AdminUser" asp-action="Index">
+                <i class="bi bi-people"></i>
+                <span>Tài khoản Người dùng</span>
+            </a>
+
+            <div class="nav-group-title">Báo cáo & Giám sát</div>
+            <a class="sidebar-link @(currentCtrl == "AdminDashboard" && currentAction == "Reports" ? "active" : "")" asp-controller="AdminDashboard" asp-action="Reports">
+                <i class="bi bi-bar-chart-line"></i>
+                <span>Báo cáo Doanh thu & Ca khám</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "AdminAuditLog" ? "active" : "")" asp-controller="AdminAuditLog" asp-action="Index">
                 <i class="bi bi-shield-check"></i>
-                <span>Audit Logs</span>
+                <span>Nhật ký Kiểm toán (Logs)</span>
             </a>
         }
 

@@ -1,0 +1,239 @@
+@model UserManageViewModel
+@{
+    ViewData["Title"] = "Quản lý Tài khoản & Phân quyền";
+}
+
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-controller="AdminDashboard" asp-action="Dashboard" class="text-decoration-none text-muted small">
+                    <i class="bi bi-chevron-left"></i> Tổng quan
+                </a>
+                <span class="text-muted small">&bull;</span>
+                <span class="badge-dc badge-role-systemadministrator">Bảo mật & Người dùng</span>
+            </div>
+            <h1 class="page-title">Quản lý Tài khoản & Quyền hạn Người dùng</h1>
+            <p class="page-subtitle">Danh sách toàn bộ tài khoản bệnh nhân và cán bộ nhân viên phòng khám trong hệ thống</p>
+        </div>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div class="card-dc mb-4">
+        <div class="card-dc-body p-3">
+            <form asp-controller="AdminUser" asp-action="Index" method="get" class="row g-2 align-items-center">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold text-muted mb-1">Lọc theo vai trò (Role)</label>
+                    <select name="role" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- Tất cả vai trò --</option>
+                        <option value="Patient" selected="@(Model.RoleFilter == "Patient")">Bệnh nhân (Patient)</option>
+                        <option value="Dentist" selected="@(Model.RoleFilter == "Dentist")">Bác sĩ nha khoa (Dentist)</option>
+                        <option value="Receptionist" selected="@(Model.RoleFilter == "Receptionist")">Lễ tân (Receptionist)</option>
+                        <option value="DepartmentManager" selected="@(Model.RoleFilter == "DepartmentManager")">Trưởng khoa (DepartmentManager)</option>
+                        <option value="SystemAdministrator" selected="@(Model.RoleFilter == "SystemAdministrator")">Quản trị viên (SystemAdministrator)</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small fw-semibold text-muted mb-1">Tìm kiếm theo tên / email / SĐT</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" name="search" class="form-control" placeholder="Nhập tên, email hoặc số điện thoại..." value="@Model.SearchKeyword" />
+                    </div>
+                </div>
+                <div class="col-md-3 d-flex align-items-end gap-2 pt-3">
+                    <button type="submit" class="btn btn-sm btn-dc-primary">
+                        <i class="bi bi-filter me-1"></i> Tìm kiếm
+                    </button>
+                    <a asp-controller="AdminUser" asp-action="Index" class="btn btn-sm btn-outline-secondary">
+                        Đặt lại
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="card-dc">
+        <div class="card-dc-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-people text-warning"></i>
+                <span class="fw-bold">Danh sách Tài khoản Người dùng (@Model.Users.Count)</span>
+            </div>
+        </div>
+        <div class="card-dc-body p-0">
+            <div class="table-responsive">
+                <table class="table-dc mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>Mã định danh</th>
+                            <th>Họ và tên</th>
+                            <th>Email & Điện thoại</th>
+                            <th>Vai trò (Role)</th>
+                            <th>Trạng thái tài khoản</th>
+                            <th>Ngày tạo</th>
+                            <th class="text-end">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Users.Any())
+                        {
+                            int uIdx = 1;
+                            foreach (var u in Model.Users)
+                            {
+                                <tr>
+                                    <td class="text-muted fw-bold">@(uIdx++)</td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@(string.IsNullOrEmpty(u.Code) ? $"UID-{u.UserId}" : u.Code)</div>
+                                        <div class="text-muted small">ID: @u.UserId</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark">@u.FullName</div>
+                                    </td>
+                                    <td>
+                                        <div><i class="bi bi-envelope me-1 text-muted"></i>@(u.Email ?? "—")</div>
+                                        @if (!string.IsNullOrEmpty(u.PhoneNumber))
+                                        {
+                                            <div class="text-muted small"><i class="bi bi-telephone me-1"></i>@u.PhoneNumber</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (u.Role == "Patient")
+                                        {
+                                            <span class="badge bg-primary-subtle text-primary border">Bệnh nhân</span>
+                                        }
+                                        else if (u.Role == "Dentist")
+                                        {
+                                            <span class="badge bg-success-subtle text-success border">Bác sĩ</span>
+                                        }
+                                        else if (u.Role == "Receptionist")
+                                        {
+                                            <span class="badge bg-info-subtle text-info border">Lễ tân</span>
+                                        }
+                                        else if (u.Role == "DepartmentManager")
+                                        {
+                                            <span class="badge bg-warning-subtle text-warning border">Trưởng khoa</span>
+                                        }
+                                        else if (u.Role == "SystemAdministrator")
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border">Admin</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-dark border">@u.Role</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (u.Status == "Active")
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                <i class="bi bi-check-circle me-1"></i> Hoạt động
+                                            </span>
+                                        }
+                                        else if (u.Status == "Locked")
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                                <i class="bi bi-lock me-1"></i> Đang bị khóa
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                                @u.Status
+                                            </span>
+                                        }
+                                    </td>
+                                    <td class="text-nowrap small text-muted">
+                                        @u.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        <button type="button" class="btn btn-sm @(u.Status == "Locked" ? "btn-outline-success" : "btn-outline-danger") btn-toggle-lock"
+                                                data-id="@u.UserId"
+                                                data-name="@u.FullName"
+                                                data-status="@u.Status">
+                                            <i class="bi @(u.Status == "Locked" ? "bi-unlock" : "bi-lock")"></i>
+                                            @(u.Status == "Locked" ? "Mở khóa" : "Khóa tài khoản")
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="bi bi-people fs-3 d-block mb-1"></i>
+                                    Không tìm thấy tài khoản người dùng nào phù hợp.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Khóa / Mở khóa tài khoản -->
+<div class="modal fade" id="toggleLockModal" tabindex="-1" aria-labelledby="toggleLockLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="toggleLockForm" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="returnRole" value="@Model.RoleFilter" />
+                <input type="hidden" name="returnSearch" value="@Model.SearchKeyword" />
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="toggleLockLabel">
+                        Xác nhận thao tác tài khoản
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="lockConfirmText" class="mb-3"></p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lý do thực hiện (sẽ ghi nhận vào Audit Log):</label>
+                        <textarea name="reason" class="form-control" rows="3" placeholder="Ví dụ: Yêu cầu kỷ luật nội bộ, bảo mật thông tin, thanh tra tài khoản..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy bỏ</button>
+                    <button type="submit" id="lockConfirmBtn" class="btn btn-danger">Xác nhận</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const modal = new bootstrap.Modal(document.getElementById('toggleLockModal'));
+            const form = document.getElementById('toggleLockForm');
+            const text = document.getElementById('lockConfirmText');
+            const btn = document.getElementById('lockConfirmBtn');
+
+            document.querySelectorAll('.btn-toggle-lock').forEach(b => {
+                b.addEventListener('click', function () {
+                    const id = this.dataset.id;
+                    const name = this.dataset.name;
+                    const status = this.dataset.status;
+                    const isLocked = status === 'Locked';
+
+                    form.action = '/Admin/Users/ToggleLock/' + id;
+                    if (isLocked) {
+                        text.innerHTML = `Bạn có chắc chắn muốn <strong>MỞ KHÓA</strong> tài khoản của <strong>${name}</strong>?`;
+                        btn.className = 'btn btn-success';
+                        btn.textContent = 'Xác nhận Mở Khóa';
+                    } else {
+                        text.innerHTML = `Bạn có chắc chắn muốn <strong>KHÓA</strong> tài khoản của <strong>${name}</strong>? Người dùng sẽ không thể đăng nhập vào hệ thống.`;
+                        btn.className = 'btn btn-danger';
+                        btn.textContent = 'Xác nhận Khóa Tài Khoản';
+                    }
+
+                    modal.show();
+                });
+            });
+        });
+    </script>
+}

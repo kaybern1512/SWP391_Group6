@@ -1,0 +1,288 @@
+@model AuditLogsViewModel
+@{
+    ViewData["Title"] = "Nhật ký Kiểm toán Hệ thống (Audit Logs)";
+    var paged = Model.PagedLogs;
+}
+
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-controller="AdminDashboard" asp-action="Dashboard" class="text-decoration-none text-muted small">
+                    <i class="bi bi-chevron-left"></i> Tổng quan
+                </a>
+                <span class="text-muted small">&bull;</span>
+                <span class="badge-dc badge-role-systemadministrator">Bảo mật & Kiểm toán</span>
+            </div>
+            <h1 class="page-title">Nhật ký Kiểm toán Hệ thống (Audit Logs)</h1>
+            <p class="page-subtitle">Bản ghi bất biến ghi nhận mọi thao tác cấu hình, cập nhật trạng thái và thay đổi dữ liệu</p>
+        </div>
+        <div class="page-actions">
+            <a asp-controller="AdminAuditLog" asp-action="Index" class="btn btn-dc-outline btn-sm">
+                <i class="bi bi-arrow-clockwise me-1"></i> Làm mới dữ liệu
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div class="card-dc mb-4">
+        <div class="card-dc-body p-3">
+            <form asp-controller="AdminAuditLog" asp-action="Index" method="get" class="row g-2 align-items-center">
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Hành động</label>
+                    <select name="action" class="form-select form-select-sm">
+                        <option value="">-- Tất cả hành động --</option>
+                        <option value="CREATE" selected="@(Model.Action == "CREATE")">Thêm mới (CREATE)</option>
+                        <option value="UPDATE" selected="@(Model.Action == "UPDATE")">Cập nhật (UPDATE)</option>
+                        <option value="TOGGLE_STATUS" selected="@(Model.Action == "TOGGLE_STATUS")">Đổi trạng thái (TOGGLE_STATUS)</option>
+                        <option value="CHANGE_STATUS" selected="@(Model.Action == "CHANGE_STATUS")">Đổi trạng thái (CHANGE_STATUS)</option>
+                        <option value="LOCK_USER" selected="@(Model.Action == "LOCK_USER")">Khóa/Mở tài khoản (LOCK_USER)</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Đối tượng (Entity)</label>
+                    <select name="entityName" class="form-select form-select-sm">
+                        <option value="">-- Tất cả đối tượng --</option>
+                        <option value="Department" selected="@(Model.EntityName == "Department")">Department</option>
+                        <option value="DepartmentService" selected="@(Model.EntityName == "DepartmentService")">DepartmentService</option>
+                        <option value="Room" selected="@(Model.EntityName == "Room")">Room</option>
+                        <option value="DentalChair" selected="@(Model.EntityName == "DentalChair")">DentalChair</option>
+                        <option value="UserAccount" selected="@(Model.EntityName == "UserAccount")">UserAccount</option>
+                        <option value="Appointment" selected="@(Model.EntityName == "Appointment")">Appointment</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">Tìm kiếm chi tiết</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" name="search" class="form-control" placeholder="Tên người dùng, email, ID..." value="@Model.Search" />
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Từ ngày</label>
+                    <input type="date" name="fromDate" class="form-control form-control-sm" value="@(Model.FromDate?.ToString("yyyy-MM-dd"))" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Đến ngày</label>
+                    <input type="date" name="toDate" class="form-control form-control-sm" value="@(Model.ToDate?.ToString("yyyy-MM-dd"))" />
+                </div>
+                <div class="col-md-1 d-flex align-items-end pt-3">
+                    <button type="submit" class="btn btn-sm btn-dc-primary w-100">
+                        Lọc
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Audit Logs Table -->
+    <div class="card-dc mb-4">
+        <div class="card-dc-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-shield-check text-primary"></i>
+                <span class="fw-bold">Bản ghi nhật ký kiểm toán (Tổng: @paged.TotalCount)</span>
+            </div>
+            <span class="badge bg-light text-muted border small">Trang @paged.Page / @(paged.TotalPages > 0 ? paged.TotalPages : 1)</span>
+        </div>
+        <div class="card-dc-body p-0">
+            <div class="table-responsive">
+                <table class="table-dc mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 160px;">Thời gian</th>
+                            <th>Người thực hiện</th>
+                            <th>Vai trò</th>
+                            <th>Hành động</th>
+                            <th>Đối tượng</th>
+                            <th>ID bản ghi</th>
+                            <th>Dữ liệu thay đổi</th>
+                            <th class="text-end">Chi tiết</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (paged.Items.Any())
+                        {
+                            foreach (var log in paged.Items)
+                            {
+                                <tr>
+                                    <td class="text-nowrap small text-muted">
+                                        @log.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss")
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark">@(log.UserFullName ?? log.UserEmail ?? "System")</div>
+                                        @if (!string.IsNullOrEmpty(log.UserEmail))
+                                        {
+                                            <div class="text-muted small">@log.UserEmail</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border">@(log.UserRole ?? "System")</span>
+                                    </td>
+                                    <td>
+                                        @if (log.Action.Contains("CREATE") || log.Action.Contains("INSERT"))
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">@log.Action</span>
+                                        }
+                                        else if (log.Action.Contains("UPDATE") || log.Action.Contains("EDIT"))
+                                        {
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle">@log.Action</span>
+                                        }
+                                        else if (log.Action.Contains("LOCK") || log.Action.Contains("DELETE"))
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">@log.Action</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle">@log.Action</span>
+                                        }
+                                    </td>
+                                    <td><strong>@log.EntityName</strong></td>
+                                    <td><code>@(log.EntityId ?? "-")</code></td>
+                                    <td class="small text-muted" style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        @(log.NewValues ?? log.OldValues ?? "-")
+                                    </td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary btn-log-detail"
+                                                data-time="@log.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss")"
+                                                data-actor="@(log.UserFullName ?? log.UserEmail ?? "System")"
+                                                data-role="@(log.UserRole ?? "System")"
+                                                data-action="@log.Action"
+                                                data-entity="@log.EntityName"
+                                                data-entityid="@(log.EntityId ?? "")"
+                                                data-old="@(log.OldValues ?? "")"
+                                                data-new="@(log.NewValues ?? "")">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="bi bi-inbox fs-3 d-block mb-1"></i>
+                                    Không có bản ghi nhật ký kiểm toán nào phù hợp với bộ lọc.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination Controls -->
+            @if (paged.TotalPages > 1)
+            {
+                <div class="p-3 border-top d-flex justify-content-between align-items-center">
+                    <div class="text-muted small">
+                        Hiển thị trang @paged.Page trên tổng số @paged.TotalPages trang (@paged.TotalCount bản ghi)
+                    </div>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item @(paged.Page <= 1 ? "disabled" : "")">
+                                <a class="page-link" asp-controller="AdminAuditLog" asp-action="Index"
+                                   asp-route-page="@(paged.Page - 1)"
+                                   asp-route-action="@Model.Action"
+                                   asp-route-entityName="@Model.EntityName"
+                                   asp-route-search="@Model.Search"
+                                   asp-route-fromDate="@(Model.FromDate?.ToString("yyyy-MM-dd"))"
+                                   asp-route-toDate="@(Model.ToDate?.ToString("yyyy-MM-dd"))">Trước</a>
+                            </li>
+                            @for (int p = Math.Max(1, paged.Page - 2); p <= Math.Min(paged.TotalPages, paged.Page + 2); p++)
+                            {
+                                <li class="page-item @(p == paged.Page ? "active" : "")">
+                                    <a class="page-link" asp-controller="AdminAuditLog" asp-action="Index"
+                                       asp-route-page="@p"
+                                       asp-route-action="@Model.Action"
+                                       asp-route-entityName="@Model.EntityName"
+                                       asp-route-search="@Model.Search"
+                                       asp-route-fromDate="@(Model.FromDate?.ToString("yyyy-MM-dd"))"
+                                       asp-route-toDate="@(Model.ToDate?.ToString("yyyy-MM-dd"))">@p</a>
+                                </li>
+                            }
+                            <li class="page-item @(paged.Page >= paged.TotalPages ? "disabled" : "")">
+                                <a class="page-link" asp-controller="AdminAuditLog" asp-action="Index"
+                                   asp-route-page="@(paged.Page + 1)"
+                                   asp-route-action="@Model.Action"
+                                   asp-route-entityName="@Model.EntityName"
+                                   asp-route-search="@Model.Search"
+                                   asp-route-fromDate="@(Model.FromDate?.ToString("yyyy-MM-dd"))"
+                                   asp-route-toDate="@(Model.ToDate?.ToString("yyyy-MM-dd"))">Sau</a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Modal Chi tiết Audit Log -->
+<div class="modal fade" id="logDetailModal" tabindex="-1" aria-labelledby="logDetailLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title font-heading" id="logDetailLabel">
+                    <i class="bi bi-shield-check text-primary me-2"></i>Chi Tiết Bản Ghi Nhật Ký Kiểm Toán
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small mb-0">Thời gian thực hiện:</label>
+                        <div class="fw-bold" id="detailTime"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small mb-0">Người thực hiện:</label>
+                        <div class="fw-bold" id="detailActor"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small mb-0">Hành động:</label>
+                        <div id="detailAction"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small mb-0">Đối tượng & ID:</label>
+                        <div class="fw-bold" id="detailEntity"></div>
+                    </div>
+                </div>
+                <div class="mb-3" id="oldValuesBox">
+                    <label class="form-label text-muted small mb-1 fw-bold">Dữ liệu trước thay đổi (Old Values):</label>
+                    <pre class="bg-light p-2 rounded border small mb-0" style="max-height: 200px; overflow-y: auto;" id="detailOld"></pre>
+                </div>
+                <div class="mb-3" id="newValuesBox">
+                    <label class="form-label text-muted small mb-1 fw-bold">Dữ liệu sau thay đổi (New Values):</label>
+                    <pre class="bg-light p-2 rounded border small mb-0" style="max-height: 200px; overflow-y: auto;" id="detailNew"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const modal = new bootstrap.Modal(document.getElementById('logDetailModal'));
+            document.querySelectorAll('.btn-log-detail').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    document.getElementById('detailTime').textContent = this.dataset.time;
+                    document.getElementById('detailActor').textContent = this.dataset.actor + ' (' + this.dataset.role + ')';
+                    document.getElementById('detailAction').innerHTML = `<span class="badge bg-primary">${this.dataset.action}</span>`;
+                    document.getElementById('detailEntity').textContent = this.dataset.entity + ' (ID: ' + (this.dataset.entityid || 'N/A') + ')';
+
+                    const oldVal = this.dataset.old;
+                    const newVal = this.dataset.new;
+
+                    document.getElementById('detailOld').textContent = oldVal || '(Không có)';
+                    document.getElementById('detailNew').textContent = newVal || '(Không có)';
+
+                    modal.show();
+                });
+            });
+        });
+    </script>
+}
