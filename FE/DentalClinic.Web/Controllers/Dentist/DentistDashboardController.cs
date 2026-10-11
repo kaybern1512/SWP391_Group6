@@ -19,39 +19,39 @@ public class DentistDashboardController : Controller
             FullName = User.FindFirst(ClaimTypes.Name)?.Value ?? "Dentist",
             Email = User.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty,
             Code = User.FindFirst("UserCode")?.Value,
-            Title = "Clinical Dental Workspace",
-            Subtitle = "Conduct patient consultations, update dental charts, and manage clinical treatment sessions",
+            Title = "Không Gian Lâm Sàng Bác Sĩ",
+            Subtitle = "Khám tư vấn bệnh nhân, cập nhật hồ sơ bệnh án, sơ đồ răng và thực hiện các buổi điều trị",
             StatCards = new List<StatCardItem>
             {
                 new()
                 {
-                    Title = "Today's Appointments",
+                    Title = "Ca Khám Hôm Nay",
                     Value = "--",
-                    Note = "Waiting for backend data",
+                    Note = "Theo lịch hẹn đã xác nhận",
                     Icon = "bi-calendar3",
                     ColorClass = "primary"
                 },
                 new()
                 {
-                    Title = "Assigned Patients",
+                    Title = "Bệnh Nhân Phụ Trách",
                     Value = "--",
-                    Note = "Waiting for backend data",
+                    Note = "Hồ sơ bệnh án điện tử",
                     Icon = "bi-people",
                     ColorClass = "teal"
                 },
                 new()
                 {
-                    Title = "Active Treatment Plans",
+                    Title = "Kế Hoạch Đang Điều Trị",
                     Value = "--",
-                    Note = "Waiting for backend data",
+                    Note = "Phác đồ điều trị hoạt động",
                     Icon = "bi-clipboard-pulse",
                     ColorClass = "info"
                 },
                 new()
                 {
-                    Title = "Pending Follow-ups",
+                    Title = "Lịch Tái Khám Chờ Duyệt",
                     Value = "--",
-                    Note = "Waiting for backend data",
+                    Note = "Hẹn lại & theo dõi hậu phẫu",
                     Icon = "bi-clock-history",
                     ColorClass = "warning"
                 }
@@ -60,82 +60,84 @@ public class DentistDashboardController : Controller
             {
                 new()
                 {
-                    Title = "View Work Schedule",
-                    Icon = "bi-calendar-week",
+                    Title = "Ca Khám Hôm Nay",
+                    Icon = "bi-calendar-check",
                     ColorClass = "primary",
-                    Description = "Inspect your clinical duty shifts, operating chairs, and roster calendar.",
-                    ActionText = "My Schedule",
-                    ActionUrl = "#"
+                    Description = "Xem danh sách bệnh nhân tiếp nhận hôm nay tại ghế khám nha khoa.",
+                    ActionText = "Vào Phòng Khám",
+                    ActionUrl = "/Dentist/Appointments/Today"
                 },
                 new()
                 {
-                    Title = "Update Availability",
-                    Icon = "bi-toggle-on",
-                    ColorClass = "info",
-                    Description = "Set your real-time status: Available, In Procedure, or On Leave.",
-                    ActionText = "Set Availability",
-                    ActionUrl = "#"
-                },
-                new()
-                {
-                    Title = "Open Patient Medical Record",
+                    Title = "Hồ Sơ Bệnh Án & Sơ Đồ Răng",
                     Icon = "bi-journal-medical",
                     ColorClass = "teal",
-                    Description = "Access electronic dental charts, diagnostic X-rays, and FDI Odontogram.",
-                    ActionText = "Open EMR",
-                    ActionUrl = "#"
+                    Description = "Tra cứu hồ sơ bệnh nhân, tiền sử bệnh và chẩn đoán trên sơ đồ 32 răng FDI.",
+                    ActionText = "Mở Bệnh Án EMR",
+                    ActionUrl = "/Dentist/MedicalRecords"
                 },
                 new()
                 {
-                    Title = "Create Treatment Plan",
+                    Title = "Phác Đồ & Kế Hoạch Điều Trị",
                     Icon = "bi-diagram-3",
                     ColorClass = "warning",
-                    Description = "Formulate multi-stage clinical procedures, materials, and cost estimates.",
-                    ActionText = "New Plan",
-                    ActionUrl = "#"
+                    Description = "Thiết lập kế hoạch điều trị đa giai đoạn, danh mục thủ thuật và chi phí dự kiến.",
+                    ActionText = "Quản Lý Phác Đồ",
+                    ActionUrl = "/Dentist/TreatmentPlans"
                 },
                 new()
                 {
-                    Title = "Record Treatment Session",
+                    Title = "Ghi Nhận Buổi Điều Trị",
                     Icon = "bi-clipboard2-check",
                     ColorClass = "primary",
-                    Description = "Document executed procedures, medications administered, and teeth treated.",
-                    ActionText = "Log Session",
-                    ActionUrl = "#"
+                    Description = "Nhập tiến độ buổi điều trị, răng đã xử lý, thủ thuật lâm sàng và thuốc chỉ định.",
+                    ActionText = "Ghi Nhật Ký Ca",
+                    ActionUrl = "/Dentist/TreatmentPlans/Sessions"
                 },
                 new()
                 {
-                    Title = "Create Prescription",
+                    Title = "Kê Đơn Thuốc Điện Tử",
                     Icon = "bi-capsule",
                     ColorClass = "danger",
-                    Description = "Issue digital drug prescriptions with dosage and contraindication notes.",
-                    ActionText = "New Prescription",
-                    ActionUrl = "#"
+                    Description = "Kê đơn thuốc điện tử gắn liền với ca khám, liều dùng và lời dặn bác sĩ.",
+                    ActionText = "Kê Đơn Thuốc",
+                    ActionUrl = "/Dentist/Prescriptions"
                 },
                 new()
                 {
-                    Title = "Create Department Referral",
-                    Icon = "bi-arrow-left-right",
+                    Title = "Lịch Làm Việc Của Tôi",
+                    Icon = "bi-calendar-week",
+                    ColorClass = "primary",
+                    Description = "Kiểm tra lịch trực, ca làm việc theo tuần/tháng và vị trí ghế điều trị.",
+                    ActionText = "Xem Lịch Biểu",
+                    ActionUrl = "/Dentist/Schedule"
+                },
+                new()
+                {
+                    Title = "Trạng Thái & Nghỉ Phép",
+                    Icon = "bi-toggle-on",
                     ColorClass = "info",
-                    Description = "Request cross-specialty clinical consultations or transfer patient care.",
-                    ActionText = "Refer Patient",
-                    ActionUrl = "#"
+                    Description = "Cập nhật trạng thái trực ghế nha khoa (Sẵn sàng / Đang khám / Nghỉ phép).",
+                    ActionText = "Cập Nhật Trạng Thái",
+                    ActionUrl = "/Dentist/Schedule/Availability"
                 },
                 new()
                 {
-                    Title = "Create Follow-up Schedule",
-                    Icon = "bi-calendar-plus",
+                    Title = "Đánh Giá Từ Bệnh Nhân",
+                    Icon = "bi-star",
                     ColorClass = "success",
-                    Description = "Schedule postoperative evaluations, suture removal, or routine cleanings.",
-                    ActionText = "Set Follow-up",
-                    ActionUrl = "#"
+                    Description = "Xem điểm số hài lòng và phản hồi nhận xét của bệnh nhân sau ca khám.",
+                    ActionText = "Xem Đánh Giá",
+                    ActionUrl = "/Dentist/Schedule/Feedback"
                 }
             },
             EmptyState = new EmptyStateViewModel
             {
-                Title = "No patients currently in treatment queue",
-                Description = "Your dental chair queue is currently clear. Admitted patients will appear here.",
-                Icon = "bi-person-badge"
+                Title = "Hôm nay chưa có bệnh nhân trong hàng chờ khám",
+                Description = "Ghế nha khoa đang sẵn sàng tiếp nhận. Bệnh nhân sau khi check-in tại lễ tân sẽ hiển thị ở đây.",
+                Icon = "bi-person-badge",
+                ActionText = "Xem Ca Khám Hôm Nay",
+                ActionUrl = "/Dentist/Appointments/Today"
             }
         };
 

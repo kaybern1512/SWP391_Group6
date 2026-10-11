@@ -1,6 +1,6 @@
 @model DashboardViewModel
 @{
-    ViewData["Title"] = "Reception Desk";
+    ViewData["Title"] = "Bàn Tiếp Đón Lễ Tân";
 }
 
 <div class="container-fluid p-0">
@@ -8,22 +8,22 @@
     <div class="page-header-dc">
         <div>
             <div class="d-flex align-items-center gap-2 mb-1">
-                <span class="badge-dc badge-role-receptionist">Receptionist</span>
+                <span class="badge-dc badge-role-receptionist">Lễ Tân</span>
                 @if (!string.IsNullOrEmpty(Model.Code))
                 {
-                    <span class="badge bg-white text-muted border small">Staff: @Model.Code</span>
+                    <span class="badge bg-white text-muted border small">Mã NV: @Model.Code</span>
                 }
             </div>
             <h1 class="page-title">@Model.Title</h1>
             <p class="page-subtitle">@Model.Subtitle</p>
         </div>
         <div class="page-actions">
-            <button type="button" class="btn btn-dc-outline" onclick="alert('Feature connects to Patient Registry API.');">
-                <i class="bi bi-search me-1"></i> Find Patient
-            </button>
-            <button type="button" class="btn btn-dc-primary" onclick="alert('Feature connects to Check-in API.');">
-                <i class="bi bi-person-check me-1"></i> Check In Patient
-            </button>
+            <a asp-controller="ReceptionistPatient" asp-action="Index" class="btn btn-dc-outline">
+                <i class="bi bi-people me-1"></i> Sổ Quản Lý Bệnh Nhân
+            </a>
+            <a asp-controller="ReceptionistAppointment" asp-action="TodayCheckIn" class="btn btn-dc-primary">
+                <i class="bi bi-person-check me-1"></i> Check-in Tiếp Nhận
+            </a>
         </div>
     </div>
 
@@ -52,21 +52,21 @@
 
     <!-- Quick Action Cards Section -->
     <div class="mb-4">
-        <h5 class="font-heading fs-6 fw-bold text-dark mb-3">Front Desk Workflows</h5>
+        <h5 class="font-heading fs-6 fw-bold text-dark mb-3">Quy Trình Tiếp Đón Lâm Sàng</h5>
         <div class="row g-3">
             @foreach (var card in Model.Cards)
             {
-                <div class="col-md-6 col-lg-4 col-xl">
-                    <div class="card-quick-action">
+                <div class="col-md-6 col-lg-3">
+                    <div class="card-quick-action text-center h-100 p-3 d-flex flex-column justify-content-between">
                         <div>
-                            <div class="quick-icon-box quick-icon-@card.ColorClass">
+                            <div class="quick-icon-box quick-icon-@card.ColorClass mx-auto mb-2">
                                 <i class="bi @card.Icon"></i>
                             </div>
                             <h6 class="fw-bold text-dark mb-1">@card.Title</h6>
                             <p class="text-muted small mb-3">@card.Description</p>
                         </div>
                         <div>
-                            <a href="@card.ActionUrl" class="btn btn-light btn-sm text-primary w-100 fw-semibold border" onclick="alert('Feature will connect to front-desk API according to project milestones.'); return false;">
+                            <a href="@card.ActionUrl" class="btn btn-light btn-sm text-primary w-100 fw-semibold border">
                                 @card.ActionText <i class="bi bi-arrow-right ms-1"></i>
                             </a>
                         </div>
@@ -81,10 +81,10 @@
         <div class="card-dc-header">
             <div class="d-flex align-items-center gap-2">
                 <i class="bi bi-calendar-check text-primary"></i>
-                <span>Today's Appointment Triage & Check-in Queue</span>
+                <span>Hàng Chờ Check-in & Phân Phối Ca Khám Hôm Nay</span>
             </div>
             <div class="d-flex align-items-center gap-2">
-                <span class="badge-dc badge-status-waiting">Queue Active</span>
+                <span class="badge-dc badge-status-waiting">Hàng Chờ Mở</span>
             </div>
         </div>
         <div class="card-dc-body p-3">
@@ -93,25 +93,25 @@
                 <div class="filter-group">
                     <div class="filter-search-box">
                         <i class="bi bi-search"></i>
-                        <input type="text" placeholder="Search by patient name, phone, or code..." />
+                        <input type="text" placeholder="Tìm kiếm theo tên bệnh nhân, số điện thoại hoặc mã..." />
                     </div>
                     <select class="form-select filter-select" style="width: auto;">
-                        <option value="">All Statuses</option>
-                        <option value="Confirmed">Confirmed</option>
-                        <option value="Waiting">Waiting Check-in</option>
-                        <option value="Cancelled">Cancelled</option>
+                        <option value="">Tất cả trạng thái</option>
+                        <option value="Confirmed">Đã xác nhận</option>
+                        <option value="Waiting">Chờ tiếp nhận</option>
+                        <option value="Cancelled">Đã hủy</option>
                     </select>
                     <select class="form-select filter-select" style="width: auto;">
-                        <option value="">All Departments</option>
-                        <option value="General">General Dentistry</option>
-                        <option value="Orthodontics">Orthodontics</option>
-                        <option value="Endodontics">Endodontics</option>
-                        <option value="Prosthodontics">Prosthodontics</option>
+                        <option value="">Tất cả chuyên khoa</option>
+                        <option value="General">Nha tổng quát</option>
+                        <option value="Orthodontics">Chỉnh nha - Niềng răng</option>
+                        <option value="Endodontics">Nội nha - Điều trị tủy</option>
+                        <option value="Prosthodontics">Phục hình răng</option>
                     </select>
                 </div>
                 <div>
                     <button type="button" class="btn btn-dc-outline btn-sm">
-                        <i class="bi bi-x-circle me-1"></i> Clear
+                        <i class="bi bi-x-circle me-1"></i> Xóa lọc
                     </button>
                 </div>
             </div>
@@ -121,17 +121,17 @@
                 <table class="table-dc">
                     <thead>
                         <tr>
-                            <th>Queue #</th>
-                            <th>Patient Name</th>
-                            <th>Specialty / Dept</th>
-                            <th>Attending Dentist</th>
-                            <th>Time Slot</th>
-                            <th>Status</th>
-                            <th class="text-end">Actions</th>
+                            <th>STT</th>
+                            <th>Họ Tên Bệnh Nhân</th>
+                            <th>Chuyên Khoa</th>
+                            <th>Bác Sĩ Phụ Trách</th>
+                            <th>Khung Giờ</th>
+                            <th>Trạng Thái</th>
+                            <th class="text-end">Thao Tác</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- When connected to API, rows render dynamically. Shows empty state when empty: -->
+                        <!-- Khi kết nối API, các dòng sẽ render động. Hiển thị trạng thái rỗng khi chưa có: -->
                     </tbody>
                 </table>
             </div>

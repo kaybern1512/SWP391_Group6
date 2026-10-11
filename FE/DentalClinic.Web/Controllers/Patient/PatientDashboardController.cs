@@ -19,39 +19,39 @@ public class PatientDashboardController : Controller
             FullName = User.FindFirst(ClaimTypes.Name)?.Value ?? "Patient",
             Email = User.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty,
             Code = User.FindFirst("UserCode")?.Value,
-            Title = "Personal Dental Care Portal",
-            Subtitle = "Track your appointments, medical records, and multi-specialty treatment progress",
+            Title = "Cổng Thông Tin Bệnh Nhân",
+            Subtitle = "Theo dõi lịch hẹn khám, hồ sơ bệnh án, đơn thuốc và tiến trình phác đồ điều trị",
             StatCards = new List<StatCardItem>
             {
                 new()
                 {
-                    Title = "Upcoming Appointment",
+                    Title = "Lịch Khám Sắp Tới",
                     Value = "--",
-                    Note = "Waiting for backend data",
+                    Note = "Hệ thống tự động đồng bộ",
                     Icon = "bi-calendar-event",
                     ColorClass = "primary"
                 },
                 new()
                 {
-                    Title = "Treatment Progress",
+                    Title = "Tiến Độ Điều Trị",
                     Value = "--",
-                    Note = "Waiting for backend data",
+                    Note = "Theo dõi theo phác đồ",
                     Icon = "bi-graph-up-arrow",
                     ColorClass = "teal"
                 },
                 new()
                 {
-                    Title = "Outstanding Invoice",
+                    Title = "Hóa Đơn Chờ Thanh Toán",
                     Value = "--",
-                    Note = "Waiting for backend data",
+                    Note = "Hệ thống viện phí",
                     Icon = "bi-receipt",
                     ColorClass = "warning"
                 },
                 new()
                 {
-                    Title = "Unread Notifications",
+                    Title = "Thông Báo Chưa Đọc",
                     Value = "--",
-                    Note = "Waiting for backend data",
+                    Note = "Thông báo từ phòng khám",
                     Icon = "bi-bell",
                     ColorClass = "info"
                 }
@@ -60,56 +60,65 @@ public class PatientDashboardController : Controller
             {
                 new()
                 {
-                    Title = "Book Appointment",
+                    Title = "Đặt Lịch Khám",
                     Icon = "bi-calendar-plus",
                     ColorClass = "primary",
-                    Description = "Schedule a dental checkup or specialty consultation with clinic dentists.",
-                    ActionText = "Book Now",
+                    Description = "Đăng ký khám nha khoa tổng quát hoặc chuyên sâu với đội ngũ bác sĩ.",
+                    ActionText = "Đặt Lịch Ngay",
                     ActionUrl = "/Patient/Appointment/Book"
                 },
                 new()
                 {
-                    Title = "Medical Record",
-                    Icon = "bi-journal-medical",
+                    Title = "Lịch Khám Của Tôi",
+                    Icon = "bi-calendar3",
                     ColorClass = "teal",
-                    Description = "View your electronic dental chart, diagnostic notes, and FDI Odontogram history.",
-                    ActionText = "View Records",
-                    ActionUrl = "#"
+                    Description = "Xem danh sách các ca khám sắp tới và lịch sử những lần thăm khám.",
+                    ActionText = "Xem Lịch Khám",
+                    ActionUrl = "/Patient/Appointment"
                 },
                 new()
                 {
-                    Title = "Treatment Plans",
+                    Title = "Hồ Sơ Bệnh Án & Sơ Đồ Răng",
+                    Icon = "bi-journal-medical",
+                    ColorClass = "primary",
+                    Description = "Tra cứu hồ sơ bệnh án điện tử, tiền sử bệnh và sơ đồ 32 răng chuẩn FDI.",
+                    ActionText = "Xem Bệnh Án",
+                    ActionUrl = "/Patient/MedicalRecord"
+                },
+                new()
+                {
+                    Title = "Kế Hoạch Điều Trị",
                     Icon = "bi-card-checklist",
                     ColorClass = "info",
-                    Description = "Review approved treatment stages, clinical procedures, and expected timelines.",
-                    ActionText = "View Plans",
-                    ActionUrl = "#"
+                    Description = "Theo dõi các giai đoạn điều trị, thủ thuật lâm sàng và tiến độ điều trị.",
+                    ActionText = "Xem Kế Hoạch",
+                    ActionUrl = "/Patient/TreatmentPlans"
                 },
                 new()
                 {
-                    Title = "Invoices & Payments",
-                    Icon = "bi-credit-card-2-front",
-                    ColorClass = "success",
-                    Description = "Review service invoices, billed procedures, and official receipts.",
-                    ActionText = "View Invoices",
-                    ActionUrl = "#"
+                    Title = "Đơn Thuốc Điện Tử",
+                    Icon = "bi-capsule",
+                    ColorClass = "danger",
+                    Description = "Xem danh sách đơn thuốc được bác sĩ kê sau các ca khám và in đơn thuốc.",
+                    ActionText = "Xem Đơn Thuốc",
+                    ActionUrl = "/Patient/Prescription"
                 },
                 new()
                 {
-                    Title = "Notifications",
+                    Title = "Thông Báo Hệ Thống",
                     Icon = "bi-bell",
                     ColorClass = "warning",
-                    Description = "Stay updated with appointment reminders and clinical instructions.",
-                    ActionText = "View Notifications",
-                    ActionUrl = "#"
+                    Description = "Cập nhật các nhắc nhở lịch hẹn và hướng dẫn chăm sóc răng miệng.",
+                    ActionText = "Xem Thông Báo",
+                    ActionUrl = "/Notification"
                 }
             },
             EmptyState = new EmptyStateViewModel
             {
-                Title = "No scheduled appointments found",
-                Description = "You currently have no upcoming dental visits or active treatment sessions. Schedule an appointment to get started.",
+                Title = "Chưa có lịch khám sắp tới",
+                Description = "Bạn hiện chưa có lịch khám hoặc buổi điều trị nha khoa nào sắp diễn ra. Vui lòng bấm đặt lịch hẹn để được thăm khám.",
                 Icon = "bi-calendar-check",
-                ActionText = "Book Appointment",
+                ActionText = "Đặt Lịch Khám",
                 ActionUrl = "/Patient/Appointment/Book"
             }
         };

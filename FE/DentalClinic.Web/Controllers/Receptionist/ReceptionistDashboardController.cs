@@ -19,39 +19,39 @@ public class ReceptionistDashboardController : Controller
             FullName = User.FindFirst(ClaimTypes.Name)?.Value ?? "Receptionist",
             Email = User.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty,
             Code = User.FindFirst("UserCode")?.Value,
-            Title = "Patient Intake & Reception Desk",
-            Subtitle = "Manage front-desk check-ins, appointment triage, and pending invoice generation",
+            Title = "Bàn Tiếp Đón & Điều Phối Lễ Tân",
+            Subtitle = "Quản lý check-in bệnh nhân, tiếp nhận yêu cầu đặt hẹn và mở sổ quản lý hồ sơ bệnh nhân",
             StatCards = new List<StatCardItem>
             {
                 new()
                 {
-                    Title = "Pending Requests",
+                    Title = "Yêu Cầu Chờ Xử Lý",
                     Value = "--",
-                    Note = "Waiting for backend data",
+                    Note = "Đặt hẹn trực tuyến & hotline",
                     Icon = "bi-inbox",
                     ColorClass = "warning"
                 },
                 new()
                 {
-                    Title = "Today's Appointments",
+                    Title = "Ca Khám Hôm Nay",
                     Value = "--",
-                    Note = "Waiting for backend data",
+                    Note = "Đã lên lịch trong ngày",
                     Icon = "bi-calendar-check",
                     ColorClass = "primary"
                 },
                 new()
                 {
-                    Title = "Waiting Patients",
+                    Title = "Bệnh Nhân Chờ Check-in",
                     Value = "--",
-                    Note = "Waiting for backend data",
+                    Note = "Hàng chờ sảnh tiếp tân",
                     Icon = "bi-people",
                     ColorClass = "teal"
                 },
                 new()
                 {
-                    Title = "Pending Invoices",
+                    Title = "Hóa Đơn Chờ Thu Phí",
                     Value = "--",
-                    Note = "Waiting for backend data",
+                    Note = "Viện phí sau điều trị",
                     Icon = "bi-file-earmark-text",
                     ColorClass = "danger"
                 }
@@ -60,57 +60,48 @@ public class ReceptionistDashboardController : Controller
             {
                 new()
                 {
-                    Title = "Check In Patient",
+                    Title = "Check-in Tiếp Nhận Bệnh Nhân",
                     Icon = "bi-person-check",
                     ColorClass = "primary",
-                    Description = "Confirm patient arrival at the front desk and verify their scheduled clinic slot.",
-                    ActionText = "Check In",
-                    ActionUrl = "#"
+                    Description = "Xác nhận bệnh nhân có mặt tại sảnh, đối soát khung giờ hẹn và chuyển vào ghế khám.",
+                    ActionText = "Check-in Ngay",
+                    ActionUrl = "/Receptionist/Appointments/TodayCheckIn"
                 },
                 new()
                 {
-                    Title = "Find Patient",
-                    Icon = "bi-search",
-                    ColorClass = "info",
-                    Description = "Look up existing patients by Patient Code, National ID card, or phone number.",
-                    ActionText = "Search Records",
-                    ActionUrl = "#"
-                },
-                new()
-                {
-                    Title = "Create Patient",
-                    Icon = "bi-person-plus",
+                    Title = "Sổ Quản Lý Bệnh Nhân",
+                    Icon = "bi-people",
                     ColorClass = "teal",
-                    Description = "Register new walk-in patient demographics into the clinic database.",
-                    ActionText = "Register Patient",
-                    ActionUrl = "#"
+                    Description = "Tra cứu nhanh hồ sơ theo CCCD/SĐT, tiếp đón và tạo mới thông tin bệnh nhân đến khám.",
+                    ActionText = "Mở Sổ Bệnh Nhân",
+                    ActionUrl = "/Receptionist/Patients"
                 },
                 new()
                 {
-                    Title = "Create Appointment",
-                    Icon = "bi-calendar-plus",
+                    Title = "Yêu Cầu Đặt Lịch Hẹn",
+                    Icon = "bi-calendar-check",
                     ColorClass = "warning",
-                    Description = "Book a direct walk-in consultation or scheduled follow-up visit.",
-                    ActionText = "New Appointment",
-                    ActionUrl = "#"
+                    Description = "Tiếp nhận và xử lý các yêu cầu đăng ký lịch hẹn mới từ bệnh nhân trên hệ thống.",
+                    ActionText = "Xử Lý Lịch Hẹn",
+                    ActionUrl = "/Receptionist/Appointments/Requests"
                 },
                 new()
                 {
-                    Title = "Generate Invoice",
-                    Icon = "bi-receipt-cutoff",
-                    ColorClass = "success",
-                    Description = "Generate official itemized billing invoices for completed dental treatments.",
-                    ActionText = "Generate Invoice",
-                    ActionUrl = "#"
+                    Title = "Thông Báo Điều Hành",
+                    Icon = "bi-bell",
+                    ColorClass = "info",
+                    Description = "Theo dõi các thông báo điều phối ca khám và tin nhắn điều hành phòng khám.",
+                    ActionText = "Xem Thông Báo",
+                    ActionUrl = "/Notification"
                 }
             },
             EmptyState = new EmptyStateViewModel
             {
-                Title = "No waiting patients in intake queue",
-                Description = "All confirmed patients have been admitted or no incoming visits are scheduled for this time slot.",
+                Title = "Không có bệnh nhân chờ check-in",
+                Description = "Tất cả bệnh nhân trong khung giờ hiện tại đã được tiếp nhận hoặc chưa đến giờ khám.",
                 Icon = "bi-inbox",
-                ActionText = "Check In Patient",
-                ActionUrl = "#"
+                ActionText = "Xem Danh Sách Ca Khám",
+                ActionUrl = "/Receptionist/Appointments/TodayCheckIn"
             }
         };
 

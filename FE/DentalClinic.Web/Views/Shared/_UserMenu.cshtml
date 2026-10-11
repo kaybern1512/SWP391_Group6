@@ -42,22 +42,22 @@
             <li>
                 <a class="dropdown-item py-2 d-flex align-items-center gap-2" asp-controller="Profile" asp-action="Index">
                     <i class="bi bi-person-circle text-primary"></i>
-                    <span>My Profile</span>
+                    <span>Hồ Sơ Của Tôi</span>
                 </a>
             </li>
             <li>
                 <a class="dropdown-item py-2 d-flex align-items-center gap-2" asp-controller="Account" asp-action="ChangePassword">
                     <i class="bi bi-key text-warning"></i>
-                    <span>Change Password</span>
+                    <span>Đổi Mật Khẩu</span>
                 </a>
             </li>
             <li><hr class="dropdown-divider my-1"></li>
             <li>
                 <form method="post" asp-controller="Account" asp-action="Logout" class="px-2 pt-1">
                     @Html.AntiForgeryToken()
-                    <button type="submit" class="btn btn-outline-danger w-100 btn-sm d-flex align-items-center justify-content-center gap-2" data-confirm="Are you sure you want to sign out of the clinic portal?">
+                    <button type="submit" class="btn btn-outline-danger w-100 btn-sm d-flex align-items-center justify-content-center gap-2" data-confirm="Bạn có chắc chắn muốn đăng xuất khỏi hệ thống phòng khám không?">
                         <i class="bi bi-box-arrow-right"></i>
-                        <span>Sign Out</span>
+                        <span>Đăng Xuất</span>
                     </button>
                 </form>
             </li>
@@ -68,10 +68,10 @@ else
 {
     <div class="d-flex align-items-center gap-2">
         <a asp-controller="Account" asp-action="Login" class="btn btn-dc-outline btn-sm">
-            <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+            <i class="bi bi-box-arrow-in-right me-1"></i> Đăng Nhập
         </a>
         <a asp-controller="Account" asp-action="Register" class="btn btn-dc-primary btn-sm">
-            <i class="bi bi-person-plus me-1"></i> Register
+            <i class="bi bi-person-plus me-1"></i> Đăng Ký
         </a>
     </div>
 }
