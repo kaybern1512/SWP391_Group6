@@ -9,6 +9,15 @@
     }
     var currentCtrl = ViewContext.RouteData.Values["controller"]?.ToString();
     var currentAction = ViewContext.RouteData.Values["action"]?.ToString();
+    var roleDisplayName = role.ToLowerInvariant() switch
+    {
+        "patient" => "Bệnh nhân",
+        "dentist" => "Bác sĩ",
+        "receptionist" => "Lễ tân",
+        "departmentmanager" => "Trưởng khoa",
+        "systemadministrator" => "Quản trị viên",
+        _ => role
+    };
 }
 
 <aside class="app-sidebar" id="appSidebar">
@@ -56,7 +65,7 @@
             </a>
 
             <div class="nav-group-title">Quản Lý & Thông Báo</div>
-            <a class="sidebar-link" href="#" onclick="alert('Tính năng Hóa Đơn & Thanh Toán đang được hoàn thiện theo phân công nhiệm vụ.'); return false;">
+            <a class="sidebar-link" href="#" data-bs-toggle="modal" data-bs-target="#featureRoadmapModal" data-feature-title="Hóa Đơn & Thanh Toán Viện Phí" data-feature-desc="Phân hệ thanh toán điện tử, biên lai viện phí và quản lý thanh toán trực tuyến cho bệnh nhân đang được tối ưu hóa theo lộ trình tiếp theo.">
                 <i class="bi bi-receipt"></i>
                 <span>Hóa Đơn & Thanh Toán</span>
             </a>
@@ -88,7 +97,7 @@
                 <i class="bi bi-people"></i>
                 <span>Sổ Quản Lý Bệnh Nhân</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Tính năng Hóa Đơn Viện Phí đang được hoàn thiện theo phân công nhiệm vụ.'); return false;">
+            <a class="sidebar-link" href="#" data-bs-toggle="modal" data-bs-target="#featureRoadmapModal" data-feature-title="Quản Lý Hóa Đơn & Thu Viện Phí" data-feature-desc="Phân hệ thu viện phí tại quầy, quyết toán ca khám và in hóa đơn viện phí cho bệnh nhân đang được tối ưu hóa theo lộ trình tiếp theo.">
                 <i class="bi bi-file-earmark-text"></i>
                 <span>Hóa Đơn Chờ Thanh Toán</span>
             </a>
@@ -122,7 +131,7 @@
                 <i class="bi bi-capsule"></i>
                 <span>Kê Đơn Thuốc Điện Tử</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Tính năng Hội Chẩn & Chuyển Khoa đang được hoàn thiện theo phân công nhiệm vụ.'); return false;">
+            <a class="sidebar-link" href="#" data-bs-toggle="modal" data-bs-target="#featureRoadmapModal" data-feature-title="Hội Chẩn & Chuyển Chuyên Khoa" data-feature-desc="Phân hệ lập biên bản hội chẩn liên chuyên khoa và tạo phiếu chuyển viện/chuyển chuyên khoa nội bộ đang được phát triển theo lộ trình mở rộng.">
                 <i class="bi bi-arrow-left-right"></i>
                 <span>Hội Chẩn & Chuyển Khoa</span>
             </a>
@@ -154,7 +163,7 @@
                 <i class="bi bi-check2-square"></i>
                 <span>Duyệt & Phân Bổ Ca Khám</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Tính năng Hội Chẩn & Chuyển Khoa đang được hoàn thiện theo phân công nhiệm vụ.'); return false;">
+            <a class="sidebar-link" href="#" data-bs-toggle="modal" data-bs-target="#featureRoadmapModal" data-feature-title="Điều Phối Ca Hội Chẩn & Chuyển Khoa" data-feature-desc="Phân hệ tiếp nhận và phê duyệt ca chuyển khoa đến từ các chuyên khoa khác trong toàn hệ thống phòng khám đang được phát triển theo lộ trình mở rộng.">
                 <i class="bi bi-arrow-left-right"></i>
                 <span>Xử Lý Ca Chuyển Khoa</span>
             </a>
@@ -176,7 +185,7 @@
                 <i class="bi bi-tags"></i>
                 <span>Dịch Vụ & Bảng Giá Khoa</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Tính năng Báo Cáo Hiệu Suất đang được hoàn thiện theo phân công nhiệm vụ.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "AdminDashboard" && currentAction == "Reports" ? "active" : "")" asp-controller="AdminDashboard" asp-action="Reports">
                 <i class="bi bi-file-earmark-bar-graph"></i>
                 <span>Báo Cáo Hiệu Suất Khoa</span>
             </a>
@@ -186,7 +195,7 @@
             <div class="nav-group-title">Tổng quan</div>
             <a class="sidebar-link @(currentCtrl == "AdminDashboard" && currentAction == "Dashboard" ? "active" : "")" asp-controller="AdminDashboard" asp-action="Dashboard">
                 <i class="bi bi-grid-1x2"></i>
-                <span>Admin Console</span>
+                <span>Trung Tâm Quản Trị</span>
             </a>
 
             <div class="nav-group-title">Quản trị Danh mục</div>
@@ -238,7 +247,7 @@
             <img src="@avatarUrl" alt="Avatar" class="sidebar-avatar" onerror="this.src='/images/default-avatar.svg'" />
             <div class="sidebar-user-meta">
                 <div class="sidebar-user-name" title="@fullName">@fullName</div>
-                <div class="sidebar-user-role">@role</div>
+                <div class="sidebar-user-role">@roleDisplayName</div>
             </div>
         </div>
         <form method="post" asp-controller="Account" asp-action="Logout" class="m-0 p-0 d-inline">
@@ -249,3 +258,50 @@
         </form>
     </div>
 </aside>
+
+<!-- MODAL: THÔNG BÁO TÍNH NĂNG ĐANG HOÀN THIỆN -->
+<div class="modal fade" id="featureRoadmapModal" tabindex="-1" aria-labelledby="featureRoadmapModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-slate-800 text-white">
+                <h5 class="modal-title fw-bold" id="featureRoadmapModalLabel">
+                    <i class="bi bi-layers me-2 text-primary"></i> <span id="roadmapModalTitle">Thông Báo Phân Hệ</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 text-center">
+                <div class="avatar-lg bg-primary-subtle text-primary rounded-circle d-inline-flex align-items-center justify-content-center p-3 mb-3" style="width: 64px; height: 64px;">
+                    <i class="bi bi-gear-wide-connected fs-2"></i>
+                </div>
+                <h6 class="fw-bold text-dark mb-2" id="roadmapModalHeading">Phân Hệ Chuyên Sâu Đang Phát Triển</h6>
+                <p class="text-muted small mb-3" id="roadmapModalDesc">
+                    Tính năng đang được hoàn thiện theo phân công nhiệm vụ đồ án.
+                </p>
+                <div class="alert alert-info py-2 px-3 small text-start mb-0">
+                    <i class="bi bi-info-circle-fill me-1 text-info"></i>
+                    Các tính năng chính (Đặt lịch, Tiếp nhận check-in, Hồ sơ bệnh án EMR, Sơ đồ 32 răng FDI, Kê đơn thuốc điện tử, Phác đồ & buổi điều trị, Lịch trực bác sĩ, Phân bổ bác sĩ, Dịch vụ & bảng giá khoa) đã hoàn thiện 100% và sẵn sàng hoạt động.
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đã hiểu</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const modal = document.getElementById('featureRoadmapModal');
+        if (modal) {
+            modal.addEventListener('show.bs.modal', function(event) {
+                const btn = event.relatedTarget;
+                if (!btn) return;
+                const title = btn.getAttribute('data-feature-title') || 'Thông Báo Phân Hệ';
+                const desc = btn.getAttribute('data-feature-desc') || 'Tính năng đang được hoàn thiện theo phân công nhiệm vụ.';
+                document.getElementById('roadmapModalTitle').textContent = title;
+                document.getElementById('roadmapModalHeading').textContent = title;
+                document.getElementById('roadmapModalDesc').textContent = desc;
+            });
+        }
+    });
+</script>

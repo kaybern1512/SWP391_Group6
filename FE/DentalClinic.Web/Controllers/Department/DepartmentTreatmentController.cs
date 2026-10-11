@@ -8,6 +8,7 @@ namespace DentalClinic.Web.Controllers.Department;
 
 [Authorize(Roles = "DepartmentManager,SystemAdministrator")]
 [Route("Department/TreatmentProgress")]
+[Route("Department/Treatment")]
 public class DepartmentTreatmentController : Controller
 {
     private readonly ITreatmentApiService _treatmentApiService;

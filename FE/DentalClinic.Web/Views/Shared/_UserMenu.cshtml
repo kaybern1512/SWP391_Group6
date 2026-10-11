@@ -19,6 +19,16 @@
         "systemadministrator" => "badge-role-systemadministrator",
         _ => "badge-role-patient"
     };
+
+    var roleDisplayName = role.ToLowerInvariant() switch
+    {
+        "patient" => "Bệnh nhân",
+        "dentist" => "Bác sĩ",
+        "receptionist" => "Lễ tân",
+        "departmentmanager" => "Trưởng khoa",
+        "systemadministrator" => "Quản trị viên",
+        _ => role
+    };
 }
 
 @if (isAuthenticated)
@@ -29,7 +39,7 @@
             <div class="user-text-top d-none d-md-block">
                 <div class="user-name-top">@fullName</div>
                 <div class="user-role-top">
-                    <span class="badge-dc @roleBadgeClass" style="font-size: 0.675rem; padding: 0.2em 0.55em;">@role</span>
+                    <span class="badge-dc @roleBadgeClass" style="font-size: 0.675rem; padding: 0.2em 0.55em;">@roleDisplayName</span>
                 </div>
             </div>
             <i class="bi bi-chevron-down text-muted fs-7 ms-1"></i>

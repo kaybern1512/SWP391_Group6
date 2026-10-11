@@ -1,12 +1,12 @@
 @model RegisterViewModel
 @{
     Layout = "_AuthLayout";
-    ViewData["Title"] = "Register Patient Account";
+    ViewData["Title"] = "Đăng Ký Tài Khoản Bệnh Nhân";
 }
 
 <div class="auth-card-header">
-    <h2 class="auth-card-title">Patient Registration</h2>
-    <p class="auth-card-subtitle">Create a patient profile to book appointments and monitor dental care</p>
+    <h2 class="auth-card-title">Đăng Ký Hồ Sơ Khám Bệnh</h2>
+    <p class="auth-card-subtitle">Tạo hồ sơ bệnh nhân để đặt lịch khám nha khoa và theo dõi phác đồ điều trị</p>
 </div>
 
 <form asp-controller="Account" asp-action="Register" method="post" novalidate>
@@ -15,26 +15,26 @@
     <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small mb-3"></div>
 
     <div class="mb-3">
-        <label asp-for="FullName" class="form-label">Full Name</label>
+        <label asp-for="FullName" class="form-label">Họ Và Tên <span class="text-danger">*</span></label>
         <div class="input-group">
             <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person"></i></span>
-            <input asp-for="FullName" class="form-control border-start-0" placeholder="e.g. John Doe" />
+            <input asp-for="FullName" class="form-control border-start-0" placeholder="Ví dụ: Nguyễn Văn An" />
         </div>
         <span asp-validation-for="FullName" class="text-danger small"></span>
     </div>
 
     <div class="mb-3">
-        <label asp-for="Email" class="form-label">Email Address</label>
+        <label asp-for="Email" class="form-label">Địa Chỉ Email <span class="text-danger">*</span></label>
         <div class="input-group">
             <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
-            <input asp-for="Email" type="email" class="form-control border-start-0" placeholder="name@domain.com" />
+            <input asp-for="Email" type="email" class="form-control border-start-0" placeholder="ten@domain.com" />
         </div>
         <span asp-validation-for="Email" class="text-danger small"></span>
     </div>
 
     <div class="row g-2 mb-3">
         <div class="col-md-7">
-            <label asp-for="PhoneNumber" class="form-label">Phone Number</label>
+            <label asp-for="PhoneNumber" class="form-label">Số Điện Thoại <span class="text-danger">*</span></label>
             <div class="input-group">
                 <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-telephone"></i></span>
                 <input asp-for="PhoneNumber" class="form-control border-start-0" placeholder="0912345678" />
@@ -42,19 +42,19 @@
             <span asp-validation-for="PhoneNumber" class="text-danger small"></span>
         </div>
         <div class="col-md-5">
-            <label asp-for="Gender" class="form-label">Gender</label>
+            <label asp-for="Gender" class="form-label">Giới Tính</label>
             <select asp-for="Gender" class="form-select">
-                <option value="">Select</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
+                <option value="">Chọn giới tính</option>
+                <option value="Male">Nam</option>
+                <option value="Female">Nữ</option>
+                <option value="Other">Khác</option>
             </select>
             <span asp-validation-for="Gender" class="text-danger small"></span>
         </div>
     </div>
 
     <div class="mb-3">
-        <label asp-for="DateOfBirth" class="form-label">Date of Birth</label>
+        <label asp-for="DateOfBirth" class="form-label">Ngày Sinh</label>
         <div class="input-group">
             <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-calendar"></i></span>
             <input asp-for="DateOfBirth" type="date" class="form-control border-start-0" />
@@ -63,10 +63,10 @@
     </div>
 
     <div class="mb-3">
-        <label asp-for="Password" class="form-label">Password</label>
+        <label asp-for="Password" class="form-label">Mật Khẩu <span class="text-danger">*</span></label>
         <div class="input-password-wrapper">
-            <input asp-for="Password" type="password" id="registerPasswordInput" class="form-control pe-5" placeholder="Minimum 8 characters (uppercase, lowercase, number, symbol)" />
-            <button type="button" class="password-toggle-btn" data-target="registerPasswordInput" title="Toggle password visibility">
+            <input asp-for="Password" type="password" id="registerPasswordInput" class="form-control pe-5" placeholder="Tối thiểu 8 ký tự (chữ hoa, chữ thường, số, ký tự đặc biệt)" />
+            <button type="button" class="password-toggle-btn" data-target="registerPasswordInput" title="Hiển thị/Ẩn mật khẩu">
                 <i class="bi bi-eye"></i>
             </button>
         </div>
@@ -74,10 +74,10 @@
     </div>
 
     <div class="mb-3">
-        <label asp-for="ConfirmPassword" class="form-label">Confirm Password</label>
+        <label asp-for="ConfirmPassword" class="form-label">Xác Nhận Mật Khẩu <span class="text-danger">*</span></label>
         <div class="input-password-wrapper">
-            <input asp-for="ConfirmPassword" type="password" id="registerConfirmPasswordInput" class="form-control pe-5" placeholder="Re-enter your password" />
-            <button type="button" class="password-toggle-btn" data-target="registerConfirmPasswordInput" title="Toggle password visibility">
+            <input asp-for="ConfirmPassword" type="password" id="registerConfirmPasswordInput" class="form-control pe-5" placeholder="Nhập lại mật khẩu" />
+            <button type="button" class="password-toggle-btn" data-target="registerConfirmPasswordInput" title="Hiển thị/Ẩn mật khẩu">
                 <i class="bi bi-eye"></i>
             </button>
         </div>
@@ -87,18 +87,18 @@
     <div class="form-check mb-4">
         <input asp-for="AgreeTerms" class="form-check-input" id="agreeCheck" />
         <label class="form-check-label small text-muted" for="agreeCheck">
-            I agree to the <a href="#" class="text-primary text-decoration-none">Terms of Service</a> and <a href="#" class="text-primary text-decoration-none">Medical Privacy Policy</a>.
+            Tôi đồng ý với <a asp-controller="Home" asp-action="Privacy" class="text-primary text-decoration-none">Điều khoản sử dụng</a> và <a asp-controller="Home" asp-action="Privacy" class="text-primary text-decoration-none">Chính sách bảo mật y tế</a> của phòng khám DentalCare.
         </label>
         <div><span asp-validation-for="AgreeTerms" class="text-danger small"></span></div>
     </div>
 
     <button type="submit" class="btn btn-dc-primary w-100 py-2 fs-6">
-        <i class="bi bi-check2-circle me-1"></i> Complete Registration
+        <i class="bi bi-check2-circle me-1"></i> Hoàn Tất Đăng Ký
     </button>
 
     <div class="text-center mt-3 small text-muted">
-        Already have a clinic account?
-        <a asp-controller="Account" asp-action="Login" class="text-primary fw-semibold text-decoration-none">Sign In</a>
+        Đã có tài khoản phòng khám?
+        <a asp-controller="Account" asp-action="Login" class="text-primary fw-semibold text-decoration-none">Đăng nhập</a>
     </div>
 </form>
 
