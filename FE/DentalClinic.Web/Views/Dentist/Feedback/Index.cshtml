@@ -1,0 +1,164 @@
+@model DentistFeedbackViewViewModel
+@{
+    ViewData["Title"] = "Đánh giá từ Bệnh nhân";
+    var summary = Model.Summary;
+}
+
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-controller="DentistSchedule" asp-action="Schedule" class="text-decoration-none text-muted small">
+                    <i class="bi bi-chevron-left"></i> Lịch trực
+                </a>
+                <span class="text-muted small">&bull;</span>
+                <span class="badge-dc badge-role-dentist">Bác sĩ nha khoa</span>
+            </div>
+            <h1 class="page-title">Đánh Giá & Nhận Xét Từ Bệnh Nhân</h1>
+            <p class="page-subtitle">Theo dõi phản hồi chất lượng chuyên môn, sự hài lòng và đánh giá của bệnh nhân sau mỗi ca khám</p>
+        </div>
+    </div>
+
+    <!-- Rating Summary Stat Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-4">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Đánh giá Bác sĩ</span>
+                    <div class="stat-icon-box stat-icon-warning">
+                        <i class="bi bi-star-fill text-warning"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-value text-warning">
+                        @summary.AverageDentistRating.ToString("0.0") <small class="fs-6 fw-normal text-muted">/ 5.0</small>
+                    </div>
+                    <div class="stat-note">
+                        @for (int i = 1; i <= 5; i++)
+                        {
+                            <i class="bi @(i <= Math.Round(summary.AverageDentistRating) ? "bi-star-fill text-warning" : "bi-star text-muted")"></i>
+                        }
+                        <span class="ms-1 text-muted">Điểm chuyên môn</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-xl-4">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Đánh giá Cơ sở Phòng khám</span>
+                    <div class="stat-icon-box stat-icon-teal">
+                        <i class="bi bi-hospital"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-value text-teal">
+                        @summary.AverageClinicRating.ToString("0.0") <small class="fs-6 fw-normal text-muted">/ 5.0</small>
+                    </div>
+                    <div class="stat-note">
+                        @for (int i = 1; i <= 5; i++)
+                        {
+                            <i class="bi @(i <= Math.Round(summary.AverageClinicRating) ? "bi-star-fill text-warning" : "bi-star text-muted")"></i>
+                        }
+                        <span class="ms-1 text-muted">Mức độ hài lòng chung</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-xl-4">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Tổng lượt nhận xét</span>
+                    <div class="stat-icon-box stat-icon-primary">
+                        <i class="bi bi-chat-heart"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-value">@summary.TotalFeedbacks <small class="fs-6 fw-normal text-muted">lượt</small></div>
+                    <div class="stat-note">
+                        <i class="bi bi-check-circle text-success"></i> Đánh giá sau các ca khám hoàn thành
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedbacks List -->
+    <div class="card-dc">
+        <div class="card-dc-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-chat-quote text-primary"></i>
+                <span class="fw-bold">Nhận xét chi tiết từ Bệnh nhân (@summary.RecentFeedbacks.Count)</span>
+            </div>
+        </div>
+        <div class="card-dc-body p-0">
+            <div class="table-responsive">
+                <table class="table-dc mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>Mã ca khám</th>
+                            <th>Bệnh nhân</th>
+                            <th>Dịch vụ & Chuyên khoa</th>
+                            <th class="text-center">Đánh giá Bác sĩ</th>
+                            <th class="text-center">Đánh giá Phòng khám</th>
+                            <th>Lời nhận xét</th>
+                            <th class="text-end">Thời gian</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (summary.RecentFeedbacks.Any())
+                        {
+                            int fbIdx = 1;
+                            foreach (var fb in summary.RecentFeedbacks)
+                            {
+                                <tr>
+                                    <td class="text-muted fw-bold">@(fbIdx++)</td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@fb.AppointmentCode</div>
+                                        <div class="text-muted small">ID: @fb.AppointmentId</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark">@fb.PatientName</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark">@(fb.ServiceName ?? "Khám tư vấn")</div>
+                                        <span class="badge bg-light text-primary border small">@fb.DepartmentName</span>
+                                    </td>
+                                    <td class="text-center text-nowrap">
+                                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle fw-bold px-2 py-1">
+                                            @fb.DentistRating <i class="bi bi-star-fill ms-1"></i>
+                                        </span>
+                                    </td>
+                                    <td class="text-center text-nowrap">
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle fw-bold px-2 py-1">
+                                            @fb.ClinicRating <i class="bi bi-star-fill ms-1"></i>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="text-dark">@(string.IsNullOrEmpty(fb.Comment) ? "—" : $"“{fb.Comment}”")</span>
+                                    </td>
+                                    <td class="text-end text-nowrap small text-muted">
+                                        @fb.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center py-5 text-muted">
+                                    <i class="bi bi-chat-square-heart fs-1 text-muted d-block mb-2"></i>
+                                    Chưa có đánh giá nào từ bệnh nhân cho các ca khám đã hoàn tất của bạn.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

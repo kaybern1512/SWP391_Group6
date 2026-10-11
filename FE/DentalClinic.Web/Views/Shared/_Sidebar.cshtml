@@ -127,18 +127,18 @@
                 <span>Department Referrals</span>
             </a>
 
-            <div class="nav-group-title">Management</div>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Work Schedule API.'); return false;">
+            <div class="nav-group-title">Lịch trình & Đánh giá</div>
+            <a class="sidebar-link @(currentCtrl == "DentistSchedule" && currentAction == "Schedule" ? "active" : "")" asp-controller="DentistSchedule" asp-action="Schedule">
                 <i class="bi bi-calendar-week"></i>
-                <span>View Work Schedule</span>
+                <span>Lịch Làm Việc Của Tôi</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Availability API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "DentistSchedule" && currentAction == "Availability" ? "active" : "")" asp-controller="DentistSchedule" asp-action="Availability">
                 <i class="bi bi-toggle-on"></i>
-                <span>Update Availability</span>
+                <span>Trạng Thái & Nghỉ Phép</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Follow-up API.'); return false;">
-                <i class="bi bi-clock-history"></i>
-                <span>Follow-up Schedules</span>
+            <a class="sidebar-link @(currentCtrl == "DentistSchedule" && currentAction == "Feedback" ? "active" : "")" asp-controller="DentistSchedule" asp-action="Feedback">
+                <i class="bi bi-star"></i>
+                <span>Đánh Giá Từ Bệnh Nhân</span>
             </a>
         }
         else if (role == "DepartmentManager")
@@ -168,9 +168,9 @@
                 <i class="bi bi-person-plus"></i>
                 <span>Assign Dentists</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Schedule API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "DepartmentSchedule" ? "active" : "")" asp-controller="DepartmentSchedule" asp-action="Index">
                 <i class="bi bi-calendar-range"></i>
-                <span>Department Schedule</span>
+                <span>Lịch Trực Bác Sĩ</span>
             </a>
             <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Service catalog API.'); return false;">
                 <i class="bi bi-tags"></i>

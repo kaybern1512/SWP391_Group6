@@ -1,0 +1,220 @@
+@model PatientFeedbackFormViewModel
+@{
+    ViewData["Title"] = "Đánh giá Ca khám - " + Model.AppointmentCode;
+}
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <!-- Header -->
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <a asp-action="Detail" asp-route-id="@Model.AppointmentId" class="text-decoration-none text-muted small">
+                    <i class="bi bi-chevron-left"></i> Chi tiết ca khám
+                </a>
+                <span class="text-muted small">&bull;</span>
+                <span class="badge bg-light text-dark border">Đánh giá & Phản hồi</span>
+            </div>
+
+            <!-- Appointment Summary Card -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle mb-1">
+                                <i class="bi bi-check-circle-fill me-1"></i> Ca khám đã hoàn thành
+                            </span>
+                            <h4 class="font-heading fw-bold text-dark mb-0">Mã Lịch Hẹn: @Model.AppointmentCode</h4>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 text-muted small">
+                        <div class="col-sm-6">
+                            <div><i class="bi bi-person-badge me-2 text-primary"></i>Bác sĩ phụ trách: <strong class="text-dark">@(Model.DentistName ?? "Bác sĩ phụ trách")</strong></div>
+                            <div class="mt-2"><i class="bi bi-hospital me-2 text-teal"></i>Chuyên khoa: <strong class="text-dark">@(Model.DepartmentName ?? "Chuyên khoa")</strong></div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div><i class="bi bi-tags me-2 text-info"></i>Dịch vụ: <strong class="text-dark">@(Model.ServiceName ?? "Khám nha khoa")</strong></div>
+                            <div class="mt-2"><i class="bi bi-calendar3 me-2 text-warning"></i>Thời gian khám: <strong class="text-dark">@(Model.AppointmentDate?.ToString("dd/MM/yyyy HH:mm") ?? "—")</strong></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (Model.IsAlreadySubmitted && Model.ExistingFeedback != null)
+            {
+                <!-- Already Submitted Feedback Card -->
+                <div class="card border-0 shadow-sm border-start border-success border-4 mb-4">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center gap-2 text-success mb-3">
+                            <i class="bi bi-check-circle-fill fs-4"></i>
+                            <h5 class="font-heading fw-bold mb-0">Bạn đã gửi đánh giá cho ca khám này</h5>
+                        </div>
+                        <p class="text-muted small mb-4">
+                            Đã ghi nhận ý kiến đóng góp của bạn vào lúc <strong>@Model.ExistingFeedback.CreatedAt.ToString("dd/MM/yyyy HH:mm")</strong>.
+                        </p>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-6">
+                                <div class="p-3 bg-light rounded text-center">
+                                    <div class="small text-muted mb-1">Đánh giá Bác sĩ:</div>
+                                    <div class="text-warning fs-4">
+                                        @for (int i = 1; i <= 5; i++)
+                                        {
+                                            <i class="bi @(i <= Model.ExistingFeedback.DentistRating ? "bi-star-fill" : "bi-star text-muted")"></i>
+                                        }
+                                    </div>
+                                    <span class="badge bg-warning-subtle text-warning fw-bold">@Model.ExistingFeedback.DentistRating / 5 sao</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="p-3 bg-light rounded text-center">
+                                    <div class="small text-muted mb-1">Đánh giá Cơ sở Phòng khám:</div>
+                                    <div class="text-teal fs-4">
+                                        @for (int i = 1; i <= 5; i++)
+                                        {
+                                            <i class="bi @(i <= Model.ExistingFeedback.ClinicRating ? "bi-star-fill" : "bi-star text-muted")"></i>
+                                        }
+                                    </div>
+                                    <span class="badge bg-info-subtle text-info fw-bold">@Model.ExistingFeedback.ClinicRating / 5 sao</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(Model.ExistingFeedback.Comment))
+                        {
+                            <div class="p-3 bg-light rounded">
+                                <span class="small text-muted fw-bold d-block mb-1">Lời nhận xét của bạn:</span>
+                                <p class="mb-0 text-dark fst-italic">“@Model.ExistingFeedback.Comment”</p>
+                            </div>
+                        }
+
+                        <div class="mt-4 text-center">
+                            <a asp-action="Detail" asp-route-id="@Model.AppointmentId" class="btn btn-dc-primary">
+                                <i class="bi bi-arrow-left me-1"></i> Quay Lại Chi Tiết Ca Khám
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <!-- Feedback Submission Form -->
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white py-3">
+                        <h5 class="font-heading fw-bold text-dark mb-0">
+                            <i class="bi bi-star-fill text-warning me-2"></i>Đánh Giá Chất Lượng Khám Chữa Bệnh
+                        </h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <form asp-action="SubmitFeedback" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="AppointmentId" value="@Model.AppointmentId" />
+
+                            <!-- Dentist Rating -->
+                            <div class="mb-4 text-center p-3 bg-light rounded">
+                                <label class="form-label fw-bold text-dark d-block mb-2">
+                                    1. Mức độ hài lòng với Bác sĩ điều trị <span class="text-danger">*</span>
+                                </label>
+                                <div class="star-rating d-inline-flex gap-2 fs-2 cursor-pointer" id="dentistStars">
+                                    @for (int i = 1; i <= 5; i++)
+                                    {
+                                        <i class="bi bi-star-fill text-warning star-item" data-value="@i" data-group="dentist"></i>
+                                    }
+                                </div>
+                                <input type="hidden" name="DentistRating" id="inputDentistRating" value="5" />
+                                <div class="small text-muted mt-1" id="dentistRatingLabel">Rất hài lòng (5 sao)</div>
+                            </div>
+
+                            <!-- Clinic Rating -->
+                            <div class="mb-4 text-center p-3 bg-light rounded">
+                                <label class="form-label fw-bold text-dark d-block mb-2">
+                                    2. Đánh giá cơ sở vật chất & dịch vụ phòng khám <span class="text-danger">*</span>
+                                </label>
+                                <div class="star-rating d-inline-flex gap-2 fs-2 cursor-pointer" id="clinicStars">
+                                    @for (int i = 1; i <= 5; i++)
+                                    {
+                                        <i class="bi bi-star-fill text-warning star-item" data-value="@i" data-group="clinic"></i>
+                                    }
+                                </div>
+                                <input type="hidden" name="ClinicRating" id="inputClinicRating" value="5" />
+                                <div class="small text-muted mt-1" id="clinicRatingLabel">Rất hài lòng (5 sao)</div>
+                            </div>
+
+                            <!-- Comment Textarea -->
+                            <div class="mb-4">
+                                <label class="form-label fw-bold text-dark">
+                                    3. Nhận xét & Đóng góp ý kiến (Không bắt buộc)
+                                </label>
+                                <textarea name="Comment" class="form-control" rows="4" placeholder="Chia sẻ trải nghiệm khám của bạn (thái độ bác sĩ, thời gian chờ, vệ sinh phòng khám...)" maxlength="1000"></textarea>
+                                <div class="form-text small">Tối đa 1000 ký tự. Ý kiến của bạn giúp chúng tôi nâng cao chất lượng điều trị.</div>
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2">
+                                <a asp-action="Detail" asp-route-id="@Model.AppointmentId" class="btn btn-secondary">
+                                    Bỏ qua
+                                </a>
+                                <button type="submit" class="btn btn-dc-primary px-4">
+                                    <i class="bi bi-send-fill me-1"></i> Gửi Đánh Giá
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const labels = {
+                1: 'Rất không hài lòng (1 sao)',
+                2: 'Chưa hài lòng (2 sao)',
+                3: 'Bình thường (3 sao)',
+                4: 'Hài lòng (4 sao)',
+                5: 'Rất hài lòng (5 sao)'
+            };
+
+            function setupStars(groupName, inputId, labelId) {
+                const input = document.getElementById(inputId);
+                const label = document.getElementById(labelId);
+                const stars = document.querySelectorAll(`.star-item[data-group="${groupName}"]`);
+
+                function updateStars(val) {
+                    stars.forEach(s => {
+                        const sVal = parseInt(s.dataset.value);
+                        if (sVal <= val) {
+                            s.className = 'bi bi-star-fill text-warning star-item';
+                        } else {
+                            s.className = 'bi bi-star text-muted star-item';
+                        }
+                    });
+                    if (input) input.value = val;
+                    if (label) label.textContent = labels[val] || (val + ' sao');
+                }
+
+                stars.forEach(s => {
+                    s.addEventListener('click', function () {
+                        const val = parseInt(this.dataset.value);
+                        updateStars(val);
+                    });
+                    s.addEventListener('mouseover', function () {
+                        const val = parseInt(this.dataset.value);
+                        stars.forEach(st => {
+                            const stVal = parseInt(st.dataset.value);
+                            st.className = stVal <= val ? 'bi bi-star-fill text-warning star-item' : 'bi bi-star text-muted star-item';
+                        });
+                    });
+                    s.addEventListener('mouseout', function () {
+                        const currentVal = parseInt(input.value);
+                        updateStars(currentVal);
+                    });
+                });
+            }
+
+            setupStars('dentist', 'inputDentistRating', 'dentistRatingLabel');
+            setupStars('clinic', 'inputClinicRating', 'clinicRatingLabel');
+        });
+    </script>
+}

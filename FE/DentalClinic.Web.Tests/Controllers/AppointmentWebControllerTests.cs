@@ -21,10 +21,12 @@ namespace DentalClinic.Web.Tests.Controllers;
 public class AppointmentWebControllerTests
 {
     private readonly Mock<IAppointmentApiService> _apiMock;
+    private readonly Mock<IFeedbackApiService> _feedbackApiMock;
 
     public AppointmentWebControllerTests()
     {
         _apiMock = new Mock<IAppointmentApiService>();
+        _feedbackApiMock = new Mock<IFeedbackApiService>();
     }
 
     private static ControllerContext CreateContextWithUser(long userId, string role, string name = "User")
@@ -50,7 +52,7 @@ public class AppointmentWebControllerTests
                 new() { DepartmentId = 1, Name = "Khoa Răng Tổng Quát" }
             }));
 
-        var controller = new PatientAppointmentController(_apiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(101, "Patient")
         };
@@ -72,7 +74,7 @@ public class AppointmentWebControllerTests
                 AppointmentCode = "APP-20261003-ABCDEF"
             }));
 
-        var controller = new PatientAppointmentController(_apiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(101, "Patient"),
             TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
@@ -163,6 +165,6 @@ public class AppointmentWebControllerTests
 
         var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
         redirect.ActionName.Should().Be("Requests");
-        controller.TempData["SuccessMessage"].ToString().Should().Contain("Q001");
+        controller.TempData["SuccessMessage"]?.ToString().Should().Contain("Q001");
     }
 }

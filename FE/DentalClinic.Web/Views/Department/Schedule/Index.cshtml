@@ -1,0 +1,238 @@
+@model DepartmentScheduleManageViewModel
+@{
+    ViewData["Title"] = "Quản lý Lịch trực Bác sĩ";
+}
+
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge-dc badge-role-departmentmanager">Điều phối chuyên môn</span>
+                <span class="badge bg-white text-muted border small">Lịch làm việc bác sĩ</span>
+            </div>
+            <h1 class="page-title">Xếp Lịch Trực & Ca Làm Việc Bác Sĩ</h1>
+            <p class="page-subtitle">Phân bổ ca trực theo ngày, quản lý khung giờ làm việc và điều phối nhân sự chuyên khoa</p>
+        </div>
+        <div class="page-actions">
+            <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createScheduleModal">
+                <i class="bi bi-calendar-plus me-1"></i> Phân Ca Trực Mới
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="card-dc mb-4">
+        <div class="card-dc-body p-3">
+            <form asp-controller="DepartmentSchedule" asp-action="Index" method="get" class="row g-2 align-items-center">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">Chuyên khoa</label>
+                    <select name="departmentId" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- Tất cả chuyên khoa --</option>
+                        @foreach (var d in Model.Departments)
+                        {
+                            <option value="@d.DepartmentId" selected="@(Model.DepartmentId == d.DepartmentId)">
+                                @d.Name
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">Bác sĩ</label>
+                    <select name="dentistUserId" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- Tất cả bác sĩ --</option>
+                        @foreach (var d in Model.Dentists)
+                        {
+                            <option value="@d.UserId" selected="@(Model.SelectedDentistUserId == d.UserId)">
+                                @d.FullName (@(d.Code ?? d.Email))
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Từ ngày</label>
+                    <input type="date" name="fromDate" class="form-control form-control-sm" value="@Model.FromDate.ToString("yyyy-MM-dd")" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Đến ngày</label>
+                    <input type="date" name="toDate" class="form-control form-control-sm" value="@Model.ToDate.ToString("yyyy-MM-dd")" />
+                </div>
+                <div class="col-md-2 d-flex align-items-end gap-2 pt-3">
+                    <button type="submit" class="btn btn-sm btn-dc-primary w-100">
+                        <i class="bi bi-filter me-1"></i> Xem lịch
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Schedule List Table -->
+    <div class="card-dc">
+        <div class="card-dc-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-calendar-week text-primary"></i>
+                <span class="fw-bold">Danh sách Ca trực Bác sĩ (@Model.Schedules.Count ca)</span>
+            </div>
+            <div class="text-muted small">
+                Từ <strong>@Model.FromDate.ToString("dd/MM/yyyy")</strong> đến <strong>@Model.ToDate.ToString("dd/MM/yyyy")</strong>
+            </div>
+        </div>
+        <div class="card-dc-body p-0">
+            <div class="table-responsive">
+                <table class="table-dc mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>Bác sĩ trực</th>
+                            <th>Chuyên khoa</th>
+                            <th>Ngày làm việc</th>
+                            <th>Khung giờ trực</th>
+                            <th>Trạng thái</th>
+                            <th>Ghi chú</th>
+                            <th class="text-end">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Schedules.Any())
+                        {
+                            int idx = 1;
+                            foreach (var s in Model.Schedules)
+                            {
+                                <tr>
+                                    <td class="text-muted fw-bold">@(idx++)</td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <i class="bi bi-person-badge text-primary"></i>
+                                            <div>
+                                                <div class="fw-bold text-dark">@s.DentistName</div>
+                                                <div class="text-muted small">Mã: @(s.DentistEmployeeCode ?? $"UID-{s.DentistUserId}")</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-primary border">@s.DepartmentName</span>
+                                    </td>
+                                    <td class="fw-semibold text-dark">
+                                        <i class="bi bi-calendar3 me-1 text-muted"></i>@s.WorkDate.ToString("dd/MM/yyyy (dddd)")
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary-subtle text-secondary border">
+                                            <i class="bi bi-clock me-1"></i>@s.StartTime.ToString("HH:mm") - @s.EndTime.ToString("HH:mm")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (s.Status == "Scheduled")
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                <i class="bi bi-check-circle me-1"></i> Đã lên lịch
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                                <i class="bi bi-x-circle me-1"></i> Đã hủy
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="text-muted small">@(string.IsNullOrEmpty(s.Note) ? "—" : s.Note)</span>
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        @if (s.Status == "Scheduled")
+                                        {
+                                            <form asp-controller="DepartmentSchedule" asp-action="Cancel" asp-route-id="@s.DentistScheduleId" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn hủy ca trực này của bác sĩ?');">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="returnDepartmentId" value="@Model.DepartmentId" />
+                                                <input type="hidden" name="returnFromDate" value="@Model.FromDate.ToString("yyyy-MM-dd")" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="bi bi-x-lg"></i> Hủy ca trực
+                                                </button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small italic">Đã hủy</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="bi bi-calendar-x fs-3 d-block mb-1"></i>
+                                    Không có ca trực nào được xếp trong khoảng thời gian này.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Phân Ca Trực -->
+<div class="modal fade" id="createScheduleModal" tabindex="-1" aria-labelledby="createScheduleLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="DepartmentSchedule" asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="createScheduleLabel">
+                        <i class="bi bi-calendar-plus text-primary me-2"></i>Phân Ca Trực Cho Bác Sĩ
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chuyên khoa trực <span class="text-danger">*</span></label>
+                        <select name="DepartmentId" class="form-select" required>
+                            @foreach (var dept in Model.Departments)
+                            {
+                                <option value="@dept.DepartmentId" selected="@(Model.DepartmentId == dept.DepartmentId)">
+                                    @dept.Name
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Bác sĩ phụ trách <span class="text-danger">*</span></label>
+                        <select name="DentistUserId" class="form-select" required>
+                            <option value="">-- Chọn bác sĩ --</option>
+                            @foreach (var d in Model.Dentists)
+                            {
+                                <option value="@d.UserId" selected="@(Model.SelectedDentistUserId == d.UserId)">
+                                    @d.FullName (@(d.Code ?? d.Email))
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ngày làm việc <span class="text-danger">*</span></label>
+                        <input type="date" name="WorkDate" class="form-control" value="@DateTime.UtcNow.ToString("yyyy-MM-dd")" required />
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Giờ bắt đầu <span class="text-danger">*</span></label>
+                            <input type="time" name="StartTime" class="form-control" value="08:00" required />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Giờ kết thúc <span class="text-danger">*</span></label>
+                            <input type="time" name="EndTime" class="form-control" value="12:00" required />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ghi chú ca trực</label>
+                        <input type="text" name="Note" class="form-control" placeholder="Ví dụ: Ca trực sáng, Khám răng tổng quát..." maxlength="500" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Ca Trực</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,171 @@
+@model DentistAvailabilityViewModel
+@{
+    ViewData["Title"] = "Cập nhật Trạng thái Sẵn sàng / Nghỉ phép";
+}
+
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-controller="DentistSchedule" asp-action="Schedule" class="text-decoration-none text-muted small">
+                    <i class="bi bi-chevron-left"></i> Lịch trực
+                </a>
+                <span class="text-muted small">&bull;</span>
+                <span class="badge-dc badge-role-dentist">Bác sĩ nha khoa</span>
+            </div>
+            <h1 class="page-title">Trạng Thái Sẵn Sàng & Nghỉ Phép</h1>
+            <p class="page-subtitle">Khai báo khoảng thời gian bận, xin nghỉ phép hoặc không nhận khám đột xuất để hệ thống điều phối lịch</p>
+        </div>
+        <div class="page-actions">
+            <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createAvailabilityModal">
+                <i class="bi bi-plus-lg me-1"></i> Khai Báo Bận / Nghỉ Phép
+            </button>
+        </div>
+    </div>
+
+    <!-- Availabilities Table -->
+    <div class="card-dc">
+        <div class="card-dc-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-toggle-on text-primary"></i>
+                <span class="fw-bold">Danh sách Trạng thái Đã Khai Báo (@Model.Availabilities.Count)</span>
+            </div>
+        </div>
+        <div class="card-dc-body p-0">
+            <div class="table-responsive">
+                <table class="table-dc mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>Thời gian bắt đầu</th>
+                            <th>Thời gian kết thúc</th>
+                            <th>Trạng thái khai báo</th>
+                            <th>Lý do</th>
+                            <th>Thời gian tạo</th>
+                            <th class="text-end">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Availabilities.Any())
+                        {
+                            int aIdx = 1;
+                            foreach (var a in Model.Availabilities)
+                            {
+                                <tr>
+                                    <td class="text-muted fw-bold">@(aIdx++)</td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@a.StartDateTime.ToString("dd/MM/yyyy HH:mm")</div>
+                                    </td>
+                                    <td>
+                                        @if (a.EndDateTime.HasValue)
+                                        {
+                                            <div class="fw-semibold text-dark">@a.EndDateTime.Value.ToString("dd/MM/yyyy HH:mm")</div>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-muted border">Không xác định (Đến khi mở lại)</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (a.AvailabilityStatus == "Available")
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                <i class="bi bi-check-circle me-1"></i> Sẵn sàng (Available)
+                                            </span>
+                                        }
+                                        else if (a.AvailabilityStatus == "OnLeave")
+                                        {
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+                                                <i class="bi bi-cup-hot me-1"></i> Nghỉ phép (OnLeave)
+                                            </span>
+                                        }
+                                        else if (a.AvailabilityStatus == "Busy")
+                                        {
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle">
+                                                <i class="bi bi-briefcase me-1"></i> Bận công tác / hội chẩn (Busy)
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                                <i class="bi bi-dash-circle me-1"></i> Không khả dụng (Unavailable)
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="text-muted small">@(string.IsNullOrEmpty(a.Reason) ? "—" : a.Reason)</span>
+                                    </td>
+                                    <td class="small text-muted">
+                                        @a.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        <form asp-controller="DentistSchedule" asp-action="DeleteAvailability" asp-route-id="@a.AvailabilityId" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn xóa bản ghi trạng thái này?');">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="bi bi-trash"></i> Xóa
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="7" class="text-center py-4 text-muted">
+                                    <i class="bi bi-check2-circle fs-3 text-success d-block mb-1"></i>
+                                    Bạn hiện không có lịch bận hay nghỉ phép nào. Trạng thái khám chữa bệnh đang hoàn toàn khả dụng.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Khai Báo Trạng Thái -->
+<div class="modal fade" id="createAvailabilityModal" tabindex="-1" aria-labelledby="createAvailabilityLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="DentistSchedule" asp-action="CreateAvailability" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="createAvailabilityLabel">
+                        <i class="bi bi-toggle-on text-primary me-2"></i>Khai Báo Trạng Thái Sẵn Sàng
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trạng thái áp dụng <span class="text-danger">*</span></label>
+                        <select name="AvailabilityStatus" class="form-select" required>
+                            <option value="OnLeave">Nghỉ phép thường niên (OnLeave)</option>
+                            <option value="Busy">Bận đột xuất / Hội chẩn / Phẫu thuật ngoài (Busy)</option>
+                            <option value="Unavailable">Không khả dụng (Unavailable)</option>
+                            <option value="Available">Sẵn sàng nhận lịch (Available)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Thời gian bắt đầu <span class="text-danger">*</span></label>
+                        <input type="datetime-local" name="StartDateTime" class="form-control" value="@DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm")" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Thời gian kết thúc (để trống nếu không xác định)</label>
+                        <input type="datetime-local" name="EndDateTime" class="form-control" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lý do cụ thể</label>
+                        <textarea name="Reason" class="form-control" rows="3" placeholder="Nhập lý do nghỉ phép hoặc bận đột xuất..." maxlength="500"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Trạng Thái</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -238,6 +238,13 @@
                         </button>
                         <small class="text-muted d-block text-center">Vui lòng thông báo hủy sớm để phòng khám sắp xếp lịch.</small>
                     }
+                    else if (appt.Status == "Completed")
+                    {
+                        <a asp-action="Feedback" asp-route-id="@appt.AppointmentId" class="btn btn-warning w-100 mb-2 fw-semibold text-dark">
+                            <i class="bi bi-star-fill me-1"></i> Đánh Giá Ca Khám
+                        </a>
+                        <small class="text-muted d-block text-center">Gửi phản hồi và đánh giá chất lượng phục vụ cho ca khám này.</small>
+                    }
                     else
                     {
                         <p class="text-muted mb-0 text-center py-2">Không có hành động khả dụng ở trạng thái này.</p>

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using DentalClinic.Web.Models.ApiDtos;
 using DentalClinic.Web.Services;
 using DentalClinic.Web.ViewModels.Appointments;
+using DentalClinic.Web.ViewModels.Feedback;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,10 +16,14 @@ namespace DentalClinic.Web.Controllers.Patient;
 public class PatientAppointmentController : Controller
 {
     private readonly IAppointmentApiService _appointmentApiService;
+    private readonly IFeedbackApiService _feedbackApiService;
 
-    public PatientAppointmentController(IAppointmentApiService appointmentApiService)
+    public PatientAppointmentController(
+        IAppointmentApiService appointmentApiService,
+        IFeedbackApiService feedbackApiService)
     {
         _appointmentApiService = appointmentApiService;
+        _feedbackApiService = feedbackApiService;
     }
 
     [HttpGet("")]
@@ -214,5 +219,74 @@ public class PatientAppointmentController : Controller
         }
 
         return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpGet("Feedback/{id:long}")]
+    public async Task<IActionResult> Feedback(long id)
+    {
+        var apptResult = await _appointmentApiService.GetAppointmentDetailAsync(id);
+        if (!apptResult.IsSuccess || apptResult.Data == null)
+        {
+            TempData["ErrorMessage"] = "Không tìm thấy lịch hẹn.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var appt = apptResult.Data;
+        if (appt.Status != "Completed")
+        {
+            TempData["ErrorMessage"] = "Chỉ có thể đánh giá ca khám đã hoàn thành.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var fbResult = await _feedbackApiService.GetFeedbackByAppointmentIdAsync(id);
+        var existingFb = fbResult.IsSuccess ? fbResult.Data : null;
+
+        var vm = new PatientFeedbackFormViewModel
+        {
+            AppointmentId = appt.AppointmentId,
+            AppointmentCode = appt.AppointmentCode,
+            DentistName = appt.AssignedDentistName ?? appt.RequestedDentistName,
+            DepartmentName = appt.DepartmentName,
+            ServiceName = appt.ServiceName,
+            AppointmentDate = appt.ScheduledStart,
+            IsAlreadySubmitted = existingFb != null,
+            ExistingFeedback = existingFb,
+            DentistRating = existingFb?.DentistRating ?? 5,
+            ClinicRating = existingFb?.ClinicRating ?? 5,
+            Comment = existingFb?.Comment
+        };
+
+        return View("~/Views/Patient/Appointment/Feedback.cshtml", vm);
+    }
+
+    [HttpPost("Feedback")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SubmitFeedback(PatientFeedbackFormViewModel model)
+    {
+        if (!ModelState.IsValid)
+        {
+            TempData["ErrorMessage"] = "Dữ liệu đánh giá không hợp lệ. Vui lòng chấm điểm từ 1 đến 5 sao.";
+            return RedirectToAction(nameof(Feedback), new { id = model.AppointmentId });
+        }
+
+        var req = new CreateFeedbackRequest
+        {
+            AppointmentId = model.AppointmentId,
+            DentistRating = model.DentistRating,
+            ClinicRating = model.ClinicRating,
+            Comment = model.Comment?.Trim()
+        };
+
+        var result = await _feedbackApiService.CreateFeedbackAsync(req);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Cảm ơn bạn đã gửi đánh giá và đóng góp ý kiến cho phòng khám!";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể gửi đánh giá.";
+        }
+
+        return RedirectToAction(nameof(Detail), new { id = model.AppointmentId });
     }
 }

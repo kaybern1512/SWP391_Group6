@@ -142,6 +142,24 @@ builder.Services.AddHttpClient<IAdminApiService, AdminApiService>(client =>
 .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
+// Dentist Schedule & Availability API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IDentistScheduleApiService, DentistScheduleApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
+// Visit Feedback API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IFeedbackApiService, FeedbackApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 var app = builder.Build();
 
 // Configure HTTP request pipeline
