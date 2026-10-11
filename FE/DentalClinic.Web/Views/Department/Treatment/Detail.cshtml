@@ -16,20 +16,6 @@
         </a>
     </div>
 
-    @if (TempData["SuccessMessage"] != null)
-    {
-        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    }
-    @if (TempData["ErrorMessage"] != null)
-    {
-        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    }
 
     <!-- Overview Banner -->
     <div class="card border-0 shadow-sm mb-4">
@@ -131,6 +117,9 @@
                                     break;
                                 case "Pending":
                                     <span class="badge bg-secondary px-3 py-2"><i class="bi bi-hourglass me-1"></i>Chờ thực hiện</span>
+                                    break;
+                                case "Cancelled":
+                                    <span class="badge bg-danger px-3 py-2"><i class="bi bi-x-circle me-1"></i>Đã hủy</span>
                                     break;
                                 default:
                                     <span class="badge bg-light text-dark border px-3 py-2">@phase.Status</span>

@@ -133,7 +133,7 @@
                                             break;
                                         case "Cancelled":
                                         case "Rejected":
-                                            <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>@appt.Status</span>
+                                            <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>@(appt.Status == "Rejected" ? "Bị Từ Chối" : "Đã Hủy")</span>
                                             break;
                                         default:
                                             <span class="badge bg-light text-dark border">@appt.Status</span>

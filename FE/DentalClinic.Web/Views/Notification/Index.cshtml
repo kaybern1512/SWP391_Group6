@@ -24,20 +24,6 @@
         </div>
     </div>
 
-    @if (TempData["SuccessMessage"] != null)
-    {
-        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    }
-    @if (TempData["ErrorMessage"] != null)
-    {
-        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    }
 
     <!-- Filter Tabs -->
     <div class="card border-0 shadow-sm mb-4">
@@ -188,6 +174,7 @@
                 const badge = item.querySelector('.badge.bg-primary');
                 if (badge) badge.remove();
                 btn.remove();
+                if (window.toastSuccess) window.toastSuccess('Đã đánh dấu thông báo là đã đọc.');
             }
         });
     }
