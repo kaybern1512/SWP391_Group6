@@ -1,0 +1,123 @@
+@model DentalClinic.Web.ViewModels.Treatment.PatientTreatmentPlanListViewModel
+@{
+    ViewData["Title"] = "Lộ Trình Điều Trị Của Tôi";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-card-checklist me-2 text-primary"></i>Phác Đồ & Lộ Trình Điều Trị Của Tôi
+            </h1>
+            <p class="text-muted mb-0">Theo dõi kế hoạch điều trị răng miệng theo từng giai đoạn do bác sĩ chuyên khoa thiết lập.</p>
+        </div>
+    </div>
+
+    @if (Model.Plans == null || Model.Plans.Count == 0)
+    {
+        <div class="card border-0 shadow-sm text-center py-5">
+            <div class="card-body">
+                <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
+                    <i class="bi bi-journal-medical fs-2 text-muted"></i>
+                </div>
+                <h5 class="fw-bold text-dark">Bạn chưa có phác đồ điều trị nào</h5>
+                <p class="text-muted mb-3">Sau khi được bác sĩ thăm khám và chẩn đoán, kế hoạch điều trị chi tiết sẽ xuất hiện tại đây.</p>
+                <a asp-controller="PatientAppointment" asp-action="Book" class="btn btn-primary btn-sm">
+                    <i class="bi bi-calendar-plus me-1"></i>Đặt Lịch Hẹn Khám Ngay
+                </a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @foreach (var plan in Model.Plans)
+            {
+                <div class="col-12 col-lg-6">
+                    <div class="card border-0 shadow-sm h-100 hover-shadow transition">
+                        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                            <span class="badge bg-primary bg-opacity-10 text-primary fs-6 px-3 py-2 font-monospace">
+                                Phác Đồ #@plan.TreatmentPlanId
+                            </span>
+                            @switch (plan.Status)
+                            {
+                                case "Active":
+                                    <span class="badge bg-warning text-dark px-3 py-2"><i class="bi bi-hourglass-split me-1"></i>Đang điều trị</span>
+                                    break;
+                                case "Completed":
+                                    <span class="badge bg-success px-3 py-2"><i class="bi bi-check-all me-1"></i>Đã hoàn thành</span>
+                                    break;
+                                default:
+                                    <span class="badge bg-light text-dark border px-3 py-2">@plan.Status</span>
+                                    break;
+                            }
+                        </div>
+                        <div class="card-body p-4">
+                            <h4 class="h5 fw-bold text-dark mb-1">
+                                Khoa: @plan.DepartmentName
+                            </h4>
+                            <p class="text-muted small mb-3">
+                                Bác sĩ phụ trách: <strong>@plan.CreatedByDentistName</strong> &bull;
+                                Ngày lập: @plan.CreatedAt.ToString("dd/MM/yyyy")
+                            </p>
+
+                            <!-- Progress -->
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1 small">
+                                    <span class="text-muted fw-semibold">
+                                        Tiến độ: @plan.CompletedItemsCount / @plan.TotalItemsCount giai đoạn
+                                    </span>
+                                    <span class="fw-bold text-primary">@plan.ProgressPercentage%</span>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar @(plan.ProgressPercentage == 100 ? "bg-success" : "bg-primary")" 
+                                         role="progressbar" style="width: @plan.ProgressPercentage%"></div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center py-2 px-3 bg-light rounded mb-3">
+                                <span class="text-muted small">Chi phí ước tính:</span>
+                                <span class="fw-bold text-success fs-5">
+                                    @(plan.EstimatedTotal.HasValue ? plan.EstimatedTotal.Value.ToString("N0") + " ₫" : "Chưa định giá")
+                                </span>
+                            </div>
+
+                            <!-- List preview of phases -->
+                            <div class="small mb-3">
+                                <div class="text-muted fw-semibold mb-2">Các giai đoạn điều trị:</div>
+                                <ul class="list-unstyled mb-0">
+                                    @foreach (var item in plan.Items.Take(3))
+                                    {
+                                        <li class="d-flex justify-content-between align-items-center py-1 border-bottom border-light">
+                                            <span>
+                                                <i class="bi bi-check-circle-fill me-1 @(item.Status == "Completed" ? "text-success" : "text-muted")"></i>
+                                                Giai đoạn @item.SequenceNo: @item.ServiceName
+                                                @if (!string.IsNullOrEmpty(item.ToothNumber))
+                                                {
+                                                    <span class="badge bg-secondary bg-opacity-10 text-secondary">(@item.ToothNumber)</span>
+                                                }
+                                            </span>
+                                            <span class="badge @(item.Status == "Completed" ? "bg-success" : "bg-light text-dark")">
+                                                @(item.Status == "Completed" ? "Xong" : "Chờ")
+                                            </span>
+                                        </li>
+                                    }
+                                    @if (plan.Items.Count > 3)
+                                    {
+                                        <li class="text-muted small pt-1 text-center">
+                                            ... và @(plan.Items.Count - 3) giai đoạn khác
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+
+                            <a asp-action="Detail" asp-route-id="@plan.TreatmentPlanId" class="btn btn-outline-primary w-100">
+                                <i class="bi bi-eye me-1"></i>Xem Chi Tiết Lộ Trình & Kết Quả
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

@@ -1,0 +1,227 @@
+@model DentalClinic.Web.ViewModels.Treatment.DentistCreateTreatmentPlanViewModel
+@{
+    ViewData["Title"] = "Thiết Lập Phác Đồ Điều Trị Mới";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-file-earmark-medical me-2 text-primary"></i>Thiết Lập Phác Đồ Điều Trị Mới
+            </h1>
+            <p class="text-muted mb-0">Xây dựng kế hoạch điều trị đa giai đoạn, ước tính thời gian và chi phí cho bệnh nhân.</p>
+        </div>
+        <a asp-action="Index" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Quay lại danh sách
+        </a>
+    </div>
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <form method="post" asp-action="Create" id="createPlanForm">
+        @Html.AntiForgeryToken()
+
+        <!-- Card Thông Tin Chung -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="card-title mb-0 fw-bold text-dark">
+                    <i class="bi bi-person-lines-fill me-2 text-primary"></i>1. Thông Tin Bệnh Nhân & Chuyên Khoa
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-bold">Chọn Bệnh Nhân Tiếp Nhận <span class="text-danger">*</span></label>
+                        <select name="PatientUserId" class="form-select" required>
+                            <option value="">-- Chọn bệnh nhân --</option>
+                            @foreach (var p in Model.Patients)
+                            {
+                                <option value="@p.PatientUserId">
+                                    @p.FullName - Mã: @p.PatientCode @(string.IsNullOrEmpty(p.PhoneNumber) ? "" : $"({p.PhoneNumber})")
+                                </option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-12 col-md-3">
+                        <label class="form-label fw-bold">Chuyên Khoa Điều Trị</label>
+                        <select name="DepartmentId" class="form-select">
+                            <option value="1">Nha Khoa Tổng Quát</option>
+                            <option value="2">Nha Khoa Thẩm Mỹ & Phục Hình</option>
+                            <option value="3">Chỉnh Nha & Niềng Răng</option>
+                            <option value="4">Phẫu Thuật Miệng & Implant</option>
+                            <option value="5">Nha Chu & Nội Nha</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12 col-md-3">
+                        <label class="form-label fw-bold">Trạng Thái Khởi Đầu</label>
+                        <select name="Status" class="form-select">
+                            <option value="Active" selected>Kích hoạt ngay (Active)</option>
+                            <option value="Draft">Bản nháp (Draft)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card Danh Sách Các Giai Đoạn -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0 fw-bold text-dark">
+                    <i class="bi bi-layers-half me-2 text-primary"></i>2. Lộ Trình Các Giai Đoạn Điều Trị
+                </h5>
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="addPhaseRow()">
+                    <i class="bi bi-plus-circle me-1"></i>+ Thêm giai đoạn
+                </button>
+            </div>
+            <div class="card-body p-4">
+                <div class="table-responsive">
+                    <table class="table table-bordered align-middle" id="phasesTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 70px;" class="text-center">Giai đoạn</th>
+                                <th style="min-width: 250px;">Thủ Thuật / Dịch Vụ Nha Khoa <span class="text-danger">*</span></th>
+                                <th style="width: 140px;">Vị Trí Răng</th>
+                                <th style="width: 160px;">Ngày Dự Kiến</th>
+                                <th style="width: 170px;">Chi Phí Ước Tính (₫)</th>
+                                <th>Ghi Chú Lâm Sàng</th>
+                                <th style="width: 60px;" class="text-center">Xóa</th>
+                            </tr>
+                        </thead>
+                        <tbody id="phasesBody">
+                            <!-- Sẽ được sinh tự động bằng JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex justify-content-end align-items-center mt-3 pt-3 border-top">
+                    <div class="text-end">
+                        <div class="text-muted small fw-semibold text-uppercase">Tổng chi phí dự kiến:</div>
+                        <div class="h3 fw-bold text-success mb-0" id="totalEstimatedDisplay">0 ₫</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Submit Button Bar -->
+        <div class="d-flex justify-content-end gap-2 mb-5">
+            <a asp-action="Index" class="btn btn-light border px-4">Hủy Bỏ</a>
+            <button type="submit" class="btn btn-primary px-5 fw-bold shadow-sm">
+                <i class="bi bi-check-lg me-1"></i>Lưu Phác Đồ Điều Trị
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Datalist dịch vụ để JavaScript clone -->
+<script>
+    const availableServices = [
+        @foreach (var s in Model.Services)
+        {
+            <text>{ id: @s.DepartmentServiceId, name: '@Html.Raw(s.ServiceName)', price: @s.Price },</text>
+        }
+    ];
+
+    let phaseCount = 0;
+
+    function addPhaseRow(defaultServiceId = null, tooth = '', daysOffset = 0, note = '') {
+        const tbody = document.getElementById('phasesBody');
+        const seq = phaseCount + 1;
+        const tr = document.createElement('tr');
+        tr.id = `phase-row-${phaseCount}`;
+
+        const expectedDate = new Date();
+        expectedDate.setDate(expectedDate.getDate() + (daysOffset || (phaseCount * 7)));
+        const dateStr = expectedDate.toISOString().split('T')[0];
+
+        let serviceOptionsHtml = '<option value="">-- Chọn dịch vụ --</option>';
+        let initialPrice = 0;
+        availableServices.forEach(s => {
+            const isSelected = defaultServiceId && s.id === defaultServiceId;
+            if (isSelected) initialPrice = s.price;
+            serviceOptionsHtml += `<option value="${s.id}" data-price="${s.price}" ${isSelected ? 'selected' : ''}>${s.name} (${s.price.toLocaleString('vi-VN')} ₫)</option>`;
+        });
+
+        tr.innerHTML = `
+            <td class="text-center fw-bold font-monospace bg-light">
+                ${seq}
+                <input type="hidden" name="Items[${phaseCount}].SequenceNo" value="${seq}" />
+            </td>
+            <td>
+                <select name="Items[${phaseCount}].DepartmentServiceId" class="form-select service-select" required onchange="onServiceChanged(${phaseCount})">
+                    ${serviceOptionsHtml}
+                </select>
+            </td>
+            <td>
+                <input type="text" name="Items[${phaseCount}].ToothNumber" class="form-control" value="${tooth}" placeholder="VD: 16, 21..." />
+            </td>
+            <td>
+                <input type="date" name="Items[${phaseCount}].ExpectedDate" class="form-control" value="${dateStr}" />
+            </td>
+            <td>
+                <input type="number" name="Items[${phaseCount}].EstimatedCost" class="form-control cost-input" value="${initialPrice}" min="0" step="1000" oninput="calculateTotal()" />
+            </td>
+            <td>
+                <input type="text" name="Items[${phaseCount}].Note" class="form-control" value="${note}" placeholder="Ghi chú lâm sàng..." />
+            </td>
+            <td class="text-center">
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removePhaseRow(${phaseCount})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        `;
+
+        tbody.appendChild(tr);
+        phaseCount++;
+        calculateTotal();
+    }
+
+    function onServiceChanged(index) {
+        const row = document.getElementById(`phase-row-${index}`);
+        if (!row) return;
+        const select = row.querySelector('.service-select');
+        const selectedOption = select.options[select.selectedIndex];
+        const price = selectedOption.getAttribute('data-price');
+        const costInput = row.querySelector('.cost-input');
+        if (price) {
+            costInput.value = price;
+        }
+        calculateTotal();
+    }
+
+    function removePhaseRow(index) {
+        const row = document.getElementById(`phase-row-${index}`);
+        if (row) {
+            row.remove();
+            calculateTotal();
+        }
+    }
+
+    function calculateTotal() {
+        let total = 0;
+        document.querySelectorAll('.cost-input').forEach(input => {
+            const val = parseFloat(input.value) || 0;
+            total += val;
+        });
+        document.getElementById('totalEstimatedDisplay').innerText = total.toLocaleString('vi-VN') + ' ₫';
+    }
+
+    // Tự động khởi tạo 3 giai đoạn mẫu phổ biến khi tải trang
+    document.addEventListener('DOMContentLoaded', function () {
+        if (availableServices.length > 0) {
+            addPhaseRow(availableServices[0].id, 'Toàn hàm', 0, 'Giai đoạn 1: Khám tổng quát & Vệ sinh cạo vôi');
+            if (availableServices.length > 1) {
+                addPhaseRow(availableServices[1].id, 'Răng 16', 7, 'Giai đoạn 2: Điều trị bệnh lý tủy / trám răng');
+            }
+        } else {
+            addPhaseRow(null, '', 0, '');
+        }
+    });
+</script>

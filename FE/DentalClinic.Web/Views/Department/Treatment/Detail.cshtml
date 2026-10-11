@@ -1,0 +1,290 @@
+@model DentalClinic.Web.ViewModels.Treatment.DentistTreatmentPlanDetailViewModel
+@{
+    ViewData["Title"] = $"Giám Sát Phác Đồ #{Model.Plan.TreatmentPlanId} - {Model.Plan.PatientName}";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a asp-action="Index">Tiến Độ Điều Trị Khoa</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Phác Đồ #@Model.Plan.TreatmentPlanId</li>
+            </ol>
+        </nav>
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Quay lại danh sách
+        </a>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Overview Banner -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4">
+            <div class="row align-items-center">
+                <div class="col-12 col-lg-8">
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <span class="badge bg-primary fs-6 px-3 py-2 font-monospace">KHĐT #@Model.Plan.TreatmentPlanId</span>
+                        @switch (Model.Plan.Status)
+                        {
+                            case "Active":
+                                <span class="badge bg-warning text-dark px-3 py-2"><i class="bi bi-hourglass-split me-1"></i>Đang điều trị</span>
+                                break;
+                            case "Completed":
+                                <span class="badge bg-success px-3 py-2"><i class="bi bi-check-all me-1"></i>Đã hoàn thành</span>
+                                break;
+                            case "Draft":
+                                <span class="badge bg-secondary px-3 py-2"><i class="bi bi-pencil-square me-1"></i>Bản nháp</span>
+                                break;
+                            case "Cancelled":
+                                <span class="badge bg-danger px-3 py-2"><i class="bi bi-x-circle me-1"></i>Đã hủy</span>
+                                break;
+                            default:
+                                <span class="badge bg-light text-dark border px-3 py-2">@Model.Plan.Status</span>
+                                break;
+                        }
+                    </div>
+                    <h2 class="h4 fw-bold text-dark mb-1">
+                        Bệnh nhân: <span class="text-primary">@Model.Plan.PatientName</span>
+                        <small class="text-muted fs-6">(@Model.Plan.PatientCode)</small>
+                    </h2>
+                    <p class="text-muted mb-3">
+                        <i class="bi bi-hospital me-1"></i>Khoa: <strong>@Model.Plan.DepartmentName</strong> &bull;
+                        <i class="bi bi-person-badge me-1"></i>Bác sĩ lập: <strong>@Model.Plan.CreatedByDentistName</strong> &bull;
+                        <i class="bi bi-calendar3 me-1"></i>Khởi tạo: @Model.Plan.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+                    </p>
+
+                    <div class="mt-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1 small">
+                            <span class="fw-semibold text-muted">
+                                Tiến độ khoa: <strong>@Model.Plan.CompletedItemsCount / @Model.Plan.TotalItemsCount</strong> giai đoạn hoàn tất
+                            </span>
+                            <span class="fw-bold text-primary fs-6">@Model.Plan.ProgressPercentage%</span>
+                        </div>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar @(Model.Plan.ProgressPercentage == 100 ? "bg-success" : "bg-primary")" 
+                                 role="progressbar" style="width: @Model.Plan.ProgressPercentage%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-4 mt-3 mt-lg-0 border-start ps-lg-4 text-lg-end">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Tổng chi phí dự kiến</div>
+                    <div class="display-6 fw-bold text-success mb-2">
+                        @(Model.Plan.EstimatedTotal.HasValue ? Model.Plan.EstimatedTotal.Value.ToString("N0") + " ₫" : "0 ₫")
+                    </div>
+                    <div class="text-muted small">
+                        Lần cập nhật cuối: @(Model.Plan.UpdatedAt.HasValue ? Model.Plan.UpdatedAt.Value.ToString("dd/MM/yyyy HH:mm") : "--")
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Phases List with Dentist Reassignment -->
+    <h4 class="h5 fw-bold text-dark mb-3">
+        <i class="bi bi-layers me-2 text-primary"></i>Chi Tiết Các Giai Đoạn & Phân Công Bác Sĩ Trong Khoa
+    </h4>
+
+    <div class="row g-3 mb-4">
+        @foreach (var phase in Model.Plan.Items)
+        {
+            <div class="col-12">
+                <div class="card border-0 shadow-sm border-start @(phase.Status == "Completed" ? "border-success" : phase.Status == "InProgress" ? "border-warning" : "border-primary") border-4">
+                    <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="badge bg-dark fs-6 px-3 py-2 font-monospace">
+                                GIAI ĐOẠN @phase.SequenceNo
+                            </span>
+                            <div>
+                                <h5 class="fw-bold text-dark mb-0">@phase.ServiceName</h5>
+                                @if (!string.IsNullOrEmpty(phase.ToothNumber))
+                                {
+                                    <span class="badge bg-info text-dark me-2">Vị trí: @phase.ToothNumber</span>
+                                }
+                                <span class="text-muted small">
+                                    Bác sĩ thực hiện: <strong class="text-primary">@(phase.AssignedDentistName ?? "Chưa phân công")</strong>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            @switch (phase.Status)
+                            {
+                                case "Completed":
+                                    <span class="badge bg-success px-3 py-2"><i class="bi bi-check-circle me-1"></i>Đã hoàn thành</span>
+                                    break;
+                                case "InProgress":
+                                    <span class="badge bg-warning text-dark px-3 py-2"><i class="bi bi-activity me-1"></i>Đang thực hiện</span>
+                                    break;
+                                case "Pending":
+                                    <span class="badge bg-secondary px-3 py-2"><i class="bi bi-hourglass me-1"></i>Chờ thực hiện</span>
+                                    break;
+                                default:
+                                    <span class="badge bg-light text-dark border px-3 py-2">@phase.Status</span>
+                                    break;
+                            }
+
+                            <!-- Trưởng khoa phân công bác sĩ -->
+                            <button type="button" class="btn btn-sm btn-outline-primary" 
+                                    onclick="openAssignDentistModal(@phase.TreatmentPlanItemId, '@phase.ServiceName', @phase.SequenceNo, @(phase.AssignedDentistUserId ?? 0))">
+                                <i class="bi bi-person-check me-1"></i>Phân công BS
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="row g-2 mb-3 small text-muted">
+                            <div class="col-12 col-md-4">
+                                <i class="bi bi-calendar-event me-1 text-primary"></i>Ngày dự kiến: 
+                                <strong>@(phase.ExpectedDate.HasValue ? phase.ExpectedDate.Value.ToString("dd/MM/yyyy") : "Chưa ấn định")</strong>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <i class="bi bi-cash-stack me-1 text-success"></i>Chi phí ước tính: 
+                                <strong class="text-success">@(phase.EstimatedCost.HasValue ? phase.EstimatedCost.Value.ToString("N0") + " ₫" : "0 ₫")</strong>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <i class="bi bi-chat-left-text me-1 text-secondary"></i>Chỉ định lâm sàng: 
+                                <span>@(string.IsNullOrEmpty(phase.Note) ? "Không có" : phase.Note)</span>
+                            </div>
+                        </div>
+
+                        <!-- Session history under this phase -->
+                        <div class="border-top pt-3">
+                            <span class="fw-semibold text-dark small text-uppercase mb-2 d-block">
+                                <i class="bi bi-clock-history me-1 text-primary"></i>Nhật ký điều trị lâm sàng (@phase.Sessions.Count buổi đã thực hiện)
+                            </span>
+
+                            @if (phase.Sessions == null || phase.Sessions.Count == 0)
+                            {
+                                <div class="bg-light p-2 rounded text-muted small text-center">
+                                    Chưa có buổi điều trị nào được bác sĩ ghi nhận cho giai đoạn này.
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered align-middle mb-0 bg-white">
+                                        <thead class="table-light small">
+                                            <tr>
+                                                <th style="width: 140px;">Ngày thực hiện</th>
+                                                <th>Bác sĩ thực hiện</th>
+                                                <th>Kết quả thủ thuật</th>
+                                                <th>Ghi chú lâm sàng</th>
+                                                <th>Dịch vụ phát sinh</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="small">
+                                            @foreach (var s in phase.Sessions)
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <div class="fw-bold">@s.SessionDate.ToString("dd/MM/yyyy")</div>
+                                                        <div class="text-muted small">@s.SessionDate.ToString("HH:mm")</div>
+                                                    </td>
+                                                    <td>
+                                                        <span class="fw-semibold">@s.DentistName</span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-success bg-opacity-10 text-success fw-bold">
+                                                            @s.TreatmentResult
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        @(string.IsNullOrEmpty(s.ClinicalNote) ? "--" : s.ClinicalNote)
+                                                    </td>
+                                                    <td>
+                                                        @if (s.PerformedServices != null && s.PerformedServices.Count > 0)
+                                                        {
+                                                            <ul class="list-unstyled mb-0 small">
+                                                                @foreach (var psvc in s.PerformedServices)
+                                                                {
+                                                                    <li>
+                                                                        &bull; @psvc.ServiceName (x@psvc.Quantity): 
+                                                                        <span class="text-success fw-bold">@psvc.Amount.ToString("N0") ₫</span>
+                                                                    </li>
+                                                                }
+                                                            </ul>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted">--</span>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- MODAL: PHÂN CÔNG BÁC SĨ CHO GIAI ĐOẠN -->
+<div class="modal fade" id="assignDentistModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post" asp-action="AssignDentist">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="planId" value="@Model.Plan.TreatmentPlanId" />
+                <input type="hidden" name="itemId" id="assignItemId" />
+
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-person-check me-2"></i>Phân Công Bác Sĩ Thực Hiện Giai Đoạn
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-info py-2 mb-3">
+                        Giai đoạn: <strong id="assignPhaseLabel">--</strong>
+                    </div>
+
+                    <label class="form-label fw-bold">Chọn Bác Sĩ Phụ Trách:</label>
+                    <select name="dentistUserId" class="form-select" id="assignDentistSelect" required>
+                        <option value="">-- Chọn bác sĩ trong khoa --</option>
+                        @foreach (var d in Model.Dentists)
+                        {
+                            <option value="@d.DentistUserId">@d.FullName @(string.IsNullOrEmpty(d.Specialization) ? "" : $"({d.Specialization})")</option>
+                        }
+                    </select>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Xác Nhận Phân Công</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function openAssignDentistModal(itemId, serviceName, seq, currentDentistId) {
+        document.getElementById('assignItemId').value = itemId;
+        document.getElementById('assignPhaseLabel').innerText = `Giai đoạn ${seq}: ${serviceName}`;
+        if (currentDentistId > 0) {
+            document.getElementById('assignDentistSelect').value = currentDentistId;
+        }
+        const modal = new bootstrap.Modal(document.getElementById('assignDentistModal'));
+        modal.show();
+    }
+</script>
+}
