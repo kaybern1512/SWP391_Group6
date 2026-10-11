@@ -87,3 +87,8 @@ artifacts/
 # User uploaded files
 **/wwwroot/uploads/avatars/*
 !**/wwwroot/uploads/avatars/.gitkeep
+
+# Local secret scripts and configuration overrides
+setup-secrets.bat
+setup-secrets.ps1
+appsettings*.Local.json
