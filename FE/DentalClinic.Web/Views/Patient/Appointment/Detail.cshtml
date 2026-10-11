@@ -224,7 +224,7 @@
                     <h5 class="card-title mb-0 fw-semibold text-dark">Thao Tác</h5>
                 </div>
                 <div class="card-body p-3">
-                    @if (appt.Status == "PendingReceptionReview" || appt.Status == "PendingDepartmentReview")
+                    @if (appt.Status == "PendingReceptionReview" || appt.Status == "PendingDepartmentReview" || appt.Status == "AwaitingPatientResponse")
                     {
                         <button type="button" class="btn btn-outline-danger w-100 mb-2" data-bs-toggle="modal" data-bs-target="#withdrawModal">
                             <i class="bi bi-x-circle me-1"></i> Thu Hồi Yêu Cầu Đặt Lịch
@@ -267,7 +267,7 @@
             @Html.AntiForgeryToken()
             <div class="modal-header">
                 <h5 class="modal-title">Thu Hồi Yêu Cầu Đặt Lịch</h5>
-                <button type="button" class="btn-close" data-bs-toggle="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <p>Bạn có chắc chắn muốn thu hồi yêu cầu đặt lịch khám này không?</p>
