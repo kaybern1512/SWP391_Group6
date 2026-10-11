@@ -31,11 +31,14 @@ public class PatientAppointmentController : Controller
     public async Task<IActionResult> Index([FromQuery] string? status)
     {
         var result = await _appointmentApiService.GetPatientAppointmentsAsync(status);
+        var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
+
         var vm = new AppointmentListViewModel
         {
             Appointments = result.Data ?? new(),
             SelectedStatus = status,
-            Role = "Patient"
+            Role = "Patient",
+            Eligibility = eligibilityResult?.Data
         };
         return View("~/Views/Patient/Appointment/Index.cshtml", vm);
     }
@@ -43,10 +46,14 @@ public class PatientAppointmentController : Controller
     [HttpGet("Book")]
     public async Task<IActionResult> Book()
     {
+        var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
+        var eligibility = eligibilityResult?.Data ?? new BookingEligibilityDto();
+
         var deptResult = await _appointmentApiService.GetDepartmentsAsync();
         var vm = new PatientBookViewModel
         {
-            Departments = deptResult.Data ?? new()
+            Departments = deptResult.Data ?? new(),
+            Eligibility = eligibility
         };
         return View("~/Views/Patient/Appointment/Book.cshtml", vm);
     }
@@ -81,8 +88,21 @@ public class PatientAppointmentController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Book(PatientBookViewModel model)
     {
+        var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
+        var eligibility = eligibilityResult?.Data ?? new BookingEligibilityDto();
+
+        if (!eligibility.IsEligible)
+        {
+            TempData["ErrorMessage"] = eligibility.BlockReason ?? "Tài khoản của bạn hiện đang bị tạm khóa quyền đặt lịch trực tuyến.";
+            model.Eligibility = eligibility;
+            var deptRes = await _appointmentApiService.GetDepartmentsAsync();
+            model.Departments = deptRes.Data ?? new();
+            return View("~/Views/Patient/Appointment/Book.cshtml", model);
+        }
+
         if (!ModelState.IsValid)
         {
+            model.Eligibility = eligibility;
             var deptResult = await _appointmentApiService.GetDepartmentsAsync();
             model.Departments = deptResult.Data ?? new();
             return View("~/Views/Patient/Appointment/Book.cshtml", model);
@@ -101,6 +121,7 @@ public class PatientAppointmentController : Controller
         if (!result.IsSuccess)
         {
             ModelState.AddModelError(string.Empty, result.Message ?? "Không thể đặt lịch khám.");
+            model.Eligibility = eligibility;
             var deptResult = await _appointmentApiService.GetDepartmentsAsync();
             model.Departments = deptResult.Data ?? new();
             return View("~/Views/Patient/Appointment/Book.cshtml", model);

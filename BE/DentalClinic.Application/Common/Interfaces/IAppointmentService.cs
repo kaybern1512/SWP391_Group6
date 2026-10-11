@@ -18,6 +18,7 @@ public interface IAppointmentService
     Task<ApiResponse> PatientCancelAsync(long appointmentId, long patientUserId, string reason, CancellationToken ct = default);
     Task<ApiResponse<AppointmentChangeProposalDto>> GetAppointmentProposalAsync(long appointmentId, long patientUserId, CancellationToken ct = default);
     Task<ApiResponse> PatientRespondProposalAsync(long appointmentId, long patientUserId, bool accept, CancellationToken ct = default);
+    Task<ApiResponse<BookingEligibilityDto>> GetBookingEligibilityAsync(long patientUserId, CancellationToken ct = default);
 
     // Receptionist Operations
     Task<ApiResponse<List<AppointmentDto>>> GetReceptionistRequestsAsync(CancellationToken ct = default);
@@ -25,6 +26,7 @@ public interface IAppointmentService
     Task<ApiResponse> ReceptionistRejectAsync(long appointmentId, long staffUserId, string reason, CancellationToken ct = default);
     Task<ApiResponse<List<AppointmentDto>>> GetReceptionistTodayConfirmedAsync(string? searchQuery = null, CancellationToken ct = default);
     Task<ApiResponse> ReceptionistCheckInAsync(long appointmentId, long staffUserId, string? note, CancellationToken ct = default);
+    Task<ApiResponse> ReceptionistMarkNoShowAsync(long appointmentId, long staffUserId, string? note = null, CancellationToken ct = default);
 
     // Department Manager Operations
     Task<ApiResponse<List<AppointmentDto>>> GetDepartmentRequestsAsync(long managerUserId, CancellationToken ct = default);

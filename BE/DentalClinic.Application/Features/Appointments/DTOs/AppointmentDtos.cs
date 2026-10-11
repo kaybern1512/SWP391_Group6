@@ -153,3 +153,27 @@ public class AvailableResourcesDto
     public List<ChairOptionDto> Chairs { get; set; } = new();
     public List<DentistOptionDto> Dentists { get; set; } = new();
 }
+
+public class BookingEligibilityDto
+{
+    public bool IsEligible { get; set; } = true;
+    public int StrikeCount { get; set; }
+    public int MaxStrikesAllowed { get; set; } = 3;
+    public DateTime? BlockedUntil { get; set; }
+    public string? BlockReason { get; set; }
+    public List<StrikeIncidentDto> Strikes { get; set; } = new();
+}
+
+public class StrikeIncidentDto
+{
+    public long AppointmentId { get; set; }
+    public string AppointmentCode { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public DateTime IncidentDate { get; set; }
+}
+
+public class ReceptionistNoShowRequest
+{
+    public string? Note { get; set; }
+}

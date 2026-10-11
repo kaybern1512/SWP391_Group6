@@ -57,6 +57,18 @@ public class AppointmentsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("api/patient/appointments/booking-eligibility")]
+    [Authorize(Roles = UserRole.Patient)]
+    [ProducesResponseType(typeof(ApiResponse<BookingEligibilityDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetBookingEligibility(CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId <= 0) return Unauthorized(ApiResponse.Fail("Không thể xác định danh tính người dùng."));
+
+        var result = await _appointmentService.GetBookingEligibilityAsync(userId, ct);
+        return Ok(result);
+    }
+
     [HttpGet("api/patient/appointments")]
     [Authorize(Roles = UserRole.Patient)]
     [ProducesResponseType(typeof(ApiResponse<List<AppointmentDto>>), StatusCodes.Status200OK)]
@@ -238,6 +250,21 @@ public class AppointmentsController : ControllerBase
     {
         var staffUserId = GetCurrentUserId();
         var result = await _appointmentService.ReceptionistCheckInAsync(id, staffUserId, request?.Note, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("api/receptionist/appointments/{id:long}/no-show")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ReceptionistNoShow(long id, [FromBody] ReceptionistNoShowRequest? request, CancellationToken ct)
+    {
+        var staffUserId = GetCurrentUserId();
+        var result = await _appointmentService.ReceptionistMarkNoShowAsync(id, staffUserId, request?.Note, ct);
         if (!result.Success)
         {
             return BadRequest(result);

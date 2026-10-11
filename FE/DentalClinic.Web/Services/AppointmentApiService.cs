@@ -108,6 +108,11 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendPostActionAsync($"/api/patient/appointments/{id}/proposal/reject", new { });
     }
 
+    public async Task<ApiResult<BookingEligibilityDto>> GetBookingEligibilityAsync()
+    {
+        return await SendGetAsync<BookingEligibilityDto>("/api/patient/appointments/booking-eligibility");
+    }
+
     // ==========================================
     // RECEPTIONIST
     // ==========================================
@@ -143,6 +148,12 @@ public class AppointmentApiService : IAppointmentApiService
     {
         var request = new CheckInRequest { Note = note };
         return await SendPostActionAsync($"/api/receptionist/appointments/{id}/check-in", request);
+    }
+
+    public async Task<ApiResult> ReceptionistMarkNoShowAsync(long id, string? note = null)
+    {
+        var request = new ReceptionistNoShowRequest { Note = note };
+        return await SendPostActionAsync($"/api/receptionist/appointments/{id}/no-show", request);
     }
 
     // ==========================================
