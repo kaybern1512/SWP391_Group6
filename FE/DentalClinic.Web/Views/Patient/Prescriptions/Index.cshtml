@@ -1,0 +1,106 @@
+@using DentalClinic.Web.Models.ApiDtos
+@model DentalClinic.Web.ViewModels.Prescription.PatientPrescriptionIndexViewModel
+@{
+    ViewData["Title"] = "Đơn Thuốc Của Tôi";
+}
+
+<div class="container-fluid px-4 py-4">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge bg-primary-subtle text-primary fw-medium px-2 py-1 fs-12">
+                    <i class="bi bi-capsule me-1"></i> Bệnh nhân
+                </span>
+                <span class="badge bg-light text-muted fw-normal px-2 py-1 fs-12">Đơn Thuốc Điện Tử</span>
+            </div>
+            <h1 class="h3 fw-bold text-slate-800 mb-0">Đơn Thuốc Của Tôi</h1>
+            <p class="text-muted small mb-0 mt-1">Xem lại danh sách các đơn thuốc được bác sĩ nha khoa kê sau buổi khám và in đơn thuốc khi cần</p>
+        </div>
+    </div>
+
+    <!-- Alert Messages -->
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center gap-2 mb-4" role="alert">
+            <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+            <div>@TempData["ErrorMessage"]</div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Prescriptions Table -->
+    <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+            <h5 class="card-title fw-bold text-slate-800 mb-0 d-flex align-items-center gap-2">
+                <i class="bi bi-journal-medical text-primary"></i>
+                <span>Danh Sách Đơn Thuốc</span>
+                <span class="badge bg-secondary-subtle text-secondary rounded-pill fs-12 ms-1">@Model.Prescriptions.Count đơn</span>
+            </h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light text-muted fs-13 text-uppercase">
+                    <tr>
+                        <th class="ps-4">Mã Đơn / Ca Khám</th>
+                        <th>Bác Sĩ Kê Đơn</th>
+                        <th>Ngày Kê</th>
+                        <th>Danh Mục Thuốc</th>
+                        <th>Lời Dặn Bác Sĩ</th>
+                        <th class="text-end pe-4">Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody class="fs-14">
+                    @if (Model.Prescriptions.Any())
+                    {
+                        foreach (var p in Model.Prescriptions)
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-bold text-primary">#RX-@p.PrescriptionId</div>
+                                    <div class="badge bg-light text-dark border small">Ca: @p.AppointmentCode</div>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-slate-800">@p.DentistName</div>
+                                    <div class="text-muted small">@p.DepartmentName</div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark">@p.IssuedAt.ToString("dd/MM/yyyy")</div>
+                                    <div class="text-muted small">@p.IssuedAt.ToString("HH:mm")</div>
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-column gap-1">
+                                        @foreach (var item in p.Items)
+                                        {
+                                            <div class="small">
+                                                <strong>• @item.MedicationName</strong>
+                                                <span class="text-muted">(@(item.Dosage ?? "—") - @(item.Frequency ?? "Theo chỉ định"))</span>
+                                            </div>
+                                        }
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="text-muted small fst-italic">@(string.IsNullOrEmpty(p.GeneralInstructions) ? "Không có" : p.GeneralInstructions)</span>
+                                </td>
+                                <td class="text-end pe-4">
+                                    <a asp-action="Print" asp-route-id="@p.PrescriptionId" class="btn btn-sm btn-outline-primary" target="_blank" title="Xem và in đơn thuốc">
+                                        <i class="bi bi-printer me-1"></i> In Đơn Thuốc
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <i class="bi bi-capsule fs-1 d-block mb-2 text-secondary"></i>
+                                Bạn chưa có đơn thuốc nào được kê từ bác sĩ.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

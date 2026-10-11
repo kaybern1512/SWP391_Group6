@@ -46,6 +46,10 @@
                 <i class="bi bi-journal-medical"></i>
                 <span>Medical Record</span>
             </a>
+            <a class="sidebar-link @(currentCtrl == "PatientPrescription" ? "active" : "")" asp-controller="PatientPrescription" asp-action="Index">
+                <i class="bi bi-capsule"></i>
+                <span>Prescriptions</span>
+            </a>
             <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Treatment backend API.'); return false;">
                 <i class="bi bi-card-checklist"></i>
                 <span>Treatment Plans</span>
@@ -114,7 +118,7 @@
                 <i class="bi bi-clipboard2-check"></i>
                 <span>Record Session</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Prescription API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "DentistPrescription" ? "active" : "")" asp-controller="DentistPrescription" asp-action="Index">
                 <i class="bi bi-capsule"></i>
                 <span>Prescriptions</span>
             </a>

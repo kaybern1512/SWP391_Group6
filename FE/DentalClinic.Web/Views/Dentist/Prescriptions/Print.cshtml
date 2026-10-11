@@ -1,0 +1,201 @@
+@model DentalClinic.Web.ViewModels.Prescription.PrescriptionPrintViewModel
+@{
+    Layout = null;
+    var p = Model.Prescription;
+}
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Đơn Thuốc - #RX-@p.PrescriptionId - @p.PatientName</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <style>
+        body {
+            background-color: #f1f5f9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #1e293b;
+        }
+        .prescription-paper {
+            max-width: 800px;
+            margin: 30px auto;
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            border: 1px solid #e2e8f0;
+        }
+        .clinic-brand {
+            border-bottom: 2px solid #0284c7;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+        .prescription-title {
+            text-align: center;
+            font-weight: 800;
+            color: #0369a1;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+        .table-prescription {
+            border: 1px solid #cbd5e1;
+        }
+        .table-prescription th {
+            background-color: #f8fafc;
+            font-weight: 600;
+        }
+        @@media print {
+            body {
+                background: none;
+            }
+            .prescription-paper {
+                box-shadow: none;
+                border: none;
+                margin: 0;
+                padding: 10px;
+                max-width: 100%;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Print Actions Toolbar (Hidden when printing) -->
+    <div class="container text-center my-3 no-print">
+        <button onclick="window.print()" class="btn btn-primary px-4 py-2 fw-bold shadow-sm">
+            <i class="bi bi-printer me-2"></i>In Đơn Thuốc
+        </button>
+        <button onclick="window.close()" class="btn btn-outline-secondary px-4 py-2 ms-2">
+            <i class="bi bi-x-circle me-1"></i>Đóng
+        </button>
+    </div>
+
+    <!-- Printable Prescription Paper -->
+    <div class="prescription-paper">
+        <!-- Clinic Brand Header -->
+        <div class="clinic-brand d-flex justify-content-between align-items-start">
+            <div>
+                <h4 class="fw-bold text-primary mb-1 d-flex align-items-center gap-2">
+                    <i class="bi bi-hospital fs-3"></i> NHA KHOA QUỐC TẾ DENTALCARE
+                </h4>
+                <div class="small text-muted">Hệ thống phòng khám chuyên khoa Răng - Hàm - Mặt tiêu chuẩn cao</div>
+                <div class="small text-muted"><i class="bi bi-geo-alt me-1"></i>Số 123 Đường Nguyễn Văn Cừ, Quận 5, TP. Hồ Chí Minh</div>
+                <div class="small text-muted"><i class="bi bi-telephone me-1"></i>Hotline: 1900 6868 • Email: support@dentalcare.vn</div>
+            </div>
+            <div class="text-end">
+                <div class="badge bg-light text-dark border fs-13 mb-1">Mã đơn: #RX-@p.PrescriptionId</div>
+                <div class="small text-muted">Mã ca khám: <strong>@p.AppointmentCode</strong></div>
+                <div class="small text-muted">Khoa: <strong>@p.DepartmentName</strong></div>
+            </div>
+        </div>
+
+        <!-- Prescription Title -->
+        <div class="my-3">
+            <h2 class="prescription-title">ĐƠN THUỐC ĐIỆN TỬ</h2>
+            <div class="text-center small text-muted fst-italic">Ngày kê đơn: @p.IssuedAt.ToString("dd/MM/yyyy HH:mm")</div>
+        </div>
+
+        <!-- Patient Details -->
+        <div class="card bg-light border-0 p-3 mb-4 rounded-3">
+            <div class="row g-2 fs-14">
+                <div class="col-md-7">
+                    <span>Họ và tên bệnh nhân: </span>
+                    <strong class="fs-15 text-dark">@p.PatientName.ToUpper()</strong>
+                </div>
+                <div class="col-md-2">
+                    <span>Tuổi: </span>
+                    <strong>@(p.PatientAge.HasValue ? $"{p.PatientAge} tuổi" : "—")</strong>
+                </div>
+                <div class="col-md-3">
+                    <span>Giới tính: </span>
+                    <strong>@(p.PatientGender ?? "—")</strong>
+                </div>
+                <div class="col-md-7">
+                    <span>Mã hồ sơ: </span>
+                    <strong>@p.PatientCode</strong>
+                </div>
+                <div class="col-md-5">
+                    <span>Số điện thoại: </span>
+                    <strong>@(p.PatientPhone ?? "—")</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- Medication List -->
+        <div class="mb-4">
+            <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">
+                <i class="bi bi-prescription text-primary me-1"></i> DANH MỤC THUỐC ĐIỀU TRỊ:
+            </h6>
+            <table class="table table-bordered table-prescription align-middle">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;" class="text-center">STT</th>
+                        <th>Tên Thuốc & Hàm Lượng</th>
+                        <th style="width: 140px;" class="text-center">Số Lượng</th>
+                        <th>Cách Dùng / Liều Dùng</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (p.Items.Any())
+                    {
+                        int idx = 1;
+                        foreach (var item in p.Items)
+                        {
+                            <tr>
+                                <td class="text-center fw-bold">@(idx++)</td>
+                                <td>
+                                    <div class="fw-bold text-primary">@item.MedicationName</div>
+                                    @if (!string.IsNullOrEmpty(item.Duration))
+                                    {
+                                        <div class="small text-muted">Thời gian dùng: @item.Duration</div>
+                                    }
+                                </td>
+                                <td class="text-center fw-bold">@(item.Dosage ?? "Theo chỉ định")</td>
+                                <td>
+                                    <div class="fw-semibold">@(item.Frequency ?? item.Instructions ?? "Theo hướng dẫn của bác sĩ")</div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-3">Không có thông tin thuốc</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Doctor Instructions -->
+        <div class="mb-4 p-3 border rounded-3 bg-light-subtle">
+            <h6 class="fw-bold text-dark mb-2">
+                <i class="bi bi-info-circle-fill text-primary me-1"></i> LỜI DẶN CỦA BÁC SĨ:
+            </h6>
+            <div class="fst-italic text-slate-700">
+                @(string.IsNullOrEmpty(p.GeneralInstructions) ? "Uống thuốc đúng liều lượng chỉ định. Tái khám sau 7 ngày hoặc khi có biểu hiện đau nhức bất thường." : p.GeneralInstructions)
+            </div>
+        </div>
+
+        <!-- Footer Signatures -->
+        <div class="row pt-4 mt-4">
+            <div class="col-6 text-center">
+                <div class="fw-bold small text-muted">NGƯỜI NHẬN ĐƠN</div>
+                <div class="small text-muted fst-italic">(Ký và ghi rõ họ tên)</div>
+            </div>
+            <div class="col-6 text-center">
+                <div class="small text-muted fst-italic">TP. Hồ Chí Minh, ngày @p.IssuedAt.Day tháng @p.IssuedAt.Month năm @p.IssuedAt.Year</div>
+                <div class="fw-bold text-dark mt-1">BÁC SĨ ĐIỀU TRỊ</div>
+                <div class="small text-muted fst-italic">(Ký, đóng dấu và ghi rõ họ tên)</div>
+                <div style="height: 60px;"></div>
+                <div class="fw-bold text-primary fs-15">@p.DentistName</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
