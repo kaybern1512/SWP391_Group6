@@ -201,22 +201,26 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // Intercept click on [data-confirm] buttons / links
+  // Intercept click on [data-confirm] buttons / links (Only actionable elements, NEVER generic containers or inputs)
   document.addEventListener('click', function (e) {
-    const btn = e.target.closest('[data-confirm]');
-    if (!btn) return;
+    const trigger = e.target.closest('button[data-confirm], a[data-confirm], input[type="submit"][data-confirm], input[type="button"][data-confirm]');
+    if (!trigger) return;
 
-    const message = btn.getAttribute('data-confirm');
-    const form = btn.closest('form');
+    const message = trigger.getAttribute('data-confirm');
+    const form = trigger.closest('form');
 
     e.preventDefault();
     e.stopPropagation();
 
     openConfirmModal(message, function () {
-      if (btn.tagName === 'A' && btn.href) {
-        window.location.href = btn.href;
+      if (trigger.tagName === 'A' && trigger.href) {
+        window.location.href = trigger.href;
       } else if (form) {
-        form.submit();
+        if (typeof form.requestSubmit === 'function') {
+          form.requestSubmit(trigger);
+        } else {
+          form.submit();
+        }
       }
     });
   }, true);
@@ -227,12 +231,17 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!form || form.dataset.confirmBypassed === 'true') return;
 
     const message = form.getAttribute('data-confirm');
+    const submitter = e.submitter || null;
     e.preventDefault();
     e.stopPropagation();
 
     openConfirmModal(message, function () {
       form.dataset.confirmBypassed = 'true';
-      form.submit();
+      if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit(submitter);
+      } else {
+        form.submit();
+      }
     });
   }, true);
 
