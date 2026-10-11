@@ -164,7 +164,7 @@
             </a>
 
             <div class="nav-group-title">Vận Hành Chuyên Khoa</div>
-            <a class="sidebar-link" href="#" onclick="alert('Tính năng Phân Bổ Bác Sĩ đang được hoàn thiện theo phân công nhiệm vụ.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "DepartmentDentist" ? "active" : "")" asp-controller="DepartmentDentist" asp-action="Index">
                 <i class="bi bi-person-plus"></i>
                 <span>Phân Bổ Bác Sĩ</span>
             </a>
@@ -172,7 +172,7 @@
                 <i class="bi bi-calendar-range"></i>
                 <span>Lịch Trực Bác Sĩ</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Tính năng Dịch Vụ & Bảng Giá Khoa đang được hoàn thiện theo phân công nhiệm vụ.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "DepartmentService" ? "active" : "")" asp-controller="DepartmentService" asp-action="Index">
                 <i class="bi bi-tags"></i>
                 <span>Dịch Vụ & Bảng Giá Khoa</span>
             </a>

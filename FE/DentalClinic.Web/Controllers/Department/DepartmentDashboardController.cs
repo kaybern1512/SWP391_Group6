@@ -87,6 +87,24 @@ public class DepartmentDashboardController : Controller
                 },
                 new()
                 {
+                    Title = "Phân Bổ Bác Sĩ Vào Khoa",
+                    Icon = "bi-person-plus",
+                    ColorClass = "teal",
+                    Description = "Điều động nhân sự bác sĩ vào chuyên khoa và quản lý thẩm quyền tiếp nhận ca điều trị.",
+                    ActionText = "Phân Bổ Bác Sĩ",
+                    ActionUrl = "/Department/Dentists"
+                },
+                new()
+                {
+                    Title = "Dịch Vụ & Bảng Giá Khoa",
+                    Icon = "bi-tags",
+                    ColorClass = "indigo",
+                    Description = "Quản lý danh mục kỹ thuật điều trị, định mức thời gian thực hiện và niêm yết đơn giá.",
+                    ActionText = "Bảng Giá Dịch Vụ",
+                    ActionUrl = "/Department/Services"
+                },
+                new()
+                {
                     Title = "Thông Báo Chuyên Khoa",
                     Icon = "bi-bell",
                     ColorClass = "warning",

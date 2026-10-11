@@ -198,6 +198,26 @@ public class AdminApiService : IAdminApiService
         return await SendPostActionAsync($"/api/admin/users/{userId}/toggle-lock", new ToggleUserLockRequest { Reason = reason });
     }
 
+    public async Task<ApiResult<List<DentistDepartmentAllocationDto>>> GetDentistAllocationsAsync(long? departmentId = null)
+    {
+        var url = "/api/admin/dentist-allocations";
+        if (departmentId.HasValue)
+        {
+            url += $"?departmentId={departmentId.Value}";
+        }
+        return await SendGetAsync<List<DentistDepartmentAllocationDto>>(url);
+    }
+
+    public async Task<ApiResult<DentistDepartmentAllocationDto>> AssignDentistToDepartmentAsync(AssignDentistDepartmentRequest request)
+    {
+        return await SendPostAsync<AssignDentistDepartmentRequest, DentistDepartmentAllocationDto>("/api/admin/dentist-allocations", request);
+    }
+
+    public async Task<ApiResult> ToggleDentistAllocationStatusAsync(long id)
+    {
+        return await SendPostActionAsync($"/api/admin/dentist-allocations/{id}/toggle-status", new { });
+    }
+
     // ==========================================
     // GENERIC HELPERS
     // ==========================================

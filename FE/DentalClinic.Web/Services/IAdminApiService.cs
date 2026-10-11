@@ -46,4 +46,9 @@ public interface IAdminApiService
     // User Management
     Task<ApiResult<List<AdminUserDto>>> GetUsersAsync(string? role = null, string? search = null);
     Task<ApiResult> ToggleUserLockAsync(long userId, string? reason = null);
+
+    // Dentist Department Allocations
+    Task<ApiResult<List<DentistDepartmentAllocationDto>>> GetDentistAllocationsAsync(long? departmentId = null);
+    Task<ApiResult<DentistDepartmentAllocationDto>> AssignDentistToDepartmentAsync(AssignDentistDepartmentRequest request);
+    Task<ApiResult> ToggleDentistAllocationStatusAsync(long id);
 }
