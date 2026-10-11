@@ -1332,4 +1332,153 @@ public class AdminService : IAdminService
 
         return ApiResponse.Ok(msg);
     }
+
+    // ==========================================
+    // DENTIST DEPARTMENT ALLOCATIONS
+    // ==========================================
+    public async Task<ApiResponse<List<DentistDepartmentAllocationDto>>> GetDentistAllocationsAsync(long? departmentId = null, CancellationToken ct = default)
+    {
+        var query = _dbContext.DentistDepartments
+            .AsNoTracking()
+            .Include(dd => dd.DentistUser)
+                .ThenInclude(dp => dp.User)
+                    .ThenInclude(sp => sp.User)
+            .Include(dd => dd.Department)
+            .AsQueryable();
+
+        if (departmentId.HasValue && departmentId.Value > 0)
+        {
+            query = query.Where(dd => dd.DepartmentId == departmentId.Value);
+        }
+
+        var list = await query
+            .OrderBy(dd => dd.Department.Name)
+            .ThenBy(dd => dd.DentistUser.User.FullName)
+            .ToListAsync(ct);
+
+        var dtos = list.Select(dd => new DentistDepartmentAllocationDto
+        {
+            DentistDepartmentId = dd.DentistDepartmentId,
+            DentistUserId = dd.DentistUserId,
+            DentistName = dd.DentistUser?.User?.FullName ?? $"BS #{dd.DentistUserId}",
+            DentistCode = dd.DentistUser?.User?.EmployeeCode,
+            DentistEmail = dd.DentistUser?.User?.User?.Email,
+            DentistPhone = dd.DentistUser?.User?.User?.PhoneNumber,
+            Specialty = dd.DentistUser?.Qualification,
+            DepartmentId = dd.DepartmentId,
+            DepartmentName = dd.Department?.Name ?? $"Khoa #{dd.DepartmentId}",
+            Status = dd.Status,
+            AssignedAt = dd.AssignedAt
+        }).ToList();
+
+        return ApiResponse<List<DentistDepartmentAllocationDto>>.Ok(dtos);
+    }
+
+    public async Task<ApiResponse<DentistDepartmentAllocationDto>> AssignDentistToDepartmentAsync(AssignDentistDepartmentRequest request, long? adminUserId = null, CancellationToken ct = default)
+    {
+        if (request.DentistUserId <= 0)
+        {
+            return ApiResponse<DentistDepartmentAllocationDto>.Fail("Vui lòng chọn bác sĩ hợp lệ.");
+        }
+
+        if (request.DepartmentId <= 0)
+        {
+            return ApiResponse<DentistDepartmentAllocationDto>.Fail("Vui lòng chọn chuyên khoa hợp lệ.");
+        }
+
+        var dept = await _dbContext.Departments.FirstOrDefaultAsync(d => d.DepartmentId == request.DepartmentId, ct);
+        if (dept == null)
+        {
+            return ApiResponse<DentistDepartmentAllocationDto>.Fail("Không tìm thấy chuyên khoa yêu cầu.");
+        }
+
+        var dentist = await _dbContext.DentistProfiles
+            .Include(dp => dp.User)
+                .ThenInclude(sp => sp.User)
+            .FirstOrDefaultAsync(dp => dp.UserId == request.DentistUserId, ct);
+
+        if (dentist == null)
+        {
+            return ApiResponse<DentistDepartmentAllocationDto>.Fail("Không tìm thấy hồ sơ bác sĩ.");
+        }
+
+        var existing = await _dbContext.DentistDepartments
+            .FirstOrDefaultAsync(dd => dd.DentistUserId == request.DentistUserId && dd.DepartmentId == request.DepartmentId, ct);
+
+        DentistDepartment record;
+        if (existing != null)
+        {
+            existing.Status = "Active";
+            existing.AssignedAt = DateTime.UtcNow;
+            record = existing;
+        }
+        else
+        {
+            record = new DentistDepartment
+            {
+                DentistUserId = request.DentistUserId,
+                DepartmentId = request.DepartmentId,
+                Status = "Active",
+                AssignedAt = DateTime.UtcNow
+            };
+            _dbContext.DentistDepartments.Add(record);
+        }
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        await _auditLogService.LogAsync(
+            adminUserId,
+            "ASSIGN_DENTIST_DEPT",
+            "DentistDepartment",
+            record.DentistDepartmentId.ToString(),
+            null,
+            JsonSerializer.Serialize(new { record.DentistUserId, record.DepartmentId, record.Status }),
+            ct);
+
+        var dto = new DentistDepartmentAllocationDto
+        {
+            DentistDepartmentId = record.DentistDepartmentId,
+            DentistUserId = record.DentistUserId,
+            DentistName = dentist.User?.FullName ?? $"BS #{record.DentistUserId}",
+            DentistCode = dentist.User?.EmployeeCode,
+            DentistEmail = dentist.User?.User?.Email,
+            DentistPhone = dentist.User?.User?.PhoneNumber,
+            Specialty = dentist.Qualification,
+            DepartmentId = record.DepartmentId,
+            DepartmentName = dept.Name,
+            Status = record.Status,
+            AssignedAt = record.AssignedAt
+        };
+
+        return ApiResponse<DentistDepartmentAllocationDto>.Ok(dto, "Phân bổ bác sĩ vào chuyên khoa thành công.");
+    }
+
+    public async Task<ApiResponse> ToggleDentistAllocationStatusAsync(long dentistDepartmentId, long? adminUserId = null, CancellationToken ct = default)
+    {
+        var record = await _dbContext.DentistDepartments
+            .Include(dd => dd.DentistUser)
+                .ThenInclude(dp => dp.User)
+            .Include(dd => dd.Department)
+            .FirstOrDefaultAsync(dd => dd.DentistDepartmentId == dentistDepartmentId, ct);
+
+        if (record == null)
+        {
+            return ApiResponse.Fail("Không tìm thấy bản ghi phân bổ bác sĩ.");
+        }
+
+        var oldStatus = record.Status;
+        record.Status = record.Status == "Active" ? "Inactive" : "Active";
+        await _dbContext.SaveChangesAsync(ct);
+
+        await _auditLogService.LogAsync(
+            adminUserId,
+            "TOGGLE_DENTIST_DEPT_STATUS",
+            "DentistDepartment",
+            record.DentistDepartmentId.ToString(),
+            JsonSerializer.Serialize(new { Status = oldStatus }),
+            JsonSerializer.Serialize(new { Status = record.Status }),
+            ct);
+
+        return ApiResponse.Ok($"Đã cập nhật trạng thái phân bổ bác sĩ thành '{record.Status}'.");
+    }
 }

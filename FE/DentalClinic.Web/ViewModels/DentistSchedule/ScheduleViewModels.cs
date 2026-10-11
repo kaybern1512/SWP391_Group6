@@ -11,10 +11,16 @@ public class DepartmentScheduleManageViewModel
     public List<AdminDepartmentDto> Departments { get; set; } = new();
     public List<AdminUserDto> Dentists { get; set; } = new();
     public long? SelectedDentistUserId { get; set; }
+    public int Year { get; set; } = DateTime.UtcNow.Year;
+    public int Month { get; set; } = DateTime.UtcNow.Month;
+    public string ViewMode { get; set; } = "Calendar"; // "Calendar" or "Table"
+    public string? Search { get; set; }
     public DateOnly FromDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
     public DateOnly ToDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7));
     public List<DentistWorkScheduleDto> Schedules { get; set; } = new();
+    public List<DentistCalendarDayDto> CalendarDays { get; set; } = new();
     public CreateScheduleFormModel CreateForm { get; set; } = new();
+    public BulkScheduleFormModel BulkForm { get; set; } = new();
 }
 
 public class CreateScheduleFormModel
@@ -27,6 +33,40 @@ public class CreateScheduleFormModel
 
     [Required(ErrorMessage = "Vui lòng chọn ngày làm việc")]
     public DateOnly WorkDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
+
+    [Required(ErrorMessage = "Vui lòng chọn giờ bắt đầu")]
+    public TimeOnly StartTime { get; set; } = new(8, 0);
+
+    [Required(ErrorMessage = "Vui lòng chọn giờ kết thúc")]
+    public TimeOnly EndTime { get; set; } = new(12, 0);
+
+    [StringLength(500, ErrorMessage = "Ghi chú không quá 500 ký tự")]
+    public string? Note { get; set; }
+}
+
+public class BulkScheduleFormModel
+{
+    [Required(ErrorMessage = "Vui lòng chọn bác sĩ")]
+    public long DentistUserId { get; set; }
+
+    [Required(ErrorMessage = "Vui lòng chọn chuyên khoa")]
+    public long DepartmentId { get; set; }
+
+    [Required(ErrorMessage = "Vui lòng chọn ngày bắt đầu")]
+    public DateOnly StartDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
+
+    [Required(ErrorMessage = "Vui lòng chọn ngày kết thúc")]
+    public DateOnly EndDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(14));
+
+    /// <summary>
+    /// Các thứ trong tuần: 1 = Thứ 2, 2 = Thứ 3, ..., 7 = Chủ nhật
+    /// </summary>
+    public List<int> SelectedDaysOfWeek { get; set; } = new() { 1, 2, 3, 4, 5 };
+
+    /// <summary>
+    /// Preset: "Morning" (08:00 - 12:00), "Afternoon" (13:30 - 17:30), "FullDay" (08:00 - 17:00), "Custom"
+    /// </summary>
+    public string ShiftPreset { get; set; } = "Morning";
 
     [Required(ErrorMessage = "Vui lòng chọn giờ bắt đầu")]
     public TimeOnly StartTime { get; set; } = new(8, 0);

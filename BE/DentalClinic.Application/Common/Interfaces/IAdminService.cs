@@ -61,4 +61,11 @@ public interface IAdminService
     // ==========================================
     Task<ApiResponse<List<AdminUserDto>>> GetUsersAsync(string? role = null, string? search = null, CancellationToken ct = default);
     Task<ApiResponse> ToggleUserLockAsync(long userId, string? reason = null, long? adminUserId = null, CancellationToken ct = default);
+
+    // ==========================================
+    // DENTIST DEPARTMENT ALLOCATIONS
+    // ==========================================
+    Task<ApiResponse<List<DentistDepartmentAllocationDto>>> GetDentistAllocationsAsync(long? departmentId = null, CancellationToken ct = default);
+    Task<ApiResponse<DentistDepartmentAllocationDto>> AssignDentistToDepartmentAsync(AssignDentistDepartmentRequest request, long? adminUserId = null, CancellationToken ct = default);
+    Task<ApiResponse> ToggleDentistAllocationStatusAsync(long dentistDepartmentId, long? adminUserId = null, CancellationToken ct = default);
 }

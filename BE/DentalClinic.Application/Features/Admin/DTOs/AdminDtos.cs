@@ -270,3 +270,28 @@ public class ToggleUserLockRequest
 {
     public string? Reason { get; set; }
 }
+
+// ==========================================
+// DENTIST DEPARTMENT ALLOCATION DTOS
+// ==========================================
+public class DentistDepartmentAllocationDto
+{
+    public long DentistDepartmentId { get; set; }
+    public long DentistUserId { get; set; }
+    public string DentistName { get; set; } = string.Empty;
+    public string? DentistCode { get; set; }
+    public string? DentistEmail { get; set; }
+    public string? DentistPhone { get; set; }
+    public string? Specialty { get; set; }
+    public long DepartmentId { get; set; }
+    public string DepartmentName { get; set; } = string.Empty;
+    public string Status { get; set; } = "Active";
+    public DateTime AssignedAt { get; set; }
+}
+
+public class AssignDentistDepartmentRequest
+{
+    public long DentistUserId { get; set; }
+    public long DepartmentId { get; set; }
+    public string Status { get; set; } = "Active";
+}
