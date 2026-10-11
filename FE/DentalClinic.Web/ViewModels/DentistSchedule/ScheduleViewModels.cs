@@ -38,11 +38,29 @@ public class CreateScheduleFormModel
     public string? Note { get; set; }
 }
 
+public class DentistCalendarDayDto
+{
+    public DateOnly Date { get; set; }
+    public int DayNumber => Date.Day;
+    public bool IsCurrentMonth { get; set; }
+    public bool IsToday { get; set; }
+    public bool IsPast { get; set; }
+    public List<DentistWorkScheduleDto> Shifts { get; set; } = new();
+    public List<AppointmentDto> Appointments { get; set; } = new();
+}
+
 public class DentistPersonalScheduleViewModel
 {
+    public int Year { get; set; } = DateTime.UtcNow.Year;
+    public int Month { get; set; } = DateTime.UtcNow.Month;
     public DateOnly FromDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-((int)DateTime.UtcNow.DayOfWeek == 0 ? 6 : (int)DateTime.UtcNow.DayOfWeek - 1))); // Monday
     public DateOnly ToDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(14));
+    public string? Search { get; set; }
+    public string? Department { get; set; }
     public List<DentistWorkScheduleDto> Schedules { get; set; } = new();
+    public List<AppointmentDto> Appointments { get; set; } = new();
+    public List<DentistCalendarDayDto> CalendarDays { get; set; } = new();
+    public List<string> DepartmentOptions { get; set; } = new();
 }
 
 public class DentistAvailabilityViewModel

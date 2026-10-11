@@ -184,6 +184,15 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendGetAsync<List<AppointmentDto>>("/api/dentist/today-appointments");
     }
 
+    public async Task<ApiResult<List<AppointmentDto>>> GetDentistAppointmentsAsync(DateOnly? fromDate = null, DateOnly? toDate = null)
+    {
+        var query = new List<string>();
+        if (fromDate.HasValue) query.Add($"fromDate={fromDate.Value:yyyy-MM-dd}");
+        if (toDate.HasValue) query.Add($"toDate={toDate.Value:yyyy-MM-dd}");
+        var qs = query.Count > 0 ? "?" + string.Join("&", query) : "";
+        return await SendGetAsync<List<AppointmentDto>>($"/api/dentist/appointments{qs}");
+    }
+
     // ==========================================
     // GENERIC HTTP HELPERS
     // ==========================================

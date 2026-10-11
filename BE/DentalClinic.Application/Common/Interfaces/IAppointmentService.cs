@@ -35,4 +35,5 @@ public interface IAppointmentService
 
     // Dentist Operations
     Task<ApiResponse<List<AppointmentDto>>> GetDentistTodayAppointmentsAsync(long dentistUserId, CancellationToken ct = default);
+    Task<ApiResponse<List<AppointmentDto>>> GetDentistAppointmentsAsync(long dentistUserId, DateOnly? fromDate = null, DateOnly? toDate = null, CancellationToken ct = default);
 }

@@ -1204,6 +1204,54 @@ public class AppointmentService : IAppointmentService
         return ApiResponse<List<AppointmentDto>>.Ok(list);
     }
 
+    public async Task<ApiResponse<List<AppointmentDto>>> GetDentistAppointmentsAsync(
+        long dentistUserId,
+        DateOnly? fromDate = null,
+        DateOnly? toDate = null,
+        CancellationToken ct = default)
+    {
+        var query = _dbContext.Appointments
+            .AsNoTracking()
+            .Where(a => a.AssignedDentistUserId == dentistUserId && a.ScheduledStart != null);
+
+        if (fromDate.HasValue)
+        {
+            var startDt = fromDate.Value.ToDateTime(TimeOnly.MinValue);
+            query = query.Where(a => a.ScheduledStart >= startDt);
+        }
+
+        if (toDate.HasValue)
+        {
+            var endDt = toDate.Value.ToDateTime(TimeOnly.MaxValue);
+            query = query.Where(a => a.ScheduledStart <= endDt);
+        }
+
+        var visibleStatuses = new[]
+        {
+            AppointmentStatus.Confirmed,
+            AppointmentStatus.CheckedIn,
+            AppointmentStatus.Waiting,
+            AppointmentStatus.Called,
+            AppointmentStatus.InService,
+            AppointmentStatus.Completed
+        };
+
+        var ids = await query
+            .Where(a => visibleStatuses.Contains(a.Status))
+            .OrderBy(a => a.ScheduledStart)
+            .Select(a => a.AppointmentId)
+            .ToListAsync(ct);
+
+        var list = new List<AppointmentDto>();
+        foreach (var id in ids)
+        {
+            var dto = await MapToDtoAsync(id, ct);
+            if (dto != null) list.Add(dto);
+        }
+
+        return ApiResponse<List<AppointmentDto>>.Ok(list);
+    }
+
     private async Task<string> GenerateUniqueAppointmentCodeAsync(CancellationToken ct)
     {
         var datePrefix = $"APP-{DateTime.UtcNow:yyyyMMdd}-";

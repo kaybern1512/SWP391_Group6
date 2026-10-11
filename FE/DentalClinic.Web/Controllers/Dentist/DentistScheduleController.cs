@@ -16,13 +16,16 @@ public class DentistScheduleController : Controller
 {
     private readonly IDentistScheduleApiService _scheduleApi;
     private readonly IFeedbackApiService _feedbackApi;
+    private readonly IAppointmentApiService? _appointmentApi;
 
     public DentistScheduleController(
         IDentistScheduleApiService scheduleApi,
-        IFeedbackApiService feedbackApi)
+        IFeedbackApiService feedbackApi,
+        IAppointmentApiService? appointmentApi = null)
     {
         _scheduleApi = scheduleApi;
         _feedbackApi = feedbackApi;
+        _appointmentApi = appointmentApi;
     }
 
     private long GetCurrentUserId()
@@ -37,19 +40,90 @@ public class DentistScheduleController : Controller
     // ==========================================
 
     [HttpGet("Schedule")]
-    public async Task<IActionResult> Schedule(string? fromDate = null, string? toDate = null)
+    public async Task<IActionResult> Schedule(int? year = null, int? month = null, string? fromDate = null, string? toDate = null, string? search = null, string? department = null)
     {
-        var fDate = DateOnly.TryParse(fromDate, out var fd) ? fd : DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-((int)DateTime.UtcNow.DayOfWeek == 0 ? 6 : (int)DateTime.UtcNow.DayOfWeek - 1)));
-        var tDate = DateOnly.TryParse(toDate, out var td) ? td : fDate.AddDays(14);
+        var now = DateTime.UtcNow;
+        int curYear = year ?? (DateOnly.TryParse(fromDate, out var parsedFd) ? parsedFd.Year : now.Year);
+        int curMonth = month ?? (DateOnly.TryParse(fromDate, out var parsedFd2) ? parsedFd2.Month : now.Month);
 
-        var schedResult = await _scheduleApi.GetMySchedulesAsync(fDate, tDate);
-        var schedules = schedResult.IsSuccess && schedResult.Data != null ? schedResult.Data : new();
+        while (curMonth < 1) { curMonth += 12; curYear--; }
+        while (curMonth > 12) { curMonth -= 12; curYear++; }
+
+        var firstDayOfMonth = new DateOnly(curYear, curMonth, 1);
+        var daysInMonth = DateTime.DaysInMonth(curYear, curMonth);
+        var lastDayOfMonth = new DateOnly(curYear, curMonth, daysInMonth);
+
+        // Grid starts on Monday
+        var startDayOfWeek = firstDayOfMonth.DayOfWeek;
+        int offsetBefore = startDayOfWeek == DayOfWeek.Sunday ? 6 : ((int)startDayOfWeek - 1);
+        var gridStartDate = firstDayOfMonth.AddDays(-offsetBefore);
+
+        // Grid ends on Sunday
+        var endDayOfWeek = lastDayOfMonth.DayOfWeek;
+        int offsetAfter = endDayOfWeek == DayOfWeek.Sunday ? 0 : (7 - (int)endDayOfWeek);
+        var gridEndDate = lastDayOfMonth.AddDays(offsetAfter);
+
+        // Complete 35 or 42 cells (5 or 6 rows)
+        int cellCount = gridEndDate.DayNumber - gridStartDate.DayNumber + 1;
+        if (cellCount < 35)
+        {
+            gridEndDate = gridStartDate.AddDays(34);
+        }
+        else if (cellCount > 35 && cellCount < 42)
+        {
+            gridEndDate = gridStartDate.AddDays(41);
+        }
+
+        var schedResult = await _scheduleApi.GetMySchedulesAsync(gridStartDate, gridEndDate);
+        var schedules = schedResult.IsSuccess && schedResult.Data != null ? schedResult.Data : new List<DentistWorkScheduleDto>();
+
+        var appointments = new List<AppointmentDto>();
+        if (_appointmentApi != null)
+        {
+            var apptResult = await _appointmentApi.GetDentistAppointmentsAsync(gridStartDate, gridEndDate);
+            if (apptResult.IsSuccess && apptResult.Data != null)
+            {
+                appointments = apptResult.Data;
+            }
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var calendarDays = new List<DentistCalendarDayDto>();
+        for (var d = gridStartDate; d <= gridEndDate; d = d.AddDays(1))
+        {
+            var dayShifts = schedules.Where(s => s.WorkDate == d).ToList();
+            var dayAppts = appointments.Where(a => a.ScheduledStart.HasValue && DateOnly.FromDateTime(a.ScheduledStart.Value.Date) == d).ToList();
+
+            calendarDays.Add(new DentistCalendarDayDto
+            {
+                Date = d,
+                IsCurrentMonth = d.Month == curMonth && d.Year == curYear,
+                IsToday = d == today,
+                IsPast = d < today,
+                Shifts = dayShifts,
+                Appointments = dayAppts
+            });
+        }
+
+        var deptOptions = schedules
+            .Select(s => s.DepartmentName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct()
+            .OrderBy(name => name)
+            .ToList();
 
         var vm = new DentistPersonalScheduleViewModel
         {
-            FromDate = fDate,
-            ToDate = tDate,
-            Schedules = schedules
+            Year = curYear,
+            Month = curMonth,
+            FromDate = gridStartDate,
+            ToDate = gridEndDate,
+            Search = search,
+            Department = department,
+            Schedules = schedules,
+            Appointments = appointments,
+            CalendarDays = calendarDays,
+            DepartmentOptions = deptOptions
         };
 
         return View("~/Views/Dentist/Schedule/Index.cshtml", vm);

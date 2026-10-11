@@ -325,4 +325,14 @@ public class AppointmentsController : ControllerBase
         var result = await _appointmentService.GetDentistTodayAppointmentsAsync(dentistUserId, ct);
         return Ok(result);
     }
+
+    [HttpGet("api/dentist/appointments")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<List<AppointmentDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDentistAppointments([FromQuery] DateOnly? fromDate, [FromQuery] DateOnly? toDate, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _appointmentService.GetDentistAppointmentsAsync(dentistUserId, fromDate, toDate, ct);
+        return Ok(result);
+    }
 }
