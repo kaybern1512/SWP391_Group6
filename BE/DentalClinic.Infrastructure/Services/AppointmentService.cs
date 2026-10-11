@@ -37,6 +37,13 @@ public class AppointmentService : IAppointmentService
         CreateAppointmentRequest request,
         CancellationToken ct = default)
     {
+        // 0. Check Booking Eligibility under Strike Policy
+        var eligibility = await GetBookingEligibilityAsync(patientUserId, ct);
+        if (eligibility.Success && eligibility.Data != null && !eligibility.Data.IsEligible)
+        {
+            return ApiResponse<AppointmentDto>.Fail(eligibility.Data.BlockReason ?? "Tài khoản của bạn hiện đang bị tạm khóa quyền đặt lịch trực tuyến do vi phạm chính sách hủy lịch.");
+        }
+
         // 1. Validate Patient
         var patient = await _dbContext.PatientProfiles
             .Include(p => p.User)
@@ -322,11 +329,26 @@ public class AppointmentService : IAppointmentService
             return ApiResponse.Fail("Vui lòng cung cấp lý do hủy lịch.");
         }
 
+        var now = DateTime.UtcNow;
+        var localNow = DateTime.Now;
+        bool isLate = false;
+        double hoursNotice = 0;
+        if (appointment.ScheduledStart.HasValue)
+        {
+            hoursNotice = (appointment.ScheduledStart.Value - localNow).TotalHours;
+            isLate = hoursNotice < 12;
+        }
+
         var oldStatus = appointment.Status;
         appointment.Status = AppointmentStatus.Cancelled;
-        appointment.CancelledAt = DateTime.UtcNow;
-        appointment.CancellationReason = reason.Trim();
-        appointment.UpdatedAt = DateTime.UtcNow;
+        appointment.CancelledAt = now;
+        var reasonPrefix = isLate ? "[Hủy sát giờ <12h] " : "";
+        appointment.CancellationReason = $"{reasonPrefix}{reason.Trim()}";
+        appointment.UpdatedAt = now;
+
+        var historyNote = isLate
+            ? $"Bệnh nhân hủy lịch sát giờ (<12h, báo trước {Math.Max(0, Math.Round(hoursNotice, 1))}h): {reason.Trim()}"
+            : $"Bệnh nhân hủy lịch: {reason.Trim()}";
 
         var history = new AppointmentStatusHistory
         {
@@ -334,22 +356,58 @@ public class AppointmentService : IAppointmentService
             OldStatus = oldStatus,
             NewStatus = AppointmentStatus.Cancelled,
             ChangedByUserId = patientUserId,
-            Note = $"Bệnh nhân hủy lịch: {reason.Trim()}",
-            ChangedAt = DateTime.UtcNow
+            Note = historyNote,
+            ChangedAt = now
         };
         _dbContext.AppointmentStatusHistories.Add(history);
 
         await _dbContext.SaveChangesAsync(ct);
 
-        await _notificationService.CreateNotificationAsync(
-            patientUserId,
-            appointmentId,
-            "AppointmentCancelled",
-            "Lịch hẹn đã bị hủy",
-            $"Lịch hẹn {appointment.AppointmentCode} đã được hủy thành công theo yêu cầu của bạn.",
-            ct);
+        // Fetch updated strike eligibility
+        var eligibilityResult = await GetBookingEligibilityAsync(patientUserId, ct);
+        var strikeCount = eligibilityResult.Data?.StrikeCount ?? (isLate ? 1 : 0);
+        var isBlocked = eligibilityResult.Data?.IsEligible == false;
+        var blockedUntil = eligibilityResult.Data?.BlockedUntil;
 
-        return ApiResponse.Ok("Hủy lịch khám thành công.");
+        if (isLate)
+        {
+            if (isBlocked && blockedUntil.HasValue)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    patientUserId,
+                    appointmentId,
+                    "AppointmentStrikePolicyBlocked",
+                    "Cảnh báo vi phạm & Tạm khóa đặt lịch online",
+                    $"Bạn vừa hủy lịch hẹn {appointment.AppointmentCode} sát giờ (<12h). Tài khoản đã tích lũy {strikeCount} lần vi phạm trong 30 ngày qua. Quyền tự đặt lịch trực tuyến tạm khóa đến {blockedUntil.Value:dd/MM/yyyy HH:mm}. Vui lòng liên hệ hotline 1900 1234 nếu cần hỗ trợ.",
+                    ct);
+            }
+            else
+            {
+                await _notificationService.CreateNotificationAsync(
+                    patientUserId,
+                    appointmentId,
+                    "AppointmentStrikeWarning",
+                    "Cảnh báo hủy lịch hẹn sát giờ (<12h)",
+                    $"Bạn vừa hủy lịch hẹn {appointment.AppointmentCode} sát giờ (<12h) và bị tính 1 gậy vi phạm. Hiện tại bạn có {strikeCount}/3 lần vi phạm trong 30 ngày qua. Nếu đạt 3 lần, quyền tự đặt lịch trực tuyến sẽ bị tạm khóa 30 ngày.",
+                    ct);
+            }
+        }
+        else
+        {
+            await _notificationService.CreateNotificationAsync(
+                patientUserId,
+                appointmentId,
+                "AppointmentCancelled",
+                "Lịch hẹn đã bị hủy",
+                $"Lịch hẹn {appointment.AppointmentCode} đã được hủy thành công theo yêu cầu của bạn.",
+                ct);
+        }
+
+        var successMessage = isLate
+            ? $"Hủy lịch khám thành công. Lưu ý: Do hủy trong vòng 12h trước giờ hẹn, bạn đã bị tính 1 lần vi phạm ({strikeCount}/3 lần trong 30 ngày)."
+            : "Hủy lịch khám thành công.";
+
+        return ApiResponse.Ok(successMessage);
     }
 
     public async Task<ApiResponse<AppointmentChangeProposalDto>> GetAppointmentProposalAsync(
@@ -533,6 +591,106 @@ public class AppointmentService : IAppointmentService
         }
     }
 
+    public async Task<ApiResponse<BookingEligibilityDto>> GetBookingEligibilityAsync(
+        long patientUserId,
+        CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var thirtyDaysAgo = now.AddDays(-30);
+
+        var candidateAppointments = await _dbContext.Appointments
+            .AsNoTracking()
+            .Where(a => a.PatientUserId == patientUserId &&
+                        (a.Status == AppointmentStatus.Cancelled || a.Status == AppointmentStatus.NoShow))
+            .OrderByDescending(a => a.CancelledAt ?? a.ScheduledStart ?? a.CreatedAt)
+            .ToListAsync(ct);
+
+        var strikes = new List<StrikeIncidentDto>();
+
+        foreach (var appt in candidateAppointments)
+        {
+            if (appt.Status == AppointmentStatus.Cancelled)
+            {
+                var incidentDate = appt.CancelledAt ?? appt.UpdatedAt ?? appt.CreatedAt;
+                if (incidentDate < thirtyDaysAgo) continue;
+
+                bool isLate = false;
+                if (appt.CancellationReason != null && appt.CancellationReason.Contains("[Hủy sát giờ <12h]"))
+                {
+                    isLate = true;
+                }
+                else if (appt.ScheduledStart.HasValue && appt.CancelledAt.HasValue)
+                {
+                    var cancelLocal = appt.CancelledAt.Value.Kind == DateTimeKind.Utc 
+                        ? appt.CancelledAt.Value.ToLocalTime() 
+                        : appt.CancelledAt.Value;
+                    var hoursNotice = (appt.ScheduledStart.Value - cancelLocal).TotalHours;
+                    if (hoursNotice < 12)
+                    {
+                        isLate = true;
+                    }
+                }
+
+                if (isLate)
+                {
+                    strikes.Add(new StrikeIncidentDto
+                    {
+                        AppointmentId = appt.AppointmentId,
+                        AppointmentCode = appt.AppointmentCode,
+                        Type = "LateCancellation",
+                        Description = $"Hủy lịch hẹn sát giờ (<12h): {appt.CancellationReason ?? "Không có lý do"}",
+                        IncidentDate = incidentDate
+                    });
+                }
+            }
+            else if (appt.Status == AppointmentStatus.NoShow)
+            {
+                var incidentDate = appt.ScheduledStart ?? appt.UpdatedAt ?? appt.CreatedAt;
+                if (incidentDate >= thirtyDaysAgo)
+                {
+                    strikes.Add(new StrikeIncidentDto
+                    {
+                        AppointmentId = appt.AppointmentId,
+                        AppointmentCode = appt.AppointmentCode,
+                        Type = "NoShow",
+                        Description = "Không đến khám đúng hẹn (No-Show)",
+                        IncidentDate = incidentDate
+                    });
+                }
+            }
+        }
+
+        var result = new BookingEligibilityDto
+        {
+            StrikeCount = strikes.Count,
+            MaxStrikesAllowed = 3,
+            Strikes = strikes.OrderByDescending(s => s.IncidentDate).ToList()
+        };
+
+        if (strikes.Count >= 3)
+        {
+            var latestIncident = strikes.Max(s => s.IncidentDate);
+            var blockedUntil = latestIncident.AddDays(30);
+
+            if (blockedUntil > now)
+            {
+                result.IsEligible = false;
+                result.BlockedUntil = blockedUntil;
+                result.BlockReason = $"Tài khoản đã tích lũy {strikes.Count} lần vi phạm hủy lịch/vắng mặt trong 30 ngày qua. Quyền tự đặt lịch trực tuyến tạm khóa đến {blockedUntil:dd/MM/yyyy HH:mm}. Vui lòng liên hệ hotline 1900 1234 để được hỗ trợ.";
+            }
+            else
+            {
+                result.IsEligible = true;
+            }
+        }
+        else
+        {
+            result.IsEligible = true;
+        }
+
+        return ApiResponse<BookingEligibilityDto>.Ok(result);
+    }
+
     public async Task<ApiResponse<List<AppointmentDto>>> GetReceptionistRequestsAsync(CancellationToken ct = default)
     {
         var ids = await _dbContext.Appointments
@@ -655,7 +813,8 @@ public class AppointmentService : IAppointmentService
                         a.ScheduledStart.Value.Date == today &&
                         (a.Status == AppointmentStatus.Confirmed ||
                          a.Status == AppointmentStatus.CheckedIn ||
-                         a.Status == AppointmentStatus.Waiting));
+                         a.Status == AppointmentStatus.Waiting ||
+                         a.Status == AppointmentStatus.NoShow));
 
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
@@ -720,6 +879,77 @@ public class AppointmentService : IAppointmentService
 
         await _dbContext.SaveChangesAsync(ct);
         return ApiResponse.Ok("Check-in bệnh nhân thành công.");
+    }
+
+    public async Task<ApiResponse> ReceptionistMarkNoShowAsync(
+        long appointmentId,
+        long staffUserId,
+        string? note = null,
+        CancellationToken ct = default)
+    {
+        var appointment = await _dbContext.Appointments
+            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+
+        if (appointment == null)
+        {
+            return ApiResponse.Fail("Không tìm thấy lịch hẹn.");
+        }
+
+        if (appointment.Status != AppointmentStatus.Confirmed &&
+            appointment.Status != AppointmentStatus.Waiting)
+        {
+            return ApiResponse.Fail($"Chỉ có thể đánh dấu vắng mặt cho lịch hẹn ở trạng thái Confirmed hoặc Waiting (Hiện tại: {appointment.Status}).");
+        }
+
+        var oldStatus = appointment.Status;
+        var now = DateTime.UtcNow;
+        appointment.Status = AppointmentStatus.NoShow;
+        appointment.UpdatedAt = now;
+
+        var historyNote = string.IsNullOrWhiteSpace(note)
+            ? "Lễ tân đánh dấu bệnh nhân không đến khám (No-Show)."
+            : $"Lễ tân đánh dấu vắng mặt (No-Show): {note.Trim()}";
+
+        var history = new AppointmentStatusHistory
+        {
+            AppointmentId = appointmentId,
+            OldStatus = oldStatus,
+            NewStatus = AppointmentStatus.NoShow,
+            ChangedByUserId = staffUserId,
+            Note = historyNote,
+            ChangedAt = now
+        };
+        _dbContext.AppointmentStatusHistories.Add(history);
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        var eligibilityResult = await GetBookingEligibilityAsync(appointment.PatientUserId, ct);
+        var strikeCount = eligibilityResult.Data?.StrikeCount ?? 1;
+        var isBlocked = eligibilityResult.Data?.IsEligible == false;
+        var blockedUntil = eligibilityResult.Data?.BlockedUntil;
+
+        if (isBlocked && blockedUntil.HasValue)
+        {
+            await _notificationService.CreateNotificationAsync(
+                appointment.PatientUserId,
+                appointmentId,
+                "AppointmentNoShowBlocked",
+                "Ghi nhận vắng mặt & Tạm khóa đặt lịch online",
+                $"Bạn đã không đến khám lịch hẹn {appointment.AppointmentCode} (No-Show). Tài khoản đã tích lũy {strikeCount} lần vi phạm trong 30 ngày qua. Quyền tự đặt lịch trực tuyến tạm khóa đến {blockedUntil.Value:dd/MM/yyyy HH:mm}. Vui lòng liên hệ hotline 1900 1234 để được hỗ trợ.",
+                ct);
+        }
+        else
+        {
+            await _notificationService.CreateNotificationAsync(
+                appointment.PatientUserId,
+                appointmentId,
+                "AppointmentNoShowWarning",
+                "Ghi nhận vắng mặt buổi khám (No-Show)",
+                $"Bạn đã không đến khám lịch hẹn {appointment.AppointmentCode} đúng hẹn và bị tính 1 gậy vi phạm. Hiện bạn có {strikeCount}/3 lần vi phạm trong 30 ngày qua. Nếu đạt 3 lần, quyền tự đặt lịch trực tuyến sẽ bị tạm khóa 30 ngày.",
+                ct);
+        }
+
+        return ApiResponse.Ok("Đã ghi nhận bệnh nhân vắng mặt (No-Show) thành công.");
     }
 
     public async Task<ApiResponse<List<AppointmentDto>>> GetDepartmentRequestsAsync(

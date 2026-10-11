@@ -8,6 +8,7 @@ public class AppointmentListViewModel
     public List<AppointmentDto> Appointments { get; set; } = new();
     public string? SelectedStatus { get; set; }
     public string Role { get; set; } = string.Empty;
+    public BookingEligibilityDto? Eligibility { get; set; }
 }
 
 public class AppointmentDetailViewModel

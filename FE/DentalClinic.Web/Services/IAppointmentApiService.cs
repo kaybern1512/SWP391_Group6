@@ -23,6 +23,7 @@ public interface IAppointmentApiService
     Task<ApiResult<AppointmentChangeProposalDto>> GetProposalAsync(long id);
     Task<ApiResult> AcceptProposalAsync(long id);
     Task<ApiResult> RejectProposalAsync(long id);
+    Task<ApiResult<BookingEligibilityDto>> GetBookingEligibilityAsync();
 
     // Receptionist
     Task<ApiResult<List<AppointmentDto>>> GetReceptionistRequestsAsync();
@@ -30,6 +31,7 @@ public interface IAppointmentApiService
     Task<ApiResult> ReceptionistRejectAsync(long id, string reason);
     Task<ApiResult<List<AppointmentDto>>> GetReceptionistTodayConfirmedAsync(string? search = null);
     Task<ApiResult> ReceptionistCheckInAsync(long id, string? note = null);
+    Task<ApiResult> ReceptionistMarkNoShowAsync(long id, string? note = null);
 
     // Department Manager
     Task<ApiResult<List<AppointmentDto>>> GetDepartmentRequestsAsync();

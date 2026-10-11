@@ -97,4 +97,21 @@ public class ReceptionistAppointmentController : Controller
 
         return RedirectToAction(nameof(TodayCheckIn));
     }
+
+    [HttpPost("NoShow/{id:long}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> NoShow(long id, [FromForm] string? note)
+    {
+        var result = await _appointmentApiService.ReceptionistMarkNoShowAsync(id, note);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đã ghi nhận bệnh nhân vắng mặt (No-Show). 1 gậy vi phạm đã được tính cho tài khoản bệnh nhân.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể đánh dấu vắng mặt.";
+        }
+
+        return RedirectToAction(nameof(TodayCheckIn));
+    }
 }

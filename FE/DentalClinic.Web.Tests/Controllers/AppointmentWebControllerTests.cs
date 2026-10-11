@@ -167,4 +167,85 @@ public class AppointmentWebControllerTests
         redirect.ActionName.Should().Be("Requests");
         controller.TempData["SuccessMessage"]?.ToString().Should().Contain("Q001");
     }
+
+    [Fact]
+    public async Task Patient_Book_Get_WhenBlocked_ReturnsEligibilityInModel()
+    {
+        _apiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(new List<DepartmentDto>()));
+
+        _apiMock.Setup(x => x.GetBookingEligibilityAsync())
+            .ReturnsAsync(ApiResult<BookingEligibilityDto>.Success(new BookingEligibilityDto
+            {
+                IsEligible = false,
+                StrikeCount = 3,
+                BlockReason = "Tài khoản đã tích lũy 3 lần vi phạm."
+            }));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Book();
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var model = viewResult.Model.Should().BeOfType<PatientBookViewModel>().Subject;
+        model.Eligibility.Should().NotBeNull();
+        model.Eligibility!.IsEligible.Should().BeFalse();
+        model.Eligibility.StrikeCount.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Patient_Book_Post_WhenBlocked_RejectsAndReturnsViewWithErrorMessage()
+    {
+        _apiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(new List<DepartmentDto>()));
+
+        _apiMock.Setup(x => x.GetBookingEligibilityAsync())
+            .ReturnsAsync(ApiResult<BookingEligibilityDto>.Success(new BookingEligibilityDto
+            {
+                IsEligible = false,
+                StrikeCount = 3,
+                BlockReason = "Tài khoản bị tạm khóa 30 ngày."
+            }));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient"),
+            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
+        };
+
+        var model = new PatientBookViewModel
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(1).AddHours(9),
+            ReasonForVisit = "Đau răng"
+        };
+
+        var result = await controller.Book(model);
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        controller.TempData["ErrorMessage"]?.ToString().Should().Contain("tạm khóa");
+    }
+
+    [Fact]
+    public async Task Receptionist_NoShow_Success_RedirectsToTodayCheckInWithSuccessMessage()
+    {
+        _apiMock.Setup(x => x.ReceptionistMarkNoShowAsync(10, "Bệnh nhân không đến"))
+            .ReturnsAsync(ApiResult.Success("OK"));
+
+        var controller = new ReceptionistAppointmentController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(201, "Receptionist"),
+            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
+        };
+
+        var result = await controller.NoShow(10, "Bệnh nhân không đến");
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("TodayCheckIn");
+        controller.TempData["SuccessMessage"]?.ToString().Should().Contain("vắng mặt");
+    }
 }

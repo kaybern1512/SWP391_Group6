@@ -36,4 +36,5 @@ public class PatientBookViewModel
     public List<DepartmentServiceDto> Services { get; set; } = new();
     public List<DentistOptionDto> Dentists { get; set; } = new();
     public List<AvailableSlotDto> AvailableSlots { get; set; } = new();
+    public BookingEligibilityDto? Eligibility { get; set; }
 }

@@ -16,6 +16,32 @@
         </div>
     </div>
 
+    <!-- STRIKE POLICY BANNER -->
+    @if (Model.Eligibility != null && !Model.Eligibility.IsEligible)
+    {
+        <div class="alert alert-danger border-danger shadow-sm mb-4">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-slash-circle-fill fs-3 me-3 text-danger"></i>
+                <div class="flex-grow-1">
+                    <h5 class="alert-heading fw-bold mb-1">Tài khoản tạm khóa quyền tự đặt lịch online</h5>
+                    <p class="mb-0">@Model.Eligibility.BlockReason</p>
+                </div>
+            </div>
+        </div>
+    }
+    else if (Model.Eligibility != null && Model.Eligibility.StrikeCount > 0)
+    {
+        <div class="alert alert-warning border-warning shadow-sm mb-4 py-2 d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-exclamation-triangle-fill fs-5 me-2 text-warning"></i>
+                <div class="small">
+                    <strong>Chính sách hủy lịch:</strong> Bạn hiện có <strong>@Model.Eligibility.StrikeCount / 3</strong> lần vi phạm trong 30 ngày qua (hủy sát giờ &lt;12h hoặc không đến khám). Đạt 3 lần sẽ bị tạm khóa đặt lịch trực tuyến 30 ngày.
+                </div>
+            </div>
+            <span class="badge bg-warning text-dark px-2 py-1">@Model.Eligibility.StrikeCount/3 Vi phạm</span>
+        </div>
+    }
+
     <!-- Status Filters -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-2">
@@ -134,6 +160,9 @@
                                         case "Cancelled":
                                         case "Rejected":
                                             <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>@(appt.Status == "Rejected" ? "Bị Từ Chối" : "Đã Hủy")</span>
+                                            break;
+                                        case "NoShow":
+                                            <span class="badge bg-danger"><i class="bi bi-person-x me-1"></i>Vắng Mặt (No-Show)</span>
                                             break;
                                         default:
                                             <span class="badge bg-light text-dark border">@appt.Status</span>
