@@ -50,7 +50,7 @@ public class ProfileService : IProfileService
         var response = new UserProfileResponse
         {
             UserId = user.UserId,
-            Email = user.Email,
+            Email = user.Email ?? string.Empty,
             PhoneNumber = user.PhoneNumber,
             Role = user.Role,
             Status = user.Status,
@@ -91,7 +91,7 @@ public class ProfileService : IProfileService
         }
         else
         {
-            response.FullName = user.Email;
+            response.FullName = user.Email ?? string.Empty;
         }
 
         return ApiResponse<UserProfileResponse>.Ok(response, "Lấy thông tin hồ sơ thành công.");

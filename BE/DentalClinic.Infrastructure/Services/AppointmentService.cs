@@ -372,7 +372,7 @@ public class AppointmentService : IAppointmentService
                 .ThenInclude(u => u.StaffProfile)
             .Include(p => p.ProposedDepartment)
             .Include(p => p.ProposedDentistUser)
-                .ThenInclude(d => d.User)
+                .ThenInclude(d => d!.User)
             .Where(p => p.AppointmentId == appointmentId && p.Status == ProposalStatus.Pending)
             .OrderByDescending(p => p.CreatedAt)
             .Select(p => new AppointmentChangeProposalDto
@@ -1278,9 +1278,9 @@ public class AppointmentService : IAppointmentService
             .Include(a => a.Department)
             .Include(a => a.RequestedService)
             .Include(a => a.RequestedDentistUser)
-                .ThenInclude(d => d.User)
+                .ThenInclude(d => d!.User)
             .Include(a => a.AssignedDentistUser)
-                .ThenInclude(d => d.User)
+                .ThenInclude(d => d!.User)
             .Include(a => a.Room)
             .Include(a => a.DentalChair)
             .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
@@ -1290,10 +1290,10 @@ public class AppointmentService : IAppointmentService
         var proposals = await _dbContext.AppointmentChangeProposals
             .AsNoTracking()
             .Include(p => p.ProposedByUser)
-                .ThenInclude(u => u.StaffProfile)
+                .ThenInclude(u => u!.StaffProfile)
             .Include(p => p.ProposedDepartment)
             .Include(p => p.ProposedDentistUser)
-                .ThenInclude(d => d.User)
+                .ThenInclude(d => d!.User)
             .Where(p => p.AppointmentId == appointmentId)
             .OrderByDescending(p => p.CreatedAt)
             .Select(p => new AppointmentChangeProposalDto
@@ -1318,9 +1318,9 @@ public class AppointmentService : IAppointmentService
         var histories = await _dbContext.AppointmentStatusHistories
             .AsNoTracking()
             .Include(h => h.ChangedByUser)
-                .ThenInclude(u => u.StaffProfile)
+                .ThenInclude(u => u!.StaffProfile)
             .Include(h => h.ChangedByUser)
-                .ThenInclude(u => u.PatientProfile)
+                .ThenInclude(u => u!.PatientProfile)
             .Where(h => h.AppointmentId == appointmentId)
             .OrderBy(h => h.ChangedAt)
             .Select(h => new StatusHistoryDto
