@@ -1,0 +1,285 @@
+@using DentalClinic.Web.Models.ApiDtos
+@model DentalClinic.Web.ViewModels.MedicalRecord.PatientMedicalRecordIndexViewModel
+@{
+    ViewData["Title"] = "Hồ Sơ Bệnh Án Của Tôi";
+    var record = Model.Record;
+}
+
+<style>
+    .odontogram-wrapper {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e2e8f0;
+    }
+    .arch-container {
+        display: flex;
+        justify-content: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+    .quadrant-group {
+        display: flex;
+        gap: 5px;
+    }
+    .quadrant-divider {
+        width: 2px;
+        background: #cbd5e1;
+        margin: 0 8px;
+    }
+    .tooth-card {
+        width: 44px;
+        height: 65px;
+        background: #ffffff;
+        border: 2px solid #cbd5e1;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 2px;
+        position: relative;
+    }
+    .tooth-number {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+    .tooth-icon {
+        font-size: 1.1rem;
+    }
+    .tooth-status-tag {
+        font-size: 0.55rem;
+        font-weight: 700;
+        padding: 1px 2px;
+        border-radius: 3px;
+        text-transform: uppercase;
+        width: 100%;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .tooth-healthy { border-color: #94a3b8; }
+    .tooth-healthy .tooth-icon { color: #64748b; }
+    .tooth-healthy .tooth-status-tag { background: #f1f5f9; color: #475569; }
+
+    .tooth-caries { border-color: #ef4444; background: #fff1f2; }
+    .tooth-caries .tooth-icon { color: #dc2626; }
+    .tooth-caries .tooth-status-tag { background: #fee2e2; color: #b91c1c; }
+
+    .tooth-filled { border-color: #0284c7; background: #f0f9ff; }
+    .tooth-filled .tooth-icon { color: #0284c7; }
+    .tooth-filled .tooth-status-tag { background: #e0f2fe; color: #0369a1; }
+
+    .tooth-missing { border-color: #64748b; background: #e2e8f0; opacity: 0.6; }
+    .tooth-missing .tooth-icon { color: #475569; }
+    .tooth-missing .tooth-status-tag { background: #cbd5e1; color: #334155; }
+
+    .tooth-crown { border-color: #eab308; background: #fefce8; }
+    .tooth-crown .tooth-icon { color: #ca8a04; }
+    .tooth-crown .tooth-status-tag { background: #fef9c3; color: #a16207; }
+
+    .tooth-pulpitis { border-color: #a855f7; background: #faf5ff; }
+    .tooth-pulpitis .tooth-icon { color: #9333ea; }
+    .tooth-pulpitis .tooth-status-tag { background: #f3e8ff; color: #7e22ce; }
+
+    .tooth-extractionneeded { border-color: #f97316; background: #fff7ed; }
+    .tooth-extractionneeded .tooth-icon { color: #ea580c; }
+    .tooth-extractionneeded .tooth-status-tag { background: #ffedd5; color: #c2410c; }
+</style>
+
+<div class="container-fluid px-4 py-4">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge bg-primary-subtle text-primary fw-medium px-2 py-1 fs-12">
+                    <i class="bi bi-person-heart me-1"></i> Bệnh nhân
+                </span>
+                <span class="badge bg-light text-muted fw-normal px-2 py-1 fs-12">Hồ Sơ Sức Khỏe</span>
+            </div>
+            <h1 class="h3 fw-bold text-slate-800 mb-0">Hồ Sơ Bệnh Án Răng Miệng Của Tôi</h1>
+            <p class="text-muted small mb-0 mt-1">Theo dõi tình trạng sức khỏe răng miệng, sơ đồ răng cá nhân và lịch sử các đợt khám điều trị</p>
+        </div>
+    </div>
+
+    @if (record != null)
+    {
+        <!-- Patient Info Card -->
+        <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white p-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-primary-subtle text-primary p-3 rounded-circle fs-3 fw-bold">
+                        <i class="bi bi-person-circle"></i>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <h4 class="fw-bold text-slate-800 mb-0">@record.PatientName</h4>
+                            <span class="badge bg-secondary-subtle text-secondary border">@record.PatientCode</span>
+                        </div>
+                        <div class="text-muted small mt-1 d-flex flex-wrap gap-3">
+                            <span><i class="bi bi-telephone me-1"></i>@(record.PatientPhone ?? "—")</span>
+                            <span><i class="bi bi-gender-ambiguous me-1"></i>@(record.Gender ?? "—")</span>
+                            <span><i class="bi bi-calendar3 me-1"></i>@(record.DateOfBirth?.ToString("dd/MM/yyyy") ?? "—") (@(record.Age.HasValue ? $"{record.Age} tuổi" : "—"))</span>
+                            <span><i class="bi bi-geo-alt me-1"></i>@(record.Address ?? "—")</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <div class="text-muted small">Ngày khởi tạo hồ sơ:</div>
+                    <div class="fw-bold text-dark">@record.CreatedAt.ToString("dd/MM/yyyy")</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Odontogram -->
+        <div class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                <h5 class="card-title fw-bold text-slate-800 mb-0 d-flex align-items-center gap-2">
+                    <i class="bi bi-grid-3x3-gap-fill text-primary"></i>
+                    <span>Sơ Đồ Răng Cá Nhân (Odontogram)</span>
+                </h5>
+                <span class="badge bg-light text-muted border">32 Răng</span>
+            </div>
+            <div class="card-body p-4">
+                <div class="odontogram-wrapper">
+                    <div class="text-center small fw-bold text-muted mb-2 text-uppercase letter-spacing-1">
+                        <i class="bi bi-arrow-up-circle me-1"></i> Hàm Trên
+                    </div>
+                    <div class="arch-container">
+                        <div class="quadrant-group">
+                            @for (int i = 18; i >= 11; i--)
+                            {
+                                var tStr = i.ToString();
+                                var tooth = record.CurrentOdontogram.FirstOrDefault(x => x.ToothNumber == tStr) ?? new OdontogramEntryDto { ToothNumber = tStr, Condition = "Healthy" };
+                                var condClass = $"tooth-{tooth.Condition.ToLower()}";
+                                <div class="tooth-card @condClass" title="Răng @tStr: @tooth.Condition">
+                                    <span class="tooth-number">@tStr</span>
+                                    <i class="bi bi-shield-fill tooth-icon"></i>
+                                    <span class="tooth-status-tag">@tooth.Condition</span>
+                                </div>
+                            }
+                        </div>
+                        <div class="quadrant-divider"></div>
+                        <div class="quadrant-group">
+                            @for (int i = 21; i <= 28; i++)
+                            {
+                                var tStr = i.ToString();
+                                var tooth = record.CurrentOdontogram.FirstOrDefault(x => x.ToothNumber == tStr) ?? new OdontogramEntryDto { ToothNumber = tStr, Condition = "Healthy" };
+                                var condClass = $"tooth-{tooth.Condition.ToLower()}";
+                                <div class="tooth-card @condClass" title="Răng @tStr: @tooth.Condition">
+                                    <span class="tooth-number">@tStr</span>
+                                    <i class="bi bi-shield-fill tooth-icon"></i>
+                                    <span class="tooth-status-tag">@tooth.Condition</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <hr class="my-3 text-slate-300" />
+
+                    <div class="arch-container">
+                        <div class="quadrant-group">
+                            @for (int i = 48; i >= 41; i--)
+                            {
+                                var tStr = i.ToString();
+                                var tooth = record.CurrentOdontogram.FirstOrDefault(x => x.ToothNumber == tStr) ?? new OdontogramEntryDto { ToothNumber = tStr, Condition = "Healthy" };
+                                var condClass = $"tooth-{tooth.Condition.ToLower()}";
+                                <div class="tooth-card @condClass" title="Răng @tStr: @tooth.Condition">
+                                    <span class="tooth-number">@tStr</span>
+                                    <i class="bi bi-shield-fill tooth-icon"></i>
+                                    <span class="tooth-status-tag">@tooth.Condition</span>
+                                </div>
+                            }
+                        </div>
+                        <div class="quadrant-divider"></div>
+                        <div class="quadrant-group">
+                            @for (int i = 31; i <= 38; i++)
+                            {
+                                var tStr = i.ToString();
+                                var tooth = record.CurrentOdontogram.FirstOrDefault(x => x.ToothNumber == tStr) ?? new OdontogramEntryDto { ToothNumber = tStr, Condition = "Healthy" };
+                                var condClass = $"tooth-{tooth.Condition.ToLower()}";
+                                <div class="tooth-card @condClass" title="Răng @tStr: @tooth.Condition">
+                                    <span class="tooth-number">@tStr</span>
+                                    <i class="bi bi-shield-fill tooth-icon"></i>
+                                    <span class="tooth-status-tag">@tooth.Condition</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="text-center small fw-bold text-muted mt-2 text-uppercase letter-spacing-1">
+                        <i class="bi bi-arrow-down-circle me-1"></i> Hàm Dưới
+                    </div>
+                </div>
+
+                <!-- Legend -->
+                <div class="d-flex flex-wrap align-items-center justify-content-center gap-3 mt-3 pt-2 text-muted fs-12">
+                    <span class="d-flex align-items-center gap-1"><span class="badge bg-secondary p-1 rounded-circle"></span> Khỏe mạnh</span>
+                    <span class="d-flex align-items-center gap-1"><span class="badge bg-danger p-1 rounded-circle"></span> Sâu răng</span>
+                    <span class="d-flex align-items-center gap-1"><span class="badge bg-primary p-1 rounded-circle"></span> Đã trám</span>
+                    <span class="d-flex align-items-center gap-1"><span class="badge bg-dark p-1 rounded-circle"></span> Mất răng</span>
+                    <span class="d-flex align-items-center gap-1"><span class="badge bg-warning p-1 rounded-circle"></span> Bọc sứ</span>
+                    <span class="d-flex align-items-center gap-1"><span class="badge bg-info p-1 rounded-circle"></span> Viêm tủy</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- History -->
+        <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                <h5 class="card-title fw-bold text-slate-800 mb-0 d-flex align-items-center gap-2">
+                    <i class="bi bi-clock-history text-primary"></i>
+                    <span>Lịch Sử Các Lần Khám & Chẩn Đoán</span>
+                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fs-12 ms-1">@record.ClinicalEntries.Count lần</span>
+                </h5>
+            </div>
+            <div class="card-body p-4 pt-2">
+                @if (record.ClinicalEntries.Any())
+                {
+                    @foreach (var entry in record.ClinicalEntries)
+                    {
+                        <div class="card border rounded-3 p-3 mb-3 bg-light-subtle">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                <span class="fw-bold text-dark fs-15">
+                                    <i class="bi bi-calendar-check me-1 text-primary"></i>Ngày khám: @entry.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+                                </span>
+                                <span class="text-muted small">Bác sĩ khám: <strong>@entry.DentistName</strong></span>
+                            </div>
+                            <div class="row g-2 fs-14">
+                                <div class="col-12">
+                                    <div class="text-muted small fw-semibold">Chẩn đoán:</div>
+                                    <div class="fw-bold text-primary">@entry.Diagnosis</div>
+                                </div>
+                                @if (!string.IsNullOrEmpty(entry.ClinicalNotes))
+                                {
+                                    <div class="col-12">
+                                        <div class="text-muted small fw-semibold">Lời dặn của bác sĩ:</div>
+                                        <div class="text-muted fst-italic">@entry.ClinicalNotes</div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-journal-x fs-1 d-block mb-2 text-secondary"></i>
+                        Bạn chưa có lịch sử chẩn đoán lâm sàng nào.
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm rounded-3 p-5 text-center text-muted">
+            <i class="bi bi-journal-medical fs-1 d-block mb-2 text-secondary"></i>
+            <h5>Hồ sơ bệnh án điện tử của bạn đang được khởi tạo trên hệ thống.</h5>
+            <p class="small text-muted">Khi bạn đến khám tại phòng khám, các bác sĩ sẽ ghi nhận chẩn đoán và cập nhật sơ đồ răng của bạn tại đây.</p>
+        </div>
+    }
+</div>

@@ -42,7 +42,7 @@
                 <i class="bi bi-calendar3"></i>
                 <span>My Appointments</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to EMR backend API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "PatientMedicalRecord" ? "active" : "")" asp-controller="PatientMedicalRecord" asp-action="Index">
                 <i class="bi bi-journal-medical"></i>
                 <span>Medical Record</span>
             </a>
@@ -102,7 +102,7 @@
                 <i class="bi bi-calendar-check"></i>
                 <span>Today's Appointments</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Patient EMR API.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "DentistMedicalRecord" ? "active" : "")" asp-controller="DentistMedicalRecord" asp-action="Index">
                 <i class="bi bi-journal-medical"></i>
                 <span>Medical Records & EMR</span>
             </a>

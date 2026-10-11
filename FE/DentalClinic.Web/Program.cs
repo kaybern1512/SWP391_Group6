@@ -161,6 +161,15 @@ builder.Services.AddHttpClient<IFeedbackApiService, FeedbackApiService>(client =
 .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
+// Medical Record & Odontogram API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IMedicalRecordApiService, MedicalRecordApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 var app = builder.Build();
 
 // Configure HTTP request pipeline
