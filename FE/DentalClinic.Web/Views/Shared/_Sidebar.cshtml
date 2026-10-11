@@ -79,14 +79,10 @@
                 <span>Appointment Requests</span>
             </a>
 
-            <div class="nav-group-title">Management</div>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Patient records API.'); return false;">
-                <i class="bi bi-search"></i>
-                <span>Find Patient</span>
-            </a>
-            <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Patient registration API.'); return false;">
-                <i class="bi bi-person-plus"></i>
-                <span>Create Patient</span>
+            <div class="nav-group-title">Patient Records</div>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistPatient" ? "active" : "")" asp-controller="ReceptionistPatient" asp-action="Index">
+                <i class="bi bi-people"></i>
+                <span>Patient Directory</span>
             </a>
             <a class="sidebar-link" href="#" onclick="alert('Feature will connect to Billing invoice API.'); return false;">
                 <i class="bi bi-file-earmark-text"></i>

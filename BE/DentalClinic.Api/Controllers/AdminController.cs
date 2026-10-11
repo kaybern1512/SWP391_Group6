@@ -295,6 +295,7 @@ public class AdminController : ControllerBase
     // ==========================================
 
     [HttpGet("users")]
+    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.Receptionist},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<System.Collections.Generic.List<AdminUserDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetUsers([FromQuery] string? role, [FromQuery] string? search, CancellationToken ct)
     {
