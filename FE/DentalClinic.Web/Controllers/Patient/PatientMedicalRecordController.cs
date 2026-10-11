@@ -24,7 +24,7 @@ public class PatientMedicalRecordController : Controller
         var result = await _medicalRecordApi.GetMyMedicalRecordAsync();
         var vm = new PatientMedicalRecordIndexViewModel
         {
-            Record = result.IsSuccess ? result.Data : null
+            Record = result != null && result.IsSuccess ? result.Data : null
         };
 
         return View("~/Views/Patient/MedicalRecords/Index.cshtml", vm);
