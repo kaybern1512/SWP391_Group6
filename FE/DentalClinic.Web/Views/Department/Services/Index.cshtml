@@ -226,7 +226,7 @@
                         <select asp-for="CreateForm.DepartmentId" class="form-select" required>
                             @foreach (var d in Model.Departments)
                             {
-                                <option value="@d.DepartmentId">@d.Name</option>
+                                <option value="@d.DepartmentId" selected="@(Model.CreateForm.DepartmentId == d.DepartmentId)">@d.Name</option>
                             }
                         </select>
                     </div>

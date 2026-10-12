@@ -98,9 +98,21 @@ BEGIN TRY
         IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptGeneralId AND ServiceName = N'Điều trị tủy răng công nghệ cao')
             INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
             VALUES (@DeptGeneralId, N'Điều trị tủy răng công nghệ cao', N'Làm sạch và trám bít ống tủy chuyên sâu bảo tồn răng thật.', 60, 1200000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptGeneralId AND ServiceName = N'Điều trị tủy răng hàm nhiều chân phức tạp')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptGeneralId, N'Điều trị tủy răng hàm nhiều chân phức tạp', N'Chữa tủy răng cối nhiều chân cong dưới định vị chóp điện tử, hạn chế tối đa đau nhức.', 75, 1800000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptGeneralId AND ServiceName = N'Điều trị viêm nha chu & Nạo túi lợi')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptGeneralId, N'Điều trị viêm nha chu & Nạo túi lợi', N'Làm sạch sâu bề mặt chân răng, loại bỏ ổ vi khuẩn dưới nướu, ngăn ngừa lung lay răng.', 45, 800000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptGeneralId AND ServiceName = N'Hàn răng thẩm mỹ Inlay / Onlay Porcelain')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptGeneralId, N'Hàn răng thẩm mỹ Inlay / Onlay Porcelain', N'Phục hình gián tiếp bằng sứ cho xoang sâu lớn, chịu lực nhai vượt trội.', 60, 2500000, 'Active');
     END;
 
-    -- Dept 2: Chinh Nha
+    -- Dept 2: Chinh Nha & Tham My
     IF @DeptOrthoId IS NOT NULL
     BEGIN
         IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptOrthoId AND ServiceName = N'Khám & Tư vấn Chỉnh nha')
@@ -110,6 +122,30 @@ BEGIN TRY
         IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptOrthoId AND ServiceName = N'Tẩy trắng răng Laser Whitening')
             INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
             VALUES (@DeptOrthoId, N'Tẩy trắng răng Laser Whitening', N'Tẩy trắng răng an toàn bằng công nghệ ánh sáng Laser hiện đại.', 60, 2000000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptOrthoId AND ServiceName = N'Niềng răng mắc cài kim loại chuẩn')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptOrthoId, N'Niềng răng mắc cài kim loại chuẩn', N'Khắc phục răng hô, móm, khấp khểnh hiệu quả với chi phí tối ưu, theo dõi định kỳ.', 60, 25000000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptOrthoId AND ServiceName = N'Niềng răng mắc cài sứ thẩm mỹ')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptOrthoId, N'Niềng răng mắc cài sứ thẩm mỹ', N'Mắc cài sứ tự buộc cao cấp tiệp màu răng, thẩm mỹ cao trong suốt quá trình niềng.', 60, 38000000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptOrthoId AND ServiceName = N'Niềng răng khay trong suốt Invisalign')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptOrthoId, N'Niềng răng khay trong suốt Invisalign', N'Khay niềng trong suốt của Mỹ có thể tháo lắp linh hoạt, vô hình và thoải mái tuyệt đối.', 45, 65000000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptOrthoId AND ServiceName = N'Dán sứ Veneer Emax cao cấp')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptOrthoId, N'Dán sứ Veneer Emax cao cấp', N'Mặt dán sứ siêu mỏng 0.3 - 0.5mm, bảo tồn tối đa răng thật, kiến tạo nụ cười rạng rỡ.', 60, 6000000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptOrthoId AND ServiceName = N'Bọc răng toàn sứ Cercon HT chính hãng')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptOrthoId, N'Bọc răng toàn sứ Cercon HT chính hãng', N'Răng sứ zirconia chính hãng của Đức chịu lực cao, độ trong tự nhiên, bảo hành 10 năm.', 60, 4500000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptOrthoId AND ServiceName = N'Đính đá thẩm mỹ lên răng')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptOrthoId, N'Đính đá thẩm mỹ lên răng', N'Đính đá nha khoa không khoan lỗ men răng, sáng bóng tinh tế, an toàn sinh học.', 30, 500000, 'Active');
     END;
 
     -- Dept 3: Implant & Phau Thuat
@@ -123,9 +159,33 @@ BEGIN TRY
             INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
             VALUES (@DeptImplantId, N'Tiểu phẫu nhổ răng khôn mọc lệch', N'Nhổ răng khôn mọc ngầm, mọc lệch bằng máy rung siêu âm Piezotome.', 60, 1800000, 'Active');
 
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptImplantId AND ServiceName = N'Nhổ răng khôn ngầm mọc ngang sóng Piezotome')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptImplantId, N'Nhổ răng khôn ngầm mọc ngang sóng Piezotome', N'Cắt mở xương và chia chân răng bằng sóng siêu âm cao tần không gây đau, mau lành thương.', 60, 2500000, 'Active');
+
         IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptImplantId AND ServiceName = N'Cấy ghép trụ Implant chính hãng')
             INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
             VALUES (@DeptImplantId, N'Cấy ghép trụ Implant chính hãng', N'Đặt trụ Implant sinh học công nghệ Thụy Sĩ/Hàn Quốc.', 90, 15000000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptImplantId AND ServiceName = N'Cấy ghép trụ Implant Dentium Hàn Quốc')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptImplantId, N'Cấy ghép trụ Implant Dentium Hàn Quốc', N'Phục hình mất răng bằng trụ Titanium chính hãng Dentium, tích hợp xương nhanh chóng.', 60, 14000000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptImplantId AND ServiceName = N'Cấy ghép trụ Implant Straumann Thụy Sĩ')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptImplantId, N'Cấy ghép trụ Implant Straumann Thụy Sĩ', N'Dòng trụ Implant cao cấp số 1 thế giới với bề mặt SLActive kháng tiêu xương tối đa.', 75, 28000000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptImplantId AND ServiceName = N'Ghép xương nhân tạo & Nâng xoang kín')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptImplantId, N'Ghép xương nhân tạo & Nâng xoang kín', N'Bổ sung thể tích xương hàm vùng răng hàm trên đảm bảo độ vững chắc cho trụ Implant.', 60, 8000000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptImplantId AND ServiceName = N'Phẫu thuật cắt chóp & Nạo nang nha chu')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptImplantId, N'Phẫu thuật cắt chóp & Nạo nang nha chu', N'Loại bỏ ổ nhiễm trùng dai dẳng tại chóp chân răng sau điều trị nội nha không đáp ứng.', 45, 2200000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptImplantId AND ServiceName = N'Phẫu thuật làm dài thân răng thẩm mỹ')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptImplantId, N'Phẫu thuật làm dài thân răng thẩm mỹ', N'Cắt nướu tạo hình đường viền cung cười, điều trị cười hở lợi chuẩn tỷ lệ vàng.', 45, 1500000, 'Active');
     END;
 
     -- Dept 4: Nhi
@@ -134,6 +194,30 @@ BEGIN TRY
         IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptPediatricId AND ServiceName = N'Khám nha khoa trẻ em & Bôi Flour ngừa sâu')
             INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
             VALUES (@DeptPediatricId, N'Khám nha khoa trẻ em & Bôi Flour ngừa sâu', N'Chăm sóc răng miệng định kỳ và ngừa sâu răng cho trẻ.', 30, 150000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptPediatricId AND ServiceName = N'Trám răng sữa Composite Bio không đau')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptPediatricId, N'Trám răng sữa Composite Bio không đau', N'Trám hồi phục răng sữa bị sâu bằng vật liệu sinh học an toàn tuyệt đối cho bé.', 30, 200000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptPediatricId AND ServiceName = N'Nhổ răng sữa lung lay vô cảm nhẹ nhàng')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptPediatricId, N'Nhổ răng sữa lung lay vô cảm nhẹ nhàng', N'Bôi tê bề mặt hương trái cây dịu ngọt, nhổ răng sữa đúng thời điểm để răng vĩnh viễn mọc đều.', 20, 100000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptPediatricId AND ServiceName = N'Điều trị tủy buồng răng sữa & Chụp thép SSC')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptPediatricId, N'Điều trị tủy buồng răng sữa & Chụp thép SSC', N'Bảo tồn răng sữa sâu cụt tủy bằng chụp thép tiền chế SSC giúp bé ăn nhai tốt đến tuổi thay răng.', 45, 850000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptPediatricId AND ServiceName = N'Trám bít hố rãnh ngừa sâu răng vĩnh viễn')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptPediatricId, N'Trám bít hố rãnh ngừa sâu răng vĩnh viễn', N'Phủ sealant bảo vệ các hố rãnh sâu trên mặt nhai răng hàm số 6 vừa mới mọc.', 30, 250000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptPediatricId AND ServiceName = N'Hàm tiền chỉnh nha can thiệp sớm (Trainer)')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptPediatricId, N'Hàm tiền chỉnh nha can thiệp sớm (Trainer)', N'Khí cụ silicone định hướng thở bằng mũi, uốn nắn khớp cắn sớm cho trẻ 6-12 tuổi.', 45, 5000000, 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptPediatricId AND ServiceName = N'Chữa chấn thương lún / gãy răng sữa trẻ em')
+            INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
+            VALUES (@DeptPediatricId, N'Chữa chấn thương lún / gãy răng sữa trẻ em', N'Cấp cứu răng chấn thương do té ngã, theo dõi bảo vệ mầm răng vĩnh viễn bên dưới.', 30, 400000, 'Active');
     END;
 
     ---------------------------------------------------------------------

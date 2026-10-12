@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using DentalClinic.Web.Models.ApiDtos;
 using DentalClinic.Web.Services;
@@ -24,6 +25,20 @@ public class DepartmentDentistController : Controller
     {
         var deptsResult = await _adminApi.GetDepartmentsAsync();
         var departments = deptsResult.IsSuccess && deptsResult.Data != null ? deptsResult.Data : new();
+
+        // If departmentId is not explicitly specified and user is DepartmentManager, default to their managed department
+        if (!departmentId.HasValue && User.IsInRole("DepartmentManager"))
+        {
+            var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (long.TryParse(userIdStr, out var currentUserId))
+            {
+                var myDept = departments.FirstOrDefault(d => d.ManagerUserId == currentUserId);
+                if (myDept != null)
+                {
+                    departmentId = myDept.DepartmentId;
+                }
+            }
+        }
 
         var usersResult = await _adminApi.GetUsersAsync("Dentist");
         var dentists = usersResult.IsSuccess && usersResult.Data != null ? usersResult.Data : new();
