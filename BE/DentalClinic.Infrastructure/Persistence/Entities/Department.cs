@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -36,6 +36,8 @@ public partial class Department
     public virtual ICollection<DepartmentWorkSchedule> DepartmentWorkSchedules { get; set; } = new List<DepartmentWorkSchedule>();
 
     public virtual StaffProfile? ManagerUser { get; set; }
+
+    public virtual ICollection<Room> Rooms { get; set; } = new List<Room>();
 
     public virtual ICollection<TreatmentPlan> TreatmentPlans { get; set; } = new List<TreatmentPlan>();
 }

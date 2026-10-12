@@ -241,6 +241,7 @@ public class AppointmentFlowTests
             RoomId = 1,
             RoomCode = "ROOM-101",
             RoomName = "Phòng Khám 101",
+            DepartmentId = 1,
             Status = "Active"
         };
         db.Rooms.Add(room);
@@ -1053,5 +1054,103 @@ public class AppointmentFlowTests
         });
         Assert.False(book4.Success);
         Assert.Contains("tạm khóa", book4.Message);
+    }
+
+    [Fact]
+    public async Task Test23_AvailableResources_FiltersRoomsAndChairsByDepartment()
+    {
+        using var db = CreateDbContext(nameof(Test23_AvailableResources_FiltersRoomsAndChairsByDepartment));
+        await SeedBasicDataAsync(db);
+
+        // Add a room and chair belonging to Department 2
+        var roomDept2 = new Room
+        {
+            RoomId = 2,
+            RoomCode = "ROOM-201",
+            RoomName = "Phòng Khám 201",
+            DepartmentId = 2,
+            Status = "Active"
+        };
+        db.Rooms.Add(roomDept2);
+        db.DentalChairs.Add(new DentalChair
+        {
+            DentalChairId = 21,
+            RoomId = 2,
+            ChairCode = "CHAIR-201-A",
+            Status = "Active"
+        });
+        await db.SaveChangesAsync();
+
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var slotStart = DateTime.Today.AddDays(2).AddHours(9);
+        var slotEnd = slotStart.AddMinutes(30);
+
+        // Department 1 resources
+        var dept1Resources = await service.GetAvailableResourcesAsync(1, slotStart, slotEnd);
+        Assert.True(dept1Resources.Success);
+        Assert.All(dept1Resources.Data!.Rooms, r => Assert.Equal(1, r.DepartmentId));
+        Assert.Contains(dept1Resources.Data.Rooms, r => r.RoomId == 1);
+        Assert.DoesNotContain(dept1Resources.Data.Rooms, r => r.RoomId == 2);
+        Assert.All(dept1Resources.Data.Chairs, c => Assert.Equal(1, c.RoomId));
+
+        // Department 2 resources
+        var dept2Resources = await service.GetAvailableResourcesAsync(2, slotStart, slotEnd);
+        Assert.True(dept2Resources.Success);
+        Assert.All(dept2Resources.Data!.Rooms, r => Assert.Equal(2, r.DepartmentId));
+        Assert.Contains(dept2Resources.Data.Rooms, r => r.RoomId == 2);
+        Assert.DoesNotContain(dept2Resources.Data.Rooms, r => r.RoomId == 1);
+        Assert.All(dept2Resources.Data.Chairs, c => Assert.Equal(2, c.RoomId));
+    }
+
+    [Fact]
+    public async Task Test24_ManagerConfirm_RoomBelongsToDifferentDepartment_RejectsConfirmation()
+    {
+        using var db = CreateDbContext(nameof(Test24_ManagerConfirm_RoomBelongsToDifferentDepartment_RejectsConfirmation));
+        await SeedBasicDataAsync(db);
+
+        // Add Room 2 belonging to Department 2
+        var roomDept2 = new Room
+        {
+            RoomId = 2,
+            RoomCode = "ROOM-201",
+            RoomName = "Phòng Khám 201",
+            DepartmentId = 2,
+            Status = "Active"
+        };
+        db.Rooms.Add(roomDept2);
+        db.DentalChairs.Add(new DentalChair
+        {
+            DentalChairId = 21,
+            RoomId = 2,
+            ChairCode = "CHAIR-201-A",
+            Status = "Active"
+        });
+        await db.SaveChangesAsync();
+
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        // Book appointment for Department 1
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ReasonForVisit = "Khám răng tổng quát"
+        });
+        var apptId = bookResult.Data!.AppointmentId;
+        await service.ReceptionistForwardAsync(apptId, 201, "OK");
+
+        // Try to confirm appointment with Room 2 (belonging to Dept 2)
+        var confirmResult = await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 2, // Room from Department 2!
+            DentalChairId = 21,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(2).AddHours(9).AddMinutes(30)
+        });
+
+        Assert.False(confirmResult.Success);
+        Assert.Contains("không thuộc chuyên khoa", confirmResult.Message);
     }
 }

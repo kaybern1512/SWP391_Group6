@@ -1120,22 +1120,32 @@ public class AppointmentService : IAppointmentService
             .Select(a => a.DentalChairId!.Value)
             .ToHashSet();
 
-        var rooms = await _dbContext.Rooms
+        var roomsQuery = _dbContext.Rooms
             .AsNoTracking()
-            .Where(r => r.Status == "Active" && !occupiedRoomIds.Contains(r.RoomId))
+            .Where(r => r.Status == "Active" && !occupiedRoomIds.Contains(r.RoomId));
+
+        if (departmentId > 0)
+        {
+            roomsQuery = roomsQuery.Where(r => r.DepartmentId == departmentId);
+        }
+
+        var rooms = await roomsQuery
             .OrderBy(r => r.RoomCode)
             .Select(r => new RoomOptionDto
             {
                 RoomId = r.RoomId,
                 RoomCode = r.RoomCode,
                 RoomName = r.RoomName,
+                DepartmentId = r.DepartmentId,
                 Status = r.Status
             })
             .ToListAsync(ct);
 
+        var roomIds = rooms.Select(r => r.RoomId).ToHashSet();
+
         var chairs = await _dbContext.DentalChairs
             .AsNoTracking()
-            .Where(c => c.Status == "Active" && !occupiedChairIds.Contains(c.DentalChairId))
+            .Where(c => c.Status == "Active" && roomIds.Contains(c.RoomId) && !occupiedChairIds.Contains(c.DentalChairId))
             .OrderBy(c => c.ChairCode)
             .Select(c => new ChairOptionDto
             {
@@ -1244,6 +1254,11 @@ public class AppointmentService : IAppointmentService
             if (room == null)
             {
                 return ApiResponse<AppointmentDto>.Fail("Phòng khám không hợp lệ hoặc không hoạt động.");
+            }
+
+            if (room.DepartmentId.HasValue && room.DepartmentId.Value != appointment.DepartmentId)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Phòng khám không thuộc chuyên khoa của lịch hẹn này.");
             }
 
             bool roomConflict = await _dbContext.Appointments

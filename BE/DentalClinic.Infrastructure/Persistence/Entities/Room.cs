@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -11,7 +11,11 @@ public partial class Room
 
     public string? RoomName { get; set; }
 
+    public long? DepartmentId { get; set; }
+
     public string Status { get; set; } = null!;
+
+    public virtual Department? Department { get; set; }
 
     public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
 

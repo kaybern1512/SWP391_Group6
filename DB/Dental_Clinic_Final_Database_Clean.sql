@@ -155,7 +155,9 @@ CREATE TABLE Rooms (
     RoomId BIGINT IDENTITY PRIMARY KEY,
     RoomCode VARCHAR(30) NOT NULL UNIQUE,
     RoomName NVARCHAR(100) NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Active' CHECK (Status IN ('Active','Inactive','Maintenance'))
+    DepartmentId BIGINT NULL,
+    Status VARCHAR(30) NOT NULL DEFAULT 'Active' CHECK (Status IN ('Active','Inactive','Maintenance')),
+    CONSTRAINT FK_Rooms_Department FOREIGN KEY (DepartmentId) REFERENCES Departments(DepartmentId)
 );
 GO
 

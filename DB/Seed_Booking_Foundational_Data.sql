@@ -143,34 +143,37 @@ BEGIN TRY
 
     IF NOT EXISTS (SELECT 1 FROM Rooms WHERE RoomCode = 'ROOM-101')
     BEGIN
-        INSERT INTO Rooms (RoomCode, RoomName, Status)
-        VALUES ('ROOM-101', N'Phòng Khám Răng Tổng Quát 101', 'Active');
+        INSERT INTO Rooms (RoomCode, RoomName, DepartmentId, Status)
+        VALUES ('ROOM-101', N'Phòng Khám Răng Tổng Quát 101', @DeptGeneralId, 'Active');
         SET @Room101Id = SCOPE_IDENTITY();
     END
     ELSE
     BEGIN
+        UPDATE Rooms SET DepartmentId = @DeptGeneralId WHERE RoomCode = 'ROOM-101';
         SELECT @Room101Id = RoomId FROM Rooms WHERE RoomCode = 'ROOM-101';
     END;
 
     IF NOT EXISTS (SELECT 1 FROM Rooms WHERE RoomCode = 'ROOM-201')
     BEGIN
-        INSERT INTO Rooms (RoomCode, RoomName, Status)
-        VALUES ('ROOM-201', N'Phòng Phẫu Thuật & Implant 201', 'Active');
+        INSERT INTO Rooms (RoomCode, RoomName, DepartmentId, Status)
+        VALUES ('ROOM-201', N'Phòng Phẫu Thuật & Implant 201', @DeptImplantId, 'Active');
         SET @Room201Id = SCOPE_IDENTITY();
     END
     ELSE
     BEGIN
+        UPDATE Rooms SET DepartmentId = @DeptImplantId WHERE RoomCode = 'ROOM-201';
         SELECT @Room201Id = RoomId FROM Rooms WHERE RoomCode = 'ROOM-201';
     END;
 
     IF NOT EXISTS (SELECT 1 FROM Rooms WHERE RoomCode = 'ROOM-301')
     BEGIN
-        INSERT INTO Rooms (RoomCode, RoomName, Status)
-        VALUES ('ROOM-301', N'Phòng Chỉnh Nha & Thẩm Mỹ 301', 'Active');
+        INSERT INTO Rooms (RoomCode, RoomName, DepartmentId, Status)
+        VALUES ('ROOM-301', N'Phòng Chỉnh Nha & Thẩm Mỹ 301', @DeptOrthoId, 'Active');
         SET @Room301Id = SCOPE_IDENTITY();
     END
     ELSE
     BEGIN
+        UPDATE Rooms SET DepartmentId = @DeptOrthoId WHERE RoomCode = 'ROOM-301';
         SELECT @Room301Id = RoomId FROM Rooms WHERE RoomCode = 'ROOM-301';
     END;
 

@@ -134,6 +134,7 @@ public class RoomOptionDto
     public int RoomId { get; set; }
     public string RoomCode { get; set; } = string.Empty;
     public string RoomName { get; set; } = string.Empty;
+    public long? DepartmentId { get; set; }
     public bool IsOccupied { get; set; }
 }
 

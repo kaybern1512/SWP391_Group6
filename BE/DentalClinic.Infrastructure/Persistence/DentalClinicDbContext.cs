@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -750,6 +750,10 @@ public partial class DentalClinicDbContext : DbContext
                 .HasMaxLength(30)
                 .IsUnicode(false)
                 .HasDefaultValue("Active");
+
+            entity.HasOne(d => d.Department).WithMany(p => p.Rooms)
+                .HasForeignKey(d => d.DepartmentId)
+                .HasConstraintName("FK_Rooms_Department");
         });
 
         modelBuilder.Entity<StaffProfile>(entity =>

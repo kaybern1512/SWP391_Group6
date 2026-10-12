@@ -454,6 +454,7 @@ public class AdminService : IAdminService
     {
         var rooms = await _dbContext.Rooms
             .AsNoTracking()
+            .Include(r => r.Department)
             .Include(r => r.DentalChairs)
             .OrderBy(r => r.RoomId)
             .ToListAsync(ct);
@@ -463,6 +464,8 @@ public class AdminService : IAdminService
             RoomId = r.RoomId,
             RoomCode = r.RoomCode,
             RoomName = r.RoomName,
+            DepartmentId = r.DepartmentId,
+            DepartmentName = r.Department?.Name,
             Status = r.Status,
             ChairsCount = r.DentalChairs.Count,
             ActiveChairsCount = r.DentalChairs.Count(c => c.Status == "Active")
@@ -475,6 +478,7 @@ public class AdminService : IAdminService
     {
         var r = await _dbContext.Rooms
             .AsNoTracking()
+            .Include(r => r.Department)
             .Include(r => r.DentalChairs)
             .FirstOrDefaultAsync(r => r.RoomId == roomId, ct);
 
@@ -488,6 +492,8 @@ public class AdminService : IAdminService
             RoomId = r.RoomId,
             RoomCode = r.RoomCode,
             RoomName = r.RoomName,
+            DepartmentId = r.DepartmentId,
+            DepartmentName = r.Department?.Name,
             Status = r.Status,
             ChairsCount = r.DentalChairs.Count,
             ActiveChairsCount = r.DentalChairs.Count(c => c.Status == "Active")
@@ -519,6 +525,7 @@ public class AdminService : IAdminService
         {
             RoomCode = trimmedCode,
             RoomName = string.IsNullOrWhiteSpace(request.RoomName) ? $"Phòng {trimmedCode}" : request.RoomName.Trim(),
+            DepartmentId = request.DepartmentId,
             Status = status
         };
 
@@ -531,7 +538,7 @@ public class AdminService : IAdminService
             "Room",
             room.RoomId.ToString(),
             null,
-            JsonSerializer.Serialize(new { room.RoomCode, room.RoomName, room.Status }),
+            JsonSerializer.Serialize(new { room.RoomCode, room.RoomName, room.DepartmentId, room.Status }),
             ct);
 
         return await GetRoomByIdAsync(room.RoomId, ct);
@@ -564,15 +571,19 @@ public class AdminService : IAdminService
         var validStatuses = new[] { "Active", "Inactive", "Maintenance" };
         var status = validStatuses.Contains(request.Status, StringComparer.OrdinalIgnoreCase) ? request.Status : room.Status;
 
-        var oldValues = JsonSerializer.Serialize(new { room.RoomCode, room.RoomName, room.Status });
+        var oldValues = JsonSerializer.Serialize(new { room.RoomCode, room.RoomName, room.DepartmentId, room.Status });
 
         room.RoomCode = trimmedCode;
         room.RoomName = string.IsNullOrWhiteSpace(request.RoomName) ? room.RoomName : request.RoomName.Trim();
+        if (request.DepartmentId.HasValue)
+        {
+            room.DepartmentId = request.DepartmentId.Value;
+        }
         room.Status = status;
 
         await _dbContext.SaveChangesAsync(ct);
 
-        var newValues = JsonSerializer.Serialize(new { room.RoomCode, room.RoomName, room.Status });
+        var newValues = JsonSerializer.Serialize(new { room.RoomCode, room.RoomName, room.DepartmentId, room.Status });
 
         await _auditLogService.LogAsync(
             adminUserId,

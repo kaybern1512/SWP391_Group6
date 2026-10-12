@@ -80,6 +80,8 @@ public class AdminRoomDto
     public long RoomId { get; set; }
     public string RoomCode { get; set; } = string.Empty;
     public string? RoomName { get; set; }
+    public long? DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
     public string Status { get; set; } = string.Empty;
     public int ChairsCount { get; set; }
     public int ActiveChairsCount { get; set; }
@@ -89,6 +91,7 @@ public class CreateRoomRequest
 {
     public string RoomCode { get; set; } = string.Empty;
     public string? RoomName { get; set; }
+    public long? DepartmentId { get; set; }
     public string Status { get; set; } = "Active";
 }
 
@@ -96,6 +99,7 @@ public class UpdateRoomRequest
 {
     public string RoomCode { get; set; } = string.Empty;
     public string? RoomName { get; set; }
+    public long? DepartmentId { get; set; }
     public string Status { get; set; } = "Active";
 }
 
