@@ -10,6 +10,7 @@ public class DepartmentScheduleManageViewModel
     public long? DepartmentId { get; set; }
     public List<AdminDepartmentDto> Departments { get; set; } = new();
     public List<AdminUserDto> Dentists { get; set; } = new();
+    public List<DentistDepartmentAllocationDto> Allocations { get; set; } = new();
     public long? SelectedDentistUserId { get; set; }
     public int Year { get; set; } = DateTime.UtcNow.Year;
     public int Month { get; set; } = DateTime.UtcNow.Month;

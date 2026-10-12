@@ -74,7 +74,7 @@ public class DepartmentScheduleController : Controller
         var queryToDate = viewMode?.Equals("Table", StringComparison.OrdinalIgnoreCase) == true ? tableToDate : gridEndDate;
 
         var deptsResult = await _adminApi.GetDepartmentsAsync();
-        var departments = deptsResult.IsSuccess && deptsResult.Data != null ? deptsResult.Data : new();
+        var departments = deptsResult != null && deptsResult.IsSuccess && deptsResult.Data != null ? deptsResult.Data : new();
 
         if (!departmentId.HasValue && User.IsInRole("DepartmentManager"))
         {
@@ -90,7 +90,60 @@ public class DepartmentScheduleController : Controller
         }
 
         var usersResult = await _adminApi.GetUsersAsync("Dentist");
-        var dentists = usersResult.IsSuccess && usersResult.Data != null ? usersResult.Data : new();
+        var allDentists = usersResult != null && usersResult.IsSuccess && usersResult.Data != null ? usersResult.Data : new();
+
+        var allocResult = await _adminApi.GetDentistAllocationsAsync();
+        var allAllocations = allocResult != null && allocResult.IsSuccess && allocResult.Data != null ? allocResult.Data : new();
+
+        // Fallback: If allDentists is empty, populate from allAllocations
+        if (!allDentists.Any() && allAllocations.Any())
+        {
+            allDentists = allAllocations
+                .GroupBy(a => a.DentistUserId)
+                .Select(g => g.First())
+                .Select(a => new AdminUserDto
+                {
+                    UserId = a.DentistUserId,
+                    FullName = a.DentistName,
+                    Code = a.DentistCode,
+                    Email = a.DentistEmail ?? "",
+                    Role = "Dentist",
+                    Status = a.Status
+                }).ToList();
+        }
+
+        // If departmentId is specified, filter dentists for that department
+        var dentists = allDentists;
+        if (departmentId.HasValue && departmentId.Value > 0)
+        {
+            var deptDentistUserIds = allAllocations
+                .Where(a => a.DepartmentId == departmentId.Value && (string.IsNullOrEmpty(a.Status) || a.Status == "Active"))
+                .Select(a => a.DentistUserId)
+                .ToHashSet();
+
+            if (deptDentistUserIds.Any())
+            {
+                var filtered = allDentists.Where(d => deptDentistUserIds.Contains(d.UserId)).ToList();
+                if (filtered.Any())
+                {
+                    dentists = filtered;
+                }
+                else
+                {
+                    dentists = allAllocations
+                        .Where(a => a.DepartmentId == departmentId.Value && (string.IsNullOrEmpty(a.Status) || a.Status == "Active"))
+                        .Select(a => new AdminUserDto
+                        {
+                            UserId = a.DentistUserId,
+                            FullName = a.DentistName,
+                            Code = a.DentistCode,
+                            Email = a.DentistEmail ?? "",
+                            Role = "Dentist",
+                            Status = a.Status
+                        }).ToList();
+                }
+            }
+        }
 
         var filter = new DentistScheduleFilterRequest
         {
@@ -101,7 +154,7 @@ public class DepartmentScheduleController : Controller
         };
 
         var schedResult = await _scheduleApi.GetSchedulesAsync(filter);
-        var rawSchedules = schedResult.IsSuccess && schedResult.Data != null ? schedResult.Data : new List<DentistWorkScheduleDto>();
+        var rawSchedules = schedResult != null && schedResult.IsSuccess && schedResult.Data != null ? schedResult.Data : new List<DentistWorkScheduleDto>();
 
         // In-memory search filter if provided
         var schedules = rawSchedules;
@@ -131,12 +184,15 @@ public class DepartmentScheduleController : Controller
         }
 
         var defaultDeptId = departmentId ?? (departments.FirstOrDefault()?.DepartmentId ?? 0);
+        var firstAllocatedDentist = allAllocations.FirstOrDefault(a => a.DepartmentId == defaultDeptId && (string.IsNullOrEmpty(a.Status) || a.Status == "Active"))?.DentistUserId;
+        var defaultDentistId = dentistUserId ?? (firstAllocatedDentist ?? dentists.FirstOrDefault()?.UserId ?? 0);
 
         var vm = new DepartmentScheduleManageViewModel
         {
             DepartmentId = departmentId,
             Departments = departments,
             Dentists = dentists,
+            Allocations = allAllocations,
             SelectedDentistUserId = dentistUserId,
             Year = curYear,
             Month = curMonth,
@@ -149,13 +205,13 @@ public class DepartmentScheduleController : Controller
             CreateForm = new CreateScheduleFormModel
             {
                 DepartmentId = defaultDeptId,
-                DentistUserId = dentistUserId ?? (dentists.FirstOrDefault()?.UserId ?? 0),
+                DentistUserId = defaultDentistId,
                 WorkDate = today
             },
             BulkForm = new BulkScheduleFormModel
             {
                 DepartmentId = defaultDeptId,
-                DentistUserId = dentistUserId ?? (dentists.FirstOrDefault()?.UserId ?? 0),
+                DentistUserId = defaultDentistId,
                 StartDate = today,
                 EndDate = today.AddDays(13),
                 SelectedDaysOfWeek = new List<int> { 1, 2, 3, 4, 5 },

@@ -526,24 +526,41 @@
                 @Html.AntiForgeryToken()
                 <div class="modal-body p-4">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Bác sĩ phụ trách <span class="text-danger">*</span></label>
-                        <select asp-for="CreateForm.DentistUserId" class="form-select" id="createForm_DentistUserId" required>
-                            <option value="">-- Chọn bác sĩ --</option>
-                            @foreach (var doc in Model.Dentists)
-                            {
-                                <option value="@doc.UserId">@doc.FullName (@(doc.Code ?? doc.Email))</option>
-                            }
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
                         <label class="form-label fw-semibold">Chuyên khoa trực <span class="text-danger">*</span></label>
-                        <select asp-for="CreateForm.DepartmentId" class="form-select" id="createForm_DepartmentId" required>
+                        <select asp-for="CreateForm.DepartmentId" class="form-select" id="createForm_DepartmentId" required onchange="syncDentistDropdownByDepartment('createForm_DepartmentId', 'createForm_DentistUserId')">
                             @foreach (var d in Model.Departments)
                             {
                                 <option value="@d.DepartmentId">@d.Name</option>
                             }
                         </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Bác sĩ phụ trách <span class="text-danger">*</span></label>
+                        <select asp-for="CreateForm.DentistUserId" class="form-select" id="createForm_DentistUserId" required>
+                            <option value="">-- Chọn bác sĩ phụ trách --</option>
+                            @if (Model.Allocations.Any(a => a.DepartmentId == Model.CreateForm.DepartmentId))
+                            {
+                                @foreach (var doc in Model.Allocations.Where(a => a.DepartmentId == Model.CreateForm.DepartmentId && (string.IsNullOrEmpty(a.Status) || a.Status == "Active")))
+                                {
+                                    <option value="@doc.DentistUserId" selected="@(Model.CreateForm.DentistUserId == doc.DentistUserId)">
+                                        @doc.DentistName (@(doc.DentistCode ?? $"BS-{doc.DentistUserId}"))
+                                    </option>
+                                }
+                            }
+                            else
+                            {
+                                @foreach (var doc in Model.Dentists)
+                                {
+                                    <option value="@doc.UserId" selected="@(Model.CreateForm.DentistUserId == doc.UserId)">
+                                        @doc.FullName (@(doc.Code ?? doc.Email))
+                                    </option>
+                                }
+                            }
+                        </select>
+                        <div class="form-text text-muted" id="createForm_DentistHelp">
+                            <i class="bi bi-info-circle me-1"></i> Danh sách bác sĩ thuộc chuyên khoa đã chọn.
+                        </div>
                     </div>
 
                     <div class="mb-3">
@@ -593,21 +610,35 @@
                 <div class="modal-body p-4">
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Bác sĩ phụ trách <span class="text-danger">*</span></label>
-                            <select asp-for="BulkForm.DentistUserId" class="form-select" required>
-                                <option value="">-- Chọn bác sĩ --</option>
-                                @foreach (var doc in Model.Dentists)
+                            <label class="form-label fw-semibold">Chuyên khoa trực <span class="text-danger">*</span></label>
+                            <select asp-for="BulkForm.DepartmentId" class="form-select" id="bulkForm_DepartmentId" required onchange="syncDentistDropdownByDepartment('bulkForm_DepartmentId', 'bulkForm_DentistUserId')">
+                                @foreach (var d in Model.Departments)
                                 {
-                                    <option value="@doc.UserId">@doc.FullName (@(doc.Code ?? doc.Email))</option>
+                                    <option value="@d.DepartmentId">@d.Name</option>
                                 }
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Chuyên khoa trực <span class="text-danger">*</span></label>
-                            <select asp-for="BulkForm.DepartmentId" class="form-select" required>
-                                @foreach (var d in Model.Departments)
+                            <label class="form-label fw-semibold">Bác sĩ phụ trách <span class="text-danger">*</span></label>
+                            <select asp-for="BulkForm.DentistUserId" class="form-select" id="bulkForm_DentistUserId" required>
+                                <option value="">-- Chọn bác sĩ phụ trách --</option>
+                                @if (Model.Allocations.Any(a => a.DepartmentId == Model.BulkForm.DepartmentId))
                                 {
-                                    <option value="@d.DepartmentId">@d.Name</option>
+                                    @foreach (var doc in Model.Allocations.Where(a => a.DepartmentId == Model.BulkForm.DepartmentId && (string.IsNullOrEmpty(a.Status) || a.Status == "Active")))
+                                    {
+                                        <option value="@doc.DentistUserId" selected="@(Model.BulkForm.DentistUserId == doc.DentistUserId)">
+                                            @doc.DentistName (@(doc.DentistCode ?? $"BS-{doc.DentistUserId}"))
+                                        </option>
+                                    }
+                                }
+                                else
+                                {
+                                    @foreach (var doc in Model.Dentists)
+                                    {
+                                        <option value="@doc.UserId" selected="@(Model.BulkForm.DentistUserId == doc.UserId)">
+                                            @doc.FullName (@(doc.Code ?? doc.Email))
+                                        </option>
+                                    }
                                 }
                             </select>
                         </div>
@@ -820,9 +851,87 @@
 
     function openQuickAddModal(dateStr) {
         document.getElementById('createForm_WorkDate').value = dateStr;
+        syncDentistDropdownByDepartment('createForm_DepartmentId', 'createForm_DentistUserId');
         const modal = new bootstrap.Modal(document.getElementById('createScheduleModal'));
         modal.show();
     }
+
+    // Allocations data for dynamic department-dentist synchronization
+    const allAllocations = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Allocations));
+
+    function syncDentistDropdownByDepartment(deptSelectId, dentistSelectId, selectedDentistId) {
+        const deptSelect = document.getElementById(deptSelectId);
+        const dentistSelect = document.getElementById(dentistSelectId);
+        if (!deptSelect || !dentistSelect) return;
+
+        const deptId = parseInt(deptSelect.value) || 0;
+        
+        // Find matching active allocations for this department
+        const matching = allAllocations.filter(a => {
+            const aDeptId = parseInt(a.departmentId !== undefined ? a.departmentId : a.DepartmentId) || 0;
+            const aStatus = a.status !== undefined ? a.status : a.Status;
+            return aDeptId === deptId && (!aStatus || aStatus === 'Active');
+        });
+
+        // Determine current value to preserve if possible
+        const curVal = (selectedDentistId !== undefined && selectedDentistId !== null && selectedDentistId !== '')
+            ? parseInt(selectedDentistId)
+            : (parseInt(dentistSelect.value) || 0);
+
+        dentistSelect.innerHTML = '';
+
+        if (matching.length === 0) {
+            const emptyOpt = document.createElement('option');
+            emptyOpt.value = '';
+            emptyOpt.textContent = '-- Chưa có bác sĩ nào thuộc chuyên khoa này --';
+            dentistSelect.appendChild(emptyOpt);
+        } else {
+            const defaultOpt = document.createElement('option');
+            defaultOpt.value = '';
+            defaultOpt.textContent = '-- Chọn bác sĩ phụ trách --';
+            dentistSelect.appendChild(defaultOpt);
+
+            let hasSelected = false;
+            matching.forEach(item => {
+                const uid = item.dentistUserId !== undefined ? item.dentistUserId : item.DentistUserId;
+                const name = item.dentistName !== undefined ? item.dentistName : item.DentistName;
+                const code = item.dentistCode !== undefined ? item.dentistCode : item.DentistCode;
+
+                const opt = document.createElement('option');
+                opt.value = uid;
+                opt.textContent = code ? `${name} (${code})` : name;
+
+                if (curVal && parseInt(uid) === curVal) {
+                    opt.selected = true;
+                    hasSelected = true;
+                }
+                dentistSelect.appendChild(opt);
+            });
+
+            // If existing selection wasn't in this department, default to first doctor
+            if (!hasSelected && matching.length > 0) {
+                dentistSelect.selectedIndex = 1;
+            }
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const createModalEl = document.getElementById('createScheduleModal');
+        if (createModalEl) {
+            createModalEl.addEventListener('show.bs.modal', function() {
+                const defaultDentist = @(Model.CreateForm.DentistUserId);
+                syncDentistDropdownByDepartment('createForm_DepartmentId', 'createForm_DentistUserId', defaultDentist);
+            });
+        }
+
+        const bulkModalEl = document.getElementById('bulkScheduleModal');
+        if (bulkModalEl) {
+            bulkModalEl.addEventListener('show.bs.modal', function() {
+                const defaultDentist = @(Model.BulkForm.DentistUserId);
+                syncDentistDropdownByDepartment('bulkForm_DepartmentId', 'bulkForm_DentistUserId', defaultDentist);
+            });
+        }
+    });
 
     function applyShiftPreset(preset) {
         const startInput = document.getElementById('bulkStartTime');
