@@ -35,6 +35,7 @@ public class AppointmentDto
     public string? RoomName { get; set; }
     public long? DentalChairId { get; set; }
     public string? ChairCode { get; set; }
+    public string? DentalChairName => ChairCode;
     public DateTime? ScheduledStart { get; set; }
     public DateTime? ScheduledEnd { get; set; }
     public string ReasonForVisit { get; set; } = string.Empty;

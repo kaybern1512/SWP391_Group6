@@ -90,7 +90,14 @@ public class AppointmentDto
     public int? RoomId { get; set; }
     public string? RoomName { get; set; }
     public int? DentalChairId { get; set; }
-    public string? DentalChairName { get; set; }
+    [JsonPropertyName("chairCode")]
+    public string? ChairCode { get; set; }
+    private string? _dentalChairName;
+    public string? DentalChairName
+    {
+        get => !string.IsNullOrEmpty(_dentalChairName) ? _dentalChairName : ChairCode;
+        set => _dentalChairName = value;
+    }
     public DateTime? ScheduledStart { get; set; }
     public DateTime? ScheduledEnd { get; set; }
     public string? ReasonForVisit { get; set; }

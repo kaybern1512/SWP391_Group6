@@ -48,12 +48,19 @@ public class DepartmentAppointmentController : Controller
         var dentistsResult = await _appointmentApiService.GetAvailableDentistsForAppointmentAsync(id);
         var resourcesResult = await _appointmentApiService.GetAvailableResourcesAsync(appt.DepartmentId, start, end);
 
+        var rooms = resourcesResult.Data?.Rooms ?? new();
+        var chairs = resourcesResult.Data?.Chairs ?? new();
+        var selectedRoomId = appt.RoomId ?? (rooms.Count > 0 ? rooms[0].RoomId : 0);
+        var selectedChairId = appt.DentalChairId ?? (selectedRoomId > 0 ? chairs.FirstOrDefault(c => c.RoomId == selectedRoomId)?.DentalChairId ?? 0 : 0);
+
         var vm = new DepartmentReviewViewModel
         {
             Appointment = appt,
             Dentists = dentistsResult.Data ?? new(),
-            Rooms = resourcesResult.Data?.Rooms ?? new(),
-            Chairs = resourcesResult.Data?.Chairs ?? new(),
+            Rooms = rooms,
+            Chairs = chairs,
+            RoomId = selectedRoomId,
+            DentalChairId = selectedChairId,
             AssignedDentistUserId = appt.RequestedDentistUserId ?? (dentistsResult.Data?.Count > 0 ? dentistsResult.Data[0].DentistUserId : 0),
             ScheduledStart = start,
             ScheduledEnd = end,

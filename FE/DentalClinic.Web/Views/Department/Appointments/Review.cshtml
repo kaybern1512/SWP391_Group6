@@ -102,11 +102,17 @@
                                     }
                                 </select>
                                 <div class="form-text">Bác sĩ thuộc khoa và đã đăng ký lịch làm việc trong ngày.</div>
+                                @if (!Model.Dentists.Any())
+                                {
+                                    <div class="alert alert-warning py-2 px-3 mt-2 small border-0 mb-0">
+                                        <i class="bi bi-exclamation-circle-fill me-1"></i> Khoa chưa có bác sĩ nào được phân ca trực trong ngày này. Vui lòng phân ca tại <a asp-controller="DepartmentSchedule" asp-action="Index" class="fw-bold alert-link">Xếp Lịch Trực</a> hoặc chọn tab <strong>Phương Án 2: Đề Xuất Điều Chỉnh</strong> sang ngày/giờ khác cho bệnh nhân.
+                                    </div>
+                                }
                             </div>
 
                             <div class="col-md-3">
                                 <label class="form-label fw-bold">2. Phòng khám điều trị <span class="text-danger">*</span></label>
-                                <select asp-for="RoomId" id="selectRoom" class="form-select form-select-lg" required onchange="filterChairs()">
+                                <select asp-for="RoomId" id="selectRoom" class="form-select form-select-lg" required onchange="filterChairs(true)">
                                     <option value="">-- Chọn Phòng --</option>
                                     @foreach (var r in Model.Rooms)
                                     {
@@ -209,25 +215,42 @@
 
 @section Scripts {
     <script>
-        function filterChairs() {
-            const roomId = document.getElementById('selectRoom').value;
+        function filterChairs(autoSelectFirst = false) {
+            const roomSelect = document.getElementById('selectRoom');
             const chairSelect = document.getElementById('selectChair');
+            if (!roomSelect || !chairSelect) return;
+
+            const roomId = roomSelect.value;
             const options = chairSelect.querySelectorAll('option[data-room-id]');
 
+            let hasVisibleSelected = false;
+            let firstVisibleChair = null;
+
             options.forEach(opt => {
-                if (!roomId || opt.getAttribute('data-room-id') === roomId) {
-                    opt.style.display = '';
-                } else {
-                    opt.style.display = 'none';
+                const match = !roomId || opt.getAttribute('data-room-id') === roomId;
+                opt.hidden = !match;
+                opt.disabled = !match;
+                opt.style.display = match ? '' : 'none';
+
+                if (match) {
+                    if (!firstVisibleChair) firstVisibleChair = opt;
                     if (opt.selected) {
-                        chairSelect.value = '';
+                        hasVisibleSelected = true;
                     }
                 }
             });
+
+            if (!hasVisibleSelected) {
+                if (roomId && autoSelectFirst && firstVisibleChair) {
+                    chairSelect.value = firstVisibleChair.value;
+                } else {
+                    chairSelect.value = '';
+                }
+            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            filterChairs();
+            filterChairs(false);
         });
     </script>
 }
