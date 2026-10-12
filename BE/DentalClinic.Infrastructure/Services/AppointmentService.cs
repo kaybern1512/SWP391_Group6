@@ -1014,15 +1014,17 @@ public class AppointmentService : IAppointmentService
 
         var candidateIds = dentistsInDept.Select(dd => dd.DentistUserId).ToList();
         var targetDateOnly = DateOnly.FromDateTime(date);
+        var startTimeOnly = TimeOnly.FromDateTime(start);
+        var endTimeOnly = TimeOnly.FromDateTime(end);
 
-        // Work schedule check
+        // Work schedule check: TimeOnly directly translated by EF Core
         var scheduledDentistIds = await _dbContext.DentistWorkSchedules
             .AsNoTracking()
             .Where(ws => candidateIds.Contains(ws.DentistUserId) &&
                          ws.WorkDate == targetDateOnly &&
                          ws.Status == "Scheduled" &&
-                         date.Add(ws.StartTime.ToTimeSpan()) <= start &&
-                         date.Add(ws.EndTime.ToTimeSpan()) >= end)
+                         ws.StartTime <= startTimeOnly &&
+                         ws.EndTime >= endTimeOnly)
             .Select(ws => ws.DentistUserId)
             .ToListAsync(ct);
 
@@ -1059,21 +1061,31 @@ public class AppointmentService : IAppointmentService
             .Distinct()
             .ToListAsync(ct);
 
-        var availableDentists = dentistsInDept
-            .Where(d => scheduledDentistIds.Contains(d.DentistUserId) &&
-                        !unavailableDentistIds.Contains(d.DentistUserId) &&
-                        !conflictedDentistIds.Contains(d.DentistUserId))
-            .Select(dd => new DentistOptionDto
+        var resultDentists = dentistsInDept
+            .Select(dd =>
             {
-                UserId = dd.DentistUserId,
-                FullName = dd.DentistUser.User.FullName,
-                Qualification = dd.DentistUser.Qualification,
-                YearsOfExperience = dd.DentistUser.YearsOfExperience,
-                Biography = dd.DentistUser.Biography
+                var isScheduled = scheduledDentistIds.Contains(dd.DentistUserId);
+                var isUnavailable = unavailableDentistIds.Contains(dd.DentistUserId);
+                var hasConflict = conflictedDentistIds.Contains(dd.DentistUserId);
+                var isAvailable = isScheduled && !isUnavailable && !hasConflict;
+
+                return new DentistOptionDto
+                {
+                    UserId = dd.DentistUserId,
+                    FullName = dd.DentistUser.User.FullName,
+                    EmployeeCode = dd.DentistUser.User.EmployeeCode,
+                    Specialization = dd.DentistUser.Qualification,
+                    Qualification = dd.DentistUser.Qualification,
+                    YearsOfExperience = dd.DentistUser.YearsOfExperience,
+                    Biography = dd.DentistUser.Biography,
+                    IsAvailable = isAvailable
+                };
             })
+            .OrderByDescending(d => d.IsAvailable)
+            .ThenBy(d => d.FullName)
             .ToList();
 
-        return ApiResponse<List<DentistOptionDto>>.Ok(availableDentists);
+        return ApiResponse<List<DentistOptionDto>>.Ok(resultDentists);
     }
 
     public async Task<ApiResponse<AvailableResourcesDto>> GetAvailableResourcesAsync(

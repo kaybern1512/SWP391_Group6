@@ -27,10 +27,13 @@ public class DentistOptionDto
     public long UserId { get; set; }
     public long DentistUserId => UserId;
     public string FullName { get; set; } = string.Empty;
+    public string? EmployeeCode { get; set; }
+    public string? Specialization { get; set; }
     public string? Qualification { get; set; }
     public int? YearsOfExperience { get; set; }
     public string? Biography { get; set; }
     public string? AvatarUrl { get; set; }
+    public bool IsAvailable { get; set; } = true;
 }
 
 public class AvailableSlotDto
