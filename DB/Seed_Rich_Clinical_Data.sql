@@ -1,4 +1,4 @@
--- ============================================================================
+﻿-- ============================================================================
 -- SCRIPT: Seed_Rich_Clinical_Data.sql
 -- PURPOSE: Fill comprehensive and realistic clinical EMR data into DentalClinicManagementDB
 --          Covers Appointments (Today), Odontograms (32 Teeth), Clinical Entries,
