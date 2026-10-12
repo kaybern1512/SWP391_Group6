@@ -35,12 +35,12 @@ public class AppointmentApiService : IAppointmentApiService
 
     public async Task<ApiResult<List<DepartmentServiceDto>>> GetServicesAsync(long departmentId)
     {
-        return await SendGetAsync<List<DepartmentServiceDto>>($"/api/booking/services?departmentId={departmentId}");
+        return await SendGetAsync<List<DepartmentServiceDto>>($"/api/booking/departments/{departmentId}/services");
     }
 
     public async Task<ApiResult<List<DentistOptionDto>>> GetDentistsAsync(long departmentId)
     {
-        return await SendGetAsync<List<DentistOptionDto>>($"/api/booking/dentists?departmentId={departmentId}");
+        return await SendGetAsync<List<DentistOptionDto>>($"/api/booking/departments/{departmentId}/dentists");
     }
 
     public async Task<ApiResult<List<AvailableSlotDto>>> GetAvailableSlotsAsync(
