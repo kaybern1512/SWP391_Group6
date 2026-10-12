@@ -37,6 +37,10 @@
         @if (role == "Patient")
         {
             <div class="nav-group-title">Tổng Quan</div>
+            <a class="sidebar-link @(currentCtrl == "Home" ? "active" : "")" asp-controller="Home" asp-action="Index">
+                <i class="bi bi-house-door"></i>
+                <span>Trang Chủ & Bảng Giá</span>
+            </a>
             <a class="sidebar-link @(currentCtrl == "PatientDashboard" ? "active" : "")" asp-controller="PatientDashboard" asp-action="Dashboard">
                 <i class="bi bi-grid-1x2"></i>
                 <span>Cổng Bệnh Nhân</span>

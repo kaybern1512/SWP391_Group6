@@ -21,35 +21,54 @@
                     @if (User.Identity?.IsAuthenticated == true)
                     {
                         var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
-                        var dashboardAction = role switch
+                        if (role == "Patient")
                         {
-                            "Patient" => "/Patient/Dashboard",
-                            "Receptionist" => "/Receptionist/Dashboard",
-                            "Dentist" => "/Dentist/Dashboard",
-                            "DepartmentManager" => "/Department/Dashboard",
-                            "SystemAdministrator" => "/Admin/Dashboard",
-                            _ => "/Profile"
-                        };
-                        var roleLabel = role switch
+                            <a href="/Patient/Appointment/Book" class="btn btn-dc-primary btn-lg fs-6">
+                                <i class="bi bi-calendar-plus-fill me-1"></i> Đặt Lịch Khám Ngay
+                            </a>
+                            <a href="#pricing" class="btn btn-outline-primary btn-lg fs-6">
+                                <i class="bi bi-tags-fill me-1"></i> Xem Bảng Giá Dịch Vụ
+                            </a>
+                            <a href="/Patient/Dashboard" class="btn btn-dc-outline btn-lg fs-6">
+                                <i class="bi bi-grid-1x2 me-1"></i> Cổng Bệnh Nhân
+                            </a>
+                        }
+                        else
                         {
-                            "Patient" => "Bệnh nhân",
-                            "Receptionist" => "Lễ tân",
-                            "Dentist" => "Bác sĩ",
-                            "DepartmentManager" => "Trưởng khoa",
-                            "SystemAdministrator" => "Quản trị viên",
-                            _ => role
-                        };
-                        <a href="@dashboardAction" class="btn btn-dc-primary btn-lg fs-6">
-                            <i class="bi bi-grid-1x2 me-1"></i> Bàn Làm Việc (@roleLabel)
-                        </a>
+                            var dashboardAction = role switch
+                            {
+                                "Receptionist" => "/Receptionist/Dashboard",
+                                "Dentist" => "/Dentist/Dashboard",
+                                "DepartmentManager" => "/Department/Dashboard",
+                                "SystemAdministrator" => "/Admin/Dashboard",
+                                _ => "/Profile"
+                            };
+                            var roleLabel = role switch
+                            {
+                                "Receptionist" => "Lễ tân",
+                                "Dentist" => "Bác sĩ",
+                                "DepartmentManager" => "Trưởng khoa",
+                                "SystemAdministrator" => "Quản trị viên",
+                                _ => role
+                            };
+                            <a href="@dashboardAction" class="btn btn-dc-primary btn-lg fs-6">
+                                <i class="bi bi-grid-1x2 me-1"></i> Bàn Làm Việc (@roleLabel)
+                            </a>
+                            <a href="#pricing" class="btn btn-dc-outline btn-lg fs-6">
+                                <i class="bi bi-tags me-1"></i> Xem Bảng Giá Dịch Vụ
+                            </a>
+                        }
                     }
                     else
                     {
                         <a asp-controller="Account" asp-action="Register" class="btn btn-dc-primary btn-lg fs-6">
-                            <i class="bi bi-calendar-plus me-1"></i> Đăng Ký Tài Khoản
+                            <i class="bi bi-calendar-plus me-1"></i> Đăng Ký & Đặt Lịch
+                        </a>
+                        <a href="#pricing" class="btn btn-outline-primary btn-lg fs-6">
+                            <i class="bi bi-tags me-1"></i> Xem Bảng Giá
                         </a>
                         <a asp-controller="Account" asp-action="Login" class="btn btn-dc-outline btn-lg fs-6">
-                            <i class="bi bi-box-arrow-in-right me-1"></i> Đăng Nhập Hệ Thống
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Đăng Nhập
                         </a>
                     }
                 </div>
@@ -176,6 +195,238 @@
                     <p class="text-muted small mb-0">
                         Trám răng phòng ngừa, bôi vecni fluor ngừa sâu răng và chăm sóc nha chu dịu nhẹ cho bé.
                     </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Pricing Section (Bảng Giá Dịch Vụ Niêm Yết & Ưu Đãi) -->
+<section id="pricing" class="py-5 bg-light border-top border-bottom">
+    <div class="container py-3">
+        <div class="text-center mx-auto mb-5" style="max-width: 700px;">
+            <span class="badge-dc badge-role-patient mb-2">Bảng Giá Công Khai & Minh Bạch</span>
+            <h2 class="fw-bold text-dark">Bảng Giá Dịch Vụ Niêm Yết & Ưu Đãi</h2>
+            <p class="text-muted">
+                Cam kết chi phí minh bạch 100%, không phát sinh phụ phí ẩn. Thăm khám và tư vấn phác đồ kỹ lưỡng trước khi thực hiện.
+            </p>
+        </div>
+
+        <div class="row g-4 mb-5">
+            <!-- Gói 1: Nha Khoa Tổng Quát -->
+            <div class="col-md-6 col-lg-3">
+                <div class="card-dc h-100 p-4 bg-white border rounded-3 shadow-sm d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="quick-icon-box quick-icon-primary">
+                                <i class="bi bi-shield-check"></i>
+                            </div>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Tổng Quát</span>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1">Khám & Chăm Sóc Nướu</h5>
+                        <p class="text-muted small mb-3">Vệ sinh và bảo vệ men răng định kỳ</p>
+                        <div class="mb-3 pb-3 border-bottom">
+                            <span class="fs-4 fw-bold text-primary">Từ 150.000 đ</span>
+                            <span class="text-muted small">/ dịch vụ</span>
+                        </div>
+                        <ul class="list-unstyled small text-muted mb-4">
+                            <li class="d-flex align-items-start gap-2 mb-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Cạo vôi răng & Đánh bóng siêu âm (150k - 300k)</span>
+                            </li>
+                            <li class="d-flex align-items-start gap-2 mb-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Trám răng thẩm mỹ Composite (250k - 450k/răng)</span>
+                            </li>
+                            <li class="d-flex align-items-start gap-2 mb-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Điều trị nha chu & Viêm lợi chuyên sâu</span>
+                            </li>
+                            <li class="d-flex align-items-start gap-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Miễn phí khám & Chụp X-quang kiểm tra</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <a href="/Patient/Appointment/Book" class="btn btn-outline-primary w-100 fw-semibold">
+                            Đặt Lịch Khám
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gói 2: Nhổ Răng Khôn & Tiểu Phẫu (Hot) -->
+            <div class="col-md-6 col-lg-3">
+                <div class="card-dc h-100 p-4 bg-white border border-primary border-2 rounded-3 shadow d-flex flex-column justify-content-between position-relative">
+                    <div class="position-absolute top-0 start-50 translate-middle">
+                        <span class="badge bg-primary text-white px-3 py-1 shadow-sm">Khuyên Dùng</span>
+                    </div>
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-3 mt-1">
+                            <div class="quick-icon-box quick-icon-info">
+                                <i class="bi bi-heart-pulse"></i>
+                            </div>
+                            <span class="badge bg-info-subtle text-info border border-info-subtle">Piezotome</span>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1">Nhổ Răng Khôn Siêu Âm</h5>
+                        <p class="text-muted small mb-3">Công nghệ Piezotome không đau, êm ái</p>
+                        <div class="mb-3 pb-3 border-bottom">
+                            <span class="fs-4 fw-bold text-primary">Từ 1.000.000 đ</span>
+                            <span class="text-muted small">/ răng</span>
+                        </div>
+                        <ul class="list-unstyled small text-muted mb-4">
+                            <li class="d-flex align-items-start gap-2 mb-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Nhổ răng khôn mọc thẳng (1.000.000 - 1.500.000 đ)</span>
+                            </li>
+                            <li class="d-flex align-items-start gap-2 mb-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Nhổ răng khôn mọc lệch / ngầm (1.800.000 - 2.500.000 đ)</span>
+                            </li>
+                            <li class="d-flex align-items-start gap-2 mb-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Lành thương nhanh, giảm sưng nề 90%</span>
+                            </li>
+                            <li class="d-flex align-items-start gap-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Tặng thuốc kháng viêm & Tái khám cắt chỉ</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <a href="/Patient/Appointment/Book" class="btn btn-primary w-100 fw-bold shadow-sm">
+                            Đặt Lịch Nhổ Răng
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gói 3: Răng Sứ & Thẩm Mỹ Nụ Cười -->
+            <div class="col-md-6 col-lg-3">
+                <div class="card-dc h-100 p-4 bg-white border rounded-3 shadow-sm d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="quick-icon-box quick-icon-warning">
+                                <i class="bi bi-gem"></i>
+                            </div>
+                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Thẩm Mỹ</span>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1">Răng Sứ & Tẩy Trắng</h5>
+                        <p class="text-muted small mb-3">Nụ cười trắng sáng rạng rỡ tự nhiên</p>
+                        <div class="mb-3 pb-3 border-bottom">
+                            <span class="fs-4 fw-bold text-primary">Từ 1.800.000 đ</span>
+                            <span class="text-muted small">/ liệu trình</span>
+                        </div>
+                        <ul class="list-unstyled small text-muted mb-4">
+                            <li class="d-flex align-items-start gap-2 mb-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Tẩy trắng Laser Whitening (1.800.000 - 2.500.000 đ)</span>
+                            </li>
+                            <li class="d-flex align-items-start gap-2 mb-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Răng toàn sứ Cercon / Zirconia (từ 3.500.000 đ/răng)</span>
+                            </li>
+                            <li class="d-flex align-items-start gap-2 mb-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Dán sứ Veneer siêu mỏng không mài răng</span>
+                            </li>
+                            <li class="d-flex align-items-start gap-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Bảo hành chính hãng điện tử 5 - 10 năm</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <a href="/Patient/Appointment/Book" class="btn btn-outline-primary w-100 fw-semibold">
+                            Tư Vấn Thẩm Mỹ
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gói 4: Niềng Răng & Cấy Ghép Implant -->
+            <div class="col-md-6 col-lg-3">
+                <div class="card-dc h-100 p-4 bg-white border rounded-3 shadow-sm d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="quick-icon-box quick-icon-teal">
+                                <i class="bi bi-diagram-3"></i>
+                            </div>
+                            <span class="badge bg-teal-subtle text-teal border border-teal-subtle">Chuyên Sâu</span>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1">Chỉnh Nha & Implant</h5>
+                        <p class="text-muted small mb-3">Phục hình răng mất & Nắn chỉnh răng</p>
+                        <div class="mb-3 pb-3 border-bottom">
+                            <span class="fs-4 fw-bold text-primary">Từ 14.500.000 đ</span>
+                            <span class="text-muted small">/ trụ</span>
+                        </div>
+                        <ul class="list-unstyled small text-muted mb-4">
+                            <li class="d-flex align-items-start gap-2 mb-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Trụ Implant Thụy Sĩ / Hàn Quốc chính hãng</span>
+                            </li>
+                            <li class="d-flex align-items-start gap-2 mb-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Niềng răng mắc cài thông minh (từ 25.000.000 đ)</span>
+                            </li>
+                            <li class="d-flex align-items-start gap-2 mb-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Khay niềng trong suốt 3D thẩm mỹ cao</span>
+                            </li>
+                            <li class="d-flex align-items-start gap-2">
+                                <i class="bi bi-check-circle-fill text-success pt-1"></i>
+                                <span>Hỗ trợ trả góp 0% lãi suất linh hoạt</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <a href="/Patient/Appointment/Book" class="btn btn-outline-primary w-100 fw-semibold">
+                            Đăng Ký Khám Chuyên Sâu
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4 Tiêu Chuẩn Vàng Cam Kết Chất Lượng -->
+        <div class="card-dc p-4 bg-white border rounded-3 shadow-sm">
+            <div class="row g-4 text-center">
+                <div class="col-md-3">
+                    <div class="d-flex flex-column align-items-center">
+                        <div class="stat-icon-box stat-icon-primary mb-2" style="width: 48px; height: 48px; font-size: 1.3rem;">
+                            <i class="bi bi-person-badge"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Bác Sĩ Chuyên Khoa</h6>
+                        <p class="text-muted small mb-0">100% bác sĩ có chứng chỉ hành nghề và tu nghiệp thường niên.</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="d-flex flex-column align-items-center">
+                        <div class="stat-icon-box stat-icon-teal mb-2" style="width: 48px; height: 48px; font-size: 1.3rem;">
+                            <i class="bi bi-shield-check"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Vô Trùng Class B</h6>
+                        <p class="text-muted small mb-0">Hệ thống khử khuẩn khép kín, an toàn sinh học tiêu chuẩn quốc tế.</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="d-flex flex-column align-items-center">
+                        <div class="stat-icon-box stat-icon-warning mb-2" style="width: 48px; height: 48px; font-size: 1.3rem;">
+                            <i class="bi bi-cash-stack"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Minh Bạch 100%</h6>
+                        <p class="text-muted small mb-0">Bảng giá niêm yết rõ ràng, không phát sinh chi phí phụ ngoài hợp đồng.</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="d-flex flex-column align-items-center">
+                        <div class="stat-icon-box stat-icon-info mb-2" style="width: 48px; height: 48px; font-size: 1.3rem;">
+                            <i class="bi bi-card-checklist"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Hồ Sơ Điện Tử</h6>
+                        <p class="text-muted small mb-0">Tra cứu bệnh án, đơn thuốc và tiến độ điều trị online trọn đời.</p>
+                    </div>
                 </div>
             </div>
         </div>
