@@ -23,14 +23,17 @@ public class AdminRoomChairController : Controller
     {
         var roomsResult = await _adminApi.GetRoomsAsync();
         var chairsResult = await _adminApi.GetChairsAsync(roomId);
+        var deptsResult = await _adminApi.GetDepartmentsAsync();
 
-        var rooms = roomsResult.IsSuccess && roomsResult.Data != null ? roomsResult.Data : new();
-        var chairs = chairsResult.IsSuccess && chairsResult.Data != null ? chairsResult.Data : new();
+        var rooms = roomsResult?.IsSuccess == true && roomsResult.Data != null ? roomsResult.Data : new();
+        var chairs = chairsResult?.IsSuccess == true && chairsResult.Data != null ? chairsResult.Data : new();
+        var depts = deptsResult?.IsSuccess == true && deptsResult.Data != null ? deptsResult.Data : new();
 
         var vm = new RoomChairManageViewModel
         {
             Rooms = rooms,
             Chairs = chairs,
+            Departments = depts,
             SelectedRoomId = roomId,
             ActiveTab = tab
         };
@@ -52,6 +55,7 @@ public class AdminRoomChairController : Controller
         {
             RoomCode = model.RoomCode.Trim().ToUpper(),
             RoomName = model.RoomName?.Trim(),
+            DepartmentId = model.DepartmentId,
             Status = model.Status ?? "Active"
         };
 
@@ -82,6 +86,7 @@ public class AdminRoomChairController : Controller
         {
             RoomCode = model.RoomCode.Trim().ToUpper(),
             RoomName = model.RoomName?.Trim(),
+            DepartmentId = model.DepartmentId,
             Status = model.Status ?? "Active"
         };
 

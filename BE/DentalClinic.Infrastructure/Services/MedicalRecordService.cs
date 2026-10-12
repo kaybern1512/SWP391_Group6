@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.MedicalRecords.DTOs;
+using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -201,6 +202,29 @@ public class MedicalRecordService : IMedicalRecordService
                 }
             }
             await _dbContext.SaveChangesAsync(ct);
+        }
+
+        if (request.AppointmentId.HasValue)
+        {
+            var appointment = await _dbContext.Appointments
+                .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId.Value, ct);
+
+            if (appointment != null && appointment.Status != AppointmentStatus.Completed && appointment.Status != AppointmentStatus.Cancelled)
+            {
+                var oldStatus = appointment.Status;
+                appointment.Status = AppointmentStatus.Completed;
+                appointment.CompletedAt = DateTime.UtcNow;
+
+                _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+                {
+                    AppointmentId = appointment.AppointmentId,
+                    OldStatus = oldStatus,
+                    NewStatus = AppointmentStatus.Completed,
+                    ChangedByUserId = dentistUserId,
+                    Note = "Bác sĩ hoàn tất khám và lưu chẩn đoán bệnh án.",
+                    ChangedAt = DateTime.UtcNow
+                });
+            }
         }
 
         record.UpdatedAt = DateTime.UtcNow;

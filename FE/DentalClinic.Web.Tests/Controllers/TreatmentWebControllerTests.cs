@@ -21,10 +21,12 @@ namespace DentalClinic.Web.Tests.Controllers;
 public class TreatmentWebControllerTests
 {
     private readonly Mock<ITreatmentApiService> _apiMock;
+    private readonly Mock<IAdminApiService> _adminApiMock;
 
     public TreatmentWebControllerTests()
     {
         _apiMock = new Mock<ITreatmentApiService>();
+        _adminApiMock = new Mock<IAdminApiService>();
     }
 
     private static ControllerContext CreateContextWithUser(long userId, string role, string name = "User")
@@ -122,8 +124,10 @@ public class TreatmentWebControllerTests
             }));
         _apiMock.Setup(x => x.GetDentistOptionsAsync(null))
             .ReturnsAsync(ApiResult<List<TreatmentDentistOptionDto>>.Success(new List<TreatmentDentistOptionDto>()));
+        _adminApiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<AdminDepartmentDto>>.Success(new List<AdminDepartmentDto>()));
 
-        var controller = new DepartmentTreatmentController(_apiMock.Object)
+        var controller = new DepartmentTreatmentController(_apiMock.Object, _adminApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(30, "DepartmentManager")
         };

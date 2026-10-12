@@ -76,6 +76,19 @@ public class DepartmentScheduleController : Controller
         var deptsResult = await _adminApi.GetDepartmentsAsync();
         var departments = deptsResult.IsSuccess && deptsResult.Data != null ? deptsResult.Data : new();
 
+        if (!departmentId.HasValue && User.IsInRole("DepartmentManager"))
+        {
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (long.TryParse(userIdStr, out var currentUserId))
+            {
+                var myDept = departments.FirstOrDefault(d => d.ManagerUserId == currentUserId);
+                if (myDept != null)
+                {
+                    departmentId = myDept.DepartmentId;
+                }
+            }
+        }
+
         var usersResult = await _adminApi.GetUsersAsync("Dentist");
         var dentists = usersResult.IsSuccess && usersResult.Data != null ? usersResult.Data : new();
 

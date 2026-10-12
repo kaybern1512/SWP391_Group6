@@ -59,6 +59,7 @@
                                     <th style="width: 50px;">#</th>
                                     <th>Mã phòng</th>
                                     <th>Tên phòng</th>
+                                    <th>Khoa trực thuộc</th>
                                     <th class="text-center">Số lượng ghế</th>
                                     <th class="text-center">Ghế sẵn sàng</th>
                                     <th>Trạng thái phòng</th>
@@ -79,6 +80,16 @@
                                             </td>
                                             <td>
                                                 <span class="fw-semibold">@(string.IsNullOrEmpty(rm.RoomName) ? "Phòng " + rm.RoomCode : rm.RoomName)</span>
+                                            </td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(rm.DepartmentName))
+                                                {
+                                                    <span class="badge bg-primary-subtle text-primary border">@rm.DepartmentName</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-light text-muted border">Chưa gán</span>
+                                                }
                                             </td>
                                             <td class="text-center">
                                                 <a asp-controller="AdminRoomChair" asp-action="Index" asp-route-tab="chairs" asp-route-roomId="@rm.RoomId" class="badge bg-light text-primary border text-decoration-none">
@@ -115,6 +126,7 @@
                                                         data-id="@rm.RoomId"
                                                         data-code="@rm.RoomCode"
                                                         data-name="@rm.RoomName"
+                                                        data-departmentid="@(rm.DepartmentId?.ToString() ?? "")"
                                                         data-status="@rm.Status">
                                                     <i class="bi bi-pencil-square"></i> Sửa
                                                 </button>
@@ -342,6 +354,16 @@
                         <input type="text" name="RoomName" class="form-control" placeholder="Ví dụ: Phòng Tiểu phẫu 1, Phòng Khám Tổng quát..." maxlength="100" />
                     </div>
                     <div class="mb-3">
+                        <label class="form-label fw-semibold">Khoa trực thuộc</label>
+                        <select name="DepartmentId" class="form-select">
+                            <option value="">-- Chọn chuyên khoa (tùy chọn) --</option>
+                            @foreach (var dept in Model.Departments)
+                            {
+                                <option value="@dept.DepartmentId">@dept.DepartmentName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label fw-semibold">Trạng thái ban đầu</label>
                         <select name="Status" class="form-select">
                             <option value="Active">Đang hoạt động (Active)</option>
@@ -380,6 +402,16 @@
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Tên phòng khám</label>
                         <input type="text" name="RoomName" id="editRoomName" class="form-control" maxlength="100" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Khoa trực thuộc</label>
+                        <select name="DepartmentId" id="editRoomDepartmentId" class="form-select">
+                            <option value="">-- Chọn chuyên khoa (tùy chọn) --</option>
+                            @foreach (var dept in Model.Departments)
+                            {
+                                <option value="@dept.DepartmentId">@dept.DepartmentName</option>
+                            }
+                        </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Trạng thái</label>
@@ -504,6 +536,7 @@
                     document.getElementById('editRoomId').value = this.dataset.id;
                     document.getElementById('editRoomCode').value = this.dataset.code;
                     document.getElementById('editRoomName').value = this.dataset.name || '';
+                    document.getElementById('editRoomDepartmentId').value = this.dataset.departmentid || '';
                     document.getElementById('editRoomStatus').value = this.dataset.status || 'Active';
                     editRoomModal.show();
                 });

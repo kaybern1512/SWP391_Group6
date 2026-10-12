@@ -362,4 +362,34 @@ public class AppointmentsController : ControllerBase
         var result = await _appointmentService.GetDentistAppointmentsAsync(dentistUserId, fromDate, toDate, ct);
         return Ok(result);
     }
+
+    [HttpPost("api/dentist/appointments/{id:long}/start")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DentistStartAppointment(long id, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _appointmentService.DentistStartAppointmentAsync(id, dentistUserId, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("api/dentist/appointments/{id:long}/complete")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DentistCompleteAppointment(long id, [FromBody] CompleteAppointmentRequest? request, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _appointmentService.DentistCompleteAppointmentAsync(id, dentistUserId, request?.Notes, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
 }

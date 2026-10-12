@@ -74,6 +74,7 @@ public class RoomChairManageViewModel
 {
     public List<AdminRoomDto> Rooms { get; set; } = new();
     public List<AdminDentalChairDto> Chairs { get; set; } = new();
+    public List<AdminDepartmentDto> Departments { get; set; } = new();
     public long? SelectedRoomId { get; set; }
     public string ActiveTab { get; set; } = "rooms"; // "rooms" or "chairs"
     public RoomFormModel RoomForm { get; set; } = new();
@@ -90,6 +91,8 @@ public class RoomFormModel
 
     [StringLength(100, ErrorMessage = "Tên phòng không quá 100 ký tự")]
     public string? RoomName { get; set; }
+
+    public long? DepartmentId { get; set; }
 
     public string Status { get; set; } = "Active";
 }

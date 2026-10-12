@@ -1509,6 +1509,104 @@ public class AppointmentService : IAppointmentService
         return ApiResponse<List<AppointmentDto>>.Ok(list);
     }
 
+    public async Task<ApiResponse> DentistStartAppointmentAsync(
+        long appointmentId,
+        long dentistUserId,
+        CancellationToken ct = default)
+    {
+        var appointment = await _dbContext.Appointments.FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+        if (appointment == null)
+        {
+            return ApiResponse.Fail("Không tìm thấy thông tin lịch hẹn.");
+        }
+
+        if (appointment.AssignedDentistUserId != dentistUserId)
+        {
+            return ApiResponse.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
+        }
+
+        if (appointment.Status != AppointmentStatus.CheckedIn && appointment.Status != AppointmentStatus.Confirmed)
+        {
+            return ApiResponse.Fail($"Không thể bắt đầu ca khám ở trạng thái '{appointment.Status}'. Bệnh nhân cần làm thủ tục check-in trước.");
+        }
+
+        var oldStatus = appointment.Status;
+        appointment.Status = AppointmentStatus.InService;
+        appointment.UpdatedAt = DateTime.UtcNow;
+
+        _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+        {
+            AppointmentId = appointment.AppointmentId,
+            OldStatus = oldStatus,
+            NewStatus = AppointmentStatus.InService,
+            ChangedByUserId = dentistUserId,
+            Note = "Bác sĩ tiếp nhận bệnh nhân vào ghế điều trị.",
+            ChangedAt = DateTime.UtcNow
+        });
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        await _notificationService.CreateNotificationAsync(
+            appointment.PatientUserId,
+            appointment.AppointmentId,
+            "AppointmentInService",
+            "Đang điều trị tại ghế",
+            $"Bác sĩ đã bắt đầu thực hiện ca khám/thủ thuật cho lịch hẹn {appointment.AppointmentCode}.",
+            ct);
+
+        return ApiResponse.Ok("Đã tiếp nhận bệnh nhân vào ghế điều trị thành công.");
+    }
+
+    public async Task<ApiResponse> DentistCompleteAppointmentAsync(
+        long appointmentId,
+        long dentistUserId,
+        string? notes = null,
+        CancellationToken ct = default)
+    {
+        var appointment = await _dbContext.Appointments.FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+        if (appointment == null)
+        {
+            return ApiResponse.Fail("Không tìm thấy thông tin lịch hẹn.");
+        }
+
+        if (appointment.AssignedDentistUserId != dentistUserId)
+        {
+            return ApiResponse.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
+        }
+
+        if (appointment.Status != AppointmentStatus.InService && appointment.Status != AppointmentStatus.CheckedIn)
+        {
+            return ApiResponse.Fail($"Không thể hoàn thành ca khám ở trạng thái '{appointment.Status}'.");
+        }
+
+        var oldStatus = appointment.Status;
+        appointment.Status = AppointmentStatus.Completed;
+        appointment.CompletedAt = DateTime.UtcNow;
+        appointment.UpdatedAt = DateTime.UtcNow;
+
+        _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+        {
+            AppointmentId = appointment.AppointmentId,
+            OldStatus = oldStatus,
+            NewStatus = AppointmentStatus.Completed,
+            ChangedByUserId = dentistUserId,
+            Note = string.IsNullOrWhiteSpace(notes) ? "Bác sĩ đã hoàn tất ca khám và điều trị." : notes.Trim(),
+            ChangedAt = DateTime.UtcNow
+        });
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        await _notificationService.CreateNotificationAsync(
+            appointment.PatientUserId,
+            appointment.AppointmentId,
+            "AppointmentCompleted",
+            "Ca khám đã hoàn tất",
+            $"Ca khám mã {appointment.AppointmentCode} đã hoàn thành. Quý khách vui lòng để lại đánh giá dịch vụ để chúng tôi phục vụ tốt hơn!",
+            ct);
+
+        return ApiResponse.Ok("Đã hoàn thành ca khám thành công.");
+    }
+
     private async Task<string> GenerateUniqueAppointmentCodeAsync(CancellationToken ct)
     {
         var datePrefix = $"APP-{DateTime.UtcNow:yyyyMMdd}-";

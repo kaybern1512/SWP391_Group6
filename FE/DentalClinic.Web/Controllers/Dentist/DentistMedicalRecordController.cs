@@ -22,7 +22,7 @@ public class DentistMedicalRecordController : Controller
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index(long? patientId = null, string? search = null)
+    public async Task<IActionResult> Index(long? patientId = null, string? search = null, long? appointmentId = null)
     {
         var patientListResult = await _medicalRecordApi.SearchPatientsAsync(search);
         var patients = patientListResult.IsSuccess && patientListResult.Data != null ? patientListResult.Data : new List<PatientLookupDto>();
@@ -51,7 +51,8 @@ public class DentistMedicalRecordController : Controller
             Search = search,
             NewEntryForm = new CreateClinicalEntryFormModel
             {
-                PatientUserId = targetPatientId ?? 0
+                PatientUserId = targetPatientId ?? 0,
+                AppointmentId = appointmentId
             }
         };
 

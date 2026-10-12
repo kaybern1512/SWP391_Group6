@@ -28,4 +28,37 @@ public class DentistAppointmentController : Controller
         };
         return View("~/Views/Dentist/Appointments/Today.cshtml", vm);
     }
+
+    [HttpPost("{id:long}/Start")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Start(long id)
+    {
+        var result = await _appointmentApiService.DentistStartAppointmentAsync(id);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Đã bắt đầu buổi khám và điều trị cho bệnh nhân.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể bắt đầu buổi khám.";
+        }
+        return RedirectToAction(nameof(Today));
+    }
+
+    [HttpPost("{id:long}/Complete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Complete(long id, [FromForm] string? notes)
+    {
+        var result = await _appointmentApiService.DentistCompleteAppointmentAsync(id, notes);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Đã hoàn thành buổi khám và điều trị.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể hoàn thành buổi khám.";
+        }
+        return RedirectToAction(nameof(Today));
+    }
 }
+

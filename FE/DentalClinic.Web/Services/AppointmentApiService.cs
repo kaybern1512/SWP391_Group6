@@ -204,6 +204,16 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendGetAsync<List<AppointmentDto>>($"/api/dentist/appointments{qs}");
     }
 
+    public async Task<ApiResult> DentistStartAppointmentAsync(long id)
+    {
+        return await SendPostActionAsync($"/api/dentist/appointments/{id}/start", new object());
+    }
+
+    public async Task<ApiResult> DentistCompleteAppointmentAsync(long id, string? notes = null)
+    {
+        return await SendPostActionAsync($"/api/dentist/appointments/{id}/complete", new CompleteAppointmentRequest { Notes = notes });
+    }
+
     // ==========================================
     // GENERIC HTTP HELPERS
     // ==========================================

@@ -134,8 +134,27 @@
                                     }
                                 </td>
                                 <td class="text-end pe-3">
-                                    <div class="btn-group">
-                                        <a asp-controller="DentistMedicalRecord" asp-action="Index" asp-route-patientId="@appt.PatientUserId" class="btn btn-sm btn-outline-primary" title="Mở hồ sơ bệnh án & Sơ đồ răng">
+                                    <div class="d-flex align-items-center justify-content-end gap-1">
+                                        @if (appt.Status == "CheckedIn")
+                                        {
+                                            <form asp-controller="DentistAppointment" asp-action="Start" asp-route-id="@appt.AppointmentId" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-success fw-semibold shadow-sm" title="Tiếp nhận bệnh nhân vào ghế điều trị">
+                                                    <i class="bi bi-play-circle me-1"></i>Vào Khám
+                                                </button>
+                                            </form>
+                                        }
+                                        else if (appt.Status == "InService")
+                                        {
+                                            <form asp-controller="DentistAppointment" asp-action="Complete" asp-route-id="@appt.AppointmentId" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-primary fw-semibold shadow-sm" title="Hoàn tất buổi khám và điều trị">
+                                                    <i class="bi bi-check-circle me-1"></i>Hoàn Thành
+                                                </button>
+                                            </form>
+                                        }
+
+                                        <a asp-controller="DentistMedicalRecord" asp-action="Index" asp-route-patientId="@appt.PatientUserId" asp-route-appointmentId="@appt.AppointmentId" class="btn btn-sm btn-outline-primary" title="Mở hồ sơ bệnh án & Sơ đồ răng">
                                             <i class="bi bi-journal-medical me-1"></i> Bệnh Án
                                         </a>
                                         <a asp-controller="DentistPrescription" asp-action="Index" asp-route-search="@appt.PatientCode" class="btn btn-sm btn-outline-success" title="Kê đơn hoặc xem đơn thuốc">

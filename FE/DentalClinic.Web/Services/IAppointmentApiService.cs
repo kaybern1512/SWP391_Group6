@@ -43,4 +43,6 @@ public interface IAppointmentApiService
     // Dentist
     Task<ApiResult<List<AppointmentDto>>> GetDentistTodayAppointmentsAsync();
     Task<ApiResult<List<AppointmentDto>>> GetDentistAppointmentsAsync(DateOnly? fromDate = null, DateOnly? toDate = null);
+    Task<ApiResult> DentistStartAppointmentAsync(long id);
+    Task<ApiResult> DentistCompleteAppointmentAsync(long id, string? notes = null);
 }

@@ -180,3 +180,8 @@ public class ReceptionistNoShowRequest
 {
     public string? Note { get; set; }
 }
+
+public class CompleteAppointmentRequest
+{
+    public string? Notes { get; set; }
+}

@@ -12,16 +12,33 @@ namespace DentalClinic.Web.Controllers.Department;
 public class DepartmentTreatmentController : Controller
 {
     private readonly ITreatmentApiService _treatmentApiService;
+    private readonly IAdminApiService _adminApi;
 
-    public DepartmentTreatmentController(ITreatmentApiService treatmentApiService)
+    public DepartmentTreatmentController(ITreatmentApiService treatmentApiService, IAdminApiService adminApi)
     {
         _treatmentApiService = treatmentApiService;
+        _adminApi = adminApi;
     }
 
     [HttpGet("")]
     [HttpGet("Index")]
     public async Task<IActionResult> Index(long? departmentId, string? search)
     {
+        if (!departmentId.HasValue && User.IsInRole("DepartmentManager"))
+        {
+            var deptsResult = await _adminApi.GetDepartmentsAsync();
+            var departments = deptsResult.IsSuccess && deptsResult.Data != null ? deptsResult.Data : new();
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (long.TryParse(userIdStr, out var currentUserId))
+            {
+                var myDept = departments.FirstOrDefault(d => d.ManagerUserId == currentUserId);
+                if (myDept != null)
+                {
+                    departmentId = myDept.DepartmentId;
+                }
+            }
+        }
+
         var result = await _treatmentApiService.GetDepartmentTreatmentProgressAsync(departmentId, search);
         var dentistsResult = await _treatmentApiService.GetDentistOptionsAsync(departmentId);
 

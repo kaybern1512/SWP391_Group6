@@ -414,9 +414,17 @@
                 <form asp-action="CreateEntry" method="post">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="PatientUserId" value="@record.PatientUserId" />
+                    <input type="hidden" name="AppointmentId" value="@(Model.NewEntryForm?.AppointmentId)" />
                     <input type="hidden" id="toothConditionsJsonInput" name="ToothConditionsJson" value="[]" />
 
                     <div class="modal-body p-4">
+                        @if (Model.NewEntryForm?.AppointmentId.HasValue == true)
+                        {
+                            <div class="alert alert-info py-2 px-3 mb-3 small d-flex align-items-center gap-2">
+                                <i class="bi bi-calendar2-check-fill text-primary"></i>
+                                <span>Đang ghi nhận chẩn đoán liên kết ca khám bệnh ID: <strong>#@Model.NewEntryForm.AppointmentId</strong>. Lịch khám sẽ tự động cập nhật sang trạng thái Hoàn thành.</span>
+                            </div>
+                        }
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-slate-700">Chẩn đoán chính của bác sĩ <span class="text-danger">*</span></label>
                             <input type="text" name="Diagnosis" class="form-control" placeholder="Ví dụ: Sâu răng mặt nhai R16, Viêm nướu quanh răng R46..." required />
