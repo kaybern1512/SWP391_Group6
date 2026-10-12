@@ -246,20 +246,55 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }, true);
 
-  // 7. Mobile Sidebar & Backdrop Toggle
+  // 7. Sidebar Toggle (Both Desktop Collapse & Mobile Offcanvas)
   const sidebarToggle = document.getElementById('sidebarToggleBtn');
+  const sidebarCollapseHeader = document.getElementById('sidebarCollapseHeaderBtn');
   const sidebar = document.getElementById('appSidebar');
+  const appWrapper = document.querySelector('.app-wrapper');
   const backdrop = document.getElementById('sidebarBackdrop');
 
+  // Restore saved collapse state on desktop
+  if (appWrapper && window.innerWidth > 992) {
+    if (localStorage.getItem('dc_sidebar_collapsed') === 'true') {
+      appWrapper.classList.add('sidebar-collapsed');
+    }
+  }
+
   function toggleSidebar() {
-    if (sidebar) sidebar.classList.toggle('show');
-    if (backdrop) backdrop.classList.toggle('show');
+    if (window.innerWidth <= 992) {
+      if (sidebar) sidebar.classList.toggle('show');
+      if (backdrop) backdrop.classList.toggle('show');
+    } else {
+      if (appWrapper) {
+        appWrapper.classList.toggle('sidebar-collapsed');
+        const isCollapsed = appWrapper.classList.contains('sidebar-collapsed');
+        localStorage.setItem('dc_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+      }
+    }
   }
 
   if (sidebarToggle) {
     sidebarToggle.addEventListener('click', toggleSidebar);
   }
-  if (backdrop) {
-    backdrop.addEventListener('click', toggleSidebar);
+  if (sidebarCollapseHeader) {
+    sidebarCollapseHeader.addEventListener('click', toggleSidebar);
   }
+  if (backdrop) {
+    backdrop.addEventListener('click', function () {
+      if (sidebar) sidebar.classList.remove('show');
+      if (backdrop) backdrop.classList.remove('show');
+    });
+  }
+
+  // Keyboard shortcut: Ctrl + B or Alt + S
+  document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey && e.key.toLowerCase() === 'b') || (e.altKey && e.key.toLowerCase() === 's')) {
+      // Don't intercept when user is typing in form inputs
+      const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+      if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    }
+  });
 });

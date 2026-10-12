@@ -22,14 +22,19 @@
 
 <aside class="app-sidebar" id="appSidebar">
     <!-- Brand Header -->
-    <div class="sidebar-header">
-        <div class="clinic-brand-logo">
-            <i class="bi bi-hospital"></i>
+    <div class="sidebar-header d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-2" style="min-width: 0;">
+            <div class="clinic-brand-logo">
+                <i class="bi bi-hospital"></i>
+            </div>
+            <div class="clinic-brand-text">
+                <div class="clinic-name">DentalCare</div>
+                <span class="clinic-tagline">Hệ Thống Quản Lý Nha Khoa</span>
+            </div>
         </div>
-        <div class="clinic-brand-text">
-            <div class="clinic-name">DentalCare</div>
-            <span class="clinic-tagline">Hệ Thống Quản Lý Nha Khoa</span>
-        </div>
+        <button type="button" id="sidebarCollapseHeaderBtn" class="btn btn-sm btn-link text-white-50 p-1 d-flex align-items-center justify-content-center text-decoration-none" title="Thu gọn thanh điều hướng (Ctrl + B)">
+            <i class="bi bi-chevron-left fs-6"></i>
+        </button>
     </div>
 
     <!-- Navigation Groups -->

@@ -21,7 +21,14 @@
     @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
-@if (User.Identity?.IsAuthenticated == true)
+@{
+    var currentCtrl = ViewContext.RouteData.Values["controller"]?.ToString();
+    var isHomePage = string.Equals(currentCtrl, "Home", StringComparison.OrdinalIgnoreCase);
+    var hideSidebar = isHomePage || (ViewData["HideSidebar"] as bool? == true) || (ViewData["UsePublicLayout"] as bool? == true);
+    var showPortalShell = User.Identity?.IsAuthenticated == true && !hideSidebar;
+}
+
+@if (showPortalShell)
 {
     <div class="app-wrapper">
         <partial name="_Sidebar" />
@@ -79,6 +86,32 @@ else
                     </li>
                 </ul>
                 <div class="d-flex align-items-center gap-2">
+                    @if (User.Identity?.IsAuthenticated == true)
+                    {
+                        var userRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "Patient";
+                        var portalUrl = userRole.ToLowerInvariant() switch
+                        {
+                            "patient" => "/Patient/Dashboard",
+                            "dentist" => "/Dentist/Dashboard",
+                            "receptionist" => "/Receptionist/Dashboard",
+                            "departmentmanager" => "/Department/Dashboard",
+                            "systemadministrator" => "/Admin/Dashboard",
+                            _ => "/Patient/Dashboard"
+                        };
+                        var portalLabel = userRole.ToLowerInvariant() switch
+                        {
+                            "patient" => "Cổng Bệnh Nhân",
+                            "dentist" => "Bàn Khám Bác Sĩ",
+                            "receptionist" => "Bàn Lễ Tân",
+                            "departmentmanager" => "Bàn Trưởng Khoa",
+                            "systemadministrator" => "Quản Trị Hệ Thống",
+                            _ => "Cổng Làm Việc"
+                        };
+                        <a href="@portalUrl" class="btn btn-primary btn-sm d-flex align-items-center gap-1 shadow-sm px-3 py-2 fw-semibold">
+                            <i class="bi bi-speedometer2"></i>
+                            <span>@portalLabel</span>
+                        </a>
+                    }
                     <partial name="_UserMenu" />
                 </div>
             </div>

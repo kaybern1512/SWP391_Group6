@@ -49,6 +49,23 @@
                 <div class="fw-bold text-dark text-truncate">@fullName</div>
                 <div class="small text-muted text-truncate">@email</div>
             </li>
+            @{
+                var dashboardUrl = role.ToLowerInvariant() switch
+                {
+                    "patient" => "/Patient/Dashboard",
+                    "dentist" => "/Dentist/Dashboard",
+                    "receptionist" => "/Receptionist/Dashboard",
+                    "departmentmanager" => "/Department/Dashboard",
+                    "systemadministrator" => "/Admin/Dashboard",
+                    _ => "/Patient/Dashboard"
+                };
+            }
+            <li>
+                <a class="dropdown-item py-2 d-flex align-items-center gap-2 text-primary fw-semibold" href="@dashboardUrl">
+                    <i class="bi bi-speedometer2 text-primary"></i>
+                    <span>Cổng Làm Việc / Dashboard</span>
+                </a>
+            </li>
             <li>
                 <a class="dropdown-item py-2 d-flex align-items-center gap-2" asp-controller="Profile" asp-action="Index">
                     <i class="bi bi-person-circle text-primary"></i>
