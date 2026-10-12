@@ -25,6 +25,7 @@ public class DepartmentServiceDto
 public class DentistOptionDto
 {
     public long UserId { get; set; }
+    public long DentistUserId => UserId;
     public string FullName { get; set; } = string.Empty;
     public string? Qualification { get; set; }
     public int? YearsOfExperience { get; set; }

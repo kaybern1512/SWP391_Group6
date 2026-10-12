@@ -146,6 +146,12 @@
                     <span class="badge bg-primary-subtle text-primary px-3 py-2 fs-6" id="badgeSelectedDept"></span>
                 </div>
                 <div class="card-body p-4">
+                    <div class="alert alert-info d-flex align-items-center mb-3 py-2 px-3 border-0 bg-info-subtle text-info-emphasis rounded-3">
+                        <i class="bi bi-info-circle-fill fs-5 me-2 text-info"></i>
+                        <div class="small">
+                            <strong>Gợi ý:</strong> Hãy chọn dịch vụ khám chính để giữ khung giờ hẹn ban đầu. Khi đến khám, bạn hoàn toàn có thể yêu cầu Bác sĩ thực hiện thêm bất kỳ dịch vụ hay thủ thuật nào khác theo nhu cầu (Bác sĩ sẽ kiểm tra và tổng hợp vào hóa đơn sau buổi khám).
+                        </div>
+                    </div>
                     <div id="serviceLoading" class="text-center py-5 d-none">
                         <div class="spinner-border text-primary" role="status"></div>
                         <p class="mt-2 text-muted">Đang tải danh mục dịch vụ...</p>
@@ -269,7 +275,7 @@
                         <textarea asp-for="ReasonForVisit" id="inputReasonForVisit" class="form-control" rows="4" placeholder="Ví dụ: Đau nhức răng hàm dưới bên trái khi ăn đồ nóng lạnh, muốn cạo vôi và kiểm tra tổng quát định kỳ..."></textarea>
                         <div id="reasonErrorMsg" class="text-danger small mt-1 d-none"><i class="bi bi-exclamation-circle me-1"></i>Vui lòng nhập lý do khám tối thiểu 5 ký tự.</div>
                         <span asp-validation-for="ReasonForVisit" class="text-danger small"></span>
-                        <div class="form-text">Mô tả chi tiết giúp đội ngũ bác sĩ chuẩn bị chu đáo trang thiết bị và dự kiến thời gian thăm khám hiệu quả nhất cho bạn.</div>
+                        <div class="form-text">Mô tả chi tiết giúp đội ngũ bác sĩ chuẩn bị chu đáo trang thiết bị và dự kiến thời gian thăm khám hiệu quả nhất cho bạn. Bạn có thể ghi chú thêm các dịch vụ khác muốn làm tại đây (ví dụ: cạo vôi răng, trám răng, nhổ răng khôn...).</div>
                     </div>
                 </div>
                 <div class="card-footer bg-white d-flex justify-content-between py-3">
@@ -591,17 +597,18 @@
                 const dentists = await res.json();
 
                 dentists.forEach(d => {
+                    const dId = d.dentistUserId || d.userId;
                     const row = document.createElement('div');
                     row.className = 'mt-2';
                     row.innerHTML = `
-                        <div class="card selection-card p-3" data-dentist-id="${d.dentistUserId}" onclick="selectDentist(${d.dentistUserId}, '${d.fullName}')">
+                        <div class="card selection-card p-3" data-dentist-id="${dId}" onclick="selectDentist(${dId}, '${d.fullName}')">
                             <div class="d-flex align-items-center gap-3">
                                 <div class="selection-icon bg-light text-primary">
                                     <i class="bi bi-person-badge fs-4"></i>
                                 </div>
                                 <div class="flex-grow-1">
                                     <div class="fw-bold text-dark">${d.fullName} <span class="badge bg-light text-muted border ms-1">${d.employeeCode || ''}</span></div>
-                                    <small class="text-muted">${d.specialization || 'Bác sĩ chuyên khoa'}</small>
+                                    <small class="text-muted">${d.qualification || d.specialization || 'Bác sĩ chuyên khoa'}</small>
                                 </div>
                             </div>
                         </div>
@@ -617,16 +624,24 @@
         }
 
         function selectDentist(id, name) {
-            selectedDentist = { id, name };
-            document.getElementById('hiddenDentistId').value = id || '';
+            const dentistId = (id && parseInt(id) > 0) ? parseInt(id) : null;
+            selectedDentist = { id: dentistId, name: name };
+            document.getElementById('hiddenDentistId').value = dentistId ? dentistId.toString() : '';
+
             document.querySelectorAll('#dentistOptionsGrid .selection-card').forEach(c => {
                 const cId = c.getAttribute('data-dentist-id');
-                if ((!id && !cId) || (id && cId === id.toString())) {
+                const parsedCId = (cId && parseInt(cId) > 0) ? parseInt(cId) : null;
+
+                if (!dentistId && !parsedCId) {
+                    c.classList.add('active');
+                } else if (dentistId && parsedCId === dentistId) {
                     c.classList.add('active');
                 } else {
                     c.classList.remove('active');
                 }
             });
+
+            onDateOrDentistChange();
         }
 
         function switchToAnyDentistAndReload() {

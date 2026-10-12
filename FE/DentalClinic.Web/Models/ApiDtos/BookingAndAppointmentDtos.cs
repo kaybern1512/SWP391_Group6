@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace DentalClinic.Web.Models.ApiDtos;
 
@@ -24,10 +25,27 @@ public class DepartmentServiceDto
 
 public class DentistOptionDto
 {
-    public long DentistUserId { get; set; }
+    [JsonPropertyName("userId")]
+    public long UserId { get; set; }
+
+    [JsonPropertyName("dentistUserId")]
+    public long DentistUserId 
+    { 
+        get => UserId != 0 ? UserId : _dentistUserId; 
+        set 
+        { 
+            _dentistUserId = value; 
+            if (UserId == 0) UserId = value; 
+        } 
+    }
+    private long _dentistUserId;
+
     public string FullName { get; set; } = string.Empty;
     public string? EmployeeCode { get; set; }
     public string? Specialization { get; set; }
+    public string? Qualification { get; set; }
+    public int? YearsOfExperience { get; set; }
+    public string? Biography { get; set; }
     public string? AvatarUrl { get; set; }
     public bool IsAvailable { get; set; }
 }
