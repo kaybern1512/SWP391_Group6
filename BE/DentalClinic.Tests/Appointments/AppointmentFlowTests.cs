@@ -1153,4 +1153,51 @@ public class AppointmentFlowTests
         Assert.False(confirmResult.Success);
         Assert.Contains("không thuộc chuyên khoa", confirmResult.Message);
     }
+
+    [Fact]
+    public async Task Test25_ManagerConfirmAsync_DispatchesEmailToPatient()
+    {
+        using var db = CreateDbContext(nameof(Test25_ManagerConfirmAsync_DispatchesEmailToPatient));
+        await SeedBasicDataAsync(db);
+
+        var mockEmail = new Mock<IEmailService>();
+        var service = new AppointmentService(db, _mockNotification.Object, mockEmail.Object, _mockLogger.Object);
+
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ReasonForVisit = "Khám răng định kỳ"
+        });
+        var apptId = bookResult.Data!.AppointmentId;
+        await service.ReceptionistForwardAsync(apptId, 201, "OK");
+
+        var confirmRequest = new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(2).AddHours(9).AddMinutes(30)
+        };
+
+        var confirmResult = await service.ManagerConfirmAsync(apptId, 301, confirmRequest);
+
+        Assert.True(confirmResult.Success);
+        Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data!.Status);
+
+        mockEmail.Verify(e => e.SendAppointmentConfirmedEmailAsync(
+            "patient1@dentalcare.com",
+            "Nguyễn Văn Bệnh Nhân 1",
+            It.Is<string>(code => !string.IsNullOrEmpty(code)),
+            It.Is<string>(q => q.StartsWith("Q")),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<DateTime>(),
+            It.IsAny<DateTime>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

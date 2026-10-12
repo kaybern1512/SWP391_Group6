@@ -20,15 +20,26 @@ public class AppointmentService : IAppointmentService
 {
     private readonly DentalClinicDbContext _dbContext;
     private readonly INotificationService _notificationService;
+    private readonly IEmailService? _emailService;
     private readonly ILogger<AppointmentService> _logger;
 
     public AppointmentService(
         DentalClinicDbContext dbContext,
         INotificationService notificationService,
         ILogger<AppointmentService> logger)
+        : this(dbContext, notificationService, null, logger)
+    {
+    }
+
+    public AppointmentService(
+        DentalClinicDbContext dbContext,
+        INotificationService notificationService,
+        IEmailService? emailService,
+        ILogger<AppointmentService> logger)
     {
         _dbContext = dbContext;
         _notificationService = notificationService;
+        _emailService = emailService;
         _logger = logger;
     }
 
@@ -1340,6 +1351,74 @@ public class AppointmentService : IAppointmentService
                 "Lịch khám đã được xác nhận!",
                 $"Lịch khám mã {appointment.AppointmentCode} đã được Trưởng khoa xác nhận thành công. Số thứ tự tiếp đón của bạn là {queueNumber}.",
                 ct);
+
+            if (_emailService != null)
+            {
+                try
+                {
+                    var patient = await _dbContext.PatientProfiles
+                        .AsNoTracking()
+                        .Include(p => p.User)
+                        .FirstOrDefaultAsync(p => p.UserId == appointment.PatientUserId, ct);
+
+                    var recipientEmail = patient?.User?.Email;
+                    if (!string.IsNullOrWhiteSpace(recipientEmail))
+                    {
+                        var patientName = !string.IsNullOrWhiteSpace(patient?.FullName)
+                            ? patient.FullName
+                            : "Quý khách";
+
+                        var serviceName = "Khám răng miệng";
+                        if (appointment.RequestedServiceId.HasValue)
+                        {
+                            var svc = await _dbContext.DepartmentServices
+                                .AsNoTracking()
+                                .FirstOrDefaultAsync(s => s.DepartmentServiceId == appointment.RequestedServiceId.Value, ct);
+                            if (svc != null && !string.IsNullOrWhiteSpace(svc.ServiceName))
+                            {
+                                serviceName = svc.ServiceName;
+                            }
+                        }
+
+                        var deptName = appointment.Department?.Name ?? "Chuyên khoa Răng Hàm Mặt";
+
+                        var dentistName = "Bác sĩ phụ trách";
+                        if (appointment.AssignedDentistUserId.HasValue)
+                        {
+                            var dentist = await _dbContext.StaffProfiles
+                                .AsNoTracking()
+                                .FirstOrDefaultAsync(s => s.UserId == appointment.AssignedDentistUserId.Value, ct);
+                            if (dentist != null && !string.IsNullOrWhiteSpace(dentist.FullName))
+                            {
+                                dentistName = dentist.FullName;
+                            }
+                        }
+
+                        var roomName = room.RoomName;
+                        if (chair != null && !string.IsNullOrWhiteSpace(chair.ChairCode))
+                        {
+                            roomName = $"{roomName} (Ghế {chair.ChairCode})";
+                        }
+
+                        await _emailService.SendAppointmentConfirmedEmailAsync(
+                            recipientEmail,
+                            patientName,
+                            appointment.AppointmentCode,
+                            queueNumber,
+                            serviceName,
+                            deptName,
+                            dentistName,
+                            roomName,
+                            finalStart.Value,
+                            finalEnd.Value,
+                            ct);
+                    }
+                }
+                catch (Exception emailEx)
+                {
+                    _logger.LogWarning(emailEx, "Failed to send confirmation email for appointment {AppointmentId} to patient {PatientUserId}", appointmentId, appointment.PatientUserId);
+                }
+            }
 
             var dto = await MapToDtoAsync(appointmentId, ct);
             return ApiResponse<AppointmentDto>.Ok(dto!, "Xác nhận lịch hẹn thành công.");
