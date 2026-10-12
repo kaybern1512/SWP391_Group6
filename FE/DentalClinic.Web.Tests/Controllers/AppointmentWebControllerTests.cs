@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using DentalClinic.Web.Controllers.Dentist;
 using DentalClinic.Web.Controllers.Department;
 using DentalClinic.Web.Controllers.Patient;
 using DentalClinic.Web.Controllers.Receptionist;
@@ -407,5 +408,53 @@ public class AppointmentWebControllerTests
         var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
         redirect.ActionName.Should().Be("TodayCheckIn");
         controller.TempData["SuccessMessage"].Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Receptionist_NoShow_Failure_RedirectsToTodayCheckInWithErrorMessage()
+    {
+        _apiMock.Setup(x => x.ReceptionistMarkNoShowAsync(10, "Không đến khám"))
+            .ReturnsAsync(ApiResult.Failure("Lỗi ghi nhận vắng mặt"));
+
+        var controller = new ReceptionistAppointmentController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(201, "Receptionist"),
+            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
+        };
+
+        var result = await controller.NoShow(10, "Không đến khám");
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("TodayCheckIn");
+        controller.TempData["ErrorMessage"].Should().Be("Lỗi ghi nhận vắng mặt");
+    }
+
+    [Fact]
+    public async Task DentistAppointment_Today_ReturnsViewWithAppointments()
+    {
+        _apiMock.Setup(x => x.GetDentistTodayAppointmentsAsync())
+            .ReturnsAsync(ApiResult<List<AppointmentDto>>.Success(new List<AppointmentDto>
+            {
+                new()
+                {
+                    AppointmentId = 99,
+                    AppointmentCode = "APT-99",
+                    PatientName = "Nguyễn Văn A",
+                    ServiceName = "Khám răng định kỳ",
+                    Status = "CheckedIn"
+                }
+            }));
+
+        var controller = new DentistAppointmentController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(301, "Dentist")
+        };
+
+        var result = await controller.Today();
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<DentistTodayAppointmentsViewModel>().Subject;
+        vm.Appointments.Should().HaveCount(1);
+        vm.Appointments[0].AppointmentCode.Should().Be("APT-99");
     }
 }

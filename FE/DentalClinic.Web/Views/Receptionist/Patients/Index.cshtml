@@ -74,13 +74,14 @@
                         <th>Email</th>
                         <th>Trạng Thái</th>
                         <th>Ngày Tiếp Nhận</th>
+                        <th class="text-end pe-4">Thao Tác</th>
                     </tr>
                 </thead>
                 <tbody class="fs-14">
                     @if (Model.Patients.Count == 0)
                     {
                         <tr>
-                            <td colspan="6" class="text-center py-5 text-muted">
+                            <td colspan="7" class="text-center py-5 text-muted">
                                 <div class="mb-2"><i class="bi bi-inbox fs-1 text-secondary opacity-50"></i></div>
                                 <div>Không tìm thấy bệnh nhân nào phù hợp với từ khóa tìm kiếm.</div>
                             </td>
@@ -142,6 +143,11 @@
                                 </td>
                                 <td>
                                     <span class="text-muted">@patient.CreatedAt.ToString("dd/MM/yyyy HH:mm")</span>
+                                </td>
+                                <td class="text-end pe-4">
+                                    <a asp-controller="ReceptionistAppointment" asp-action="TodayCheckIn" asp-route-search="@(patient.Code ?? patient.FullName)" class="btn btn-sm btn-outline-primary" title="Kiểm tra ca khám và check-in hôm nay">
+                                        <i class="bi bi-calendar-check me-1"></i> Check-in
+                                    </a>
                                 </td>
                             </tr>
                         }
