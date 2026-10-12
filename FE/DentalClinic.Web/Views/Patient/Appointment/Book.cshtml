@@ -224,10 +224,23 @@
                         <div class="spinner-border text-primary" role="status"></div>
                         <p class="mt-2 text-muted">Đang tra cứu lịch làm việc và khung giờ trống...</p>
                     </div>
-                    <div id="noSlotsMessage" class="alert alert-warning d-none text-center py-4">
-                        <i class="bi bi-exclamation-triangle fs-3 d-block mb-2 text-warning"></i>
-                        <h5>Không tìm thấy khung giờ khám khả dụng</h5>
-                        <p class="mb-0">Trong ngày đã chọn, bác sĩ hoặc khoa không còn khung giờ trống. Vui lòng quay lại bước 3 để chọn ngày khác hoặc chọn tùy chọn "Bất kỳ bác sĩ khả dụng".</p>
+                    <div id="noSlotsMessage" class="alert alert-warning d-none text-center py-4 border-warning shadow-sm rounded-3">
+                        <i class="bi bi-calendar-x fs-1 d-block mb-2 text-warning"></i>
+                        <h5 class="fw-bold text-dark mb-2">Chưa tìm thấy khung giờ khám phù hợp</h5>
+                        <p class="text-muted mb-3" id="noSlotsDetailText">
+                            Trong ngày đã chọn, bác sĩ đã kín lịch hoặc chuyên khoa đã hết ca làm việc trống.
+                        </p>
+                        <div class="d-flex justify-content-center gap-2 flex-wrap">
+                            <button type="button" class="btn btn-primary px-3 shadow-sm" onclick="goToStep(3)">
+                                <i class="bi bi-calendar-date me-1"></i> Quay lại Bước 3: Đổi ngày khám
+                            </button>
+                            <button type="button" class="btn btn-outline-primary px-3" onclick="switchToAnyDentistAndReload()">
+                                <i class="bi bi-people me-1"></i> Chọn "Bất kỳ bác sĩ khả dụng"
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary px-3" onclick="goToStep(1)">
+                                <i class="bi bi-hospital me-1"></i> Chọn Chuyên khoa khác
+                            </button>
+                        </div>
                     </div>
                     <div class="row g-3" id="slotsGrid"></div>
                 </div>
@@ -616,6 +629,11 @@
             });
         }
 
+        function switchToAnyDentistAndReload() {
+            selectDentist(null, 'Bất kỳ bác sĩ khả dụng');
+            loadSlots();
+        }
+
         function onDateOrDentistChange() {
             selectedSlot = null;
             document.getElementById('hiddenScheduledStart').value = '';
@@ -645,6 +663,11 @@
                 loading.classList.add('d-none');
 
                 if (!slots || slots.length === 0) {
+                    const detailText = document.getElementById('noSlotsDetailText');
+                    if (detailText) {
+                        const doctorLabel = selectedDentist.id ? `Bác sĩ ${selectedDentist.name}` : 'Khoa';
+                        detailText.innerText = `Vào ngày ${date}, ${doctorLabel} không còn khung giờ trống hoặc đã kết thúc ca làm việc trong ngày. Vui lòng chọn ngày khác hoặc chọn tùy chọn bác sĩ bất kỳ.`;
+                    }
                     noSlots.classList.remove('d-none');
                     return;
                 }
