@@ -73,6 +73,11 @@ sqlcmd -S .\SQLEXPRESS -E -i "DB\Dental_Clinic_Final_Database_Clean.sql"
 sqlcmd -S .\SQLEXPRESS -d DentalClinicManagementDB -E -i "DB\Seed_Booking_Foundational_Data.sql"
 ```
 
+### Bước 3: Nạp lịch hẹn Demo & Lịch sử khám bệnh nhân (Tùy chọn)
+```powershell
+sqlcmd -S .\SQLEXPRESS -d DentalClinicManagementDB -E -i "DB\Seed_Demo_Appointments.sql"
+```
+
 ---
 
 ## 💻 V. KHỞI CHẠY HỆ THỐNG
@@ -80,7 +85,7 @@ sqlcmd -S .\SQLEXPRESS -d DentalClinicManagementDB -E -i "DB\Seed_Booking_Founda
 ### 1. Khởi chạy Backend Web API (Terminal 1)
 ```powershell
 cd BE\DentalClinic.Api
-dotnet run
+dotnet run --launch-profile "https"
 ```
 - **API URL (HTTPS)**: `https://localhost:7350`
 - **Swagger Documentation**: `https://localhost:7350/swagger`
@@ -88,18 +93,38 @@ dotnet run
 ### 2. Khởi chạy Frontend MVC (Terminal 2)
 ```powershell
 cd FE\DentalClinic.Web
-dotnet run
+dotnet run --launch-profile "https"
 ```
 - **Web App URL (HTTPS)**: `https://localhost:7129`
 
 ---
 
-## 👥 VI. TÀI KHOẢN MẪU ĐỂ TEST HỆ THỐNG
+## 👥 VI. DANH SÁCH TÀI KHOẢN MẪU TEST TẤT CẢ CÁC ROLE
 
-| Vai trò | Email đăng nhập | Mật khẩu mặc định |
-| :--- | :--- | :--- |
-| **System Admin** | `admin@dentalclinic.com` | `Password123@` |
-| **Department Manager** | `manager@dentalclinic.com` | `Password123@` |
-| **Dentist** | `dentist1@dentalclinic.com` | `Password123@` |
-| **Receptionist** | `receptionist1@dentalclinic.com` | `Password123@` |
-| **Patient** | `patient1@dentalclinic.com` | `Password123@` |
+* **Mật khẩu dùng chung cho tất cả tài khoản bên dưới:** `Password123@`
+
+| Vai trò (Role) | Chuyên khoa / Họ tên | Email đăng nhập | Mật khẩu mặc định |
+| :--- | :--- | :--- | :--- |
+| **System Administrator** | Quản trị viên hệ thống | `admin@dentalcare.com` | `Password123@` |
+| **Receptionist** | Lễ tân quầy tiếp đón | `receptionist@dentalcare.com` | `Password123@` |
+| **Department Manager** | Khoa Răng Tổng Quát & Nội Nha (Khoa 1) | `manager1@dentalcare.com` | `Password123@` |
+| **Department Manager** | Khoa Chỉnh Nha & Thẩm Mỹ (Khoa 2) | `manager2@dentalcare.com` | `Password123@` |
+| **Department Manager** | Khoa Phẫu Thuật Miệng & Implant (Khoa 3) | `manager@dentalcare.com` | `Password123@` |
+| **Department Manager** | Khoa Răng Trẻ Em (Khoa 4) | `manager4@dentalcare.com` | `Password123@` |
+| **Dentist** | Bác Sĩ Trần Văn Hùng | `dentist@dentalcare.com` | `Password123@` |
+| **Dentist** | Bác Sĩ Nguyễn Thị Phương Thảo | `dentist2@dentalcare.com` | `Password123@` |
+| **Dentist** | Bác Sĩ Phạm Quốc Anh | `dentist3@dentalcare.com` | `Password123@` |
+| **Dentist** | Bác Sĩ Lê Thị Mai Lan | `dentist4@dentalcare.com` | `Password123@` |
+| **Patient (Demo Check-in)** | Võ Văn Đông (Lịch hẹn 12:40 hôm nay) | `vovandong1512@gmail.com` | `Password123@` *(hoặc Google)* |
+| **Patient** | Trần Mai Chi | `patient1@dentalcare.com` | `Password123@` |
+| **Patient** | Nguyễn Bảo Nam | `patient2@dentalcare.com` | `Password123@` |
+| **Patient** | Phạm Thu Trang | `patient3@dentalcare.com` | `Password123@` |
+| **Patient** | Đặng Quốc Tuấn | `patient4@dentalcare.com` | `Password123@` |
+| **Patient** | Bé Vũ Hải Đăng | `patient5@dentalcare.com` | `Password123@` |
+| **Patient** | Lê Hoàng Minh | `lehoangminh.test@dentalcare.com` | `Password123@` |
+| **Patient** | Nguyễn Thị Hoàng Lan | `hoanglan.patient@dentalcare.com` | `Password123@` |
+| **Patient** | Lý Đình Phong | `dinhphong.patient@dentalcare.com` | `Password123@` |
+| **Patient** | Phan Thanh Hằng | `thanhhang.patient@dentalcare.com` | `Password123@` |
+| **Patient** | Bé Trần Minh Đức | `minhduc.patient@dentalcare.com` | `Password123@` |
+| **Patient** | Đỗ Khánh Ly | `khanhly.patient@dentalcare.com` | `Password123@` |
+
