@@ -123,8 +123,9 @@
                                     <option value="">-- Chọn Ghế --</option>
                                     @foreach (var c in Model.Chairs)
                                     {
+                                        var chairLabel = !string.IsNullOrWhiteSpace(c.ChairNumber) ? c.ChairNumber : (!string.IsNullOrWhiteSpace(c.ChairCode) ? c.ChairCode : $"Số {c.DentalChairId}");
                                         <option value="@c.DentalChairId" data-room-id="@c.RoomId" selected="@(c.DentalChairId == Model.DentalChairId)">
-                                            Ghế @c.ChairNumber @(c.IsOccupied ? " [Đang dùng]" : " [Trống]")
+                                            Ghế @chairLabel @(c.IsOccupied ? " [Đang dùng]" : " [Sẵn sàng]")
                                         </option>
                                     }
                                 </select>

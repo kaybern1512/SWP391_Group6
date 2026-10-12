@@ -144,6 +144,7 @@ public class ChairOptionDto
     public long DentalChairId { get; set; }
     public long RoomId { get; set; }
     public string ChairCode { get; set; } = string.Empty;
+    public string ChairNumber => ChairCode;
     public string Status { get; set; } = "Active";
 }
 

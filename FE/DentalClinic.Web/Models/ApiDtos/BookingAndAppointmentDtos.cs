@@ -141,7 +141,15 @@ public class DentalChairOptionDto
 {
     public int DentalChairId { get; set; }
     public int RoomId { get; set; }
-    public string ChairNumber { get; set; } = string.Empty;
+    [JsonPropertyName("chairCode")]
+    public string ChairCode { get; set; } = string.Empty;
+    [JsonPropertyName("chairNumber")]
+    public string ChairNumber
+    {
+        get => !string.IsNullOrEmpty(_chairNumber) ? _chairNumber : ChairCode;
+        set => _chairNumber = value;
+    }
+    private string _chairNumber = string.Empty;
     public bool IsOccupied { get; set; }
 }
 
