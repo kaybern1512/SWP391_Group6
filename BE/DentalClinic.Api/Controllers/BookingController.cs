@@ -32,18 +32,22 @@ public class BookingController : ControllerBase
     }
 
     [HttpGet("departments/{departmentId:long}/services")]
+    [HttpGet("services")]
     [ProducesResponseType(typeof(ApiResponse<List<DepartmentServiceDto>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetServices(long departmentId, CancellationToken ct)
+    public async Task<IActionResult> GetServices([FromRoute] long? departmentId, [FromQuery(Name = "departmentId")] long? queryDepartmentId, CancellationToken ct)
     {
-        var result = await _bookingService.GetServicesByDepartmentAsync(departmentId, ct);
+        var targetDepartmentId = departmentId ?? queryDepartmentId ?? 0;
+        var result = await _bookingService.GetServicesByDepartmentAsync(targetDepartmentId, ct);
         return Ok(result);
     }
 
     [HttpGet("departments/{departmentId:long}/dentists")]
+    [HttpGet("dentists")]
     [ProducesResponseType(typeof(ApiResponse<List<DentistOptionDto>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetDentists(long departmentId, CancellationToken ct)
+    public async Task<IActionResult> GetDentists([FromRoute] long? departmentId, [FromQuery(Name = "departmentId")] long? queryDepartmentId, CancellationToken ct)
     {
-        var result = await _bookingService.GetDentistsByDepartmentAsync(departmentId, ct);
+        var targetDepartmentId = departmentId ?? queryDepartmentId ?? 0;
+        var result = await _bookingService.GetDentistsByDepartmentAsync(targetDepartmentId, ct);
         return Ok(result);
     }
 
