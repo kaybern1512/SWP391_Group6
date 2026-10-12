@@ -5,7 +5,7 @@
 
 <div class="container-fluid p-0">
     <!-- Page Header -->
-    <div class="page-header-dc">
+    <div class="page-header-dc mb-4">
         <div>
             <div class="d-flex align-items-center gap-2 mb-1">
                 <span class="badge-dc badge-role-patient">Bệnh Nhân</span>
@@ -14,35 +14,88 @@
                     <span class="badge bg-white text-muted border small">Mã BN: @Model.Code</span>
                 }
             </div>
-            <h1 class="page-title">Chào mừng trở lại, @Model.FullName</h1>
-            <p class="page-subtitle">@Model.Subtitle</p>
+            <h1 class="page-title fs-3 fw-bold text-dark">Xin chào, @Model.FullName!</h1>
+            <p class="page-subtitle text-muted mb-0">Cổng chăm sóc sức khỏe răng miệng & hồ sơ điện tử DentalCare</p>
         </div>
-        <div class="page-actions">
+        <div class="page-actions d-flex flex-wrap align-items-center gap-2">
+            <a asp-controller="Home" asp-action="Index" class="btn btn-outline-primary fw-semibold" title="Về trang chủ xem bảng giá và chuyên khoa">
+                <i class="bi bi-house-door me-1"></i> Trang Chủ & Bảng Giá
+            </a>
             <a asp-controller="Profile" asp-action="Index" class="btn btn-dc-outline">
                 <i class="bi bi-person-circle me-1"></i> Hồ Sơ Của Tôi
             </a>
-            <a asp-controller="PatientAppointment" asp-action="Book" class="btn btn-dc-primary">
-                <i class="bi bi-calendar-plus me-1"></i> Đặt Lịch Khám
+            <a asp-controller="PatientAppointment" asp-action="Book" class="btn btn-dc-primary shadow-sm">
+                <i class="bi bi-calendar-plus-fill me-1"></i> Đặt Lịch Khám Ngay
             </a>
         </div>
     </div>
 
-    <!-- 4 KPI Stat Cards (No Fake Numbers) -->
+    <!-- Welcome & Quick Booking Banner -->
+    <div class="card border-0 shadow-sm mb-4 text-white overflow-hidden" style="background: linear-gradient(135deg, #0d6efd 0%, #0aa2c0 100%); border-radius: 16px;">
+        <div class="card-body p-4 p-md-5">
+            <div class="row align-items-center g-4">
+                <div class="col-lg-8">
+                    <span class="badge bg-white text-primary fw-bold px-3 py-2 rounded-pill mb-3 shadow-sm">
+                        <i class="bi bi-stars text-warning me-1"></i> Chăm Sóc Nụ Cười Toàn Diện
+                    </span>
+                    <h2 class="fw-bold mb-2 text-white">Bạn Cần Khám Răng Hoặc Tư Vấn Chuyên Khoa?</h2>
+                    <p class="mb-4 text-white-50 fs-6 lh-base" style="max-width: 650px;">
+                        Đặt lịch khám nhanh chóng chỉ trong 1 phút &bull; Lựa chọn bác sĩ chuyên khoa phù hợp &bull; Tiếp nhận khám đúng giờ không cần xếp hàng chờ đợi.
+                    </p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a asp-controller="PatientAppointment" asp-action="Book" class="btn btn-light btn-lg text-primary fw-bold px-4 py-2 shadow-sm">
+                            <i class="bi bi-calendar-check-fill me-1"></i> Đặt Lịch Khám Ngay
+                        </a>
+                        <a href="/#pricing" class="btn btn-outline-light btn-lg fw-semibold px-4 py-2">
+                            <i class="bi bi-tags-fill me-1"></i> Khám Phá Bảng Giá Dịch Vụ
+                        </a>
+                    </div>
+                </div>
+                <div class="col-lg-4 text-center d-none d-lg-block">
+                    <div class="p-4 bg-white bg-opacity-10 rounded-4 border border-white border-opacity-25 shadow-sm text-start">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <i class="bi bi-shield-check text-warning fs-3"></i>
+                            <h6 class="fw-bold text-white mb-0">Cam Kết Y Khoa DentalCare</h6>
+                        </div>
+                        <ul class="list-unstyled text-white-50 small mb-3 ps-1">
+                            <li class="mb-1"><i class="bi bi-check2 text-white me-1"></i> 100% Bác sĩ Răng Hàm Mặt có CCHN</li>
+                            <li class="mb-1"><i class="bi bi-check2 text-white me-1"></i> Vô trùng tiêu chuẩn Class B Quốc tế</li>
+                            <li><i class="bi bi-check2 text-white me-1"></i> Bảng giá niêm yết minh bạch</li>
+                        </ul>
+                        <div class="pt-2 border-top border-white border-opacity-25 text-white small">
+                            <i class="bi bi-telephone-fill me-1 text-warning"></i> Tổng đài: <strong>1900 1234</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4 Status Summary Cards (Thân thiện, không dùng ký hiệu gạch ngang gây hiểu lầm) -->
     <div class="row g-3 mb-4">
         @foreach (var stat in Model.StatCards)
         {
             <div class="col-sm-6 col-xl-3">
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span class="stat-label">@stat.Title</span>
-                        <div class="stat-icon-box stat-icon-@stat.ColorClass">
-                            <i class="bi @stat.Icon"></i>
+                <div class="stat-card h-100 p-3 bg-white rounded-3 border shadow-sm d-flex flex-column justify-content-between">
+                    <div class="stat-header d-flex justify-content-between align-items-center mb-2">
+                        <span class="stat-label text-muted fw-semibold small">@stat.Title</span>
+                        <div class="stat-icon-box stat-icon-@stat.ColorClass" style="width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px;">
+                            <i class="bi @stat.Icon fs-5"></i>
                         </div>
                     </div>
                     <div>
-                        <div class="stat-value">@stat.Value</div>
-                        <div class="stat-note">
-                            <i class="bi bi-info-circle"></i> @stat.Note
+                        <div class="stat-value fs-4 fw-bold text-dark mb-1">
+                            @if (stat.Value == "--" || stat.Value == "Chưa có")
+                            {
+                                <span class="badge bg-light text-secondary border fw-normal small px-2 py-1">Chưa có lịch hẹn</span>
+                            }
+                            else
+                            {
+                                <span>@stat.Value</span>
+                            }
+                        </div>
+                        <div class="stat-note small text-muted">
+                            <i class="bi bi-info-circle me-1"></i> @stat.Note
                         </div>
                     </div>
                 </div>
@@ -50,23 +103,31 @@
         }
     </div>
 
-    <!-- Quick Action Cards Section -->
+    <!-- Quick Action Cards Section (Dịch Vụ & Tiện Ích Dành Cho Bạn) -->
     <div class="mb-4">
-        <h5 class="font-heading fs-6 fw-bold text-dark mb-3">Thao Tác Lâm Sàng Nhanh</h5>
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+            <div>
+                <h5 class="font-heading fs-6 fw-bold text-dark mb-0">Dịch Vụ & Tiện Ích Dành Cho Bạn</h5>
+                <p class="text-muted small mb-0">Truy cập nhanh các chức năng thăm khám, hồ sơ sức khỏe và đơn thuốc điện tử</p>
+            </div>
+            <a href="/#pricing" class="btn btn-sm btn-outline-primary fw-semibold">
+                <i class="bi bi-tags me-1"></i> Xem Bảng Giá Toàn Viện <i class="bi bi-arrow-right ms-1"></i>
+            </a>
+        </div>
         <div class="row g-3">
             @foreach (var card in Model.Cards)
             {
                 <div class="col-md-6 col-lg-4 col-xl-2">
-                    <div class="card-quick-action text-center h-100 p-3 d-flex flex-column justify-content-between">
+                    <div class="card-quick-action text-center h-100 p-3 d-flex flex-column justify-content-between bg-white border rounded-3 shadow-sm transition-hover">
                         <div>
-                            <div class="quick-icon-box quick-icon-@card.ColorClass mx-auto mb-2">
-                                <i class="bi @card.Icon"></i>
+                            <div class="quick-icon-box quick-icon-@card.ColorClass mx-auto mb-2" style="width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px;">
+                                <i class="bi @card.Icon fs-4"></i>
                             </div>
-                            <h6 class="fw-bold text-dark mb-1">@card.Title</h6>
+                            <h6 class="fw-bold text-dark mb-1 fs-6">@card.Title</h6>
                             <p class="text-muted small mb-3">@card.Description</p>
                         </div>
                         <div>
-                            <a href="@card.ActionUrl" class="btn btn-light btn-sm text-primary w-100 fw-semibold border">
+                            <a href="@card.ActionUrl" class="btn btn-light btn-sm text-primary w-100 fw-semibold border shadow-none">
                                 @card.ActionText <i class="bi bi-arrow-right ms-1"></i>
                             </a>
                         </div>
@@ -80,51 +141,144 @@
     <div class="row g-4">
         <!-- Upcoming Visits & Treatment Schedule -->
         <div class="col-lg-8">
-            <div class="card-dc">
-                <div class="card-dc-header">
+            <div class="card-dc bg-white border rounded-3 shadow-sm mb-4">
+                <div class="card-dc-header p-3 border-bottom d-flex justify-content-between align-items-center">
                     <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-calendar-event text-primary"></i>
-                        <span>Lịch Khám Sắp Tới & Tiến Độ Điều Trị</span>
+                        <i class="bi bi-calendar-event text-primary fs-5"></i>
+                        <span class="fw-bold text-dark">Lịch Khám Sắp Tới & Tiến Độ Điều Trị</span>
                     </div>
-                    <span class="badge-dc badge-status-neutral">Trực Tiếp</span>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Hồ Sơ Của Bạn</span>
                 </div>
-                <div class="card-dc-body p-0">
-                    <partial name="_EmptyState" model="Model.EmptyState" />
+                <div class="card-dc-body p-4 text-center">
+                    <div class="py-4">
+                        <div class="avatar-lg bg-light text-primary rounded-circle d-inline-flex align-items-center justify-content-center p-3 mb-3" style="width: 64px; height: 64px;">
+                            <i class="bi bi-calendar-check fs-2 text-primary"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-2">Bạn Hiện Chưa Có Lịch Khám Sắp Tới</h6>
+                        <p class="text-muted small mb-4 mx-auto" style="max-width: 480px;">
+                            Khám và lấy cao răng định kỳ mỗi 6 tháng giúp phát hiện sớm sâu răng và bảo vệ hàm răng chắc khỏe. Hãy đặt lịch hẹn để bác sĩ chăm sóc bạn nhé!
+                        </p>
+                        <div class="d-flex justify-content-center flex-wrap gap-2">
+                            <a asp-controller="PatientAppointment" asp-action="Book" class="btn btn-dc-primary">
+                                <i class="bi bi-calendar-plus me-1"></i> Đặt Lịch Khám Ngay
+                            </a>
+                            <a href="/#pricing" class="btn btn-outline-secondary">
+                                <i class="bi bi-tags me-1"></i> Xem Bảng Giá Dịch Vụ
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Health Care Tips Card -->
+            <div class="card-dc bg-white border rounded-3 shadow-sm p-4">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <i class="bi bi-lightbulb-fill text-warning fs-5"></i>
+                    <h6 class="fw-bold text-dark mb-0">Lời Khuyên Chăm Sóc Nụ Cười Từ Bác Sĩ</h6>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="fw-bold text-dark small mb-1"><i class="bi bi-clock-history text-primary me-1"></i> Đánh răng đúng cách</div>
+                            <p class="text-muted small mb-0">Đánh răng tối thiểu 2 lần/ngày, mỗi lần ít nhất 2 phút và chải theo chiều dọc của răng.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="fw-bold text-dark small mb-1"><i class="bi bi-shield-check text-success me-1"></i> Dùng chỉ nha khoa</div>
+                            <p class="text-muted small mb-0">Làm sạch kẽ răng bằng chỉ tơ hoặc máy tăm nước mỗi ngày để ngừa viêm nha chu và hôi miệng.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 h-100">
+                            <div class="fw-bold text-dark small mb-1"><i class="bi bi-calendar2-heart text-danger me-1"></i> Khám răng định kỳ</div>
+                            <p class="text-muted small mb-0">Kiểm tra răng miệng và lấy vôi răng mỗi 6 tháng/lần để bảo vệ men răng và nướu.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Invoices & Billing Summary -->
+        <!-- Invoices & Billing Summary + Pricing & Contact -->
         <div class="col-lg-4">
-            <div class="card-dc mb-4">
-                <div class="card-dc-header">
+            <!-- Quick Pricing Summary Card -->
+            <div class="card-dc bg-white border rounded-3 shadow-sm mb-4">
+                <div class="card-dc-header p-3 border-bottom d-flex justify-content-between align-items-center">
                     <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-receipt text-warning"></i>
-                        <span>Hóa Đơn & Viện Phí</span>
+                        <i class="bi bi-tags-fill text-primary"></i>
+                        <span class="fw-bold text-dark">Dịch Vụ Phổ Biến & Bảng Giá</span>
                     </div>
+                    <span class="badge bg-success-subtle text-success">Ưu đãi</span>
+                </div>
+                <div class="card-dc-body p-3">
+                    <div class="list-group list-group-flush mb-3">
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <div>
+                                <div class="fw-semibold text-dark small">Cạo vôi răng & Đánh bóng</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Sóng siêu âm dịu nhẹ</div>
+                            </div>
+                            <span class="text-primary fw-bold small">Từ 150.000 đ</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <div>
+                                <div class="fw-semibold text-dark small">Trám răng thẩm mỹ</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Composite thẩm mỹ cao cấp</div>
+                            </div>
+                            <span class="text-primary fw-bold small">Từ 250.000 đ</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <div>
+                                <div class="fw-semibold text-dark small">Nhổ răng khôn Piezotome</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Công nghệ siêu âm không đau</div>
+                            </div>
+                            <span class="text-primary fw-bold small">Từ 1.000.000 đ</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <div>
+                                <div class="fw-semibold text-dark small">Tẩy trắng răng Laser</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Sáng bật 2-3 tone tức thì</div>
+                            </div>
+                            <span class="text-primary fw-bold small">Từ 1.800.000 đ</span>
+                        </div>
+                    </div>
+                    <a href="/#pricing" class="btn btn-outline-primary btn-sm w-100 fw-semibold">
+                        <i class="bi bi-journal-text me-1"></i> Xem Toàn Bộ Bảng Giá
+                    </a>
+                </div>
+            </div>
+
+            <!-- Invoices Summary -->
+            <div class="card-dc bg-white border rounded-3 shadow-sm mb-4">
+                <div class="card-dc-header p-3 border-bottom d-flex align-items-center gap-2">
+                    <i class="bi bi-receipt text-warning fs-5"></i>
+                    <span class="fw-bold text-dark">Hóa Đơn & Viện Phí</span>
                 </div>
                 <div class="card-dc-body p-4 text-center">
-                    <div class="empty-state-icon-box mb-2" style="width: 48px; height: 48px; font-size: 1.25rem;">
-                        <i class="bi bi-check2-circle text-success"></i>
+                    <div class="avatar-sm bg-success-subtle text-success rounded-circle d-inline-flex align-items-center justify-content-center p-2 mb-2" style="width: 44px; height: 44px;">
+                        <i class="bi bi-check2-circle fs-4"></i>
                     </div>
-                    <h6 class="fw-bold text-dark mb-1">Không Có Hóa Đơn Tồn Đọng</h6>
-                    <p class="text-muted small mb-0">Tất cả các dịch vụ khám và điều trị nha khoa trước đây đều đã được hoàn tất thanh toán.</p>
+                    <h6 class="fw-bold text-dark mb-1">Không Có Viện Phí Tồn Đọng</h6>
+                    <p class="text-muted small mb-0">Tất cả chi phí thăm khám nha khoa trước đây của bạn đã được quyết toán hoàn tất.</p>
                 </div>
             </div>
 
             <!-- Clinic Contact Notice -->
-            <div class="card-dc bg-light border">
+            <div class="card-dc bg-light border rounded-3 shadow-sm">
                 <div class="card-dc-body p-3">
                     <div class="d-flex align-items-center gap-2 mb-2">
                         <i class="bi bi-hospital text-primary"></i>
                         <span class="fw-semibold text-dark small">Phòng Khám Nha Khoa DentalCare</span>
                     </div>
-                    <p class="text-muted small mb-2">Cần thay đổi lịch hẹn hoặc nhận hỗ trợ nha khoa khẩn cấp? Vui lòng liên hệ quầy tiếp đón lễ tân.</p>
-                    <a href="tel:19001234" class="btn btn-dc-outline btn-sm w-100">
-                        <i class="bi bi-telephone me-1"></i> Tổng Đài Hỗ Trợ: 1900 1234
+                    <p class="text-muted small mb-3">Cần thay đổi lịch hẹn hoặc nhận tư vấn nha khoa khẩn cấp? Vui lòng liên hệ quầy tiếp đón lễ tân:</p>
+                    <a href="tel:19001234" class="btn btn-dc-outline btn-sm w-100 mb-2">
+                        <i class="bi bi-telephone-fill me-1 text-primary"></i> Tổng Đài Hỗ Trợ: 1900 1234
+                    </a>
+                    <a asp-controller="Home" asp-action="Index" class="btn btn-outline-secondary btn-sm w-100">
+                        <i class="bi bi-arrow-left me-1"></i> Quay Lại Trang Chủ
                     </a>
                 </div>
             </div>
         </div>
     </div>
 </div>
+

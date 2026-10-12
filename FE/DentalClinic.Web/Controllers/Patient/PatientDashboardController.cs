@@ -26,32 +26,32 @@ public class PatientDashboardController : Controller
                 new()
                 {
                     Title = "Lịch Khám Sắp Tới",
-                    Value = "--",
-                    Note = "Hệ thống tự động đồng bộ",
+                    Value = "Chưa có",
+                    Note = "Bạn chưa có lịch hẹn mới",
                     Icon = "bi-calendar-event",
                     ColorClass = "primary"
                 },
                 new()
                 {
                     Title = "Tiến Độ Điều Trị",
-                    Value = "--",
-                    Note = "Theo dõi theo phác đồ",
+                    Value = "Chưa có",
+                    Note = "Chưa có phác đồ đang điều trị",
                     Icon = "bi-graph-up-arrow",
                     ColorClass = "teal"
                 },
                 new()
                 {
                     Title = "Hóa Đơn Chờ Thanh Toán",
-                    Value = "--",
-                    Note = "Hệ thống viện phí",
+                    Value = "0 đ",
+                    Note = "Không có viện phí tồn đọng",
                     Icon = "bi-receipt",
                     ColorClass = "warning"
                 },
                 new()
                 {
                     Title = "Thông Báo Chưa Đọc",
-                    Value = "--",
-                    Note = "Thông báo từ phòng khám",
+                    Value = "0",
+                    Note = "Tất cả thông báo đã đọc",
                     Icon = "bi-bell",
                     ColorClass = "info"
                 }
