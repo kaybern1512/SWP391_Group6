@@ -28,4 +28,28 @@ public class PatientMedicalRecordController : Controller
 
         return View("~/Views/Patient/MedicalRecords/Index.cshtml", vm);
     }
+
+    [HttpGet("ImageContent/{id:long}")]
+    public async Task<IActionResult> ImageContent(long id)
+    {
+        var result = await _medicalRecordApi.GetImageContentAsync(id);
+        if (result == null)
+        {
+            return NotFound();
+        }
+
+        var allowedTypes = new[] { "image/jpeg", "image/png", "image/webp" };
+        var contentType = result.Value.ContentType.ToLowerInvariant();
+        if (!allowedTypes.Contains(contentType))
+        {
+            return BadRequest();
+        }
+
+        Response.Headers["Cache-Control"] = "private, no-cache, no-store, must-revalidate";
+        Response.Headers["Pragma"] = "no-cache";
+        Response.Headers["Expires"] = "0";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+
+        return File(result.Value.Stream, contentType);
+    }
 }

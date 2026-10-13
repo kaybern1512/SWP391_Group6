@@ -260,6 +260,56 @@
                                         <div class="text-muted fst-italic">@entry.ClinicalNotes</div>
                                     </div>
                                 }
+                                @if (entry.ImagingRecords.Any())
+                                {
+                                    <div class="col-12 mt-2 pt-2 border-top">
+                                        <div class="fw-semibold text-slate-800 small mb-2 d-flex align-items-center gap-2">
+                                            <i class="bi bi-images text-primary"></i>
+                                            <span>Phim X-Quang & Hình Ảnh Nha Khoa</span>
+                                            <span class="badge bg-primary-subtle text-primary rounded-pill fs-11">@entry.ImagingRecords.Count ảnh</span>
+                                        </div>
+                                        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-2">
+                                            @foreach (var img in entry.ImagingRecords)
+                                            {
+                                                var badgeColor = img.ImagingType switch
+                                                {
+                                                    "Panorama" => "bg-primary",
+                                                    "Periapical" => "bg-info text-white",
+                                                    "Cephalometric" => "bg-success",
+                                                    "Intraoral" => "bg-warning text-dark",
+                                                    _ => "bg-secondary"
+                                                };
+                                                var imgUrl = Url.Action("ImageContent", "PatientMedicalRecord", new { id = img.ImagingRecordId });
+                                                <div class="col">
+                                                    <div class="card h-100 border shadow-none bg-dark text-white rounded-3 overflow-hidden position-relative imaging-card">
+                                                        <div class="position-relative" style="height: 120px; background: #020617; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                                                            <img src="@imgUrl" alt="@img.ImagingType"
+                                                                 class="img-fluid w-100 h-100 object-fit-cover cursor-pointer"
+                                                                 onclick="openPatientLightbox('@imgUrl', '@img.ImagingType', '@img.CreatedAt.ToString("dd/MM/yyyy HH:mm")', '@(img.ResultSummary?.Replace("'", "\\'"))')"
+                                                                 title="Nhấp để phóng to ảnh X-quang" />
+                                                            <span class="position-absolute top-0 start-0 m-1 badge @badgeColor fs-10 shadow-sm">
+                                                                @img.ImagingType
+                                                            </span>
+                                                        </div>
+                                                        <div class="card-body p-2 bg-slate-900 fs-11 text-slate-300">
+                                                            <div class="text-white-50 mb-1"><i class="bi bi-clock me-1"></i>@img.CreatedAt.ToString("dd/MM/yyyy")</div>
+                                                            @if (!string.IsNullOrEmpty(img.ResultSummary))
+                                                            {
+                                                                <div class="text-truncate text-white" title="@img.ResultSummary">
+                                                                    <i class="bi bi-chat-left-dots me-1 text-primary"></i>@img.ResultSummary
+                                                                </div>
+                                                            }
+                                                            <button type="button" class="btn btn-xs btn-outline-light w-100 mt-2 py-1 fs-11"
+                                                                    onclick="openPatientLightbox('@imgUrl', '@img.ImagingType', '@img.CreatedAt.ToString("dd/MM/yyyy HH:mm")', '@(img.ResultSummary?.Replace("'", "\\'"))')">
+                                                                <i class="bi bi-arrows-fullscreen me-1"></i> Phóng to xem
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
                             </div>
                         </div>
                     }
@@ -283,3 +333,184 @@
         </div>
     }
 </div>
+
+<!-- ==================================================== -->
+<!-- PATIENT LIGHTBOX & DIAGNOSTIC VIEWER -->
+<!-- ==================================================== -->
+<div class="modal fade" id="patientLightboxModal" tabindex="-1" aria-labelledby="patientLightboxModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content bg-slate-950 text-white border-0">
+            <div class="modal-header bg-slate-900 border-bottom border-slate-800 py-2 px-3 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <span id="pLbTypeBadge" class="badge bg-primary fs-14">Panorama</span>
+                    <span id="pLbDateText" class="text-slate-400 small ms-2"></span>
+                </div>
+
+                <!-- Viewer Controls Toolbar -->
+                <div class="d-flex align-items-center gap-1 bg-slate-800 px-2 py-1 rounded-pill border border-slate-700">
+                    <button type="button" class="btn btn-sm btn-dark text-white rounded-circle p-2" onclick="pLbZoom(0.25)" title="Phóng to (+)">
+                        <i class="bi bi-zoom-in"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-dark text-white rounded-circle p-2" onclick="pLbZoom(-0.25)" title="Thu nhỏ (-)">
+                        <i class="bi bi-zoom-out"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-dark text-white rounded-pill px-3 py-1" onclick="pLbReset()" title="Kích thước gốc (1:1)">
+                        <i class="bi bi-arrows-angle-contract me-1"></i> <span id="pLbScalePercent">100%</span>
+                    </button>
+                    <div class="vr bg-secondary mx-1 my-1"></div>
+                    <button type="button" class="btn btn-sm btn-dark text-white rounded-circle p-2" onclick="pLbRotate()" title="Xoay 90 độ">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    <button type="button" id="pLbInvertBtn" class="btn btn-sm btn-dark text-warning rounded-pill px-3 py-1" onclick="pLbToggleInvert()" title="Chế độ âm bản X-quang (Invert colors)">
+                        <i class="bi bi-circle-half me-1"></i> Âm bản (Invert)
+                    </button>
+                </div>
+
+                <div class="d-flex align-items-center gap-2">
+                    <a id="pLbOpenDirectLink" href="#" target="_blank" class="btn btn-sm btn-outline-light rounded-pill px-3" title="Mở ảnh trong tab riêng">
+                        <i class="bi bi-box-arrow-up-right me-1"></i> Mở Tab Mới
+                    </a>
+                    <button type="button" class="btn btn-sm btn-outline-danger rounded-circle p-2" data-bs-dismiss="modal" aria-label="Close" title="Đóng Lightbox (ESC)">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="modal-body p-0 position-relative d-flex align-items-center justify-content-center overflow-hidden"
+                 id="pLbViewport"
+                 style="height: calc(100vh - 120px); background: #030712; cursor: grab; user-select: none;">
+                <img id="pLbMainImage" src="" alt="Dental Image"
+                     style="max-width: 90vw; max-height: 80vh; object-fit: contain; transform-origin: center center; transition: filter 0.2s ease;" />
+            </div>
+
+            <div class="modal-footer bg-slate-900 border-top border-slate-800 py-2 px-4 justify-content-between">
+                <div id="pLbSummaryContainer" class="text-slate-300 small">
+                    <strong class="text-white me-1"><i class="bi bi-file-earmark-medical me-1 text-primary"></i>Kết luận chẩn đoán:</strong>
+                    <span id="pLbSummaryText" class="fst-italic text-slate-300">Không có ghi chú.</span>
+                </div>
+                <div class="text-slate-500 fs-12">
+                    <span><i class="bi bi-mouse me-1"></i>Kéo chuột để di chuyển (Pan) • Cuộn chuột để phóng to/thu nhỏ (Zoom)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let pLbScale = 1;
+        let pLbRotation = 0;
+        let pLbIsInverted = false;
+        let pLbPosX = 0;
+        let pLbPosY = 0;
+        let pLbIsDragging = false;
+        let pLbStartX = 0;
+        let pLbStartY = 0;
+
+        function openPatientLightbox(imgUrl, imagingType, dateStr, summary) {
+            const modalEl = document.getElementById('patientLightboxModal');
+            const mainImg = document.getElementById('pLbMainImage');
+            const typeBadge = document.getElementById('pLbTypeBadge');
+            const dateText = document.getElementById('pLbDateText');
+            const summaryText = document.getElementById('pLbSummaryText');
+            const directLink = document.getElementById('pLbOpenDirectLink');
+
+            mainImg.src = imgUrl;
+            directLink.href = imgUrl;
+            typeBadge.innerText = imagingType || 'X-Quang';
+            dateText.innerText = dateStr ? 'Chụp ngày: ' + dateStr : '';
+            summaryText.innerText = summary && summary.trim() !== '' ? summary : 'Không có ghi chú lâm sàng bổ sung.';
+
+            pLbReset();
+
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        function pLbUpdateTransform() {
+            const img = document.getElementById('pLbMainImage');
+            const percent = document.getElementById('pLbScalePercent');
+            if (img) {
+                img.style.transform = `translate(${pLbPosX}px, ${pLbPosY}px) scale(${pLbScale}) rotate(${pLbRotation}deg)`;
+                img.style.filter = pLbIsInverted ? 'invert(100%) contrast(120%)' : 'none';
+                if (percent) {
+                    percent.innerText = Math.round(pLbScale * 100) + '%';
+                }
+            }
+        }
+
+        function pLbZoom(delta) {
+            pLbScale = Math.max(0.25, Math.min(6.0, pLbScale + delta));
+            pLbUpdateTransform();
+        }
+
+        function pLbRotate() {
+            pLbRotation = (pLbRotation + 90) % 360;
+            pLbUpdateTransform();
+        }
+
+        function pLbReset() {
+            pLbScale = 1;
+            pLbRotation = 0;
+            pLbIsInverted = false;
+            pLbPosX = 0;
+            pLbPosY = 0;
+            const invertBtn = document.getElementById('pLbInvertBtn');
+            if (invertBtn) {
+                invertBtn.classList.remove('btn-warning');
+                invertBtn.classList.add('btn-dark');
+            }
+            pLbUpdateTransform();
+        }
+
+        function pLbToggleInvert() {
+            pLbIsInverted = !pLbIsInverted;
+            const invertBtn = document.getElementById('pLbInvertBtn');
+            if (invertBtn) {
+                if (pLbIsInverted) {
+                    invertBtn.classList.remove('btn-dark');
+                    invertBtn.classList.add('btn-warning');
+                } else {
+                    invertBtn.classList.remove('btn-warning');
+                    invertBtn.classList.add('btn-dark');
+                }
+            }
+            pLbUpdateTransform();
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const viewport = document.getElementById('pLbViewport');
+            if (viewport) {
+                viewport.addEventListener('mousedown', function(e) {
+                    if (e.button === 0) {
+                        pLbIsDragging = true;
+                        pLbStartX = e.clientX - pLbPosX;
+                        pLbStartY = e.clientY - pLbPosY;
+                        viewport.style.cursor = 'grabbing';
+                    }
+                });
+
+                window.addEventListener('mousemove', function(e) {
+                    if (pLbIsDragging) {
+                        pLbPosX = e.clientX - pLbStartX;
+                        pLbPosY = e.clientY - pLbStartY;
+                        pLbUpdateTransform();
+                    }
+                });
+
+                window.addEventListener('mouseup', function() {
+                    if (pLbIsDragging) {
+                        pLbIsDragging = false;
+                        viewport.style.cursor = 'grab';
+                    }
+                });
+
+                viewport.addEventListener('wheel', function(e) {
+                    e.preventDefault();
+                    const delta = e.deltaY < 0 ? 0.2 : -0.2;
+                    pLbZoom(delta);
+                }, { passive: false });
+            }
+        });
+    </script>
+}
