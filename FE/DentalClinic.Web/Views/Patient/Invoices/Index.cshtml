@@ -1,0 +1,180 @@
+@model List<DentalClinic.Web.Models.ApiDtos.InvoiceDto>
+@{
+    ViewData["Title"] = "Lịch Sử Hóa Đơn & Thanh Toán";
+    var totalSpent = Model.Sum(i => i.PaidAmount);
+    var fullyPaidCount = Model.Count(i => i.Status == "Paid");
+    var pendingCount = Model.Count(i => i.Status == "Unpaid" || i.Status == "PartiallyPaid");
+}
+
+<div class="container-fluid px-0">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-receipt-cutoff text-primary me-2"></i>Lịch Sử Hóa Đơn & Thanh Toán
+            </h1>
+            <p class="text-muted mb-0">Theo dõi toàn bộ hóa đơn viện phí, các đợt đóng tiền và biên lai điều trị của bạn</p>
+        </div>
+        <div>
+            <a asp-controller="PatientAppointment" asp-action="Index" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-calendar3 me-1"></i> Lịch Khám Của Tôi
+            </a>
+        </div>
+    </div>
+
+    <!-- Alert Messages -->
+    <partial name="_AlertMessage" />
+
+    <!-- Stat Summary Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm rounded-3 border-start border-4 border-primary">
+                <div class="card-body">
+                    <span class="text-muted small text-uppercase fw-semibold">Tổng Viện Phí Đã Thanh Toán</span>
+                    <h3 class="fw-bold text-primary mb-0 mt-1">@totalSpent.ToString("N0") đ</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm rounded-3 border-start border-4 border-success">
+                <div class="card-body">
+                    <span class="text-muted small text-uppercase fw-semibold">Hóa Đơn Hoàn Tất</span>
+                    <h3 class="fw-bold text-success mb-0 mt-1">@fullyPaidCount</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm rounded-3 border-start border-4 border-warning">
+                <div class="card-body">
+                    <span class="text-muted small text-uppercase fw-semibold">Chờ Thanh Toán / Đặt Cọc</span>
+                    <h3 class="fw-bold text-warning mb-0 mt-1">@pendingCount</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invoices List -->
+    @if (Model.Count == 0)
+    {
+        <div class="card border-0 shadow-sm text-center py-5">
+            <div class="card-body">
+                <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
+                    <i class="bi bi-receipt fs-2 text-muted"></i>
+                </div>
+                <h5 class="fw-bold text-dark">Chưa có hóa đơn nào</h5>
+                <p class="text-muted mb-3">Bạn chưa có hóa đơn viện phí hoặc đợt thanh toán nào trong hệ thống phòng khám.</p>
+                <a asp-controller="PatientAppointment" asp-action="Book" class="btn btn-primary px-4">
+                    <i class="bi bi-calendar-plus me-1"></i> Đặt Lịch Khám Ngay
+                </a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h5 class="card-title mb-0 fw-bold text-dark">
+                    <i class="bi bi-journal-text text-primary me-2"></i>Danh Sách Hóa Đơn (@Model.Count)
+                </h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">Mã Hóa Đơn</th>
+                            <th>Ca Khám & Bác Sĩ</th>
+                            <th>Tổng Viện Phí</th>
+                            <th>Đã Thanh Toán</th>
+                            <th>Còn Lại</th>
+                            <th>Trạng Thái</th>
+                            <th>Ngày Lập</th>
+                            <th class="text-end pe-3">Chi Tiết</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var inv in Model)
+                        {
+                            <tr>
+                                <td class="ps-3">
+                                    <a asp-action="Detail" asp-route-id="@inv.InvoiceId" class="fw-bold font-monospace text-primary text-decoration-none">
+                                        @inv.InvoiceCode
+                                    </a>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">@inv.DepartmentName</div>
+                                    <div class="text-muted small">
+                                        <i class="bi bi-person me-1"></i>@(inv.DentistName ?? "Bác sĩ phòng khám")
+                                        @if (!string.IsNullOrEmpty(inv.AppointmentCode))
+                                        {
+                                            <span> &bull; <span class="badge bg-light text-dark font-monospace">@inv.AppointmentCode</span></span>
+                                        }
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="fw-bold text-dark">@inv.TotalAmount.ToString("N0") đ</span>
+                                    @if (inv.DiscountAmount > 0)
+                                    {
+                                        <div class="text-danger small"><i class="bi bi-tag-fill me-1"></i>Ưu đãi: @inv.DiscountAmount.ToString("N0") đ</div>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="fw-semibold text-success">@inv.PaidAmount.ToString("N0") đ</span>
+                                </td>
+                                <td>
+                                    @if (inv.RemainingAmount > 0)
+                                    {
+                                        <span class="fw-bold text-danger">@inv.RemainingAmount.ToString("N0") đ</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success-subtle text-success"><i class="bi bi-check me-1"></i>Đã đủ</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (inv.Status == "Paid")
+                                    {
+                                        <span class="badge bg-success px-3 py-2">
+                                            <i class="bi bi-check-circle me-1"></i>Đã thanh toán
+                                        </span>
+                                    }
+                                    else if (inv.Status == "PartiallyPaid")
+                                    {
+                                        <span class="badge bg-warning text-dark px-3 py-2">
+                                            <i class="bi bi-hourglass-split me-1"></i>Đã đặt cọc
+                                        </span>
+                                    }
+                                    else if (inv.Status == "Unpaid")
+                                    {
+                                        <span class="badge bg-danger px-3 py-2">
+                                            <i class="bi bi-clock me-1"></i>Chưa thanh toán
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary px-3 py-2">@inv.Status</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="small">@inv.CreatedAt.ToString("dd/MM/yyyy")</div>
+                                    <div class="text-muted small">@inv.CreatedAt.ToString("HH:mm")</div>
+                                </td>
+                                <td class="text-end pe-3">
+                                    <div class="btn-group btn-group-sm">
+                                        <a asp-action="Detail" asp-route-id="@inv.InvoiceId" class="btn btn-outline-primary" title="Xem chi tiết">
+                                            <i class="bi bi-eye me-1"></i>Xem
+                                        </a>
+                                        <a asp-action="Print" asp-route-id="@inv.InvoiceId" target="_blank" class="btn btn-outline-secondary" title="In phiếu thu">
+                                            <i class="bi bi-printer"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
