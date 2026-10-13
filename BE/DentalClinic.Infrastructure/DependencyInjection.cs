@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IGoogleAuthService, GoogleAuthService>();
         services.AddScoped<IImageStorageService, CloudinaryImageStorageService>();
+        services.AddScoped<IMedicalImageStorageService, SecureMedicalImageStorageService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
 
         services.AddScoped<IAuthService, AuthService>();

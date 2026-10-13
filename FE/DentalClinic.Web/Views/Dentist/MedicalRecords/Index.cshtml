@@ -161,7 +161,7 @@
                         foreach (var p in Model.Patients)
                         {
                             var isActive = p.PatientUserId == Model.SelectedPatientUserId;
-                            <a asp-action="Index" asp-route-patientId="@p.PatientUserId" asp-route-search="@Model.Search" 
+                            <a asp-action="Index" asp-route-patientId="@p.PatientUserId" asp-route-search="@Model.Search"
                                class="list-group-item list-group-item-action p-3 @(isActive ? "active text-white bg-primary border-primary" : "")">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div class="fw-bold @(isActive ? "text-white" : "text-dark")">@p.FullName</div>
@@ -388,6 +388,80 @@
                                                     </div>
                                                 </div>
                                             }
+                                            <!-- Dental Imaging / X-Ray Gallery Section -->
+                                            <div class="col-12 mt-3 pt-3 border-top">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="text-slate-800 fw-bold small d-flex align-items-center gap-2">
+                                                        <i class="bi bi-images text-primary fs-5"></i>
+                                                        <span>Phim Chụp X-Quang & Hình Ảnh Chẩn Đoán</span>
+                                                        <span class="badge bg-primary-subtle text-primary rounded-pill fs-11">@entry.ImagingRecords.Count ảnh</span>
+                                                    </span>
+                                                    <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                                                            data-bs-toggle="modal" data-bs-target="#uploadImagingModal"
+                                                            onclick="prepareUploadImaging(@Model.SelectedPatientUserId, @entry.ClinicalEntryId, '@entry.CreatedAt.ToString("dd/MM/yyyy HH:mm")')">
+                                                        <i class="bi bi-cloud-arrow-up me-1"></i> Tải Lên Phim / Ảnh Mới
+                                                    </button>
+                                                </div>
+
+                                                @if (entry.ImagingRecords.Any())
+                                                {
+                                                    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3 mt-1">
+                                                        @foreach (var img in entry.ImagingRecords)
+                                                        {
+                                                            var badgeColor = img.ImagingType switch
+                                                            {
+                                                                "Panorama" => "bg-primary",
+                                                                "Periapical" => "bg-info text-white",
+                                                                "Cephalometric" => "bg-success",
+                                                                "Intraoral" => "bg-warning text-dark",
+                                                                _ => "bg-secondary"
+                                                            };
+                                                            var imgUrl = Url.Action("ImageContent", "DentistMedicalRecord", new { id = img.ImagingRecordId });
+                                                            <div class="col">
+                                                                <div class="card h-100 border shadow-none bg-dark text-white rounded-3 overflow-hidden position-relative imaging-card">
+                                                                    <div class="position-relative" style="height: 140px; background: #020617; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                                                                        <img src="@imgUrl" alt="@img.ImagingType"
+                                                                             class="img-fluid w-100 h-100 object-fit-cover cursor-pointer"
+                                                                             onclick="openMedicalLightbox('@imgUrl', '@img.ImagingType', '@img.CreatedAt.ToString("dd/MM/yyyy HH:mm")', '@(img.ResultSummary?.Replace("'", "\\'"))')"
+                                                                             title="Nhấp để mở xem phóng to (Lightbox)" />
+                                                                        <span class="position-absolute top-0 start-0 m-2 badge @badgeColor fs-11 shadow-sm">
+                                                                            @img.ImagingType
+                                                                        </span>
+                                                                    </div>
+                                                                    <div class="card-body p-2 bg-slate-900 fs-12 text-slate-300">
+                                                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                                                            <span class="text-white-50"><i class="bi bi-clock me-1"></i>@img.CreatedAt.ToString("dd/MM/yyyy")</span>
+                                                                            <form method="post" asp-action="DeleteImaging" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn xóa ảnh chẩn đoán này khỏi bệnh án không? Thao tác không thể hoàn tác.');">
+                                                                                <input type="hidden" name="patientUserId" value="@Model.SelectedPatientUserId" />
+                                                                                <input type="hidden" name="imagingRecordId" value="@img.ImagingRecordId" />
+                                                                                <button type="submit" class="btn btn-sm text-danger p-0 border-0 bg-transparent" title="Xóa ảnh">
+                                                                                    <i class="bi bi-trash"></i>
+                                                                                </button>
+                                                                            </form>
+                                                                        </div>
+                                                                        @if (!string.IsNullOrEmpty(img.ResultSummary))
+                                                                        {
+                                                                            <div class="text-truncate text-white" title="@img.ResultSummary">
+                                                                                <i class="bi bi-chat-left-dots me-1 text-primary"></i>@img.ResultSummary
+                                                                            </div>
+                                                                        }
+                                                                        <button type="button" class="btn btn-xs btn-outline-light w-100 mt-2 py-1 fs-11"
+                                                                                onclick="openMedicalLightbox('@imgUrl', '@img.ImagingType', '@img.CreatedAt.ToString("dd/MM/yyyy HH:mm")', '@(img.ResultSummary?.Replace("'", "\\'"))')">
+                                                                            <i class="bi bi-arrows-fullscreen me-1"></i> Phóng to & Chẩn đoán
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="p-3 bg-light rounded text-center text-muted small">
+                                                        <i class="bi bi-camera me-1"></i> Chưa có phim X-quang hoặc ảnh chẩn đoán nào được lưu trong đợt khám này.
+                                                    </div>
+                                                }
+                                            </div>
                                         </div>
                                     </div>
                                 }
@@ -479,6 +553,132 @@
         </div>
     </div>
 
+    <!-- ==================================================== -->
+    <!-- MODAL: TẢI LÊN PHIM X-QUANG & HÌNH ẢNH CHẨN ĐOÁN -->
+    <!-- ==================================================== -->
+    <div class="modal fade" id="uploadImagingModal" tabindex="-1" aria-labelledby="uploadImagingModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-slate-900 text-white">
+                    <h5 class="modal-title fw-bold" id="uploadImagingModalLabel">
+                        <i class="bi bi-cloud-arrow-up-fill text-primary me-2"></i>Tải Lên Phim X-Quang / Ảnh Chẩn Đoán
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form asp-action="UploadImaging" method="post" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="patientUserId" id="uploadModalPatientUserId" value="@Model.SelectedPatientUserId" />
+                    <input type="hidden" name="clinicalEntryId" id="uploadModalClinicalEntryId" value="" />
+
+                    <div class="modal-body p-4">
+                        <div class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3">
+                            <i class="bi bi-info-circle-fill"></i>
+                            <div>Đợt khám: <strong id="uploadModalEntryDate">—</strong></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-slate-700">Loại hình ảnh chẩn đoán <span class="text-danger">*</span></label>
+                            <select name="imagingType" class="form-select" required>
+                                <option value="Panorama">Panorama (Phim toàn cảnh hàm)</option>
+                                <option value="Periapical">Periapical (Phim cận chóp răng)</option>
+                                <option value="Cephalometric">Cephalometric (Phim sọ nghiêng chỉnh nha)</option>
+                                <option value="Intraoral">Intraoral (Ảnh chụp trong miệng)</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-slate-700">Chọn tệp hình ảnh <span class="text-danger">*</span></label>
+                            <input type="file" name="imageFile" id="imagingFileInput" class="form-control" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required onchange="handleImagePreview(this)" />
+                            <div class="form-text text-muted">Hỗ trợ JPEG, PNG, WEBP. Tối đa 15 MB. Ảnh được mã hóa và lưu trữ bảo mật y tế.</div>
+                        </div>
+
+                        <!-- Image Preview Box -->
+                        <div id="imagePreviewBox" class="d-none mb-3 p-2 bg-dark rounded text-center border">
+                            <img id="imagePreviewImg" class="img-fluid rounded" style="max-height: 180px; object-fit: contain;" />
+                            <div id="imagePreviewInfo" class="text-white-50 small mt-1"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-slate-700">Kết luận chẩn đoán / Ghi chú lâm sàng</label>
+                            <textarea name="resultSummary" class="form-control" rows="3" placeholder="Ví dụ: Răng 38 mọc lệch 90 độ ngầm dưới xương hàm, chân răng gần ống thần kinh..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                        <button type="submit" class="btn btn-primary px-4 fw-medium">
+                            <i class="bi bi-upload me-1"></i> Bắt Đầu Tải Lên
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================================================== -->
+    <!-- MODAL: DENTAL LIGHTBOX & DIAGNOSTIC VIEWER -->
+    <!-- ==================================================== -->
+    <div class="modal fade" id="medicalLightboxModal" tabindex="-1" aria-labelledby="medicalLightboxModalLabel" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-fullscreen">
+            <div class="modal-content bg-slate-950 text-white border-0">
+                <!-- Lightbox Top Navigation & Controls Toolbar -->
+                <div class="modal-header bg-slate-900 border-bottom border-slate-800 py-2 px-3 d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <span id="lbTypeBadge" class="badge bg-primary fs-14">Panorama</span>
+                        <span id="lbDateText" class="text-slate-400 small ms-2"></span>
+                    </div>
+
+                    <!-- Viewer Controls Toolbar -->
+                    <div class="d-flex align-items-center gap-1 bg-slate-800 px-2 py-1 rounded-pill border border-slate-700">
+                        <button type="button" class="btn btn-sm btn-dark text-white rounded-circle p-2" onclick="lbZoom(0.25)" title="Phóng to (+)">
+                            <i class="bi bi-zoom-in"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-dark text-white rounded-circle p-2" onclick="lbZoom(-0.25)" title="Thu nhỏ (-)">
+                            <i class="bi bi-zoom-out"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-dark text-white rounded-pill px-3 py-1" onclick="lbReset()" title="Kích thước gốc (1:1)">
+                            <i class="bi bi-arrows-angle-contract me-1"></i> <span id="lbScalePercent">100%</span>
+                        </button>
+                        <div class="vr bg-secondary mx-1 my-1"></div>
+                        <button type="button" class="btn btn-sm btn-dark text-white rounded-circle p-2" onclick="lbRotate()" title="Xoay 90 độ">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                        <button type="button" id="lbInvertBtn" class="btn btn-sm btn-dark text-warning rounded-pill px-3 py-1" onclick="lbToggleInvert()" title="Chế độ âm bản X-quang (Invert colors)">
+                            <i class="bi bi-circle-half me-1"></i> Âm bản (Invert)
+                        </button>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2">
+                        <a id="lbOpenDirectLink" href="#" target="_blank" class="btn btn-sm btn-outline-light rounded-pill px-3" title="Mở ảnh trong tab riêng">
+                            <i class="bi bi-box-arrow-up-right me-1"></i> Mở Tab Mới
+                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-danger rounded-circle p-2" data-bs-dismiss="modal" aria-label="Close" title="Đóng Lightbox (ESC)">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Lightbox Canvas Viewport -->
+                <div class="modal-body p-0 position-relative d-flex align-items-center justify-content-center overflow-hidden"
+                     id="lbViewport"
+                     style="height: calc(100vh - 120px); background: #030712; cursor: grab; user-select: none;">
+                    <img id="lbMainImage" src="" alt="Dental Image"
+                         style="max-width: 90vw; max-height: 80vh; object-fit: contain; transform-origin: center center; transition: filter 0.2s ease;" />
+                </div>
+
+                <!-- Lightbox Bottom Result Summary Bar -->
+                <div class="modal-footer bg-slate-900 border-top border-slate-800 py-2 px-4 justify-content-between">
+                    <div id="lbSummaryContainer" class="text-slate-300 small">
+                        <strong class="text-white me-1"><i class="bi bi-file-earmark-medical me-1 text-primary"></i>Kết luận chẩn đoán:</strong>
+                        <span id="lbSummaryText" class="fst-italic text-slate-300">Không có ghi chú.</span>
+                    </div>
+                    <div class="text-slate-500 fs-12">
+                        <span><i class="bi bi-mouse me-1"></i>Kéo chuột để di chuyển (Pan) • Cuộn chuột để phóng to/thu nhỏ (Zoom)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         function addToothRow() {
             const container = document.getElementById("toothRowsContainer");
@@ -538,6 +738,160 @@
         document.addEventListener("DOMContentLoaded", function() {
             if (document.getElementById("toothRowsContainer")) {
                 addToothRow();
+            }
+        });
+
+        // ==========================================
+        // DENTAL IMAGING & LIGHTBOX VIEWER SCRIPT
+        // ==========================================
+        let lbScale = 1;
+        let lbRotation = 0;
+        let lbIsInverted = false;
+        let lbPosX = 0;
+        let lbPosY = 0;
+        let lbIsDragging = false;
+        let lbStartX = 0;
+        let lbStartY = 0;
+
+        function prepareUploadImaging(patientUserId, clinicalEntryId, dateStr) {
+            document.getElementById('uploadModalPatientUserId').value = patientUserId;
+            document.getElementById('uploadModalClinicalEntryId').value = clinicalEntryId;
+            document.getElementById('uploadModalEntryDate').innerText = dateStr;
+            const previewBox = document.getElementById('imagePreviewBox');
+            if (previewBox) previewBox.classList.add('d-none');
+            const fileInput = document.getElementById('imagingFileInput');
+            if (fileInput) fileInput.value = '';
+        }
+
+        function handleImagePreview(input) {
+            const previewBox = document.getElementById('imagePreviewBox');
+            const previewImg = document.getElementById('imagePreviewImg');
+            const previewInfo = document.getElementById('imagePreviewInfo');
+
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                if (file.size > 15 * 1024 * 1024) {
+                    alert('Tệp đã chọn vượt quá 15 MB. Vui lòng chọn tệp nhỏ hơn.');
+                    input.value = '';
+                    previewBox.classList.add('d-none');
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewImg.src = e.target.result;
+                    previewInfo.innerText = `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
+                    previewBox.classList.remove('d-none');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                previewBox.classList.add('d-none');
+            }
+        }
+
+        function openMedicalLightbox(imgUrl, imagingType, dateStr, summary) {
+            const modalEl = document.getElementById('medicalLightboxModal');
+            const mainImg = document.getElementById('lbMainImage');
+            const typeBadge = document.getElementById('lbTypeBadge');
+            const dateText = document.getElementById('lbDateText');
+            const summaryText = document.getElementById('lbSummaryText');
+            const directLink = document.getElementById('lbOpenDirectLink');
+
+            mainImg.src = imgUrl;
+            directLink.href = imgUrl;
+            typeBadge.innerText = imagingType || 'X-Quang';
+            dateText.innerText = dateStr ? 'Chụp ngày: ' + dateStr : '';
+            summaryText.innerText = summary && summary.trim() !== '' ? summary : 'Không có ghi chú lâm sàng bổ sung.';
+
+            lbReset();
+
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        function lbUpdateTransform() {
+            const img = document.getElementById('lbMainImage');
+            const percent = document.getElementById('lbScalePercent');
+            if (img) {
+                img.style.transform = `translate(${lbPosX}px, ${lbPosY}px) scale(${lbScale}) rotate(${lbRotation}deg)`;
+                img.style.filter = lbIsInverted ? 'invert(100%) contrast(120%)' : 'none';
+                if (percent) {
+                    percent.innerText = Math.round(lbScale * 100) + '%';
+                }
+            }
+        }
+
+        function lbZoom(delta) {
+            lbScale = Math.max(0.25, Math.min(6.0, lbScale + delta));
+            lbUpdateTransform();
+        }
+
+        function lbRotate() {
+            lbRotation = (lbRotation + 90) % 360;
+            lbUpdateTransform();
+        }
+
+        function lbReset() {
+            lbScale = 1;
+            lbRotation = 0;
+            lbIsInverted = false;
+            lbPosX = 0;
+            lbPosY = 0;
+            const invertBtn = document.getElementById('lbInvertBtn');
+            if (invertBtn) {
+                invertBtn.classList.remove('btn-warning');
+                invertBtn.classList.add('btn-dark');
+            }
+            lbUpdateTransform();
+        }
+
+        function lbToggleInvert() {
+            lbIsInverted = !lbIsInverted;
+            const invertBtn = document.getElementById('lbInvertBtn');
+            if (invertBtn) {
+                if (lbIsInverted) {
+                    invertBtn.classList.remove('btn-dark');
+                    invertBtn.classList.add('btn-warning');
+                } else {
+                    invertBtn.classList.remove('btn-warning');
+                    invertBtn.classList.add('btn-dark');
+                }
+            }
+            lbUpdateTransform();
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const viewport = document.getElementById('lbViewport');
+            if (viewport) {
+                viewport.addEventListener('mousedown', function(e) {
+                    if (e.button === 0) { // Chuột trái
+                        lbIsDragging = true;
+                        lbStartX = e.clientX - lbPosX;
+                        lbStartY = e.clientY - lbPosY;
+                        viewport.style.cursor = 'grabbing';
+                    }
+                });
+
+                window.addEventListener('mousemove', function(e) {
+                    if (lbIsDragging) {
+                        lbPosX = e.clientX - lbStartX;
+                        lbPosY = e.clientY - lbStartY;
+                        lbUpdateTransform();
+                    }
+                });
+
+                window.addEventListener('mouseup', function() {
+                    if (lbIsDragging) {
+                        lbIsDragging = false;
+                        viewport.style.cursor = 'grab';
+                    }
+                });
+
+                viewport.addEventListener('wheel', function(e) {
+                    e.preventDefault();
+                    const delta = e.deltaY < 0 ? 0.2 : -0.2;
+                    lbZoom(delta);
+                }, { passive: false });
             }
         });
     </script>
