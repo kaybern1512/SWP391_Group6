@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -422,10 +422,15 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.Urgency)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasDefaultValue("Normal");
             entity.Property(e => e.Status)
                 .HasMaxLength(30)
                 .IsUnicode(false)
-                .HasDefaultValue("Pending");
+                .HasDefaultValue("Pending")
+                .IsConcurrencyToken();
 
             entity.HasOne(d => d.AssignedDentistUser).WithMany(p => p.DepartmentReferrals)
                 .HasForeignKey(d => d.AssignedDentistUserId)
@@ -491,11 +496,16 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasIndex(e => new { e.Status, e.RecommendedDate }, "IX_FollowUpSchedules_Status_Date");
 
+            entity.HasIndex(e => e.AppointmentId, "UX_FollowUpSchedules_AppointmentId")
+                .IsUnique()
+                .HasFilter("[AppointmentId] IS NOT NULL");
+
             entity.Property(e => e.Reason).HasMaxLength(500);
             entity.Property(e => e.Status)
                 .HasMaxLength(30)
                 .IsUnicode(false)
-                .HasDefaultValue("Pending");
+                .HasDefaultValue("Pending")
+                .IsConcurrencyToken();
 
             entity.HasOne(d => d.Appointment).WithMany(p => p.FollowUpSchedules)
                 .HasForeignKey(d => d.AppointmentId)

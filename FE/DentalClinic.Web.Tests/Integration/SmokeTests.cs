@@ -72,6 +72,12 @@ public class SmokeTests : IClassFixture<WebApplicationFactory<Program>>
     [InlineData("/Department/Dashboard")]
     [InlineData("/Admin")]
     [InlineData("/Admin/Dashboard")]
+    [InlineData("/Dentist/Referrals")]
+    [InlineData("/Department/Referrals")]
+    [InlineData("/Patient/FollowUps")]
+    [InlineData("/Receptionist/FollowUps")]
+    [InlineData("/Dentist/MedicalRecords")]
+    [InlineData("/Patient/MedicalRecord")]
     public async Task ProtectedRoutes_RedirectToLogin(string protectedUrl)
     {
         // Act

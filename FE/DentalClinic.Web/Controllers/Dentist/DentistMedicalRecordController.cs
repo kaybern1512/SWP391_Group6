@@ -109,4 +109,82 @@ public class DentistMedicalRecordController : Controller
 
         return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
     }
+
+    [HttpPost("UploadImaging")]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(20 * 1024 * 1024)]
+    public async Task<IActionResult> UploadImaging(
+        long patientUserId,
+        long clinicalEntryId,
+        Microsoft.AspNetCore.Http.IFormFile? imageFile,
+        string imagingType,
+        string? resultSummary)
+    {
+        if (imageFile == null || imageFile.Length == 0)
+        {
+            TempData["ErrorMessage"] = "Vui lòng chọn một tệp hình ảnh để tải lên.";
+            return RedirectToAction(nameof(Index), new { patientId = patientUserId });
+        }
+
+        using var stream = imageFile.OpenReadStream();
+        var result = await _medicalRecordApi.UploadImagingRecordAsync(
+            clinicalEntryId,
+            stream,
+            imageFile.FileName,
+            imageFile.ContentType,
+            imagingType,
+            resultSummary);
+
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đã tải lên và lưu trữ ảnh chẩn đoán/X-quang thành công!";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Tải ảnh thất bại.";
+        }
+
+        return RedirectToAction(nameof(Index), new { patientId = patientUserId });
+    }
+
+    [HttpPost("DeleteImaging")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteImaging(long patientUserId, long imagingRecordId)
+    {
+        var result = await _medicalRecordApi.DeleteImagingRecordAsync(imagingRecordId);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đã xóa ảnh chẩn đoán thành công!";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Xóa ảnh thất bại.";
+        }
+
+        return RedirectToAction(nameof(Index), new { patientId = patientUserId });
+    }
+
+    [HttpGet("ImageContent/{id:long}")]
+    public async Task<IActionResult> ImageContent(long id)
+    {
+        var result = await _medicalRecordApi.GetImageContentAsync(id);
+        if (result == null)
+        {
+            return NotFound();
+        }
+
+        var allowedTypes = new[] { "image/jpeg", "image/png", "image/webp" };
+        var contentType = result.Value.ContentType.ToLowerInvariant();
+        if (!allowedTypes.Contains(contentType))
+        {
+            return BadRequest();
+        }
+
+        Response.Headers["Cache-Control"] = "private, no-cache, no-store, must-revalidate";
+        Response.Headers["Pragma"] = "no-cache";
+        Response.Headers["Expires"] = "0";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+
+        return File(result.Value.Stream, contentType);
+    }
 }

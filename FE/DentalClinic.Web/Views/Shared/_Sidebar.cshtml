@@ -54,6 +54,10 @@
                 <i class="bi bi-card-checklist"></i>
                 <span>Kế Hoạch Điều Trị</span>
             </a>
+            <a class="sidebar-link @(currentCtrl == "PatientFollowUp" ? "active" : "")" asp-controller="PatientFollowUp" asp-action="Index">
+                <i class="bi bi-clock-history"></i>
+                <span>Lịch Hẹn Tái Khám</span>
+            </a>
 
             <div class="nav-group-title">Quản Lý & Thông Báo</div>
             <a class="sidebar-link" href="#" onclick="alert('Tính năng Hóa Đơn & Thanh Toán đang được hoàn thiện theo phân công nhiệm vụ.'); return false;">
@@ -81,6 +85,10 @@
             <a class="sidebar-link @(currentCtrl == "ReceptionistAppointment" && currentAction == "Requests" ? "active" : "")" asp-controller="ReceptionistAppointment" asp-action="Requests">
                 <i class="bi bi-calendar-check"></i>
                 <span>Yêu Cầu Đặt Lịch Hẹn</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistFollowUp" ? "active" : "")" asp-controller="ReceptionistFollowUp" asp-action="Index">
+                <i class="bi bi-telephone-outbound"></i>
+                <span>Theo Dõi Tái Khám</span>
             </a>
 
             <div class="nav-group-title">Hồ Sơ & Viện Phí</div>
@@ -122,9 +130,9 @@
                 <i class="bi bi-capsule"></i>
                 <span>Kê Đơn Thuốc Điện Tử</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Tính năng Hội Chẩn & Chuyển Khoa đang được hoàn thiện theo phân công nhiệm vụ.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "DentistPostCare" ? "active" : "")" asp-controller="DentistPostCare" asp-action="Index">
                 <i class="bi bi-arrow-left-right"></i>
-                <span>Hội Chẩn & Chuyển Khoa</span>
+                <span>Chuyển Khoa & Tái Khám</span>
             </a>
 
             <div class="nav-group-title">Lịch Trình & Đánh Giá</div>
@@ -154,9 +162,9 @@
                 <i class="bi bi-check2-square"></i>
                 <span>Duyệt & Phân Bổ Ca Khám</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Tính năng Hội Chẩn & Chuyển Khoa đang được hoàn thiện theo phân công nhiệm vụ.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "DepartmentReferral" ? "active" : "")" asp-controller="DepartmentReferral" asp-action="Index">
                 <i class="bi bi-arrow-left-right"></i>
-                <span>Xử Lý Ca Chuyển Khoa</span>
+                <span>Hội Chẩn & Chuyển Khoa Đến</span>
             </a>
             <a class="sidebar-link @(currentCtrl == "DepartmentTreatment" ? "active" : "")" asp-controller="DepartmentTreatment" asp-action="Index">
                 <i class="bi bi-graph-up"></i>

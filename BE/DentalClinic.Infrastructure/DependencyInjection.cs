@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IGoogleAuthService, GoogleAuthService>();
         services.AddScoped<IImageStorageService, CloudinaryImageStorageService>();
+        services.AddScoped<IMedicalImageStorageService, SecureMedicalImageStorageService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
 
         services.AddScoped<IAuthService, AuthService>();
@@ -38,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<IMedicalRecordService, MedicalRecordService>();
         services.AddScoped<IPrescriptionService, PrescriptionService>();
         services.AddScoped<ITreatmentService, TreatmentService>();
+        services.AddScoped<IPostCareService, PostCareService>();
 
         return services;
     }
