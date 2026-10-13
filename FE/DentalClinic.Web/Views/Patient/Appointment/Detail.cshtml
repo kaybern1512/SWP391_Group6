@@ -243,10 +243,19 @@
                     }
                     else if (appt.Status == "Completed")
                     {
-                        <a asp-action="Feedback" asp-route-id="@appt.AppointmentId" class="btn btn-warning w-100 mb-2 fw-semibold text-dark">
+                        <a asp-action="Feedback" asp-route-id="@appt.AppointmentId" class="btn btn-warning w-100 mb-2 fw-semibold text-dark shadow-sm">
                             <i class="bi bi-star-fill me-1"></i> Đánh Giá Ca Khám
                         </a>
-                        <small class="text-muted d-block text-center">Gửi phản hồi và đánh giá chất lượng phục vụ cho ca khám này.</small>
+                        <a asp-controller="PatientInvoice" asp-action="Index" class="btn btn-outline-primary w-100 mb-2 fw-semibold">
+                            <i class="bi bi-receipt me-1"></i> Xem Hóa Đơn & Mã VietQR
+                        </a>
+                        <a asp-controller="PatientPrescription" asp-action="Index" class="btn btn-outline-success w-100 mb-2 fw-semibold">
+                            <i class="bi bi-capsule me-1"></i> Đơn Thuốc Bác Sĩ Kê
+                        </a>
+                        <a asp-controller="PatientMedicalRecord" asp-action="Index" class="btn btn-outline-secondary w-100 mb-2 fw-semibold">
+                            <i class="bi bi-journal-medical me-1"></i> Hồ Sơ Bệnh Án & Sơ Đồ Răng
+                        </a>
+                        <small class="text-muted d-block text-center mt-1">Ca khám đã hoàn tất. Bạn có thể xem lại viện phí, đơn thuốc hoặc gửi đánh giá phản hồi.</small>
                     }
                     else
                     {

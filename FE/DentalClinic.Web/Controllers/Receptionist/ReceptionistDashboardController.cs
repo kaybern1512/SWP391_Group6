@@ -87,6 +87,15 @@ public class ReceptionistDashboardController : Controller
                 },
                 new()
                 {
+                    Title = "Hóa Đơn & Thu Viện Phí",
+                    Icon = "bi-receipt-cutoff",
+                    ColorClass = "success",
+                    Description = "Lập hóa đơn ca khám hoàn thành, thu tiền mặt/chuyển khoản VietQR và in phiếu thu viện phí.",
+                    ActionText = "Vào Thu Phí",
+                    ActionUrl = "/Receptionist/Billing"
+                },
+                new()
+                {
                     Title = "Thông Báo Điều Hành",
                     Icon = "bi-bell",
                     ColorClass = "info",

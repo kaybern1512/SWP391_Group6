@@ -17,9 +17,12 @@
             <h1 class="page-title">@Model.Title</h1>
             <p class="page-subtitle">@Model.Subtitle</p>
         </div>
-        <div class="page-actions">
+        <div class="page-actions d-flex gap-2 flex-wrap">
             <a asp-controller="ReceptionistPatient" asp-action="Index" class="btn btn-dc-outline">
                 <i class="bi bi-people me-1"></i> Sổ Quản Lý Bệnh Nhân
+            </a>
+            <a asp-controller="ReceptionistBilling" asp-action="Index" class="btn btn-dc-outline text-success border-success-subtle">
+                <i class="bi bi-receipt-cutoff me-1"></i> Thu Viện Phí & Hóa Đơn
             </a>
             <a asp-controller="ReceptionistAppointment" asp-action="TodayCheckIn" class="btn btn-dc-primary">
                 <i class="bi bi-person-check me-1"></i> Check-in Tiếp Nhận

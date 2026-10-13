@@ -157,8 +157,11 @@
                                         <a asp-controller="DentistMedicalRecord" asp-action="Index" asp-route-patientId="@appt.PatientUserId" asp-route-appointmentId="@appt.AppointmentId" class="btn btn-sm btn-outline-primary" title="Mở hồ sơ bệnh án & Sơ đồ răng">
                                             <i class="bi bi-journal-medical me-1"></i> Bệnh Án
                                         </a>
+                                        <a asp-controller="DentistTreatmentPlan" asp-action="Create" asp-route-patientId="@appt.PatientUserId" class="btn btn-sm btn-outline-info" title="Lập phác đồ & kế hoạch điều trị cho bệnh nhân">
+                                            <i class="bi bi-diagram-3 me-1"></i>Phác Đồ
+                                        </a>
                                         <a asp-controller="DentistPrescription" asp-action="Index" asp-route-search="@appt.PatientCode" class="btn btn-sm btn-outline-success" title="Kê đơn hoặc xem đơn thuốc">
-                                            <i class="bi bi-capsule"></i>
+                                            <i class="bi bi-capsule me-1"></i>Đơn Thuốc
                                         </a>
                                     </div>
                                 </td>

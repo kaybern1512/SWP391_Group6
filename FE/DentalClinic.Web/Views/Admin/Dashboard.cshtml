@@ -15,12 +15,15 @@
             <h1 class="page-title">Trung tâm Quản trị & Điều hành Hệ thống</h1>
             <p class="page-subtitle">Quản lý chuyên khoa, danh mục dịch vụ, phòng/ghế nha khoa, tài khoản người dùng và giám sát kiểm toán</p>
         </div>
-        <div class="page-actions d-flex gap-2">
+        <div class="page-actions d-flex gap-2 flex-wrap">
             <a asp-controller="AdminAuditLog" asp-action="Index" class="btn btn-dc-outline">
                 <i class="bi bi-shield-check me-1"></i> Nhật ký kiểm toán
             </a>
-            <a asp-controller="AdminDashboard" asp-action="Reports" class="btn btn-dc-primary">
-                <i class="bi bi-bar-chart-line me-1"></i> Báo cáo tổng thể
+            <a asp-controller="AdminDashboard" asp-action="Reports" class="btn btn-dc-outline">
+                <i class="bi bi-graph-up-arrow me-1"></i> Tổng quan ca khám
+            </a>
+            <a asp-controller="AdminReport" asp-action="Revenue" class="btn btn-dc-primary">
+                <i class="bi bi-bar-chart-line me-1"></i> Báo cáo Doanh thu & Excel
             </a>
         </div>
     </div>
@@ -160,12 +163,12 @@
             <div class="col-md-6 col-lg-4 col-xl-2">
                 <div class="card-quick-action text-center h-100 p-3">
                     <div class="quick-icon-box quick-icon-success mx-auto mb-2">
-                        <i class="bi bi-graph-up-arrow"></i>
+                        <i class="bi bi-bar-chart-line"></i>
                     </div>
-                    <h6 class="fw-bold text-dark mb-1">Báo cáo & Thống kê</h6>
-                    <p class="text-muted small mb-3">Biểu đồ doanh thu chi tiết</p>
-                    <a asp-controller="AdminDashboard" asp-action="Reports" class="btn btn-light btn-sm text-success w-100 fw-semibold border">
-                        Xem báo cáo <i class="bi bi-arrow-right ms-1"></i>
+                    <h6 class="fw-bold text-dark mb-1">Báo cáo Doanh thu</h6>
+                    <p class="text-muted small mb-3">Biểu đồ Chart.js & Xuất file Excel</p>
+                    <a asp-controller="AdminReport" asp-action="Revenue" class="btn btn-light btn-sm text-success w-100 fw-semibold border">
+                        Xem doanh thu <i class="bi bi-arrow-right ms-1"></i>
                     </a>
                 </div>
             </div>
