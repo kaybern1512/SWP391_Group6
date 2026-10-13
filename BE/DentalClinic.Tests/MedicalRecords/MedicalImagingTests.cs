@@ -707,6 +707,278 @@ public class MedicalImagingTests
     }
 
     [Fact]
+    public async Task GetImagingRecordContentAsync_DentistWithCompletedTreatmentPlan_ReturnsForbidden_LeastPrivilege()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedMedicalRecordDataAsync(db);
+
+        // Treatment plan was completed - past completion does NOT grant perpetual access to whole record
+        db.TreatmentPlans.Add(new TreatmentPlan
+        {
+            TreatmentPlanId = 802,
+            PatientUserId = 101,
+            DepartmentId = 1,
+            CreatedByDentistUserId = 202,
+            Status = "Completed",
+            CreatedAt = DateTime.UtcNow.AddMonths(-2)
+        });
+
+        db.ImagingRecords.Add(new ImagingRecord
+        {
+            ImagingRecordId = 888,
+            ClinicalEntryId = 701,
+            ImagingType = "Panorama",
+            FileUrl = "secure://med-img/xray_patient101.jpg",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new MedicalRecordService(db, Mock.Of<IMedicalImageStorageService>(), Mock.Of<ILogger<MedicalRecordService>>());
+
+        var result = await service.GetImagingRecordContentAsync(
+            currentUserId: 202,
+            currentUserRole: UserRole.Dentist,
+            imagingRecordId: 888);
+
+        Assert.False(result.Success);
+        Assert.Contains("không có quyền", result.Message);
+    }
+
+    [Fact]
+    public async Task GetImagingRecordContentAsync_DentistWithAssignedReferral_Succeeds()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedMedicalRecordDataAsync(db);
+
+        var appt = new Appointment
+        {
+            AppointmentId = 950,
+            PatientUserId = 101,
+            AppointmentCode = "APT-950",
+            BookingSource = "WalkIn",
+            ReasonForVisit = "Hội chẩn",
+            Status = AppointmentStatus.Completed,
+            ScheduledStart = DateTime.UtcNow.AddDays(-60),
+            ScheduledEnd = DateTime.UtcNow.AddDays(-60).AddMinutes(30),
+            CreatedAt = DateTime.UtcNow.AddDays(-60)
+        };
+        db.Appointments.Add(appt);
+
+        var dept1 = new Department { DepartmentId = 1, Name = "Nha chu", Status = "Active", CreatedAt = DateTime.UtcNow };
+        var dept2 = new Department { DepartmentId = 2, Name = "Chỉnh nha", Status = "Active", CreatedAt = DateTime.UtcNow };
+        db.Departments.AddRange(dept1, dept2);
+
+        var plan = new TreatmentPlan
+        {
+            TreatmentPlanId = 850,
+            PatientUserId = 101,
+            DepartmentId = 1,
+            CreatedByDentistUserId = 201,
+            Status = "Completed",
+            CreatedAt = DateTime.UtcNow.AddDays(-60)
+        };
+        db.TreatmentPlans.Add(plan);
+
+        var item = new TreatmentPlanItem
+        {
+            TreatmentPlanItemId = 851,
+            TreatmentPlanId = 850,
+            SequenceNo = 1,
+            Status = "Completed"
+        };
+        db.TreatmentPlanItems.Add(item);
+
+        var session = new TreatmentSession
+        {
+            TreatmentSessionId = 960,
+            TreatmentPlanItemId = 851,
+            AppointmentId = 950,
+            DentistUserId = 201,
+            SessionDate = DateTime.UtcNow.AddDays(-60)
+        };
+        db.TreatmentSessions.Add(session);
+
+        // Referral specifically assigned to Dentist 202 with status 'Assigned'
+        var referral = new DepartmentReferral
+        {
+            ReferralId = 1001,
+            TreatmentSessionId = 960,
+            FromDepartmentId = 1,
+            ToDepartmentId = 2,
+            AssignedDentistUserId = 202,
+            Reason = "Chuyển hội chẩn niềng răng",
+            Status = "Assigned",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DepartmentReferrals.Add(referral);
+
+        db.ImagingRecords.Add(new ImagingRecord
+        {
+            ImagingRecordId = 888,
+            ClinicalEntryId = 701,
+            ImagingType = "Panorama",
+            FileUrl = "secure://med-img/xray_patient101.jpg",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var mockStorage = new Mock<IMedicalImageStorageService>();
+        mockStorage.Setup(s => s.GetImageStreamAsync("secure://med-img/xray_patient101.jpg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MedicalImageStreamResult
+            {
+                Stream = new MemoryStream(new byte[] { 1, 2, 3 }),
+                ContentType = "image/jpeg",
+                FileName = "xray_patient101.jpg"
+            });
+
+        var service = new MedicalRecordService(db, mockStorage.Object, Mock.Of<ILogger<MedicalRecordService>>());
+
+        var result = await service.GetImagingRecordContentAsync(
+            currentUserId: 202,
+            currentUserRole: UserRole.Dentist,
+            imagingRecordId: 888);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+    }
+
+    [Fact]
+    public async Task GetImagingRecordContentAsync_DentistWithUnassignedOrRejectedReferral_ReturnsForbidden()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedMedicalRecordDataAsync(db);
+
+        var appt = new Appointment
+        {
+            AppointmentId = 950,
+            PatientUserId = 101,
+            AppointmentCode = "APT-950",
+            BookingSource = "WalkIn",
+            ReasonForVisit = "Hội chẩn",
+            Status = AppointmentStatus.Completed,
+            ScheduledStart = DateTime.UtcNow.AddDays(-60),
+            ScheduledEnd = DateTime.UtcNow.AddDays(-60).AddMinutes(30),
+            CreatedAt = DateTime.UtcNow.AddDays(-60)
+        };
+        db.Appointments.Add(appt);
+
+        var dept1 = new Department { DepartmentId = 1, Name = "Nha chu", Status = "Active", CreatedAt = DateTime.UtcNow };
+        var dept2 = new Department { DepartmentId = 2, Name = "Chỉnh nha", Status = "Active", CreatedAt = DateTime.UtcNow };
+        db.Departments.AddRange(dept1, dept2);
+
+        var plan = new TreatmentPlan
+        {
+            TreatmentPlanId = 850,
+            PatientUserId = 101,
+            DepartmentId = 1,
+            CreatedByDentistUserId = 201,
+            Status = "Completed",
+            CreatedAt = DateTime.UtcNow.AddDays(-60)
+        };
+        db.TreatmentPlans.Add(plan);
+
+        var item = new TreatmentPlanItem
+        {
+            TreatmentPlanItemId = 851,
+            TreatmentPlanId = 850,
+            SequenceNo = 1,
+            Status = "Completed"
+        };
+        db.TreatmentPlanItems.Add(item);
+
+        var session = new TreatmentSession
+        {
+            TreatmentSessionId = 960,
+            TreatmentPlanItemId = 851,
+            AppointmentId = 950,
+            DentistUserId = 201,
+            SessionDate = DateTime.UtcNow.AddDays(-60)
+        };
+        db.TreatmentSessions.Add(session);
+
+        // Referral is Rejected
+        var referral = new DepartmentReferral
+        {
+            ReferralId = 1002,
+            TreatmentSessionId = 960,
+            FromDepartmentId = 1,
+            ToDepartmentId = 2,
+            AssignedDentistUserId = 202,
+            Reason = "Từ chối tiếp nhận",
+            Status = "Rejected",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DepartmentReferrals.Add(referral);
+
+        db.ImagingRecords.Add(new ImagingRecord
+        {
+            ImagingRecordId = 888,
+            ClinicalEntryId = 701,
+            ImagingType = "Panorama",
+            FileUrl = "secure://med-img/xray_patient101.jpg",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new MedicalRecordService(db, Mock.Of<IMedicalImageStorageService>(), Mock.Of<ILogger<MedicalRecordService>>());
+
+        var result = await service.GetImagingRecordContentAsync(
+            currentUserId: 202,
+            currentUserRole: UserRole.Dentist,
+            imagingRecordId: 888);
+
+        Assert.False(result.Success);
+        Assert.Contains("không có quyền", result.Message);
+    }
+
+    [Fact]
+    public async Task GetImagingRecordsByClinicalEntryAsync_AuthoringDentist_AlwaysSucceeds()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedMedicalRecordDataAsync(db);
+
+        // Entry 701 was authored by Dentist 201
+        db.ImagingRecords.Add(new ImagingRecord
+        {
+            ImagingRecordId = 888,
+            ClinicalEntryId = 701,
+            ImagingType = "Panorama",
+            FileUrl = "secure://med-img/xray_author.jpg",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var mockStorage = new Mock<IMedicalImageStorageService>();
+        mockStorage.Setup(s => s.GetImageStreamAsync("secure://med-img/xray_author.jpg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MedicalImageStreamResult
+            {
+                Stream = new MemoryStream(new byte[] { 1, 2, 3 }),
+                ContentType = "image/jpeg",
+                FileName = "xray_author.jpg"
+            });
+
+        var service = new MedicalRecordService(db, mockStorage.Object, Mock.Of<ILogger<MedicalRecordService>>());
+
+        // Authoring dentist queries entry
+        var listResult = await service.GetImagingRecordsByClinicalEntryAsync(
+            currentUserId: 201,
+            currentUserRole: UserRole.Dentist,
+            clinicalEntryId: 701);
+
+        Assert.True(listResult.Success);
+        Assert.Single(listResult.Data!);
+
+        // Authoring dentist streams image content
+        var contentResult = await service.GetImagingRecordContentAsync(
+            currentUserId: 201,
+            currentUserRole: UserRole.Dentist,
+            imagingRecordId: 888);
+
+        Assert.True(contentResult.Success);
+        Assert.NotNull(contentResult.Data);
+    }
+
+    [Fact]
     public async Task DeleteImagingRecordAsync_PatientRole_ReturnsForbidden()
     {
         var db = CreateDbContext(Guid.NewGuid().ToString());

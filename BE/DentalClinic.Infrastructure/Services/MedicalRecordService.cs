@@ -629,26 +629,30 @@ public class MedicalRecordService : IMedicalRecordService
         if (hasActiveAppointment) return true;
 
         // 2. Kiểm tra qua kế hoạch điều trị đang hoạt động
-        // Least Privilege: Kế hoạch điều trị không được ở trạng thái Cancelled hoặc Rejected.
+        // Schema check: CHECK (Status IN ('Planned','InProgress','Completed','Cancelled'))
+        // Least Privilege: Chỉ chấp nhận 'Planned' hoặc 'InProgress'.
+        // Tuyệt đối KHÔNG cấp quyền cho 'Completed' (đã hoàn thành) hoặc 'Cancelled' (đã hủy).
+        var activePlanStatuses = new[] { "Planned", "InProgress" };
         var hasActiveTreatmentPlan = await _dbContext.TreatmentPlans.AnyAsync(tp =>
             tp.PatientUserId == patientUserId &&
-            tp.Status != "Cancelled" &&
-            tp.Status != "Rejected" &&
+            activePlanStatuses.Contains(tp.Status) &&
             (
                 tp.CreatedByDentistUserId == dentistUserId ||
                 tp.TreatmentPlanItems.Any(tpi =>
                     (tpi.AssignedDentistUserId == dentistUserId ||
                      tpi.TreatmentSessions.Any(ts => ts.DentistUserId == dentistUserId)) &&
-                    tpi.Status != "Cancelled")
+                    activePlanStatuses.Contains(tpi.Status))
             ), ct);
 
         if (hasActiveTreatmentPlan) return true;
 
-        // 3. Kiểm tra qua chuyển tuyến chuyên khoa hợp lệ đang tiếp nhận
-        // Least Privilege: Chỉ chấp nhận trạng thái Accepted hoặc InProgress.
+        // 3. Kiểm tra qua chuyển tuyến chuyên khoa hợp lệ đã phân công cho bác sĩ
+        // Schema check: CHECK (Status IN ('Pending','Accepted','Rejected','Assigned','Completed'))
+        // Least Privilege: Chỉ chấp nhận trạng thái 'Assigned' cho đúng bác sĩ được phân công.
+        // Tuyệt đối KHÔNG cấp quyền cho 'Pending', 'Accepted' (chưa phân công), 'Rejected' hoặc 'Completed'.
         var hasActiveReferral = await _dbContext.DepartmentReferrals.AnyAsync(dr =>
             dr.AssignedDentistUserId == dentistUserId &&
-            (dr.Status == "Accepted" || dr.Status == "InProgress") &&
+            dr.Status == "Assigned" &&
             dr.TreatmentSession != null &&
             dr.TreatmentSession.Appointment != null &&
             dr.TreatmentSession.Appointment.PatientUserId == patientUserId, ct);
