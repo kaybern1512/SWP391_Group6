@@ -188,6 +188,15 @@ builder.Services.AddHttpClient<ITreatmentApiService, TreatmentApiService>(client
 .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
+// PostCare API client with ApiAuthorizationHandler (Referrals & Follow-ups)
+builder.Services.AddHttpClient<IPostCareApiService, PostCareApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 // Notification API client with ApiAuthorizationHandler
 builder.Services.AddHttpClient<INotificationApiService, NotificationApiService>(client =>
 {
