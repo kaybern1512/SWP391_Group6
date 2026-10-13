@@ -1,0 +1,250 @@
+@model DentalClinic.Web.Models.ApiDtos.InvoiceDto
+@{
+    Layout = null;
+    ViewData["Title"] = $"Phiếu Thu Viện Phí #{Model.InvoiceCode}";
+}
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Phiếu Thu Viện Phí - @Model.InvoiceCode</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" />
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #212529;
+        }
+
+        .print-container {
+            max-width: 800px;
+            margin: 30px auto;
+            background: #ffffff;
+            padding: 40px 50px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            border-radius: 8px;
+        }
+
+        .clinic-brand {
+            border-bottom: 2px solid #0d6efd;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+
+        .invoice-title {
+            text-align: center;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: #1a1a1a;
+            margin-bottom: 5px;
+        }
+
+        .table-items th {
+            background-color: #f1f5f9;
+            color: #334155;
+            font-weight: 600;
+            border-bottom: 2px solid #cbd5e1;
+        }
+
+        .signature-box {
+            margin-top: 50px;
+            padding-top: 10px;
+        }
+
+        .signature-line {
+            height: 90px;
+        }
+
+        .badge-status {
+            font-size: 0.9rem;
+            padding: 6px 12px;
+            border-radius: 4px;
+        }
+
+        @@media print {
+            body {
+                background: #ffffff;
+                margin: 0;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            .print-container {
+                box-shadow: none;
+                margin: 0;
+                padding: 15px 20px;
+                max-width: 100%;
+                border-radius: 0;
+            }
+
+            .table-items th {
+                background-color: #f1f5f9 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Floating Print Control Toolbar -->
+    <div class="no-print bg-dark text-white py-2 px-3 sticky-top shadow-sm mb-3">
+        <div class="container d-flex justify-content-between align-items-center">
+            <div class="fw-semibold">
+                <i class="bi bi-file-earmark-pdf me-2"></i>Mẫu In Biên Lai Thu Viện Phí Chuẩn
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-primary btn-sm px-4 fw-semibold" onclick="window.print()">
+                    <i class="bi bi-printer-fill me-1"></i> In Ngay (Print)
+                </button>
+                <button type="button" class="btn btn-outline-light btn-sm px-3" onclick="window.close()">
+                    <i class="bi bi-x-lg me-1"></i> Đóng
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="print-container">
+        <!-- Clinic Header -->
+        <div class="clinic-brand d-flex justify-content-between align-items-start">
+            <div class="d-flex gap-3 align-items-center">
+                <div class="bg-primary text-white rounded-3 d-flex align-items-center justify-content-center" style="width: 65px; height: 65px;">
+                    <i class="bi bi-hospital fs-1"></i>
+                </div>
+                <div>
+                    <h5 class="fw-bold text-primary mb-1">@Model.ClinicName</h5>
+                    <div class="small text-muted"><i class="bi bi-geo-alt me-1"></i>@Model.ClinicAddress</div>
+                    <div class="small text-muted"><i class="bi bi-telephone me-1"></i>Hotline: @Model.ClinicPhone &bull; Email: @Model.ClinicEmail</div>
+                </div>
+            </div>
+            <div class="text-end">
+                <div class="fw-bold font-monospace text-dark fs-5">#@Model.InvoiceCode</div>
+                <div class="small text-muted">Ngày: @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                @if (Model.Status == "Paid")
+                {
+                    <span class="badge bg-success badge-status mt-2">ĐÃ THANH TOÁN ĐỦ</span>
+                }
+                else if (Model.Status == "PartiallyPaid")
+                {
+                    <span class="badge bg-warning text-dark badge-status mt-2">ĐÃ ĐẶT CỌC MỘT PHẦN</span>
+                }
+                else
+                {
+                    <span class="badge bg-danger badge-status mt-2">CHƯA THANH TOÁN</span>
+                }
+            </div>
+        </div>
+
+        <!-- Title -->
+        <h3 class="invoice-title">PHIẾU THU TIỀN VIỆN PHÍ</h3>
+        <p class="text-center text-muted small mb-4">(Liên lưu tại phòng khám & giao cho bệnh nhân)</p>
+
+        <!-- Customer & Medical Info -->
+        <div class="row g-2 mb-4 bg-light p-3 rounded-2 border">
+            <div class="col-7">
+                <div class="mb-1"><strong>Họ và tên người bệnh:</strong> <span class="text-dark fw-bold text-uppercase">@Model.PatientName</span></div>
+                <div class="mb-1"><strong>Mã hồ sơ bệnh nhân:</strong> <span class="font-monospace">@(Model.PatientCode ?? "--")</span></div>
+                <div class="mb-1"><strong>Số điện thoại:</strong> @(Model.PatientPhoneNumber ?? "--")</div>
+                <div class="mb-0"><strong>Địa chỉ:</strong> @(Model.PatientAddress ?? "Chưa cập nhật")</div>
+            </div>
+            <div class="col-5 border-start ps-3">
+                <div class="mb-1"><strong>Mã ca khám:</strong> <span class="font-monospace text-primary fw-bold">@Model.AppointmentCode</span></div>
+                <div class="mb-1"><strong>Chuyên khoa:</strong> @Model.DepartmentName</div>
+                <div class="mb-1"><strong>Bác sĩ phụ trách:</strong> @Model.DentistName</div>
+                <div class="mb-0"><strong>Thời gian khám:</strong> @(Model.AppointmentDate?.ToString("dd/MM/yyyy HH:mm") ?? "--")</div>
+            </div>
+        </div>
+
+        <!-- Services Items Table -->
+        <table class="table table-bordered table-items align-middle mb-3">
+            <thead>
+                <tr class="text-center">
+                    <th style="width: 5%;">STT</th>
+                    <th style="width: 50%;">Nội dung dịch vụ / Thủ thuật thực hiện</th>
+                    <th style="width: 10%;">Số lượng</th>
+                    <th style="width: 17%;">Đơn giá (đ)</th>
+                    <th style="width: 18%;">Thành tiền (đ)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{ var stt = 1; }
+                @foreach (var item in Model.Items)
+                {
+                    <tr>
+                        <td class="text-center">@(stt++)</td>
+                        <td>@item.Description</td>
+                        <td class="text-center font-monospace">@item.Quantity</td>
+                        <td class="text-end">@item.UnitPrice.ToString("N0")</td>
+                        <td class="text-end fw-semibold">@item.Amount.ToString("N0")</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="4" class="text-end fw-semibold">Cộng tiền dịch vụ (Tạm tính):</td>
+                    <td class="text-end fw-bold">@Model.SubTotal.ToString("N0") đ</td>
+                </tr>
+                @if (Model.DiscountAmount > 0)
+                {
+                    <tr>
+                        <td colspan="4" class="text-end text-danger">Giảm trừ chiết khấu:</td>
+                        <td class="text-end fw-bold text-danger">-@Model.DiscountAmount.ToString("N0") đ</td>
+                    </tr>
+                }
+                <tr>
+                    <td colspan="4" class="text-end fw-bold text-uppercase fs-6">TỔNG TIỀN PHẢI THANH TOÁN:</td>
+                    <td class="text-end fw-bold text-primary fs-5">@Model.TotalAmount.ToString("N0") đ</td>
+                </tr>
+                <tr>
+                    <td colspan="4" class="text-end fw-semibold text-success">Đã thanh toán thực tế:</td>
+                    <td class="text-end fw-bold text-success">@Model.PaidAmount.ToString("N0") đ</td>
+                </tr>
+                @if (Model.RemainingAmount > 0)
+                {
+                    <tr>
+                        <td colspan="4" class="text-end fw-semibold text-danger">Còn thiếu (Chưa thanh toán):</td>
+                        <td class="text-end fw-bold text-danger">@Model.RemainingAmount.ToString("N0") đ</td>
+                    </tr>
+                }
+            </tfoot>
+        </table>
+
+        <!-- Payment methods note -->
+        @if (Model.Payments.Any())
+        {
+            <div class="mb-4 small">
+                <strong>Phương thức đã thanh toán: </strong>
+                @string.Join(", ", Model.Payments.Select(p => $"{p.MethodDisplayName}: {p.Amount:N0} đ (Mã: {p.TransactionReference})"))
+            </div>
+        }
+
+        <!-- Signatures -->
+        <div class="row signature-box text-center">
+            <div class="col-6">
+                <div class="fw-bold">NGƯỜI NỘP TIỀN</div>
+                <div class="small text-muted fst-italic">(Ký và ghi rõ họ tên)</div>
+                <div class="signature-line"></div>
+                <div class="fw-semibold">@Model.PatientName</div>
+            </div>
+            <div class="col-6">
+                <div class="small text-muted mb-1">Ngày @DateTime.Now.ToString("dd") tháng @DateTime.Now.ToString("MM") năm @DateTime.Now.ToString("yyyy")</div>
+                <div class="fw-bold">NGƯỜI LẬP PHIẾU / THU NGÂN</div>
+                <div class="small text-muted fst-italic">(Ký, họ tên và đóng dấu)</div>
+                <div class="signature-line"></div>
+                <div class="fw-semibold">@(Model.GeneratedByName ?? "Thu ngân phòng khám")</div>
+            </div>
+        </div>
+
+        <div class="text-center mt-5 pt-4 text-muted small border-top">
+            Cảm ơn Quý khách đã tin tưởng và sử dụng dịch vụ tại <strong>@Model.ClinicName</strong>!
+        </div>
+    </div>
+
+</body>
+</html>
