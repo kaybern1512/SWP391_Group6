@@ -496,6 +496,10 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasIndex(e => new { e.Status, e.RecommendedDate }, "IX_FollowUpSchedules_Status_Date");
 
+            entity.HasIndex(e => e.AppointmentId, "UX_FollowUpSchedules_AppointmentId")
+                .IsUnique()
+                .HasFilter("[AppointmentId] IS NOT NULL");
+
             entity.Property(e => e.Reason).HasMaxLength(500);
             entity.Property(e => e.Status)
                 .HasMaxLength(30)

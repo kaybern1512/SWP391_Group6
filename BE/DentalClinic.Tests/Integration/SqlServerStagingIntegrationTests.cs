@@ -528,11 +528,225 @@ public class SqlServerStagingIntegrationTests : IAsyncLifetime
         });
         Assert.False(res2.Success);
         Assert.Contains("Lịch hẹn này đã được liên kết với một kế hoạch tái khám khác", res2.Message);
+    }
 
-        // 2. Ghi nhận phân tích DB-level:
-        // FollowUpSchedules hiện chỉ có application-level validation AnyAsync.
-        // Để ngăn ngừa triệt để race condition khi có 2 request đồng thời ở mức database,
-        // kiến nghị bổ sung: CREATE UNIQUE NONCLUSTERED INDEX UX_FollowUpSchedules_AppointmentId ON FollowUpSchedules(AppointmentId) WHERE AppointmentId IS NOT NULL;
+    [Fact]
+    public async Task SQL_M2_09_ConcurrentDuplicateAppointmentLink_OnlyOneSucceeds()
+    {
+        using var dbSetup = CreateDbContext();
+        var pId = await CreateIsolatedPatientAsync(dbSetup, "ConcAppt");
+        var (_, d1Id, _, _, _, _) = await GetActorsAsync(dbSetup);
+        var (_, session1) = await CreateTestSessionAsync(dbSetup, pId, d1Id);
+        var (_, session2) = await CreateTestSessionAsync(dbSetup, pId, d1Id);
+
+        var serviceSetup = new PostCareService(dbSetup, Mock.Of<INotificationService>());
+        var f1 = await serviceSetup.CreateFollowUpScheduleAsync(d1Id, new CreateFollowUpScheduleRequest { TreatmentSessionId = session1.TreatmentSessionId, RecommendedDate = DateTime.UtcNow.AddDays(7) });
+        var f2 = await serviceSetup.CreateFollowUpScheduleAsync(d1Id, new CreateFollowUpScheduleRequest { TreatmentSessionId = session2.TreatmentSessionId, RecommendedDate = DateTime.UtcNow.AddDays(7) });
+
+        var sharedAppt = new Appointment
+        {
+            AppointmentCode = $"APT-CNC-{Guid.NewGuid():N}".Substring(0, 20),
+            PatientUserId = pId,
+            DepartmentId = 1,
+            AssignedDentistUserId = d1Id,
+            ReasonForVisit = "Khám cạnh tranh đồng thời",
+            BookingSource = "Receptionist",
+            Status = AppointmentStatus.Confirmed,
+            ScheduledStart = DateTime.UtcNow.AddDays(7),
+            ScheduledEnd = DateTime.UtcNow.AddDays(7).AddHours(1),
+            CreatedAt = DateTime.UtcNow
+        };
+        dbSetup.Appointments.Add(sharedAppt);
+        await dbSetup.SaveChangesAsync();
+
+        // Chạy 2 tác vụ liên kết đồng thời sử dụng 2 DbContext và 2 Service riêng biệt truy cập SQL Server thực tế
+        using var db1 = CreateDbContext();
+        using var db2 = CreateDbContext();
+        var s1 = new PostCareService(db1, Mock.Of<INotificationService>());
+        var s2 = new PostCareService(db2, Mock.Of<INotificationService>());
+
+        var req1 = s1.UpdateFollowUpStatusAsync(pId, UserRole.Patient, f1.Data!.FollowUpId, new UpdateFollowUpStatusRequest { Status = "Scheduled", AppointmentId = sharedAppt.AppointmentId });
+        var req2 = s2.UpdateFollowUpStatusAsync(pId, UserRole.Patient, f2.Data!.FollowUpId, new UpdateFollowUpStatusRequest { Status = "Scheduled", AppointmentId = sharedAppt.AppointmentId });
+
+        var results = await Task.WhenAll(req1, req2);
+
+        // Chính xác 1 request thành công và 1 request thất bại!
+        var successCount = results.Count(r => r.Success);
+        var failCount = results.Count(r => !r.Success);
+        Assert.Equal(1, successCount);
+        Assert.Equal(1, failCount);
+
+        // Phản hồi lỗi phải là thông báo nghiệp vụ thân thiện, không văng lỗi 500
+        var failedResult = results.First(r => !r.Success);
+        Assert.Contains("Lịch hẹn này đã được liên kết với một kế hoạch tái khám khác", failedResult.Message);
+    }
+
+    [Fact]
+    public async Task SQL_M2_10_CancelledFollowUp_RetainsAppointmentId_AndBlocksRelink()
+    {
+        using var db = CreateDbContext();
+        var pId = await CreateIsolatedPatientAsync(db, "CancBlock");
+        var (_, d1Id, _, _, _, _) = await GetActorsAsync(db);
+        var (_, session1) = await CreateTestSessionAsync(db, pId, d1Id);
+        var (_, session2) = await CreateTestSessionAsync(db, pId, d1Id);
+        var service = new PostCareService(db, Mock.Of<INotificationService>());
+
+        var f1 = await service.CreateFollowUpScheduleAsync(d1Id, new CreateFollowUpScheduleRequest { TreatmentSessionId = session1.TreatmentSessionId, RecommendedDate = DateTime.UtcNow.AddDays(5) });
+        var f2 = await service.CreateFollowUpScheduleAsync(d1Id, new CreateFollowUpScheduleRequest { TreatmentSessionId = session2.TreatmentSessionId, RecommendedDate = DateTime.UtcNow.AddDays(5) });
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CNC2-{Guid.NewGuid():N}".Substring(0, 20),
+            PatientUserId = pId,
+            DepartmentId = 1,
+            AssignedDentistUserId = d1Id,
+            ReasonForVisit = "Lịch khám tái khám hủy",
+            BookingSource = "Receptionist",
+            Status = AppointmentStatus.Confirmed,
+            ScheduledStart = DateTime.UtcNow.AddDays(5),
+            ScheduledEnd = DateTime.UtcNow.AddDays(5).AddHours(1),
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        // 1. Liên kết f1 với lịch hẹn
+        await service.UpdateFollowUpStatusAsync(pId, UserRole.Patient, f1.Data!.FollowUpId, new UpdateFollowUpStatusRequest { Status = "Scheduled", AppointmentId = appt.AppointmentId });
+
+        // 2. Chuyển f1 sang Cancelled
+        var cancelRes = await service.UpdateFollowUpStatusAsync(pId, UserRole.Patient, f1.Data!.FollowUpId, new UpdateFollowUpStatusRequest { Status = "Cancelled" });
+        Assert.True(cancelRes.Success);
+
+        // Xác minh SQL Server vẫn giữ AppointmentId trên bản ghi Cancelled
+        var inDb = await db.FollowUpSchedules.FindAsync(f1.Data!.FollowUpId);
+        Assert.Equal("Cancelled", inDb!.Status);
+        Assert.Equal(appt.AppointmentId, inDb.AppointmentId);
+
+        // 3. Cố liên kết f2 với cùng AppointmentId -> Bị chặn theo quy tắc nghiệp vụ chốt
+        var relinkRes = await service.UpdateFollowUpStatusAsync(pId, UserRole.Patient, f2.Data!.FollowUpId, new UpdateFollowUpStatusRequest { Status = "Scheduled", AppointmentId = appt.AppointmentId });
+        Assert.False(relinkRes.Success);
+        Assert.Contains("Lịch hẹn này đã được liên kết với một kế hoạch tái khám khác", relinkRes.Message);
+    }
+
+    [Fact]
+    public async Task SQL_M2_11_MultipleFollowUps_WithNullAppointmentId_Allowed()
+    {
+        using var db = CreateDbContext();
+        var pId = await CreateIsolatedPatientAsync(db, "NullAppt");
+        var (_, d1Id, _, _, _, _) = await GetActorsAsync(db);
+        var (_, session) = await CreateTestSessionAsync(db, pId, d1Id);
+        var service = new PostCareService(db, Mock.Of<INotificationService>());
+
+        // Tạo 5 FollowUpSchedules liên tiếp không có AppointmentId (AppointmentId IS NULL)
+        for (int i = 1; i <= 5; i++)
+        {
+            var res = await service.CreateFollowUpScheduleAsync(d1Id, new CreateFollowUpScheduleRequest
+            {
+                TreatmentSessionId = session.TreatmentSessionId,
+                RecommendedDate = DateTime.UtcNow.AddDays(i * 7),
+                Reason = $"Khuyến nghị tái khám lần {i}"
+            });
+            Assert.True(res.Success);
+            Assert.Null(res.Data!.AppointmentId);
+            Assert.Equal("Pending", res.Data.Status);
+        }
+
+        // Kiểm tra trực tiếp trên SQL Server
+        var nullCount = await db.FollowUpSchedules.CountAsync(f => f.TreatmentSessionId == session.TreatmentSessionId && f.AppointmentId == null);
+        Assert.Equal(5, nullCount);
+    }
+
+    [Fact]
+    public async Task SQL_M2_12_DatabaseDirectInsert_ThrowsSqlException_2601_or_2627()
+    {
+        using var db = CreateDbContext();
+        var pId = await CreateIsolatedPatientAsync(db, "SqlErr");
+        var (_, d1Id, _, _, _, _) = await GetActorsAsync(db);
+        var (_, session1) = await CreateTestSessionAsync(db, pId, d1Id);
+        var (_, session2) = await CreateTestSessionAsync(db, pId, d1Id);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-ERR-{Guid.NewGuid():N}".Substring(0, 20),
+            PatientUserId = pId,
+            DepartmentId = 1,
+            AssignedDentistUserId = d1Id,
+            ReasonForVisit = "Test direct SQL violation",
+            BookingSource = "Receptionist",
+            Status = AppointmentStatus.Confirmed,
+            ScheduledStart = DateTime.UtcNow.AddDays(3),
+            ScheduledEnd = DateTime.UtcNow.AddDays(3).AddHours(1),
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        // Chèn bản ghi FollowUp đầu tiên liên kết với appt.AppointmentId
+        var f1 = new FollowUpSchedule
+        {
+            TreatmentSessionId = session1.TreatmentSessionId,
+            RecommendedDate = DateTime.UtcNow.AddDays(3),
+            Status = "Scheduled",
+            AppointmentId = appt.AppointmentId
+        };
+        db.FollowUpSchedules.Add(f1);
+        await db.SaveChangesAsync();
+
+        // Chèn trực tiếp bản ghi thứ hai vi phạm UX_FollowUpSchedules_AppointmentId qua SQL thô
+        var rawSql = @"
+            INSERT INTO FollowUpSchedules (TreatmentSessionId, RecommendedDate, Reason, Status, AppointmentId)
+            VALUES (@sessionId, SYSDATETIME(), N'Vi phạm unique index', 'Scheduled', @apptId);
+        ";
+
+        var ex = await Assert.ThrowsAsync<SqlException>(async () =>
+        {
+            await db.Database.ExecuteSqlRawAsync(rawSql,
+                new SqlParameter("@sessionId", session2.TreatmentSessionId),
+                new SqlParameter("@apptId", appt.AppointmentId));
+        });
+
+        // Xác minh SQL error number 2601 hoặc 2627 (Unique constraint / unique index violation)
+        Assert.True(ex.Number == 2601 || ex.Number == 2627, $"Expected SQL error 2601 or 2627, but got {ex.Number}");
+        Assert.Contains("UX_FollowUpSchedules_AppointmentId", ex.Message);
+    }
+
+    [Fact]
+    public async Task SQL_M2_13_ApplicationCatchesDatabaseUniqueness_ReturnsBusinessError()
+    {
+        using var db = CreateDbContext();
+        var pId = await CreateIsolatedPatientAsync(db, "AppErrConv");
+        var (_, d1Id, _, _, _, _) = await GetActorsAsync(db);
+        var (_, session1) = await CreateTestSessionAsync(db, pId, d1Id);
+        var (_, session2) = await CreateTestSessionAsync(db, pId, d1Id);
+        var service = new PostCareService(db, Mock.Of<INotificationService>());
+
+        var f1 = await service.CreateFollowUpScheduleAsync(d1Id, new CreateFollowUpScheduleRequest { TreatmentSessionId = session1.TreatmentSessionId, RecommendedDate = DateTime.UtcNow.AddDays(7) });
+        var f2 = await service.CreateFollowUpScheduleAsync(d1Id, new CreateFollowUpScheduleRequest { TreatmentSessionId = session2.TreatmentSessionId, RecommendedDate = DateTime.UtcNow.AddDays(7) });
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONV-{Guid.NewGuid():N}".Substring(0, 20),
+            PatientUserId = pId,
+            DepartmentId = 1,
+            AssignedDentistUserId = d1Id,
+            ReasonForVisit = "Test error conversion",
+            BookingSource = "Receptionist",
+            Status = AppointmentStatus.Confirmed,
+            ScheduledStart = DateTime.UtcNow.AddDays(7),
+            ScheduledEnd = DateTime.UtcNow.AddDays(7).AddHours(1),
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        // f1 liên kết trước
+        var res1 = await service.UpdateFollowUpStatusAsync(pId, UserRole.Patient, f1.Data!.FollowUpId, new UpdateFollowUpStatusRequest { Status = "Scheduled", AppointmentId = appt.AppointmentId });
+        Assert.True(res1.Success);
+
+        // f2 cố liên kết -> Trả về ApiResponse Fail sạch sẽ, không throw unhandled 500
+        var res2 = await service.UpdateFollowUpStatusAsync(pId, UserRole.Patient, f2.Data!.FollowUpId, new UpdateFollowUpStatusRequest { Status = "Scheduled", AppointmentId = appt.AppointmentId });
+        Assert.False(res2.Success);
+        Assert.Contains("Lịch hẹn này đã được liên kết với một kế hoạch tái khám khác", res2.Message);
     }
 
     // =========================================================================

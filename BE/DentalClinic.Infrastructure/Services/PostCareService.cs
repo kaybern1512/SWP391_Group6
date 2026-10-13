@@ -9,6 +9,7 @@ using DentalClinic.Application.Features.PostCare.DTOs;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace DentalClinic.Infrastructure.Services;
@@ -891,6 +892,15 @@ public class PostCareService : IPostCareService
         {
             await tx.RollbackAsync(ct);
             return ApiResponse<FollowUpScheduleDto>.Fail("Lịch tái khám đã được cập nhật bởi một thao tác khác cùng thời điểm. Vui lòng tải lại trang.");
+        }
+        catch (DbUpdateException ex)
+        {
+            await tx.RollbackAsync(ct);
+            if (ex.InnerException is SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627))
+            {
+                return ApiResponse<FollowUpScheduleDto>.Fail("Lịch hẹn này đã được liên kết với một kế hoạch tái khám khác. Vui lòng chọn lịch hẹn khác.");
+            }
+            throw;
         }
 
         var dto = await MapToFollowUpScheduleDtoAsync(followUp.FollowUpId, ct);
