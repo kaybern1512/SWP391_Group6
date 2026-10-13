@@ -176,7 +176,7 @@
                 <i class="bi bi-tags"></i>
                 <span>Dịch Vụ & Bảng Giá Khoa</span>
             </a>
-            <a class="sidebar-link" href="#" onclick="alert('Tính năng Báo Cáo Hiệu Suất đang được hoàn thiện theo phân công nhiệm vụ.'); return false;">
+            <a class="sidebar-link @(currentCtrl == "DepartmentReport" ? "active" : "")" asp-controller="DepartmentReport" asp-action="Performance">
                 <i class="bi bi-file-earmark-bar-graph"></i>
                 <span>Báo Cáo Hiệu Suất Khoa</span>
             </a>
@@ -210,9 +210,13 @@
             </a>
 
             <div class="nav-group-title">Báo cáo & Giám sát</div>
-            <a class="sidebar-link @(currentCtrl == "AdminDashboard" && currentAction == "Reports" ? "active" : "")" asp-controller="AdminDashboard" asp-action="Reports">
+            <a class="sidebar-link @(currentCtrl == "AdminReport" ? "active" : "")" asp-controller="AdminReport" asp-action="Revenue">
                 <i class="bi bi-bar-chart-line"></i>
-                <span>Báo cáo Doanh thu & Ca khám</span>
+                <span>Báo Cáo Doanh Thu</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "AdminDashboard" && currentAction == "Reports" ? "active" : "")" asp-controller="AdminDashboard" asp-action="Reports">
+                <i class="bi bi-graph-up-arrow"></i>
+                <span>Tổng Quan Ca Khám</span>
             </a>
             <a class="sidebar-link @(currentCtrl == "AdminAuditLog" ? "active" : "")" asp-controller="AdminAuditLog" asp-action="Index">
                 <i class="bi bi-shield-check"></i>
