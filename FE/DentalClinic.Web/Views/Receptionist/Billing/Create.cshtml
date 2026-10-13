@@ -1,0 +1,457 @@
+@model DentalClinic.Web.Models.ApiDtos.AppointmentBillingPreparationDto
+@{
+    ViewData["Title"] = "Lập Hóa Đơn Viện Phí";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-action="Index" class="btn btn-outline-secondary btn-sm rounded-circle p-2" style="line-height: 1;">
+                    <i class="bi bi-arrow-left"></i>
+                </a>
+                <h1 class="h3 fw-bold text-dark mb-0">Lập Hóa Đơn Viện Phí</h1>
+            </div>
+            <p class="text-muted mb-0 ms-5 ps-2">Khởi tạo hóa đơn cho ca khám &bull; Tự động load dịch vụ thực hiện &bull; Mã sinh tự động (INV-YYYYMMDD-XXXX)</p>
+        </div>
+        <div>
+            <span class="badge bg-primary px-3 py-2 fs-6">
+                <i class="bi bi-calendar-check me-1"></i>Mã hẹn: @Model.AppointmentCode
+            </span>
+        </div>
+    </div>
+
+    <!-- Alert Message -->
+    <partial name="_AlertMessage" />
+
+    <div class="row g-4">
+        <!-- Left Column: Patient & Appointment Info -->
+        <div class="col-12 col-lg-4">
+            <div class="card border-0 shadow-sm rounded-3 mb-4">
+                <div class="card-header bg-primary bg-opacity-10 py-3 border-0">
+                    <h6 class="fw-bold text-primary mb-0">
+                        <i class="bi bi-person-circle me-2"></i>Thông Tin Bệnh Nhân
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="text-muted small">Họ và tên bệnh nhân</div>
+                        <div class="fw-bold fs-5 text-dark">@Model.PatientName</div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <div class="text-muted small">Mã bệnh nhân</div>
+                            <div class="fw-semibold">@(string.IsNullOrEmpty(Model.PatientCode) ? "--" : Model.PatientCode)</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Số điện thoại</div>
+                            <div class="fw-semibold">@(Model.PatientPhoneNumber ?? "--")</div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="text-muted small">Địa chỉ</div>
+                        <div class="small">@(Model.PatientAddress ?? "Chưa cập nhật")</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm rounded-3">
+                <div class="card-header bg-light py-3 border-0">
+                    <h6 class="fw-bold text-dark mb-0">
+                        <i class="bi bi-hospital me-2"></i>Chi Tiết Ca Khám
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <div class="text-muted small">Chuyên khoa</div>
+                        <div class="fw-semibold">@(Model.DepartmentName ?? "--")</div>
+                    </div>
+                    <div class="mb-2">
+                        <div class="text-muted small">Bác sĩ phụ trách</div>
+                        <div class="fw-semibold text-primary"><i class="bi bi-person me-1"></i>@(Model.DentistName ?? "Chưa phân bổ")</div>
+                    </div>
+                    <div class="mb-2">
+                        <div class="text-muted small">Thời gian khám</div>
+                        <div class="small">@(Model.ScheduledStart?.ToString("dd/MM/yyyy HH:mm") ?? "--")</div>
+                    </div>
+                    <div class="mb-0">
+                        <div class="text-muted small">Lý do khám / Triệu chứng</div>
+                        <div class="small fst-italic">@(Model.ReasonForVisit ?? "--")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Services & Cost Calculation -->
+        <div class="col-12 col-lg-8">
+            <div class="card border-0 shadow-sm rounded-3">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+                    <h5 class="card-title mb-0 fw-bold text-dark">
+                        <i class="bi bi-list-check text-primary me-2"></i>Danh Mục Dịch Vụ & Viện Phí
+                    </h5>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnAddCustomItem">
+                        <i class="bi bi-plus-lg me-1"></i>Thêm Dòng Chi Phí
+                    </button>
+                </div>
+                <div class="card-body p-4">
+                    <!-- Quick Add from Clinic Services -->
+                    <div class="p-3 bg-light rounded-3 mb-4 border">
+                        <label class="form-label fw-semibold small text-dark mb-2">
+                            <i class="bi bi-search me-1"></i>Thêm nhanh từ bảng giá phòng khám:
+                        </label>
+                        <div class="row g-2">
+                            <div class="col-12 col-md-9">
+                                <select id="clinicServiceSelect" class="form-select form-select-sm">
+                                    <option value="">-- Chọn dịch vụ nha khoa --</option>
+                                    @foreach (var s in Model.AvailableServices)
+                                    {
+                                        <option value="@s.ServiceId" data-name="@s.ServiceName" data-price="@s.Price">
+                                            @s.ServiceName - @s.Price.ToString("N0") đ (@s.DepartmentName)
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-12 col-md-3">
+                                <button type="button" class="btn btn-secondary btn-sm w-100" id="btnApplyClinicService">
+                                    <i class="bi bi-plus-circle me-1"></i>Thêm Dịch Vụ
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Items Table -->
+                    <div class="table-responsive mb-4">
+                        <table class="table align-middle" id="itemsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 45%;">Tên Dịch Vụ / Khoản Phí</th>
+                                    <th style="width: 15%;" class="text-center">Số Lượng</th>
+                                    <th style="width: 20%;" class="text-end">Đơn Giá (đ)</th>
+                                    <th style="width: 15%;" class="text-end">Thành Tiền (đ)</th>
+                                    <th style="width: 5%;" class="text-center"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody">
+                                @if (Model.SuggestedItems.Any())
+                                {
+                                    @foreach (var item in Model.SuggestedItems)
+                                    {
+                                        <tr class="item-row" data-performed-id="@item.PerformedServiceId">
+                                            <td>
+                                                <input type="text" class="form-control form-control-sm item-desc" value="@item.Description" required />
+                                            </td>
+                                            <td>
+                                                <input type="number" class="form-control form-control-sm text-center item-qty" value="@item.Quantity" min="1" required />
+                                            </td>
+                                            <td>
+                                                <input type="number" class="form-control form-control-sm text-end item-price" value="@item.UnitPrice" min="0" step="1000" required />
+                                            </td>
+                                            <td class="text-end fw-semibold item-subtotal">
+                                                @((item.Quantity * item.UnitPrice).ToString("N0")) đ
+                                            </td>
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-link text-danger p-0 btn-remove-row" title="Xóa dòng">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr class="item-row">
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm item-desc" placeholder="Tên dịch vụ / thủ thuật..." required />
+                                        </td>
+                                        <td>
+                                            <input type="number" class="form-control form-control-sm text-center item-qty" value="1" min="1" required />
+                                        </td>
+                                        <td>
+                                            <input type="number" class="form-control form-control-sm text-end item-price" value="0" min="0" step="1000" required />
+                                        </td>
+                                        <td class="text-end fw-semibold item-subtotal">0 đ</td>
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-link text-danger p-0 btn-remove-row" title="Xóa dòng">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Discount, VAT & Calculation Box -->
+                    <div class="row g-3 justify-content-end mb-4">
+                        <div class="col-12 col-md-7">
+                            <div class="p-3 bg-light rounded-3 border">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="text-muted">Tổng phụ (Tạm tính):</span>
+                                    <span class="fw-bold fs-6 text-dark" id="dispSubTotal">0 đ</span>
+                                </div>
+
+                                <div class="row g-2 align-items-center mb-2">
+                                    <div class="col-6">
+                                        <label class="small text-muted mb-0">Giảm giá / Chiết khấu (đ):</label>
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="number" id="inputDiscount" class="form-control form-control-sm text-end" value="0" min="0" step="1000" />
+                                    </div>
+                                </div>
+
+                                <div class="row g-2 align-items-center mb-2">
+                                    <div class="col-6">
+                                        <label class="small text-muted mb-0">Thuế GTGT / VAT (%):</label>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="input-group input-group-sm">
+                                            <input type="number" id="inputTaxPercent" class="form-control text-end" value="0" min="0" max="100" step="1" />
+                                            <span class="input-group-text">%</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="text-muted small">Tiền thuế VAT:</span>
+                                    <span class="small text-muted" id="dispTaxAmount">0 đ</span>
+                                </div>
+
+                                <hr class="my-2" />
+
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold fs-5 text-dark">Tổng tiền thanh toán:</span>
+                                    <span class="fw-bold fs-4 text-primary" id="dispTotalAmount">0 đ</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label small text-muted">Ghi chú hóa đơn (tùy chọn):</label>
+                        <textarea id="invoiceNote" class="form-control" rows="2" placeholder="Ghi chú thêm về ca điều trị hoặc chính sách ưu đãi..."></textarea>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                        <a asp-action="Index" class="btn btn-light px-4 border">
+                            <i class="bi bi-x-circle me-1"></i>Hủy Bỏ
+                        </a>
+                        <button type="button" class="btn btn-primary px-4 py-2 shadow" id="btnSubmitInvoice">
+                            <i class="bi bi-check-circle-fill me-1"></i> Khởi Tạo Hóa Đơn & Chuyển Sang Thu Tiền
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const itemsBody = document.getElementById('itemsBody');
+            const btnAddCustomItem = document.getElementById('btnAddCustomItem');
+            const btnApplyClinicService = document.getElementById('btnApplyClinicService');
+            const clinicServiceSelect = document.getElementById('clinicServiceSelect');
+            const inputDiscount = document.getElementById('inputDiscount');
+            const inputTaxPercent = document.getElementById('inputTaxPercent');
+            const dispSubTotal = document.getElementById('dispSubTotal');
+            const dispTaxAmount = document.getElementById('dispTaxAmount');
+            const dispTotalAmount = document.getElementById('dispTotalAmount');
+            const btnSubmitInvoice = document.getElementById('btnSubmitInvoice');
+
+            function formatMoney(amount) {
+                return new Intl.NumberFormat('vi-VN').format(Math.round(amount)) + ' đ';
+            }
+
+            function recalculateTotals() {
+                let subTotal = 0;
+                const rows = itemsBody.querySelectorAll('.item-row');
+
+                rows.forEach(row => {
+                    const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+                    const price = parseFloat(row.querySelector('.item-price').value) || 0;
+                    const lineTotal = qty * price;
+                    row.querySelector('.item-subtotal').textContent = formatMoney(lineTotal);
+                    subTotal += lineTotal;
+                });
+
+                let discount = parseFloat(inputDiscount.value) || 0;
+                if (discount < 0) discount = 0;
+                if (discount > subTotal) discount = subTotal;
+
+                const discountedSubTotal = subTotal - discount;
+                let taxPercent = parseFloat(inputTaxPercent.value) || 0;
+                if (taxPercent < 0) taxPercent = 0;
+
+                const taxAmount = Math.round(discountedSubTotal * (taxPercent / 100));
+                const totalAmount = discountedSubTotal + taxAmount;
+
+                dispSubTotal.textContent = formatMoney(subTotal);
+                dispTaxAmount.textContent = formatMoney(taxAmount);
+                dispTotalAmount.textContent = formatMoney(totalAmount);
+            }
+
+            // Bind change events on inputs
+            itemsBody.addEventListener('input', function (e) {
+                if (e.target.classList.contains('item-qty') || e.target.classList.contains('item-price')) {
+                    recalculateTotals();
+                }
+            });
+
+            inputDiscount.addEventListener('input', recalculateTotals);
+            inputTaxPercent.addEventListener('input', recalculateTotals);
+
+            // Remove Row
+            itemsBody.addEventListener('click', function (e) {
+                const btn = e.target.closest('.btn-remove-row');
+                if (btn) {
+                    const rows = itemsBody.querySelectorAll('.item-row');
+                    if (rows.length <= 1) {
+                        alert('Hóa đơn cần ít nhất một dòng dịch vụ / khoản phí.');
+                        return;
+                    }
+                    btn.closest('.item-row').remove();
+                    recalculateTotals();
+                }
+            });
+
+            // Add Custom Item Row
+            btnAddCustomItem.addEventListener('click', function () {
+                const tr = document.createElement('tr');
+                tr.className = 'item-row';
+                tr.innerHTML = `
+                    <td>
+                        <input type="text" class="form-control form-control-sm item-desc" placeholder="Tên dịch vụ / khoản phí..." required />
+                    </td>
+                    <td>
+                        <input type="number" class="form-control form-control-sm text-center item-qty" value="1" min="1" required />
+                    </td>
+                    <td>
+                        <input type="number" class="form-control form-control-sm text-end item-price" value="0" min="0" step="1000" required />
+                    </td>
+                    <td class="text-end fw-semibold item-subtotal">0 đ</td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-link text-danger p-0 btn-remove-row" title="Xóa dòng">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                `;
+                itemsBody.appendChild(tr);
+                recalculateTotals();
+            });
+
+            // Apply selected clinic service
+            btnApplyClinicService.addEventListener('click', function () {
+                const opt = clinicServiceSelect.options[clinicServiceSelect.selectedIndex];
+                if (!opt || !opt.value) {
+                    alert('Vui lòng chọn dịch vụ trong danh sách trước khi bấm thêm.');
+                    return;
+                }
+                const name = opt.getAttribute('data-name');
+                const price = parseFloat(opt.getAttribute('data-price')) || 0;
+
+                const tr = document.createElement('tr');
+                tr.className = 'item-row';
+                tr.innerHTML = `
+                    <td>
+                        <input type="text" class="form-control form-control-sm item-desc" value="${name}" required />
+                    </td>
+                    <td>
+                        <input type="number" class="form-control form-control-sm text-center item-qty" value="1" min="1" required />
+                    </td>
+                    <td>
+                        <input type="number" class="form-control form-control-sm text-end item-price" value="${price}" min="0" step="1000" required />
+                    </td>
+                    <td class="text-end fw-semibold item-subtotal">${formatMoney(price)}</td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-link text-danger p-0 btn-remove-row" title="Xóa dòng">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                `;
+                itemsBody.appendChild(tr);
+                clinicServiceSelect.value = '';
+                recalculateTotals();
+            });
+
+            // Initial calculation
+            recalculateTotals();
+
+            // Submit Invoice
+            btnSubmitInvoice.addEventListener('click', async function () {
+                const rows = itemsBody.querySelectorAll('.item-row');
+                const items = [];
+
+                for (let row of rows) {
+                    const descInput = row.querySelector('.item-desc');
+                    const desc = descInput.value.trim();
+                    const qty = parseInt(row.querySelector('.item-qty').value) || 0;
+                    const price = parseFloat(row.querySelector('.item-price').value) || 0;
+                    const perfId = row.getAttribute('data-performed-id');
+
+                    if (!desc) {
+                        alert('Vui lòng nhập tên dịch vụ cho tất cả các dòng chi phí.');
+                        descInput.focus();
+                        return;
+                    }
+                    if (qty <= 0) {
+                        alert('Số lượng dịch vụ phải lớn hơn 0.');
+                        return;
+                    }
+
+                    items.push({
+                        performedServiceId: perfId ? parseInt(perfId) : null,
+                        description: desc,
+                        quantity: qty,
+                        unitPrice: price
+                    });
+                }
+
+                if (items.length === 0) {
+                    alert('Vui lòng thêm ít nhất một dịch vụ vào hóa đơn.');
+                    return;
+                }
+
+                const discountAmount = parseFloat(inputDiscount.value) || 0;
+                const taxPercent = parseFloat(inputTaxPercent.value) || 0;
+                const note = document.getElementById('invoiceNote').value;
+
+                btnSubmitInvoice.disabled = true;
+                btnSubmitInvoice.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang tạo hóa đơn...';
+
+                try {
+                    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+                    const response = await fetch('@Url.Action("Create", "ReceptionistBilling")', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': token || ''
+                        },
+                        body: JSON.stringify({
+                            appointmentId: @Model.AppointmentId,
+                            discountAmount: discountAmount,
+                            taxPercent: taxPercent,
+                            note: note,
+                            items: items
+                        })
+                    });
+
+                    const res = await response.json();
+                    if (res.success) {
+                        window.location.href = res.redirectUrl;
+                    } else {
+                        alert(res.message || 'Lỗi khi tạo hóa đơn.');
+                        btnSubmitInvoice.disabled = false;
+                        btnSubmitInvoice.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Khởi Tạo Hóa Đơn & Chuyển Sang Thu Tiền';
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Lỗi kết nối đến máy chủ. Vui lòng thử lại.');
+                    btnSubmitInvoice.disabled = false;
+                    btnSubmitInvoice.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Khởi Tạo Hóa Đơn & Chuyển Sang Thu Tiền';
+                }
+            });
+        });
+    </script>
+}

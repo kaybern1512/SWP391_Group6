@@ -471,7 +471,7 @@ CREATE TABLE Payments (
     PaymentId BIGINT IDENTITY PRIMARY KEY,
     InvoiceId BIGINT NOT NULL,
     PaidByPatientUserId BIGINT NOT NULL,
-    Method VARCHAR(30) NOT NULL CHECK (Method IN ('Online','BankTransfer')),
+    Method VARCHAR(30) NOT NULL CHECK (Method IN ('Cash','BankTransfer','CreditCard','Online')),
     Amount DECIMAL(18,2) NOT NULL,
     TransactionReference VARCHAR(100) NULL,
     Status VARCHAR(30) NOT NULL DEFAULT 'Pending' CHECK (Status IN ('Pending','Successful','Failed','Cancelled')),

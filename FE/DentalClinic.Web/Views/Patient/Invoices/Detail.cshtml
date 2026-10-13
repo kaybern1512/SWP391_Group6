@@ -1,0 +1,257 @@
+@model DentalClinic.Web.Models.ApiDtos.InvoiceDto
+@{
+    ViewData["Title"] = $"Chi Tiết Hóa Đơn #{Model.InvoiceCode}";
+}
+
+<div class="container-fluid px-0">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-action="Index" class="btn btn-outline-secondary btn-sm rounded-circle p-2" style="line-height: 1;">
+                    <i class="bi bi-arrow-left"></i>
+                </a>
+                <h1 class="h3 fw-bold text-dark mb-0">Hóa Đơn Viện Phí #<span class="font-monospace text-primary">@Model.InvoiceCode</span></h1>
+            </div>
+            <p class="text-muted mb-0 ms-5 ps-2">Ngày lập: @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm") &bull; Ca khám: @Model.AppointmentCode</p>
+        </div>
+        <div>
+            <a asp-action="Print" asp-route-id="@Model.InvoiceId" target="_blank" class="btn btn-outline-dark shadow-sm">
+                <i class="bi bi-printer me-1"></i> In Phiếu Thu Viện Phí
+            </a>
+        </div>
+    </div>
+
+    <!-- Status Banner -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-4">
+            <div class="row g-3 align-items-center">
+                <div class="col-12 col-md-3">
+                    <span class="text-muted small text-uppercase fw-semibold d-block">Trạng thái thanh toán</span>
+                    @if (Model.Status == "Paid")
+                    {
+                        <span class="badge bg-success fs-6 px-3 py-2 mt-1">
+                            <i class="bi bi-check-circle-fill me-1"></i> Đã thanh toán đầy đủ
+                        </span>
+                    }
+                    else if (Model.Status == "PartiallyPaid")
+                    {
+                        <span class="badge bg-warning text-dark fs-6 px-3 py-2 mt-1">
+                            <i class="bi bi-hourglass-split me-1"></i> Đã đặt cọc một phần
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-danger fs-6 px-3 py-2 mt-1">
+                            <i class="bi bi-clock me-1"></i> Chưa thanh toán
+                        </span>
+                    }
+                </div>
+                <div class="col-12 col-md-3">
+                    <span class="text-muted small text-uppercase fw-semibold d-block">Tổng viện phí</span>
+                    <h4 class="fw-bold text-dark mb-0 mt-1">@Model.TotalAmount.ToString("N0") đ</h4>
+                </div>
+                <div class="col-12 col-md-3">
+                    <span class="text-muted small text-uppercase fw-semibold d-block">Đã thanh toán</span>
+                    <h4 class="fw-bold text-success mb-0 mt-1">@Model.PaidAmount.ToString("N0") đ</h4>
+                </div>
+                <div class="col-12 col-md-3">
+                    <span class="text-muted small text-uppercase fw-semibold d-block">Còn lại</span>
+                    <h4 class="fw-bold text-danger mb-0 mt-1">@Model.RemainingAmount.ToString("N0") đ</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-12 col-lg-8">
+            <!-- Services table -->
+            <div class="card border-0 shadow-sm rounded-3 mb-4">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h5 class="card-title mb-0 fw-bold text-dark">
+                        <i class="bi bi-list-check text-primary me-2"></i>Dịch Vụ & Thủ Thuật Thực Hiện
+                    </h5>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3" style="width: 5%;">#</th>
+                                <th style="width: 55%;">Nội Dung Dịch Vụ</th>
+                                <th style="width: 15%;" class="text-center">Số Lượng</th>
+                                <th style="width: 25%;" class="text-end pe-3">Thành Tiền</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{ var idx = 1; }
+                            @foreach (var item in Model.Items)
+                            {
+                                <tr>
+                                    <td class="ps-3 text-muted">@(idx++)</td>
+                                    <td>
+                                        <div class="fw-semibold text-dark">@item.Description</div>
+                                        <div class="text-muted small">Đơn giá: @item.UnitPrice.ToString("N0") đ</div>
+                                    </td>
+                                    <td class="text-center font-monospace">@item.Quantity</td>
+                                    <td class="text-end pe-3 fw-bold">@item.Amount.ToString("N0") đ</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot class="border-top">
+                            <tr>
+                                <td colspan="3" class="text-end text-muted">Tạm tính:</td>
+                                <td class="text-end pe-3 fw-bold">@Model.SubTotal.ToString("N0") đ</td>
+                            </tr>
+                            @if (Model.DiscountAmount > 0)
+                            {
+                                <tr>
+                                    <td colspan="3" class="text-end text-danger">Ưu đãi / Giảm trừ:</td>
+                                    <td class="text-end pe-3 fw-bold text-danger">-@Model.DiscountAmount.ToString("N0") đ</td>
+                                </tr>
+                            }
+                            <tr class="table-light">
+                                <td colspan="3" class="text-end fw-bold text-dark fs-6">TỔNG TIỀN PHẢI THANH TOÁN:</td>
+                                <td class="text-end pe-3 fw-bold text-primary fs-5">@Model.TotalAmount.ToString("N0") đ</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Payment transaction list -->
+            <div class="card border-0 shadow-sm rounded-3">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h5 class="card-title mb-0 fw-bold text-dark">
+                        <i class="bi bi-clock-history text-success me-2"></i>Lịch Sử Giao Dịch Thanh Toán
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    @if (!Model.Payments.Any())
+                    {
+                        <div class="text-center py-4 text-muted">
+                            Chưa có giao dịch thanh toán nào được ghi nhận.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3">Thời Gian</th>
+                                        <th>Hình Thức</th>
+                                        <th>Mã Giao Dịch</th>
+                                        <th class="text-end pe-3">Số Tiền</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var p in Model.Payments)
+                                    {
+                                        <tr>
+                                            <td class="ps-3">@p.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                                            <td>
+                                                <span class="badge bg-light text-dark border">
+                                                    @p.MethodDisplayName
+                                                </span>
+                                            </td>
+                                            <td><span class="font-monospace small text-muted">@p.TransactionReference</span></td>
+                                            <td class="text-end pe-3 fw-bold text-success">+@p.Amount.ToString("N0") đ</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-4">
+            <div class="card border-0 shadow-sm rounded-3 mb-4">
+                <div class="card-header bg-light py-3 border-0">
+                    <h6 class="fw-bold text-dark mb-0">
+                        <i class="bi bi-info-circle me-2"></i>Thông Tin Ca Khám
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <span class="text-muted small d-block">Mã ca khám:</span>
+                        <div class="fw-bold font-monospace text-primary">@Model.AppointmentCode</div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted small d-block">Chuyên khoa:</span>
+                        <div class="fw-semibold">@Model.DepartmentName</div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted small d-block">Bác sĩ phụ trách:</span>
+                        <div class="fw-semibold text-primary">@Model.DentistName</div>
+                    </div>
+                    <div class="mb-0">
+                        <span class="text-muted small d-block">Thời gian:</span>
+                        <div class="small">@(Model.AppointmentDate?.ToString("dd/MM/yyyy HH:mm") ?? "--")</div>
+                    </div>
+                </div>
+            </div>
+
+            @if (Model.RemainingAmount > 0)
+            {
+                <div class="card border-0 shadow-sm rounded-3 mb-4 border-top border-4 border-primary">
+                    <div class="card-header bg-white py-3 border-bottom text-center">
+                        <span class="badge bg-primary-subtle text-primary fw-semibold mb-1">
+                            <i class="bi bi-qr-code-scan me-1"></i> VietQR Banking
+                        </span>
+                        <h6 class="fw-bold text-dark mb-0">Quét Mã Thanh Toán Trực Tuyến</h6>
+                    </div>
+                    <div class="card-body text-center p-3">
+                        <p class="text-muted small mb-2">Mở app Ngân hàng / MoMo quét mã dưới đây để thanh toán số dư còn lại:</p>
+                        
+                        <div class="p-2 bg-light rounded-3 d-inline-block border shadow-xs mb-3">
+                            <img src="@DentalClinic.Web.Helpers.VietQrHelper.GenerateQrUrl(Model.InvoiceCode, Model.RemainingAmount)" 
+                                 alt="VietQR @Model.InvoiceCode" 
+                                 class="img-fluid rounded" 
+                                 style="max-width: 220px; width: 100%; height: auto;" />
+                        </div>
+
+                        <div class="text-start bg-light p-3 rounded-3 small">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Ngân hàng:</span>
+                                <span class="fw-bold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultBankId</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Số tài khoản:</span>
+                                <span class="fw-bold font-monospace text-primary">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountNo</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Chủ tài khoản:</span>
+                                <span class="fw-semibold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountName</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Số tiền:</span>
+                                <span class="fw-bold text-danger">@Model.RemainingAmount.ToString("N0") đ</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Nội dung CK:</span>
+                                <span class="fw-bold font-monospace text-dark">THANH TOAN @Model.InvoiceCode</span>
+                            </div>
+                        </div>
+
+                        <div class="text-muted mt-2" style="font-size: 0.75rem;">
+                            <i class="bi bi-shield-check text-success me-1"></i>Hệ thống tự động nhận diện thanh toán chính xác 100%.
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="card border-0 shadow-sm rounded-3 bg-light">
+                <div class="card-body p-4 text-center">
+                    <i class="bi bi-shield-check fs-1 text-primary mb-2 d-block"></i>
+                    <h6 class="fw-bold">Biên Lai Điện Tử Hợp Lệ</h6>
+                    <p class="text-muted small mb-3">Phiếu thu này được xác nhận bởi hệ thống phòng khám @Model.ClinicName.</p>
+                    <a asp-action="Print" asp-route-id="@Model.InvoiceId" target="_blank" class="btn btn-outline-primary btn-sm w-100">
+                        <i class="bi bi-printer me-1"></i> In Phiếu Thu
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

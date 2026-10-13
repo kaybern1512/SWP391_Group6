@@ -197,6 +197,24 @@ builder.Services.AddHttpClient<INotificationApiService, NotificationApiService>(
 .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
+// Billing API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IBillingApiService, BillingApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
+// Report API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IReportApiService, ReportApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 var app = builder.Build();
 
 // Configure HTTP request pipeline
