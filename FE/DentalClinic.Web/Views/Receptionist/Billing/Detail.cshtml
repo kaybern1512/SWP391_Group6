@@ -334,8 +334,8 @@
                             <div class="col-4">
                                 <input type="radio" class="btn-check" name="Method" id="methodBank" value="BankTransfer">
                                 <label class="btn btn-outline-primary w-100 py-2 d-flex flex-column align-items-center" for="methodBank">
-                                    <i class="bi bi-bank fs-4 mb-1"></i>
-                                    <span class="small fw-semibold">Chuyển khoản</span>
+                                    <i class="bi bi-qr-code fs-4 mb-1"></i>
+                                    <span class="small fw-semibold">VietQR / CK</span>
                                 </label>
                             </div>
                             <div class="col-4">
@@ -344,6 +344,35 @@
                                     <i class="bi bi-credit-card fs-4 mb-1"></i>
                                     <span class="small fw-semibold">Quẹt thẻ POS</span>
                                 </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic VietQR Box (shown when BankTransfer selected) -->
+                    <div id="vietQrBox" class="p-3 bg-light rounded-3 border mb-3 d-none text-center">
+                        <div class="fw-bold text-primary mb-1">
+                            <i class="bi bi-qr-code-scan me-1"></i>Mã VietQR Tự Động Điền Chuẩn 100%
+                        </div>
+                        <p class="text-muted small mb-2">Bệnh nhân mở ứng dụng ngân hàng quét mã QR dưới đây:</p>
+                        <div class="d-inline-block bg-white p-2 rounded shadow-sm border mb-2">
+                            <img id="vietQrImg" src="@DentalClinic.Web.Helpers.VietQrHelper.GenerateQrUrl(Model.InvoiceCode, Model.RemainingAmount)" alt="VietQR" class="img-fluid" style="max-height: 200px;" />
+                        </div>
+                        <div class="small text-start bg-white p-2 rounded border">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Ngân hàng:</span>
+                                <span class="fw-bold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultBankName</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Số tài khoản:</span>
+                                <span class="fw-bold font-monospace text-primary">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountNo</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Chủ tài khoản:</span>
+                                <span class="fw-semibold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountName</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Nội dung CK:</span>
+                                <span class="fw-bold font-monospace text-danger">THANH TOAN @Model.InvoiceCode</span>
                             </div>
                         </div>
                     </div>
@@ -391,9 +420,47 @@
             document.addEventListener('DOMContentLoaded', function () {
                 const btnPayFull = document.getElementById('btnPayFull');
                 const payAmountInput = document.getElementById('payAmountInput');
+                const methodCash = document.getElementById('methodCash');
+                const methodBank = document.getElementById('methodBank');
+                const methodCard = document.getElementById('methodCard');
+                const vietQrBox = document.getElementById('vietQrBox');
+                const vietQrImg = document.getElementById('vietQrImg');
+
+                function toggleVietQr() {
+                    if (methodBank && methodBank.checked) {
+                        vietQrBox.classList.remove('d-none');
+                        updateQrCode();
+                    } else if (vietQrBox) {
+                        vietQrBox.classList.add('d-none');
+                    }
+                }
+
+                function updateQrCode() {
+                    if (!vietQrImg) return;
+                    const amount = Math.round(parseFloat(payAmountInput.value) || @Model.RemainingAmount);
+                    const invoiceCode = '@Model.InvoiceCode';
+                    const url = `https://img.vietqr.io/image/MB-039123456789-compact2.png?amount=${amount}&addInfo=THANH%20TOAN%20${encodeURIComponent(invoiceCode)}&accountName=NHA%20KHOA%20DENTALCARE`;
+                    vietQrImg.src = url;
+                }
+
+                if (methodCash) methodCash.addEventListener('change', toggleVietQr);
+                if (methodBank) methodBank.addEventListener('change', toggleVietQr);
+                if (methodCard) methodCard.addEventListener('change', toggleVietQr);
+
+                if (payAmountInput) {
+                    payAmountInput.addEventListener('input', function() {
+                        if (methodBank && methodBank.checked) {
+                            updateQrCode();
+                        }
+                    });
+                }
+
                 if (btnPayFull && payAmountInput) {
                     btnPayFull.addEventListener('click', function () {
                         payAmountInput.value = '@Model.RemainingAmount';
+                        if (methodBank && methodBank.checked) {
+                            updateQrCode();
+                        }
                     });
                 }
             });

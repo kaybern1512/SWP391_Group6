@@ -215,14 +215,30 @@
             </tfoot>
         </table>
 
-        <!-- Payment methods note -->
-        @if (Model.Payments.Any())
-        {
-            <div class="mb-4 small">
-                <strong>Phương thức đã thanh toán: </strong>
-                @string.Join(", ", Model.Payments.Select(p => $"{p.MethodDisplayName}: {p.Amount:N0} đ (Mã: {p.TransactionReference})"))
+        <!-- VietQR Quick Scan (If unpaid or for digital payment proof) -->
+        <div class="row align-items-center bg-light p-3 rounded border mb-4">
+            <div class="col-8">
+                <div class="fw-bold text-primary mb-1">
+                    <i class="bi bi-qr-code me-1"></i>Thanh Toán Qua Mã Chuẩn VietQR (Chuyển khoản 24/7)
+                </div>
+                <div class="small text-muted mb-1">
+                    Quét bằng ứng dụng của bất kỳ ngân hàng nào (MB, Vietcombank, Techcombank, BIDV, MoMo...).
+                </div>
+                <div class="small">
+                    <strong>Ngân hàng:</strong> @DentalClinic.Web.Helpers.VietQrHelper.DefaultBankName<br />
+                    <strong>Số tài khoản:</strong> <span class="font-monospace text-primary fw-bold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountNo</span><br />
+                    <strong>Chủ TK:</strong> @DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountName<br />
+                    <strong>Số tiền:</strong> <span class="fw-bold text-danger">@((Model.RemainingAmount > 0 ? Model.RemainingAmount : Model.TotalAmount).ToString("N0")) đ</span><br />
+                    <strong>Nội dung:</strong> <span class="font-monospace text-danger fw-bold">THANH TOAN @Model.InvoiceCode</span>
+                </div>
             </div>
-        }
+            <div class="col-4 text-center">
+                <div class="bg-white p-2 rounded shadow-sm border d-inline-block">
+                    <img src="@DentalClinic.Web.Helpers.VietQrHelper.GenerateQrUrl(Model.InvoiceCode, Model.RemainingAmount > 0 ? Model.RemainingAmount : Model.TotalAmount, template: "compact")" alt="VietQR" style="max-height: 140px;" />
+                </div>
+                <div class="small text-muted mt-1" style="font-size: 0.7rem;">Tự động điền 100% chuẩn xác</div>
+            </div>
+        </div>
 
         <!-- Signatures -->
         <div class="row signature-box text-center">
