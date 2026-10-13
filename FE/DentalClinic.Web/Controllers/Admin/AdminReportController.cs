@@ -24,7 +24,6 @@ public class AdminReportController : Controller
         _appointmentApiService = appointmentApiService;
     }
 
-    [HttpGet("")]
     [HttpGet("Revenue")]
     public async Task<IActionResult> Revenue(
         [FromQuery] DateTime? fromDate = null,
