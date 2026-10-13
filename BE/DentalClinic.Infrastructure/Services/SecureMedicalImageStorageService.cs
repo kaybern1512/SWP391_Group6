@@ -252,6 +252,16 @@ public class SecureMedicalImageStorageService : IMedicalImageStorageService
         };
     }
 
+    /// <summary>
+    /// Trích xuất và kiểm tra kích thước biên (Width x Height) trực tiếp từ container headers của ảnh
+    /// nhằm phòng chống tấn công cạn kiệt tài nguyên (Decompression Bomb / Pixel Flooding) mà không cần tải toàn bộ bitmap vào bộ nhớ.
+    ///
+    /// GIỚI HẠN KIẾN TRÚC ĐÃ XÁC NHẬN:
+    /// Phương thức này chỉ kiểm tra tính hợp lệ của cấu trúc header/metadata và giới hạn kích thước an toàn (8000x8000 px).
+    /// Đây KHÔNG PHẢI là bộ giải mã điểm ảnh toàn phần (full pixel-rendering codec). Các khiếm khuyết tiềm ẩn sâu
+    /// trong luồng nén scanline (corrupted pixel payload) không được giải mã toàn bộ nếu không tích hợp thư viện
+    /// xử lý đồ họa chuyên sâu (như SkiaSharp, ImageSharp hoặc libjpeg-turbo).
+    /// </summary>
     private static (bool IsValid, int Width, int Height, string? Error) TryValidateImageDimensions(byte[] bytes, string ext)
     {
         try

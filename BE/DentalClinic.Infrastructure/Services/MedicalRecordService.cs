@@ -460,10 +460,10 @@ public class MedicalRecordService : IMedicalRecordService
         else if (currentUserRole == UserRole.Dentist)
         {
             var isTreatingDentist = entry.DentistUserId == currentUserId ||
-                                   await HasDentistTreatmentRelationshipAsync(currentUserId, patientUserId, ct);
+                                   await HasActiveDentistTreatmentRelationshipAsync(currentUserId, patientUserId, ct);
             if (!isTreatingDentist)
             {
-                return ApiResponse<List<ImagingRecordDto>>.Fail("Bạn không có quyền truy cập ảnh chẩn đoán của bệnh nhân này do không phụ trách ca điều trị.");
+                return ApiResponse<List<ImagingRecordDto>>.Fail("Bạn không có quyền truy cập ảnh chẩn đoán của bệnh nhân này do không phụ trách ca điều trị hiện tại.");
             }
         }
         else if (currentUserRole != UserRole.SystemAdministrator)
@@ -517,10 +517,10 @@ public class MedicalRecordService : IMedicalRecordService
         else if (currentUserRole == UserRole.Dentist)
         {
             var isTreatingDentist = record.ClinicalEntry.DentistUserId == currentUserId ||
-                                   await HasDentistTreatmentRelationshipAsync(currentUserId, patientUserId, ct);
+                                   await HasActiveDentistTreatmentRelationshipAsync(currentUserId, patientUserId, ct);
             if (!isTreatingDentist)
             {
-                return ApiResponse<MedicalImageStreamResult>.Fail("Bạn không có quyền xem ảnh chẩn đoán của bệnh nhân này do không phụ trách ca điều trị.");
+                return ApiResponse<MedicalImageStreamResult>.Fail("Bạn không có quyền xem ảnh chẩn đoán của bệnh nhân này do không phụ trách ca điều trị hiện tại.");
             }
         }
         else if (currentUserRole != UserRole.SystemAdministrator)
@@ -595,37 +595,65 @@ public class MedicalRecordService : IMedicalRecordService
         return ApiResponse<bool>.Ok(true, "Đã xóa ảnh chẩn đoán thành công.");
     }
 
-    private async Task<bool> HasDentistTreatmentRelationshipAsync(long dentistUserId, long patientUserId, CancellationToken ct)
+    private async Task<bool> HasActiveDentistTreatmentRelationshipAsync(long dentistUserId, long patientUserId, CancellationToken ct)
     {
         if (dentistUserId <= 0 || patientUserId <= 0)
         {
             return false;
         }
 
-        // 1. Kiểm tra qua đợt khám lâm sàng trong hồ sơ bệnh án
-        var hasClinicalEntry = await _dbContext.ClinicalEntries
-            .AnyAsync(ce => ce.DentistUserId == dentistUserId && ce.MedicalRecord.PatientUserId == patientUserId, ct);
-        if (hasClinicalEntry) return true;
+        var now = DateTime.UtcNow;
+        var activeRecentWindow = TimeSpan.FromDays(30);
 
-        // 2. Kiểm tra qua lịch hẹn khám điều trị
-        var hasAppointment = await _dbContext.Appointments
-            .AnyAsync(a => a.PatientUserId == patientUserId && (a.AssignedDentistUserId == dentistUserId || a.RequestedDentistUserId == dentistUserId), ct);
-        if (hasAppointment) return true;
+        // 1. Kiểm tra qua lịch hẹn điều trị được phân công chính thức đang có hiệu lực hoặc trong cửa sổ điều trị gần đây (30 ngày).
+        // Least Privilege:
+        // - KHÔNG chấp nhận chỉ là yêu cầu đặt lịch từ bệnh nhân (RequestedDentistUserId).
+        // - KHÔNG chấp nhận lịch hẹn bị hủy (Cancelled), bị từ chối (Rejected), vắng mặt (NoShow), hoặc hết hạn (Expired).
+        var validActiveStatuses = new[]
+        {
+            AppointmentStatus.Confirmed,
+            AppointmentStatus.CheckedIn,
+            AppointmentStatus.Waiting,
+            AppointmentStatus.Called,
+            AppointmentStatus.InService
+        };
 
-        // 3. Kiểm tra qua kế hoạch điều trị hoặc các buổi điều trị
-        var hasTreatmentPlan = await _dbContext.TreatmentPlans
-            .AnyAsync(tp => tp.PatientUserId == patientUserId &&
-                (tp.CreatedByDentistUserId == dentistUserId ||
-                 tp.TreatmentPlanItems.Any(tpi => tpi.TreatmentSessions.Any(ts => ts.DentistUserId == dentistUserId))), ct);
-        if (hasTreatmentPlan) return true;
+        var hasActiveAppointment = await _dbContext.Appointments.AnyAsync(a =>
+            a.PatientUserId == patientUserId &&
+            a.AssignedDentistUserId == dentistUserId &&
+            (
+                validActiveStatuses.Contains(a.Status) ||
+                (a.Status == AppointmentStatus.Completed && a.ScheduledStart >= now.Subtract(activeRecentWindow))
+            ), ct);
 
-        // 4. Kiểm tra qua chuyển tuyến chuyên khoa
-        var hasReferral = await _dbContext.DepartmentReferrals
-            .AnyAsync(dr => dr.AssignedDentistUserId == dentistUserId &&
-                            dr.TreatmentSession != null &&
-                            dr.TreatmentSession.Appointment != null &&
-                            dr.TreatmentSession.Appointment.PatientUserId == patientUserId, ct);
-        if (hasReferral) return true;
+        if (hasActiveAppointment) return true;
+
+        // 2. Kiểm tra qua kế hoạch điều trị đang hoạt động
+        // Least Privilege: Kế hoạch điều trị không được ở trạng thái Cancelled hoặc Rejected.
+        var hasActiveTreatmentPlan = await _dbContext.TreatmentPlans.AnyAsync(tp =>
+            tp.PatientUserId == patientUserId &&
+            tp.Status != "Cancelled" &&
+            tp.Status != "Rejected" &&
+            (
+                tp.CreatedByDentistUserId == dentistUserId ||
+                tp.TreatmentPlanItems.Any(tpi =>
+                    (tpi.AssignedDentistUserId == dentistUserId ||
+                     tpi.TreatmentSessions.Any(ts => ts.DentistUserId == dentistUserId)) &&
+                    tpi.Status != "Cancelled")
+            ), ct);
+
+        if (hasActiveTreatmentPlan) return true;
+
+        // 3. Kiểm tra qua chuyển tuyến chuyên khoa hợp lệ đang tiếp nhận
+        // Least Privilege: Chỉ chấp nhận trạng thái Accepted hoặc InProgress.
+        var hasActiveReferral = await _dbContext.DepartmentReferrals.AnyAsync(dr =>
+            dr.AssignedDentistUserId == dentistUserId &&
+            (dr.Status == "Accepted" || dr.Status == "InProgress") &&
+            dr.TreatmentSession != null &&
+            dr.TreatmentSession.Appointment != null &&
+            dr.TreatmentSession.Appointment.PatientUserId == patientUserId, ct);
+
+        if (hasActiveReferral) return true;
 
         return false;
     }

@@ -539,6 +539,174 @@ public class MedicalImagingTests
     }
 
     [Fact]
+    public async Task GetImagingRecordsByClinicalEntryAsync_DentistOnlyHadCancelledAppointment_ReturnsForbidden_LeastPrivilege()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedMedicalRecordDataAsync(db);
+
+        // Appointment was cancelled
+        db.Appointments.Add(new Appointment
+        {
+            AppointmentId = 910,
+            PatientUserId = 101,
+            AssignedDentistUserId = 202,
+            AppointmentCode = "APT-910",
+            BookingSource = "Online",
+            ReasonForVisit = "Đau răng",
+            Status = AppointmentStatus.Cancelled,
+            ScheduledStart = DateTime.UtcNow,
+            ScheduledEnd = DateTime.UtcNow.AddMinutes(30),
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new MedicalRecordService(db, Mock.Of<IMedicalImageStorageService>(), Mock.Of<ILogger<MedicalRecordService>>());
+
+        var result = await service.GetImagingRecordsByClinicalEntryAsync(
+            currentUserId: 202,
+            currentUserRole: UserRole.Dentist,
+            clinicalEntryId: 701);
+
+        Assert.False(result.Success);
+        Assert.Contains("không có quyền", result.Message);
+    }
+
+    [Fact]
+    public async Task GetImagingRecordsByClinicalEntryAsync_DentistOnlyHadRejectedAppointment_ReturnsForbidden_LeastPrivilege()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedMedicalRecordDataAsync(db);
+
+        // Appointment was rejected
+        db.Appointments.Add(new Appointment
+        {
+            AppointmentId = 911,
+            PatientUserId = 101,
+            AssignedDentistUserId = 202,
+            AppointmentCode = "APT-911",
+            BookingSource = "Online",
+            ReasonForVisit = "Niềng răng",
+            Status = AppointmentStatus.Rejected,
+            ScheduledStart = DateTime.UtcNow,
+            ScheduledEnd = DateTime.UtcNow.AddMinutes(30),
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new MedicalRecordService(db, Mock.Of<IMedicalImageStorageService>(), Mock.Of<ILogger<MedicalRecordService>>());
+
+        var result = await service.GetImagingRecordsByClinicalEntryAsync(
+            currentUserId: 202,
+            currentUserRole: UserRole.Dentist,
+            clinicalEntryId: 701);
+
+        Assert.False(result.Success);
+        Assert.Contains("không có quyền", result.Message);
+    }
+
+    [Fact]
+    public async Task GetImagingRecordsByClinicalEntryAsync_DentistOnlyRequestedByPatient_ReturnsForbidden_LeastPrivilege()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedMedicalRecordDataAsync(db);
+
+        // Patient requested Dentist 202, but doctor is not assigned yet and status is pending review
+        db.Appointments.Add(new Appointment
+        {
+            AppointmentId = 912,
+            PatientUserId = 101,
+            RequestedDentistUserId = 202,
+            AssignedDentistUserId = null,
+            AppointmentCode = "APT-912",
+            BookingSource = "Online",
+            ReasonForVisit = "Tẩy trắng răng",
+            Status = AppointmentStatus.PendingReceptionReview,
+            ScheduledStart = DateTime.UtcNow.AddDays(2),
+            ScheduledEnd = DateTime.UtcNow.AddDays(2).AddMinutes(30),
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new MedicalRecordService(db, Mock.Of<IMedicalImageStorageService>(), Mock.Of<ILogger<MedicalRecordService>>());
+
+        var result = await service.GetImagingRecordsByClinicalEntryAsync(
+            currentUserId: 202,
+            currentUserRole: UserRole.Dentist,
+            clinicalEntryId: 701);
+
+        Assert.False(result.Success);
+        Assert.Contains("không có quyền", result.Message);
+    }
+
+    [Fact]
+    public async Task GetImagingRecordsByClinicalEntryAsync_DentistOnlyHadOldClinicalEntryInPast_ReturnsForbidden_LeastPrivilege()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedMedicalRecordDataAsync(db);
+
+        // Dentist 202 examined Patient 101 in the past (Entry 799)
+        db.ClinicalEntries.Add(new ClinicalEntry
+        {
+            ClinicalEntryId = 799,
+            MedicalRecordId = 501, // Patient 101
+            DentistUserId = 202,
+            Diagnosis = "Cạo vôi răng cách đây 6 tháng",
+            CreatedAt = DateTime.UtcNow.AddMonths(-6)
+        });
+        await db.SaveChangesAsync();
+
+        var service = new MedicalRecordService(db, Mock.Of<IMedicalImageStorageService>(), Mock.Of<ILogger<MedicalRecordService>>());
+
+        // Dentist 202 attempts to view images belonging to Entry 701 (authored by Dentist 201)
+        // With least privilege, past examination does not grant lifetime access to other doctors' entries.
+        var result = await service.GetImagingRecordsByClinicalEntryAsync(
+            currentUserId: 202,
+            currentUserRole: UserRole.Dentist,
+            clinicalEntryId: 701);
+
+        Assert.False(result.Success);
+        Assert.Contains("không có quyền", result.Message);
+    }
+
+    [Fact]
+    public async Task GetImagingRecordContentAsync_DentistWithCancelledTreatmentPlan_ReturnsForbidden_LeastPrivilege()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedMedicalRecordDataAsync(db);
+
+        // Treatment plan was cancelled
+        db.TreatmentPlans.Add(new TreatmentPlan
+        {
+            TreatmentPlanId = 801,
+            PatientUserId = 101,
+            DepartmentId = 1,
+            CreatedByDentistUserId = 202,
+            Status = "Cancelled",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        db.ImagingRecords.Add(new ImagingRecord
+        {
+            ImagingRecordId = 888,
+            ClinicalEntryId = 701,
+            ImagingType = "Panorama",
+            FileUrl = "secure://med-img/xray_patient101.jpg",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new MedicalRecordService(db, Mock.Of<IMedicalImageStorageService>(), Mock.Of<ILogger<MedicalRecordService>>());
+
+        var result = await service.GetImagingRecordContentAsync(
+            currentUserId: 202,
+            currentUserRole: UserRole.Dentist,
+            imagingRecordId: 888);
+
+        Assert.False(result.Success);
+        Assert.Contains("không có quyền", result.Message);
+    }
+
+    [Fact]
     public async Task DeleteImagingRecordAsync_PatientRole_ReturnsForbidden()
     {
         var db = CreateDbContext(Guid.NewGuid().ToString());
