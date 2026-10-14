@@ -38,7 +38,7 @@ public class DentistAppointmentController : Controller
 
     [HttpPost("{id:long}/Start")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Start(long id)
+    public async Task<IActionResult> Start(long id, [FromForm] string? date = null)
     {
         var result = await _appointmentApiService.DentistStartAppointmentAsync(id);
         if (result.IsSuccess)
@@ -49,12 +49,12 @@ public class DentistAppointmentController : Controller
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể bắt đầu buổi khám.";
         }
-        return RedirectToAction(nameof(Today));
+        return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
     }
 
     [HttpPost("{id:long}/Complete")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Complete(long id, [FromForm] string? notes)
+    public async Task<IActionResult> Complete(long id, [FromForm] string? notes, [FromForm] string? date = null)
     {
         var result = await _appointmentApiService.DentistCompleteAppointmentAsync(id, notes);
         if (result.IsSuccess)
@@ -65,7 +65,7 @@ public class DentistAppointmentController : Controller
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể hoàn thành buổi khám.";
         }
-        return RedirectToAction(nameof(Today));
+        return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
     }
 }
 

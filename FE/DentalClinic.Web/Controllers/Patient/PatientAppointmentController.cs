@@ -13,6 +13,7 @@ namespace DentalClinic.Web.Controllers.Patient;
 
 [Authorize(Roles = "Patient")]
 [Route("Patient/Appointment")]
+[Route("Patient/Appointments")]
 public class PatientAppointmentController : Controller
 {
     private readonly IAppointmentApiService _appointmentApiService;

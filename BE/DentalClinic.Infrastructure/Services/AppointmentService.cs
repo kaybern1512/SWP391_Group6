@@ -1394,7 +1394,7 @@ public class AppointmentService : IAppointmentService
                             }
                         }
 
-                        var roomName = room.RoomName;
+                        var roomName = !string.IsNullOrWhiteSpace(room.RoomName) ? room.RoomName : "Phòng điều trị";
                         if (chair != null && !string.IsNullOrWhiteSpace(chair.ChairCode))
                         {
                             roomName = $"{roomName} (Ghế {chair.ChairCode})";

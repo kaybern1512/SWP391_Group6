@@ -242,6 +242,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(
+    name: "auth_alias",
+    pattern: "Auth/{action=Login}/{id?}",
+    defaults: new { controller = "Account" });
+
+app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 

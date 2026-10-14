@@ -250,13 +250,17 @@ public class BillingService : IBillingService
         try
         {
             var methodLabel = GetMethodDisplayName(normalizedMethod);
-            await _notificationService.CreateNotificationAsync(
-                invoice.Appointment.PatientUserId,
-                invoice.AppointmentId,
-                "Payment",
-                "Xác nhận thanh toán thành công",
-                $"Bạn đã thanh toán {request.Amount:N0} đ cho hóa đơn #{invoice.InvoiceCode} bằng hình thức {methodLabel}. Trạng thái hóa đơn: {(invoice.Status == "Paid" ? "Đã thanh toán đủ" : "Đã đặt cọc một phần")}.",
-                ct);
+            var patientUserId = invoice.Appointment?.PatientUserId ?? invoice.Payments.FirstOrDefault()?.PaidByPatientUserId ?? 0;
+            if (patientUserId > 0)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    patientUserId,
+                    invoice.AppointmentId,
+                    "Payment",
+                    "Xác nhận thanh toán thành công",
+                    $"Bạn đã thanh toán {request.Amount:N0} đ cho hóa đơn #{invoice.InvoiceCode} bằng hình thức {methodLabel}. Trạng thái hóa đơn: {(invoice.Status == "Paid" ? "Đã thanh toán đủ" : "Đã đặt cọc một phần")}.",
+                    ct);
+            }
         }
         catch (Exception ex)
         {

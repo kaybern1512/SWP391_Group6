@@ -175,10 +175,11 @@
                                 </td>
                                 <td class="text-end pe-3">
                                     <div class="d-flex align-items-center justify-content-end gap-1">
-                                        @if (appt.Status == "CheckedIn")
+                                        @if (appt.Status == "CheckedIn" || appt.Status == "Confirmed")
                                         {
                                             <form asp-controller="DentistAppointment" asp-action="Start" asp-route-id="@appt.AppointmentId" method="post" class="d-inline">
                                                 @Html.AntiForgeryToken()
+                                                <input type="hidden" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
                                                 <button type="submit" class="btn btn-sm btn-success fw-semibold shadow-sm" title="Tiếp nhận bệnh nhân vào ghế điều trị">
                                                     <i class="bi bi-play-circle me-1"></i>Vào Khám
                                                 </button>
@@ -188,6 +189,7 @@
                                         {
                                             <form asp-controller="DentistAppointment" asp-action="Complete" asp-route-id="@appt.AppointmentId" method="post" class="d-inline">
                                                 @Html.AntiForgeryToken()
+                                                <input type="hidden" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
                                                 <button type="submit" class="btn btn-sm btn-primary fw-semibold shadow-sm" title="Hoàn tất buổi khám và điều trị">
                                                     <i class="bi bi-check-circle me-1"></i>Hoàn Thành
                                                 </button>
