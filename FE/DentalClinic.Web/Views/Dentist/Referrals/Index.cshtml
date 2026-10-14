@@ -1,0 +1,322 @@
+@model DentalClinic.Web.ViewModels.PostCare.DentistReferralIndexViewModel
+@{
+    ViewData["Title"] = "Hội Chẩn & Chuyển Khoa - Hẹn Tái Khám";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-arrow-left-right me-2 text-primary"></i>Hội Chẩn & Chuyển Khoa - Hẹn Tái Khám
+            </h1>
+            <p class="text-muted mb-0">Quản lý phiếu chuyển viện/chuyên khoa nội bộ và theo dõi lịch hẹn tái khám định kỳ của bệnh nhân.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#createReferralModal">
+                <i class="bi bi-plus-circle me-1"></i>Lập Phiếu Chuyển Khoa
+            </button>
+            <button type="button" class="btn btn-success shadow-sm" data-bs-toggle="modal" data-bs-target="#createFollowUpModal">
+                <i class="bi bi-calendar-plus me-1"></i>Hẹn Tái Khám
+            </button>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-pills mb-4 gap-2 bg-white p-2 rounded shadow-sm border" id="postCareTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(Model.ActiveTab != "followups" ? "active" : "") fw-semibold" id="referrals-tab" data-bs-toggle="tab" data-bs-target="#referrals-content" type="button" role="tab">
+                <i class="bi bi-arrow-left-right me-2"></i>Phiếu Chuyển Khoa (@Model.Referrals.Count)
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(Model.ActiveTab == "followups" ? "active" : "") fw-semibold" id="followups-tab" data-bs-toggle="tab" data-bs-target="#followups-content" type="button" role="tab">
+                <i class="bi bi-calendar-heart me-2"></i>Lịch Hẹn Tái Khám (@Model.FollowUps.Count)
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="postCareTabsContent">
+        <!-- TAB 1: REFERRALS -->
+        <div class="tab-pane fade @(Model.ActiveTab != "followups" ? "show active" : "")" id="referrals-content" role="tabpanel">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h5 class="card-title fw-bold mb-0 text-dark">
+                        <i class="bi bi-list-columns me-2 text-primary"></i>Danh Sách Yêu Cầu Chuyển Chuyên Khoa
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    @if (Model.Referrals == null || Model.Referrals.Count == 0)
+                    {
+                        <div class="text-center py-5">
+                            <i class="bi bi-inbox display-4 text-muted mb-3 d-block"></i>
+                            <h6 class="fw-bold text-muted">Chưa có phiếu chuyển khoa nào được lập</h6>
+                            <p class="text-muted small">Nhấn nút "Lập Phiếu Chuyển Khoa" để chuyển bệnh nhân sang chuyên khoa phối hợp điều trị.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-4">Mã Phiếu</th>
+                                        <th>Bệnh Nhân</th>
+                                        <th>Từ Khoa</th>
+                                        <th>Chuyển Đến</th>
+                                        <th>Bác Sĩ Tiếp Nhận</th>
+                                        <th>Trạng Thái</th>
+                                        <th>Ngày Lập</th>
+                                        <th class="pe-4 text-end">Chi Tiết Lý Do</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var r in Model.Referrals)
+                                    {
+                                        <tr>
+                                            <td class="ps-4 fw-bold text-primary">#REF-@r.ReferralId</td>
+                                            <td>
+                                                <div class="fw-bold text-dark">@r.PatientName</div>
+                                                <div class="small text-muted">@(r.PatientCode ?? "BN-" + r.PatientUserId)</div>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-secondary">@r.FromDepartmentName</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-primary">@r.ToDepartmentName</span>
+                                            </td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(r.AssignedDentistName))
+                                                {
+                                                    <span class="text-success fw-semibold"><i class="bi bi-person-check me-1"></i>@r.AssignedDentistName</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted fst-italic">Đang chờ phân bổ</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (r.Status == "Pending")
+                                                {
+                                                    <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Chờ Trưởng khoa duyệt</span>
+                                                }
+                                                else if (r.Status == "Accepted" || r.Status == "Assigned")
+                                                {
+                                                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Đã tiếp nhận</span>
+                                                }
+                                                else if (r.Status == "Rejected")
+                                                {
+                                                    <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Từ chối</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-info">@r.Status</span>
+                                                }
+                                            </td>
+                                            <td class="small text-muted">@r.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                                            <td class="pe-4 text-end">
+                                                <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="popover" data-bs-trigger="focus" data-bs-placement="left" title="Lý Do Hội Chẩn & Dặn Dò" data-bs-content="@r.Reason">
+                                                    <i class="bi bi-info-circle me-1"></i>Xem Lý Do
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: FOLLOW-UPS -->
+        <div class="tab-pane fade @(Model.ActiveTab == "followups" ? "show active" : "")" id="followups-content" role="tabpanel">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h5 class="card-title fw-bold mb-0 text-dark">
+                        <i class="bi bi-calendar-check me-2 text-success"></i>Lịch Hẹn Tái Khám Đã Chỉ Định
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    @if (Model.FollowUps == null || Model.FollowUps.Count == 0)
+                    {
+                        <div class="text-center py-5">
+                            <i class="bi bi-calendar-x display-4 text-muted mb-3 d-block"></i>
+                            <h6 class="fw-bold text-muted">Chưa có lịch hẹn tái khám nào</h6>
+                            <p class="text-muted small">Sau mỗi buổi điều trị, bạn có thể lập lịch hẹn tái khám định kỳ để nhắc nhở bệnh nhân.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-4">Mã Hẹn Tái Khám</th>
+                                        <th>Bệnh Nhân</th>
+                                        <th>Ngày Dự Kiến Hẹn</th>
+                                        <th>Lý Do / Nội Dung Tái Khám</th>
+                                        <th>Trạng Thái</th>
+                                        <th class="pe-4">Mã Ca Khám Gốc</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var f in Model.FollowUps)
+                                    {
+                                        <tr>
+                                            <td class="ps-4 fw-bold text-success">#FUP-@f.FollowUpId</td>
+                                            <td>
+                                                <div class="fw-bold text-dark">@f.PatientName</div>
+                                                <div class="small text-muted">@(f.PatientCode ?? "BN-" + f.PatientUserId)</div>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-info text-dark fs-6 py-1 px-2">
+                                                    <i class="bi bi-calendar-event me-1"></i>@f.RecommendedDate.ToString("dd/MM/yyyy")
+                                                </span>
+                                            </td>
+                                            <td class="text-dark">@f.Reason</td>
+                                            <td>
+                                                @if (f.Status == "Pending")
+                                                {
+                                                    <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Chờ tái khám</span>
+                                                }
+                                                else if (f.Status == "Completed")
+                                                {
+                                                    <span class="badge bg-success"><i class="bi bi-check2-all me-1"></i>Đã tái khám</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">@f.Status</span>
+                                                }
+                                            </td>
+                                            <td class="pe-4 small text-muted">
+                                                @(f.AppointmentCode ?? ("APT-" + f.AppointmentId))
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: TẠO PHIẾU CHUYỂN KHOA -->
+<div class="modal fade" id="createReferralModal" tabindex="-1" aria-labelledby="createReferralModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow">
+            <form method="post" asp-action="Create">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="createReferralModalLabel">
+                        <i class="bi bi-arrow-left-right me-2"></i>Lập Phiếu Hội Chẩn & Chuyển Chuyên Khoa
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-info border-0 shadow-sm d-flex align-items-center mb-4">
+                        <i class="bi bi-info-circle fs-4 me-3"></i>
+                        <div>Phiếu chuyển khoa sẽ được gửi trực tiếp đến Trưởng khoa của chuyên khoa đích để thẩm định và phân công bác sĩ tiếp nhận phối hợp điều trị.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chọn ca điều trị lâm sàng <span class="text-danger">*</span></label>
+                        <select name="TreatmentSessionId" class="form-select select2-enable" required>
+                            <option value="">-- Chọn buổi điều trị của bệnh nhân --</option>
+                            @foreach (var s in Model.RecentSessions)
+                            {
+                                <option value="@s.TreatmentSessionId">
+                                    [Buổi #@s.TreatmentSessionId] BN: @s.PatientName (@s.PatientCode) - Ngày: @s.SessionDate.ToString("dd/MM/yyyy") - Giai đoạn @s.PhaseSequenceNo: @(s.PhaseServiceName ?? "Thủ thuật")
+                                </option>
+                            }
+                        </select>
+                        <div class="form-text">Chọn buổi điều trị gần nhất cần phối hợp hội chẩn với chuyên khoa khác.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chuyên khoa chuyển đến <span class="text-danger">*</span></label>
+                        <select name="ToDepartmentId" class="form-select" required>
+                            <option value="">-- Chọn chuyên khoa tiếp nhận --</option>
+                            @foreach (var d in Model.Departments)
+                            {
+                                <option value="@d.DepartmentId">@d.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lý do chuyển khoa & Dặn dò lâm sàng <span class="text-danger">*</span></label>
+                        <textarea name="Reason" class="form-control" rows="4" placeholder="Ghi rõ tình trạng hiện tại của răng/hàm, lý do chuyển (vd: cần nhổ răng ngầm trước chỉnh nha, điều trị nha chu sâu, cấy ghép implant...), hình ảnh x-quang đã chụp..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy bỏ</button>
+                    <button type="submit" class="btn btn-primary fw-semibold">
+                        <i class="bi bi-send-check me-1"></i>Gửi Yêu Cầu Chuyển Khoa
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: HẸN TÁI KHÁM -->
+<div class="modal fade" id="createFollowUpModal" tabindex="-1" aria-labelledby="createFollowUpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post" asp-action="CreateFollowUp">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold" id="createFollowUpModalLabel">
+                        <i class="bi bi-calendar-heart me-2"></i>Lập Lịch Hẹn Tái Khám Sau Điều Trị
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Buổi điều trị liên quan <span class="text-danger">*</span></label>
+                        <select name="TreatmentSessionId" class="form-select" required>
+                            <option value="">-- Chọn ca điều trị của bệnh nhân --</option>
+                            @foreach (var s in Model.RecentSessions)
+                            {
+                                <option value="@s.TreatmentSessionId">
+                                    [Buổi #@s.TreatmentSessionId] BN: @s.PatientName (@s.PatientCode) - Ngày: @s.SessionDate.ToString("dd/MM/yyyy")
+                                </option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ngày đề xuất tái khám <span class="text-danger">*</span></label>
+                        <input type="date" name="RecommendedDate" class="form-control" min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" value="@DateTime.Today.AddDays(7).ToString("yyyy-MM-dd")" required />
+                        <div class="form-text">Hệ thống sẽ gửi thông báo và tự động nhắc nhở bệnh nhân khi sắp đến hạn.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Nội dung tái khám & Dặn dò bệnh nhân</label>
+                        <textarea name="Reason" class="form-control" rows="3" placeholder="Ví dụ: Kiểm tra vết khâu, cắt chỉ, kiểm tra khớp cắn, theo dõi tủy sau trám..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-success fw-semibold">
+                        <i class="bi bi-calendar-check me-1"></i>Xác Nhận Lên Lịch Hẹn
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+            popoverTriggerList.map(function (popoverTriggerEl) {
+                return new bootstrap.Popover(popoverTriggerEl);
+            });
+        });
+    </script>
+}

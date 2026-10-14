@@ -1,0 +1,112 @@
+@model DentalClinic.Web.ViewModels.PostCare.PatientFollowUpIndexViewModel
+@{
+    ViewData["Title"] = "Lịch Hẹn Tái Khám Của Tôi";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-calendar-heart me-2 text-primary"></i>Lịch Hẹn Tái Khám Của Tôi
+            </h1>
+            <p class="text-muted mb-0">Theo dõi các mốc hẹn tái khám do bác sĩ điều trị chỉ định để bảo đảm sức khỏe răng miệng tốt nhất.</p>
+        </div>
+        <div>
+            <a asp-controller="PatientAppointment" asp-action="Book" class="btn btn-primary shadow-sm">
+                <i class="bi bi-calendar-plus me-1"></i>Đặt Lịch Hẹn Ngay
+            </a>
+        </div>
+    </div>
+
+    <!-- Alert Advice -->
+    <div class="alert alert-primary bg-primary-subtle border-0 shadow-sm d-flex align-items-center mb-4 p-3 rounded-3">
+        <i class="bi bi-info-circle-fill text-primary fs-3 me-3"></i>
+        <div>
+            <span class="fw-bold text-primary">Lời dặn từ Bác Sĩ Nha Khoa:</span>
+            <span class="text-dark"> Việc tái khám đúng thời hạn giúp phát hiện sớm các phản ứng bất thường, cắt chỉ, kiểm tra khớp cắn và đảm bảo hiệu quả điều trị phục hồi toàn diện.</span>
+        </div>
+    </div>
+
+    <!-- List of Follow-up Schedules -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-3 border-bottom">
+            <h5 class="card-title fw-bold mb-0 text-dark">
+                <i class="bi bi-clock-history me-2 text-primary"></i>Danh Sách Lịch Hẹn Tái Khám
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            @if (Model.FollowUps == null || Model.FollowUps.Count == 0)
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-calendar-heart display-4 text-muted mb-3 d-block"></i>
+                    <h6 class="fw-bold text-muted">Bạn chưa có lịch hẹn tái khám nào</h6>
+                    <p class="text-muted small">Sau khi hoàn thành các buổi điều trị tại phòng khám, bác sĩ sẽ lên lịch hẹn tái khám nếu cần thiết.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Mã Lịch Hẹn</th>
+                                <th>Chuyên Khoa & Bác Sĩ</th>
+                                <th>Ngày Dự Kiến Tái Khám</th>
+                                <th>Nội Dung Chỉ Định</th>
+                                <th>Trạng Thái</th>
+                                <th class="pe-4 text-end">Hành Động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var f in Model.FollowUps)
+                            {
+                                var isUpcoming = f.RecommendedDate >= DateTime.Today;
+                                <tr>
+                                    <td class="ps-4 fw-bold text-primary">#FUP-@f.FollowUpId</td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@f.DepartmentName</div>
+                                        <div class="small text-muted"><i class="bi bi-person me-1"></i>BS. @f.DentistName</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold @(isUpcoming ? "text-primary fs-6" : "text-muted")">
+                                            <i class="bi bi-calendar-event me-1"></i>@f.RecommendedDate.ToString("dd/MM/yyyy")
+                                        </div>
+                                        @if (isUpcoming)
+                                        {
+                                            var daysLeft = (f.RecommendedDate.Date - DateTime.Today).Days;
+                                            <span class="badge bg-info-subtle text-info border">
+                                                @(daysLeft == 0 ? "Hôm nay" : $"Còn {daysLeft} ngày")
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="text-dark">@f.Reason</span>
+                                    </td>
+                                    <td>
+                                        @if (f.Status == "Pending")
+                                        {
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Chờ tái khám</span>
+                                        }
+                                        else if (f.Status == "Completed")
+                                        {
+                                            <span class="badge bg-success"><i class="bi bi-check2-circle me-1"></i>Đã tái khám</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">@f.Status</span>
+                                        }
+                                    </td>
+                                    <td class="pe-4 text-end">
+                                        <a asp-controller="PatientAppointment" asp-action="Book" class="btn btn-sm btn-outline-primary fw-semibold">
+                                            <i class="bi bi-calendar-plus me-1"></i>Đặt Lịch
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
