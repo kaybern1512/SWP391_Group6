@@ -270,6 +270,51 @@
                 </div>
             </div>
 
+            @if (Model.RemainingAmount > 0 && Model.Status != "Cancelled")
+            {
+                <div class="card border-0 shadow-sm rounded-3 mb-4 border-top border-4 border-primary">
+                    <div class="card-header bg-white py-3 border-bottom text-center">
+                        <span class="badge bg-primary-subtle text-primary fw-semibold mb-1">
+                            <i class="bi bi-qr-code-scan me-1"></i> VietQR Banking
+                        </span>
+                        <h6 class="fw-bold text-dark mb-0">Mã QR Thanh Toán Tại Quầy</h6>
+                    </div>
+                    <div class="card-body text-center p-3">
+                        <p class="text-muted small mb-2">Cho bệnh nhân quét mã bằng App Ngân hàng hoặc MoMo:</p>
+                        
+                        <div class="p-2 bg-light rounded-3 d-inline-block border shadow-xs mb-3">
+                            <img src="@DentalClinic.Web.Helpers.VietQrHelper.GenerateQrUrl(Model.InvoiceCode, Model.RemainingAmount)" 
+                                 alt="VietQR @Model.InvoiceCode" 
+                                 class="img-fluid rounded" 
+                                 style="max-width: 220px; width: 100%; height: auto;" />
+                        </div>
+
+                        <div class="text-start bg-light p-3 rounded-3 small">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Ngân hàng:</span>
+                                <span class="fw-bold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultBankId</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Số tài khoản:</span>
+                                <span class="fw-bold font-monospace text-primary">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountNo</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Chủ tài khoản:</span>
+                                <span class="fw-semibold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountName</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Số tiền:</span>
+                                <span class="fw-bold text-danger">@Model.RemainingAmount.ToString("N0") đ</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Nội dung CK:</span>
+                                <span class="fw-bold font-monospace text-dark">THANH TOAN @Model.InvoiceCode</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
             <div class="card border-0 shadow-sm rounded-3">
                 <div class="card-body text-center p-4">
                     <i class="bi bi-printer-fill fs-1 text-secondary mb-2 d-block"></i>
@@ -433,6 +478,9 @@
                     } else if (vietQrBox) {
                         vietQrBox.classList.add('d-none');
                     }
+                const paymentModal = document.getElementById('paymentModal');
+                if (paymentModal) {
+                    paymentModal.addEventListener('shown.bs.modal', toggleVietQr);
                 }
 
                 function updateQrCode() {
