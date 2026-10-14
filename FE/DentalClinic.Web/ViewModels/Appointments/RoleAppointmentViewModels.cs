@@ -45,5 +45,6 @@ public class DepartmentReviewViewModel
 
 public class DentistTodayAppointmentsViewModel
 {
+    public DateOnly SelectedDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
     public List<AppointmentDto> Appointments { get; set; } = new();
 }

@@ -19,11 +19,18 @@ public class DentistAppointmentController : Controller
 
     [HttpGet("")]
     [HttpGet("Today")]
-    public async Task<IActionResult> Today()
+    public async Task<IActionResult> Today([FromQuery] string? date = null)
     {
-        var result = await _appointmentApiService.GetDentistTodayAppointmentsAsync();
+        var targetDate = System.DateOnly.FromDateTime(System.DateTime.Today);
+        if (!string.IsNullOrWhiteSpace(date) && System.DateOnly.TryParse(date, out var parsed))
+        {
+            targetDate = parsed;
+        }
+
+        var result = await _appointmentApiService.GetDentistAppointmentsAsync(targetDate, targetDate);
         var vm = new DentistTodayAppointmentsViewModel
         {
+            SelectedDate = targetDate,
             Appointments = result.Data ?? new()
         };
         return View("~/Views/Dentist/Appointments/Today.cshtml", vm);

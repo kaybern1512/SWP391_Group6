@@ -1,17 +1,46 @@
 @model DentalClinic.Web.ViewModels.Appointments.DentistTodayAppointmentsViewModel
 @{
-    ViewData["Title"] = "Lịch khám hôm nay của Bác sĩ";
+    var today = DateOnly.FromDateTime(DateTime.Today);
+    var tomorrow = today.AddDays(1);
+    var yesterday = today.AddDays(-1);
+    var isToday = Model.SelectedDate == today;
+    var isTomorrow = Model.SelectedDate == tomorrow;
+    var displayTitle = isToday ? "Lịch Thăm Khám Hôm Nay" : (isTomorrow ? "Lịch Thăm Khám Ngày Mai" : $"Lịch Thăm Khám Ngày {Model.SelectedDate:dd/MM/yyyy}");
+    ViewData["Title"] = displayTitle;
 }
 
 <div class="container-fluid px-0">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
         <div>
-            <h1 class="h3 fw-bold text-dark mb-1">Lịch Thăm Khám Hôm Nay</h1>
-            <p class="text-muted mb-0">Hôm nay: <strong class="text-primary">@DateTime.Today.ToString("dd/MM/yyyy")</strong> &bull; Bác sĩ chuyên khoa phụ trách điều trị</p>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-calendar2-week text-primary me-2"></i>@displayTitle
+            </h1>
+            <p class="text-muted mb-0">
+                Ngày khám: <strong class="text-primary">@Model.SelectedDate.ToString("dd/MM/yyyy")</strong>
+                @(isToday ? " (Hôm nay)" : (isTomorrow ? " (Ngày mai)" : ""))
+                &bull; Bác sĩ chuyên khoa phụ trách điều trị
+            </p>
         </div>
-        <div>
-            <span class="badge bg-primary fs-6 px-3 py-2">
-                Tổng cộng: @Model.Appointments.Count ca khám
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="btn-group shadow-sm">
+                <a asp-action="Today" asp-route-date="@today.ToString("yyyy-MM-dd")" class="btn btn-sm @(isToday ? "btn-primary fw-semibold" : "btn-outline-primary")">
+                    Hôm Nay
+                </a>
+                <a asp-action="Today" asp-route-date="@tomorrow.ToString("yyyy-MM-dd")" class="btn btn-sm @(isTomorrow ? "btn-primary fw-semibold" : "btn-outline-primary")">
+                    Ngày Mai
+                </a>
+            </div>
+
+            <form method="get" asp-action="Today" class="d-flex align-items-center gap-1">
+                <input type="date" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" onchange="this.form.submit()" class="form-control form-control-sm shadow-sm" style="width: 150px;" title="Chọn ngày xem lịch khám" />
+            </form>
+
+            <a asp-controller="DentistSchedule" asp-action="Schedule" class="btn btn-sm btn-outline-secondary shadow-sm" title="Mở lịch làm việc tháng">
+                <i class="bi bi-calendar-month me-1"></i>Xem Lịch Tháng
+            </a>
+
+            <span class="badge bg-primary fs-6 px-3 py-2 ms-2">
+                @Model.Appointments.Count ca khám
             </span>
         </div>
     </div>
@@ -23,8 +52,19 @@
                 <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
                     <i class="bi bi-calendar-event fs-2 text-muted"></i>
                 </div>
-                <h5 class="fw-bold text-dark">Hôm nay không có ca khám nào</h5>
-                <p class="text-muted mb-0">Bạn hiện không có lịch hẹn khám nào được phân bổ trong ngày hôm nay.</p>
+                <h5 class="fw-bold text-dark">Không có ca khám nào vào ngày @Model.SelectedDate.ToString("dd/MM/yyyy")</h5>
+                <p class="text-muted mb-3">Bạn hiện không có lịch hẹn khám nào được phân bổ trong ngày này.</p>
+                <div class="d-flex justify-content-center gap-2">
+                    @if (!isToday)
+                    {
+                        <a asp-action="Today" asp-route-date="@today.ToString("yyyy-MM-dd")" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-calendar-check me-1"></i>Xem Lịch Hôm Nay
+                        </a>
+                    }
+                    <a asp-controller="DentistSchedule" asp-action="Schedule" class="btn btn-primary btn-sm">
+                        <i class="bi bi-calendar-month me-1"></i>Xem Lịch Làm Việc Cả Tháng
+                    </a>
+                </div>
             </div>
         </div>
     }
