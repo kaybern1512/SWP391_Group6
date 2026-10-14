@@ -176,7 +176,7 @@ public class PatientAppointmentController : Controller
         var result = await _appointmentApiService.PatientWithdrawAsync(id, reason);
         if (result.IsSuccess)
         {
-            TempData["SuccessMessage"] = "Đã thu hồi yêu cầu đặt lịch khám thành công.";
+            TempData["SuccessMessage"] = !string.IsNullOrWhiteSpace(result.Message) ? result.Message : "Đã thu hồi yêu cầu đặt lịch khám thành công.";
         }
         else
         {
@@ -199,7 +199,7 @@ public class PatientAppointmentController : Controller
         var result = await _appointmentApiService.PatientCancelAsync(id, reason);
         if (result.IsSuccess)
         {
-            TempData["SuccessMessage"] = "Đã hủy lịch hẹn thành công.";
+            TempData["SuccessMessage"] = !string.IsNullOrWhiteSpace(result.Message) ? result.Message : "Đã hủy lịch hẹn thành công.";
         }
         else
         {

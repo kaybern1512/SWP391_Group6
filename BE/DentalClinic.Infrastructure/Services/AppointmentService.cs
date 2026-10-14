@@ -330,9 +330,29 @@ public class AppointmentService : IAppointmentService
             return ApiResponse.Fail("Bạn không có quyền hủy lịch hẹn này.");
         }
 
+        var withdrawableStatuses = new[]
+        {
+            AppointmentStatus.PendingReceptionReview,
+            AppointmentStatus.PendingDepartmentReview,
+            AppointmentStatus.AwaitingPatientResponse
+        };
+
+        if (withdrawableStatuses.Contains(appointment.Status))
+        {
+            return await PatientWithdrawAsync(appointmentId, patientUserId, reason, ct);
+        }
+
         if (appointment.Status != AppointmentStatus.Confirmed)
         {
-            return ApiResponse.Fail("Chỉ có thể hủy lịch hẹn đã được xác nhận (Confirmed).");
+            if (appointment.Status == AppointmentStatus.Cancelled || appointment.Status == AppointmentStatus.Withdrawn)
+            {
+                return ApiResponse.Fail("Lịch hẹn này đã được hủy trước đó.");
+            }
+            if (appointment.Status == AppointmentStatus.Completed)
+            {
+                return ApiResponse.Fail("Không thể hủy lịch hẹn đã hoàn thành.");
+            }
+            return ApiResponse.Fail($"Chỉ có thể hủy lịch hẹn đang chờ duyệt hoặc đã được xác nhận (Hiện tại: {appointment.Status}).");
         }
 
         if (string.IsNullOrWhiteSpace(reason))
@@ -626,7 +646,16 @@ public class AppointmentService : IAppointmentService
                 if (incidentDate < thirtyDaysAgo) continue;
 
                 bool isLate = false;
-                if (appt.CancellationReason != null && appt.CancellationReason.Contains("[Hủy sát giờ <12h]"))
+                // Staff or clinic cancellations are never penalized against the patient
+                if (appt.CancellationReason != null && 
+                    (appt.CancellationReason.Contains("[Lễ tân") || 
+                     appt.CancellationReason.Contains("[Phòng khám") || 
+                     appt.CancellationReason.Contains("[Staff]") ||
+                     appt.CancellationReason.Contains("[Clinic]")))
+                {
+                    isLate = false;
+                }
+                else if (appt.CancellationReason != null && appt.CancellationReason.Contains("[Hủy sát giờ <12h]"))
                 {
                     isLate = true;
                 }
@@ -961,6 +990,81 @@ public class AppointmentService : IAppointmentService
         }
 
         return ApiResponse.Ok("Đã ghi nhận bệnh nhân vắng mặt (No-Show) thành công.");
+    }
+
+    public async Task<ApiResponse> StaffCancelAppointmentAsync(
+        long appointmentId,
+        long staffUserId,
+        string reason,
+        CancellationToken ct = default)
+    {
+        var appointment = await _dbContext.Appointments
+            .Include(a => a.PatientUser)
+            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+
+        if (appointment == null)
+        {
+            return ApiResponse.Fail("Không tìm thấy lịch hẹn.");
+        }
+
+        var cancellableStatuses = new[]
+        {
+            AppointmentStatus.PendingReceptionReview,
+            AppointmentStatus.PendingDepartmentReview,
+            AppointmentStatus.AwaitingPatientResponse,
+            AppointmentStatus.Confirmed,
+            AppointmentStatus.Waiting
+        };
+
+        if (!cancellableStatuses.Contains(appointment.Status))
+        {
+            if (appointment.Status == AppointmentStatus.Cancelled || appointment.Status == AppointmentStatus.Withdrawn)
+            {
+                return ApiResponse.Fail("Lịch hẹn này đã được hủy trước đó.");
+            }
+            if (appointment.Status == AppointmentStatus.Completed)
+            {
+                return ApiResponse.Fail("Không thể hủy lịch hẹn đã hoàn thành khám.");
+            }
+            return ApiResponse.Fail($"Không thể hủy lịch hẹn ở trạng thái hiện tại ({appointment.Status}).");
+        }
+
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return ApiResponse.Fail("Vui lòng cung cấp lý do hủy lịch hẹn.");
+        }
+
+        var now = DateTime.UtcNow;
+        var oldStatus = appointment.Status;
+        appointment.Status = AppointmentStatus.Cancelled;
+        appointment.CancelledAt = now;
+        appointment.CancellationReason = $"[Lễ tân hủy] {reason.Trim()}";
+        appointment.UpdatedAt = now;
+
+        var historyNote = $"Lễ tân/Nhân viên hủy lịch: {reason.Trim()}";
+
+        var history = new AppointmentStatusHistory
+        {
+            AppointmentId = appointmentId,
+            OldStatus = oldStatus,
+            NewStatus = AppointmentStatus.Cancelled,
+            ChangedByUserId = staffUserId,
+            Note = historyNote,
+            ChangedAt = now
+        };
+        _dbContext.AppointmentStatusHistories.Add(history);
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        await _notificationService.CreateNotificationAsync(
+            appointment.PatientUserId,
+            appointmentId,
+            "AppointmentCancelledByStaff",
+            "Lịch hẹn đã được hủy bởi phòng khám",
+            $"Lịch hẹn {appointment.AppointmentCode} đã được nhân viên phòng khám hỗ trợ hủy. Lý do: {reason.Trim()}. Bạn không bị tính điểm phạt gậy vi phạm.",
+            ct);
+
+        return ApiResponse.Ok("Đã hủy lịch hẹn thành công (không tính điểm phạt cho bệnh nhân).");
     }
 
     public async Task<ApiResponse<List<AppointmentDto>>> GetDepartmentRequestsAsync(

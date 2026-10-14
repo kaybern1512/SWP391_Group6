@@ -272,6 +272,21 @@ public class AppointmentsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("api/receptionist/appointments/{id:long}/cancel")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ReceptionistCancel(long id, [FromBody] StaffCancelAppointmentRequest request, CancellationToken ct)
+    {
+        var staffUserId = GetCurrentUserId();
+        var result = await _appointmentService.StaffCancelAppointmentAsync(id, staffUserId, request.Reason, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
     // ==========================================
     // DEPARTMENT MANAGER ENDPOINTS
     // ==========================================

@@ -150,6 +150,9 @@
                                             <button type="button" class="btn btn-success btn-sm px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#checkInModal-@appt.AppointmentId">
                                                 <i class="bi bi-person-check-fill me-1"></i> Check-in
                                             </button>
+                                            <button type="button" class="btn btn-outline-warning text-dark btn-sm px-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#cancelModal-@appt.AppointmentId" title="Hủy lịch hẹn (0 gậy phạt)">
+                                                <i class="bi bi-x-circle me-1"></i> Hủy Hẹn
+                                            </button>
                                             <button type="button" class="btn btn-outline-danger btn-sm px-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#noShowModal-@appt.AppointmentId" title="Đánh dấu bệnh nhân vắng mặt">
                                                 <i class="bi bi-person-x me-1"></i> Vắng mặt
                                             </button>
@@ -191,6 +194,59 @@
                                                     <div class="modal-footer">
                                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
                                                         <button type="submit" class="btn btn-success fw-bold">Hoàn Tất Check-In</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+
+                                        <!-- Cancel Modal -->
+                                        <div class="modal fade text-start" id="cancelModal-@appt.AppointmentId" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <form asp-action="Cancel" asp-route-id="@appt.AppointmentId" method="post" class="modal-content">
+                                                    @Html.AntiForgeryToken()
+                                                    <div class="modal-header bg-warning text-dark">
+                                                        <h5 class="modal-title"><i class="bi bi-x-circle me-2"></i>Hủy Lịch Hẹn (Lễ Tân / Phòng Khám)</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <div class="p-3 bg-light rounded mb-3">
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Mã lịch hẹn:</span>
+                                                                <span class="fw-bold font-monospace">@appt.AppointmentCode</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Bệnh nhân:</span>
+                                                                <span class="fw-bold">@appt.PatientName (@appt.PatientCode)</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Khung giờ:</span>
+                                                                <span class="fw-semibold text-primary">@(appt.ScheduledStart?.ToString("HH:mm") ?? "--") - @(appt.ScheduledEnd?.ToString("HH:mm") ?? "--")</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between">
+                                                                <span class="text-muted">Bác sĩ:</span>
+                                                                <span class="fw-semibold">@(appt.AssignedDentistName ?? "Chưa phân bổ")</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="alert alert-info border-info small mb-3">
+                                                            <i class="bi bi-shield-check me-1 text-primary"></i>
+                                                            <strong>Chính sách công bằng:</strong> Khi Lễ tân hỗ trợ hủy lịch hẹn do bệnh nhân gọi điện xin hủy trước hoặc do phòng khám điều chỉnh, bệnh nhân <strong>KHÔNG</strong> bị tính điểm phạt gậy vi phạm.
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-semibold">Lý do hủy hẹn <span class="text-danger">*</span>:</label>
+                                                            <select class="form-select mb-2" onchange="document.getElementById('customReason-@appt.AppointmentId').value = this.value">
+                                                                <option value="">-- Chọn lý do thường gặp --</option>
+                                                                <option value="Bệnh nhân gọi điện báo bận đột xuất, xin hủy hẹn">Bệnh nhân gọi điện báo bận đột xuất, xin hủy hẹn</option>
+                                                                <option value="Bệnh nhân xin dời lịch sang ngày khác">Bệnh nhân xin dời lịch sang ngày khác</option>
+                                                                <option value="Bác sĩ có lịch cấp cứu / phẫu thuật đột xuất">Bác sĩ có lịch cấp cứu / phẫu thuật đột xuất</option>
+                                                                <option value="Phòng khám bảo trì trang thiết bị chuyên khoa">Phòng khám bảo trì trang thiết bị chuyên khoa</option>
+                                                                <option value="Bệnh nhân có triệu chứng không phù hợp điều trị hôm nay">Bệnh nhân có triệu chứng không phù hợp điều trị hôm nay</option>
+                                                            </select>
+                                                            <textarea id="customReason-@appt.AppointmentId" name="reason" class="form-control" rows="2" required placeholder="Hoặc nhập chi tiết lý do hủy lịch tại đây..."></textarea>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                                                        <button type="submit" class="btn btn-warning fw-bold text-dark">Xác Nhận Hủy Lịch</button>
                                                     </div>
                                                 </form>
                                             </div>
@@ -244,6 +300,41 @@
                                     else if (appt.Status == "NoShow")
                                     {
                                         <span class="text-danger small"><i class="bi bi-person-x me-1"></i>Đã báo vắng</span>
+                                    }
+                                    else if (appt.Status == "Waiting")
+                                    {
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            <button type="button" class="btn btn-outline-warning text-dark btn-sm px-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#cancelModal-@appt.AppointmentId" title="Hủy lịch hẹn (0 gậy phạt)">
+                                                <i class="bi bi-x-circle me-1"></i> Hủy Hẹn
+                                            </button>
+                                            <a asp-controller="ReceptionistBilling" asp-action="Create" asp-route-appointmentId="@appt.AppointmentId" class="btn btn-outline-primary btn-sm" title="Lập hóa đơn viện phí">
+                                                <i class="bi bi-receipt me-1"></i>Viện phí
+                                            </a>
+                                        </div>
+
+                                        <!-- Cancel Modal for Waiting -->
+                                        <div class="modal fade text-start" id="cancelModal-@appt.AppointmentId" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <form asp-action="Cancel" asp-route-id="@appt.AppointmentId" method="post" class="modal-content">
+                                                    @Html.AntiForgeryToken()
+                                                    <div class="modal-header bg-warning text-dark">
+                                                        <h5 class="modal-title"><i class="bi bi-x-circle me-2"></i>Hủy Lịch Hẹn Đang Chờ Khám</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <p>Bệnh nhân <strong>@appt.PatientName</strong> đã check-in nhưng cần hủy hẹn và rời khỏi phòng khám.</p>
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-semibold">Lý do hủy hẹn <span class="text-danger">*</span>:</label>
+                                                            <textarea name="reason" class="form-control" rows="2" required placeholder="Nhập lý do bệnh nhân hủy hẹn..."></textarea>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                                                        <button type="submit" class="btn btn-warning fw-bold text-dark">Xác Nhận Hủy Lịch</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
                                     }
                                     else
                                     {

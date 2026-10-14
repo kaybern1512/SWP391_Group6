@@ -156,6 +156,12 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendPostActionAsync($"/api/receptionist/appointments/{id}/no-show", request);
     }
 
+    public async Task<ApiResult> ReceptionistCancelAsync(long id, string reason)
+    {
+        var request = new StaffCancelAppointmentRequest { Reason = reason };
+        return await SendPostActionAsync($"/api/receptionist/appointments/{id}/cancel", request);
+    }
+
     // ==========================================
     // DEPARTMENT MANAGER
     // ==========================================

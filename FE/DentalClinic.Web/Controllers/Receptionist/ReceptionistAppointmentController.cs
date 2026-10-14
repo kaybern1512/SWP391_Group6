@@ -114,4 +114,27 @@ public class ReceptionistAppointmentController : Controller
 
         return RedirectToAction(nameof(TodayCheckIn));
     }
+
+    [HttpPost("Cancel/{id:long}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(long id, [FromForm] string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            TempData["ErrorMessage"] = "Vui lòng nhập lý do hủy lịch hẹn.";
+            return RedirectToAction(nameof(TodayCheckIn));
+        }
+
+        var result = await _appointmentApiService.ReceptionistCancelAsync(id, reason);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Đã hủy lịch hẹn thành công (không tính điểm phạt cho bệnh nhân).";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể hủy lịch hẹn.";
+        }
+
+        return RedirectToAction(nameof(TodayCheckIn));
+    }
 }

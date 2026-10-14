@@ -32,6 +32,7 @@ public interface IAppointmentApiService
     Task<ApiResult<List<AppointmentDto>>> GetReceptionistTodayConfirmedAsync(string? search = null);
     Task<ApiResult> ReceptionistCheckInAsync(long id, string? note = null);
     Task<ApiResult> ReceptionistMarkNoShowAsync(long id, string? note = null);
+    Task<ApiResult> ReceptionistCancelAsync(long id, string reason);
 
     // Department Manager
     Task<ApiResult<List<AppointmentDto>>> GetDepartmentRequestsAsync();

@@ -191,3 +191,8 @@ public class AssignChairRequest
 {
     public long DentalChairId { get; set; }
 }
+
+public class StaffCancelAppointmentRequest
+{
+    public string Reason { get; set; } = string.Empty;
+}

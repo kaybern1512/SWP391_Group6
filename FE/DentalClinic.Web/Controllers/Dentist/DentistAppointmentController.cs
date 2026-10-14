@@ -28,10 +28,15 @@ public class DentistAppointmentController : Controller
         }
 
         var result = await _appointmentApiService.GetDentistAppointmentsAsync(targetDate, targetDate);
+        if (result == null && string.IsNullOrWhiteSpace(date))
+        {
+            result = await _appointmentApiService.GetDentistTodayAppointmentsAsync();
+        }
+
         var vm = new DentistTodayAppointmentsViewModel
         {
             SelectedDate = targetDate,
-            Appointments = result.Data ?? new()
+            Appointments = result?.Data ?? new()
         };
         return View("~/Views/Dentist/Appointments/Today.cshtml", vm);
     }

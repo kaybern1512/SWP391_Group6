@@ -1200,4 +1200,112 @@ public class AppointmentFlowTests
             It.IsAny<DateTime>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task Test29_PatientCancelPendingAppointment_WithdrawsCleanlyWithZeroStrike()
+    {
+        using var db = CreateDbContext(nameof(Test29_PatientCancelPendingAppointment_WithdrawsCleanlyWithZeroStrike));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(10),
+            ReasonForVisit = "Khám răng đang chờ duyệt"
+        });
+        var apptId = bookResult.Data!.AppointmentId;
+
+        // Patient cancels while appointment is still PendingReceptionReview
+        var cancelResult = await service.PatientCancelAsync(apptId, 101, "Đổi ý định, không muốn khám nữa");
+
+        Assert.True(cancelResult.Success);
+        var appt = await db.Appointments.FindAsync(apptId);
+        Assert.NotNull(appt);
+        Assert.Equal(AppointmentStatus.Withdrawn, appt.Status);
+        Assert.Equal("Đổi ý định, không muốn khám nữa", appt.CancellationReason);
+
+        // Strikes must be 0
+        var eligibility = await service.GetBookingEligibilityAsync(101);
+        Assert.True(eligibility.Success);
+        Assert.Equal(0, eligibility.Data!.StrikeCount);
+    }
+
+    [Fact]
+    public async Task Test30_StaffCancelConfirmedAppointment_FreesSlotWithZeroStrike()
+    {
+        using var db = CreateDbContext(nameof(Test30_StaffCancelConfirmedAppointment_FreesSlotWithZeroStrike));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        // Book and confirm appointment within 2 hours
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Now.AddHours(2),
+            ReasonForVisit = "Đau răng cần khám gấp"
+        });
+        var apptId = bookResult.Data!.AppointmentId;
+        await service.ReceptionistForwardAsync(apptId, 201, "OK");
+        await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11
+        });
+
+        // Receptionist cancels on behalf of patient calling in
+        var cancelResult = await service.StaffCancelAppointmentAsync(apptId, 201, "Bệnh nhân gọi điện báo bận đột xuất");
+
+        Assert.True(cancelResult.Success);
+        var appt = await db.Appointments.FindAsync(apptId);
+        Assert.NotNull(appt);
+        Assert.Equal(AppointmentStatus.Cancelled, appt.Status);
+        Assert.StartsWith("[Lễ tân hủy]", appt.CancellationReason);
+
+        // Even though cancellation happened < 12h, receptionist cancellation MUST NOT count as a strike
+        var eligibility = await service.GetBookingEligibilityAsync(101);
+        Assert.True(eligibility.Success);
+        Assert.Equal(0, eligibility.Data!.StrikeCount);
+        Assert.Empty(eligibility.Data.Strikes);
+    }
+
+    [Fact]
+    public async Task Test31_StaffCancelWaitingAppointment_Succeeds()
+    {
+        using var db = CreateDbContext(nameof(Test31_StaffCancelWaitingAppointment_Succeeds));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(1).AddHours(9),
+            ReasonForVisit = "Khám răng"
+        });
+        var apptId = bookResult.Data!.AppointmentId;
+        await service.ReceptionistForwardAsync(apptId, 201, "OK");
+        await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11
+        });
+
+        // Patient checked in and is Waiting
+        var appt = await db.Appointments.FindAsync(apptId);
+        appt!.Status = AppointmentStatus.Waiting;
+        await db.SaveChangesAsync();
+
+        // Staff cancels waiting appointment
+        var cancelResult = await service.StaffCancelAppointmentAsync(apptId, 201, "Bệnh nhân có việc gấp cần rời đi");
+
+        Assert.True(cancelResult.Success);
+        var updatedAppt = await db.Appointments.FindAsync(apptId);
+        Assert.NotNull(updatedAppt);
+        Assert.Equal(AppointmentStatus.Cancelled, updatedAppt.Status);
+    }
 }
