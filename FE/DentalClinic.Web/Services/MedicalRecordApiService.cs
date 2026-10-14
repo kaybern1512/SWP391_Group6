@@ -53,6 +53,11 @@ public class MedicalRecordApiService : IMedicalRecordApiService
         return await SendGetAsync<List<OdontogramEntryDto>>($"/api/medical-records/patient/{patientUserId}/odontogram");
     }
 
+    public async Task<ApiResult<ImagingRecordDto>> AddImagingRecordAsync(CreateImagingRecordRequest request)
+    {
+        return await SendPostAsync<CreateImagingRecordRequest, ImagingRecordDto>("/api/medical-records/imaging", request);
+    }
+
     // ==========================================
     // GENERIC HTTP HELPERS
     // ==========================================

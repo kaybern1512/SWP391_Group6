@@ -51,7 +51,7 @@ public class DepartmentAppointmentController : Controller
         var rooms = resourcesResult.Data?.Rooms ?? new();
         var chairs = resourcesResult.Data?.Chairs ?? new();
         var selectedRoomId = appt.RoomId ?? (rooms.Count > 0 ? rooms[0].RoomId : 0);
-        var selectedChairId = appt.DentalChairId ?? (selectedRoomId > 0 ? chairs.FirstOrDefault(c => c.RoomId == selectedRoomId)?.DentalChairId ?? 0 : 0);
+        var selectedChairId = appt.DentalChairId;
 
         var vm = new DepartmentReviewViewModel
         {
@@ -75,9 +75,9 @@ public class DepartmentAppointmentController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Confirm(long id, [FromForm] DepartmentReviewViewModel model)
     {
-        if (model.AssignedDentistUserId <= 0 || model.RoomId <= 0 || model.DentalChairId <= 0)
+        if (model.AssignedDentistUserId <= 0 || model.RoomId <= 0)
         {
-            TempData["ErrorMessage"] = "Vui lòng chọn đầy đủ Bác sĩ, Phòng khám và Ghế nha khoa.";
+            TempData["ErrorMessage"] = "Vui lòng chọn đầy đủ Bác sĩ và Phòng khám điều trị.";
             return RedirectToAction(nameof(Review), new { id });
         }
 
@@ -85,7 +85,7 @@ public class DepartmentAppointmentController : Controller
         {
             AssignedDentistUserId = model.AssignedDentistUserId,
             RoomId = model.RoomId,
-            DentalChairId = model.DentalChairId,
+            DentalChairId = (model.DentalChairId.HasValue && model.DentalChairId.Value > 0) ? model.DentalChairId : null,
             ScheduledStart = model.ScheduledStart,
             ScheduledEnd = model.ScheduledEnd,
             Note = model.AssignmentNote

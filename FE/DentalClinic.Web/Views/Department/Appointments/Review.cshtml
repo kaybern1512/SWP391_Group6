@@ -110,10 +110,10 @@
                                 }
                             </div>
 
-                            <div class="col-md-3">
+                            <div class="col-md-6">
                                 <label class="form-label fw-bold">2. Phòng khám điều trị <span class="text-danger">*</span></label>
-                                <select asp-for="RoomId" id="selectRoom" class="form-select form-select-lg" required onchange="filterChairs(true)">
-                                    <option value="">-- Chọn Phòng --</option>
+                                <select asp-for="RoomId" id="selectRoom" class="form-select form-select-lg" required onchange="filterChairs(false)">
+                                    <option value="">-- Chọn Phòng Khám --</option>
                                     @foreach (var r in Model.Rooms)
                                     {
                                         <option value="@r.RoomId" selected="@(r.RoomId == Model.RoomId)">
@@ -121,12 +121,15 @@
                                         </option>
                                     }
                                 </select>
+                                <div class="form-text text-muted">
+                                    <i class="bi bi-info-circle me-1 text-primary"></i>Trưởng khoa chỉ định Phòng khám. Bác sĩ sẽ trực tiếp chọn ghế trong phòng khi vào khám/điều trị.
+                                </div>
                             </div>
 
-                            <div class="col-md-3">
-                                <label class="form-label fw-bold">3. Ghế nha khoa <span class="text-danger">*</span></label>
-                                <select asp-for="DentalChairId" id="selectChair" class="form-select form-select-lg" required>
-                                    <option value="">-- Chọn Ghế --</option>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">3. Ghế nha khoa <span class="badge bg-secondary ms-1 fw-normal">Tùy chọn</span></label>
+                                <select asp-for="DentalChairId" id="selectChair" class="form-select form-select-lg">
+                                    <option value="">-- Bác sĩ sẽ tự chọn ghế khi vào khám --</option>
                                     @foreach (var c in Model.Chairs)
                                     {
                                         var chairLabel = !string.IsNullOrWhiteSpace(c.ChairNumber) ? c.ChairNumber : (!string.IsNullOrWhiteSpace(c.ChairCode) ? c.ChairCode : $"Số {c.DentalChairId}");
@@ -135,6 +138,7 @@
                                         </option>
                                     }
                                 </select>
+                                <div class="form-text text-muted">Có thể để trống để Bác sĩ pick ghế thực tế tại phòng.</div>
                             </div>
 
                             <div class="col-md-6">

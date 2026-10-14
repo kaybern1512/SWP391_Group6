@@ -59,6 +59,14 @@ public class ImagingRecordDto
     public DateTime CreatedAt { get; set; }
 }
 
+public class CreateImagingRecordRequest
+{
+    public long ClinicalEntryId { get; set; }
+    public string ImagingType { get; set; } = string.Empty;
+    public string? FileUrl { get; set; }
+    public string? ResultSummary { get; set; }
+}
+
 public class CreateClinicalEntryRequest
 {
     public long PatientUserId { get; set; }
@@ -68,7 +76,9 @@ public class CreateClinicalEntryRequest
     public string Diagnosis { get; set; } = string.Empty;
     public string? DentalConditions { get; set; }
     public string? ClinicalNotes { get; set; }
+    public bool CompleteAppointment { get; set; } = false;
     public List<ToothConditionInput> ToothConditions { get; set; } = new();
+    public List<CreateImagingRecordRequest> ImagingOrders { get; set; } = new();
 }
 
 public class ToothConditionInput

@@ -371,6 +371,56 @@
                                                     </div>
                                                 </div>
                                             }
+
+                                            @if (entry.ImagingRecords.Any())
+                                            {
+                                                <div class="col-12 mt-2 pt-2 border-top">
+                                                    <div class="text-muted small fw-semibold mb-2 d-flex align-items-center gap-1">
+                                                        <i class="bi bi-camera-fill text-info"></i>
+                                                        <span>Phim X-quang & Cận lâm sàng (@entry.ImagingRecords.Count):</span>
+                                                    </div>
+                                                    <div class="row g-2">
+                                                        @foreach (var img in entry.ImagingRecords)
+                                                        {
+                                                            <div class="col-sm-6 col-md-4">
+                                                                <div class="card h-100 border shadow-none bg-white p-2">
+                                                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                                                        <span class="badge bg-info-subtle text-info border border-info-subtle small text-truncate">
+                                                                            <i class="bi bi-film me-1"></i>@img.ImagingType
+                                                                        </span>
+                                                                        <span class="text-muted small ms-auto">@img.CreatedAt.ToString("dd/MM")</span>
+                                                                    </div>
+                                                                    @if (!string.IsNullOrEmpty(img.FileUrl))
+                                                                    {
+                                                                        <div class="my-1 text-center bg-dark rounded overflow-hidden" style="max-height: 120px;">
+                                                                            <img src="@img.FileUrl" class="img-fluid" alt="@img.ImagingType" style="object-fit: cover; max-height: 120px;" onerror="this.onerror=null; this.src='/images/clinic-logo.svg';" />
+                                                                        </div>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <div class="my-1 p-2 text-center bg-light rounded text-muted small">
+                                                                            <i class="bi bi-file-earmark-medical fs-4 d-block text-secondary"></i>
+                                                                            Lưu bản cứng tại phòng X-quang
+                                                                        </div>
+                                                                    }
+                                                                    @if (!string.IsNullOrEmpty(img.ResultSummary))
+                                                                    {
+                                                                        <div class="small text-slate-700 mt-1">
+                                                                            <strong>Kết luận:</strong> @img.ResultSummary
+                                                                        </div>
+                                                                    }
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+
+                                            <div class="col-12 text-end mt-2">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openAddImagingModal(@entry.ClinicalEntryId, '@(entry.Diagnosis?.Replace("'", "\\'") ?? "")')">
+                                                    <i class="bi bi-camera me-1"></i> Bổ sung phim X-quang
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 }
@@ -422,7 +472,7 @@
                         {
                             <div class="alert alert-info py-2 px-3 mb-3 small d-flex align-items-center gap-2">
                                 <i class="bi bi-calendar2-check-fill text-primary"></i>
-                                <span>Đang ghi nhận chẩn đoán liên kết ca khám bệnh ID: <strong>#@Model.NewEntryForm.AppointmentId</strong>. Lịch khám sẽ tự động cập nhật sang trạng thái Hoàn thành.</span>
+                                <span>Đang ghi nhận chẩn đoán liên kết ca khám bệnh ID: <strong>#@Model.NewEntryForm.AppointmentId</strong>.</span>
                             </div>
                         }
                         <div class="mb-3">
@@ -446,8 +496,33 @@
                             <textarea name="ClinicalNotes" class="form-control" rows="2" placeholder="Ví dụ: Trám composite R16, hẹn tái khám sau 1 tuần..."></textarea>
                         </div>
 
+                        <!-- Chỉ Định Chụp X-Quang / Cận Lâm Sàng -->
+                        <div class="border rounded-3 p-3 bg-light mb-3">
+                            <label class="form-label fw-bold text-slate-800 d-flex justify-content-between align-items-center mb-2">
+                                <span><i class="bi bi-camera-fill me-1 text-info"></i> Chỉ Định Chụp Phim X-Quang / Cận Lâm Sàng:</span>
+                            </label>
+                            <div class="row g-2">
+                                <div class="col-md-5">
+                                    <select name="ImagingType" class="form-select form-select-sm">
+                                        <option value="">-- Không yêu cầu chụp phim --</option>
+                                        <option value="X-Quang chóp răng (Periapical)">X-Quang chóp răng (Periapical)</option>
+                                        <option value="X-Quang cánh cắn (Bitewing)">X-Quang cánh cắn (Bitewing)</option>
+                                        <option value="Toàn cảnh Panorama">Toàn cảnh Panorama</option>
+                                        <option value="Phim sọ nghiêng Cephalometric">Phim sọ nghiêng Cephalometric</option>
+                                        <option value="Chụp CT Cone Beam 3D">Chụp CT Cone Beam 3D</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-7">
+                                    <input type="text" name="ImagingResultSummary" class="form-control form-control-sm" placeholder="Vị trí/mục đích chụp (VD: Khảo sát răng ngầm R48, cuống răng R16...)" />
+                                </div>
+                                <div class="col-12 mt-1">
+                                    <input type="text" name="ImagingFileUrl" class="form-control form-control-sm" placeholder="URL hình ảnh phim chụp nếu đã có sẵn (tùy chọn)" />
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Interactive Tooth Condition Picker for this Entry -->
-                        <div class="border rounded-3 p-3 bg-light">
+                        <div class="border rounded-3 p-3 bg-light mb-3">
                             <label class="form-label fw-bold text-slate-800 d-flex justify-content-between align-items-center mb-2">
                                 <span><i class="bi bi-tools me-1 text-primary"></i> Ghi Nhận Răng Có Tổn Thương / Thủ Thuật:</span>
                                 <button type="button" class="btn btn-sm btn-outline-primary" onclick="addToothRow()">
@@ -458,6 +533,19 @@
                                 <!-- Dynamic rows added by JS -->
                             </div>
                         </div>
+
+                        @if (Model.NewEntryForm?.AppointmentId.HasValue == true)
+                        {
+                            <div class="form-check form-switch p-2 bg-light rounded border">
+                                <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="completeAppointmentSwitch" name="CompleteAppointment" value="true">
+                                <label class="form-check-label fw-semibold text-slate-800" for="completeAppointmentSwitch">
+                                    Đánh dấu hoàn thành toàn bộ ca khám này
+                                </label>
+                                <div class="text-muted small ms-4">
+                                    (Để trống nếu bác sĩ vẫn đang tư vấn dịch vụ, chỉ định chụp X-quang hoặc chuẩn bị đưa bệnh nhân vào ghế điều trị)
+                                </div>
+                            </div>
+                        }
                     </div>
                     <div class="modal-footer bg-light">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy Bỏ</button>
@@ -469,10 +557,66 @@
             </div>
         </div>
     </div>
+
+    <!-- Modal Bổ Sung Phim X-Quang -->
+    <div class="modal fade" id="modalAddImaging" tabindex="-1" aria-labelledby="modalAddImagingLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title fw-bold" id="modalAddImagingLabel">
+                        <i class="bi bi-camera me-2"></i>Bổ Sung Kết Quả Phim X-Quang
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form asp-action="AddImagingRecord" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="addImagingClinicalEntryId" name="ClinicalEntryId" value="0" />
+                    <input type="hidden" name="PatientUserId" value="@(record.PatientUserId)" />
+                    <div class="modal-body p-4">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-slate-700">Đợt khám:</label>
+                            <div id="addImagingDiagnosisPreview" class="fw-bold text-primary small"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-slate-700">Loại phim X-quang <span class="text-danger">*</span></label>
+                            <select name="ImagingType" class="form-select" required>
+                                <option value="">-- Chọn loại phim --</option>
+                                <option value="X-Quang chóp răng (Periapical)">X-Quang chóp răng (Periapical)</option>
+                                <option value="X-Quang cánh cắn (Bitewing)">X-Quang cánh cắn (Bitewing)</option>
+                                <option value="Toàn cảnh Panorama">Toàn cảnh Panorama</option>
+                                <option value="Phim sọ nghiêng Cephalometric">Phim sọ nghiêng Cephalometric</option>
+                                <option value="Chụp CT Cone Beam 3D">Chụp CT Cone Beam 3D</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-slate-700">Đường dẫn file ảnh phim (File URL / Cloud URL)</label>
+                            <input type="text" name="FileUrl" class="form-control" placeholder="https://... hoặc /uploads/xray_01.jpg" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-slate-700">Kết luận đọc phim / Mô tả tổn thương</label>
+                            <textarea name="ResultSummary" class="form-control" rows="3" placeholder="Ghi nhận cấu trúc xương ổ, cuống răng, nang quanh cuống hoặc hướng mọc của răng..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                        <button type="submit" class="btn btn-info text-white px-4 fw-medium">
+                            <i class="bi bi-save me-1"></i> Lưu Kết Quả Phim
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 }
 
 @section Scripts {
     <script>
+        function openAddImagingModal(entryId, diagnosis) {
+            document.getElementById('addImagingClinicalEntryId').value = entryId;
+            document.getElementById('addImagingDiagnosisPreview').textContent = diagnosis || ('Đợt khám #' + entryId);
+            new bootstrap.Modal(document.getElementById('modalAddImaging')).show();
+        }
+
         function addToothRow() {
             const container = document.getElementById("toothRowsContainer");
             const rowId = "tooth-row-" + Date.now();

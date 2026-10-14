@@ -260,6 +260,49 @@
                                         <div class="text-muted fst-italic">@entry.ClinicalNotes</div>
                                     </div>
                                 }
+                                @if (entry.ImagingRecords.Any())
+                                {
+                                    <div class="col-12 mt-2 pt-2 border-top">
+                                        <div class="text-muted small fw-semibold mb-2 d-flex align-items-center gap-1">
+                                            <i class="bi bi-camera-fill text-info"></i>
+                                            <span>Phim X-quang & Chẩn đoán hình ảnh:</span>
+                                        </div>
+                                        <div class="row g-2">
+                                            @foreach (var img in entry.ImagingRecords)
+                                            {
+                                                <div class="col-sm-6 col-md-4">
+                                                    <div class="card h-100 border shadow-none bg-white p-2">
+                                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                                            <span class="badge bg-info-subtle text-info border border-info-subtle small text-truncate">
+                                                                <i class="bi bi-film me-1"></i>@img.ImagingType
+                                                            </span>
+                                                            <span class="text-muted small ms-auto">@img.CreatedAt.ToString("dd/MM/yyyy")</span>
+                                                        </div>
+                                                        @if (!string.IsNullOrEmpty(img.FileUrl))
+                                                        {
+                                                            <div class="my-1 text-center bg-dark rounded overflow-hidden" style="max-height: 120px;">
+                                                                <img src="@img.FileUrl" class="img-fluid" alt="@img.ImagingType" style="object-fit: cover; max-height: 120px;" onerror="this.onerror=null; this.src='/images/clinic-logo.svg';" />
+                                                            </div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="my-1 p-2 text-center bg-light rounded text-muted small">
+                                                                <i class="bi bi-file-earmark-medical fs-4 d-block text-secondary"></i>
+                                                                Lưu bản cứng tại phòng khám
+                                                            </div>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(img.ResultSummary))
+                                                        {
+                                                            <div class="small text-slate-700 mt-1">
+                                                                <strong>Kết luận:</strong> @img.ResultSummary
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
                             </div>
                         </div>
                     }

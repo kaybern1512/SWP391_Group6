@@ -214,6 +214,16 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendPostActionAsync($"/api/dentist/appointments/{id}/complete", new CompleteAppointmentRequest { Notes = notes });
     }
 
+    public async Task<ApiResult<List<DentalChairOptionDto>>> GetDentistRoomChairsAsync(long appointmentId)
+    {
+        return await SendGetAsync<List<DentalChairOptionDto>>($"/api/dentist/appointments/{appointmentId}/room-chairs");
+    }
+
+    public async Task<ApiResult> DentistAssignChairAsync(long appointmentId, long chairId)
+    {
+        return await SendPostActionAsync($"/api/dentist/appointments/{appointmentId}/assign-chair", new { dentalChairId = chairId });
+    }
+
     // ==========================================
     // GENERIC HTTP HELPERS
     // ==========================================

@@ -126,7 +126,23 @@
                                 </td>
                                 <td>
                                     <div class="fw-semibold text-dark"><i class="bi bi-geo-alt me-1 text-danger"></i>@(appt.RoomName ?? "--")</div>
-                                    <div class="text-muted small">Ghế: @(appt.DentalChairName ?? "--")</div>
+                                    @if (appt.DentalChairId.HasValue && !string.IsNullOrWhiteSpace(appt.DentalChairName))
+                                    {
+                                        <div class="text-success small fw-semibold d-flex align-items-center gap-1 mt-1">
+                                            <i class="bi bi-check-circle"></i> Ghế: @appt.DentalChairName
+                                            <button type="button" class="btn btn-link p-0 text-muted ms-1" style="font-size: 0.75rem;" title="Đổi ghế khác" onclick="openPickChairModal(@appt.AppointmentId, '@appt.PatientName', '@(appt.RoomName ?? "")', @appt.DentalChairId.Value)">
+                                                <i class="bi bi-arrow-repeat"></i>
+                                            </button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="mt-1">
+                                            <button type="button" class="btn btn-sm btn-outline-warning text-dark py-0 px-2 d-inline-flex align-items-center gap-1 shadow-sm" style="font-size: 0.78rem;" onclick="openPickChairModal(@appt.AppointmentId, '@appt.PatientName', '@(appt.RoomName ?? "")', 0)">
+                                                <i class="bi bi-pin-map text-warning"></i> <strong>Pick Ghế</strong>
+                                            </button>
+                                        </div>
+                                    }
                                 </td>
                                 <td style="max-width: 220px;">
                                     <div class="small text-truncate" title="@appt.ReasonForVisit">
@@ -202,9 +218,18 @@
                                         <a asp-controller="DentistTreatmentPlan" asp-action="Create" asp-route-patientId="@appt.PatientUserId" class="btn btn-sm btn-outline-info" title="Lập phác đồ & kế hoạch điều trị cho bệnh nhân">
                                             <i class="bi bi-diagram-3 me-1"></i>Phác Đồ
                                         </a>
-                                        <a asp-controller="DentistPrescription" asp-action="Index" asp-route-search="@appt.PatientCode" class="btn btn-sm btn-outline-success" title="Kê đơn hoặc xem đơn thuốc">
-                                            <i class="bi bi-capsule me-1"></i>Đơn Thuốc
-                                        </a>
+                                        @if (appt.Status == "InService" || appt.Status == "Completed")
+                                        {
+                                            <a asp-controller="DentistPrescription" asp-action="Index" asp-route-search="@appt.PatientCode" class="btn btn-sm btn-outline-success" title="Kê đơn hoặc xem đơn thuốc">
+                                                <i class="bi bi-capsule me-1"></i>Đơn Thuốc
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-secondary opacity-50" disabled title="Bác sĩ cần vào khám và chẩn đoán trước khi kê đơn thuốc">
+                                                <i class="bi bi-capsule me-1"></i>Đơn Thuốc
+                                            </button>
+                                        }
                                     </div>
                                 </td>
                             </tr>
@@ -215,3 +240,125 @@
         </div>
     }
 </div>
+
+<!-- Modal Chọn Ghế Điều Trị Cho Bác Sĩ -->
+<div class="modal fade" id="pickChairModal" tabindex="-1" aria-labelledby="pickChairModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold" id="pickChairModalLabel">
+                    <i class="bi bi-pin-map me-2"></i>Chọn Ghế Nha Khoa Điều Trị
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="pickChairForm" method="post" action="">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
+                <div class="modal-body p-4">
+                    <div class="alert alert-light border mb-3">
+                        <div class="small text-muted">Bệnh nhân: <strong id="modalPatientName" class="text-dark">--</strong></div>
+                        <div class="small text-muted">Phòng điều trị: <strong id="modalRoomName" class="text-primary">--</strong></div>
+                    </div>
+
+                    <label class="form-label fw-bold mb-2">Danh sách ghế trong phòng:</label>
+                    <div id="chairsLoading" class="text-center py-3">
+                        <div class="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
+                        <span class="text-muted small">Đang tải danh sách ghế...</span>
+                    </div>
+
+                    <div id="chairsContainer" class="d-flex flex-column gap-2" style="display: none;">
+                        <!-- Ghế render động -->
+                    </div>
+
+                    <div id="chairsEmpty" class="text-center py-3 text-muted small" style="display: none;">
+                        <i class="bi bi-info-circle me-1"></i>Không tìm thấy ghế nào đang hoạt động trong phòng khám này.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" id="btnSubmitPickChair" class="btn btn-primary fw-semibold" disabled>
+                        <i class="bi bi-check2-circle me-1"></i>Xác Nhận Ghế
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function openPickChairModal(apptId, patientName, roomName, currentChairId) {
+            document.getElementById('modalPatientName').innerText = patientName;
+            document.getElementById('modalRoomName').innerText = roomName || 'Phòng khám chuyên khoa';
+            const form = document.getElementById('pickChairForm');
+            form.action = `/Dentist/Appointments/${apptId}/AssignChair`;
+
+            const loading = document.getElementById('chairsLoading');
+            const container = document.getElementById('chairsContainer');
+            const empty = document.getElementById('chairsEmpty');
+            const submitBtn = document.getElementById('btnSubmitPickChair');
+
+            loading.style.display = 'block';
+            container.style.display = 'none';
+            empty.style.display = 'none';
+            submitBtn.disabled = true;
+            container.innerHTML = '';
+
+            fetch(`/Dentist/Appointments/${apptId}/RoomChairs`)
+                .then(res => res.json())
+                .then(result => {
+                    loading.style.display = 'none';
+                    if (result.success && result.data && result.data.length > 0) {
+                        container.style.display = 'flex';
+                        result.data.forEach(chair => {
+                            const isSelected = currentChairId && currentChairId === chair.dentalChairId;
+                            const isOccupied = chair.isOccupied;
+                            const div = document.createElement('div');
+                            div.className = `p-3 rounded border d-flex justify-content-between align-items-center ${isOccupied ? 'bg-light border-danger text-muted' : (isSelected ? 'bg-primary-subtle border-primary' : 'bg-white')}`;
+                            div.style.cursor = isOccupied ? 'not-allowed' : 'pointer';
+
+                            div.innerHTML = `
+                                <div class="d-flex align-items-center gap-2">
+                                    <input class="form-check-input mt-0" type="radio" name="dentalChairId" id="chairRadio_${chair.dentalChairId}" value="${chair.dentalChairId}" ${isSelected ? 'checked' : ''} ${isOccupied ? 'disabled' : ''}>
+                                    <label class="form-check-label fw-semibold cursor-pointer mb-0" for="chairRadio_${chair.dentalChairId}">
+                                        <i class="bi bi-badge-hd me-1"></i> Ghế ${chair.chairCode}
+                                    </label>
+                                </div>
+                                <div>
+                                    ${isOccupied 
+                                        ? '<span class="badge bg-danger-subtle text-danger border border-danger small"><i class="bi bi-person-fill-exclamation me-1"></i>Đang bận</span>' 
+                                        : '<span class="badge bg-success-subtle text-success border border-success small"><i class="bi bi-check-circle me-1"></i>Sẵn sàng</span>'}
+                                </div>
+                            `;
+
+                            if (!isOccupied) {
+                                div.addEventListener('click', () => {
+                                    const radio = div.querySelector('input[type="radio"]');
+                                    radio.checked = true;
+                                    submitBtn.disabled = false;
+                                    container.querySelectorAll('.p-3').forEach(el => el.classList.remove('bg-primary-subtle', 'border-primary'));
+                                    div.classList.add('bg-primary-subtle', 'border-primary');
+                                });
+                            }
+
+                            container.appendChild(div);
+                        });
+
+                        if (currentChairId) {
+                            submitBtn.disabled = false;
+                        }
+                    } else {
+                        empty.style.display = 'block';
+                    }
+                })
+                .catch(err => {
+                    loading.style.display = 'none';
+                    empty.style.display = 'block';
+                    empty.innerText = 'Không thể tải danh sách ghế từ máy chủ.';
+                });
+
+            const modal = new bootstrap.Modal(document.getElementById('pickChairModal'));
+            modal.show();
+        }
+    </script>
+}

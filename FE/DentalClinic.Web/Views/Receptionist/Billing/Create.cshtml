@@ -192,6 +192,19 @@
 
                                 <div class="row g-2 align-items-center mb-2">
                                     <div class="col-6">
+                                        <label class="small text-muted mb-0"><i class="bi bi-tag-fill text-warning me-1"></i>Mã giảm giá (Voucher):</label>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" id="inputVoucherCode" class="form-control text-uppercase" placeholder="VD: GIAM10, VIP20" />
+                                            <button type="button" id="btnApplyVoucher" class="btn btn-outline-success fw-semibold">Áp dụng</button>
+                                        </div>
+                                        <div id="voucherMessage" class="small mt-1 text-success" style="display: none; font-size: 0.75rem;"></div>
+                                    </div>
+                                </div>
+
+                                <div class="row g-2 align-items-center mb-2">
+                                    <div class="col-6">
                                         <label class="small text-muted mb-0">Giảm giá / Chiết khấu (đ):</label>
                                     </div>
                                     <div class="col-6">
@@ -301,6 +314,56 @@
 
             inputDiscount.addEventListener('input', recalculateTotals);
             inputTaxPercent.addEventListener('input', recalculateTotals);
+
+            // Voucher Apply Button
+            const btnApplyVoucher = document.getElementById('btnApplyVoucher');
+            const inputVoucherCode = document.getElementById('inputVoucherCode');
+            const voucherMessage = document.getElementById('voucherMessage');
+
+            btnApplyVoucher.addEventListener('click', function () {
+                const code = (inputVoucherCode.value || '').trim().toUpperCase();
+                voucherMessage.style.display = 'block';
+
+                let subTotal = 0;
+                itemsBody.querySelectorAll('.item-row').forEach(row => {
+                    const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+                    const price = parseFloat(row.querySelector('.item-price').value) || 0;
+                    subTotal += qty * price;
+                });
+
+                if (!code) {
+                    voucherMessage.className = 'small mt-1 text-danger';
+                    voucherMessage.textContent = 'Vui lòng nhập mã giảm giá.';
+                    return;
+                }
+
+                if (code === 'GIAM10' || code === 'KHACHHANGMOI' || code === 'DENTAL10') {
+                    const discount = Math.round(subTotal * 0.10);
+                    inputDiscount.value = discount;
+                    voucherMessage.className = 'small mt-1 text-success fw-semibold';
+                    voucherMessage.innerHTML = `<i class="bi bi-check-circle me-1"></i>Áp dụng mã <strong>${code}</strong>: Giảm 10% (-${formatMoney(discount)})`;
+                } else if (code === 'GIAM20' || code === 'VIP20') {
+                    const discount = Math.round(subTotal * 0.20);
+                    inputDiscount.value = discount;
+                    voucherMessage.className = 'small mt-1 text-success fw-semibold';
+                    voucherMessage.innerHTML = `<i class="bi bi-check-circle me-1"></i>Áp dụng mã <strong>${code}</strong>: Giảm 20% (-${formatMoney(discount)})`;
+                } else if (code === 'GIAM50K') {
+                    const discount = Math.min(subTotal, 50000);
+                    inputDiscount.value = discount;
+                    voucherMessage.className = 'small mt-1 text-success fw-semibold';
+                    voucherMessage.innerHTML = `<i class="bi bi-check-circle me-1"></i>Áp dụng mã <strong>${code}</strong>: Giảm trực tiếp 50.000 đ`;
+                } else if (code === 'GIAM100K' || code === 'FREEKHAM') {
+                    const discount = Math.min(subTotal, 100000);
+                    inputDiscount.value = discount;
+                    voucherMessage.className = 'small mt-1 text-success fw-semibold';
+                    voucherMessage.innerHTML = `<i class="bi bi-check-circle me-1"></i>Áp dụng mã <strong>${code}</strong>: Giảm trực tiếp 100.000 đ`;
+                } else {
+                    voucherMessage.className = 'small mt-1 text-danger';
+                    voucherMessage.innerHTML = `<i class="bi bi-x-circle me-1"></i>Mã <strong>${code}</strong> không hợp lệ hoặc đã hết hạn.`;
+                }
+
+                recalculateTotals();
+            });
 
             // Remove Row
             itemsBody.addEventListener('click', function (e) {

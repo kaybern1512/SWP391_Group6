@@ -98,7 +98,7 @@ public class ManagerConfirmRequest
 {
     public long AssignedDentistUserId { get; set; }
     public long RoomId { get; set; }
-    public long DentalChairId { get; set; }
+    public long? DentalChairId { get; set; }
     public DateTime? ScheduledStart { get; set; }
     public DateTime? ScheduledEnd { get; set; }
 }
@@ -148,6 +148,7 @@ public class ChairOptionDto
     public string ChairCode { get; set; } = string.Empty;
     public string ChairNumber => ChairCode;
     public string Status { get; set; } = "Active";
+    public bool IsOccupied { get; set; }
 }
 
 public class AvailableResourcesDto
@@ -184,4 +185,9 @@ public class ReceptionistNoShowRequest
 public class CompleteAppointmentRequest
 {
     public string? Notes { get; set; }
+}
+
+public class AssignChairRequest
+{
+    public long DentalChairId { get; set; }
 }

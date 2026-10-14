@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.Prescriptions.DTOs;
+using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -161,6 +162,11 @@ public class PrescriptionService : IPrescriptionService
         if (appointment == null)
         {
             return ApiResponse<PrescriptionDto>.Fail("Không tìm thấy thông tin ca khám.");
+        }
+
+        if (appointment.Status != AppointmentStatus.InService && appointment.Status != AppointmentStatus.Completed)
+        {
+            return ApiResponse<PrescriptionDto>.Fail($"Bác sĩ chỉ có thể kê đơn thuốc sau khi ca khám đã bắt đầu diễn ra hoặc đã hoàn tất khám (Trạng thái hiện tại: {appointment.Status}).");
         }
 
         // Tìm hoặc tạo TreatmentSession cho Appointment này

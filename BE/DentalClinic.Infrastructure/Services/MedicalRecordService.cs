@@ -204,26 +204,65 @@ public class MedicalRecordService : IMedicalRecordService
             await _dbContext.SaveChangesAsync(ct);
         }
 
+        // Lưu chỉ định chụp X-quang / chẩn đoán hình ảnh nếu có
+        if (request.ImagingOrders != null && request.ImagingOrders.Any())
+        {
+            foreach (var img in request.ImagingOrders)
+            {
+                if (!string.IsNullOrWhiteSpace(img.ImagingType))
+                {
+                    var imgRecord = new ImagingRecord
+                    {
+                        ClinicalEntryId = entry.ClinicalEntryId,
+                        ImagingType = img.ImagingType.Trim(),
+                        FileUrl = img.FileUrl?.Trim(),
+                        ResultSummary = img.ResultSummary?.Trim(),
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _dbContext.ImagingRecords.Add(imgRecord);
+                }
+            }
+            await _dbContext.SaveChangesAsync(ct);
+        }
+
         if (request.AppointmentId.HasValue)
         {
             var appointment = await _dbContext.Appointments
                 .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId.Value, ct);
 
-            if (appointment != null && appointment.Status != AppointmentStatus.Completed && appointment.Status != AppointmentStatus.Cancelled)
+            if (appointment != null)
             {
-                var oldStatus = appointment.Status;
-                appointment.Status = AppointmentStatus.Completed;
-                appointment.CompletedAt = DateTime.UtcNow;
-
-                _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+                if (request.CompleteAppointment)
                 {
-                    AppointmentId = appointment.AppointmentId,
-                    OldStatus = oldStatus,
-                    NewStatus = AppointmentStatus.Completed,
-                    ChangedByUserId = dentistUserId,
-                    Note = "Bác sĩ hoàn tất khám và lưu chẩn đoán bệnh án.",
-                    ChangedAt = DateTime.UtcNow
-                });
+                    if (appointment.Status != AppointmentStatus.Completed && appointment.Status != AppointmentStatus.Cancelled)
+                    {
+                        var oldStatus = appointment.Status;
+                        appointment.Status = AppointmentStatus.Completed;
+                        appointment.CompletedAt = DateTime.UtcNow;
+
+                        _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+                        {
+                            AppointmentId = appointment.AppointmentId,
+                            OldStatus = oldStatus,
+                            NewStatus = AppointmentStatus.Completed,
+                            ChangedByUserId = dentistUserId,
+                            Note = "Bác sĩ hoàn tất khám và lưu chẩn đoán bệnh án.",
+                            ChangedAt = DateTime.UtcNow
+                        });
+                    }
+                }
+                else
+                {
+                    _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+                    {
+                        AppointmentId = appointment.AppointmentId,
+                        OldStatus = appointment.Status,
+                        NewStatus = appointment.Status,
+                        ChangedByUserId = dentistUserId,
+                        Note = "Bác sĩ ghi nhận chẩn đoán lâm sàng & sơ đồ răng bệnh án.",
+                        ChangedAt = DateTime.UtcNow
+                    });
+                }
             }
         }
 
@@ -363,5 +402,46 @@ public class MedicalRecordService : IMedicalRecordService
         }
 
         return list;
+    }
+
+    public async Task<ApiResponse<ImagingRecordDto>> AddImagingRecordAsync(long dentistUserId, CreateImagingRecordRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.ImagingType))
+        {
+            return ApiResponse<ImagingRecordDto>.Fail("Vui lòng chọn hoặc nhập loại phim chụp / chẩn đoán hình ảnh.");
+        }
+
+        var entry = await _dbContext.ClinicalEntries
+            .Include(c => c.MedicalRecord)
+            .FirstOrDefaultAsync(c => c.ClinicalEntryId == request.ClinicalEntryId, ct);
+
+        if (entry == null)
+        {
+            return ApiResponse<ImagingRecordDto>.Fail("Không tìm thấy đợt khám lâm sàng tương ứng.");
+        }
+
+        var imagingRecord = new ImagingRecord
+        {
+            ClinicalEntryId = request.ClinicalEntryId,
+            ImagingType = request.ImagingType.Trim(),
+            FileUrl = request.FileUrl?.Trim(),
+            ResultSummary = request.ResultSummary?.Trim(),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _dbContext.ImagingRecords.Add(imagingRecord);
+        entry.MedicalRecord.UpdatedAt = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync(ct);
+
+        var dto = new ImagingRecordDto
+        {
+            ImagingRecordId = imagingRecord.ImagingRecordId,
+            ImagingType = imagingRecord.ImagingType,
+            FileUrl = imagingRecord.FileUrl,
+            ResultSummary = imagingRecord.ResultSummary,
+            CreatedAt = imagingRecord.CreatedAt
+        };
+
+        return ApiResponse<ImagingRecordDto>.Ok(dto, "Lưu thông tin phim chụp X-quang thành công.");
     }
 }

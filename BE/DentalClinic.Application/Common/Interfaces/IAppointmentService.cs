@@ -40,4 +40,6 @@ public interface IAppointmentService
     Task<ApiResponse<List<AppointmentDto>>> GetDentistAppointmentsAsync(long dentistUserId, DateOnly? fromDate = null, DateOnly? toDate = null, CancellationToken ct = default);
     Task<ApiResponse> DentistStartAppointmentAsync(long appointmentId, long dentistUserId, CancellationToken ct = default);
     Task<ApiResponse> DentistCompleteAppointmentAsync(long appointmentId, long dentistUserId, string? notes = null, CancellationToken ct = default);
+    Task<ApiResponse<List<ChairOptionDto>>> GetDentistRoomChairsAsync(long appointmentId, long dentistUserId, CancellationToken ct = default);
+    Task<ApiResponse> DentistAssignChairAsync(long appointmentId, long dentistUserId, long dentalChairId, CancellationToken ct = default);
 }

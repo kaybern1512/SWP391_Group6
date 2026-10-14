@@ -392,4 +392,37 @@ public class AppointmentsController : ControllerBase
         }
         return Ok(result);
     }
+
+    [HttpGet("api/dentist/appointments/{id:long}/room-chairs")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<List<ChairOptionDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDentistRoomChairs(long id, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _appointmentService.GetDentistRoomChairsAsync(id, dentistUserId, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("api/dentist/appointments/{id:long}/assign-chair")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DentistAssignChair(long id, [FromBody] AssignChairRequest request, CancellationToken ct)
+    {
+        if (request == null || request.DentalChairId <= 0)
+        {
+            return BadRequest(ApiResponse.Fail("Vui lòng chọn ghế nha khoa hợp lệ."));
+        }
+        var dentistUserId = GetCurrentUserId();
+        var result = await _appointmentService.DentistAssignChairAsync(id, dentistUserId, request.DentalChairId, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
 }

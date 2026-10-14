@@ -89,4 +89,18 @@ public class MedicalRecordController : ControllerBase
         var result = await _medicalRecordService.GetCurrentOdontogramAsync(patientUserId, ct);
         return Ok(result);
     }
+
+    [HttpPost("imaging")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Receptionist}")]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> AddImagingRecord([FromBody] CreateImagingRecordRequest request, CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        var result = await _medicalRecordService.AddImagingRecordAsync(currentUserId, request, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
 }

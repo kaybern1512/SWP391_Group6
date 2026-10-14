@@ -37,6 +37,37 @@ public class CreateClinicalEntryFormModel
     public string? ClinicalNotes { get; set; }
 
     public string? ToothConditionsJson { get; set; }
+
+    [Display(Name = "Hoàn thành ca khám sau khi lưu chẩn đoán")]
+    public bool CompleteAppointment { get; set; } = false;
+
+    [Display(Name = "Chỉ định chụp X-quang / Cận lâm sàng")]
+    public string? ImagingType { get; set; }
+
+    [Display(Name = "Kết luận đọc phim / Vị trí cần chụp")]
+    public string? ImagingResultSummary { get; set; }
+
+    [Display(Name = "Đường dẫn file ảnh phim")]
+    public string? ImagingFileUrl { get; set; }
+}
+
+public class AddImagingRecordFormModel
+{
+    [Required]
+    public long ClinicalEntryId { get; set; }
+
+    [Required]
+    public long PatientUserId { get; set; }
+
+    [Required(ErrorMessage = "Vui lòng chọn loại phim chụp")]
+    [Display(Name = "Loại phim chụp")]
+    public string ImagingType { get; set; } = string.Empty;
+
+    [Display(Name = "Link ảnh / File URL")]
+    public string? FileUrl { get; set; }
+
+    [Display(Name = "Kết luận đọc phim / Mô tả")]
+    public string? ResultSummary { get; set; }
 }
 
 public class PatientMedicalRecordIndexViewModel

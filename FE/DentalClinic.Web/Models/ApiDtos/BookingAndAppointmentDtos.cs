@@ -172,7 +172,7 @@ public class ManagerConfirmRequest
 {
     public long AssignedDentistUserId { get; set; }
     public int RoomId { get; set; }
-    public int DentalChairId { get; set; }
+    public int? DentalChairId { get; set; }
     public DateTime? ScheduledStart { get; set; }
     public DateTime? ScheduledEnd { get; set; }
     public string? Note { get; set; }

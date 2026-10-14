@@ -67,5 +67,34 @@ public class DentistAppointmentController : Controller
         }
         return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
     }
+
+    [HttpGet("{id:long}/RoomChairs")]
+    public async Task<IActionResult> GetRoomChairs(long id)
+    {
+        var result = await _appointmentApiService.GetDentistRoomChairsAsync(id);
+        return Json(new { success = result.IsSuccess, data = result.Data ?? new(), message = result.Message });
+    }
+
+    [HttpPost("{id:long}/AssignChair")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AssignChair(long id, [FromForm] long dentalChairId, [FromForm] string? date = null)
+    {
+        if (dentalChairId <= 0)
+        {
+            TempData["ErrorMessage"] = "Vui lòng chọn ghế nha khoa hợp lệ.";
+            return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
+        }
+
+        var result = await _appointmentApiService.DentistAssignChairAsync(id, dentalChairId);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Đã chọn ghế điều trị thành công!";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể chọn ghế điều trị này.";
+        }
+        return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
+    }
 }
 

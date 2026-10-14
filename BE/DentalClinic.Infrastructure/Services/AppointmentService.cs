@@ -1284,28 +1284,32 @@ public class AppointmentService : IAppointmentService
                 return ApiResponse<AppointmentDto>.Fail("Phòng khám đã bị trùng lịch với ca khám khác trong khung giờ này.");
             }
 
-            // 3. REVALIDATE CHAIR CONFLICT
-            var chair = await _dbContext.DentalChairs
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.DentalChairId == request.DentalChairId &&
-                                          c.RoomId == request.RoomId &&
-                                          c.Status == "Active", ct);
-
-            if (chair == null)
+            // 3. REVALIDATE CHAIR CONFLICT (OPTIONAL: Dentist can pick chair inside the clinic room)
+            DentalChair? chair = null;
+            if (request.DentalChairId.HasValue && request.DentalChairId.Value > 0)
             {
-                return ApiResponse<AppointmentDto>.Fail("Ghế nha khoa không thuộc phòng khám đã chọn hoặc không hoạt động.");
-            }
+                chair = await _dbContext.DentalChairs
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.DentalChairId == request.DentalChairId.Value &&
+                                              c.RoomId == request.RoomId &&
+                                              c.Status == "Active", ct);
 
-            bool chairConflict = await _dbContext.Appointments
-                .AnyAsync(a => a.AppointmentId != appointmentId &&
-                               a.DentalChairId == request.DentalChairId &&
-                               occupiedStatuses.Contains(a.Status) &&
-                               a.ScheduledStart < finalEnd.Value &&
-                               a.ScheduledEnd > finalStart.Value, ct);
+                if (chair == null)
+                {
+                    return ApiResponse<AppointmentDto>.Fail("Ghế nha khoa không thuộc phòng khám đã chọn hoặc không hoạt động.");
+                }
 
-            if (chairConflict)
-            {
-                return ApiResponse<AppointmentDto>.Fail("Ghế nha khoa đã bị trùng lịch với ca khám khác trong khung giờ này.");
+                bool chairConflict = await _dbContext.Appointments
+                    .AnyAsync(a => a.AppointmentId != appointmentId &&
+                                   a.DentalChairId == request.DentalChairId.Value &&
+                                   occupiedStatuses.Contains(a.Status) &&
+                                   a.ScheduledStart < finalEnd.Value &&
+                                   a.ScheduledEnd > finalStart.Value, ct);
+
+                if (chairConflict)
+                {
+                    return ApiResponse<AppointmentDto>.Fail("Ghế nha khoa đã bị trùng lịch với ca khám khác trong khung giờ này.");
+                }
             }
 
             // 4. GENERATE QUEUE NUMBER in Transaction (e.g. Q001, Q002 per department and target date)
@@ -1810,5 +1814,156 @@ public class AppointmentService : IAppointmentService
             Proposals = proposals,
             StatusHistories = histories
         };
+    }
+
+    public async Task<ApiResponse<List<ChairOptionDto>>> GetDentistRoomChairsAsync(
+        long appointmentId,
+        long dentistUserId,
+        CancellationToken ct = default)
+    {
+        var appt = await _dbContext.Appointments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+
+        if (appt == null)
+        {
+            return ApiResponse<List<ChairOptionDto>>.Fail("Không tìm thấy thông tin lịch hẹn.");
+        }
+
+        if (appt.AssignedDentistUserId != dentistUserId)
+        {
+            return ApiResponse<List<ChairOptionDto>>.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
+        }
+
+        long targetRoomId = appt.RoomId ?? 0;
+        if (targetRoomId <= 0)
+        {
+            var defaultRoom = await _dbContext.Rooms
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.DepartmentId == appt.DepartmentId && r.Status == "Active", ct);
+            if (defaultRoom != null) targetRoomId = defaultRoom.RoomId;
+        }
+
+        if (targetRoomId <= 0)
+        {
+            return ApiResponse<List<ChairOptionDto>>.Ok(new List<ChairOptionDto>());
+        }
+
+        var start = appt.ScheduledStart ?? DateTime.UtcNow;
+        var end = appt.ScheduledEnd ?? start.AddMinutes(30);
+
+        var activeStatuses = new[]
+        {
+            AppointmentStatus.InService
+        };
+
+        var chairs = await _dbContext.DentalChairs
+            .AsNoTracking()
+            .Where(c => c.RoomId == targetRoomId && c.Status == "Active")
+            .OrderBy(c => c.ChairCode)
+            .ToListAsync(ct);
+
+        var occupiedChairIds = await _dbContext.Appointments
+            .AsNoTracking()
+            .Where(a => a.AppointmentId != appointmentId &&
+                        a.DentalChairId != null &&
+                        activeStatuses.Contains(a.Status) &&
+                        a.ScheduledStart < end &&
+                        a.ScheduledEnd > start)
+            .Select(a => a.DentalChairId!.Value)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var result = chairs.Select(c => new ChairOptionDto
+        {
+            DentalChairId = c.DentalChairId,
+            RoomId = c.RoomId,
+            ChairCode = c.ChairCode,
+            Status = c.Status,
+            IsOccupied = occupiedChairIds.Contains(c.DentalChairId)
+        }).ToList();
+
+        return ApiResponse<List<ChairOptionDto>>.Ok(result);
+    }
+
+    public async Task<ApiResponse> DentistAssignChairAsync(
+        long appointmentId,
+        long dentistUserId,
+        long dentalChairId,
+        CancellationToken ct = default)
+    {
+        var appt = await _dbContext.Appointments
+            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+
+        if (appt == null)
+        {
+            return ApiResponse.Fail("Không tìm thấy thông tin lịch hẹn.");
+        }
+
+        if (appt.AssignedDentistUserId != dentistUserId)
+        {
+            return ApiResponse.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
+        }
+
+        var chair = await _dbContext.DentalChairs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.DentalChairId == dentalChairId && c.Status == "Active", ct);
+
+        if (chair == null)
+        {
+            return ApiResponse.Fail("Ghế nha khoa không tồn tại hoặc đã ngừng hoạt động.");
+        }
+
+        if (appt.RoomId.HasValue && chair.RoomId != appt.RoomId.Value)
+        {
+            return ApiResponse.Fail("Ghế nha khoa đã chọn không thuộc phòng khám của ca này.");
+        }
+
+        var start = appt.ScheduledStart ?? DateTime.UtcNow;
+        var end = appt.ScheduledEnd ?? start.AddMinutes(30);
+
+        var activeStatuses = new[]
+        {
+            AppointmentStatus.InService
+        };
+
+        bool isOccupied = await _dbContext.Appointments
+            .AnyAsync(a => a.AppointmentId != appointmentId &&
+                           a.DentalChairId == dentalChairId &&
+                           activeStatuses.Contains(a.Status) &&
+                           a.ScheduledStart < end &&
+                           a.ScheduledEnd > start, ct);
+
+        if (isOccupied)
+        {
+            return ApiResponse.Fail($"Ghế {chair.ChairCode} hiện đang có bệnh nhân khác sử dụng. Vui lòng chọn ghế khác.");
+        }
+
+        appt.DentalChairId = dentalChairId;
+        appt.RoomId = chair.RoomId;
+        appt.UpdatedAt = DateTime.UtcNow;
+
+        var oldStatus = appt.Status;
+        var newStatus = appt.Status;
+        if (appt.Status == AppointmentStatus.CheckedIn)
+        {
+            newStatus = AppointmentStatus.InService;
+            appt.Status = newStatus;
+        }
+
+        _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+        {
+            AppointmentId = appointmentId,
+            OldStatus = oldStatus,
+            NewStatus = newStatus,
+            ChangedByUserId = dentistUserId,
+            Note = newStatus == AppointmentStatus.InService 
+                ? $"Bác sĩ chọn ghế điều trị {chair.ChairCode} và chuyển ca sang trạng thái đang điều trị (InService)."
+                : $"Bác sĩ cập nhật ghế điều trị {chair.ChairCode}.",
+            ChangedAt = DateTime.UtcNow
+        });
+
+        await _dbContext.SaveChangesAsync(ct);
+        return ApiResponse.Ok($"Đã chọn ghế {chair.ChairCode} cho ca khám thành công.");
     }
 }
