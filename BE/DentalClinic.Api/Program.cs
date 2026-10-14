@@ -156,6 +156,8 @@ builder.Services.AddSwaggerGen(c =>
             Array.Empty<string>()
         }
     });
+
+    c.CustomSchemaIds(type => type.FullName?.Replace("+", ".") ?? type.Name);
 });
 
 var app = builder.Build();

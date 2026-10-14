@@ -41,7 +41,7 @@ public class GlobalExceptionHandler
         context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
 
         var message = "Đã xảy ra lỗi hệ thống trong quá trình xử lý. Vui lòng thử lại sau.";
-        var errorDetails = _env.IsDevelopment() ? exception.Message : message;
+        var errorDetails = _env.IsDevelopment() ? exception.ToString() : message;
 
         var response = ApiResponse.Fail(message, new System.Collections.Generic.List<string> { errorDetails });
 
