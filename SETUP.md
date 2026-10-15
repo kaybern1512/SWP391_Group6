@@ -58,24 +58,23 @@ Authentication:Google:ClientId = 482754989911-krfsu4jokuuqcttqbtmuh6bdal15a107.a
 
 ---
 
-## 🗄️ IV. THIẾT LẬP CƠ SỞ DỮ LIỆU (DATABASE FIRST)
+## 🗄️ IV. THIẾT LẬP CƠ SỞ DỮ LIỆU ĐẦY ĐỦ (DATABASE & DỮ LIỆU DEMO)
 
-Hệ thống sử dụng SQL Server với file database gốc `Dental_Clinic_Final_Database_Clean.sql`.
+Hệ thống đã chuẩn bị sẵn cơ sở dữ liệu hoàn chỉnh (gồm cấu trúc bảng + 33 tài khoản + toàn bộ dữ liệu lâm sàng). Bạn có thể chọn 1 trong 2 cách sau:
 
-### Bước 1: Tạo Database sạch
-Mở PowerShell chạy lệnh:
+### Cách 1: Nạp 1 bước duy nhất bằng File SQL Script (Khuyên dùng)
+Mở PowerShell tại thư mục gốc dự án và chạy:
 ```powershell
-sqlcmd -S .\SQLEXPRESS -E -i "DB\Dental_Clinic_Final_Database_Clean.sql"
+sqlcmd -S .\SQLEXPRESS -E -i "DB\DentalClinic_Full_Database_And_Data.sql"
 ```
+*(Lệnh này tự động tạo mới `DentalClinicManagementDB`, tạo đầy đủ bảng, quan hệ, index, trigger và nạp sẵn 33 tài khoản cùng toàn bộ ca khám, hóa đơn, đơn thuốc demo).*
 
-### Bước 2: Nạp dữ liệu nền tảng (Phòng khám, Bác sĩ, Lịch trực, Ca khám mẫu)
+### Cách 2: Phục hồi trực tiếp từ file Backup (`.bak`)
+File backup đã được lưu sẵn trong thư mục `DB/DentalClinicManagementDB.bak`.
+- Trong SQL Server Management Studio (SSMS): Click chuột phải vào **Databases** $\rightarrow$ Chọn **Restore Database...** $\rightarrow$ Chọn **Device** $\rightarrow$ Trỏ tới file `DB\DentalClinicManagementDB.bak` $\rightarrow$ Nhấn **OK**.
+- Hoặc chạy lệnh khôi phục qua SQL:
 ```powershell
-sqlcmd -S .\SQLEXPRESS -d DentalClinicManagementDB -E -i "DB\Seed_Booking_Foundational_Data.sql"
-```
-
-### Bước 3: Nạp lịch hẹn Demo & Lịch sử khám bệnh nhân (Tùy chọn)
-```powershell
-sqlcmd -S .\SQLEXPRESS -d DentalClinicManagementDB -E -i "DB\Seed_Demo_Appointments.sql"
+sqlcmd -S .\SQLEXPRESS -E -Q "RESTORE DATABASE DentalClinicManagementDB FROM DISK = 'D:\SWP391\SWP391_Group6\DB\DentalClinicManagementDB.bak' WITH REPLACE;"
 ```
 
 ---
