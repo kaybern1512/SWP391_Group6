@@ -99,32 +99,84 @@ dotnet run --launch-profile "https"
 
 ---
 
-## 👥 VI. DANH SÁCH TÀI KHOẢN MẪU TEST TẤT CẢ CÁC ROLE
+## 👥 VI. BẢNG 30 TÀI KHOẢN MẪU TEST & DEMO TOÀN DIỆN MỌI PHÂN HỆ
 
-* **Mật khẩu dùng chung cho tất cả tài khoản bên dưới:** `Password123@`
+* **Mật khẩu dùng chung cho TẤT CẢ tài khoản:** `Password123@`
 
-| Vai trò (Role) | Chuyên khoa / Họ tên | Email đăng nhập | Mật khẩu mặc định |
-| :--- | :--- | :--- | :--- |
-| **System Administrator** | Quản trị viên hệ thống | `admin@dentalcare.com` | `Password123@` |
-| **Receptionist** | Lễ tân quầy tiếp đón | `receptionist@dentalcare.com` | `Password123@` |
-| **Department Manager** | Khoa Răng Tổng Quát & Nội Nha (Khoa 1) | `manager1@dentalcare.com` | `Password123@` |
-| **Department Manager** | Khoa Chỉnh Nha & Thẩm Mỹ (Khoa 2) | `manager2@dentalcare.com` | `Password123@` |
-| **Department Manager** | Khoa Phẫu Thuật Miệng & Implant (Khoa 3) | `manager@dentalcare.com` | `Password123@` |
-| **Department Manager** | Khoa Răng Trẻ Em (Khoa 4) | `manager4@dentalcare.com` | `Password123@` |
-| **Dentist** | Bác Sĩ Trần Văn Hùng | `dentist@dentalcare.com` | `Password123@` |
-| **Dentist** | Bác Sĩ Nguyễn Thị Phương Thảo | `dentist2@dentalcare.com` | `Password123@` |
-| **Dentist** | Bác Sĩ Phạm Quốc Anh | `dentist3@dentalcare.com` | `Password123@` |
-| **Dentist** | Bác Sĩ Lê Thị Mai Lan | `dentist4@dentalcare.com` | `Password123@` |
-| **Patient (Demo Check-in)** | Võ Văn Đông (Lịch hẹn 12:40 hôm nay) | `vovandong1512@gmail.com` | `Password123@` *(hoặc Google)* |
-| **Patient** | Trần Mai Chi | `patient1@dentalcare.com` | `Password123@` |
-| **Patient** | Nguyễn Bảo Nam | `patient2@dentalcare.com` | `Password123@` |
-| **Patient** | Phạm Thu Trang | `patient3@dentalcare.com` | `Password123@` |
-| **Patient** | Đặng Quốc Tuấn | `patient4@dentalcare.com` | `Password123@` |
-| **Patient** | Bé Vũ Hải Đăng | `patient5@dentalcare.com` | `Password123@` |
-| **Patient** | Lê Hoàng Minh | `lehoangminh.test@dentalcare.com` | `Password123@` |
-| **Patient** | Nguyễn Thị Hoàng Lan | `hoanglan.patient@dentalcare.com` | `Password123@` |
-| **Patient** | Lý Đình Phong | `dinhphong.patient@dentalcare.com` | `Password123@` |
-| **Patient** | Phan Thanh Hằng | `thanhhang.patient@dentalcare.com` | `Password123@` |
-| **Patient** | Bé Trần Minh Đức | `minhduc.patient@dentalcare.com` | `Password123@` |
-| **Patient** | Đỗ Khánh Ly | `khanhly.patient@dentalcare.com` | `Password123@` |
+### 1. Quản Trị Viên Hệ Thống (System Administrator)
+| Vai trò (Role) | Họ tên & Nhiệm vụ | Email đăng nhập | Mật khẩu | Kịch bản Demo |
+| :--- | :--- | :--- | :--- | :--- |
+| **System Administrator** | Quản Trị Viên Trưởng | `admin@dentalcare.com` | `Password123@` | Quản lý danh mục chuyên khoa, phòng khám, ghế nha, dịch vụ giá, tài khoản nhân viên |
+| **System Administrator** | Quản Trị Kỹ Thuật (Backup) | `admin2@dentalcare.com` | `Password123@` | Xem nhật ký kiểm toán hệ thống (`AuditLogs`), giám sát vận hành |
+
+### 2. Lễ Tân Tiếp Đón & Thu Ngân (Receptionist)
+| Vai trò (Role) | Họ tên & Nhiệm vụ | Email đăng nhập | Mật khẩu | Kịch bản Demo |
+| :--- | :--- | :--- | :--- | :--- |
+| **Receptionist** | Lễ Tân Nguyễn Thị Mai (Tiếp đón) | `receptionist@dentalcare.com` | `Password123@` | **Check-in bệnh nhân**, cấp số thứ tự phòng khám, tiếp nhận yêu cầu đặt lịch online |
+| **Receptionist** | Lễ Tân Lê Thu Hương (Thu ngân) | `receptionist2@dentalcare.com` | `Password123@` | **Lập hóa đơn**, **áp mã giảm giá** (`GIAM50K`, `VIP20`), **xuất mã VietQR động**, check-out |
+| **Receptionist** | Lễ Tân Trần Minh Quân (CSKH) | `receptionist3@dentalcare.com` | `Password123@` | Tra cứu sổ quản lý bệnh nhân, theo dõi danh sách bệnh nhân hẹn tái khám |
+
+### 3. Trưởng Khoa Chuyên Môn (Department Manager - 4 Khoa)
+| Vai trò (Role) | Chuyên khoa & Họ tên | Email đăng nhập | Mật khẩu | Kịch bản Demo |
+| :--- | :--- | :--- | :--- | :--- |
+| **Department Manager** | Khoa 1: Răng Tổng Quát & Nội Nha<br>*(BS.CKII Nguyễn Văn Bình)* | `manager1@dentalcare.com` | `Password123@` | Duyệt lịch hẹn Khoa 1, phân bổ Bác sĩ & Phòng khám (không ép chọn ghế) |
+| **Department Manager** | Khoa 2: Chỉnh Nha & Thẩm Mỹ<br>*(ThS.BS Lê Thị Lan Hương)* | `manager2@dentalcare.com` | `Password123@` | Duyệt ca niềng răng mới, giám sát tiến độ các phác đồ điều trị chỉnh nha |
+| **Department Manager** | Khoa 3: Phẫu Thuật Miệng & Implant<br>*(TS.BS Vũ Đình Trọng)* | `manager@dentalcare.com` | `Password123@` | **Xử lý ca hội chẩn chuyển khoa** (`/Department/Referrals`), tiếp nhận & phân công bác sĩ |
+| **Department Manager** | Khoa 4: Răng Trẻ Em<br>*(ThS.BS Đỗ Hải Yến)* | `manager4@dentalcare.com` | `Password123@` | Phê duyệt lịch khám nhi khoa, theo dõi báo cáo hiệu suất khám của bác sĩ |
+
+### 4. Bác Sĩ Điều Trị (Dentists - 6 Chuyên Gia)
+| Vai trò (Role) | Bác sĩ & Chuyên môn chính | Email đăng nhập | Mật khẩu | Kịch bản Demo |
+| :--- | :--- | :--- | :--- | :--- |
+| **Dentist** | **BS. Trần Văn Hùng**<br>*(Implant & Tiểu phẫu răng khôn - Khoa 3 & 1)* | `dentist@dentalcare.com` | `Password123@` | **Xem ca khám hôm nay**, **Pick ghế nha**, chụp X-quang, **kê đơn thuốc điện tử**, **lập phiếu chuyển khoa** |
+| **Dentist** | **BS. Nguyễn Thị Phương Thảo**<br>*(Nội nha & Trám vi phẫu - Khoa 1)* | `dentist2@dentalcare.com` | `Password123@` | Điều trị ca tủy răng hôm nay, ghi nhận buổi điều trị lâm sàng (`Sessions`) |
+| **Dentist** | **BS. Phạm Quốc Anh**<br>*(Chỉnh nha & Niềng răng - Khoa 2)* | `dentist3@dentalcare.com` | `Password123@` | Tiếp nhận ca chuyển khoa từ bác sĩ ngoại khoa, theo dõi phác đồ 6 giai đoạn |
+| **Dentist** | **BS. Lê Thị Mai Lan**<br>*(Nha khoa Trẻ em - Khoa 4)* | `dentist4@dentalcare.com` | `Password123@` | Khám răng sữa, bôi vecni Flour phòng ngừa sâu răng cho bé |
+| **Dentist** | **BS. Hoàng Trọng Nghĩa**<br>*(Phục hình răng sứ & Veneer - Khoa 2 & 1)* | `dentist5@dentalcare.com` | `Password123@` | Thiết kế nụ cười, tạo phác đồ dán sứ thẩm mỹ Veneer |
+| **Dentist** | **BS. Vũ Minh Tuấn**<br>*(Nha chu & Bảo tồn - Khoa 1)* | `dentist6@dentalcare.com` | `Password123@` | Điều trị viêm nha chu, lấy cao răng siêu âm, theo dõi liền thương |
+
+### 5. Bệnh Nhân (Patients - 15 Bệnh Nhân với Hồ Sơ Bệnh Lý Thực Tế)
+| Bệnh nhân | Mã BN | Email đăng nhập | Mật khẩu | Tình trạng & Kịch bản Demo |
+| :--- | :--- | :--- | :--- | :--- |
+| **Võ Văn Đông** | `PAT-001` | `vovandong1512@gmail.com` | `Password123@` | **Demo Check-in hôm nay (15:30)**, có hóa đơn chưa thanh toán, lịch hẹn tái khám 14 ngày |
+| **Lê Hoàng Minh** | `PAT-007` | `lehoangminh.test@dentalcare.com` | `Password123@` | **Đang ở sảnh chờ (Queue Q-001)** -> Bác sĩ bấm vào phòng chọn ghế |
+| **Nguyễn Thị Hoàng Lan**| `PAT-008` | `hoanglan.patient@dentalcare.com` | `Password123@` | **Đang ngồi trên ghế điều trị G-01 (InService)** -> Bác sĩ lưu chẩn đoán |
+| **Đặng Quốc Tuấn** | `PAT-005` | `patient4@dentalcare.com` | `Password123@` | **Vừa nhổ răng khôn xong (Completed)**: có đơn thuốc Augmentin, hóa đơn, lịch hẹn cắt chỉ |
+| **Trần Mai Chi** | `PAT-002` | `patient1@dentalcare.com` | `Password123@` | Ca niềng răng thẩm mỹ 6 giai đoạn, có **lịch hẹn tái khám siết niềng (còn 30 ngày)** |
+| **Nguyễn Bảo Nam** | `PAT-003` | `patient2@dentalcare.com` | `Password123@` | Ca cấy ghép Implant Straumann, có phim CT Cone Beam và sơ đồ răng |
+| **Phạm Thu Trang** | `PAT-004` | `patient3@dentalcare.com` | `Password123@` | Ca dán sứ Veneer 16 răng, đã đánh giá 5 sao cho phòng khám |
+| **Bé Vũ Hải Đăng** | `PAT-006` | `patient5@dentalcare.com` | `Password123@` | Nhi khoa: trám răng sữa, bôi Flour, có lịch hẹn chờ Trưởng khoa 4 duyệt |
+| **Lý Đình Phong** | `PAT-009` | `dinhphong.patient@dentalcare.com` | `Password123@` | Ca chuyển khoa liên viện (Khoa 1 chuyển sang Khoa 2) |
+| **Phan Thanh Hằng** | `PAT-010` | `thanhhang.patient@dentalcare.com` | `Password123@` | Lịch hẹn tái khám định kỳ sau 7 ngày |
+| **Bé Trần Minh Đức** | `PAT-011` | `minhduc.patient@dentalcare.com` | `Password123@` | Khám nha khoa học đường, hồ sơ theo dõi răng vĩnh viễn mới mọc |
+| **Đỗ Khánh Ly** | `PAT-012` | `khanhly.patient@dentalcare.com` | `Password123@` | Tẩy trắng răng Laser Whitening, có ảnh trước và sau điều trị |
+| **Bùi Anh Khoa** | `PAT-013` | `patient6@dentalcare.com` | `Password123@` | **Lịch hẹn mới đặt online** -> Trưởng khoa 2 vào duyệt phân công bác sĩ |
+| **Chu Thị Bích Ngọc** | `PAT-014` | `patient7@dentalcare.com` | `Password123@` | **Lịch hẹn chờ tiếp nhận** -> Lễ tân vào xem và chuyển tiếp sang khoa |
+| **Trịnh Gia Bảo (VIP)**| `PAT-015` | `patient8@dentalcare.com` | `Password123@` | Khách VIP, áp voucher giảm giá `VIP20`, trả góp viện phí qua chuyển khoản |
+
+---
+
+## 🎬 VII. KỊCH BẢN DEMO HOÀN CHỈNH TỪNG BƯỚC (CHO BUỔI BẢO VỆ ĐỒ ÁN)
+
+1. **Bước 1 (Bệnh nhân đặt lịch & Lễ tân tiếp nhận):**
+   - Đăng nhập `patient7@dentalcare.com` $\rightarrow$ Đặt lịch khám răng.
+   - Đăng nhập `receptionist@dentalcare.com` $\rightarrow$ Menu *Yêu cầu đặt lịch hẹn* $\rightarrow$ Chuyển tiếp sang khoa chuyên môn.
+2. **Bước 2 (Trưởng khoa phê duyệt & phân bổ):**
+   - Đăng nhập `manager2@dentalcare.com` hoặc `manager1@dentalcare.com` $\rightarrow$ Menu *Duyệt & Phân Bổ Ca Khám* $\rightarrow$ Chỉ định Bác sĩ và Phòng khám (không bắt buộc chọn ghế).
+3. **Bước 3 (Bệnh nhân đến phòng khám & Lễ tân Check-in):**
+   - Đăng nhập `receptionist@dentalcare.com` $\rightarrow$ Menu *Check-in Tiếp Nhận* $\rightarrow$ Bấm Check-in ca của bệnh nhân `vovandong1512@gmail.com` $\rightarrow$ Cấp số thứ tự sảnh chờ.
+4. **Bước 4 (Bác sĩ tiếp nhận, Pick ghế, Khám & Kê đơn):**
+   - Đăng nhập `dentist@dentalcare.com` $\rightarrow$ Menu *Ca Khám Trong Ngày* $\rightarrow$ Thấy bệnh nhân Lê Hoàng Minh (Q-001) $\rightarrow$ Bấm **"Chọn Ghế Khám (Pick Ghế)"** $\rightarrow$ Ca chuyển sang `InService`.
+   - Bác sĩ bấm *Hồ Sơ Bệnh Án* $\rightarrow$ Cập nhật sơ đồ 32 răng, tải ảnh phim X-quang.
+   - Bác sĩ bấm *Kê Đơn Thuốc* $\rightarrow$ Kê đơn thuốc điện tử (khóa kê đơn nếu ca chưa vào khám).
+   - Bác sĩ bấm *Hội Chẩn & Chuyển Khoa* hoặc *Hẹn Tái Khám* $\rightarrow$ Lên lịch hẹn tái khám sau 7 ngày.
+   - Bác sĩ bấm *Hoàn tất ca khám* $\rightarrow$ Ca chuyển sang `Completed`.
+5. **Bước 5 (Trưởng khoa xử lý ca chuyển chuyên khoa):**
+   - Đăng nhập `manager@dentalcare.com` $\rightarrow$ Menu *Xử Lý Ca Chuyển Khoa* $\rightarrow$ Bấm **"Tiếp nhận & Phân công Bác sĩ phụ trách"**.
+6. **Bước 6 (Lễ tân lập hóa đơn, áp voucher & Thanh toán VietQR):**
+   - Đăng nhập `receptionist2@dentalcare.com` $\rightarrow$ Menu *Viện Phí & Hóa Đơn* $\rightarrow$ Xem hóa đơn chưa thanh toán.
+   - Nhập mã giảm giá: `GIAM50K` hoặc `VIP20` $\rightarrow$ Hệ thống tự động trừ tiền.
+   - Quét mã **VietQR** động trên màn hình hoặc chọn phương thức Tiền mặt $\rightarrow$ Bấm **Thanh toán & Check-out**.
+7. **Bước 7 (Bệnh nhân xem hồ sơ & Lịch tái khám):**
+   - Đăng nhập `patient4@dentalcare.com` hoặc `vovandong1512@gmail.com` $\rightarrow$ Xem Sơ đồ răng, Đơn thuốc, Hóa đơn đã thanh toán và **Lịch hẹn tái khám** với bộ đếm ngược số ngày.
+
 
