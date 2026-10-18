@@ -229,17 +229,23 @@
                 <div class="card-body p-3">
                     @if (appt.Status == "PendingReceptionReview" || appt.Status == "PendingDepartmentReview" || appt.Status == "AwaitingPatientResponse")
                     {
+                        <a asp-action="Reschedule" asp-route-id="@appt.AppointmentId" class="btn btn-outline-primary w-100 mb-2 fw-semibold shadow-sm">
+                            <i class="bi bi-calendar-range me-1"></i> Dời Lịch Sang Thời Điểm Khác
+                        </a>
                         <button type="button" class="btn btn-outline-danger w-100 mb-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#withdrawModal">
                             <i class="bi bi-x-circle me-1"></i> Hủy Yêu Cầu Đặt Lịch
                         </button>
-                        <small class="text-muted d-block text-center">Yêu cầu đang chờ duyệt có thể hủy miễn phí (0 gậy vi phạm).</small>
+                        <small class="text-muted d-block text-center">Yêu cầu đang chờ duyệt có thể dời lịch hoặc hủy miễn phí (0 gậy vi phạm).</small>
                     }
                     else if (appt.Status == "Confirmed")
                     {
+                        <a asp-action="Reschedule" asp-route-id="@appt.AppointmentId" class="btn btn-primary w-100 mb-2 fw-bold shadow-sm">
+                            <i class="bi bi-calendar-range me-1"></i> Dời Lịch Sang Thời Điểm Khác
+                        </a>
                         <button type="button" class="btn btn-outline-danger w-100 mb-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#cancelModal">
                             <i class="bi bi-calendar-x me-1"></i> Hủy Lịch Hẹn Đã Xác Nhận
                         </button>
-                        <small class="text-muted d-block text-center">Hủy trước 12h: miễn phí. Hủy sát giờ (&lt;12h): tính 1 gậy vi phạm.</small>
+                        <small class="text-muted d-block text-center">Dời lịch sang ngày khác an toàn hoặc hủy trước 12h: miễn phí (0 gậy vi phạm).</small>
                     }
                     else if (appt.Status == "Completed")
                     {
@@ -289,6 +295,15 @@
                 <div class="alert alert-success border-success small mb-3">
                     <i class="bi bi-check-circle-fill me-1 text-success"></i>
                     Yêu cầu đặt lịch này hiện đang chờ duyệt. Bạn có thể hủy miễn phí bất kỳ lúc nào mà <strong>không bị tính gậy vi phạm</strong>.
+                </div>
+                <div class="alert alert-light border d-flex align-items-center justify-content-between p-2 mb-3">
+                    <div class="small text-muted">
+                        <i class="bi bi-calendar-event text-primary me-1"></i>
+                        Bạn muốn <strong>chuyển lịch sang thời điểm khác</strong> thay vì hủy hoàn toàn?
+                    </div>
+                    <a asp-action="Reschedule" asp-route-id="@appt.AppointmentId" class="btn btn-sm btn-outline-primary ms-2 flex-shrink-0">
+                        <i class="bi bi-arrow-repeat me-1"></i> Dời Lịch Khám
+                    </a>
                 </div>
                 <p class="mb-2">Bạn có chắc chắn muốn hủy yêu cầu đặt lịch khám <strong>@appt.AppointmentCode</strong>?</p>
                 <div class="mb-3">
@@ -350,6 +365,15 @@
                         </div>
                     </div>
                 }
+                <div class="alert alert-light border d-flex align-items-center justify-content-between p-2 mb-3">
+                    <div class="small text-muted">
+                        <i class="bi bi-calendar-event text-primary me-1"></i>
+                        Bận việc đột xuất? Bạn có thể <strong>dời lịch sang ngày khác</strong> thay vì hủy bỏ:
+                    </div>
+                    <a asp-action="Reschedule" asp-route-id="@appt.AppointmentId" class="btn btn-sm btn-outline-primary ms-2 flex-shrink-0">
+                        <i class="bi bi-arrow-repeat me-1"></i> Dời Lịch Khám
+                    </a>
+                </div>
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Lý do hủy hẹn <span class="text-danger">*</span>:</label>
                     <select class="form-select mb-2" onchange="document.getElementById('cancelReasonInput').value = this.value">

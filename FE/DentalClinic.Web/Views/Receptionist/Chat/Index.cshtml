@@ -1,0 +1,395 @@
+@{
+    ViewData["Title"] = "Tổng Đài Tư Vấn Trực Tuyến (Live Chat)";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-chat-dots-fill text-warning me-2"></i>Tổng Đài Tư Vấn Trực Tuyến
+            </h1>
+            <p class="text-muted mb-0">Quầy Lễ Tân &bull; Tiếp nhận và giải đáp trực tiếp các câu hỏi từ bệnh nhân và khách vãng lai</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fs-6">
+                <i class="bi bi-broadcast me-1"></i> Trực Tuyến (8h30 &ndash; 19h00)
+            </span>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadConversations()" title="Làm mới danh sách">
+                <i class="bi bi-arrow-clockwise me-1"></i> Làm mới
+            </button>
+        </div>
+    </div>
+
+    <!-- Antiforgery Token for AJAX -->
+    @Html.AntiForgeryToken()
+
+    <!-- Main Chat Workspace Card -->
+    <div class="card border-0 shadow-sm" style="height: calc(100vh - 210px); min-height: 580px;">
+        <div class="card-body p-0 d-flex h-100 overflow-hidden">
+            
+            <!-- LEFT PANEL: CONVERSATIONS LIST -->
+            <div class="border-end d-flex flex-column h-100" style="width: 360px; min-width: 300px; background-color: #ffffff;">
+                <div class="p-3 border-bottom bg-light">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white border-end-0">
+                            <i class="bi bi-search text-muted"></i>
+                        </span>
+                        <input type="text" id="convSearchInput" class="form-control border-start-0" placeholder="Tìm kiếm khách hàng..." onkeyup="filterConversations()" />
+                    </div>
+                </div>
+
+                <div class="flex-grow-1 overflow-y-auto" id="conversationListContainer">
+                    <div class="text-center py-5 text-muted" id="convListLoading">
+                        <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+                        <div>Đang tải danh sách hội thoại...</div>
+                    </div>
+                    <div id="convListEmpty" class="text-center py-5 text-muted d-none">
+                        <i class="bi bi-inbox fs-1 text-muted"></i>
+                        <p class="mt-2 mb-0">Chưa có cuộc trò chuyện nào.</p>
+                    </div>
+                    <div class="list-group list-group-flush" id="convList"></div>
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL: ACTIVE CHAT THREAD -->
+            <div class="flex-grow-1 d-flex flex-column h-100 bg-white" id="chatThreadWrapper">
+                
+                <!-- Placeholder when no conversation is selected -->
+                <div id="noConversationSelected" class="d-flex flex-column align-items-center justify-content-center h-100 text-center p-4 bg-light">
+                    <div class="rounded-circle bg-white text-muted d-flex align-items-center justify-content-center shadow-sm mb-3" style="width: 72px; height: 72px;">
+                        <i class="bi bi-chat-heart fs-1 text-warning"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark">Chưa chọn cuộc trò chuyện</h5>
+                    <p class="text-muted small" style="max-width: 400px;">
+                        Vui lòng chọn một khách hàng hoặc bệnh nhân từ danh sách bên trái để xem nội dung câu hỏi và phản hồi tư vấn trực tiếp.
+                    </p>
+                </div>
+
+                <!-- Chat Conversation Active View -->
+                <div id="activeConversationView" class="d-flex flex-column h-100 d-none">
+                    <!-- Chat Header -->
+                    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-white shadow-sm">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center fw-bold" style="width: 44px; height: 44px; font-size: 1.1rem;" id="activeAvatar">
+                                K
+                            </div>
+                            <div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <h6 class="mb-0 fw-bold text-dark" id="activeCustomerName">Khách vãng lai</h6>
+                                    <span class="badge bg-secondary" id="activeCustomerRoleBadge">Guest</span>
+                                </div>
+                                <small class="text-muted" id="activeConvSubtext">Mã hội thoại: -</small>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <a href="/Patient/Appointment/Book" target="_blank" class="btn btn-sm btn-outline-primary" title="Tạo ca hẹn cho khách này">
+                                <i class="bi bi-calendar-plus me-1"></i> Tạo Hẹn Nhanh
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Messages Stream Body -->
+                    <div class="flex-grow-1 p-3 overflow-y-auto d-flex flex-column gap-3" id="activeChatMessages" style="background-color: #f8fafc;"></div>
+
+                    <!-- Quick Response Templates -->
+                    <div class="px-3 py-2 bg-light border-top border-bottom d-flex align-items-center gap-1 overflow-x-auto" style="white-space: nowrap;">
+                        <span class="text-muted small me-1"><i class="bi bi-lightning-charge-fill text-warning"></i> Nhanh:</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary bg-white text-dark py-1 px-2" style="font-size: 0.76rem;" onclick="setTemplate('Dạ chào bạn, Nha Khoa DentalCare có thể hỗ trợ tư vấn dịch vụ gì cho bạn hôm nay ạ?')">
+                            👋 Chào hỏi
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary bg-white text-dark py-1 px-2" style="font-size: 0.76rem;" onclick="setTemplate('Chi phí lấy cao răng & đánh bóng siêu âm là 250.000đ, thời lượng 45 phút, hoàn toàn êm ái ạ.')">
+                            💰 Giá cạo vôi
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary bg-white text-dark py-1 px-2" style="font-size: 0.76rem;" onclick="setTemplate('Phòng khám có sẵn Bác sĩ chuyên khoa tại Khoa Răng Tổng Quát, bạn muốn đặt lịch vào khung giờ nào để mình giữ chỗ ạ?')">
+                            📅 Đặt hẹn
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary bg-white text-dark py-1 px-2" style="font-size: 0.76rem;" onclick="setTemplate('Cảm ơn bạn đã liên hệ Nha Khoa DentalCare. Nếu cần thêm thông tin, bạn cứ nhắn tin cho phòng khám nhé!')">
+                            🙏 Cảm ơn
+                        </button>
+                    </div>
+
+                    <!-- Message Input Box -->
+                    <div class="p-3 bg-white border-top">
+                        <form id="receptionistSendForm" class="d-flex align-items-end gap-2" onsubmit="return handleReceptionistSend(event);">
+                            <textarea id="receptionistInputText" 
+                                      class="form-control" 
+                                      rows="2" 
+                                      placeholder="Nhập câu trả lời tư vấn cho khách hàng... (Nhấn Enter để gửi, Shift+Enter xuống dòng)" 
+                                      style="resize: none; font-size: 0.9rem;"
+                                      required></textarea>
+                            <button type="submit" class="btn btn-primary px-4 py-2 h-100 d-flex flex-column align-items-center justify-content-center" id="btnSendReply">
+                                <i class="bi bi-send-fill fs-5 mb-1"></i>
+                                <span class="small fw-semibold">Gửi</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- SignalR Client Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+
+    <script>
+        let currentConversationId = null;
+        let conversations = [];
+        let hubConnection = null;
+        const apiBaseUrl = 'https://localhost:7350';
+
+        document.addEventListener('DOMContentLoaded', function () {
+            loadConversations();
+            initReceptionistSignalR();
+
+            const textInput = document.getElementById('receptionistInputText');
+            if (textInput) {
+                textInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleReceptionistSend(e);
+                    }
+                });
+            }
+
+            // Auto refresh conversation list every 8 seconds
+            setInterval(loadConversations, 8000);
+        });
+
+        async function loadConversations() {
+            try {
+                const res = await fetch('/Receptionist/Chat/Conversations');
+                if (res.ok) {
+                    conversations = await res.json();
+                    renderConversationList(conversations);
+                }
+            } catch (err) {
+                console.error('Error loading conversations:', err);
+            }
+        }
+
+        function renderConversationList(list) {
+            const container = document.getElementById('convList');
+            const loading = document.getElementById('convListLoading');
+            const empty = document.getElementById('convListEmpty');
+
+            if (loading) loading.classList.add('d-none');
+
+            if (!list || list.length === 0) {
+                if (empty) empty.classList.remove('d-none');
+                if (container) container.innerHTML = '';
+                return;
+            }
+
+            if (empty) empty.classList.add('d-none');
+            if (!container) return;
+
+            container.innerHTML = '';
+            list.forEach(c => {
+                const isActive = c.conversationId === currentConversationId;
+                const initial = (c.customerName || 'K').charAt(0).toUpperCase();
+                const isPatient = c.senderType === 'Patient';
+                const timeStr = c.lastMessageTime ? new Date(c.lastMessageTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
+
+                const item = document.createElement('a');
+                item.href = 'javascript:void(0)';
+                item.className = `list-group-item list-group-item-action p-3 border-bottom d-flex align-items-center gap-3 ${isActive ? 'active' : ''}`;
+                item.onclick = () => selectConversation(c);
+
+                item.innerHTML = `
+                    <div class="rounded-circle ${isPatient ? 'bg-primary' : 'bg-warning'} text-white d-flex align-items-center justify-content-center fw-bold flex-shrink-0" style="width: 40px; height: 40px;">
+                        ${initial}
+                    </div>
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-bold text-truncate ${isActive ? 'text-white' : 'text-dark'}" style="max-width: 160px;">${escapeHtml(c.customerName)}</span>
+                            <small class="${isActive ? 'text-white-50' : 'text-muted'}">${timeStr}</small>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-truncate ${isActive ? 'text-white-50' : 'text-muted'}" style="max-width: 170px;">${escapeHtml(c.lastMessage || 'Chưa có tin nhắn')}</small>
+                            ${c.unreadCount > 0 ? `<span class="badge bg-danger rounded-pill">${c.unreadCount}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function filterConversations() {
+            const query = (document.getElementById('convSearchInput')?.value || '').toLowerCase().trim();
+            if (!query) {
+                renderConversationList(conversations);
+                return;
+            }
+            const filtered = conversations.filter(c => (c.customerName || '').toLowerCase().includes(query) || (c.lastMessage || '').toLowerCase().includes(query));
+            renderConversationList(filtered);
+        }
+
+        async function selectConversation(c) {
+            currentConversationId = c.conversationId;
+            renderConversationList(conversations);
+
+            document.getElementById('noConversationSelected')?.classList.add('d-none');
+            const activeView = document.getElementById('activeConversationView');
+            if (activeView) activeView.classList.remove('d-none');
+
+            document.getElementById('activeCustomerName').innerText = c.customerName;
+            document.getElementById('activeAvatar').innerText = (c.customerName || 'K').charAt(0).toUpperCase();
+            document.getElementById('activeConvSubtext').innerText = `Mã hội thoại: ${c.conversationId}`;
+            
+            const roleBadge = document.getElementById('activeCustomerRoleBadge');
+            if (roleBadge) {
+                roleBadge.innerText = c.senderType === 'Patient' ? 'Bệnh Nhân' : 'Khách Vãng Lai';
+                roleBadge.className = c.senderType === 'Patient' ? 'badge bg-primary' : 'badge bg-warning text-dark';
+            }
+
+            await loadMessages(c.conversationId);
+
+            // Join SignalR group for real-time
+            if (hubConnection && hubConnection.state === signalR.HubConnectionState.Connected) {
+                hubConnection.invoke('JoinConversation', c.conversationId);
+            }
+        }
+
+        async function loadMessages(convId) {
+            const container = document.getElementById('activeChatMessages');
+            if (!container) return;
+
+            container.innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary mb-2"></div><div>Đang tải nội dung tin nhắn...</div></div>';
+
+            try {
+                const res = await fetch(`/Receptionist/Chat/Messages?conversationId=${encodeURIComponent(convId)}`);
+                if (res.ok) {
+                    const result = await res.json();
+                    container.innerHTML = '';
+                    if (result && result.data && Array.isArray(result.data)) {
+                        result.data.forEach(m => appendChatMessage(m));
+                        scrollChatBottom();
+                    }
+                }
+            } catch (err) {
+                console.error('Error loading messages:', err);
+                container.innerHTML = '<div class="text-danger text-center py-4">Lỗi tải tin nhắn. Vui lòng thử lại.</div>';
+            }
+        }
+
+        function appendChatMessage(msg) {
+            const container = document.getElementById('activeChatMessages');
+            if (!container || !msg) return;
+
+            const isStaff = msg.senderType === 'Receptionist';
+            const isBot = msg.senderType === 'Bot';
+
+            const wrap = document.createElement('div');
+            wrap.className = `d-flex flex-column ${isStaff ? 'align-items-end' : 'align-items-start'}`;
+
+            const timeStr = msg.sentAt ? new Date(msg.sentAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
+            const senderName = isStaff ? 'Bạn (Lễ tân)' : (msg.senderName || (isBot ? 'Trợ lý ảo' : 'Khách hàng'));
+
+            wrap.innerHTML = `
+                <div class="small text-muted mb-1 px-1 fw-semibold">${escapeHtml(senderName)}</div>
+                <div class="p-3 rounded-3 shadow-sm" style="max-width: 70%; word-break: break-word; font-size: 0.9rem; ${isStaff ? 'background-color: #0d6efd; color: #ffffff;' : (isBot ? 'background-color: #f1f5f9; color: #334155; border: 1px dashed #cbd5e1;' : 'background-color: #ffffff; color: #1e293b; border: 1px solid #e2e8f0;')}">
+                    ${escapeHtml(msg.messageText)}
+                </div>
+                <div class="text-muted px-1 mt-1" style="font-size: 0.7rem;">${timeStr}</div>
+            `;
+
+            container.appendChild(wrap);
+            scrollChatBottom();
+        }
+
+        function scrollChatBottom() {
+            const container = document.getElementById('activeChatMessages');
+            if (container) {
+                setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
+            }
+        }
+
+        function setTemplate(text) {
+            const input = document.getElementById('receptionistInputText');
+            if (input) {
+                input.value = text;
+                input.focus();
+            }
+        }
+
+        async function handleReceptionistSend(e) {
+            if (e) e.preventDefault();
+            if (!currentConversationId) return false;
+
+            const textInput = document.getElementById('receptionistInputText');
+            const text = (textInput?.value || '').trim();
+            if (!text) return false;
+
+            textInput.value = '';
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const formData = new URLSearchParams();
+            formData.append('__RequestVerificationToken', token);
+            formData.append('conversationId', currentConversationId);
+            formData.append('messageText', text);
+
+            try {
+                const res = await fetch('/Receptionist/Chat/Send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: formData
+                });
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result && result.data) {
+                        if (Array.isArray(result.data)) {
+                            result.data.forEach(m => appendChatMessage(m));
+                        } else {
+                            appendChatMessage(result.data);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Error sending receptionist message:', err);
+            }
+            return false;
+        }
+
+        function initReceptionistSignalR() {
+            try {
+                hubConnection = new signalR.HubConnectionBuilder()
+                    .withUrl(`${apiBaseUrl}/hubs/livechat`)
+                    .withAutomaticReconnect()
+                    .build();
+
+                hubConnection.on('NewIncomingMessage', function (msg) {
+                    loadConversations();
+                    if (msg && msg.conversationId === currentConversationId) {
+                        appendChatMessage(msg);
+                    }
+                });
+
+                hubConnection.on('ReceiveMessage', function (msg) {
+                    if (msg && msg.conversationId === currentConversationId) {
+                        appendChatMessage(msg);
+                    }
+                });
+
+                hubConnection.start()
+                    .then(() => {
+                        hubConnection.invoke('JoinReceptionistGroup');
+                        if (currentConversationId) {
+                            hubConnection.invoke('JoinConversation', currentConversationId);
+                        }
+                    })
+                    .catch(err => console.warn('SignalR Receptionist connection failed:', err));
+            } catch (err) {
+                console.warn('SignalR init failed:', err);
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return text.toString().replace(/[&<>"']/g, m => map[m]);
+        }
+    </script>
+}

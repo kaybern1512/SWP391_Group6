@@ -20,6 +20,7 @@ public interface IAppointmentApiService
     Task<ApiResult<AppointmentDto>> GetAppointmentDetailAsync(long id);
     Task<ApiResult> PatientWithdrawAsync(long id, string? reason = null);
     Task<ApiResult> PatientCancelAsync(long id, string reason);
+    Task<ApiResult<AppointmentDto>> PatientRescheduleAsync(long id, PatientRescheduleRequest request);
     Task<ApiResult<AppointmentChangeProposalDto>> GetProposalAsync(long id);
     Task<ApiResult> AcceptProposalAsync(long id);
     Task<ApiResult> RejectProposalAsync(long id);

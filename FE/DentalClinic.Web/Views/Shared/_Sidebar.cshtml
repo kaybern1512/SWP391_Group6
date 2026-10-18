@@ -114,6 +114,12 @@
                 <i class="bi bi-file-earmark-text"></i>
                 <span>Hóa Đơn & Thu Viện Phí</span>
             </a>
+
+            <div class="nav-group-title">Tư Vấn & Hỗ Trợ</div>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistChat" ? "active" : "")" asp-controller="ReceptionistChat" asp-action="Index">
+                <i class="bi bi-chat-dots"></i>
+                <span>Tư Vấn Trực Tuyến (Live Chat)</span>
+            </a>
         }
         else if (role == "Dentist")
         {

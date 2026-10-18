@@ -169,9 +169,17 @@
                                             break;
                                     }
                                 </div>
-                                <a asp-action="Detail" asp-route-id="@appt.AppointmentId" class="btn btn-outline-primary btn-sm">
-                                    Chi tiết <i class="bi bi-chevron-right ms-1"></i>
-                                </a>
+                                <div class="d-flex gap-1">
+                                    @if (appt.Status == "PendingReceptionReview" || appt.Status == "PendingDepartmentReview" || appt.Status == "AwaitingPatientResponse" || appt.Status == "Confirmed")
+                                    {
+                                        <a asp-action="Reschedule" asp-route-id="@appt.AppointmentId" class="btn btn-outline-warning text-dark btn-sm fw-semibold" title="Dời lịch khám">
+                                            <i class="bi bi-arrow-repeat me-1"></i>Dời lịch
+                                        </a>
+                                    }
+                                    <a asp-action="Detail" asp-route-id="@appt.AppointmentId" class="btn btn-outline-primary btn-sm">
+                                        Chi tiết <i class="bi bi-chevron-right ms-1"></i>
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     </div>

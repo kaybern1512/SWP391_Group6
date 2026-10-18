@@ -80,6 +80,8 @@ public partial class DentalClinicDbContext : DbContext
 
     public virtual DbSet<VisitFeedback> VisitFeedbacks { get; set; }
 
+    public virtual DbSet<SupportChatMessage> SupportChatMessages { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Appointment>(entity =>
@@ -909,6 +911,22 @@ public partial class DentalClinicDbContext : DbContext
                 .HasForeignKey<VisitFeedback>(d => d.AppointmentId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_VisitFeedback_Appointment");
+        });
+
+        modelBuilder.Entity<SupportChatMessage>(entity =>
+        {
+            entity.HasKey(e => e.MessageId);
+            entity.ToTable("SupportChatMessages");
+            entity.Property(e => e.ConversationId).HasMaxLength(64);
+            entity.Property(e => e.SenderType).HasMaxLength(20);
+            entity.Property(e => e.SenderName).HasMaxLength(100);
+            entity.Property(e => e.MessageText).HasMaxLength(2000);
+            entity.Property(e => e.SentAt).HasDefaultValueSql("(sysdatetime())");
+
+            entity.HasOne(d => d.SenderUser)
+                .WithMany()
+                .HasForeignKey(d => d.SenderUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         OnModelCreatingPartial(modelBuilder);

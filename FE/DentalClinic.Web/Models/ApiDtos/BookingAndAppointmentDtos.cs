@@ -211,6 +211,13 @@ public class PatientCancelRequest
     public string Reason { get; set; } = string.Empty;
 }
 
+public class PatientRescheduleRequest
+{
+    public DateTime NewScheduledStart { get; set; }
+    public long? NewRequestedDentistUserId { get; set; }
+    public string Reason { get; set; } = string.Empty;
+}
+
 public class BookingEligibilityDto
 {
     public bool IsEligible { get; set; } = true;

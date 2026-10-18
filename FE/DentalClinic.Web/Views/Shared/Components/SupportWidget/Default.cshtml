@@ -1,0 +1,203 @@
+@model DentalClinic.Web.ViewModels.Support.SupportWidgetViewModel
+@{
+    var config = Model.Config;
+    var bookingUrl = Model.IsAuthenticated
+        ? "/Patient/Appointment/Book"
+        : "/Account/Login?returnUrl=" + Uri.EscapeDataString("/Patient/Appointment/Book");
+}
+
+<!-- Floating Support Widget Container -->
+<div id="dentalSupportWidget" 
+     class="dc-support-widget"
+     data-is-authenticated="@(Model.IsAuthenticated ? "true" : "false")"
+     data-user-name="@(Model.UserName ?? "Khách vãng lai")"
+     data-user-id="@(Model.UserId?.ToString() ?? "")"
+     data-user-role="@(Model.UserRole ?? "Guest")"
+     data-default-conv="@Model.DefaultConversationId"
+     data-api-base="https://localhost:7350">
+
+    <!-- 1. FLOATING ACTION BUTTON (FAB) -->
+    <button type="button" 
+            id="dcSupportFab" 
+            class="dc-support-fab" 
+            aria-label="Hỗ trợ trực tuyến DentalCare"
+            title="Hỗ trợ trực tuyến & Tư vấn nhanh (@config.SupportHours)">
+        <div class="dc-fab-pulse"></div>
+        <div class="dc-fab-icon-box">
+            <i class="bi bi-headset dc-icon-default"></i>
+            <i class="bi bi-x-lg dc-icon-close d-none"></i>
+        </div>
+        <span class="dc-fab-badge" id="dcUnreadBadge" style="display: none;">0</span>
+        <span class="dc-online-dot" title="Đang trực tuyến"></span>
+    </button>
+
+    <!-- 2. POPUP MENU (4 CHỨC NĂNG TƯ VẤN) -->
+    <div id="dcSupportMenu" class="dc-support-menu d-none shadow-lg">
+        <!-- Header -->
+        <div class="dc-menu-header">
+            <div class="d-flex align-items-center gap-2">
+                <div class="dc-header-icon">
+                    <i class="bi bi-hospital"></i>
+                </div>
+                <div>
+                    <h6 class="mb-0 fw-bold text-white">Hỗ Trợ Trực Tuyến</h6>
+                    <small class="dc-text-subtle">
+                        <span class="dc-status-indicator"></span> @config.SupportHours &bull; Trực tổng đài
+                    </small>
+                </div>
+            </div>
+            <button type="button" class="btn-close btn-close-white dc-btn-close-menu" id="dcCloseMenuBtn" aria-label="Đóng"></button>
+        </div>
+
+        <!-- Feature Navigation Items -->
+        <div class="dc-menu-body">
+            <!-- 1. Đặt lịch khám nhanh -->
+            <a href="@bookingUrl" class="dc-menu-item" id="dcMenuBookBtn">
+                <div class="dc-item-icon bg-primary-subtle text-primary">
+                    <i class="bi bi-calendar-check-fill"></i>
+                </div>
+                <div class="dc-item-content">
+                    <div class="dc-item-title">Đặt Lịch Hẹn Nhanh</div>
+                    <div class="dc-item-desc">Chọn chuyên khoa, bác sĩ & giờ khám trực tuyến</div>
+                </div>
+                <i class="bi bi-chevron-right dc-item-arrow"></i>
+            </a>
+
+            <!-- 2. Chat trực tuyến nội bộ (Live Chat) -->
+            <button type="button" class="dc-menu-item dc-btn-open-chat" id="dcMenuLiveChatBtn">
+                <div class="dc-item-icon bg-warning-subtle text-warning-emphasis">
+                    <i class="bi bi-chat-dots-fill"></i>
+                </div>
+                <div class="dc-item-content">
+                    <div class="dc-item-title d-flex align-items-center gap-1">
+                        <span>Chat Trực Tuyến</span>
+                        <span class="badge bg-warning text-dark" style="font-size: 0.65rem;">Lễ tân trực</span>
+                    </div>
+                    <div class="dc-item-desc">Hỏi đáp triệu chứng, bảng giá và tư vấn 1-1</div>
+                </div>
+                <i class="bi bi-chevron-right dc-item-arrow"></i>
+            </button>
+
+            <!-- 4. Chat Facebook Messenger -->
+            <a href="@config.MessengerUrl" target="_blank" rel="noopener noreferrer" class="dc-menu-item">
+                <div class="dc-item-icon bg-info-subtle text-info">
+                    <i class="bi bi-messenger"></i>
+                </div>
+                <div class="dc-item-content">
+                    <div class="dc-item-title">Chat Qua Messenger</div>
+                    <div class="dc-item-desc">Nhắn tin trực tiếp qua Fanpage Facebook</div>
+                </div>
+                <i class="bi bi-box-arrow-up-right dc-item-arrow"></i>
+            </a>
+
+            <!-- 5. Chat Zalo -->
+            <a href="@config.ZaloUrl" target="_blank" rel="noopener noreferrer" class="dc-menu-item">
+                <div class="dc-item-icon bg-success-subtle text-success">
+                    <i class="bi bi-chat-square-dots-fill"></i>
+                </div>
+                <div class="dc-item-content">
+                    <div class="dc-item-title">Chat Qua Zalo OA</div>
+                    <div class="dc-item-desc">Tư vấn nhanh qua Zalo Official Account</div>
+                </div>
+                <i class="bi bi-box-arrow-up-right dc-item-arrow"></i>
+            </a>
+        </div>
+
+        <!-- Hotline Footer -->
+        <div class="dc-menu-footer">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <small class="text-muted d-block">Tổng đài hỗ trợ khẩn cấp:</small>
+                    <a href="tel:@config.Hotline" class="fw-bold text-danger text-decoration-none">
+                        <i class="bi bi-telephone-fill me-1"></i>@config.Hotline
+                    </a>
+                </div>
+                <span class="badge bg-light text-muted border">Miễn phí cước gọi</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. MINI LIVE CHAT WINDOW -->
+    <div id="dcChatWindow" class="dc-chat-window d-none shadow-lg">
+        <!-- Chat Header -->
+        <div class="dc-chat-header">
+            <div class="d-flex align-items-center gap-2">
+                <div class="dc-chat-avatar position-relative">
+                    <div class="rounded-circle bg-white text-primary d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">
+                        <i class="bi bi-person-fill-gear fs-5"></i>
+                    </div>
+                    <span class="dc-online-dot-mini" title="Đang trực tuyến"></span>
+                </div>
+                <div>
+                    <h6 class="mb-0 fw-bold text-white">Tư Vấn Trực Tuyến DentalCare</h6>
+                    <small class="dc-text-subtle">
+                        <span class="dc-status-indicator"></span> Lễ tân & Bot đang trực tuyến (@config.SupportHours)
+                    </small>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <button type="button" class="btn btn-sm text-white p-1" id="dcMinimizeChatBtn" title="Thu nhỏ">
+                    <i class="bi bi-dash-lg"></i>
+                </button>
+                <button type="button" class="btn btn-sm text-white p-1" id="dcCloseChatBtn" title="Đóng chat">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat Notification Bar -->
+        <div class="dc-chat-notice">
+            <i class="bi bi-shield-check text-success me-1"></i>
+            <span>Nha khoa cam kết bảo mật 100% thông tin tư vấn và hồ sơ bệnh nhân.</span>
+        </div>
+
+        <!-- Chat Messages Body -->
+        <div class="dc-chat-body" id="dcChatBody">
+            <div class="dc-chat-time-divider">
+                <span>Hôm nay</span>
+            </div>
+
+            <!-- Welcome greeting message -->
+            <div class="dc-chat-msg dc-msg-bot">
+                <div class="dc-msg-sender">
+                    <i class="bi bi-robot me-1"></i>Trợ lý ảo DentalCare
+                </div>
+                <div class="dc-msg-bubble">
+                    Xin chào <strong>@(Model.UserName ?? "Quý khách")</strong>! Cảm ơn Quý khách đã liên hệ Nha Khoa DentalCare. Bạn đang cần tư vấn về dịch vụ, bảng giá hay đặt lịch khám với chuyên gia nào ạ?
+                </div>
+                <div class="dc-msg-time">Vừa xong</div>
+            </div>
+
+            <!-- Quick Action Chips -->
+            <div class="dc-quick-chips" id="dcQuickChips">
+                <button type="button" class="dc-chip" onclick="window.sendQuickChat('Tôi muốn tư vấn đặt lịch khám răng tổng quát')">
+                    📅 Đặt lịch khám
+                </button>
+                <button type="button" class="dc-chip" onclick="window.sendQuickChat('Cho tôi hỏi bảng giá cạo vôi răng và trám răng?')">
+                    💰 Bảng giá dịch vụ
+                </button>
+                <button type="button" class="dc-chip" onclick="window.sendQuickChat('Tôi bị đau răng khôn, phòng khám có khám hôm nay không?')">
+                    🦷 Khám răng khôn
+                </button>
+                <button type="button" class="dc-chip" onclick="window.sendQuickChat('Chi phí niềng răng trong suốt Invisalign khoảng bao nhiêu?')">
+                    ✨ Niềng răng thẩm mỹ
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat Input Footer -->
+        <div class="dc-chat-footer">
+            <form id="dcChatForm" class="d-flex align-items-center gap-2" onsubmit="return false;">
+                <input type="text" 
+                       id="dcChatInput" 
+                       class="form-control dc-chat-input" 
+                       placeholder="Nhập câu hỏi của bạn tại đây..." 
+                       autocomplete="off" 
+                       maxlength="500" />
+                <button type="button" id="dcChatSendBtn" class="btn dc-btn-send" title="Gửi tin nhắn (Enter)">
+                    <i class="bi bi-send-fill"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>

@@ -17,12 +17,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
+using DentalClinic.Infrastructure.Hubs;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Add Infrastructure & Application Services
 builder.Services.AddInfrastructureServices(builder.Configuration);
+builder.Services.AddSignalR();
 
 // 2. Add FluentValidation
 builder.Services.AddFluentValidationAutoValidation();
@@ -195,6 +197,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<LiveChatHub>("/hubs/livechat");
 app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.Run();

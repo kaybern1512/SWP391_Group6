@@ -93,6 +93,11 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendPostActionAsync($"/api/patient/appointments/{id}/cancel", request);
     }
 
+    public async Task<ApiResult<AppointmentDto>> PatientRescheduleAsync(long id, PatientRescheduleRequest request)
+    {
+        return await SendPostAsync<PatientRescheduleRequest, AppointmentDto>($"/api/patient/appointments/{id}/reschedule", request);
+    }
+
     public async Task<ApiResult<AppointmentChangeProposalDto>> GetProposalAsync(long id)
     {
         return await SendGetAsync<AppointmentChangeProposalDto>($"/api/patient/appointments/{id}/proposal");

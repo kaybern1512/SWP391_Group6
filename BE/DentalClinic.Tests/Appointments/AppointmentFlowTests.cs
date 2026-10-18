@@ -1308,4 +1308,121 @@ public class AppointmentFlowTests
         Assert.NotNull(updatedAppt);
         Assert.Equal(AppointmentStatus.Cancelled, updatedAppt.Status);
     }
+
+    [Fact]
+    public async Task PatientReschedule_ConfirmedAppointment_CancelsOldAndCreatesNewAppointment()
+    {
+        var db = CreateDbContext(nameof(PatientReschedule_ConfirmedAppointment_CancelsOldAndCreatesNewAppointment));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        // 1. Patient books appointment
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ReasonForVisit = "Khám răng định kỳ"
+        });
+        Assert.True(bookResult.Success);
+        var oldApptId = bookResult.Data!.AppointmentId;
+        var oldCode = bookResult.Data.AppointmentCode;
+
+        // 2. Forward & Confirm
+        await service.ReceptionistForwardAsync(oldApptId, 201, "Tiếp nhận");
+        await service.ManagerConfirmAsync(oldApptId, 301, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11
+        });
+
+        // 3. Patient reschedules to new date/time
+        var newStart = DateTime.Today.AddDays(4).AddHours(14);
+        var rescheduleResult = await service.PatientRescheduleAsync(oldApptId, 101, new PatientRescheduleRequest
+        {
+            NewScheduledStart = newStart,
+            Reason = "Trùng lịch họp đột xuất ở cơ quan"
+        });
+
+        Assert.True(rescheduleResult.Success);
+        Assert.NotNull(rescheduleResult.Data);
+        var newApptId = rescheduleResult.Data.AppointmentId;
+        var newCode = rescheduleResult.Data.AppointmentCode;
+
+        Assert.NotEqual(oldApptId, newApptId);
+        Assert.NotEqual(oldCode, newCode);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, rescheduleResult.Data.Status);
+        Assert.Equal(newStart, rescheduleResult.Data.ScheduledStart);
+
+        // Check old appointment in database
+        var oldAppt = await db.Appointments.FindAsync(oldApptId);
+        Assert.NotNull(oldAppt);
+        Assert.Equal(AppointmentStatus.Cancelled, oldAppt.Status);
+        Assert.Contains("[Dời lịch]", oldAppt.CancellationReason);
+        Assert.Null(oldAppt.RoomId);
+        Assert.Null(oldAppt.DentalChairId);
+        Assert.Null(oldAppt.AssignedDentistUserId);
+
+        // Check new appointment in database
+        var newAppt = await db.Appointments.FindAsync(newApptId);
+        Assert.NotNull(newAppt);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, newAppt.Status);
+        Assert.Equal(101, newAppt.PatientUserId);
+        Assert.Contains(oldCode, newAppt.ReasonForVisit);
+    }
+
+    [Fact]
+    public async Task PatientReschedule_PastDate_ReturnsFail()
+    {
+        var db = CreateDbContext(nameof(PatientReschedule_PastDate_ReturnsFail));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ReasonForVisit = "Khám răng"
+        });
+        var apptId = bookResult.Data!.AppointmentId;
+
+        var result = await service.PatientRescheduleAsync(apptId, 101, new PatientRescheduleRequest
+        {
+            NewScheduledStart = DateTime.Now.AddDays(-1),
+            Reason = "Lỗi chọn ngày quá khứ"
+        });
+
+        Assert.False(result.Success);
+        Assert.Contains("quá khứ", result.Message);
+    }
+
+    [Fact]
+    public async Task PatientReschedule_UnauthorizedUser_ReturnsFail()
+    {
+        var db = CreateDbContext(nameof(PatientReschedule_UnauthorizedUser_ReturnsFail));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ReasonForVisit = "Khám răng"
+        });
+        var apptId = bookResult.Data!.AppointmentId;
+
+        // User 999 attempts to reschedule User 101's appointment
+        var result = await service.PatientRescheduleAsync(apptId, 999, new PatientRescheduleRequest
+        {
+            NewScheduledStart = DateTime.Today.AddDays(3).AddHours(10),
+            Reason = "Dời lịch của người khác"
+        });
+
+        Assert.False(result.Success);
+        Assert.Contains("không có quyền", result.Message);
+    }
 }
+

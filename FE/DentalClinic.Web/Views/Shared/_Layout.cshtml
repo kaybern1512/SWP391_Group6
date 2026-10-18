@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/dashboard.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/profile.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/support-widget.css" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
@@ -138,10 +139,17 @@ else
 <!-- Universal Confirmation Modal -->
 <partial name="_ConfirmModal" />
 
+<!-- Floating Support Widget (Component) -->
+@await Component.InvokeAsync("SupportWidget")
+
 <!-- Bootstrap 5 JS Bundle -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<!-- SignalR Client Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
 <!-- Application JS -->
 <script src="~/js/site.js" asp-append-version="true"></script>
+<!-- Support Widget & Live Chat JS -->
+<script src="~/js/support-widget.js" asp-append-version="true"></script>
 @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

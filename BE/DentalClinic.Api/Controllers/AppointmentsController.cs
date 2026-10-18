@@ -139,6 +139,23 @@ public class AppointmentsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("api/patient/appointments/{id:long}/reschedule")]
+    [Authorize(Roles = UserRole.Patient)]
+    [ProducesResponseType(typeof(ApiResponse<AppointmentDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<AppointmentDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> PatientReschedule(long id, [FromBody] PatientRescheduleRequest request, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId <= 0) return Unauthorized(ApiResponse.Fail("Không thể xác định danh tính người dùng."));
+
+        var result = await _appointmentService.PatientRescheduleAsync(id, userId, request, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
     [HttpGet("api/patient/appointments/{id:long}/proposal")]
     [Authorize(Roles = UserRole.Patient)]
     [ProducesResponseType(typeof(ApiResponse<AppointmentChangeProposalDto>), StatusCodes.Status200OK)]
