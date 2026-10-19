@@ -12,6 +12,10 @@ public class DentistPerformanceDto
     public string DepartmentName { get; set; } = string.Empty;
     public int TotalAppointments { get; set; }
     public int CompletedAppointments { get; set; }
+    public int CancelledAppointments { get; set; }
+    public int NoShowAppointments { get; set; }
+    public int DistinctPatientsTreated { get; set; }
+    public int CompletedTreatmentSessions { get; set; }
     public double CompletionRate { get; set; }
     public int TotalFeedbacks { get; set; }
     public double AverageRating { get; set; } // Scale 1 - 5
@@ -20,7 +24,8 @@ public class DentistPerformanceDto
     public int ThreeStarCount { get; set; }
     public int TwoStarCount { get; set; }
     public int OneStarCount { get; set; }
-    public decimal TotalRevenueGenerated { get; set; }
+    public decimal TotalRevenueGenerated { get; set; } // Billed revenue from valid invoices
+    public decimal TotalPaidRevenue { get; set; }       // Collected revenue
     public List<FeedbackItemSummaryDto> RecentFeedbacks { get; set; } = new();
 }
 
@@ -44,7 +49,11 @@ public class DepartmentPerformanceReportDto
     public int TotalDentists { get; set; }
     public int TotalAppointments { get; set; }
     public int CompletedAppointments { get; set; }
+    public int CancelledAppointments { get; set; }
+    public int DistinctPatientsTreated { get; set; }
+    public int CompletedTreatmentSessions { get; set; }
     public double OverallDepartmentRating { get; set; }
-    public decimal TotalDepartmentRevenue { get; set; }
+    public decimal TotalDepartmentRevenue { get; set; } // Total valid invoiced
+    public decimal TotalDepartmentPaid { get; set; }    // Total collected
     public List<DentistPerformanceDto> Dentists { get; set; } = new();
 }

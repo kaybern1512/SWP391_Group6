@@ -414,6 +414,8 @@ CREATE TABLE DepartmentReferrals (
     AssignedDentistUserId BIGINT NULL,
     ReviewedByUserId BIGINT NULL,
     Reason NVARCHAR(1000) NOT NULL,
+    Urgency VARCHAR(20) NOT NULL DEFAULT 'Normal' CHECK (Urgency IN ('Normal', 'Urgent')),
+    ClinicalInstructions NVARCHAR(2000) NULL,
     Status VARCHAR(30) NOT NULL DEFAULT 'Pending' CHECK (Status IN ('Pending','Accepted','Rejected','Assigned','Completed')),
     CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
     ReviewedAt DATETIME2 NULL,

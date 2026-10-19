@@ -14,5 +14,7 @@ public interface IReportApiService
     Task<ApiResult<DepartmentPerformanceReportDto>> GetDepartmentPerformanceReportAsync(long departmentId, DateTime? fromDate = null, DateTime? toDate = null);
     Task<ApiResult<List<DentistPerformanceDto>>> GetAllDentistsPerformanceAsync(long? departmentId = null, DateTime? fromDate = null, DateTime? toDate = null);
     Task<(byte[]? Data, string ContentType, string FileName)> DownloadRevenueCsvAsync(DateTime? fromDate = null, DateTime? toDate = null, long? departmentId = null);
+    Task<(byte[]? Data, string ContentType, string FileName)> DownloadRevenueXlsxAsync(DateTime? fromDate = null, DateTime? toDate = null, long? departmentId = null);
     Task<(byte[]? Data, string ContentType, string FileName)> DownloadDentistPerformanceCsvAsync(long? departmentId = null, DateTime? fromDate = null, DateTime? toDate = null);
+    Task<(byte[]? Data, string ContentType, string FileName)> DownloadDentistPerformanceXlsxAsync(long? departmentId = null, DateTime? fromDate = null, DateTime? toDate = null);
 }

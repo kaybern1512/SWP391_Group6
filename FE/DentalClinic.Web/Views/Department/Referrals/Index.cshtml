@@ -55,10 +55,11 @@
                         <thead class="table-light">
                             <tr>
                                 <th class="ps-4">Mã Phiếu</th>
+                                <th>Mức Độ</th>
                                 <th>Bệnh Nhân</th>
                                 <th>Chuyển Từ</th>
                                 <th>Bác Sĩ Gửi</th>
-                                <th>Lý Do Hội Chẩn / Lâm Sàng</th>
+                                <th>Lý Do & Dặn Dò Lâm Sàng</th>
                                 <th>Trạng Thái</th>
                                 <th>Bác Sĩ Tiếp Nhận</th>
                                 <th class="pe-4 text-end">Hành Động</th>
@@ -67,8 +68,21 @@
                         <tbody>
                             @foreach (var r in Model.Referrals)
                             {
-                                <tr>
+                                var isUrgent = r.Urgency == "Urgent";
+                                <tr class="@(isUrgent ? "table-danger-subtle" : "")">
                                     <td class="ps-4 fw-bold text-primary">#REF-@r.ReferralId</td>
+                                    <td>
+                                        @if (isUrgent)
+                                        {
+                                            <span class="badge bg-danger">
+                                                <i class="bi bi-exclamation-triangle-fill me-1"></i>Khẩn cấp
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-secondary border">Bình thường</span>
+                                        }
+                                    </td>
                                     <td>
                                         <div class="fw-bold text-dark">@r.PatientName</div>
                                         <div class="small text-muted">@(r.PatientCode ?? "BN-" + r.PatientUserId)</div>
@@ -80,8 +94,16 @@
                                         <div class="fw-semibold text-dark">@r.ReferringDentistName</div>
                                         <div class="small text-muted">@r.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
                                     </td>
-                                    <td style="max-width: 250px;">
-                                        <div class="text-truncate" title="@r.Reason">@r.Reason</div>
+                                    <td style="max-width: 280px;">
+                                        <div class="fw-medium text-dark text-truncate" title="@r.Reason">
+                                            <strong>Lý do:</strong> @r.Reason
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(r.ClinicalInstructions))
+                                        {
+                                            <div class="small text-muted text-truncate" title="@r.ClinicalInstructions">
+                                                <i class="bi bi-info-circle me-1 text-primary"></i><strong>Dặn dò:</strong> @r.ClinicalInstructions
+                                            </div>
+                                        }
                                     </td>
                                     <td>
                                         @if (r.Status == "Pending")
@@ -116,7 +138,8 @@
                                         {
                                             <div class="d-inline-flex gap-1">
                                                 <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#reviewModal" 
-                                                        data-referral-id="@r.ReferralId" data-patient-name="@r.PatientName" data-reason="@r.Reason">
+                                                        data-referral-id="@r.ReferralId" data-patient-name="@r.PatientName" data-reason="@r.Reason"
+                                                        data-urgency="@r.Urgency" data-instructions="@(r.ClinicalInstructions ?? "")">
                                                     <i class="bi bi-check-lg me-1"></i>Tiếp Nhận & Phân Bác Sĩ
                                                 </button>
                                                 <form method="post" asp-action="Review" asp-route-id="@r.ReferralId" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn từ chối ca chuyển khoa này không?');">
@@ -145,7 +168,7 @@
 
 <!-- MODAL DUYỆT & TIẾP NHẬN PHÂN BÁC SĨ -->
 <div class="modal fade" id="reviewModal" tabindex="-1" aria-labelledby="reviewModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow">
             <form id="reviewForm" method="post" action="">
                 @Html.AntiForgeryToken()
@@ -157,14 +180,25 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
-                    <div class="mb-3">
-                        <label class="form-label text-muted small fw-bold text-uppercase">Bệnh nhân:</label>
-                        <div id="modalPatientName" class="fw-bold text-dark fs-5"></div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-8">
+                            <label class="form-label text-muted small fw-bold text-uppercase mb-1">Bệnh nhân:</label>
+                            <div id="modalPatientName" class="fw-bold text-dark fs-5"></div>
+                        </div>
+                        <div class="col-4 text-end">
+                            <label class="form-label text-muted small fw-bold text-uppercase mb-1">Mức độ khẩn cấp:</label>
+                            <div id="modalUrgencyBadge"></div>
+                        </div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label text-muted small fw-bold text-uppercase">Lý do chuyển khoa:</label>
+                        <label class="form-label text-muted small fw-bold text-uppercase mb-1">Lý do chuyển khoa:</label>
                         <div id="modalReason" class="p-3 bg-light rounded text-dark small border"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold text-uppercase mb-1">Dặn dò & Hướng dẫn chuyên môn đi kèm:</label>
+                        <div id="modalInstructions" class="p-3 bg-light rounded text-dark small border fst-italic"></div>
                     </div>
 
                     <div class="mb-3">
@@ -205,9 +239,28 @@
                     const referralId = button.getAttribute('data-referral-id');
                     const patientName = button.getAttribute('data-patient-name');
                     const reason = button.getAttribute('data-reason');
+                    const urgency = button.getAttribute('data-urgency');
+                    const instructions = button.getAttribute('data-instructions');
 
                     document.getElementById('modalPatientName').textContent = patientName;
                     document.getElementById('modalReason').textContent = reason;
+
+                    const instructionsEl = document.getElementById('modalInstructions');
+                    if (instructions && instructions.trim() !== '') {
+                        instructionsEl.textContent = instructions;
+                        instructionsEl.classList.remove('text-muted');
+                    } else {
+                        instructionsEl.textContent = 'Không có dặn dò chuyên môn bổ sung từ bác sĩ chuyển khoa.';
+                        instructionsEl.classList.add('text-muted');
+                    }
+
+                    const urgencyEl = document.getElementById('modalUrgencyBadge');
+                    if (urgency === 'Urgent') {
+                        urgencyEl.innerHTML = '<span class="badge bg-danger fs-6"><i class="bi bi-exclamation-triangle-fill me-1"></i>Khẩn cấp</span>';
+                    } else {
+                        urgencyEl.innerHTML = '<span class="badge bg-light text-secondary border fs-6">Bình thường</span>';
+                    }
+
                     document.getElementById('reviewForm').action = '/Department/Referrals/Review/' + referralId;
                 });
             }

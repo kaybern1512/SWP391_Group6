@@ -270,19 +270,36 @@
                                         <div class="row g-2">
                                             @foreach (var img in entry.ImagingRecords)
                                             {
+                                                var isDcm = !string.IsNullOrEmpty(img.FileUrl) && (img.FileUrl.EndsWith(".dcm", StringComparison.OrdinalIgnoreCase) || img.ImagingType.Contains("DICOM", StringComparison.OrdinalIgnoreCase));
+                                                var protectedViewUrl = Url.Action("GetImagingFile", "PatientMedicalRecord", new { id = img.ImagingRecordId });
+                                                var protectedDownloadUrl = Url.Action("GetImagingFile", "PatientMedicalRecord", new { id = img.ImagingRecordId, download = true });
                                                 <div class="col-sm-6 col-md-4">
                                                     <div class="card h-100 border shadow-none bg-white p-2">
                                                         <div class="d-flex align-items-center gap-2 mb-1">
-                                                            <span class="badge bg-info-subtle text-info border border-info-subtle small text-truncate">
+                                                            <span class="badge bg-info-subtle text-info border border-info-subtle small text-truncate" title="@img.ImagingType">
                                                                 <i class="bi bi-film me-1"></i>@img.ImagingType
                                                             </span>
                                                             <span class="text-muted small ms-auto">@img.CreatedAt.ToString("dd/MM/yyyy")</span>
                                                         </div>
                                                         @if (!string.IsNullOrEmpty(img.FileUrl))
                                                         {
-                                                            <div class="my-1 text-center bg-dark rounded overflow-hidden" style="max-height: 120px;">
-                                                                <img src="@img.FileUrl" class="img-fluid" alt="@img.ImagingType" style="object-fit: cover; max-height: 120px;" onerror="this.onerror=null; this.src='/images/clinic-logo.svg';" />
-                                                            </div>
+                                                            @if (isDcm)
+                                                            {
+                                                                <div class="my-1 p-3 text-center bg-dark text-info rounded cursor-pointer" onclick="openPatientLightbox('@protectedViewUrl', '@(img.ImagingType.Replace("'", "\\'"))', '@img.CreatedAt.ToString("dd/MM/yyyy")', '@(img.ResultSummary?.Replace("'", "\\'") ?? "")', true, '@protectedDownloadUrl')">
+                                                                    <i class="bi bi-file-earmark-medical fs-2 d-block text-info"></i>
+                                                                    <span class="badge bg-primary text-white mt-1">DICOM Y TẾ</span>
+                                                                    <div class="text-white-50 fs-12 mt-1">Bấm xem / tải file</div>
+                                                                </div>
+                                                            }
+                                                            else
+                                                            {
+                                                                <div class="my-1 text-center bg-dark rounded overflow-hidden position-relative cursor-pointer" style="height: 130px;" onclick="openPatientLightbox('@protectedViewUrl', '@(img.ImagingType.Replace("'", "\\'"))', '@img.CreatedAt.ToString("dd/MM/yyyy")', '@(img.ResultSummary?.Replace("'", "\\'") ?? "")', false, '@protectedDownloadUrl')">
+                                                                    <img src="@protectedViewUrl" class="w-100 h-100" alt="@img.ImagingType" style="object-fit: cover;" onerror="this.onerror=null; this.src='/images/clinic-logo.svg';" />
+                                                                    <div class="position-absolute bottom-0 end-0 p-1 bg-dark bg-opacity-75 rounded-top-start text-white fs-12">
+                                                                        <i class="bi bi-zoom-in me-1"></i>Phóng to
+                                                                    </div>
+                                                                </div>
+                                                            }
                                                         }
                                                         else
                                                         {
@@ -295,6 +312,14 @@
                                                         {
                                                             <div class="small text-slate-700 mt-1">
                                                                 <strong>Kết luận:</strong> @img.ResultSummary
+                                                            </div>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(img.FileUrl))
+                                                        {
+                                                            <div class="mt-2 pt-1 border-top text-end">
+                                                                <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 fs-12" onclick="openPatientLightbox('@protectedViewUrl', '@(img.ImagingType.Replace("'", "\\'"))', '@img.CreatedAt.ToString("dd/MM/yyyy")', '@(img.ResultSummary?.Replace("'", "\\'") ?? "")', @(isDcm ? "true" : "false"), '@protectedDownloadUrl')">
+                                                                    <i class="bi bi-arrows-fullscreen me-1"></i> Xem phóng to
+                                                                </button>
                                                             </div>
                                                         }
                                                     </div>
@@ -326,3 +351,166 @@
         </div>
     }
 </div>
+
+<!-- Modal Lightbox Xem Phóng To Cho Bệnh Nhân (Read-Only) -->
+<div class="modal fade" id="modalPatientImagingLightbox" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content bg-dark text-white border-0">
+            <div class="modal-header border-secondary py-2 px-3 d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="badge bg-info text-dark me-2" id="patientLightboxType">Phim X-Quang</span>
+                    <span class="text-white-50 small" id="patientLightboxDate"></span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="patientZoomIn()" title="Phóng to (+)">
+                        <i class="bi bi-zoom-in"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="patientZoomOut()" title="Thu nhỏ (-)">
+                        <i class="bi bi-zoom-out"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="patientRotate()" title="Xoay 90 độ">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="patientReset()" title="Đặt lại kích thước">
+                        <i class="bi bi-arrow-counterclockwise"></i> Đặt lại
+                    </button>
+                    <a id="patientLightboxDownloadBtn" href="#" target="_blank" download class="btn btn-sm btn-outline-info" title="Tải về máy">
+                        <i class="bi bi-download"></i> Tải về
+                    </a>
+                    <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0 d-flex justify-content-center align-items-center position-relative overflow-hidden" style="background: #0b1120; min-height: 70vh;" onwheel="handlePatientLightboxWheel(event)">
+                <div id="patientLightboxWrapper" style="transition: transform 0.15s ease-out; transform-origin: center center; cursor: grab; user-select: none;">
+                    <img id="patientLightboxImg" src="" alt="Phim X-quang" class="img-fluid" style="max-height: 80vh; max-width: 90vw; object-fit: contain; box-shadow: 0 10px 30px rgba(0,0,0,0.6);" />
+                </div>
+                <div id="patientLightboxDicomPlaceholder" class="d-none text-center p-4">
+                    <i class="bi bi-file-earmark-medical text-info" style="font-size: 5rem;"></i>
+                    <h4 class="mt-3 text-white">Tệp Phim DICOM Y Tế</h4>
+                    <p class="text-white-50 small max-w-md mx-auto">
+                        File DICOM (.dcm) lưu trữ dữ liệu hình ảnh nha khoa chuyên sâu. Bạn có thể tải file về máy và mở bằng phần mềm RadiAnt DICOM Viewer.
+                    </p>
+                    <a id="patientDicomDownloadBtn" href="#" class="btn btn-primary px-4 mt-2">
+                        <i class="bi bi-download me-1"></i> Tải File DICOM Gốc
+                    </a>
+                </div>
+            </div>
+            <div class="modal-footer border-secondary py-2 px-3 justify-content-between bg-black bg-opacity-75">
+                <div class="small">
+                    <span class="text-white-50">Kết luận của bác sĩ:</span>
+                    <span class="fw-semibold text-white ms-1" id="patientLightboxSummary">—</span>
+                </div>
+                <div class="small text-white-50">
+                    <i class="bi bi-shield-check text-success me-1"></i> Ảnh chẩn đoán hình ảnh an toàn thuộc hồ sơ bệnh án cá nhân của bạn.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let pZoom = 1;
+        let pRotation = 0;
+        let pIsDragging = false;
+        let pStartX, pStartY, pTranslateX = 0, pTranslateY = 0;
+
+        function openPatientLightbox(url, type, date, summary, isDicom, downloadUrl) {
+            pZoom = 1;
+            pRotation = 0;
+            pTranslateX = 0;
+            pTranslateY = 0;
+
+            const dlUrl = downloadUrl || url;
+            document.getElementById('patientLightboxType').textContent = type || 'Phim X-Quang';
+            document.getElementById('patientLightboxDate').textContent = date ? ('Chụp ngày: ' + date) : '';
+            document.getElementById('patientLightboxSummary').textContent = summary || 'Không có mô tả bổ sung.';
+            document.getElementById('patientLightboxDownloadBtn').href = dlUrl;
+
+            const imgEl = document.getElementById('patientLightboxImg');
+            const wrapper = document.getElementById('patientLightboxWrapper');
+            const dicomPlaceholder = document.getElementById('patientLightboxDicomPlaceholder');
+            const dicomDownloadBtn = document.getElementById('patientDicomDownloadBtn');
+
+            if (isDicom) {
+                wrapper.classList.add('d-none');
+                dicomPlaceholder.classList.remove('d-none');
+                dicomDownloadBtn.href = dlUrl;
+            } else {
+                dicomPlaceholder.classList.add('d-none');
+                wrapper.classList.remove('d-none');
+                imgEl.src = url;
+                updatePatientTransform();
+            }
+
+            new bootstrap.Modal(document.getElementById('modalPatientImagingLightbox')).show();
+        }
+
+        function updatePatientTransform() {
+            const wrapper = document.getElementById('patientLightboxWrapper');
+            if (wrapper) {
+                wrapper.style.transform = `translate(${pTranslateX}px, ${pTranslateY}px) scale(${pZoom}) rotate(${pRotation}deg)`;
+            }
+        }
+
+        function patientZoomIn() {
+            if (pZoom < 5) {
+                pZoom += 0.25;
+                updatePatientTransform();
+            }
+        }
+
+        function patientZoomOut() {
+            if (pZoom > 0.5) {
+                pZoom -= 0.25;
+                updatePatientTransform();
+            }
+        }
+
+        function patientRotate() {
+            pRotation = (pRotation + 90) % 360;
+            updatePatientTransform();
+        }
+
+        function patientReset() {
+            pZoom = 1;
+            pRotation = 0;
+            pTranslateX = 0;
+            pTranslateY = 0;
+            updatePatientTransform();
+        }
+
+        function handlePatientLightboxWheel(e) {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+                patientZoomIn();
+            } else {
+                patientZoomOut();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const wrapper = document.getElementById('patientLightboxWrapper');
+            if (wrapper) {
+                wrapper.addEventListener('mousedown', function(e) {
+                    pIsDragging = true;
+                    pStartX = e.clientX - pTranslateX;
+                    pStartY = e.clientY - pTranslateY;
+                    wrapper.style.cursor = 'grabbing';
+                });
+
+                window.addEventListener('mousemove', function(e) {
+                    if (!pIsDragging) return;
+                    pTranslateX = e.clientX - pStartX;
+                    pTranslateY = e.clientY - pStartY;
+                    updatePatientTransform();
+                });
+
+                window.addEventListener('mouseup', function() {
+                    pIsDragging = false;
+                    if (wrapper) wrapper.style.cursor = 'grab';
+                });
+            }
+        });
+    </script>
+}

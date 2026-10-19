@@ -102,6 +102,37 @@ public class ReportApiService : IReportApiService
         return (null, string.Empty, string.Empty);
     }
 
+    public async Task<(byte[]? Data, string ContentType, string FileName)> DownloadRevenueXlsxAsync(
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        long? departmentId = null)
+    {
+        var queryParams = new List<string>();
+        if (fromDate.HasValue) queryParams.Add($"fromDate={fromDate.Value:yyyy-MM-dd}");
+        if (toDate.HasValue) queryParams.Add($"toDate={toDate.Value:yyyy-MM-dd}");
+        if (departmentId.HasValue && departmentId.Value > 0) queryParams.Add($"departmentId={departmentId.Value}");
+
+        var url = "/api/reports/revenue/export-xlsx";
+        if (queryParams.Count > 0) url += "?" + string.Join("&", queryParams);
+
+        try
+        {
+            var res = await _httpClient.GetAsync(url);
+            if (res.IsSuccessStatusCode)
+            {
+                var bytes = await res.Content.ReadAsByteArrayAsync();
+                var fileName = $"BaoCaoDoanhThu_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                return (bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi tải file Excel doanh thu");
+        }
+
+        return (null, string.Empty, string.Empty);
+    }
+
     public async Task<(byte[]? Data, string ContentType, string FileName)> DownloadDentistPerformanceCsvAsync(
         long? departmentId = null,
         DateTime? fromDate = null,
@@ -128,6 +159,37 @@ public class ReportApiService : IReportApiService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Lỗi khi tải file CSV năng suất bác sĩ");
+        }
+
+        return (null, string.Empty, string.Empty);
+    }
+
+    public async Task<(byte[]? Data, string ContentType, string FileName)> DownloadDentistPerformanceXlsxAsync(
+        long? departmentId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null)
+    {
+        var queryParams = new List<string>();
+        if (departmentId.HasValue && departmentId.Value > 0) queryParams.Add($"departmentId={departmentId.Value}");
+        if (fromDate.HasValue) queryParams.Add($"fromDate={fromDate.Value:yyyy-MM-dd}");
+        if (toDate.HasValue) queryParams.Add($"toDate={toDate.Value:yyyy-MM-dd}");
+
+        var url = "/api/reports/dentists/export-xlsx";
+        if (queryParams.Count > 0) url += "?" + string.Join("&", queryParams);
+
+        try
+        {
+            var res = await _httpClient.GetAsync(url);
+            if (res.IsSuccessStatusCode)
+            {
+                var bytes = await res.Content.ReadAsByteArrayAsync();
+                var fileName = $"NangSuatBacSi_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                return (bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi tải file Excel năng suất bác sĩ");
         }
 
         return (null, string.Empty, string.Empty);

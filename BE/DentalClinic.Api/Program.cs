@@ -185,6 +185,25 @@ if (!Directory.Exists(avatarsPath))
     Directory.CreateDirectory(avatarsPath);
 }
 
+// BẢO MẬT HỒ SƠ Y TẾ: Chặn truy cập trực tiếp các tệp phim chụp qua static files (Task 08 Security Remediation)
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value;
+    if (!string.IsNullOrEmpty(path) && path.StartsWith("/uploads/imaging", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        context.Response.ContentType = "application/json";
+        var response = ApiResponse.Fail("Truy cập trực tiếp thư mục hình ảnh y tế công khai bị nghiêm cấm vì lý do bảo mật hồ sơ bệnh án.");
+        await context.Response.WriteAsync(JsonSerializer.Serialize(response, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        }));
+        return;
+    }
+
+    await next();
+});
+
 app.UseStaticFiles(); // Serves files from wwwroot
 
 app.UseRouting();

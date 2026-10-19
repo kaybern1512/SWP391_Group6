@@ -76,12 +76,31 @@ public class PostCareService : IPostCareService
         if (toDept == null)
             return ApiResponse<DepartmentReferralDto>.Fail("Không tìm thấy chuyên khoa chuyển đến.");
 
+        var urgency = "Normal";
+        if (!string.IsNullOrWhiteSpace(request.Urgency))
+        {
+            if (request.Urgency.Equals("Urgent", StringComparison.OrdinalIgnoreCase))
+            {
+                urgency = "Urgent";
+            }
+            else if (request.Urgency.Equals("Normal", StringComparison.OrdinalIgnoreCase))
+            {
+                urgency = "Normal";
+            }
+            else
+            {
+                return ApiResponse<DepartmentReferralDto>.Fail("Mức độ khẩn cấp không hợp lệ. Chỉ chấp nhận 'Normal' hoặc 'Urgent'.");
+            }
+        }
+
         var referral = new DepartmentReferral
         {
             TreatmentSessionId = session.TreatmentSessionId,
             FromDepartmentId = fromDeptId,
             ToDepartmentId = request.ToDepartmentId,
             Reason = request.Reason.Trim(),
+            ClinicalInstructions = string.IsNullOrWhiteSpace(request.ClinicalInstructions) ? null : request.ClinicalInstructions.Trim(),
+            Urgency = urgency,
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
@@ -97,12 +116,18 @@ public class PostCareService : IPostCareService
                 var patientName = session.TreatmentPlanItem.TreatmentPlan.PatientUser.FullName;
                 var dentistName = session.DentistUser.User.FullName;
                 var currentDeptName = session.Appointment.Department?.Name ?? session.TreatmentPlanItem.TreatmentPlan.Department.Name;
+                var isUrgent = urgency == "Urgent";
+                var notifTitle = isUrgent ? "[KHẨN CẤP] Ca chuyển chuyên khoa mới" : "Ca chuyển khoa mới cần duyệt";
+                var notifMessage = isUrgent
+                    ? $"[KHẨN CẤP] Bác sĩ {dentistName} ({currentDeptName}) vừa gửi yêu cầu chuyển khoa khẩn cấp cho bệnh nhân {patientName}. Lý do: {referral.Reason}. Dặn dò: {referral.ClinicalInstructions ?? "Không có"}."
+                    : $"Bác sĩ {dentistName} ({currentDeptName}) vừa chuyển bệnh nhân {patientName} sang chuyên khoa {toDept.Name}. Lý do: {referral.Reason}.";
+
                 await _notificationService.CreateNotificationAsync(
                     toDept.ManagerUserId.Value,
                     session.AppointmentId,
                     "ReferralRequest",
-                    "Ca chuyển khoa mới cần duyệt",
-                    $"Bác sĩ {dentistName} ({currentDeptName}) vừa chuyển bệnh nhân {patientName} sang chuyên khoa {toDept.Name}. Lý do: {request.Reason.Trim()}.",
+                    notifTitle,
+                    notifMessage,
                     ct);
             }
             catch (Exception ex)
@@ -179,7 +204,8 @@ public class PostCareService : IPostCareService
         }
 
         var referrals = await query
-            .OrderByDescending(r => r.CreatedAt)
+            .OrderByDescending(r => r.Urgency == "Urgent")
+            .ThenByDescending(r => r.CreatedAt)
             .ToListAsync(ct);
 
         var list = referrals.Select(MapReferralEntityToDto).ToList();
@@ -222,24 +248,49 @@ public class PostCareService : IPostCareService
             return ApiResponse<DepartmentReferralDto>.Fail("Trạng thái duyệt chỉ có thể là Accepted (Tiếp nhận) hoặc Rejected (Từ chối).");
         }
 
-        referral.Status = normalizedStatus;
+        DentistProfile? assignedDentist = null;
+        if (normalizedStatus == "Accepted" && request.AssignedDentistUserId.HasValue && request.AssignedDentistUserId.Value > 0)
+        {
+            var dentistUserId = request.AssignedDentistUserId.Value;
+
+            assignedDentist = await _dbContext.DentistProfiles
+                .Include(d => d.User)
+                .FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
+
+            if (assignedDentist == null)
+            {
+                return ApiResponse<DepartmentReferralDto>.Fail("Bác sĩ được chỉ định phân công không tồn tại trong hệ thống.");
+            }
+
+            var isDentistInDepartment = await _dbContext.DentistDepartments
+                .AnyAsync(dd => dd.DentistUserId == dentistUserId
+                             && dd.DepartmentId == referral.ToDepartmentId
+                             && dd.Status == "Active", ct);
+
+            if (!isDentistInDepartment)
+            {
+                return ApiResponse<DepartmentReferralDto>.Fail($"Bác sĩ được chỉ định không thuộc chuyên khoa tiếp nhận ({referral.ToDepartment.Name}) hoặc không ở trạng thái hoạt động.");
+            }
+        }
+
         referral.ReviewedByUserId = managerUserId;
         referral.ReviewedAt = DateTime.UtcNow;
 
         if (normalizedStatus == "Accepted")
         {
-            if (request.AssignedDentistUserId.HasValue && request.AssignedDentistUserId.Value > 0)
+            if (assignedDentist != null)
             {
-                var dentistProfile = await _dbContext.DentistProfiles
-                    .Include(d => d.User)
-                    .FirstOrDefaultAsync(d => d.UserId == request.AssignedDentistUserId.Value, ct);
-
-                if (dentistProfile != null)
-                {
-                    referral.AssignedDentistUserId = dentistProfile.UserId;
-                    referral.Status = "Assigned";
-                }
+                referral.AssignedDentistUserId = assignedDentist.UserId;
+                referral.Status = "Assigned";
             }
+            else
+            {
+                referral.Status = "Accepted";
+            }
+        }
+        else
+        {
+            referral.Status = "Rejected";
         }
 
         await _dbContext.SaveChangesAsync(ct);
@@ -435,6 +486,76 @@ public class PostCareService : IPostCareService
         return ApiResponse<List<FollowUpScheduleDto>>.Ok(list);
     }
 
+    public async Task<ApiResponse<List<ReceptionistFollowUpDto>>> GetReceptionistFollowUpsAsync(
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? status = null,
+        CancellationToken ct = default)
+    {
+        var query = _dbContext.FollowUpSchedules
+            .AsNoTracking()
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a!.Department)
+            .Include(f => f.TreatmentSession)
+                .ThenInclude(s => s.DentistUser)
+                    .ThenInclude(d => d.User)
+            .Include(f => f.TreatmentSession)
+                .ThenInclude(s => s.TreatmentPlanItem)
+                    .ThenInclude(i => i.TreatmentPlan)
+                        .ThenInclude(p => p.PatientUser)
+                            .ThenInclude(pu => pu.User)
+            .AsQueryable();
+
+        if (fromDate.HasValue)
+        {
+            var start = fromDate.Value.Date;
+            query = query.Where(f => f.RecommendedDate >= start);
+        }
+
+        if (toDate.HasValue)
+        {
+            var end = toDate.Value.Date.AddDays(1).AddTicks(-1);
+            query = query.Where(f => f.RecommendedDate <= end);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var trimmedStatus = status.Trim();
+            query = query.Where(f => f.Status == trimmedStatus);
+        }
+
+        var followUps = await query
+            .OrderBy(f => f.RecommendedDate)
+            .ToListAsync(ct);
+
+        var list = followUps.Select(f =>
+        {
+            var patient = f.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.PatientUser;
+            var dentist = f.TreatmentSession?.DentistUser?.User;
+            var deptName = f.Appointment?.Department?.Name ?? "Nha khoa tổng quát";
+
+            return new ReceptionistFollowUpDto
+            {
+                FollowUpId = f.FollowUpId,
+                TreatmentSessionId = f.TreatmentSessionId,
+                PatientUserId = patient?.UserId ?? 0,
+                PatientName = patient?.FullName ?? "N/A",
+                PatientCode = patient?.PatientCode,
+                PhoneNumber = patient?.User?.PhoneNumber ?? patient?.EmergencyContact,
+                DentistUserId = f.TreatmentSession?.DentistUserId ?? 0,
+                DentistName = dentist?.FullName ?? "N/A",
+                DepartmentName = deptName,
+                RecommendedDate = f.RecommendedDate,
+                Reason = f.Reason,
+                Status = f.Status,
+                AppointmentId = f.AppointmentId,
+                AppointmentCode = f.Appointment?.AppointmentCode
+            };
+        }).ToList();
+
+        return ApiResponse<List<ReceptionistFollowUpDto>>.Ok(list);
+    }
+
     private async Task<DepartmentReferralDto?> MapReferralToDtoAsync(long referralId, CancellationToken ct)
     {
         var r = await _dbContext.DepartmentReferrals
@@ -476,6 +597,8 @@ public class PostCareService : IPostCareService
             ReviewedByUserId = r.ReviewedByUserId,
             ReviewedByName = r.ReviewedByUser?.FullName,
             Reason = r.Reason,
+            Urgency = string.IsNullOrWhiteSpace(r.Urgency) ? "Normal" : r.Urgency,
+            ClinicalInstructions = r.ClinicalInstructions,
             Status = r.Status,
             CreatedAt = r.CreatedAt,
             ReviewedAt = r.ReviewedAt

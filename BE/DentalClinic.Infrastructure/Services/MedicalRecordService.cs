@@ -18,6 +18,7 @@ public class MedicalRecordService : IMedicalRecordService
 {
     private readonly DentalClinicDbContext _dbContext;
     private readonly ILogger<MedicalRecordService> _logger;
+    private readonly IImageStorageService _imageStorageService;
 
     private static readonly string[] All32Teeth = new[]
     {
@@ -32,9 +33,18 @@ public class MedicalRecordService : IMedicalRecordService
     public MedicalRecordService(
         DentalClinicDbContext dbContext,
         ILogger<MedicalRecordService> logger)
+        : this(dbContext, logger, null!)
+    {
+    }
+
+    public MedicalRecordService(
+        DentalClinicDbContext dbContext,
+        ILogger<MedicalRecordService> logger,
+        IImageStorageService imageStorageService)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _imageStorageService = imageStorageService;
     }
 
     public async Task<ApiResponse<MedicalRecordDto>> GetMedicalRecordByPatientIdAsync(long patientUserId, CancellationToken ct = default)
@@ -100,7 +110,7 @@ public class MedicalRecordService : IMedicalRecordService
                 {
                     ImagingRecordId = img.ImagingRecordId,
                     ImagingType = img.ImagingType,
-                    FileUrl = img.FileUrl,
+                    FileUrl = FormatAuthorizedImagingUrl(img.ImagingRecordId, img.FileUrl, img.ImagingType),
                     ResultSummary = img.ResultSummary,
                     CreatedAt = img.CreatedAt
                 }).ToList()
@@ -420,6 +430,27 @@ public class MedicalRecordService : IMedicalRecordService
             return ApiResponse<ImagingRecordDto>.Fail("Không tìm thấy đợt khám lâm sàng tương ứng.");
         }
 
+        // BẢO MẬT: Bác sĩ chỉ có thể thêm phim chụp cho ca khám do chính mình phụ trách
+        if (entry.DentistUserId != dentistUserId)
+        {
+            return ApiResponse<ImagingRecordDto>.Fail("Bạn chỉ có thể thêm phim chụp cho ca khám lâm sàng do chính mình phụ trách.");
+        }
+
+        // BẢO MẬT: Chống SSRF / Untrusted Storage Reference khi nhập FileUrl trực tiếp
+        if (!string.IsNullOrWhiteSpace(request.FileUrl))
+        {
+            var trimmedUrl = request.FileUrl.Trim();
+            var isSafeLocal = trimmedUrl.StartsWith("App_Data/uploads/imaging", StringComparison.OrdinalIgnoreCase)
+                || trimmedUrl.StartsWith("local://", StringComparison.OrdinalIgnoreCase);
+
+            var isSafeCloudinary = CloudinaryImageStorageService.TryValidateCloudinaryUrl(trimmedUrl, null, out _, out _);
+
+            if (!isSafeLocal && !isSafeCloudinary)
+            {
+                return ApiResponse<ImagingRecordDto>.Fail("Không chấp nhận đường dẫn hình ảnh từ nguồn bên ngoài chưa được hệ thống xác minh. Vui lòng sử dụng tính năng tải lên tệp trực tiếp.");
+            }
+        }
+
         var imagingRecord = new ImagingRecord
         {
             ClinicalEntryId = request.ClinicalEntryId,
@@ -437,11 +468,296 @@ public class MedicalRecordService : IMedicalRecordService
         {
             ImagingRecordId = imagingRecord.ImagingRecordId,
             ImagingType = imagingRecord.ImagingType,
-            FileUrl = imagingRecord.FileUrl,
+            FileUrl = FormatAuthorizedImagingUrl(imagingRecord.ImagingRecordId, imagingRecord.FileUrl, imagingRecord.ImagingType),
             ResultSummary = imagingRecord.ResultSummary,
             CreatedAt = imagingRecord.CreatedAt
         };
 
         return ApiResponse<ImagingRecordDto>.Ok(dto, "Lưu thông tin phim chụp X-quang thành công.");
+    }
+
+    public async Task<ApiResponse<ImagingRecordDto>> UploadImagingRecordAsync(
+        long currentUserId,
+        string currentUserRole,
+        long clinicalEntryId,
+        string imagingType,
+        string? resultSummary,
+        System.IO.Stream fileStream,
+        string fileName,
+        string contentType,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(imagingType))
+        {
+            return ApiResponse<ImagingRecordDto>.Fail("Vui lòng chọn hoặc nhập loại phim chụp / chẩn đoán hình ảnh.");
+        }
+
+        var entry = await _dbContext.ClinicalEntries
+            .Include(c => c.MedicalRecord)
+            .FirstOrDefaultAsync(c => c.ClinicalEntryId == clinicalEntryId, ct);
+
+        if (entry == null)
+        {
+            return ApiResponse<ImagingRecordDto>.Fail("Không tìm thấy đợt khám lâm sàng tương ứng.");
+        }
+
+        if (currentUserRole != UserRole.Dentist &&
+            currentUserRole != UserRole.SystemAdministrator &&
+            currentUserRole != UserRole.Receptionist)
+        {
+            return ApiResponse<ImagingRecordDto>.Fail("Bạn không có quyền tải lên phim chụp y tế.");
+        }
+
+        // 1. Upload lên Cloudinary (hoặc local fallback nếu chưa cấu hình)
+        string fileUrl;
+        try
+        {
+            fileUrl = await _imageStorageService.UploadImagingRecordAsync(
+                entry.MedicalRecord.PatientUserId,
+                clinicalEntryId,
+                fileStream,
+                fileName,
+                contentType,
+                ct);
+        }
+        catch (ArgumentException aex)
+        {
+            return ApiResponse<ImagingRecordDto>.Fail(aex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi upload hình ảnh phim chụp cho ClinicalEntry {EntryId}", clinicalEntryId);
+            return ApiResponse<ImagingRecordDto>.Fail($"Không thể tải hình ảnh lên dịch vụ lưu trữ: {ex.Message}");
+        }
+
+        // 2. Lưu metadata và URL vào ImagingRecords trong Database
+        var imagingRecord = new ImagingRecord
+        {
+            ClinicalEntryId = clinicalEntryId,
+            ImagingType = imagingType.Trim(),
+            FileUrl = fileUrl,
+            ResultSummary = resultSummary?.Trim(),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _dbContext.ImagingRecords.Add(imagingRecord);
+        entry.MedicalRecord.UpdatedAt = DateTime.UtcNow;
+
+        // 3. Compensating transaction: Nếu lưu DB thất bại, xóa asset vừa upload để tránh file mồ côi
+        try
+        {
+            await _dbContext.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lưu thông tin phim chụp vào CSDL thất bại. Đang dọn dẹp asset vừa upload để tránh file mồ côi: {FileUrl}", fileUrl);
+            try
+            {
+                await _imageStorageService.DeleteImageAsync(fileUrl, CancellationToken.None);
+            }
+            catch (Exception cleanupEx)
+            {
+                _logger.LogError(cleanupEx, "Không thể dọn dẹp file mồ côi {FileUrl}", fileUrl);
+            }
+
+            return ApiResponse<ImagingRecordDto>.Fail("Lỗi khi lưu thông tin phim chụp vào cơ sở dữ liệu. Tệp hình ảnh đã được thu hồi an toàn.");
+        }
+
+        var dto = new ImagingRecordDto
+        {
+            ImagingRecordId = imagingRecord.ImagingRecordId,
+            ImagingType = imagingRecord.ImagingType,
+            FileUrl = FormatAuthorizedImagingUrl(imagingRecord.ImagingRecordId, imagingRecord.FileUrl, imagingRecord.ImagingType),
+            ResultSummary = imagingRecord.ResultSummary,
+            CreatedAt = imagingRecord.CreatedAt
+        };
+
+        return ApiResponse<ImagingRecordDto>.Ok(dto, "Tải lên và lưu thông tin phim chụp X-quang thành công.");
+    }
+
+    public async Task<ApiResponse<bool>> DeleteImagingRecordAsync(
+        long currentUserId,
+        string currentUserRole,
+        long imagingRecordId,
+        CancellationToken ct = default)
+    {
+        var record = await _dbContext.ImagingRecords
+            .Include(i => i.ClinicalEntry)
+                .ThenInclude(c => c.MedicalRecord)
+            .FirstOrDefaultAsync(i => i.ImagingRecordId == imagingRecordId, ct);
+
+        if (record == null)
+        {
+            return ApiResponse<bool>.Fail("Không tìm thấy thông tin phim chụp X-quang cần xóa.");
+        }
+
+        // Kiểm tra quyền: Chỉ SystemAdministrator hoặc Bác sĩ phụ trách ca khám được phép xóa
+        var isAdmin = currentUserRole == UserRole.SystemAdministrator;
+        var isDentist = currentUserRole == UserRole.Dentist;
+
+        if (!isAdmin && !isDentist)
+        {
+            return ApiResponse<bool>.Fail("Bạn không có quyền xóa phim chụp này trong hồ sơ bệnh án.");
+        }
+
+        // Bác sĩ chỉ được phép xóa phim chụp thuộc ca khám do chính mình phụ trách
+        if (isDentist)
+        {
+            if (record.ClinicalEntry == null || record.ClinicalEntry.DentistUserId != currentUserId)
+            {
+                return ApiResponse<bool>.Fail("Bạn chỉ có quyền xóa phim chụp thuộc ca khám lâm sàng do chính mình phụ trách.");
+            }
+        }
+
+        var fileUrl = record.FileUrl;
+
+        _dbContext.ImagingRecords.Remove(record);
+        if (record.ClinicalEntry?.MedicalRecord != null)
+        {
+            record.ClinicalEntry.MedicalRecord.UpdatedAt = DateTime.UtcNow;
+        }
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi xóa bản ghi ImagingRecord {Id} trong CSDL", imagingRecordId);
+            return ApiResponse<bool>.Fail("Không thể xóa thông tin phim chụp trong cơ sở dữ liệu.");
+        }
+
+        // Đồng bộ xóa asset trên Cloudinary/Storage
+        if (!string.IsNullOrWhiteSpace(fileUrl))
+        {
+            try
+            {
+                await _imageStorageService.DeleteImageAsync(fileUrl, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Đã xóa metadata DB thành công nhưng không thể xóa asset lưu trữ: {FileUrl}", fileUrl);
+            }
+        }
+
+        return ApiResponse<bool>.Ok(true, "Đã xóa phim chụp X-quang thành công.");
+    }
+
+    public async Task<ApiResponse<StorageFileStreamResult>> GetImagingFileAsync(
+        long currentUserId,
+        string currentUserRole,
+        long imagingRecordId,
+        CancellationToken ct = default)
+    {
+        var record = await _dbContext.ImagingRecords
+            .Include(i => i.ClinicalEntry)
+                .ThenInclude(c => c.MedicalRecord)
+            .FirstOrDefaultAsync(i => i.ImagingRecordId == imagingRecordId, ct);
+
+        if (record == null)
+        {
+            return ApiResponse<StorageFileStreamResult>.Fail("Không tìm thấy thông tin phim chụp X-quang.");
+        }
+
+        if (record.ClinicalEntry == null || record.ClinicalEntry.MedicalRecord == null)
+        {
+            return ApiResponse<StorageFileStreamResult>.Fail("Dữ liệu hồ sơ bệnh án liên kết không hợp lệ.");
+        }
+
+        var patientUserId = record.ClinicalEntry.MedicalRecord.PatientUserId;
+
+        // Phân quyền bảo mật:
+        if (currentUserRole == UserRole.Patient)
+        {
+            // Bệnh nhân chỉ xem được phim chụp thuộc hồ sơ bệnh án của chính mình
+            if (patientUserId != currentUserId)
+            {
+                return ApiResponse<StorageFileStreamResult>.Fail("Bạn không có quyền truy cập phim chụp của bệnh nhân khác.");
+            }
+        }
+        else if (currentUserRole == UserRole.Dentist)
+        {
+            // Bác sĩ chỉ xem được phim chụp nếu:
+            // 1. Là bác sĩ trực tiếp thực hiện ca khám này, HOẶC
+            // 2. Có mối quan hệ điều trị/khám qua ca khám lâm sàng khác trong hồ sơ bệnh án, HOẶC
+            // 3. Có lịch hẹn điều trị hợp lệ (Confirmed, CheckedIn, Waiting, Called, InService, Completed) với bệnh nhân
+            // TUYỆT ĐỐI KHÔNG cấp quyền dựa trên lịch hẹn đã hủy (Cancelled), rút lui (Withdrawn), từ chối (Rejected), hết hạn (Expired) hoặc vắng mặt (NoShow)
+            var validAppointmentStatuses = new[]
+            {
+                AppointmentStatus.Confirmed,
+                AppointmentStatus.CheckedIn,
+                AppointmentStatus.Waiting,
+                AppointmentStatus.Called,
+                AppointmentStatus.InService,
+                AppointmentStatus.Completed
+            };
+
+            var isDirectDentist = record.ClinicalEntry.DentistUserId == currentUserId;
+
+            var isPriorTreatingDentist = await _dbContext.ClinicalEntries
+                .AnyAsync(c => c.DentistUserId == currentUserId && c.MedicalRecord.PatientUserId == patientUserId, ct);
+
+            var hasValidAppointment = await _dbContext.Appointments
+                .AnyAsync(a => (a.AssignedDentistUserId == currentUserId || a.RequestedDentistUserId == currentUserId)
+                    && a.PatientUserId == patientUserId
+                    && validAppointmentStatuses.Contains(a.Status), ct);
+
+            var hasAccess = isDirectDentist || isPriorTreatingDentist || hasValidAppointment;
+
+            if (!hasAccess)
+            {
+                return ApiResponse<StorageFileStreamResult>.Fail("Bạn không có quyền truy cập phim chụp của bệnh nhân này.");
+            }
+        }
+        else if (currentUserRole == UserRole.SystemAdministrator)
+        {
+            // Admin có quyền xem phục vụ quản trị hệ thống
+        }
+        else
+        {
+            // Các vai trò khác (Lễ tân, Trưởng khoa không điều trị...) không được xem trực tiếp tệp phim chụp
+            return ApiResponse<StorageFileStreamResult>.Fail("Vai trò của bạn không được phép xem nội dung tệp phim chụp.");
+        }
+
+        if (string.IsNullOrWhiteSpace(record.FileUrl))
+        {
+            return ApiResponse<StorageFileStreamResult>.Fail("Phim chụp này không có tệp kỹ thuật số (bản cứng lưu tại phòng X-quang).");
+        }
+
+        var streamResult = await _imageStorageService.GetImageStreamAsync(record.FileUrl, ct);
+        if (streamResult == null || streamResult.Stream == null)
+        {
+            return ApiResponse<StorageFileStreamResult>.Fail("Không thể truy xuất tập tin hình ảnh từ dịch vụ lưu trữ.");
+        }
+
+        // Đảm bảo tên file an toàn cho download
+        var ext = System.IO.Path.GetExtension(streamResult.FileName);
+        if (string.IsNullOrWhiteSpace(ext))
+        {
+            ext = streamResult.ContentType switch
+            {
+                "application/dicom" => ".dcm",
+                "image/png" => ".png",
+                "image/webp" => ".webp",
+                _ => ".jpg"
+            };
+        }
+        streamResult.FileName = $"imaging_{record.ImagingRecordId}_{patientUserId}{ext}";
+
+        return ApiResponse<StorageFileStreamResult>.Ok(streamResult);
+    }
+
+    private static string? FormatAuthorizedImagingUrl(long imagingRecordId, string? fileUrl, string imagingType)
+    {
+        if (string.IsNullOrWhiteSpace(fileUrl))
+        {
+            return null;
+        }
+
+        var isDcm = fileUrl.EndsWith(".dcm", StringComparison.OrdinalIgnoreCase)
+            || imagingType.Contains("DICOM", StringComparison.OrdinalIgnoreCase);
+
+        // Trả về URI API xác thực của Backend thay vì URL lưu trữ gốc (Cloudinary/App_Data)
+        return $"/api/medical-records/imaging/{imagingRecordId}/file{(isDcm ? ".dcm" : "")}";
     }
 }

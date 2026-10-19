@@ -20,6 +20,8 @@ public class DepartmentReferralDto
     public long? ReviewedByUserId { get; set; }
     public string? ReviewedByName { get; set; }
     public string Reason { get; set; } = string.Empty;
+    public string? ClinicalInstructions { get; set; }
+    public string Urgency { get; set; } = "Normal";
     public string Status { get; set; } = "Pending";
     public DateTime CreatedAt { get; set; }
     public DateTime? ReviewedAt { get; set; }
@@ -30,6 +32,8 @@ public class CreateReferralRequest
     public long TreatmentSessionId { get; set; }
     public long ToDepartmentId { get; set; }
     public string Reason { get; set; } = string.Empty;
+    public string? ClinicalInstructions { get; set; }
+    public string Urgency { get; set; } = "Normal";
 }
 
 public class ReviewReferralRequest
@@ -61,4 +65,25 @@ public class CreateFollowUpRequest
     public long TreatmentSessionId { get; set; }
     public DateTime RecommendedDate { get; set; }
     public string? Reason { get; set; }
+}
+
+public class ReceptionistFollowUpDto
+{
+    public long FollowUpId { get; set; }
+    public long TreatmentSessionId { get; set; }
+    public long PatientUserId { get; set; }
+    public string PatientName { get; set; } = string.Empty;
+    public string? PatientCode { get; set; }
+    public string? PhoneNumber { get; set; }
+    public long DentistUserId { get; set; }
+    public string DentistName { get; set; } = string.Empty;
+    public string DepartmentName { get; set; } = string.Empty;
+    public DateTime RecommendedDate { get; set; }
+    public string? Reason { get; set; }
+    public string Status { get; set; } = "Pending";
+    public long? AppointmentId { get; set; }
+    public string? AppointmentCode { get; set; }
+    public bool IsToday => RecommendedDate.Date == DentalClinic.Web.Helpers.ClinicDateTimeHelper.GetClinicToday();
+    public bool IsOverdue => RecommendedDate.Date < DentalClinic.Web.Helpers.ClinicDateTimeHelper.GetClinicToday() && Status == "Pending";
+    public bool IsUpcoming => RecommendedDate.Date > DentalClinic.Web.Helpers.ClinicDateTimeHelper.GetClinicToday();
 }

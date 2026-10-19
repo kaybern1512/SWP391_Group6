@@ -422,6 +422,11 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.ClinicalInstructions).HasMaxLength(2000);
+            entity.Property(e => e.Urgency)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasDefaultValue("Normal");
             entity.Property(e => e.Status)
                 .HasMaxLength(30)
                 .IsUnicode(false)

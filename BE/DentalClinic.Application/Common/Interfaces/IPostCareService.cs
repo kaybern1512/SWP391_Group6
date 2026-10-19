@@ -18,4 +18,5 @@ public interface IPostCareService
     Task<ApiResponse<FollowUpScheduleDto>> CreateFollowUpAsync(long dentistUserId, CreateFollowUpRequest request, CancellationToken ct = default);
     Task<ApiResponse<List<FollowUpScheduleDto>>> GetPatientFollowUpsAsync(long patientUserId, CancellationToken ct = default);
     Task<ApiResponse<List<FollowUpScheduleDto>>> GetDentistFollowUpsAsync(long dentistUserId, CancellationToken ct = default);
+    Task<ApiResponse<List<ReceptionistFollowUpDto>>> GetReceptionistFollowUpsAsync(System.DateTime? fromDate = null, System.DateTime? toDate = null, string? status = null, CancellationToken ct = default);
 }

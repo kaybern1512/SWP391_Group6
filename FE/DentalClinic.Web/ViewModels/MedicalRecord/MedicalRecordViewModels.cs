@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using DentalClinic.Web.Models.ApiDtos;
+using Microsoft.AspNetCore.Http;
 
 namespace DentalClinic.Web.ViewModels.MedicalRecord;
 
@@ -63,7 +64,10 @@ public class AddImagingRecordFormModel
     [Display(Name = "Loại phim chụp")]
     public string ImagingType { get; set; } = string.Empty;
 
-    [Display(Name = "Link ảnh / File URL")]
+    [Display(Name = "Chọn tệp hình ảnh từ máy tính (.jpg, .png, .webp, .dcm)")]
+    public IFormFile? ImageFile { get; set; }
+
+    [Display(Name = "Link ảnh / File URL (nếu có sẵn)")]
     public string? FileUrl { get; set; }
 
     [Display(Name = "Kết luận đọc phim / Mô tả")]

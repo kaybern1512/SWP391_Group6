@@ -58,6 +58,120 @@ public class MedicalRecordApiService : IMedicalRecordApiService
         return await SendPostAsync<CreateImagingRecordRequest, ImagingRecordDto>("/api/medical-records/imaging", request);
     }
 
+    public async Task<ApiResult<ImagingRecordDto>> UploadImagingFileAsync(long clinicalEntryId, string imagingType, string? resultSummary, System.IO.Stream fileStream, string fileName, string contentType)
+    {
+        try
+        {
+            using var form = new MultipartFormDataContent();
+            var streamContent = new StreamContent(fileStream);
+            if (!string.IsNullOrWhiteSpace(contentType))
+            {
+                streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+            }
+            form.Add(streamContent, "File", fileName);
+            form.Add(new StringContent(imagingType ?? string.Empty), "ImagingType");
+            if (!string.IsNullOrWhiteSpace(resultSummary))
+            {
+                form.Add(new StringContent(resultSummary), "ResultSummary");
+            }
+
+            var endpoint = $"/api/medical-records/clinical-entries/{clinicalEntryId}/imaging";
+            var response = await _httpClient.PostAsync(endpoint, form);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var apiResponse = TryDeserialize<ApiResponse<ImagingRecordDto>>(body);
+                if (apiResponse != null && apiResponse.Success)
+                {
+                    return ApiResult<ImagingRecordDto>.Success(apiResponse.Data, apiResponse.Message, (int)response.StatusCode);
+                }
+                var direct = TryDeserialize<ImagingRecordDto>(body);
+                if (direct != null)
+                {
+                    return ApiResult<ImagingRecordDto>.Success(direct, null, (int)response.StatusCode);
+                }
+                return ApiResult<ImagingRecordDto>.Failure("Không thể phân tích dữ liệu ảnh trả về.", statusCode: 500);
+            }
+
+            return ParseError<ImagingRecordDto>(response.StatusCode, body);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Lỗi kết nối khi upload ảnh chẩn đoán cho ClinicalEntry {Id}", clinicalEntryId);
+            return ApiResult<ImagingRecordDto>.Failure("Không thể kết nối đến máy chủ API.", statusCode: (int)HttpStatusCode.ServiceUnavailable);
+        }
+    }
+
+    public async Task<ApiResult<bool>> DeleteImagingRecordAsync(long imagingRecordId)
+    {
+        try
+        {
+            var endpoint = $"/api/medical-records/imaging/{imagingRecordId}";
+            var response = await _httpClient.DeleteAsync(endpoint);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var apiResponse = TryDeserialize<ApiResponse<bool>>(body);
+                if (apiResponse != null && apiResponse.Success)
+                {
+                    return ApiResult<bool>.Success(apiResponse.Data, apiResponse.Message, (int)response.StatusCode);
+                }
+                return ApiResult<bool>.Success(true, "Đã xóa ảnh thành công.", (int)response.StatusCode);
+            }
+
+            return ParseError<bool>(response.StatusCode, body);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Lỗi kết nối khi xóa phim chụp {Id}", imagingRecordId);
+            return ApiResult<bool>.Failure("Không thể kết nối đến máy chủ API.", statusCode: (int)HttpStatusCode.ServiceUnavailable);
+        }
+    }
+
+    public async Task<ApiFileStreamResult?> GetImagingFileStreamAsync(long imagingRecordId, bool download = false)
+    {
+        try
+        {
+            var endpoint = $"/api/medical-records/imaging/{imagingRecordId}/file?download={download.ToString().ToLowerInvariant()}";
+            var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new ApiFileStreamResult
+                {
+                    StatusCode = (int)response.StatusCode,
+                    ResponseMessage = response
+                };
+            }
+
+            var stream = await response.Content.ReadAsStreamAsync();
+            var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+            var fileName = response.Content.Headers.ContentDisposition?.FileName?.Trim('\"');
+
+            return new ApiFileStreamResult
+            {
+                Stream = stream,
+                ContentType = contentType,
+                FileName = fileName,
+                StatusCode = (int)response.StatusCode,
+                ResponseMessage = response
+            };
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Lỗi kết nối khi stream phim chụp {Id}", imagingRecordId);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi không xác định khi stream phim chụp {Id}", imagingRecordId);
+            return null;
+        }
+    }
+
     // ==========================================
     // GENERIC HTTP HELPERS
     // ==========================================
