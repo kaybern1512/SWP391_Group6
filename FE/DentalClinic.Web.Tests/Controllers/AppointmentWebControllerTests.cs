@@ -457,4 +457,81 @@ public class AppointmentWebControllerTests
         vm.Appointments.Should().HaveCount(1);
         vm.Appointments[0].AppointmentCode.Should().Be("APT-99");
     }
+
+    [Fact]
+    public async Task Patient_Reschedule_Get_ValidAppointment_ReturnsViewResultWithModel()
+    {
+        _apiMock.Setup(x => x.GetAppointmentDetailAsync(10))
+            .ReturnsAsync(ApiResult<AppointmentDto>.Success(new AppointmentDto
+            {
+                AppointmentId = 10,
+                AppointmentCode = "APP-20261016-111111",
+                DepartmentId = 1,
+                DepartmentName = "Khoa Chỉnh Nha",
+                RequestedServiceId = 2,
+                ServiceName = "Tư vấn niềng răng",
+                Status = "Confirmed",
+                ScheduledStart = DateTime.Today.AddDays(2).AddHours(9)
+            }));
+        _apiMock.Setup(x => x.GetBookingEligibilityAsync())
+            .ReturnsAsync(ApiResult<BookingEligibilityDto>.Success(new BookingEligibilityDto { IsEligible = true }));
+        _apiMock.Setup(x => x.GetDentistsAsync(1))
+            .ReturnsAsync(ApiResult<List<DentistOptionDto>>.Success(new List<DentistOptionDto>
+            {
+                new() { UserId = 401, FullName = "Bác Sĩ Nguyễn Văn A" }
+            }));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Reschedule(10);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var model = view.Model.Should().BeOfType<PatientRescheduleViewModel>().Subject;
+        model.AppointmentId.Should().Be(10);
+        model.AppointmentCode.Should().Be("APP-20261016-111111");
+        model.DepartmentName.Should().Be("Khoa Chỉnh Nha");
+        model.ServiceName.Should().Be("Tư vấn niềng răng");
+        model.Dentists.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Patient_Reschedule_Post_Success_RedirectsToSuccessAction()
+    {
+        _apiMock.Setup(x => x.GetBookingEligibilityAsync())
+            .ReturnsAsync(ApiResult<BookingEligibilityDto>.Success(new BookingEligibilityDto { IsEligible = true }));
+
+        var newStart = DateTime.Today.AddDays(3).AddHours(10);
+        _apiMock.Setup(x => x.PatientRescheduleAsync(10, It.IsAny<PatientRescheduleRequest>()))
+            .ReturnsAsync(ApiResult<AppointmentDto>.Success(new AppointmentDto
+            {
+                AppointmentId = 25,
+                AppointmentCode = "APP-20261016-222222",
+                Status = "PendingReceptionReview",
+                ScheduledStart = newStart
+            }, "Dời lịch khám thành công"));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient"),
+            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
+        };
+
+        var model = new PatientRescheduleViewModel
+        {
+            AppointmentId = 10,
+            NewScheduledStart = newStart,
+            Reason = "Trùng lịch bận đột xuất"
+        };
+
+        var result = await controller.Reschedule(10, model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Success");
+        redirect.RouteValues.Should().ContainKey("id").WhoseValue.Should().Be(25L);
+        controller.TempData["SuccessMessage"].Should().Be("Dời lịch khám thành công");
+    }
 }
+

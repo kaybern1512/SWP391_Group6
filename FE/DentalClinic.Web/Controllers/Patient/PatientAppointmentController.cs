@@ -209,6 +209,108 @@ public class PatientAppointmentController : Controller
         return RedirectToAction(nameof(Detail), new { id });
     }
 
+    [HttpGet("Reschedule/{id:long}")]
+    public async Task<IActionResult> Reschedule(long id)
+    {
+        var result = await _appointmentApiService.GetAppointmentDetailAsync(id);
+        if (!result.IsSuccess || result.Data == null)
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không tìm thấy lịch hẹn.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var appt = result.Data;
+        var validStatuses = new[] { "PendingReceptionReview", "PendingDepartmentReview", "AwaitingPatientResponse", "Confirmed" };
+        if (!validStatuses.Contains(appt.Status))
+        {
+            TempData["ErrorMessage"] = $"Không thể dời lịch khi ca khám ở trạng thái {appt.Status}.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
+        var dentistsResult = await _appointmentApiService.GetDentistsAsync(appt.DepartmentId);
+
+        var vm = new PatientRescheduleViewModel
+        {
+            AppointmentId = appt.AppointmentId,
+            AppointmentCode = appt.AppointmentCode,
+            DepartmentId = appt.DepartmentId,
+            DepartmentName = appt.DepartmentName,
+            RequestedServiceId = appt.RequestedServiceId,
+            ServiceName = appt.ServiceName,
+            CurrentScheduledStart = appt.ScheduledStart,
+            CurrentDentistName = appt.AssignedDentistName ?? appt.RequestedDentistName,
+            NewRequestedDentistUserId = appt.RequestedDentistUserId,
+            NewAppointmentDate = DateTime.Today.AddDays(1).ToString("yyyy-MM-dd"),
+            Dentists = dentistsResult.Data ?? new(),
+            Eligibility = eligibilityResult?.Data
+        };
+
+        return View("~/Views/Patient/Appointment/Reschedule.cshtml", vm);
+    }
+
+    [HttpPost("Reschedule/{id:long}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Reschedule(long id, PatientRescheduleViewModel model)
+    {
+        var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
+        var eligibility = eligibilityResult?.Data ?? new BookingEligibilityDto();
+
+        if (!eligibility.IsEligible)
+        {
+            TempData["ErrorMessage"] = eligibility.BlockReason ?? "Tài khoản của bạn hiện đang bị tạm khóa quyền đặt/dời lịch khám trực tuyến.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        if (!ModelState.IsValid)
+        {
+            var detailRes = await _appointmentApiService.GetAppointmentDetailAsync(id);
+            if (detailRes.IsSuccess && detailRes.Data != null)
+            {
+                var appt = detailRes.Data;
+                model.AppointmentCode = appt.AppointmentCode;
+                model.DepartmentName = appt.DepartmentName;
+                model.ServiceName = appt.ServiceName;
+                model.CurrentScheduledStart = appt.ScheduledStart;
+                model.CurrentDentistName = appt.AssignedDentistName ?? appt.RequestedDentistName;
+                var dentistsResult = await _appointmentApiService.GetDentistsAsync(appt.DepartmentId);
+                model.Dentists = dentistsResult.Data ?? new();
+                model.Eligibility = eligibility;
+            }
+            return View("~/Views/Patient/Appointment/Reschedule.cshtml", model);
+        }
+
+        var req = new PatientRescheduleRequest
+        {
+            NewScheduledStart = model.NewScheduledStart!.Value,
+            NewRequestedDentistUserId = model.NewRequestedDentistUserId,
+            Reason = model.Reason
+        };
+
+        var result = await _appointmentApiService.PatientRescheduleAsync(id, req);
+        if (!result.IsSuccess)
+        {
+            ModelState.AddModelError(string.Empty, result.Message ?? "Không thể dời lịch khám.");
+            var detailRes = await _appointmentApiService.GetAppointmentDetailAsync(id);
+            if (detailRes.IsSuccess && detailRes.Data != null)
+            {
+                var appt = detailRes.Data;
+                model.AppointmentCode = appt.AppointmentCode;
+                model.DepartmentName = appt.DepartmentName;
+                model.ServiceName = appt.ServiceName;
+                model.CurrentScheduledStart = appt.ScheduledStart;
+                model.CurrentDentistName = appt.AssignedDentistName ?? appt.RequestedDentistName;
+                var dentistsResult = await _appointmentApiService.GetDentistsAsync(appt.DepartmentId);
+                model.Dentists = dentistsResult.Data ?? new();
+                model.Eligibility = eligibility;
+            }
+            return View("~/Views/Patient/Appointment/Reschedule.cshtml", model);
+        }
+
+        TempData["SuccessMessage"] = result.Message ?? "Đã hủy lịch hẹn cũ và chuyển sang lịch khám mới thành công!";
+        return RedirectToAction(nameof(Success), new { id = result.Data!.AppointmentId });
+    }
+
     [HttpPost("Proposal/Accept/{id:long}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AcceptProposal(long id)

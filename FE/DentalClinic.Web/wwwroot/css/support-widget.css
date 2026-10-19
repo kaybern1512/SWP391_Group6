@@ -1,0 +1,502 @@
+/* =====================================================================
+   DENTALCARE FLOATING SUPPORT WIDGET & LIVE CHAT STYLESHEET
+   Brand Theme: Modern Medical Orange (#F05123 / #FF5722)
+   ===================================================================== */
+
+:root {
+    --dc-widget-primary: #F05123;
+    --dc-widget-primary-hover: #d94216;
+    --dc-widget-primary-gradient: linear-gradient(135deg, #F05123 0%, #ff7043 100%);
+    --dc-widget-bg-card: #ffffff;
+    --dc-widget-text-dark: #1e293b;
+    --dc-widget-text-muted: #64748b;
+    --dc-widget-border-color: #e2e8f0;
+    --dc-widget-shadow: 0 10px 25px -5px rgba(240, 81, 35, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    --dc-widget-shadow-soft: 0 20px 30px -10px rgba(0, 0, 0, 0.15);
+}
+
+/* Container */
+.dc-support-widget {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 1050;
+    font-family: inherit;
+}
+
+/* 1. FLOATING ACTION BUTTON (FAB) */
+.dc-support-fab {
+    position: relative;
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    background: var(--dc-widget-primary-gradient);
+    border: none;
+    outline: none;
+    color: #ffffff;
+    box-shadow: 0 8px 24px rgba(240, 81, 35, 0.45);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.dc-support-fab:hover {
+    transform: translateY(-4px) scale(1.05);
+    box-shadow: 0 12px 28px rgba(240, 81, 35, 0.55);
+}
+
+.dc-support-fab:active {
+    transform: translateY(-1px) scale(0.98);
+}
+
+.dc-fab-icon-box {
+    position: relative;
+    font-size: 1.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s ease;
+}
+
+.dc-fab-pulse {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: rgba(240, 81, 35, 0.4);
+    animation: dcFabPulse 2.4s infinite;
+    pointer-events: none;
+    z-index: -1;
+}
+
+@keyframes dcFabPulse {
+    0% {
+        transform: scale(0.95);
+        opacity: 0.8;
+    }
+    70% {
+        transform: scale(1.4);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1.4);
+        opacity: 0;
+    }
+}
+
+.dc-online-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background-color: #10b981;
+    border: 2px solid #ffffff;
+}
+
+.dc-online-dot-mini {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #10b981;
+    border: 1.5px solid #ffffff;
+}
+
+.dc-fab-badge {
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    background-color: #ef4444;
+    color: #ffffff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+/* 2. POPUP MENU (5 CHỨC NĂNG) */
+.dc-support-menu {
+    position: absolute;
+    bottom: 76px;
+    right: 0;
+    width: 360px;
+    background-color: var(--dc-widget-bg-card);
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--dc-widget-border-color);
+    box-shadow: var(--dc-widget-shadow-soft);
+    animation: dcSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    transform-origin: bottom right;
+}
+
+@keyframes dcSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.dc-menu-header {
+    background: var(--dc-widget-primary-gradient);
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.dc-header-icon {
+    width: 38px;
+    height: 38px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 1.25rem;
+}
+
+.dc-text-subtle {
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 0.76rem;
+}
+
+.dc-status-indicator {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: #10b981;
+    margin-right: 4px;
+}
+
+.dc-btn-close-menu {
+    filter: brightness(0) invert(1);
+    opacity: 0.8;
+}
+.dc-btn-close-menu:hover {
+    opacity: 1;
+}
+
+.dc-menu-body {
+    padding: 10px 8px;
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.dc-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    text-decoration: none;
+    color: inherit;
+    background: transparent;
+    border: none;
+    width: 100%;
+    text-align: left;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.dc-menu-item:hover {
+    background-color: #f8fafc;
+    transform: translateX(3px);
+}
+
+.dc-item-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+.dc-item-content {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.dc-item-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--dc-widget-text-dark);
+    margin-bottom: 2px;
+}
+
+.dc-item-desc {
+    font-size: 0.74rem;
+    color: var(--dc-widget-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dc-item-arrow {
+    color: #94a3b8;
+    font-size: 0.85rem;
+    transition: transform 0.2s ease;
+}
+
+.dc-menu-item:hover .dc-item-arrow {
+    color: var(--dc-widget-primary);
+    transform: translateX(2px);
+}
+
+.dc-menu-footer {
+    padding: 12px 18px;
+    background-color: #f8fafc;
+    border-top: 1px solid var(--dc-widget-border-color);
+}
+
+/* 3. MINI LIVE CHAT WINDOW */
+.dc-chat-window {
+    position: absolute;
+    bottom: 76px;
+    right: 0;
+    width: 380px;
+    height: 540px;
+    max-height: calc(100vh - 120px);
+    background-color: var(--dc-widget-bg-card);
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid var(--dc-widget-border-color);
+    box-shadow: var(--dc-widget-shadow-soft);
+    display: flex;
+    flex-direction: column;
+    animation: dcSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    transform-origin: bottom right;
+}
+
+.dc-chat-header {
+    background: var(--dc-widget-primary-gradient);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+
+.dc-chat-notice {
+    background-color: #f0fdf4;
+    color: #166534;
+    padding: 6px 14px;
+    font-size: 0.72rem;
+    border-bottom: 1px solid #dcfce7;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.dc-chat-body {
+    flex-grow: 1;
+    padding: 16px;
+    overflow-y: auto;
+    background-color: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.dc-chat-time-divider {
+    text-align: center;
+    position: relative;
+    margin: 8px 0;
+}
+
+.dc-chat-time-divider::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background-color: #e2e8f0;
+    z-index: 1;
+}
+
+.dc-chat-time-divider span {
+    position: relative;
+    z-index: 2;
+    background-color: #f8fafc;
+    padding: 0 10px;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.dc-chat-msg {
+    display: flex;
+    flex-direction: column;
+    max-width: 82%;
+    word-break: break-word;
+}
+
+.dc-msg-sender {
+    font-size: 0.7rem;
+    color: #64748b;
+    margin-bottom: 3px;
+    font-weight: 500;
+}
+
+.dc-msg-bubble {
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.dc-msg-time {
+    font-size: 0.65rem;
+    color: #94a3b8;
+    margin-top: 3px;
+}
+
+/* Bot & Staff message (Left) */
+.dc-msg-bot,
+.dc-msg-receptionist {
+    align-self: flex-start;
+}
+
+.dc-msg-bot .dc-msg-bubble,
+.dc-msg-receptionist .dc-msg-bubble {
+    background-color: #ffffff;
+    color: #1e293b;
+    border: 1px solid #e2e8f0;
+    border-top-left-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+/* Guest & Patient message (Right) */
+.dc-msg-guest,
+.dc-msg-patient {
+    align-self: flex-end;
+}
+
+.dc-msg-guest .dc-msg-sender,
+.dc-msg-patient .dc-msg-sender {
+    text-align: right;
+}
+
+.dc-msg-guest .dc-msg-time,
+.dc-msg-patient .dc-msg-time {
+    text-align: right;
+}
+
+.dc-msg-guest .dc-msg-bubble,
+.dc-msg-patient .dc-msg-bubble {
+    background: var(--dc-widget-primary-gradient);
+    color: #ffffff;
+    border-top-right-radius: 4px;
+    box-shadow: 0 2px 6px rgba(240, 81, 35, 0.25);
+}
+
+/* Quick Chips */
+.dc-quick-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.dc-chip {
+    background-color: #ffffff;
+    border: 1px solid #fed7aa;
+    color: #c2410c;
+    border-radius: 16px;
+    padding: 5px 11px;
+    font-size: 0.74rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.dc-chip:hover {
+    background-color: #fff7ed;
+    border-color: #fb923c;
+    transform: translateY(-1px);
+}
+
+/* Chat Footer / Input */
+.dc-chat-footer {
+    padding: 10px 14px;
+    background-color: #ffffff;
+    border-top: 1px solid var(--dc-widget-border-color);
+    flex-shrink: 0;
+}
+
+.dc-chat-input {
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-size: 0.86rem;
+    border-color: #e2e8f0;
+    box-shadow: none !important;
+}
+
+.dc-chat-input:focus {
+    border-color: var(--dc-widget-primary);
+}
+
+.dc-btn-send {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--dc-widget-primary-gradient);
+    color: #ffffff;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.dc-btn-send:hover {
+    background: var(--dc-widget-primary-hover);
+    color: #ffffff;
+    transform: scale(1.05);
+}
+
+/* Mobile Responsive */
+@media (max-width: 576px) {
+    .dc-support-widget {
+        bottom: 16px;
+        right: 16px;
+    }
+    .dc-support-menu {
+        width: calc(100vw - 32px);
+        right: 0;
+        bottom: 70px;
+    }
+    .dc-chat-window {
+        width: calc(100vw - 32px);
+        height: calc(100vh - 110px);
+        right: 0;
+        bottom: 70px;
+    }
+}

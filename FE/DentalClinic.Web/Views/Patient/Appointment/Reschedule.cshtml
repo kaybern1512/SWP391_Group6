@@ -1,0 +1,304 @@
+@model DentalClinic.Web.ViewModels.Appointments.PatientRescheduleViewModel
+@{
+    ViewData["Title"] = $"Dời Lịch Khám #{Model.AppointmentCode} - Nha Khoa DentalCare";
+    var minDate = DateTime.Today.AddDays(1).ToString("yyyy-MM-dd");
+}
+
+<div class="container py-4">
+    <!-- BREADCRUMB -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-controller="PatientDashboard" asp-action="Index" class="text-decoration-none">Bảng điều khiển</a></li>
+            <li class="breadcrumb-item"><a asp-action="Index" class="text-decoration-none">Lịch hẹn của tôi</a></li>
+            <li class="breadcrumb-item"><a asp-action="Detail" asp-route-id="@Model.AppointmentId" class="text-decoration-none">#@Model.AppointmentCode</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Dời lịch khám</li>
+        </ol>
+    </nav>
+
+    <!-- TITLE & HERO -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h2 class="fw-bold text-dark mb-1">
+                <i class="bi bi-calendar-range text-primary me-2"></i>Dời Lịch Hẹn Khám
+            </h2>
+            <p class="text-muted mb-0">Hủy lịch hẹn hiện tại và chuyển sang một ngày / khung giờ khám mới thuận tiện hơn.</p>
+        </div>
+        <a asp-action="Detail" asp-route-id="@Model.AppointmentId" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Quay lại chi tiết
+        </a>
+    </div>
+
+    <!-- STRIKE / ELIGIBILITY WARNING IF ANY -->
+    @if (Model.Eligibility != null && !Model.Eligibility.IsEligible)
+    {
+        <div class="alert alert-danger border-0 shadow-sm d-flex align-items-center mb-4">
+            <i class="bi bi-exclamation-octagon-fill fs-3 me-3 text-danger flex-shrink-0"></i>
+            <div>
+                <strong class="d-block fs-6">Tài khoản đang bị tạm khóa quyền đặt / dời lịch trực tuyến</strong>
+                <span>@(Model.Eligibility.BlockReason ?? "Vui lòng liên hệ hotline 1900 1234 để được Lễ tân hỗ trợ sắp xếp ca khám.")</span>
+            </div>
+        </div>
+    }
+
+    <!-- CURRENT APPOINTMENT SUMMARY -->
+    <div class="card border-0 shadow-sm mb-4 bg-light">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-bookmark-check text-primary me-2"></i>Thông Tin Lịch Hẹn Hiện Tại
+                </h5>
+                <span class="badge bg-primary fs-6 font-monospace">#@Model.AppointmentCode</span>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <small class="text-muted d-block">Chuyên khoa:</small>
+                    <strong class="text-dark">@Model.DepartmentName</strong>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted d-block">Dịch vụ yêu cầu:</small>
+                    <strong class="text-primary">@Model.ServiceName</strong>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted d-block">Thời gian khám hiện tại:</small>
+                    <strong class="text-danger">
+                        @(Model.CurrentScheduledStart?.ToString("dd/MM/yyyy HH:mm") ?? "Chưa xếp thời gian")
+                    </strong>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted d-block">Bác sĩ phụ trách/yêu cầu:</small>
+                    <strong class="text-secondary">@(Model.CurrentDentistName ?? "Bất kỳ bác sĩ khả dụng")</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RESCHEDULE FORM -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-3">
+            <h5 class="card-title mb-0 fw-semibold text-primary">
+                <i class="bi bi-calendar-plus me-2"></i>Chọn Thời Điểm Khám Mới
+            </h5>
+        </div>
+        <div class="card-body p-4">
+            <form asp-action="Reschedule" asp-route-id="@Model.AppointmentId" method="post" id="rescheduleForm">
+                @Html.AntiForgeryToken()
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-4" role="alert"></div>
+
+                <input type="hidden" asp-for="AppointmentId" />
+                <input type="hidden" asp-for="DepartmentId" id="rescheduleDeptId" />
+                <input type="hidden" asp-for="RequestedServiceId" id="rescheduleServiceId" />
+                <input type="hidden" asp-for="NewScheduledStart" id="hiddenNewScheduledStart" />
+
+                <!-- 1. DATE & DOCTOR -->
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6">
+                        <label asp-for="NewAppointmentDate" class="form-label fw-semibold">
+                            <i class="bi bi-calendar3 me-1 text-primary"></i>1. Chọn Ngày Khám Mới <span class="text-danger">*</span>
+                        </label>
+                        <input type="date" asp-for="NewAppointmentDate" id="inputNewDate" class="form-control form-control-lg" min="@minDate" onchange="onFilterChange()" />
+                        <span asp-validation-for="NewAppointmentDate" class="text-danger small"></span>
+                        <div class="form-text">Phòng khám tiếp nhận đặt trước từ 08:30 đến 19:00 hàng ngày.</div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="NewRequestedDentistUserId" class="form-label fw-semibold">
+                            <i class="bi bi-person-badge me-1 text-primary"></i>2. Bác Sĩ Mong Muốn Khám (Tùy chọn)
+                        </label>
+                        <select asp-for="NewRequestedDentistUserId" id="selectDentist" class="form-select form-select-lg" onchange="onFilterChange()">
+                            <option value="">-- Bất kỳ bác sĩ khả dụng trong khoa --</option>
+                            @foreach (var d in Model.Dentists)
+                            {
+                                var dId = d.DentistUserId != 0 ? d.DentistUserId : d.UserId;
+                                <option value="@dId">@d.FullName (@(d.Specialization ?? "Bác sĩ chuyên khoa"))</option>
+                            }
+                        </select>
+                        <div class="form-text">Chọn "Bất kỳ bác sĩ" để xem được nhiều khung giờ trống nhất.</div>
+                    </div>
+                </div>
+
+                <!-- 2. TIME SLOTS SELECTION -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label fw-semibold mb-0">
+                            <i class="bi bi-clock me-1 text-primary"></i>3. Chọn Khung Giờ Khám Khả Dụng <span class="text-danger">*</span>
+                        </label>
+                        <span class="text-muted small" id="slotSummaryText"></span>
+                    </div>
+
+                    <div id="slotsLoading" class="text-center py-4 bg-light rounded d-none">
+                        <div class="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
+                        <span class="text-muted small">Đang tra cứu khung giờ trống...</span>
+                    </div>
+
+                    <div id="noSlotsMessage" class="alert alert-warning text-center py-3 d-none mb-0">
+                        <i class="bi bi-calendar-x fs-4 d-block mb-1 text-warning"></i>
+                        <strong>Không có khung giờ trống phù hợp trong ngày đã chọn.</strong>
+                        <p class="mb-0 small text-muted">Vui lòng chọn ngày khác hoặc chuyển sang tùy chọn "Bất kỳ bác sĩ khả dụng".</p>
+                    </div>
+
+                    <div class="row g-2" id="slotsContainer"></div>
+                    <span asp-validation-for="NewScheduledStart" class="text-danger small mt-1 d-block" id="slotValidationError"></span>
+
+                    <!-- SELECTED SLOT PREVIEW -->
+                    <div id="selectedSlotAlert" class="alert alert-success d-flex align-items-center mt-3 py-2 px-3 d-none">
+                        <i class="bi bi-check-circle-fill fs-5 me-2 text-success"></i>
+                        <div>
+                            Khung giờ bạn chọn: <strong id="selectedSlotText" class="text-success fs-6"></strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. REASON FOR RESCHEDULING -->
+                <div class="mb-4">
+                    <label asp-for="Reason" class="form-label fw-semibold">
+                        <i class="bi bi-chat-left-text me-1 text-primary"></i>4. Lý Do Dời Lịch Khám <span class="text-danger">*</span>
+                    </label>
+                    <select class="form-select mb-2" onchange="document.getElementById('inputReason').value = this.value">
+                        <option value="">-- Chọn lý do thường gặp --</option>
+                        <option value="Bận việc đột xuất không thể đến đúng lịch hẹn ban đầu">Bận việc đột xuất không thể đến đúng lịch hẹn ban đầu</option>
+                        <option value="Muốn dời sang ngày nghỉ cuối tuần để tiện sắp xếp">Muốn dời sang ngày nghỉ cuối tuần để tiện sắp xếp</option>
+                        <option value="Trùng lịch công tác / lịch học phát sinh">Trùng lịch công tác / lịch học phát sinh</option>
+                        <option value="Có việc gia đình cần giải quyết">Có việc gia đình cần giải quyết</option>
+                        <option value="Muốn chuyển khung giờ khác trong ngày cho thuận tiện">Muốn chuyển khung giờ khác trong ngày cho thuận tiện</option>
+                    </select>
+                    <textarea asp-for="Reason" id="inputReason" class="form-control" rows="3" placeholder="Nhập chi tiết lý do bạn muốn dời lịch khám tại đây (tối thiểu 5 ký tự)..."></textarea>
+                    <span asp-validation-for="Reason" class="text-danger small"></span>
+                </div>
+
+                <!-- POLICY BOX -->
+                <div class="alert alert-info border-info-subtle bg-info-subtle text-info-emphasis rounded-3 p-3 mb-4">
+                    <h6 class="fw-bold mb-1"><i class="bi bi-shield-check me-2"></i>Quy Trình & Chính Sách Dời Lịch:</h6>
+                    <ul class="small mb-0 ps-3">
+                        <li>Khi xác nhận, lịch hẹn cũ (<strong>#@Model.AppointmentCode</strong>) sẽ được hủy an toàn và hệ thống tự động khởi tạo lịch khám mới với thời gian bạn đã chọn.</li>
+                        <li>Lễ tân và Trưởng khoa sẽ tiếp nhận ngay lịch mới để phân công phòng khám chu đáo cho bạn.</li>
+                        <li>Dời lịch khám không bị tính phạt vi phạm quy định đặt lịch.</li>
+                    </ul>
+                </div>
+
+                <!-- ACTION BUTTONS -->
+                <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                    <a asp-action="Detail" asp-route-id="@Model.AppointmentId" class="btn btn-outline-secondary px-4">
+                        <i class="bi bi-x-circle me-1"></i> Hủy thao tác
+                    </a>
+                    <button type="submit" id="btnSubmitReschedule" class="btn btn-primary px-4 py-2 fw-bold shadow-sm" disabled>
+                        <i class="bi bi-arrow-repeat me-1"></i> Xác Nhận Hủy Lịch Cũ & Chuyển Sang Lịch Mới
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.slot-btn {
+    border: 1.5px solid #dee2e6;
+    border-radius: 8px;
+    padding: 10px 8px;
+    text-align: center;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.slot-btn:hover {
+    border-color: #0d6efd;
+    background-color: #f8fbff;
+    transform: translateY(-1px);
+}
+.slot-btn.active {
+    border-color: #0d6efd;
+    background-color: #0d6efd;
+    color: #fff !important;
+}
+.slot-btn.active .text-muted {
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+</style>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        const deptId = @Model.DepartmentId;
+        const serviceId = @Model.RequestedServiceId;
+        let selectedStartTime = null;
+
+        function onFilterChange() {
+            selectedStartTime = null;
+            document.getElementById('hiddenNewScheduledStart').value = '';
+            document.getElementById('selectedSlotAlert').classList.add('d-none');
+            document.getElementById('btnSubmitReschedule').disabled = true;
+            loadAvailableSlots();
+        }
+
+        async function loadAvailableSlots() {
+            const date = document.getElementById('inputNewDate').value;
+            const dentistId = document.getElementById('selectDentist').value;
+            const loading = document.getElementById('slotsLoading');
+            const noSlots = document.getElementById('noSlotsMessage');
+            const container = document.getElementById('slotsContainer');
+            const summary = document.getElementById('slotSummaryText');
+
+            if (!date) return;
+
+            summary.innerText = `Ngày: ${date}`;
+            loading.classList.remove('d-none');
+            noSlots.classList.add('d-none');
+            container.innerHTML = '';
+
+            const dentistParam = dentistId ? `&dentistUserId=${dentistId}` : '';
+            try {
+                const url = `/Patient/Appointment/GetSlots?departmentId=${deptId}&serviceId=${serviceId}&date=${date}${dentistParam}`;
+                const res = await fetch(url);
+                const slots = await res.json();
+                loading.classList.add('d-none');
+
+                if (!slots || slots.length === 0) {
+                    noSlots.classList.remove('d-none');
+                    return;
+                }
+
+                slots.forEach(slot => {
+                    const col = document.createElement('div');
+                    col.className = 'col-6 col-sm-4 col-md-3 col-lg-2';
+                    const start = new Date(slot.startTime);
+                    const timeStr = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
+                    const recDentist = slot.recommendedDentistName ? `<div class="small text-muted text-truncate" title="${slot.recommendedDentistName}"><i class="bi bi-person me-1"></i>${slot.recommendedDentistName}</div>` : '';
+
+                    col.innerHTML = `
+                        <div class="slot-btn" data-start="${slot.startTime}" onclick="selectSlot('${slot.startTime}', '${timeStr} - ${slot.timeDisplay}')">
+                            <div class="fw-bold fs-5">${timeStr}</div>
+                            <div class="small text-muted">${slot.timeDisplay}</div>
+                            ${recDentist}
+                        </div>
+                    `;
+                    container.appendChild(col);
+                });
+            } catch (err) {
+                loading.classList.add('d-none');
+                noSlots.classList.remove('d-none');
+            }
+        }
+
+        function selectSlot(startTime, display) {
+            selectedStartTime = startTime;
+            document.getElementById('hiddenNewScheduledStart').value = startTime;
+
+            document.querySelectorAll('#slotsContainer .slot-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-start') === startTime);
+            });
+
+            const alertBox = document.getElementById('selectedSlotAlert');
+            const alertText = document.getElementById('selectedSlotText');
+            alertText.innerText = display;
+            alertBox.classList.remove('d-none');
+
+            document.getElementById('btnSubmitReschedule').disabled = false;
+            const validationErr = document.getElementById('slotValidationError');
+            if (validationErr) validationErr.innerText = '';
+        }
+
+        // Auto load slots on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            loadAvailableSlots();
+        });
+    </script>
+}
