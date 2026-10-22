@@ -72,16 +72,6 @@ public class PostCareServiceTests
         db.UserAccounts.Add(mgrUser);
         db.StaffProfiles.Add(mgrStaff);
 
-        // Dentist Department link
-        db.DentistDepartments.Add(new DentistDepartment
-        {
-            DentistDepartmentId = 1,
-            DentistUserId = 30, // BS C
-            DepartmentId = 2,   // Khoa Chỉnh Nha
-            Status = "Active",
-            AssignedAt = DateTime.UtcNow
-        });
-
         // Appointment
         var appointment = new Appointment
         {

@@ -19,25 +19,15 @@ public interface IReportService
         long departmentId,
         DateTime? fromDate = null,
         DateTime? toDate = null,
-        long? callerUserId = null,
-        string? callerRole = null,
         CancellationToken ct = default);
 
     Task<ApiResponse<List<DentistPerformanceDto>>> GetAllDentistsPerformanceAsync(
         long? departmentId = null,
         DateTime? fromDate = null,
         DateTime? toDate = null,
-        long? callerUserId = null,
-        string? callerRole = null,
         CancellationToken ct = default);
 
     Task<byte[]> ExportInvoicesCsvAsync(
-        DateTime? fromDate = null,
-        DateTime? toDate = null,
-        long? departmentId = null,
-        CancellationToken ct = default);
-
-    Task<byte[]> ExportInvoicesXlsxAsync(
         DateTime? fromDate = null,
         DateTime? toDate = null,
         long? departmentId = null,
@@ -47,15 +37,5 @@ public interface IReportService
         long? departmentId = null,
         DateTime? fromDate = null,
         DateTime? toDate = null,
-        long? callerUserId = null,
-        string? callerRole = null,
-        CancellationToken ct = default);
-
-    Task<byte[]> ExportDentistPerformanceXlsxAsync(
-        long? departmentId = null,
-        DateTime? fromDate = null,
-        DateTime? toDate = null,
-        long? callerUserId = null,
-        string? callerRole = null,
         CancellationToken ct = default);
 }

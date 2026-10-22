@@ -249,20 +249,6 @@ else
 app.UseStatusCodePagesWithReExecute("/Home/Error", "?statusCode={0}");
 
 app.UseHttpsRedirection();
-
-// BẢO MẬT: Chặn truy cập tĩnh trực tiếp tới thư mục phim chụp y tế
-app.Use(async (context, next) =>
-{
-    var path = context.Request.Path.Value;
-    if (!string.IsNullOrEmpty(path) && path.StartsWith("/uploads/imaging", StringComparison.OrdinalIgnoreCase))
-    {
-        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        return;
-    }
-
-    await next();
-});
-
 app.UseStaticFiles();
 
 app.UseRouting();

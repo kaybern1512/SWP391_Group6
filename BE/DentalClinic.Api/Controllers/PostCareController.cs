@@ -113,17 +113,4 @@ public class PostCareController : ControllerBase
         var result = await _postCareService.GetDentistFollowUpsAsync(dentistUserId, ct);
         return Ok(result);
     }
-
-    [HttpGet("follow-ups/receptionist")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
-    [ProducesResponseType(typeof(ApiResponse<List<ReceptionistFollowUpDto>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetReceptionistFollowUps(
-        [FromQuery] System.DateTime? fromDate,
-        [FromQuery] System.DateTime? toDate,
-        [FromQuery] string? status,
-        CancellationToken ct)
-    {
-        var result = await _postCareService.GetReceptionistFollowUpsAsync(fromDate, toDate, status, ct);
-        return Ok(result);
-    }
 }

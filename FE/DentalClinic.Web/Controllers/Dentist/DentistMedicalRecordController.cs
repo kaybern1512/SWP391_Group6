@@ -132,115 +132,24 @@ public class DentistMedicalRecordController : Controller
             return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
         }
 
-        // Ưu tiên 1: Upload file từ máy tính
-        if (model.ImageFile != null && model.ImageFile.Length > 0)
+        var req = new CreateImagingRecordRequest
         {
-            if (model.ImageFile.Length > 15 * 1024 * 1024)
-            {
-                TempData["ErrorMessage"] = "Kích thước tập tin vượt quá giới hạn tối đa 15 MB.";
-                return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
-            }
+            ClinicalEntryId = model.ClinicalEntryId,
+            ImagingType = model.ImagingType.Trim(),
+            FileUrl = model.FileUrl?.Trim(),
+            ResultSummary = model.ResultSummary?.Trim()
+        };
 
-            await using var stream = model.ImageFile.OpenReadStream();
-            var uploadResult = await _medicalRecordApi.UploadImagingFileAsync(
-                model.ClinicalEntryId,
-                model.ImagingType.Trim(),
-                model.ResultSummary?.Trim(),
-                stream,
-                model.ImageFile.FileName,
-                model.ImageFile.ContentType);
-
-            if (uploadResult.IsSuccess)
-            {
-                TempData["SuccessMessage"] = "Đã tải lên và lưu kết quả phim chụp X-quang thành công!";
-            }
-            else
-            {
-                TempData["ErrorMessage"] = uploadResult.Message ?? "Không thể tải lên phim chụp.";
-            }
-
-            return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
-        }
-
-        // Ưu tiên 2: Lưu URL có sẵn (backward compatibility)
-        if (!string.IsNullOrWhiteSpace(model.FileUrl))
-        {
-            var req = new CreateImagingRecordRequest
-            {
-                ClinicalEntryId = model.ClinicalEntryId,
-                ImagingType = model.ImagingType.Trim(),
-                FileUrl = model.FileUrl.Trim(),
-                ResultSummary = model.ResultSummary?.Trim()
-            };
-
-            var result = await _medicalRecordApi.AddImagingRecordAsync(req);
-            if (result.IsSuccess)
-            {
-                TempData["SuccessMessage"] = "Đã lưu kết quả phim chụp X-quang thành công!";
-            }
-            else
-            {
-                TempData["ErrorMessage"] = result.Message ?? "Không thể lưu thông tin phim chụp.";
-            }
-
-            return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
-        }
-
-        TempData["ErrorMessage"] = "Vui lòng chọn tập tin ảnh phim chụp từ máy tính hoặc cung cấp đường dẫn ảnh.";
-        return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
-    }
-
-    [HttpPost("DeleteImagingRecord")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteImagingRecord(long imagingRecordId, long patientUserId)
-    {
-        var result = await _medicalRecordApi.DeleteImagingRecordAsync(imagingRecordId);
+        var result = await _medicalRecordApi.AddImagingRecordAsync(req);
         if (result.IsSuccess)
         {
-            TempData["SuccessMessage"] = "Đã xóa phim chụp X-quang khỏi hồ sơ bệnh án thành công!";
+            TempData["SuccessMessage"] = "Đã lưu kết quả phim chụp X-quang thành công!";
         }
         else
         {
-            TempData["ErrorMessage"] = result.Message ?? "Không thể xóa phim chụp X-quang.";
+            TempData["ErrorMessage"] = result.Message ?? "Không thể lưu thông tin phim chụp.";
         }
 
-        return RedirectToAction(nameof(Index), new { patientId = patientUserId });
-    }
-
-    [HttpGet("ImagingFile/{id:long}")]
-    public async Task<IActionResult> GetImagingFile(long id, [FromQuery] bool download = false)
-    {
-        var streamResult = await _medicalRecordApi.GetImagingFileStreamAsync(id, download);
-        if (streamResult == null)
-        {
-            return NotFound();
-        }
-
-        if (streamResult.StatusCode == 401)
-        {
-            streamResult.Dispose();
-            return Unauthorized();
-        }
-        if (streamResult.StatusCode == 403)
-        {
-            streamResult.Dispose();
-            return Forbid();
-        }
-        if (streamResult.StatusCode == 404 || streamResult.Stream == null)
-        {
-            streamResult.Dispose();
-            return NotFound();
-        }
-
-        Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
-        Response.Headers["Pragma"] = "no-cache";
-        Response.Headers["X-Content-Type-Options"] = "nosniff";
-
-        if (download && !string.IsNullOrWhiteSpace(streamResult.FileName))
-        {
-            return File(streamResult.Stream, streamResult.ContentType, streamResult.FileName);
-        }
-
-        return File(streamResult.Stream, streamResult.ContentType);
+        return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
     }
 }

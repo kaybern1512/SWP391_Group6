@@ -16,20 +16,13 @@
             </h1>
             <p class="text-muted mb-0">Chuyên khoa: <strong>@Model.DepartmentName</strong> &bull; Trưởng khoa phụ trách: @(Model.ManagerName ?? "--")</p>
         </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <a asp-action="ExportPerformanceXlsx"
+        <div class="d-flex gap-2">
+            <a asp-action="ExportPerformance"
                asp-route-departmentId="@selectedDeptId"
                asp-route-fromDate="@fromDate"
                asp-route-toDate="@toDate"
                class="btn btn-success shadow-sm">
-                <i class="bi bi-file-earmark-spreadsheet me-1"></i> Xuất Excel (.xlsx)
-            </a>
-            <a asp-action="ExportPerformanceCsv"
-               asp-route-departmentId="@selectedDeptId"
-               asp-route-fromDate="@fromDate"
-               asp-route-toDate="@toDate"
-               class="btn btn-outline-success shadow-sm">
-                <i class="bi bi-file-earmark-text me-1"></i> Xuất CSV (UTF-8)
+                <i class="bi bi-file-earmark-excel me-1"></i> Xuất Báo Cáo Excel (CSV)
             </a>
         </div>
     </div>
@@ -42,7 +35,7 @@
         <div class="card-body p-3">
             <form method="get" asp-action="Performance" class="row g-2 align-items-end">
                 <div class="col-12 col-md-4">
-                    <label class="form-label small text-muted mb-1">Chuyên khoa</label>
+                    <label class="form-label small text-muted mb-1">Chọn chuyên khoa</label>
                     <select name="departmentId" class="form-select form-select-sm" onchange="this.form.submit()">
                         @foreach (var d in departments)
                         {
@@ -87,13 +80,7 @@
                 <div class="card-body">
                     <span class="text-muted small text-uppercase fw-semibold">Ca Khám Hoàn Thành</span>
                     <h3 class="fw-bold text-success mb-0 mt-1">@Model.CompletedAppointments</h3>
-                    <div class="small text-muted mt-1">
-                        Tổng @Model.TotalAppointments lịch hẹn
-                        @if (Model.CancelledAppointments > 0)
-                        {
-                            <span class="text-danger ms-1">(@Model.CancelledAppointments ca hủy)</span>
-                        }
-                    </div>
+                    <div class="small text-muted mt-1">trên tổng số @Model.TotalAppointments lịch hẹn</div>
                 </div>
             </div>
         </div>
@@ -101,13 +88,11 @@
         <div class="col-12 col-sm-6 col-xl-3">
             <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 border-warning">
                 <div class="card-body">
-                    <span class="text-muted small text-uppercase fw-semibold">Bệnh Nhân & Buổi Điều Trị</span>
-                    <h3 class="fw-bold text-dark mb-0 mt-1">
-                        @Model.DistinctPatientsTreated <small class="fs-6 fw-normal text-muted">bệnh nhân</small>
+                    <span class="text-muted small text-uppercase fw-semibold">Đánh Giá Trung Bình</span>
+                    <h3 class="fw-bold text-warning mb-0 mt-1">
+                        @Model.OverallDepartmentRating.ToString("F1") <i class="bi bi-star-fill fs-5"></i>
                     </h3>
-                    <div class="small text-muted mt-1">
-                        <i class="bi bi-check2-circle text-primary me-1"></i>@Model.CompletedTreatmentSessions buổi điều trị hoàn tất
-                    </div>
+                    <div class="small text-muted mt-1">Theo nhận xét từ bệnh nhân</div>
                 </div>
             </div>
         </div>
@@ -115,11 +100,9 @@
         <div class="col-12 col-sm-6 col-xl-3">
             <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 border-info">
                 <div class="card-body">
-                    <span class="text-muted small text-uppercase fw-semibold">Doanh Thu & Thực Thu</span>
+                    <span class="text-muted small text-uppercase fw-semibold">Doanh Thu Khoa Tạo Ra</span>
                     <h3 class="fw-bold text-primary mb-0 mt-1">@Model.TotalDepartmentRevenue.ToString("N0") đ</h3>
-                    <div class="small text-success fw-semibold mt-1">
-                        <i class="bi bi-cash-stack me-1"></i>Thực thu: @Model.TotalDepartmentPaid.ToString("N0") đ
-                    </div>
+                    <div class="small text-muted mt-1">Tổng viện phí các ca khám</div>
                 </div>
             </div>
         </div>
@@ -127,29 +110,11 @@
 
     <!-- Dentist Performance Table -->
     <div class="card border-0 shadow-sm rounded-3 mb-4">
-        <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <div>
-                <h5 class="card-title mb-0 fw-bold text-dark">
-                    <i class="bi bi-trophy text-warning me-2"></i>Bảng Thống Kê Hiệu Suất Từng Bác Sĩ
-                </h5>
-                <span class="text-muted small">Sắp xếp theo số ca khám hoàn tất &bull; Đánh giá trung bình toàn khoa: @Model.OverallDepartmentRating.ToString("F1") <i class="bi bi-star-fill text-warning"></i></span>
-            </div>
-            <div class="d-flex gap-2">
-                <a asp-action="ExportPerformanceXlsx"
-                   asp-route-departmentId="@selectedDeptId"
-                   asp-route-fromDate="@fromDate"
-                   asp-route-toDate="@toDate"
-                   class="btn btn-outline-success btn-sm">
-                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Excel (.xlsx)
-                </a>
-                <a asp-action="ExportPerformanceCsv"
-                   asp-route-departmentId="@selectedDeptId"
-                   asp-route-fromDate="@fromDate"
-                   asp-route-toDate="@toDate"
-                   class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-download me-1"></i> CSV
-                </a>
-            </div>
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0 fw-bold text-dark">
+                <i class="bi bi-trophy text-warning me-2"></i>Bảng Thống Kê Hiệu Suất Từng Bác Sĩ
+            </h5>
+            <span class="text-muted small">Sắp xếp theo số ca khám hoàn tất</span>
         </div>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
@@ -157,15 +122,12 @@
                     <tr>
                         <th class="ps-3">Bác Sĩ</th>
                         <th>Mã NV</th>
-                        <th class="text-center">Tổng Ca</th>
-                        <th class="text-center">Đã Khám</th>
-                        <th class="text-center">Ca Hủy</th>
-                        <th class="text-center">Bệnh Nhân</th>
-                        <th class="text-center">Buổi Đ.Trị</th>
-                        <th class="text-center">Tỷ Lệ</th>
-                        <th class="text-center">Đánh Giá</th>
-                        <th class="text-end">Doanh Thu HĐ</th>
-                        <th class="text-end">Thực Thu</th>
+                        <th class="text-center">Tổng Ca Khám</th>
+                        <th class="text-center">Đã Hoàn Thành</th>
+                        <th class="text-center">Tỷ Lệ Hoàn Thành</th>
+                        <th class="text-center">Đánh Giá (Sao)</th>
+                        <th class="text-center">Số Lượt Đánh Giá</th>
+                        <th class="text-end">Doanh Thu Đóng Góp</th>
                         <th class="text-end pe-3">Chi Tiết</th>
                     </tr>
                 </thead>
@@ -173,7 +135,7 @@
                     @if (!Model.Dentists.Any())
                     {
                         <tr>
-                            <td colspan="12" class="text-center py-4 text-muted">
+                            <td colspan="9" class="text-center py-4 text-muted">
                                 Khoa này hiện chưa có dữ liệu bác sĩ hoặc ca khám trong kỳ báo cáo.
                             </td>
                         </tr>
@@ -192,12 +154,9 @@
                                 </td>
                                 <td class="text-center fw-semibold">@d.TotalAppointments</td>
                                 <td class="text-center fw-bold text-success">@d.CompletedAppointments</td>
-                                <td class="text-center text-danger small">@(d.CancelledAppointments > 0 ? d.CancelledAppointments.ToString() : "-")</td>
-                                <td class="text-center fw-semibold text-primary">@d.DistinctPatientsTreated</td>
-                                <td class="text-center text-muted">@d.CompletedTreatmentSessions</td>
                                 <td class="text-center">
                                     <div class="d-flex align-items-center justify-content-center gap-2">
-                                        <div class="progress flex-grow-1" style="height: 6px; max-width: 60px;">
+                                        <div class="progress flex-grow-1" style="height: 6px; max-width: 70px;">
                                             <div class="progress-bar bg-success" role="progressbar" style="width: @d.CompletionRate%;"></div>
                                         </div>
                                         <span class="small fw-semibold">@d.CompletionRate%</span>
@@ -208,13 +167,12 @@
                                         <i class="bi bi-star-fill text-warning"></i>
                                         <span>@d.AverageRating.ToString("F1")</span>
                                     </div>
-                                    <div class="text-muted" style="font-size: 0.72rem;">@d.TotalFeedbacks lượt</div>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-light text-muted border">@d.TotalFeedbacks lượt</span>
                                 </td>
                                 <td class="text-end fw-bold text-primary">
                                     @d.TotalRevenueGenerated.ToString("N0") đ
-                                </td>
-                                <td class="text-end fw-semibold text-success">
-                                    @d.TotalPaidRevenue.ToString("N0") đ
                                 </td>
                                 <td class="text-end pe-3">
                                     <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#feedbackModal-@d.DentistUserId">

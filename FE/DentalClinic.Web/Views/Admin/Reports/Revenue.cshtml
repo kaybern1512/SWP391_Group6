@@ -16,22 +16,15 @@
             <h1 class="h3 fw-bold text-dark mb-1">
                 <i class="bi bi-graph-up-arrow text-primary me-2"></i>Báo Cáo & Phân Tích Doanh Thu
             </h1>
-            <p class="text-muted mb-0">Hệ thống phân tích tài chính &bull; Biểu đồ doanh thu theo thời gian, tỷ trọng chuyên khoa và xuất file Excel / CSV</p>
+            <p class="text-muted mb-0">Hệ thống phân tích tài chính &bull; Biểu đồ doanh thu theo thời gian, tỷ trọng chuyên khoa và xuất file Excel</p>
         </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <a asp-action="ExportRevenueXlsx"
+        <div class="d-flex gap-2">
+            <a asp-action="ExportRevenue"
                asp-route-fromDate="@fromDate"
                asp-route-toDate="@toDate"
                asp-route-departmentId="@selectedDeptId"
                class="btn btn-success shadow-sm">
-                <i class="bi bi-file-earmark-spreadsheet me-1"></i> Xuất Excel (.xlsx)
-            </a>
-            <a asp-action="ExportRevenueCsv"
-               asp-route-fromDate="@fromDate"
-               asp-route-toDate="@toDate"
-               asp-route-departmentId="@selectedDeptId"
-               class="btn btn-outline-success shadow-sm">
-                <i class="bi bi-file-earmark-text me-1"></i> Xuất CSV (UTF-8)
+                <i class="bi bi-file-earmark-excel me-1"></i> Xuất Báo Cáo Excel (CSV)
             </a>
         </div>
     </div>
@@ -81,20 +74,6 @@
                     <span class="text-muted small text-uppercase fw-semibold">Tổng Doanh Thu Hóa Đơn</span>
                     <h3 class="fw-bold text-primary mb-1 mt-1">@Model.TotalRevenue.ToString("N0") đ</h3>
                     <div class="small text-muted"><i class="bi bi-receipt me-1"></i>@Model.TotalInvoices hóa đơn phát sinh</div>
-                    @if (Model.PreviousPeriodRevenue > 0)
-                    {
-                        <div class="small mt-1 pt-1 border-top">
-                            @if (Model.RevenueGrowthPercentage >= 0)
-                            {
-                                <span class="text-success fw-semibold"><i class="bi bi-arrow-up-right"></i> +@Model.RevenueGrowthPercentage%</span>
-                            }
-                            else
-                            {
-                                <span class="text-danger fw-semibold"><i class="bi bi-arrow-down-right"></i> @Model.RevenueGrowthPercentage%</span>
-                            }
-                            <span class="text-muted ms-1">(Kỳ trước: @Model.PreviousPeriodRevenue.ToString("N0") đ)</span>
-                        </div>
-                    }
                 </div>
             </div>
         </div>
@@ -105,20 +84,6 @@
                     <span class="text-muted small text-uppercase fw-semibold">Số Tiền Thực Thu</span>
                     <h3 class="fw-bold text-success mb-1 mt-1">@Model.TotalPaid.ToString("N0") đ</h3>
                     <div class="small text-success fw-semibold"><i class="bi bi-check-circle me-1"></i>@recoveryRate% tổng viện phí</div>
-                    @if (Model.PreviousPeriodPaid > 0)
-                    {
-                        <div class="small mt-1 pt-1 border-top">
-                            @if (Model.PaidGrowthPercentage >= 0)
-                            {
-                                <span class="text-success fw-semibold"><i class="bi bi-arrow-up-right"></i> +@Model.PaidGrowthPercentage%</span>
-                            }
-                            else
-                            {
-                                <span class="text-danger fw-semibold"><i class="bi bi-arrow-down-right"></i> @Model.PaidGrowthPercentage%</span>
-                            }
-                            <span class="text-muted ms-1">(Kỳ trước: @Model.PreviousPeriodPaid.ToString("N0") đ)</span>
-                        </div>
-                    }
                 </div>
             </div>
         </div>
@@ -128,13 +93,7 @@
                 <div class="card-body">
                     <span class="text-muted small text-uppercase fw-semibold">Số Tiền Còn Chờ Thu</span>
                     <h3 class="fw-bold text-danger mb-1 mt-1">@Model.TotalRemaining.ToString("N0") đ</h3>
-                    <div class="small text-muted">
-                        <i class="bi bi-hourglass-split me-1"></i>@Model.UnpaidInvoices HĐ chưa trả, @Model.PartiallyPaidInvoices HĐ cọc
-                        @if (Model.CancelledInvoices > 0)
-                        {
-                            <span class="badge bg-secondary-subtle text-secondary border small ms-1">@Model.CancelledInvoices HĐ hủy</span>
-                        }
-                    </div>
+                    <div class="small text-muted"><i class="bi bi-hourglass-split me-1"></i>@Model.UnpaidInvoices HĐ chưa trả, @Model.PartiallyPaidInvoices HĐ cọc</div>
                 </div>
             </div>
         </div>
@@ -145,9 +104,6 @@
                     <span class="text-muted small text-uppercase fw-semibold">Hóa Đơn Hoàn Tất</span>
                     <h3 class="fw-bold text-dark mb-1 mt-1">@Model.PaidInvoices</h3>
                     <div class="small text-muted">trên tổng số @Model.TotalInvoices hóa đơn</div>
-                    <div class="small text-muted mt-1 pt-1 border-top">
-                        <i class="bi bi-clock-history me-1"></i>Từ @(Model.FromDate?.ToString("dd/MM/yyyy") ?? "--") đến @(Model.ToDate?.ToString("dd/MM/yyyy") ?? "--")
-                    </div>
                 </div>
             </div>
         </div>
@@ -155,21 +111,14 @@
 
     <!-- Charts Row -->
     <div class="row g-4 mb-4">
-        <!-- Line Chart: Revenue Trend (Day / Week / Month) -->
+        <!-- Line Chart: Daily Revenue Trend -->
         <div class="col-12 col-xl-8">
             <div class="card border-0 shadow-sm rounded-3 h-100">
-                <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
-                    <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-activity text-primary fs-5"></i>
-                        <h5 class="card-title mb-0 fw-bold text-dark" id="chartTitle">Xu Hướng Doanh Thu Theo Ngày</h5>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="btn-group btn-group-sm" role="group" aria-label="Kỳ hiển thị">
-                            <button type="button" class="btn btn-outline-primary active" id="btnDaily">Ngày</button>
-                            <button type="button" class="btn btn-outline-primary" id="btnWeekly">Tuần</button>
-                            <button type="button" class="btn btn-outline-primary" id="btnMonthly">Tháng</button>
-                        </div>
-                    </div>
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+                    <h5 class="card-title mb-0 fw-bold text-dark">
+                        <i class="bi bi-activity text-primary me-2"></i>Xu Hướng Doanh Thu Theo Ngày
+                    </h5>
+                    <span class="badge bg-light text-muted border font-monospace">Chart.js</span>
                 </div>
                 <div class="card-body p-3">
                     <div style="height: 320px; position: relative;">
@@ -210,29 +159,20 @@
 
     <!-- Details Table -->
     <div class="card border-0 shadow-sm rounded-3 mb-4">
-        <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
             <div>
                 <h5 class="card-title mb-0 fw-bold text-dark">
                     <i class="bi bi-table text-primary me-2"></i>Chi Tiết Hóa Đơn Trong Kỳ Báo Cáo (@Model.Invoices.Count hóa đơn)
                 </h5>
                 <span class="text-muted small">Từ ngày @(Model.FromDate?.ToString("dd/MM/yyyy") ?? "--") đến @(Model.ToDate?.ToString("dd/MM/yyyy") ?? "--")</span>
             </div>
-            <div class="d-flex gap-2">
-                <a asp-action="ExportRevenueXlsx"
-                   asp-route-fromDate="@fromDate"
-                   asp-route-toDate="@toDate"
-                   asp-route-departmentId="@selectedDeptId"
-                   class="btn btn-outline-success btn-sm">
-                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Tải bảng tính Excel (.xlsx)
-                </a>
-                <a asp-action="ExportRevenueCsv"
-                   asp-route-fromDate="@fromDate"
-                   asp-route-toDate="@toDate"
-                   asp-route-departmentId="@selectedDeptId"
-                   class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-download me-1"></i> Tải CSV
-                </a>
-            </div>
+            <a asp-action="ExportRevenue"
+               asp-route-fromDate="@fromDate"
+               asp-route-toDate="@toDate"
+               asp-route-departmentId="@selectedDeptId"
+               class="btn btn-outline-success btn-sm">
+                <i class="bi bi-download me-1"></i> Tải bảng tính Excel
+            </a>
         </div>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
@@ -293,10 +233,6 @@
                                     {
                                         <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1">Đặt cọc</span>
                                     }
-                                    else if (inv.Status == "Cancelled")
-                                    {
-                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1">Đã hủy</span>
-                                    }
                                     else
                                     {
                                         <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">Chưa thu</span>
@@ -316,28 +252,20 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            // Trend data sets
-            const dailyLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DailyTrend.Select(d => d.DisplayDate)));
-            const dailyRevenueData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DailyTrend.Select(d => d.Revenue)));
-            const dailyPaidData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DailyTrend.Select(d => d.PaidAmount)));
-
-            const weeklyLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.WeeklyTrend.Select(w => w.WeekLabel)));
-            const weeklyRevenueData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.WeeklyTrend.Select(w => w.Revenue)));
-            const weeklyPaidData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.WeeklyTrend.Select(w => w.PaidAmount)));
-
-            const monthlyLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MonthlyTrend.Select(m => m.MonthLabel)));
-            const monthlyRevenueData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MonthlyTrend.Select(m => m.Revenue)));
-            const monthlyPaidData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MonthlyTrend.Select(m => m.PaidAmount)));
+            // Line Chart: Daily Revenue
+            const lineLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DailyTrend.Select(d => d.DisplayDate)));
+            const lineRevenueData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DailyTrend.Select(d => d.Revenue)));
+            const linePaidData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DailyTrend.Select(d => d.PaidAmount)));
 
             const ctxLine = document.getElementById('revenueLineChart').getContext('2d');
-            const lineChart = new Chart(ctxLine, {
+            new Chart(ctxLine, {
                 type: 'line',
                 data: {
-                    labels: dailyLabels,
+                    labels: lineLabels,
                     datasets: [
                         {
                             label: 'Doanh thu phát sinh (VNĐ)',
-                            data: dailyRevenueData,
+                            data: lineRevenueData,
                             borderColor: '#0d6efd',
                             backgroundColor: 'rgba(13, 110, 253, 0.1)',
                             fill: true,
@@ -347,7 +275,7 @@
                         },
                         {
                             label: 'Thực thu tiền mặt/chuyển khoản (VNĐ)',
-                            data: dailyPaidData,
+                            data: linePaidData,
                             borderColor: '#198754',
                             backgroundColor: 'rgba(25, 135, 84, 0.05)',
                             borderDash: [5, 5],
@@ -384,46 +312,6 @@
                     }
                 }
             });
-
-            // Toggle Day / Week / Month
-            const btnDaily = document.getElementById('btnDaily');
-            const btnWeekly = document.getElementById('btnWeekly');
-            const btnMonthly = document.getElementById('btnMonthly');
-            const chartTitle = document.getElementById('chartTitle');
-
-            function setActiveButton(btn) {
-                [btnDaily, btnWeekly, btnMonthly].forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-            }
-
-            if (btnDaily && btnWeekly && btnMonthly) {
-                btnDaily.addEventListener('click', function() {
-                    setActiveButton(btnDaily);
-                    chartTitle.textContent = 'Xu Hướng Doanh Thu Theo Ngày';
-                    lineChart.data.labels = dailyLabels;
-                    lineChart.data.datasets[0].data = dailyRevenueData;
-                    lineChart.data.datasets[1].data = dailyPaidData;
-                    lineChart.update();
-                });
-
-                btnWeekly.addEventListener('click', function() {
-                    setActiveButton(btnWeekly);
-                    chartTitle.textContent = 'Xu Hướng Doanh Thu Theo Tuần';
-                    lineChart.data.labels = weeklyLabels;
-                    lineChart.data.datasets[0].data = weeklyRevenueData;
-                    lineChart.data.datasets[1].data = weeklyPaidData;
-                    lineChart.update();
-                });
-
-                btnMonthly.addEventListener('click', function() {
-                    setActiveButton(btnMonthly);
-                    chartTitle.textContent = 'Xu Hướng Doanh Thu Theo Tháng';
-                    lineChart.data.labels = monthlyLabels;
-                    lineChart.data.datasets[0].data = monthlyRevenueData;
-                    lineChart.data.datasets[1].data = monthlyPaidData;
-                    lineChart.update();
-                });
-            }
 
             // Doughnut Chart: Department Distribution
             const doughnutLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DepartmentDistribution.Select(d => d.DepartmentName)));

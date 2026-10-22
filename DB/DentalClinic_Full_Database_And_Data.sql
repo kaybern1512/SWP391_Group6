@@ -1,4 +1,4 @@
--- =========================================================================================
+﻿-- =========================================================================================
 -- DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)
 -- FULL DATABASE SCHEMA & COMPLETE 30+ DEMO ACCOUNTS SEED DATASET
 -- Target: SQL Server (2017 / 2019 / 2022 / LocalDB / SQLEXPRESS)
@@ -422,8 +422,6 @@ CREATE TABLE DepartmentReferrals (
     AssignedDentistUserId BIGINT NULL,
     ReviewedByUserId BIGINT NULL,
     Reason NVARCHAR(1000) NOT NULL,
-    Urgency VARCHAR(20) NOT NULL DEFAULT 'Normal' CHECK (Urgency IN ('Normal', 'Urgent')),
-    ClinicalInstructions NVARCHAR(2000) NULL,
     Status VARCHAR(30) NOT NULL DEFAULT 'Pending' CHECK (Status IN ('Pending','Accepted','Rejected','Assigned','Completed')),
     CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
     ReviewedAt DATETIME2 NULL,

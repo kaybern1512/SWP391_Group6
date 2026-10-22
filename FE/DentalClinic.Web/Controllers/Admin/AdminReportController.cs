@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using DentalClinic.Web.Helpers;
 using DentalClinic.Web.Models.ApiDtos;
 using DentalClinic.Web.Models.Reports;
 using DentalClinic.Web.Services;
@@ -31,7 +30,7 @@ public class AdminReportController : Controller
         [FromQuery] DateTime? toDate = null,
         [FromQuery] long? departmentId = null)
     {
-        var end = toDate ?? ClinicDateTimeHelper.GetClinicToday();
+        var end = toDate ?? DateTime.Today;
         var start = fromDate ?? end.AddDays(-29);
 
         var reportTask = _reportApiService.GetRevenueReportAsync(start, end, departmentId);
@@ -55,7 +54,6 @@ public class AdminReportController : Controller
     }
 
     [HttpGet("ExportRevenue")]
-    [HttpGet("ExportRevenueCsv")]
     public async Task<IActionResult> ExportRevenue(
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null,
@@ -64,23 +62,7 @@ public class AdminReportController : Controller
         var (data, contentType, fileName) = await _reportApiService.DownloadRevenueCsvAsync(fromDate, toDate, departmentId);
         if (data == null || data.Length == 0)
         {
-            TempData["ErrorMessage"] = "Không thể xuất file CSV báo cáo doanh thu.";
-            return RedirectToAction(nameof(Revenue), new { fromDate, toDate, departmentId });
-        }
-
-        return File(data, contentType, fileName);
-    }
-
-    [HttpGet("ExportRevenueXlsx")]
-    public async Task<IActionResult> ExportRevenueXlsx(
-        [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null,
-        [FromQuery] long? departmentId = null)
-    {
-        var (data, contentType, fileName) = await _reportApiService.DownloadRevenueXlsxAsync(fromDate, toDate, departmentId);
-        if (data == null || data.Length == 0)
-        {
-            TempData["ErrorMessage"] = "Không thể xuất file Excel báo cáo doanh thu.";
+            TempData["ErrorMessage"] = "Không thể xuất file báo cáo doanh thu.";
             return RedirectToAction(nameof(Revenue), new { fromDate, toDate, departmentId });
         }
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -18,10 +18,6 @@ public partial class DepartmentReferral
     public long? ReviewedByUserId { get; set; }
 
     public string Reason { get; set; } = null!;
-
-    public string? ClinicalInstructions { get; set; }
-
-    public string Urgency { get; set; } = "Normal";
 
     public string Status { get; set; } = null!;
 

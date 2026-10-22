@@ -25,18 +25,3 @@ public class PatientFollowUpIndexViewModel
 {
     public List<FollowUpScheduleDto> FollowUps { get; set; } = new();
 }
-
-public class ReceptionistFollowUpIndexViewModel
-{
-    public List<ReceptionistFollowUpDto> FollowUps { get; set; } = new();
-    public System.DateTime? FromDate { get; set; }
-    public System.DateTime? ToDate { get; set; }
-    public string? StatusFilter { get; set; }
-    public string? QuickFilter { get; set; } = "all"; // "all", "today", "week", "overdue", "upcoming"
-    public string? SearchKeyword { get; set; }
-
-    public int TotalCount => FollowUps.Count;
-    public int TodayCount => FollowUps.FindAll(f => f.IsToday).Count;
-    public int OverdueCount => FollowUps.FindAll(f => f.IsOverdue).Count;
-    public int UpcomingCount => FollowUps.FindAll(f => f.IsUpcoming).Count;
-}

@@ -180,47 +180,4 @@ public class PostCareWebControllerTests
         var model = viewResult.Model.Should().BeOfType<PatientFollowUpIndexViewModel>().Subject;
         model.FollowUps.Should().HaveCount(1);
     }
-
-    [Fact]
-    public async Task ReceptionistFollowUpController_Index_ReturnsViewWithFilteredFollowUps()
-    {
-        var followUps = new List<ReceptionistFollowUpDto>
-        {
-            new()
-            {
-                FollowUpId = 1,
-                PatientName = "Nguyễn Văn A",
-                PatientCode = "PAT-001",
-                PhoneNumber = "0987654321",
-                RecommendedDate = DateTime.UtcNow.Date,
-                Status = "Pending"
-            },
-            new()
-            {
-                FollowUpId = 2,
-                PatientName = "Trần Thị B",
-                PatientCode = "PAT-002",
-                PhoneNumber = "0912345678",
-                RecommendedDate = DateTime.UtcNow.Date.AddDays(-2),
-                Status = "Pending"
-            }
-        };
-
-        _postCareApiMock.Setup(x => x.GetReceptionistFollowUpsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>()))
-            .ReturnsAsync(ApiResult<List<ReceptionistFollowUpDto>>.Success(followUps));
-
-        var controller = new DentalClinic.Web.Controllers.Receptionist.ReceptionistFollowUpController(_postCareApiMock.Object)
-        {
-            ControllerContext = CreateContextWithUser(5, "Receptionist", "Lễ Tân"),
-            TempData = CreateTempData()
-        };
-
-        // Test search by patient name
-        var result = await controller.Index(null, null, null, "all", "Nguyễn");
-
-        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
-        var model = viewResult.Model.Should().BeOfType<ReceptionistFollowUpIndexViewModel>().Subject;
-        model.FollowUps.Should().HaveCount(1);
-        model.FollowUps[0].PatientName.Should().Be("Nguyễn Văn A");
-    }
 }

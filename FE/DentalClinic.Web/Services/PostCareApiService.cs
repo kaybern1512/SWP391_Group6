@@ -63,25 +63,6 @@ public class PostCareApiService : IPostCareApiService
         return await SendGetAsync<List<FollowUpScheduleDto>>("/api/post-care/follow-ups/dentist");
     }
 
-    public async Task<ApiResult<List<ReceptionistFollowUpDto>>> GetReceptionistFollowUpsAsync(DateTime? fromDate = null, DateTime? toDate = null, string? status = null)
-    {
-        var queryParams = new List<string>();
-        if (fromDate.HasValue)
-            queryParams.Add($"fromDate={fromDate.Value:yyyy-MM-dd}");
-        if (toDate.HasValue)
-            queryParams.Add($"toDate={toDate.Value:yyyy-MM-dd}");
-        if (!string.IsNullOrWhiteSpace(status))
-            queryParams.Add($"status={Uri.EscapeDataString(status.Trim())}");
-
-        var url = "/api/post-care/follow-ups/receptionist";
-        if (queryParams.Count > 0)
-        {
-            url += "?" + string.Join("&", queryParams);
-        }
-
-        return await SendGetAsync<List<ReceptionistFollowUpDto>>(url);
-    }
-
     // ==========================================
     // HTTP HELPERS
     // ==========================================

@@ -60,7 +60,6 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th class="ps-4">Mã Phiếu</th>
-                                        <th>Mức Độ</th>
                                         <th>Bệnh Nhân</th>
                                         <th>Từ Khoa</th>
                                         <th>Chuyển Đến</th>
@@ -73,21 +72,8 @@
                                 <tbody>
                                     @foreach (var r in Model.Referrals)
                                     {
-                                        var isUrgent = r.Urgency == "Urgent";
-                                        <tr class="@(isUrgent ? "table-danger-subtle" : "")">
+                                        <tr>
                                             <td class="ps-4 fw-bold text-primary">#REF-@r.ReferralId</td>
-                                            <td>
-                                                @if (isUrgent)
-                                                {
-                                                    <span class="badge bg-danger">
-                                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Khẩn cấp
-                                                    </span>
-                                                }
-                                                else
-                                                {
-                                                    <span class="badge bg-light text-secondary border">Bình thường</span>
-                                                }
-                                            </td>
                                             <td>
                                                 <div class="fw-bold text-dark">@r.PatientName</div>
                                                 <div class="small text-muted">@(r.PatientCode ?? "BN-" + r.PatientUserId)</div>
@@ -128,15 +114,8 @@
                                             </td>
                                             <td class="small text-muted">@r.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
                                             <td class="pe-4 text-end">
-                                                @{
-                                                    var popoverDetails = $"Lý do: {r.Reason}";
-                                                    if (!string.IsNullOrWhiteSpace(r.ClinicalInstructions))
-                                                    {
-                                                        popoverDetails += $"\n\nDặn dò lâm sàng: {r.ClinicalInstructions}";
-                                                    }
-                                                }
-                                                <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="popover" data-bs-trigger="focus" data-bs-placement="left" title="Chi Tiết Hội Chẩn" data-bs-content="@popoverDetails">
-                                                    <i class="bi bi-info-circle me-1"></i>Xem Chi Tiết
+                                                <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="popover" data-bs-trigger="focus" data-bs-placement="left" title="Lý Do Hội Chẩn & Dặn Dò" data-bs-content="@r.Reason">
+                                                    <i class="bi bi-info-circle me-1"></i>Xem Lý Do
                                                 </button>
                                             </td>
                                         </tr>
@@ -268,34 +247,8 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Mức độ khẩn cấp <span class="text-danger">*</span></label>
-                        <div class="d-flex gap-4 p-2 bg-light rounded border">
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="Urgency" id="urgencyNormal" value="Normal" checked>
-                                <label class="form-check-label fw-semibold text-secondary" for="urgencyNormal">
-                                    <i class="bi bi-shield-check text-success me-1"></i>Bình thường (Normal)
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="Urgency" id="urgencyUrgent" value="Urgent">
-                                <label class="form-check-label fw-semibold text-danger" for="urgencyUrgent">
-                                    <i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>Khẩn cấp (Urgent)
-                                </label>
-                            </div>
-                        </div>
-                        <div class="form-text">Phiếu "Khẩn cấp" sẽ được ưu tiên hiển thị đầu tiên và nổi bật trong danh sách duyệt của Trưởng khoa.</div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Lý do chuyển khoa <span class="text-danger">*</span></label>
-                        <textarea name="Reason" class="form-control" rows="3" placeholder="Ghi rõ lý do chuyển chuyên khoa (ví dụ: cần nhổ răng ngầm trước chỉnh nha, điều trị tủy chân răng cong phức tạp, phẫu thuật nha chu sâu...)" required></textarea>
-                        <div class="form-text">Mục đích chính của việc chuyển viện/chuyên khoa phối hợp.</div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Dặn dò & Hướng dẫn chuyên môn đi kèm</label>
-                        <textarea name="ClinicalInstructions" class="form-control" rows="2" placeholder="Dặn dò chuyên môn hoặc lưu ý lâm sàng đi kèm (tùy chọn: đã chụp CT ConeBeam, đã thử tủy, dị ứng kháng sinh, lưu ý khi gây tê...)"></textarea>
-                        <div class="form-text">Thông tin dặn dò lâm sàng để bác sĩ tiếp nhận phối hợp điều trị an toàn và chuẩn xác.</div>
+                        <label class="form-label fw-semibold">Lý do chuyển khoa & Dặn dò lâm sàng <span class="text-danger">*</span></label>
+                        <textarea name="Reason" class="form-control" rows="4" placeholder="Ghi rõ tình trạng hiện tại của răng/hàm, lý do chuyển (vd: cần nhổ răng ngầm trước chỉnh nha, điều trị nha chu sâu, cấy ghép implant...), hình ảnh x-quang đã chụp..." required></textarea>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
