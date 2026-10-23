@@ -5,7 +5,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Common.Validation;
 using DentalClinic.Application.Features.MedicalRecords.DTOs;
+using DentalClinic.Application.Validators;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
@@ -17,6 +19,8 @@ namespace DentalClinic.Infrastructure.Services;
 public class MedicalRecordService : IMedicalRecordService
 {
     private readonly DentalClinicDbContext _dbContext;
+    private readonly IImageStorageService? _imageStorageService;
+    private readonly IDentalImageFileValidator _fileValidator;
     private readonly ILogger<MedicalRecordService> _logger;
 
     private static readonly string[] All32Teeth = new[]
@@ -32,8 +36,19 @@ public class MedicalRecordService : IMedicalRecordService
     public MedicalRecordService(
         DentalClinicDbContext dbContext,
         ILogger<MedicalRecordService> logger)
+        : this(dbContext, null, null, logger)
+    {
+    }
+
+    public MedicalRecordService(
+        DentalClinicDbContext dbContext,
+        IImageStorageService? imageStorageService,
+        IDentalImageFileValidator? fileValidator,
+        ILogger<MedicalRecordService> logger)
     {
         _dbContext = dbContext;
+        _imageStorageService = imageStorageService;
+        _fileValidator = fileValidator ?? new DentalImageFileValidator();
         _logger = logger;
     }
 
@@ -443,5 +458,162 @@ public class MedicalRecordService : IMedicalRecordService
         };
 
         return ApiResponse<ImagingRecordDto>.Ok(dto, "Lưu thông tin phim chụp X-quang thành công.");
+    }
+
+    public Task<ApiResponse<ImagingRecordMetadataDto>> UploadImagingRecordAsync(
+        long currentUserId,
+        UploadImagingRecordRequest request,
+        CancellationToken ct = default)
+    {
+        return UploadImagingRecordAsync(currentUserId, null, request, ct);
+    }
+
+    public async Task<ApiResponse<ImagingRecordMetadataDto>> UploadImagingRecordAsync(
+        long currentUserId,
+        string? currentUserRole,
+        UploadImagingRecordRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null)
+        {
+            return ApiResponse<ImagingRecordMetadataDto>.Fail("Dữ liệu yêu cầu tải lên không được để trống.");
+        }
+
+        // 1. Validate request structure and rules via Day 01 validator
+        var requestValidator = new UploadImagingRecordRequestValidator();
+        var valResult = await requestValidator.ValidateAsync(request, ct);
+        if (!valResult.IsValid)
+        {
+            return ApiResponse<ImagingRecordMetadataDto>.Fail(
+                valResult.Errors.First().ErrorMessage,
+                valResult.Errors.Select(e => e.ErrorMessage).ToList());
+        }
+
+        // 2. Strict classification check against supported dental imaging types
+        if (!DentalImagingType.IsValid(request.ImagingType))
+        {
+            return ApiResponse<ImagingRecordMetadataDto>.Fail(
+                "Loại phim chụp không hợp lệ. Chỉ chấp nhận 4 loại: Panorama, Periapical, Cephalometric, Intraoral.");
+        }
+
+        var normalizedType = DentalImagingType.Normalize(request.ImagingType) ?? request.ImagingType.Trim();
+
+        // 3. Secure file validation (size, extension, mime, binary signatures)
+        var fileValidation = _fileValidator.Validate(request.File);
+        if (!fileValidation.IsValid)
+        {
+            return ApiResponse<ImagingRecordMetadataDto>.Fail(fileValidation.ErrorMessage ?? "Tập tin hình ảnh không hợp lệ.");
+        }
+
+        // 4. Verify ClinicalEntry exists
+        var entry = await _dbContext.ClinicalEntries
+            .Include(c => c.MedicalRecord)
+            .Include(c => c.Appointment)
+            .FirstOrDefaultAsync(c => c.ClinicalEntryId == request.ClinicalEntryId, ct);
+
+        if (entry == null)
+        {
+            return ApiResponse<ImagingRecordMetadataDto>.Fail("Không tìm thấy đợt khám lâm sàng tương ứng.");
+        }
+
+        // 5. Authorization & access control: dentist must be assigned to this clinical entry/appointment
+        if (currentUserId <= 0)
+        {
+            return ApiResponse<ImagingRecordMetadataDto>.Fail("Người dùng chưa đăng nhập hoặc danh tính không hợp lệ.");
+        }
+
+        if (string.Equals(currentUserRole, UserRole.Dentist, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(currentUserRole))
+        {
+            var isAssignedDentist = entry.DentistUserId == currentUserId ||
+                (entry.Appointment != null && entry.Appointment.AssignedDentistUserId == currentUserId);
+
+            if (!isAssignedDentist)
+            {
+                return ApiResponse<ImagingRecordMetadataDto>.Fail(
+                    "Bác sĩ không có quyền thao tác tải lên phim chụp cho đợt khám của bác sĩ khác.");
+            }
+        }
+        else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(currentUserRole, UserRole.DepartmentManager, StringComparison.OrdinalIgnoreCase))
+        {
+            return ApiResponse<ImagingRecordMetadataDto>.Fail(
+                "Bạn không có quyền thực hiện thao tác tải lên hình ảnh y tế.");
+        }
+
+        // 6. Upload file through storage service
+        if (_imageStorageService == null)
+        {
+            _logger.LogError("Image storage service is not configured or resolved.");
+            return ApiResponse<ImagingRecordMetadataDto>.Fail("Dịch vụ lưu trữ hình ảnh chưa sẵn sàng.");
+        }
+
+        DentalImageUploadResult uploadResult;
+        try
+        {
+            var subFolder = $"entry_{entry.ClinicalEntryId}";
+            uploadResult = await _imageStorageService.UploadDentalImageAsync(request.File, subFolder, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to upload dental imaging file to storage for ClinicalEntry {EntryId}", entry.ClinicalEntryId);
+            return ApiResponse<ImagingRecordMetadataDto>.Fail($"Tải hình ảnh lên hệ thống lưu trữ thất bại: {ex.Message}");
+        }
+
+        // 7. Save record into database (ImagingRecords) with rollback cleanup on error
+        var imagingRecord = new ImagingRecord
+        {
+            ClinicalEntryId = entry.ClinicalEntryId,
+            ImagingType = normalizedType,
+            FileUrl = uploadResult.Url,
+            ResultSummary = string.IsNullOrWhiteSpace(request.ResultSummary) ? null : request.ResultSummary.Trim(),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        try
+        {
+            _dbContext.ImagingRecords.Add(imagingRecord);
+            if (entry.MedicalRecord != null)
+            {
+                entry.MedicalRecord.UpdatedAt = DateTime.UtcNow;
+            }
+            await _dbContext.SaveChangesAsync(ct);
+        }
+        catch (Exception dbEx)
+        {
+            _logger.LogError(dbEx, "Database save failed for ImagingRecord in ClinicalEntry {EntryId}. Cleaning up uploaded storage asset {PublicId}.",
+                entry.ClinicalEntryId, uploadResult.PublicId);
+
+            // Clean up uploaded file to prevent orphaned storage assets
+            if (!string.IsNullOrEmpty(uploadResult.PublicId))
+            {
+                try
+                {
+                    await _imageStorageService.DeleteDentalImageAsync(uploadResult.PublicId, CancellationToken.None);
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogWarning(cleanupEx, "Failed to rollback/delete storage asset {PublicId} after database save error.", uploadResult.PublicId);
+                }
+            }
+
+            return ApiResponse<ImagingRecordMetadataDto>.Fail("Lưu thông tin hồ sơ hình ảnh vào cơ sở dữ liệu thất bại.");
+        }
+
+        // 8. Return response matching architecture
+        var responseDto = new ImagingRecordMetadataDto
+        {
+            ImagingRecordId = imagingRecord.ImagingRecordId,
+            ClinicalEntryId = imagingRecord.ClinicalEntryId,
+            ImagingType = imagingRecord.ImagingType,
+            FileUrl = imagingRecord.FileUrl,
+            ResultSummary = imagingRecord.ResultSummary,
+            CreatedAt = imagingRecord.CreatedAt,
+            OriginalFileName = request.File.FileName,
+            MimeType = request.File.ContentType,
+            FileSizeBytes = uploadResult.FileSizeBytes,
+            StorageProvider = uploadResult.StorageProvider
+        };
+
+        return ApiResponse<ImagingRecordMetadataDto>.Ok(responseDto, "Tải lên và lưu hồ sơ hình ảnh X-quang thành công.");
     }
 }

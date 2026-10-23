@@ -1,4 +1,5 @@
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Validation;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +23,7 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
         services.AddSingleton<IOtpService, OtpService>();
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
+        services.AddSingleton<IDentalImageFileValidator, DentalImageFileValidator>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IGoogleAuthService, GoogleAuthService>();
         services.AddScoped<IImageStorageService, CloudinaryImageStorageService>();
