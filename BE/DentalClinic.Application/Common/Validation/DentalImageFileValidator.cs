@@ -60,15 +60,7 @@ public class DentalImageFileValidator : IDentalImageFileValidator
         }
 
         // 2. File size validation
-        long actualLength = 0;
-        if (fileStream.CanSeek)
-        {
-            actualLength = fileStream.Length;
-        }
-        else if (declaredLength.HasValue && declaredLength.Value > 0)
-        {
-            actualLength = declaredLength.Value;
-        }
+        long actualLength = Math.Max(declaredLength ?? 0, fileStream.CanSeek ? fileStream.Length : 0);
 
         if (actualLength <= 0)
         {

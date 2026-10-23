@@ -559,6 +559,11 @@ public class MedicalRecordService : IMedicalRecordService
             return ApiResponse<ImagingRecordMetadataDto>.Fail($"Tải hình ảnh lên hệ thống lưu trữ thất bại: {ex.Message}");
         }
 
+        if (uploadResult == null || string.IsNullOrWhiteSpace(uploadResult.Url))
+        {
+            return ApiResponse<ImagingRecordMetadataDto>.Fail("Không nhận được thông tin tệp tải lên từ hệ thống lưu trữ.");
+        }
+
         // 7. Save record into database (ImagingRecords) with rollback cleanup on error
         var imagingRecord = new ImagingRecord
         {
