@@ -305,6 +305,8 @@ public class MedicalRecordController : ControllerBase
             return BadRequest(ApiResponse.Fail(result.Message ?? "Không thể lấy nội dung hình ảnh y tế."));
         }
 
+        Response.Headers.CacheControl = "no-store, private";
+        Response.Headers.Pragma = "no-cache";
         return File(result.Data.Stream, result.Data.ContentType, result.Data.FileName);
     }
 

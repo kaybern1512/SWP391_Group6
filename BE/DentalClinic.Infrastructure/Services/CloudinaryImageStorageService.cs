@@ -261,6 +261,7 @@ public class CloudinaryImageStorageService : IImageStorageService
 
     /// <summary>
     /// Retrieves a secure read stream of an image asset from storage for authorized server-side delivery.
+    /// Incorporates SSRF guard: only HTTPS requests targeting legitimate Cloudinary domains are permitted.
     /// </summary>
     public async Task<Stream?> GetImageStreamAsync(string fileUrl, CancellationToken ct = default)
     {
@@ -269,17 +270,26 @@ public class CloudinaryImageStorageService : IImageStorageService
             return null;
         }
 
+        if (!IsAllowedCloudinaryStorageUri(uri))
+        {
+            _logger.LogWarning("Potential SSRF attempt or disallowed storage URL blocked: {FileUrl}", fileUrl);
+            return null;
+        }
+
         try
         {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(15));
+
             using var httpClient = new System.Net.Http.HttpClient();
-            var response = await httpClient.GetAsync(uri, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, ct);
+            var response = await httpClient.GetAsync(uri, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cts.Token);
             if (!response.IsSuccessStatusCode)
             {
                 return null;
             }
 
             var ms = new MemoryStream();
-            await response.Content.CopyToAsync(ms, ct);
+            await response.Content.CopyToAsync(ms, cts.Token);
             ms.Position = 0;
             return ms;
         }
@@ -288,5 +298,36 @@ public class CloudinaryImageStorageService : IImageStorageService
             _logger.LogWarning(ex, "Failed to retrieve image stream from URL {FileUrl}", fileUrl);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Validates that a storage URI is strictly HTTPS and points exclusively to approved Cloudinary domains,
+    /// protecting against Server-Side Request Forgery (SSRF) targeting internal networks or cloud metadata.
+    /// </summary>
+    public static bool IsAllowedCloudinaryStorageUri(Uri uri)
+    {
+        if (uri == null || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            return false;
+        }
+
+        var host = uri.Host.ToLowerInvariant();
+
+        // Reject raw IP addresses (IPv4 or IPv6)
+        if (System.Net.IPAddress.TryParse(host, out _))
+        {
+            return false;
+        }
+
+        // Reject localhost and internal network identifiers
+        if (host is "localhost" || host.EndsWith(".local") || host.EndsWith(".internal"))
+        {
+            return false;
+        }
+
+        // Only allow official Cloudinary domains
+        return host == "res.cloudinary.com" ||
+               host == "api.cloudinary.com" ||
+               host.EndsWith(".cloudinary.com");
     }
 }

@@ -59,6 +59,8 @@ public class PatientMedicalRecordController : Controller
             return StatusCode(statusCode);
         }
 
+        Response.Headers.CacheControl = "no-store, private";
+        Response.Headers.Pragma = "no-cache";
         return File(stream, contentType);
     }
 }
