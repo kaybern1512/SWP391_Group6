@@ -63,6 +63,11 @@ public class PostCareApiService : IPostCareApiService
         return await SendGetAsync<List<FollowUpScheduleDto>>("/api/post-care/follow-ups/dentist");
     }
 
+    public async Task<ApiResult<List<FollowUpScheduleDto>>> GetReceptionistFollowUpsAsync()
+    {
+        return await SendGetAsync<List<FollowUpScheduleDto>>("/api/post-care/follow-ups/receptionist");
+    }
+
     // ==========================================
     // HTTP HELPERS
     // ==========================================

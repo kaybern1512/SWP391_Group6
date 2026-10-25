@@ -1,0 +1,71 @@
+@model DentalClinic.Web.ViewModels.PostCare.PatientFollowUpIndexViewModel
+@{
+    ViewData["Title"] = "Theo Dõi Tái Khám";
+}
+
+<div class="container-fluid px-0">
+    <div class="mb-4">
+        <h1 class="h3 fw-bold text-dark mb-1">
+            <i class="bi bi-telephone-forward me-2 text-primary"></i>Danh Sách Theo Dõi Tái Khám
+        </h1>
+        <p class="text-muted mb-0">Liên hệ bệnh nhân để nhắc lịch tái khám theo chỉ định của bác sĩ.</p>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Ngày tái khám</th>
+                        <th>Bệnh nhân</th>
+                        <th>Điện thoại</th>
+                        <th>Chuyên khoa / Bác sĩ</th>
+                        <th>Nội dung</th>
+                        <th>Trạng thái</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.FollowUps.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-5">Chưa có lịch tái khám cần theo dõi.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var followUp in Model.FollowUps)
+                        {
+                            <tr>
+                                <td class="ps-4 fw-semibold">@followUp.RecommendedDate.ToString("dd/MM/yyyy")</td>
+                                <td>
+                                    <div class="fw-semibold">@followUp.PatientName</div>
+                                    <div class="small text-muted">@followUp.PatientCode</div>
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(followUp.PatientPhoneNumber))
+                                    {
+                                        <a href="tel:@followUp.PatientPhoneNumber">@followUp.PatientPhoneNumber</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">Chưa có số điện thoại</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div>@followUp.DepartmentName</div>
+                                    <div class="small text-muted">BS. @followUp.DentistName</div>
+                                </td>
+                                <td>@followUp.Reason</td>
+                                <td>
+                                    <span class="badge @(followUp.Status == "Completed" ? "bg-success" : followUp.Status == "Cancelled" ? "bg-secondary" : "bg-warning text-dark")">
+                                        @followUp.Status
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
