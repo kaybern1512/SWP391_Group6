@@ -98,6 +98,37 @@
     .tooth-extractionneeded { border-color: #f97316; background: #fff7ed; }
     .tooth-extractionneeded .tooth-icon { color: #ea580c; }
     .tooth-extractionneeded .tooth-status-tag { background: #ffedd5; color: #c2410c; }
+
+    /* Imaging Gallery & Lightbox Styles */
+    .img-thumbnail-fit {
+        object-fit: cover;
+        object-position: center;
+        transition: transform 0.25s ease;
+    }
+    .imaging-preview-container:hover .img-thumbnail-fit {
+        transform: scale(1.05);
+    }
+    .imaging-zoom-overlay {
+        transition: opacity 0.2s ease;
+        pointer-events: none;
+    }
+    .imaging-preview-container:hover .imaging-zoom-overlay {
+        opacity: 1 !important;
+    }
+    .fs-11 { font-size: 0.72rem; }
+    .text-truncate-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .btn-xs {
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+        border-radius: 4px;
+    }
+    .bg-purple-subtle { background-color: #f3e8ff; color: #7e22ce; }
+    .border-purple-subtle { border-color: #d8b4fe !important; }
 </style>
 
 <div class="container-fluid px-4 py-4">
@@ -372,49 +403,97 @@
                                                 </div>
                                             }
 
-                                            @if (entry.ImagingRecords.Any())
-                                            {
-                                                <div class="col-12 mt-2 pt-2 border-top">
-                                                    <div class="text-muted small fw-semibold mb-2 d-flex align-items-center gap-1">
-                                                        <i class="bi bi-camera-fill text-info"></i>
-                                                        <span>Phim X-quang & Cận lâm sàng (@entry.ImagingRecords.Count):</span>
-                                                    </div>
-                                                    <div class="row g-2">
+                                            <!-- Dental Imaging Thumbnail Gallery -->
+                                            <div class="col-12 mt-3 pt-3 border-top">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="text-muted small fw-bold text-uppercase d-flex align-items-center gap-1">
+                                                        <i class="bi bi-images text-primary"></i>
+                                                        <span>Thư Viện Phim X-quang & Cận Lâm Sàng</span>
+                                                        <span class="badge bg-primary-subtle text-primary ms-1">@entry.ImagingRecords.Count</span>
+                                                    </span>
+                                                </div>
+
+                                                @if (entry.ImagingRecords.Any())
+                                                {
+                                                    <div class="row g-3">
                                                         @foreach (var img in entry.ImagingRecords)
                                                         {
-                                                            <div class="col-sm-6 col-md-4">
-                                                                <div class="card h-100 border shadow-none bg-white p-2">
-                                                                    <div class="d-flex align-items-center gap-2 mb-1">
-                                                                        <span class="badge bg-info-subtle text-info border border-info-subtle small text-truncate">
+                                                            var isDicom = (!string.IsNullOrEmpty(img.FileUrl) && img.FileUrl.EndsWith(".dcm", StringComparison.OrdinalIgnoreCase)) ||
+                                                                          img.ImagingType.Equals("DICOM", StringComparison.OrdinalIgnoreCase);
+                                                            var safeUrl = Url.Action("ImagingContent", "DentistMedicalRecord", new { imagingRecordId = img.ImagingRecordId });
+                                                            var badgeColor = img.ImagingType switch
+                                                            {
+                                                                "Panorama" => "bg-primary-subtle text-primary border-primary-subtle",
+                                                                "Periapical" => "bg-info-subtle text-info border-info-subtle",
+                                                                "Cephalometric" => "bg-purple-subtle text-purple border-purple-subtle",
+                                                                "Intraoral" => "bg-success-subtle text-success border-success-subtle",
+                                                                _ => "bg-secondary-subtle text-secondary border-secondary-subtle"
+                                                            };
+
+                                                            <div class="col-6 col-md-4 col-lg-3">
+                                                                <div class="card h-100 border rounded-3 shadow-none overflow-hidden imaging-thumbnail-card bg-white">
+                                                                    <div class="d-flex align-items-center justify-content-between px-2 pt-2 pb-1 border-bottom bg-light-subtle">
+                                                                        <span class="badge @badgeColor small text-truncate fw-semibold">
                                                                             <i class="bi bi-film me-1"></i>@img.ImagingType
                                                                         </span>
-                                                                        <span class="text-muted small ms-auto">@img.CreatedAt.ToString("dd/MM")</span>
+                                                                        <span class="text-muted fs-11" title="@img.CreatedAt.ToString("dd/MM/yyyy HH:mm")">
+                                                                            @img.CreatedAt.ToString("dd/MM/yyyy")
+                                                                        </span>
                                                                     </div>
-                                                                    @if (!string.IsNullOrEmpty(img.FileUrl))
+
+                                                                    @if (isDicom)
                                                                     {
-                                                                        <div class="my-1 text-center bg-dark rounded overflow-hidden" style="max-height: 120px;">
-                                                                            <img src="@img.FileUrl" class="img-fluid" alt="@img.ImagingType" style="object-fit: cover; max-height: 120px;" onerror="this.onerror=null; this.src='/images/clinic-logo.svg';" />
+                                                                        <div class="p-3 text-center bg-light d-flex flex-column align-items-center justify-content-center" style="min-height: 140px;">
+                                                                            <i class="bi bi-file-earmark-medical-fill text-primary" style="font-size: 2.2rem;"></i>
+                                                                            <span class="badge bg-primary-subtle text-primary border mt-2 small">DICOM PS 3.10</span>
+                                                                            <span class="text-muted small mt-1" style="font-size: 0.75rem;">Định dạng y tế chuyên dụng</span>
+                                                                            <a href="@safeUrl" class="btn btn-xs btn-outline-primary mt-2" download>
+                                                                                <i class="bi bi-download me-1"></i> Tải file .dcm
+                                                                            </a>
                                                                         </div>
                                                                     }
                                                                     else
                                                                     {
-                                                                        <div class="my-1 p-2 text-center bg-light rounded text-muted small">
-                                                                            <i class="bi bi-file-earmark-medical fs-4 d-block text-secondary"></i>
-                                                                            Lưu bản cứng tại phòng X-quang
+                                                                        <div class="imaging-preview-container position-relative bg-dark text-center" style="height: 140px; cursor: pointer;"
+                                                                             onclick="openImagingLightbox('@safeUrl', '@img.ImagingType', '@(img.ResultSummary?.Replace("'", "\\'") ?? "")', '@img.CreatedAt.ToString("dd/MM/yyyy HH:mm")', false)"
+                                                                             title="Nhấn để phóng to xem chi tiết">
+                                                                            <img src="@safeUrl"
+                                                                                 class="w-100 h-100 img-thumbnail-fit"
+                                                                                 alt="@img.ImagingType"
+                                                                                 loading="lazy"
+                                                                                 onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'p-3 text-center text-muted small h-100 d-flex flex-column align-items-center justify-content-center\'><i class=\'bi bi-image-fill fs-2 text-secondary mb-1\'></i> Không thể tải ảnh an toàn</div>';" />
+                                                                            <div class="imaging-zoom-overlay position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center text-white bg-dark bg-opacity-25 opacity-0">
+                                                                                <i class="bi bi-zoom-in fs-4"></i>
+                                                                            </div>
                                                                         </div>
                                                                     }
-                                                                    @if (!string.IsNullOrEmpty(img.ResultSummary))
-                                                                    {
-                                                                        <div class="small text-slate-700 mt-1">
-                                                                            <strong>Kết luận:</strong> @img.ResultSummary
+
+                                                                    <div class="p-2 border-top bg-white flex-grow-1 d-flex flex-column justify-content-between">
+                                                                        <div class="small text-slate-700 text-truncate-2" title="@img.ResultSummary">
+                                                                            <i class="bi bi-chat-left-text me-1 text-muted"></i>
+                                                                            @if (!string.IsNullOrWhiteSpace(img.ResultSummary))
+                                                                            {
+                                                                                <span>@img.ResultSummary</span>
+                                                                            }
+                                                                            else
+                                                                            {
+                                                                                <span class="text-muted fst-italic">Chưa có kết luận</span>
+                                                                            }
                                                                         </div>
-                                                                    }
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         }
                                                     </div>
-                                                </div>
-                                            }
+                                                }
+                                                else
+                                                {
+                                                    <div class="text-center py-3 px-2 bg-light-subtle rounded-3 border border-dashed text-muted small my-2">
+                                                        <i class="bi bi-film fs-4 d-block mb-1 text-secondary opacity-50"></i>
+                                                        <span>Chưa có phim X-quang hoặc ảnh răng nào cho ca khám này.</span>
+                                                    </div>
+                                                }
+                                            </div>
 
                                             @if (User.IsInRole("Dentist"))
                                             {

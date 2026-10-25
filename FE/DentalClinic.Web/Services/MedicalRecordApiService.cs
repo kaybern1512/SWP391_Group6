@@ -202,6 +202,28 @@ public class MedicalRecordApiService : IMedicalRecordApiService
         }
     }
 
+    public async Task<(Stream? Stream, string ContentType, int StatusCode)> GetImagingStreamAsync(long imagingRecordId)
+    {
+        var endpoint = $"/api/medical-records/imaging/{imagingRecordId}/content";
+        try
+        {
+            var response = await _httpClient.GetAsync(endpoint, HttpCompletionOption.ResponseHeadersRead);
+            if (!response.IsSuccessStatusCode)
+            {
+                return (null, string.Empty, (int)response.StatusCode);
+            }
+
+            var stream = await response.Content.ReadAsStreamAsync();
+            var contentType = response.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
+            return (stream, contentType, 200);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Lỗi kết nối khi tải luồng ảnh {Endpoint}", endpoint);
+            return (null, string.Empty, (int)HttpStatusCode.ServiceUnavailable);
+        }
+    }
+
     // ==========================================
     // GENERIC HTTP HELPERS
     // ==========================================

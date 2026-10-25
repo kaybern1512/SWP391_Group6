@@ -208,4 +208,36 @@ public class DentistMedicalRecordController : Controller
 
         return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
     }
+
+    [HttpGet("ImagingContent/{imagingRecordId:long}")]
+    public async Task<IActionResult> ImagingContent(long imagingRecordId)
+    {
+        if (imagingRecordId <= 0)
+        {
+            return NotFound();
+        }
+
+        var (stream, contentType, statusCode) = await _medicalRecordApi.GetImagingStreamAsync(imagingRecordId);
+        if (statusCode == 401)
+        {
+            return Unauthorized();
+        }
+
+        if (statusCode == 403)
+        {
+            return Forbid();
+        }
+
+        if (statusCode == 404 || stream == null)
+        {
+            return NotFound();
+        }
+
+        if (statusCode != 200)
+        {
+            return StatusCode(statusCode);
+        }
+
+        return File(stream, contentType);
+    }
 }

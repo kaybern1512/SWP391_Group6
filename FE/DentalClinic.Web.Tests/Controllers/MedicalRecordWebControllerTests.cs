@@ -249,4 +249,56 @@ public class MedicalRecordWebControllerTests
         redirect.ActionName.Should().Be("Index");
         controller.TempData["ErrorMessage"].Should().Be("Cloudinary quota exceeded");
     }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_ImagingContent_WhenFound_ReturnsFileResult()
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes("fake-image-data");
+        var ms = new System.IO.MemoryStream(bytes);
+        _apiMock.Setup(x => x.GetImagingStreamAsync(88))
+            .ReturnsAsync((ms, "image/png", 200));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist")
+        };
+
+        var result = await controller.ImagingContent(88);
+
+        var fileResult = result.Should().BeOfType<FileStreamResult>().Subject;
+        fileResult.ContentType.Should().Be("image/png");
+        fileResult.FileStream.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_ImagingContent_WhenNotFound_ReturnsNotFound()
+    {
+        _apiMock.Setup(x => x.GetImagingStreamAsync(99))
+            .ReturnsAsync((null, string.Empty, 404));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist")
+        };
+
+        var result = await controller.ImagingContent(99);
+
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_ImagingContent_WhenForbidden_ReturnsForbid()
+    {
+        _apiMock.Setup(x => x.GetImagingStreamAsync(100))
+            .ReturnsAsync((null, string.Empty, 403));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist")
+        };
+
+        var result = await controller.ImagingContent(100);
+
+        result.Should().BeOfType<ForbidResult>();
+    }
 }
