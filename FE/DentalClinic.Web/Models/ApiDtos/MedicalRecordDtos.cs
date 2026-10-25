@@ -53,10 +53,27 @@ public class OdontogramEntryDto
 public class ImagingRecordDto
 {
     public long ImagingRecordId { get; set; }
+    public long ClinicalEntryId { get; set; }
     public string ImagingType { get; set; } = string.Empty;
     public string? FileUrl { get; set; }
+    public string? ViewUrl { get; set; }
     public string? ResultSummary { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public class ImagingRecordMetadataDto
+{
+    public long ImagingRecordId { get; set; }
+    public long ClinicalEntryId { get; set; }
+    public string ImagingType { get; set; } = string.Empty;
+    public string? FileUrl { get; set; }
+    public string? ViewUrl { get; set; }
+    public string? ResultSummary { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public string? OriginalFileName { get; set; }
+    public string? MimeType { get; set; }
+    public long? FileSizeBytes { get; set; }
+    public string? StorageProvider { get; set; }
 }
 
 public class CreateImagingRecordRequest

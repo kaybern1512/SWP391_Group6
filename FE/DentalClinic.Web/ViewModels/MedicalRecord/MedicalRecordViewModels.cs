@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using DentalClinic.Web.Models.ApiDtos;
+using Microsoft.AspNetCore.Http;
 
 namespace DentalClinic.Web.ViewModels.MedicalRecord;
 
@@ -49,6 +50,26 @@ public class CreateClinicalEntryFormModel
 
     [Display(Name = "Đường dẫn file ảnh phim")]
     public string? ImagingFileUrl { get; set; }
+}
+
+public class UploadDentalImagingFormModel
+{
+    [Required]
+    public long ClinicalEntryId { get; set; }
+
+    [Required]
+    public long PatientUserId { get; set; }
+
+    [Required(ErrorMessage = "Vui lòng chọn tập tin phim X-quang hoặc ảnh răng")]
+    [Display(Name = "Tập tin phim X-quang")]
+    public IFormFile? File { get; set; }
+
+    [Required(ErrorMessage = "Vui lòng chọn loại phim chụp")]
+    [Display(Name = "Loại phim chụp")]
+    public string ImagingType { get; set; } = string.Empty;
+
+    [Display(Name = "Kết luận đọc phim / Mô tả tổn thương")]
+    public string? ResultSummary { get; set; }
 }
 
 public class AddImagingRecordFormModel

@@ -98,6 +98,37 @@
     .tooth-extractionneeded { border-color: #f97316; background: #fff7ed; }
     .tooth-extractionneeded .tooth-icon { color: #ea580c; }
     .tooth-extractionneeded .tooth-status-tag { background: #ffedd5; color: #c2410c; }
+
+    /* Imaging Gallery & Lightbox Styles */
+    .img-thumbnail-fit {
+        object-fit: cover;
+        object-position: center;
+        transition: transform 0.25s ease;
+    }
+    .imaging-preview-container:hover .img-thumbnail-fit {
+        transform: scale(1.05);
+    }
+    .imaging-zoom-overlay {
+        transition: opacity 0.2s ease;
+        pointer-events: none;
+    }
+    .imaging-preview-container:hover .imaging-zoom-overlay {
+        opacity: 1 !important;
+    }
+    .fs-11 { font-size: 0.72rem; }
+    .text-truncate-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .btn-xs {
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+        border-radius: 4px;
+    }
+    .bg-purple-subtle { background-color: #f3e8ff; color: #7e22ce; }
+    .border-purple-subtle { border-color: #d8b4fe !important; }
 </style>
 
 <div class="container-fluid px-4 py-4">
@@ -372,55 +403,116 @@
                                                 </div>
                                             }
 
-                                            @if (entry.ImagingRecords.Any())
-                                            {
-                                                <div class="col-12 mt-2 pt-2 border-top">
-                                                    <div class="text-muted small fw-semibold mb-2 d-flex align-items-center gap-1">
-                                                        <i class="bi bi-camera-fill text-info"></i>
-                                                        <span>Phim X-quang & Cận lâm sàng (@entry.ImagingRecords.Count):</span>
-                                                    </div>
-                                                    <div class="row g-2">
+                                            <!-- Dental Imaging Thumbnail Gallery -->
+                                            <div class="col-12 mt-3 pt-3 border-top">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="text-muted small fw-bold text-uppercase d-flex align-items-center gap-1">
+                                                        <i class="bi bi-images text-primary"></i>
+                                                        <span>Thư Viện Phim X-quang & Cận Lâm Sàng</span>
+                                                        <span class="badge bg-primary-subtle text-primary ms-1">@entry.ImagingRecords.Count</span>
+                                                    </span>
+                                                </div>
+
+                                                @if (entry.ImagingRecords.Any())
+                                                {
+                                                    <div class="row g-3">
                                                         @foreach (var img in entry.ImagingRecords)
                                                         {
-                                                            <div class="col-sm-6 col-md-4">
-                                                                <div class="card h-100 border shadow-none bg-white p-2">
-                                                                    <div class="d-flex align-items-center gap-2 mb-1">
-                                                                        <span class="badge bg-info-subtle text-info border border-info-subtle small text-truncate">
+                                                            var isDicom = (!string.IsNullOrEmpty(img.FileUrl) && (img.FileUrl.EndsWith(".dcm", StringComparison.OrdinalIgnoreCase) || img.FileUrl.EndsWith(".dicom", StringComparison.OrdinalIgnoreCase))) ||
+                                                                          img.ImagingType.Equals("DICOM", StringComparison.OrdinalIgnoreCase);
+                                                            var safeUrl = Url.Action("ImagingContent", "DentistMedicalRecord", new { imagingRecordId = img.ImagingRecordId });
+                                                            var badgeColor = img.ImagingType switch
+                                                            {
+                                                                "Panorama" => "bg-primary-subtle text-primary border-primary-subtle",
+                                                                "Periapical" => "bg-info-subtle text-info border-info-subtle",
+                                                                "Cephalometric" => "bg-purple-subtle text-purple border-purple-subtle",
+                                                                "Intraoral" => "bg-success-subtle text-success border-success-subtle",
+                                                                _ => "bg-secondary-subtle text-secondary border-secondary-subtle"
+                                                            };
+
+                                                            <div class="col-6 col-md-4 col-lg-3">
+                                                                <div class="card h-100 border rounded-3 shadow-none overflow-hidden imaging-thumbnail-card bg-white">
+                                                                    <div class="d-flex align-items-center justify-content-between px-2 pt-2 pb-1 border-bottom bg-light-subtle">
+                                                                        <span class="badge @badgeColor small text-truncate fw-semibold">
                                                                             <i class="bi bi-film me-1"></i>@img.ImagingType
                                                                         </span>
-                                                                        <span class="text-muted small ms-auto">@img.CreatedAt.ToString("dd/MM")</span>
+                                                                        <span class="text-muted fs-11" title="@img.CreatedAt.ToString("dd/MM/yyyy HH:mm")">
+                                                                            @img.CreatedAt.ToString("dd/MM/yyyy")
+                                                                        </span>
                                                                     </div>
-                                                                    @if (!string.IsNullOrEmpty(img.FileUrl))
+
+                                                                    @if (isDicom)
                                                                     {
-                                                                        <div class="my-1 text-center bg-dark rounded overflow-hidden" style="max-height: 120px;">
-                                                                            <img src="@img.FileUrl" class="img-fluid" alt="@img.ImagingType" style="object-fit: cover; max-height: 120px;" onerror="this.onerror=null; this.src='/images/clinic-logo.svg';" />
+                                                                        <div class="p-3 text-center bg-light d-flex flex-column align-items-center justify-content-center" style="min-height: 140px;">
+                                                                            <i class="bi bi-file-earmark-medical-fill text-primary" style="font-size: 2.2rem;"></i>
+                                                                            <span class="badge bg-primary-subtle text-primary border mt-2 small">DICOM PS 3.10</span>
+                                                                            <span class="text-muted small mt-1" style="font-size: 0.75rem;">Định dạng y tế chuyên dụng</span>
+                                                                            <a href="@safeUrl" class="btn btn-xs btn-outline-primary mt-2" download>
+                                                                                <i class="bi bi-download me-1"></i> Tải file .dcm
+                                                                            </a>
                                                                         </div>
                                                                     }
                                                                     else
                                                                     {
-                                                                        <div class="my-1 p-2 text-center bg-light rounded text-muted small">
-                                                                            <i class="bi bi-file-earmark-medical fs-4 d-block text-secondary"></i>
-                                                                            Lưu bản cứng tại phòng X-quang
+                                                                        <div class="imaging-preview-container position-relative bg-dark text-center" style="height: 140px; cursor: pointer;"
+                                                                             onclick="openImagingLightbox('@safeUrl', '@img.ImagingType', '@(img.ResultSummary?.Replace("'", "\\'") ?? "")', '@img.CreatedAt.ToString("dd/MM/yyyy HH:mm")', false)"
+                                                                             title="Nhấn để phóng to xem chi tiết">
+                                                                            <img src="@safeUrl"
+                                                                                 class="w-100 h-100 img-thumbnail-fit"
+                                                                                 alt="@img.ImagingType"
+                                                                                 loading="lazy"
+                                                                                 onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'p-3 text-center text-muted small h-100 d-flex flex-column align-items-center justify-content-center\'><i class=\'bi bi-image-fill fs-2 text-secondary mb-1\'></i> Không thể tải ảnh an toàn</div>';" />
+                                                                            <div class="imaging-zoom-overlay position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center text-white bg-dark bg-opacity-25 opacity-0">
+                                                                                <i class="bi bi-zoom-in fs-4"></i>
+                                                                            </div>
                                                                         </div>
                                                                     }
-                                                                    @if (!string.IsNullOrEmpty(img.ResultSummary))
-                                                                    {
-                                                                        <div class="small text-slate-700 mt-1">
-                                                                            <strong>Kết luận:</strong> @img.ResultSummary
+
+                                                                    <div class="p-2 border-top bg-white flex-grow-1 d-flex flex-column justify-content-between">
+                                                                        <div class="small text-slate-700 text-truncate-2" title="@img.ResultSummary">
+                                                                            <i class="bi bi-chat-left-text me-1 text-muted"></i>
+                                                                            @if (!string.IsNullOrWhiteSpace(img.ResultSummary))
+                                                                            {
+                                                                                <span>@img.ResultSummary</span>
+                                                                            }
+                                                                            else
+                                                                            {
+                                                                                <span class="text-muted fst-italic">Chưa có kết luận</span>
+                                                                            }
                                                                         </div>
-                                                                    }
+                                                                        @if (User.IsInRole("Dentist"))
+                                                                        {
+                                                                            <div class="d-flex justify-content-end mt-2 pt-1 border-top border-light">
+                                                                                <button type="button" class="btn btn-xs btn-outline-danger"
+                                                                                        onclick="openDeleteImagingModal(@img.ImagingRecordId, '@(img.ImagingType)', '@(img.CreatedAt.ToString("dd/MM/yyyy HH:mm"))', @(record.PatientUserId))"
+                                                                                        title="Xóa phim X-quang">
+                                                                                    <i class="bi bi-trash3-fill me-1"></i> Xóa
+                                                                                </button>
+                                                                            </div>
+                                                                        }
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         }
                                                     </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="text-center py-3 px-2 bg-light-subtle rounded-3 border border-dashed text-muted small my-2">
+                                                        <i class="bi bi-film fs-4 d-block mb-1 text-secondary opacity-50"></i>
+                                                        <span>Chưa có phim X-quang hoặc ảnh răng nào cho ca khám này.</span>
+                                                    </div>
+                                                }
+                                            </div>
+
+                                            @if (User.IsInRole("Dentist"))
+                                            {
+                                                <div class="col-12 text-end mt-2">
+                                                    <button type="button" class="btn btn-sm btn-outline-primary fw-medium" onclick="openUploadImagingModal(@entry.ClinicalEntryId, '@(entry.Diagnosis?.Replace("'", "\\'") ?? "")')">
+                                                        <i class="bi bi-cloud-arrow-up-fill me-1"></i> Upload Phim X-quang / Ảnh Răng
+                                                    </button>
                                                 </div>
                                             }
-
-                                            <div class="col-12 text-end mt-2">
-                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openAddImagingModal(@entry.ClinicalEntryId, '@(entry.Diagnosis?.Replace("'", "\\'") ?? "")')">
-                                                    <i class="bi bi-camera me-1"></i> Bổ sung phim X-quang
-                                                </button>
-                                            </div>
                                         </div>
                                     </div>
                                 }
@@ -558,49 +650,150 @@
         </div>
     </div>
 
-    <!-- Modal Bổ Sung Phim X-Quang -->
-    <div class="modal fade" id="modalAddImaging" tabindex="-1" aria-labelledby="modalAddImagingLabel" aria-hidden="true">
+    <!-- Modal Upload Phim X-Quang / Ảnh Răng -->
+    <div class="modal fade" id="modalUploadImaging" tabindex="-1" aria-labelledby="modalUploadImagingLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow">
-                <div class="modal-header bg-info text-white">
-                    <h5 class="modal-title fw-bold" id="modalAddImagingLabel">
-                        <i class="bi bi-camera me-2"></i>Bổ Sung Kết Quả Phim X-Quang
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="modalUploadImagingLabel">
+                        <i class="bi bi-cloud-arrow-up-fill me-2"></i>Upload Phim X-Quang / Ảnh Răng
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form asp-action="AddImagingRecord" method="post">
+                <form id="formUploadImaging" asp-action="UploadImaging" method="post" enctype="multipart/form-data">
                     @Html.AntiForgeryToken()
-                    <input type="hidden" id="addImagingClinicalEntryId" name="ClinicalEntryId" value="0" />
+                    <input type="hidden" id="uploadImagingClinicalEntryId" name="ClinicalEntryId" value="0" />
                     <input type="hidden" name="PatientUserId" value="@(record.PatientUserId)" />
                     <div class="modal-body p-4">
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold text-slate-700">Đợt khám:</label>
-                            <div id="addImagingDiagnosisPreview" class="fw-bold text-primary small"></div>
+                        <div class="mb-3 p-2 bg-light rounded border">
+                            <label class="form-label fw-semibold text-slate-700 mb-0 small">Đợt khám liên kết:</label>
+                            <div id="uploadImagingDiagnosisPreview" class="fw-bold text-primary small"></div>
                         </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-slate-700">Tệp phim X-quang / ảnh răng <span class="text-danger">*</span></label>
+                            <input type="file" id="uploadImagingFileInput" name="File" class="form-control" accept=".jpg,.jpeg,.png,.dcm,.dicom" required />
+                            <div class="form-text small text-muted">
+                                <i class="bi bi-info-circle me-1"></i>Hỗ trợ JPG, PNG, DICOM (.dcm, .dicom) — Tối đa 15 MB.
+                            </div>
+                            <div id="fileValidationFeedback" class="text-danger small mt-1 d-none"></div>
+                        </div>
+
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-slate-700">Loại phim X-quang <span class="text-danger">*</span></label>
-                            <select name="ImagingType" class="form-select" required>
+                            <select id="uploadImagingTypeSelect" name="ImagingType" class="form-select" required>
                                 <option value="">-- Chọn loại phim --</option>
-                                <option value="X-Quang chóp răng (Periapical)">X-Quang chóp răng (Periapical)</option>
-                                <option value="X-Quang cánh cắn (Bitewing)">X-Quang cánh cắn (Bitewing)</option>
-                                <option value="Toàn cảnh Panorama">Toàn cảnh Panorama</option>
-                                <option value="Phim sọ nghiêng Cephalometric">Phim sọ nghiêng Cephalometric</option>
-                                <option value="Chụp CT Cone Beam 3D">Chụp CT Cone Beam 3D</option>
+                                <option value="Panorama">Panorama (Toàn cảnh OPG)</option>
+                                <option value="Periapical">Periapical (Cận chóp / Quanh chóp)</option>
+                                <option value="Cephalometric">Cephalometric (Sọ nghiêng Ceph)</option>
+                                <option value="Intraoral">Intraoral (Ảnh chụp trong miệng)</option>
                             </select>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold text-slate-700">Đường dẫn file ảnh phim (File URL / Cloud URL)</label>
-                            <input type="text" name="FileUrl" class="form-control" placeholder="https://... hoặc /uploads/xray_01.jpg" />
-                        </div>
+
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-slate-700">Kết luận đọc phim / Mô tả tổn thương</label>
-                            <textarea name="ResultSummary" class="form-control" rows="3" placeholder="Ghi nhận cấu trúc xương ổ, cuống răng, nang quanh cuống hoặc hướng mọc của răng..."></textarea>
+                            <textarea id="uploadImagingResultSummary" name="ResultSummary" class="form-control" rows="3" placeholder="Ghi nhận cấu trúc xương ổ, cuống răng, nang quanh cuống hoặc hướng mọc của răng..."></textarea>
                         </div>
                     </div>
                     <div class="modal-footer bg-light">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-                        <button type="submit" class="btn btn-info text-white px-4 fw-medium">
-                            <i class="bi bi-save me-1"></i> Lưu Kết Quả Phim
+                        <button type="submit" id="btnSubmitUploadImaging" class="btn btn-primary px-4 fw-medium">
+                            <span id="uploadSpinner" class="spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
+                            <i class="bi bi-cloud-arrow-up-fill me-1" id="uploadIcon"></i>
+                            <span id="uploadBtnText">Upload Phim</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Phóng To Ảnh X-Quang (Lightbox - Commit 16) -->
+    <div class="modal fade" id="imagingLightboxModal" tabindex="-1" aria-labelledby="imagingLightboxModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content bg-dark text-white border-0 shadow-lg overflow-hidden">
+                <div class="modal-header border-secondary border-opacity-50 py-2 px-3 bg-dark">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-aspect-ratio text-info fs-5"></i>
+                        <span class="badge bg-primary text-white px-2 py-1" id="lightboxTypeBadge">X-Quang</span>
+                        <span class="text-white-50 small ms-2" id="lightboxDate"></span>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng (Esc)"></button>
+                </div>
+                <div class="modal-body p-0 position-relative d-flex justify-content-center align-items-center bg-black" style="min-height: 420px; max-height: 75vh; overflow: hidden;">
+                    <!-- Loading State -->
+                    <div id="lightboxLoadingSpinner" class="position-absolute d-flex flex-column align-items-center justify-content-center text-white">
+                        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                            <span class="visually-hidden">Đang tải phim X-quang...</span>
+                        </div>
+                        <span class="small text-white-50 mt-2">Đang tải ảnh chuẩn nét...</span>
+                    </div>
+
+                    <!-- Error State -->
+                    <div id="lightboxErrorAlert" class="p-4 text-center text-warning d-none">
+                        <i class="bi bi-exclamation-triangle-fill fs-1 text-warning mb-2 d-block"></i>
+                        <h6 class="text-white">Không thể hiển thị ảnh phóng to</h6>
+                        <p class="small text-white-50 mb-0">Tệp ảnh có thể đã bị xóa hoặc phiên truy cập đã hết hạn. Vui lòng thử tải lại trang.</p>
+                    </div>
+
+                    <!-- Large Image (Aspect Ratio Preserved) -->
+                    <img id="lightboxImage"
+                         src=""
+                         class="img-fluid d-none"
+                         style="max-height: 75vh; max-width: 100%; object-fit: contain;"
+                         alt="Phóng to phim X-quang nha khoa" />
+                </div>
+                <div class="modal-footer border-secondary border-opacity-50 py-2 px-3 justify-content-between bg-dark">
+                    <div class="text-start flex-grow-1 me-3">
+                        <div class="small fw-semibold text-info mb-0"><i class="bi bi-journal-text me-1"></i>Kết luận đọc phim:</div>
+                        <div id="lightboxResultSummary" class="text-white-50 small text-wrap"></div>
+                    </div>
+                    <div class="d-flex gap-2 align-items-center">
+                        <a id="lightboxDownloadBtn" href="#" download class="btn btn-sm btn-outline-light">
+                            <i class="bi bi-download me-1"></i> Tải ảnh
+                        </a>
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+                            <i class="bi bi-x-lg me-1"></i> Đóng (Esc)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Xác Nhận Xóa Phim X-Quang (Commit 22) -->
+    <div class="modal fade" id="modalDeleteImagingConfirm" tabindex="-1" aria-labelledby="modalDeleteImagingConfirmLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold" id="modalDeleteImagingConfirmLabel">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Xác Nhận Xóa Phim X-Quang
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="formDeleteImaging" asp-action="DeleteImaging" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="deleteImagingRecordId" name="imagingRecordId" value="0" />
+                    <input type="hidden" id="deleteImagingPatientUserId" name="patientUserId" value="@(record.PatientUserId)" />
+                    <div class="modal-body p-4">
+                        <p class="text-slate-800 mb-3">
+                            Bạn có chắc chắn muốn xóa phim X-quang này khỏi hồ sơ bệnh án không? Thao tác này sẽ gỡ bỏ bản ghi chẩn đoán hình ảnh và tệp liên quan.
+                        </p>
+                        <div class="alert alert-warning py-2 px-3 small border-0 bg-warning-subtle text-dark">
+                            <div><i class="bi bi-info-circle-fill text-warning me-1"></i><strong>Loại phim:</strong> <span id="deleteImagingTypeLabel" class="fw-bold"></span></div>
+                            <div><i class="bi bi-calendar-event me-1"></i><strong>Ngày tạo:</strong> <span id="deleteImagingDateLabel"></span></div>
+                            <div><i class="bi bi-hash me-1"></i><strong>Mã bản ghi:</strong> #<span id="deleteImagingIdLabel"></span></div>
+                        </div>
+                        <div class="text-muted small fst-italic">
+                            Lưu ý: Chỉ bác sĩ được phân công phụ trách ca khám mới có quyền xóa phim X-quang này.
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                        <button type="submit" id="btnConfirmDeleteImaging" class="btn btn-danger px-4 fw-medium">
+                            <span id="deleteSpinner" class="spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
+                            <i class="bi bi-trash3-fill me-1" id="deleteIcon"></i>
+                            <span id="deleteBtnText">Xác nhận xóa</span>
                         </button>
                     </div>
                 </form>
@@ -611,10 +804,106 @@
 
 @section Scripts {
     <script>
+        let lightboxModalInstance = null;
+
+        function openImagingLightbox(imageUrl, imagingType, resultSummary, createdAt, isDicom) {
+            if (isDicom) {
+                return;
+            }
+
+            const modalEl = document.getElementById('imagingLightboxModal');
+            if (!modalEl) return;
+
+            const imgEl = document.getElementById('lightboxImage');
+            const spinner = document.getElementById('lightboxLoadingSpinner');
+            const errorAlert = document.getElementById('lightboxErrorAlert');
+            const typeBadge = document.getElementById('lightboxTypeBadge');
+            const dateEl = document.getElementById('lightboxDate');
+            const summaryEl = document.getElementById('lightboxResultSummary');
+            const downloadBtn = document.getElementById('lightboxDownloadBtn');
+
+            // Reset UI states
+            if (imgEl) {
+                imgEl.classList.add('d-none');
+                imgEl.src = '';
+            }
+            if (spinner) spinner.classList.remove('d-none');
+            if (errorAlert) errorAlert.classList.add('d-none');
+
+            if (typeBadge) typeBadge.textContent = imagingType || 'X-Quang';
+            if (dateEl) dateEl.textContent = createdAt ? ('Ngày chụp: ' + createdAt) : '';
+            if (summaryEl) summaryEl.textContent = resultSummary && resultSummary.trim().length > 0 ? resultSummary : 'Chưa có ghi nhận kết luận đọc phim.';
+            if (downloadBtn) {
+                downloadBtn.href = imageUrl;
+            }
+
+            // Bind image load events
+            if (imgEl) {
+                imgEl.onload = function () {
+                    if (spinner) spinner.classList.add('d-none');
+                    imgEl.classList.remove('d-none');
+                };
+                imgEl.onerror = function () {
+                    if (spinner) spinner.classList.add('d-none');
+                    if (errorAlert) errorAlert.classList.remove('d-none');
+                };
+                imgEl.src = imageUrl;
+            }
+
+            if (!lightboxModalInstance) {
+                lightboxModalInstance = new bootstrap.Modal(modalEl, {
+                    keyboard: true,
+                    backdrop: true
+                });
+            }
+            lightboxModalInstance.show();
+        }
+
+        function openUploadImagingModal(entryId, diagnosis) {
+            document.getElementById('uploadImagingClinicalEntryId').value = entryId;
+            document.getElementById('uploadImagingDiagnosisPreview').textContent = diagnosis || ('Đợt khám #' + entryId);
+            const fileInput = document.getElementById('uploadImagingFileInput');
+            if (fileInput) fileInput.value = '';
+            const typeSelect = document.getElementById('uploadImagingTypeSelect');
+            if (typeSelect) typeSelect.selectedIndex = 0;
+            const summaryInput = document.getElementById('uploadImagingResultSummary');
+            if (summaryInput) summaryInput.value = '';
+            const feedback = document.getElementById('fileValidationFeedback');
+            if (feedback) { feedback.textContent = ''; feedback.classList.add('d-none'); }
+            const submitBtn = document.getElementById('btnSubmitUploadImaging');
+            if (submitBtn) { submitBtn.disabled = false; }
+            const spinner = document.getElementById('uploadSpinner');
+            if (spinner) spinner.classList.add('d-none');
+            const icon = document.getElementById('uploadIcon');
+            if (icon) icon.classList.remove('d-none');
+            const btnText = document.getElementById('uploadBtnText');
+            if (btnText) btnText.textContent = 'Upload Phim';
+
+            new bootstrap.Modal(document.getElementById('modalUploadImaging')).show();
+        }
+
+        function openDeleteImagingModal(imagingRecordId, imagingType, createdAt, patientUserId) {
+            document.getElementById('deleteImagingRecordId').value = imagingRecordId;
+            document.getElementById('deleteImagingPatientUserId').value = patientUserId;
+            document.getElementById('deleteImagingTypeLabel').textContent = imagingType || 'X-Quang';
+            document.getElementById('deleteImagingDateLabel').textContent = createdAt || '—';
+            document.getElementById('deleteImagingIdLabel').textContent = imagingRecordId;
+
+            const submitBtn = document.getElementById('btnConfirmDeleteImaging');
+            if (submitBtn) submitBtn.disabled = false;
+            const spinner = document.getElementById('deleteSpinner');
+            if (spinner) spinner.classList.add('d-none');
+            const icon = document.getElementById('deleteIcon');
+            if (icon) icon.classList.remove('d-none');
+            const btnText = document.getElementById('deleteBtnText');
+            if (btnText) btnText.textContent = 'Xác nhận xóa';
+
+            new bootstrap.Modal(document.getElementById('modalDeleteImagingConfirm')).show();
+        }
+
+        // Backward compatibility
         function openAddImagingModal(entryId, diagnosis) {
-            document.getElementById('addImagingClinicalEntryId').value = entryId;
-            document.getElementById('addImagingDiagnosisPreview').textContent = diagnosis || ('Đợt khám #' + entryId);
-            new bootstrap.Modal(document.getElementById('modalAddImaging')).show();
+            openUploadImagingModal(entryId, diagnosis);
         }
 
         function addToothRow() {
@@ -671,10 +960,94 @@
             document.getElementById("toothConditionsJsonInput").value = JSON.stringify(list);
         }
 
-        // Add 1 default row when modal is loaded
+        // Client-side file validation & double submit prevention
         document.addEventListener("DOMContentLoaded", function() {
             if (document.getElementById("toothRowsContainer")) {
                 addToothRow();
+            }
+
+            const fileInput = document.getElementById('uploadImagingFileInput');
+            const uploadForm = document.getElementById('formUploadImaging');
+            const feedback = document.getElementById('fileValidationFeedback');
+            const maxSizeBytes = 15 * 1024 * 1024;
+            const allowedExts = ['.jpg', '.jpeg', '.png', '.dcm', '.dicom'];
+
+            if (fileInput) {
+                fileInput.addEventListener('change', function () {
+                    if (!this.files || this.files.length === 0) return;
+                    const file = this.files[0];
+                    const name = file.name.toLowerCase();
+                    const hasValidExt = allowedExts.some(ext => name.endsWith(ext));
+
+                    if (!hasValidExt) {
+                        feedback.textContent = 'Định dạng tệp không hợp lệ! Vui lòng chỉ chọn .jpg, .jpeg, .png hoặc .dcm/.dicom';
+                        feedback.classList.remove('d-none');
+                        this.value = '';
+                        return;
+                    }
+
+                    if (file.size > maxSizeBytes) {
+                        feedback.textContent = `Dung lượng tệp (${(file.size / (1024 * 1024)).toFixed(2)} MB) vượt quá giới hạn 15 MB!`;
+                        feedback.classList.remove('d-none');
+                        this.value = '';
+                        return;
+                    }
+
+                    feedback.textContent = '';
+                    feedback.classList.add('d-none');
+                });
+            }
+
+            if (uploadForm) {
+                uploadForm.addEventListener('submit', function (e) {
+                    const submitBtn = document.getElementById('btnSubmitUploadImaging');
+                    const spinner = document.getElementById('uploadSpinner');
+                    const icon = document.getElementById('uploadIcon');
+                    const btnText = document.getElementById('uploadBtnText');
+
+                    if (submitBtn.disabled) {
+                        e.preventDefault();
+                        return;
+                    }
+
+                    submitBtn.disabled = true;
+                    if (spinner) spinner.classList.remove('d-none');
+                    if (icon) icon.classList.add('d-none');
+                    if (btnText) btnText.textContent = 'Đang tải lên...';
+                });
+            }
+
+            const deleteForm = document.getElementById('formDeleteImaging');
+            if (deleteForm) {
+                deleteForm.addEventListener('submit', function (e) {
+                    const submitBtn = document.getElementById('btnConfirmDeleteImaging');
+                    const spinner = document.getElementById('deleteSpinner');
+                    const icon = document.getElementById('deleteIcon');
+                    const btnText = document.getElementById('deleteBtnText');
+
+                    if (submitBtn.disabled) {
+                        e.preventDefault();
+                        return;
+                    }
+
+                    submitBtn.disabled = true;
+                    if (spinner) spinner.classList.remove('d-none');
+                    if (icon) icon.classList.add('d-none');
+                    if (btnText) btnText.textContent = 'Đang xóa...';
+                });
+            }
+
+            const lightboxModalEl = document.getElementById('imagingLightboxModal');
+            if (lightboxModalEl) {
+                lightboxModalEl.addEventListener('hidden.bs.modal', function () {
+                    const imgEl = document.getElementById('lightboxImage');
+                    if (imgEl) {
+                        imgEl.onload = null;
+                        imgEl.onerror = null;
+                        imgEl.src = '';
+                        imgEl.classList.add('d-none');
+                    }
+                });
             }
         });
     </script>

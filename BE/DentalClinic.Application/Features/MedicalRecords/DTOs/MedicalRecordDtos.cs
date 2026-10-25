@@ -53,10 +53,19 @@ public class OdontogramEntryDto
 public class ImagingRecordDto
 {
     public long ImagingRecordId { get; set; }
+    public long ClinicalEntryId { get; set; }
     public string ImagingType { get; set; } = string.Empty;
     public string? FileUrl { get; set; }
+    public string? ViewUrl { get; set; }
     public string? ResultSummary { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public class DentalImageStreamResult
+{
+    public System.IO.Stream Stream { get; set; } = System.IO.Stream.Null;
+    public string ContentType { get; set; } = "application/octet-stream";
+    public string FileName { get; set; } = string.Empty;
 }
 
 public class CreateImagingRecordRequest

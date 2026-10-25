@@ -12,6 +12,13 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DentalClinic.Api.Controllers;
 
+public class DentalImagingUploadForm
+{
+    public IFormFile? File { get; set; }
+    public string? ImagingType { get; set; }
+    public string? ResultSummary { get; set; }
+}
+
 [ApiController]
 [Route("api/medical-records")]
 [Authorize]
@@ -29,6 +36,11 @@ public class MedicalRecordController : ControllerBase
         var idStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? User.FindFirst("sub")?.Value;
         return long.TryParse(idStr, out var id) ? id : 0;
+    }
+
+    private string GetCurrentUserRole()
+    {
+        return User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
     }
 
     [HttpGet("patient/{patientUserId:long}")]
@@ -102,5 +114,251 @@ public class MedicalRecordController : ControllerBase
             return BadRequest(result);
         }
         return Ok(result);
+    }
+
+    [HttpPost("clinical-entries/{id:long}/imaging")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordMetadataDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordMetadataDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordMetadataDto>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordMetadataDto>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordMetadataDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UploadClinicalEntryImaging(
+        [FromRoute] long id,
+        [FromForm] DentalImagingUploadForm form,
+        CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId <= 0)
+        {
+            return Unauthorized(ApiResponse<ImagingRecordMetadataDto>.Fail("Không xác định được danh tính người dùng đăng nhập."));
+        }
+
+        var currentUserRole = GetCurrentUserRole();
+
+        if (id <= 0)
+        {
+            return BadRequest(ApiResponse<ImagingRecordMetadataDto>.Fail("Mã đợt khám (ClinicalEntryId) không hợp lệ."));
+        }
+
+        if (form.File == null || form.File.Length == 0)
+        {
+            return BadRequest(ApiResponse<ImagingRecordMetadataDto>.Fail("Tập tin hình ảnh không được để trống."));
+        }
+
+        if (string.IsNullOrWhiteSpace(form.ImagingType))
+        {
+            return BadRequest(ApiResponse<ImagingRecordMetadataDto>.Fail("Loại phim chụp không được để trống."));
+        }
+
+        await using var stream = form.File.OpenReadStream();
+
+        var uploadRequest = new UploadImagingRecordRequest
+        {
+            ClinicalEntryId = id,
+            ImagingType = form.ImagingType.Trim(),
+            ResultSummary = form.ResultSummary,
+            File = new DentalImageFileInput
+            {
+                Content = stream,
+                FileName = form.File.FileName,
+                ContentType = form.File.ContentType,
+                Length = form.File.Length
+            }
+        };
+
+        var result = await _medicalRecordService.UploadImagingRecordAsync(currentUserId, currentUserRole, uploadRequest, ct);
+
+        if (!result.Success)
+        {
+            if (result.Message != null && result.Message.Contains("Không tìm thấy đợt khám"))
+            {
+                return NotFound(result);
+            }
+
+            if (result.Message != null && (result.Message.Contains("không có quyền") || result.Message.Contains("quyền thao tác")))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
+
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("clinical-entries/{id:long}/imaging")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Patient},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetClinicalEntryImaging(
+        [FromRoute] long id,
+        CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId <= 0)
+        {
+            return Unauthorized(ApiResponse<List<ImagingRecordDto>>.Fail("Không xác định được danh tính người dùng đăng nhập."));
+        }
+
+        var currentUserRole = GetCurrentUserRole();
+
+        if (id <= 0)
+        {
+            return BadRequest(ApiResponse<List<ImagingRecordDto>>.Fail("Mã đợt khám (ClinicalEntryId) không hợp lệ."));
+        }
+
+        var result = await _medicalRecordService.GetImagingRecordsByClinicalEntryIdAsync(currentUserId, currentUserRole, id, ct);
+
+        if (!result.Success)
+        {
+            if (result.Message != null && result.Message.Contains("Không tìm thấy đợt khám"))
+            {
+                return NotFound(result);
+            }
+
+            if (result.Message != null && (result.Message.Contains("không có quyền") || result.Message.Contains("quyền thao tác")))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
+
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("imaging/{imagingRecordId:long}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Patient},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordDto>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordDto>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetImagingRecordById(
+        [FromRoute] long imagingRecordId,
+        CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId <= 0)
+        {
+            return Unauthorized(ApiResponse<ImagingRecordDto>.Fail("Không xác định được danh tính người dùng đăng nhập."));
+        }
+
+        var currentUserRole = GetCurrentUserRole();
+
+        var result = await _medicalRecordService.GetImagingRecordByIdAsync(currentUserId, currentUserRole, imagingRecordId, ct);
+
+        if (!result.Success)
+        {
+            if (result.Message != null && result.Message.Contains("Không tìm thấy"))
+            {
+                return NotFound(result);
+            }
+
+            if (result.Message != null && (result.Message.Contains("không có quyền") || result.Message.Contains("quyền thao tác")))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
+
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("imaging/{imagingRecordId:long}/content")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Patient},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetImagingContent(
+        [FromRoute] long imagingRecordId,
+        CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId <= 0)
+        {
+            return Unauthorized(ApiResponse.Fail("Không xác định được danh tính người dùng đăng nhập."));
+        }
+
+        var currentUserRole = GetCurrentUserRole();
+
+        var result = await _medicalRecordService.GetImagingFileStreamAsync(currentUserId, currentUserRole, imagingRecordId, ct);
+
+        if (!result.Success || result.Data == null)
+        {
+            if (result.Message != null && result.Message.Contains("Không tìm thấy"))
+            {
+                return NotFound(ApiResponse.Fail(result.Message));
+            }
+
+            if (result.Message != null && (result.Message.Contains("không có quyền") || result.Message.Contains("quyền thao tác")))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, ApiResponse.Fail(result.Message));
+            }
+
+            return BadRequest(ApiResponse.Fail(result.Message ?? "Không thể lấy nội dung hình ảnh y tế."));
+        }
+
+        Response.Headers.CacheControl = "no-store, private";
+        Response.Headers.Pragma = "no-cache";
+        return File(result.Data.Stream, result.Data.ContentType, result.Data.FileName);
+    }
+
+    [HttpDelete("imaging/{imagingRecordId:long}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteImagingRecord(
+        [FromRoute] long imagingRecordId,
+        CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId <= 0)
+        {
+            return Unauthorized(ApiResponse<bool>.Fail("Không xác định được danh tính người dùng đăng nhập."));
+        }
+
+        var currentUserRole = GetCurrentUserRole();
+
+        var result = await _medicalRecordService.DeleteImagingRecordAsync(currentUserId, currentUserRole, imagingRecordId, ct);
+
+        if (!result.Success)
+        {
+            if (result.Message != null && result.Message.Contains("Không tìm thấy"))
+            {
+                return NotFound(result);
+            }
+
+            if (result.Message != null && (result.Message.Contains("không có quyền") || result.Message.Contains("quyền thao tác")))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
+
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpDelete("clinical-entries/{id:long}/imaging/{imagingRecordId:long}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteClinicalEntryImaging(
+        [FromRoute] long id,
+        [FromRoute] long imagingRecordId,
+        CancellationToken ct)
+    {
+        return await DeleteImagingRecord(imagingRecordId, ct);
     }
 }

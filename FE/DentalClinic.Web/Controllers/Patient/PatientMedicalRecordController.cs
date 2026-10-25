@@ -29,4 +29,38 @@ public class PatientMedicalRecordController : Controller
 
         return View("~/Views/Patient/MedicalRecords/Index.cshtml", vm);
     }
+
+    [HttpGet("ImagingContent/{imagingRecordId:long}")]
+    public async Task<IActionResult> ImagingContent(long imagingRecordId)
+    {
+        if (imagingRecordId <= 0)
+        {
+            return NotFound();
+        }
+
+        var (stream, contentType, statusCode) = await _medicalRecordApi.GetImagingStreamAsync(imagingRecordId);
+        if (statusCode == 401)
+        {
+            return Unauthorized();
+        }
+
+        if (statusCode == 403)
+        {
+            return Forbid();
+        }
+
+        if (statusCode == 404 || stream == null)
+        {
+            return NotFound();
+        }
+
+        if (statusCode != 200)
+        {
+            return StatusCode(statusCode);
+        }
+
+        Response.Headers.CacheControl = "no-store, private";
+        Response.Headers.Pragma = "no-cache";
+        return File(stream, contentType);
+    }
 }

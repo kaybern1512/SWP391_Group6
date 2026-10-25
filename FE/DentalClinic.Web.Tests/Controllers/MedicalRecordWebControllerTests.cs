@@ -133,4 +133,545 @@ public class MedicalRecordWebControllerTests
         vm.Record.Should().NotBeNull();
         vm.Record!.PatientName.Should().Be("Lê Thị B");
     }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_UploadImaging_WhenValid_RedirectsToIndexWithSuccessMessage()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("xray.jpg");
+        fileMock.Setup(f => f.Length).Returns(1024);
+
+        _apiMock.Setup(x => x.UploadImagingRecordAsync(15, fileMock.Object, "Panorama", "Bình thường"))
+            .ReturnsAsync(ApiResult<ImagingRecordMetadataDto>.Success(new ImagingRecordMetadataDto { ImagingRecordId = 1 }));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var model = new UploadDentalImagingFormModel
+        {
+            ClinicalEntryId = 15,
+            PatientUserId = 10,
+            File = fileMock.Object,
+            ImagingType = "Panorama",
+            ResultSummary = "Bình thường"
+        };
+
+        var result = await controller.UploadImaging(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        redirect.RouteValues!["patientId"].Should().Be(10L);
+        controller.TempData["SuccessMessage"].Should().Be("Tải lên phim X-quang / ảnh răng thành công!");
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_UploadImaging_WhenFileMissing_RedirectsToIndexWithErrorMessage()
+    {
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var model = new UploadDentalImagingFormModel
+        {
+            ClinicalEntryId = 15,
+            PatientUserId = 10,
+            File = null,
+            ImagingType = "Panorama"
+        };
+
+        var result = await controller.UploadImaging(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("chọn tập tin");
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_UploadImaging_WhenFileExtensionInvalid_RedirectsToIndexWithErrorMessage()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("virus.exe");
+        fileMock.Setup(f => f.Length).Returns(1024);
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var model = new UploadDentalImagingFormModel
+        {
+            ClinicalEntryId = 15,
+            PatientUserId = 10,
+            File = fileMock.Object,
+            ImagingType = "Panorama"
+        };
+
+        var result = await controller.UploadImaging(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("không được hỗ trợ");
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_UploadImaging_WhenApiFails_RedirectsToIndexWithErrorMessage()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("xray.png");
+        fileMock.Setup(f => f.Length).Returns(1024);
+
+        _apiMock.Setup(x => x.UploadImagingRecordAsync(15, fileMock.Object, "Panorama", null))
+            .ReturnsAsync(ApiResult<ImagingRecordMetadataDto>.Failure("Cloudinary quota exceeded", statusCode: 500));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var model = new UploadDentalImagingFormModel
+        {
+            ClinicalEntryId = 15,
+            PatientUserId = 10,
+            File = fileMock.Object,
+            ImagingType = "Panorama"
+        };
+
+        var result = await controller.UploadImaging(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"].Should().Be("Cloudinary quota exceeded");
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_ImagingContent_WhenFound_ReturnsFileResult()
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes("fake-image-data");
+        var ms = new System.IO.MemoryStream(bytes);
+        _apiMock.Setup(x => x.GetImagingStreamAsync(88))
+            .ReturnsAsync((ms, "image/png", 200));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist")
+        };
+
+        var result = await controller.ImagingContent(88);
+
+        var fileResult = result.Should().BeOfType<FileStreamResult>().Subject;
+        fileResult.ContentType.Should().Be("image/png");
+        fileResult.FileStream.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_ImagingContent_WhenNotFound_ReturnsNotFound()
+    {
+        _apiMock.Setup(x => x.GetImagingStreamAsync(99))
+            .ReturnsAsync((null, string.Empty, 404));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist")
+        };
+
+        var result = await controller.ImagingContent(99);
+
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_ImagingContent_WhenForbidden_ReturnsForbid()
+    {
+        _apiMock.Setup(x => x.GetImagingStreamAsync(100))
+            .ReturnsAsync((null, string.Empty, 403));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist")
+        };
+
+        var result = await controller.ImagingContent(100);
+
+        result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_Index_WithClinicalEntriesAndImaging_PopulatesViewModelForGallery()
+    {
+        var record = new MedicalRecordDto
+        {
+            PatientUserId = 12,
+            PatientName = "Trần Văn C",
+            ClinicalEntries = new List<ClinicalEntryDto>
+            {
+                new()
+                {
+                    ClinicalEntryId = 5,
+                    Diagnosis = "Viêm tủy cấp R46",
+                    ImagingRecords = new List<ImagingRecordDto>
+                    {
+                        new()
+                        {
+                            ImagingRecordId = 88,
+                            ClinicalEntryId = 5,
+                            ImagingType = "Periapical",
+                            FileUrl = "https://cloudinary.com/sample.jpg",
+                            ResultSummary = "Nang quanh cuống chân răng 46"
+                        }
+                    }
+                }
+            }
+        };
+
+        _apiMock.Setup(x => x.SearchPatientsAsync(null))
+            .ReturnsAsync(ApiResult<List<PatientLookupDto>>.Success(new List<PatientLookupDto> { new() { PatientUserId = 12, FullName = "Trần Văn C" } }));
+        _apiMock.Setup(x => x.GetByPatientIdAsync(12))
+            .ReturnsAsync(ApiResult<MedicalRecordDto>.Success(record));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist")
+        };
+
+        var result = await controller.Index(12);
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = viewResult.Model.Should().BeOfType<DentistMedicalRecordIndexViewModel>().Subject;
+        vm.SelectedRecord.Should().NotBeNull();
+        vm.SelectedRecord!.ClinicalEntries.Should().HaveCount(1);
+        vm.SelectedRecord.ClinicalEntries[0].ImagingRecords.Should().HaveCount(1);
+        vm.SelectedRecord.ClinicalEntries[0].ImagingRecords[0].ImagingType.Should().Be("Periapical");
+    }
+
+    [Fact]
+    public void PatientMedicalRecordController_HasAuthorizeAttribute_WithRolePatient()
+    {
+        var authAttr = System.Attribute.GetCustomAttribute(
+            typeof(PatientMedicalRecordController),
+            typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute)) as Microsoft.AspNetCore.Authorization.AuthorizeAttribute;
+
+        authAttr.Should().NotBeNull();
+        authAttr!.Roles.Should().Be("Patient");
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_Index_WithImagingRecords_PopulatesPatientViewModel()
+    {
+        var record = new MedicalRecordDto
+        {
+            PatientUserId = 101,
+            PatientName = "Lê Thị B",
+            ClinicalEntries = new List<ClinicalEntryDto>
+            {
+                new()
+                {
+                    ClinicalEntryId = 12,
+                    Diagnosis = "Chỉnh nha toàn hàm",
+                    CreatedAt = System.DateTime.UtcNow,
+                    ImagingRecords = new List<ImagingRecordDto>
+                    {
+                        new()
+                        {
+                            ImagingRecordId = 55,
+                            ClinicalEntryId = 12,
+                            ImagingType = "Cephalometric",
+                            FileUrl = "https://res.cloudinary.com/demo/image/upload/ceph.jpg",
+                            ResultSummary = "Góc ANB tăng nhẹ, hạng II xương",
+                            CreatedAt = System.DateTime.UtcNow
+                        }
+                    }
+                }
+            }
+        };
+
+        _apiMock.Setup(x => x.GetMyMedicalRecordAsync())
+            .ReturnsAsync(ApiResult<MedicalRecordDto>.Success(record));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient", "Lê Thị B")
+        };
+
+        var result = await controller.Index();
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        viewResult.ViewName.Should().Be("~/Views/Patient/MedicalRecords/Index.cshtml");
+        var vm = viewResult.Model.Should().BeOfType<PatientMedicalRecordIndexViewModel>().Subject;
+        vm.Record.Should().NotBeNull();
+        vm.Record!.PatientUserId.Should().Be(101);
+        vm.Record.ClinicalEntries.Should().HaveCount(1);
+        vm.Record.ClinicalEntries[0].ImagingRecords.Should().HaveCount(1);
+        vm.Record.ClinicalEntries[0].ImagingRecords[0].ImagingType.Should().Be("Cephalometric");
+        vm.Record.ClinicalEntries[0].ImagingRecords[0].ResultSummary.Should().Be("Góc ANB tăng nhẹ, hạng II xương");
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_Index_WhenNoRecord_ReturnsNullRecordInViewModel()
+    {
+        _apiMock.Setup(x => x.GetMyMedicalRecordAsync())
+            .ReturnsAsync(ApiResult<MedicalRecordDto>.Failure("NotFound", statusCode: 404));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient", "Lê Thị B")
+        };
+
+        var result = await controller.Index();
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = viewResult.Model.Should().BeOfType<PatientMedicalRecordIndexViewModel>().Subject;
+        vm.Record.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_ImagingContent_WhenFound_ReturnsFileResult()
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes("patient-image-content");
+        var ms = new System.IO.MemoryStream(bytes);
+        _apiMock.Setup(x => x.GetImagingStreamAsync(55))
+            .ReturnsAsync((ms, "image/jpeg", 200));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.ImagingContent(55);
+
+        var fileResult = result.Should().BeOfType<FileStreamResult>().Subject;
+        fileResult.ContentType.Should().Be("image/jpeg");
+        fileResult.FileStream.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_ImagingContent_WhenForbidden_ReturnsForbid()
+    {
+        _apiMock.Setup(x => x.GetImagingStreamAsync(99))
+            .ReturnsAsync((null, string.Empty, 403));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.ImagingContent(99);
+
+        result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_ImagingContent_WhenNotFound_ReturnsNotFound()
+    {
+        _apiMock.Setup(x => x.GetImagingStreamAsync(404))
+            .ReturnsAsync((null, string.Empty, 404));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.ImagingContent(404);
+
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_ImagingContent_WhenUnauthorized_ReturnsUnauthorized()
+    {
+        _apiMock.Setup(x => x.GetImagingStreamAsync(401))
+            .ReturnsAsync((null, string.Empty, 401));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.ImagingContent(401);
+
+        result.Should().BeOfType<UnauthorizedResult>();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-100)]
+    public async Task PatientMedicalRecordController_ImagingContent_WhenInvalidId_ReturnsNotFound(long invalidId)
+    {
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.ImagingContent(invalidId);
+
+        result.Should().BeOfType<NotFoundResult>();
+        _apiMock.Verify(x => x.GetImagingStreamAsync(It.IsAny<long>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_UploadImaging_WhenWebpFile_RedirectsToIndexWithErrorMessage()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("photo.webp");
+        fileMock.Setup(f => f.Length).Returns(1024);
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var model = new UploadDentalImagingFormModel
+        {
+            ClinicalEntryId = 15,
+            PatientUserId = 10,
+            File = fileMock.Object,
+            ImagingType = "Panorama"
+        };
+
+        var result = await controller.UploadImaging(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("không được hỗ trợ");
+        _apiMock.Verify(x => x.UploadImagingRecordAsync(It.IsAny<long>(), It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_UploadImaging_WhenDicomExtension_CallsApiAndRedirects()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("scan.dcm");
+        fileMock.Setup(f => f.Length).Returns(2048);
+
+        _apiMock.Setup(x => x.UploadImagingRecordAsync(15, fileMock.Object, "Panorama", null))
+            .ReturnsAsync(ApiResult<ImagingRecordMetadataDto>.Success(new ImagingRecordMetadataDto { ImagingRecordId = 1 }));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var model = new UploadDentalImagingFormModel
+        {
+            ClinicalEntryId = 15,
+            PatientUserId = 10,
+            File = fileMock.Object,
+            ImagingType = "Panorama"
+        };
+
+        var result = await controller.UploadImaging(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["SuccessMessage"]!.ToString().Should().Contain("thành công");
+        _apiMock.Verify(x => x.UploadImagingRecordAsync(15, fileMock.Object, "Panorama", null), Times.Once);
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_DeleteImaging_WhenValid_CallsApiAndRedirectsWithSuccessMessage()
+    {
+        _apiMock.Setup(x => x.DeleteImagingRecordAsync(88))
+            .ReturnsAsync(ApiResult<bool>.Success(true, "Xóa phim X-quang thành công."));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.DeleteImaging(88, 10);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        redirect.RouteValues!["patientId"].Should().Be(10L);
+        controller.TempData["SuccessMessage"]!.ToString().Should().Contain("thành công");
+        _apiMock.Verify(x => x.DeleteImagingRecordAsync(88), Times.Once);
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_DeleteImaging_WhenApiFails_RedirectsWithErrorMessage()
+    {
+        _apiMock.Setup(x => x.DeleteImagingRecordAsync(88))
+            .ReturnsAsync(ApiResult<bool>.Failure("Bác sĩ không có quyền thao tác xóa hình ảnh này.", statusCode: 403));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.DeleteImaging(88, 10);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("không có quyền");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task DentistMedicalRecordController_DeleteImaging_WhenInvalidId_RedirectsWithErrorMessage(long invalidId)
+    {
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.DeleteImaging(invalidId, 10);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("không hợp lệ");
+        _apiMock.Verify(x => x.DeleteImagingRecordAsync(It.IsAny<long>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_ImagingContent_SetsNoStoreCacheControlHeaders()
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes("image-content");
+        var ms = new System.IO.MemoryStream(bytes);
+        _apiMock.Setup(x => x.GetImagingStreamAsync(55))
+            .ReturnsAsync((ms, "image/jpeg", 200));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist")
+        };
+
+        var result = await controller.ImagingContent(55);
+
+        result.Should().BeOfType<FileStreamResult>();
+        controller.Response.Headers.CacheControl.ToString().Should().Contain("no-store");
+        controller.Response.Headers.Pragma.ToString().Should().Contain("no-cache");
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_ImagingContent_SetsNoStoreCacheControlHeaders()
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes("patient-image-content");
+        var ms = new System.IO.MemoryStream(bytes);
+        _apiMock.Setup(x => x.GetImagingStreamAsync(55))
+            .ReturnsAsync((ms, "image/jpeg", 200));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.ImagingContent(55);
+
+        result.Should().BeOfType<FileStreamResult>();
+        controller.Response.Headers.CacheControl.ToString().Should().Contain("no-store");
+        controller.Response.Headers.Pragma.ToString().Should().Contain("no-cache");
+    }
 }
