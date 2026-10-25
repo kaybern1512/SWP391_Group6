@@ -1,12 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using DentalClinic.Web.Models.Api;
 using DentalClinic.Web.Models.ApiDtos;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 namespace DentalClinic.Web.Services;
@@ -56,6 +60,146 @@ public class MedicalRecordApiService : IMedicalRecordApiService
     public async Task<ApiResult<ImagingRecordDto>> AddImagingRecordAsync(CreateImagingRecordRequest request)
     {
         return await SendPostAsync<CreateImagingRecordRequest, ImagingRecordDto>("/api/medical-records/imaging", request);
+    }
+
+    public async Task<ApiResult<ImagingRecordMetadataDto>> UploadImagingRecordAsync(
+        long clinicalEntryId,
+        IFormFile file,
+        string imagingType,
+        string? resultSummary = null)
+    {
+        if (clinicalEntryId <= 0)
+        {
+            return ApiResult<ImagingRecordMetadataDto>.Failure("Mã ca khám không hợp lệ.", statusCode: 400);
+        }
+
+        if (file == null || file.Length == 0)
+        {
+            return ApiResult<ImagingRecordMetadataDto>.Failure("Vui lòng chọn tập tin hình ảnh hoặc phim X-quang.", statusCode: 400);
+        }
+
+        if (file.Length > 15 * 1024 * 1024)
+        {
+            return ApiResult<ImagingRecordMetadataDto>.Failure("Kích thước tệp không được vượt quá 15 MB.", statusCode: 400);
+        }
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var allowedExts = new[] { ".jpg", ".jpeg", ".png", ".webp", ".dcm" };
+        if (!allowedExts.Contains(ext))
+        {
+            return ApiResult<ImagingRecordMetadataDto>.Failure("Định dạng tệp không được hỗ trợ. Chỉ chấp nhận .jpg, .jpeg, .png, .webp, .dcm.", statusCode: 400);
+        }
+
+        if (string.IsNullOrWhiteSpace(imagingType))
+        {
+            return ApiResult<ImagingRecordMetadataDto>.Failure("Vui lòng chọn loại phim X-quang.", statusCode: 400);
+        }
+
+        using var stream = file.OpenReadStream();
+        var contentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
+        return await UploadImagingRecordAsync(clinicalEntryId, stream, file.FileName, contentType, imagingType, resultSummary);
+    }
+
+    public async Task<ApiResult<ImagingRecordMetadataDto>> UploadImagingRecordAsync(
+        long clinicalEntryId,
+        Stream fileStream,
+        string fileName,
+        string contentType,
+        string imagingType,
+        string? resultSummary = null)
+    {
+        if (clinicalEntryId <= 0)
+        {
+            return ApiResult<ImagingRecordMetadataDto>.Failure("Mã ca khám không hợp lệ.", statusCode: 400);
+        }
+
+        if (fileStream == null || fileStream.CanRead == false)
+        {
+            return ApiResult<ImagingRecordMetadataDto>.Failure("Luồng dữ liệu tệp không hợp lệ.", statusCode: 400);
+        }
+
+        if (string.IsNullOrWhiteSpace(imagingType))
+        {
+            return ApiResult<ImagingRecordMetadataDto>.Failure("Vui lòng chọn loại phim X-quang.", statusCode: 400);
+        }
+
+        var endpoint = $"/api/medical-records/clinical-entries/{clinicalEntryId}/imaging";
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            using var streamContent = new StreamContent(fileStream);
+            if (!string.IsNullOrWhiteSpace(contentType))
+            {
+                streamContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            }
+            content.Add(streamContent, "File", string.IsNullOrWhiteSpace(fileName) ? "imaging.jpg" : fileName);
+            content.Add(new StringContent(imagingType.Trim(), Encoding.UTF8), "ImagingType");
+
+            if (!string.IsNullOrWhiteSpace(resultSummary))
+            {
+                content.Add(new StringContent(resultSummary.Trim(), Encoding.UTF8), "ResultSummary");
+            }
+
+            var response = await _httpClient.PostAsync(endpoint, content);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var apiResponse = TryDeserialize<ApiResponse<ImagingRecordMetadataDto>>(body);
+                if (apiResponse != null && apiResponse.Success && apiResponse.Data != null)
+                {
+                    return ApiResult<ImagingRecordMetadataDto>.Success(apiResponse.Data, apiResponse.Message ?? "Tải phim X-quang thành công.", (int)response.StatusCode);
+                }
+
+                var direct = TryDeserialize<ImagingRecordMetadataDto>(body);
+                if (direct != null)
+                {
+                    return ApiResult<ImagingRecordMetadataDto>.Success(direct, "Tải phim X-quang thành công.", (int)response.StatusCode);
+                }
+
+                return ApiResult<ImagingRecordMetadataDto>.Failure("Không thể phân tích dữ liệu trả về từ hệ thống.", statusCode: 500);
+            }
+
+            return ParseError<ImagingRecordMetadataDto>(response.StatusCode, body);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Lỗi kết nối khi gọi POST {Endpoint}", endpoint);
+            return ApiResult<ImagingRecordMetadataDto>.Failure("Không thể kết nối đến máy chủ API.", statusCode: (int)HttpStatusCode.ServiceUnavailable);
+        }
+    }
+
+    public async Task<ApiResult<List<ImagingRecordDto>>> GetClinicalEntryImagingAsync(long clinicalEntryId)
+    {
+        return await SendGetAsync<List<ImagingRecordDto>>($"/api/medical-records/clinical-entries/{clinicalEntryId}/imaging");
+    }
+
+    public async Task<ApiResult<bool>> DeleteImagingRecordAsync(long imagingRecordId)
+    {
+        var endpoint = $"/api/medical-records/imaging/{imagingRecordId}";
+        try
+        {
+            var response = await _httpClient.DeleteAsync(endpoint);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var apiResponse = TryDeserialize<ApiResponse<bool>>(body);
+                if (apiResponse != null && apiResponse.Success)
+                {
+                    return ApiResult<bool>.Success(apiResponse.Data, apiResponse.Message ?? "Xóa phim X-quang thành công.", (int)response.StatusCode);
+                }
+                return ApiResult<bool>.Success(true, "Xóa phim X-quang thành công.", (int)response.StatusCode);
+            }
+
+            return ParseError<bool>(response.StatusCode, body);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Lỗi kết nối khi gọi DELETE {Endpoint}", endpoint);
+            return ApiResult<bool>.Failure("Không thể kết nối đến máy chủ API.", statusCode: (int)HttpStatusCode.ServiceUnavailable);
+        }
     }
 
     // ==========================================
