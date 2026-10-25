@@ -125,11 +125,17 @@ public class DentalImageFileValidator : IDentalImageFileValidator
         // Check DICOM (.dcm, .dicom)
         if (ext is ".dcm" or ".dicom")
         {
-            // First check if it's actually a disguised JPEG
+            // First check if it's actually a disguised JPEG or PNG
             if (IsJpeg(headerBytes))
             {
                 return ImageFileValidationResult.Failure(
                     "Tệp mang phần mở rộng DICOM nhưng nội dung thực tế là ảnh JPEG thông thường. Vui lòng sử dụng tệp chuẩn DICOM PS 3.10 hoặc tải lên dưới dạng .jpg/.jpeg.");
+            }
+
+            if (IsPng(headerBytes))
+            {
+                return ImageFileValidationResult.Failure(
+                    "Tệp mang phần mở rộng DICOM nhưng nội dung thực tế là ảnh PNG thông thường. Vui lòng sử dụng tệp chuẩn DICOM PS 3.10 hoặc tải lên dưới dạng .png.");
             }
 
             // Standard DICOM Part 10 (PS 3.10) requires 128-byte preamble + 4-byte 'DICM' prefix

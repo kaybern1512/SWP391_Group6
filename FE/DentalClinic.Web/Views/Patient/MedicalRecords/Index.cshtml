@@ -306,7 +306,7 @@
                                         <div class="row g-3">
                                             @foreach (var img in entry.ImagingRecords)
                                             {
-                                                var isDicom = (!string.IsNullOrEmpty(img.FileUrl) && img.FileUrl.EndsWith(".dcm", StringComparison.OrdinalIgnoreCase)) ||
+                                                var isDicom = (!string.IsNullOrEmpty(img.FileUrl) && (img.FileUrl.EndsWith(".dcm", StringComparison.OrdinalIgnoreCase) || img.FileUrl.EndsWith(".dicom", StringComparison.OrdinalIgnoreCase))) ||
                                                               img.ImagingType.Equals("DICOM", StringComparison.OrdinalIgnoreCase);
                                                 var safeUrl = Url.Action("ImagingContent", "PatientMedicalRecord", new { imagingRecordId = img.ImagingRecordId });
                                                 var badgeColor = img.ImagingType switch

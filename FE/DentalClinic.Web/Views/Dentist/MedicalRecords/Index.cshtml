@@ -418,7 +418,7 @@
                                                     <div class="row g-3">
                                                         @foreach (var img in entry.ImagingRecords)
                                                         {
-                                                            var isDicom = (!string.IsNullOrEmpty(img.FileUrl) && img.FileUrl.EndsWith(".dcm", StringComparison.OrdinalIgnoreCase)) ||
+                                                            var isDicom = (!string.IsNullOrEmpty(img.FileUrl) && (img.FileUrl.EndsWith(".dcm", StringComparison.OrdinalIgnoreCase) || img.FileUrl.EndsWith(".dicom", StringComparison.OrdinalIgnoreCase))) ||
                                                                           img.ImagingType.Equals("DICOM", StringComparison.OrdinalIgnoreCase);
                                                             var safeUrl = Url.Action("ImagingContent", "DentistMedicalRecord", new { imagingRecordId = img.ImagingRecordId });
                                                             var badgeColor = img.ImagingType switch
@@ -662,9 +662,9 @@
 
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-slate-700">Tệp phim X-quang / ảnh răng <span class="text-danger">*</span></label>
-                            <input type="file" id="uploadImagingFileInput" name="File" class="form-control" accept=".jpg,.jpeg,.png,.webp,.dcm" required />
+                            <input type="file" id="uploadImagingFileInput" name="File" class="form-control" accept=".jpg,.jpeg,.png,.dcm,.dicom" required />
                             <div class="form-text small text-muted">
-                                <i class="bi bi-info-circle me-1"></i>Hỗ trợ JPG, PNG, WEBP, DICOM (.dcm) — Tối đa 15 MB.
+                                <i class="bi bi-info-circle me-1"></i>Hỗ trợ JPG, PNG, DICOM (.dcm, .dicom) — Tối đa 15 MB.
                             </div>
                             <div id="fileValidationFeedback" class="text-danger small mt-1 d-none"></div>
                         </div>
@@ -901,7 +901,7 @@
             const uploadForm = document.getElementById('formUploadImaging');
             const feedback = document.getElementById('fileValidationFeedback');
             const maxSizeBytes = 15 * 1024 * 1024;
-            const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.dcm'];
+            const allowedExts = ['.jpg', '.jpeg', '.png', '.dcm', '.dicom'];
 
             if (fileInput) {
                 fileInput.addEventListener('change', function () {
@@ -911,7 +911,7 @@
                     const hasValidExt = allowedExts.some(ext => name.endsWith(ext));
 
                     if (!hasValidExt) {
-                        feedback.textContent = 'Định dạng tệp không hợp lệ! Vui lòng chỉ chọn .jpg, .jpeg, .png, .webp hoặc .dcm';
+                        feedback.textContent = 'Định dạng tệp không hợp lệ! Vui lòng chỉ chọn .jpg, .jpeg, .png hoặc .dcm/.dicom';
                         feedback.classList.remove('d-none');
                         this.value = '';
                         return;

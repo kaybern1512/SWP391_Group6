@@ -863,7 +863,6 @@ public class MedicalRecordService : IMedicalRecordService
         {
             ".jpg" or ".jpeg" => "image/jpeg",
             ".png" => "image/png",
-            ".webp" => "image/webp",
             ".dcm" or ".dicom" => "application/dicom",
             _ => "application/octet-stream"
         };

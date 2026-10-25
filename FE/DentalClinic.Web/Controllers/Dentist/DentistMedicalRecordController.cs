@@ -146,11 +146,11 @@ public class DentistMedicalRecordController : Controller
             return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
         }
 
-        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp", ".dcm" };
+        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".dcm", ".dicom" };
         var ext = Path.GetExtension(model.File.FileName).ToLowerInvariant();
         if (!allowedExtensions.Contains(ext))
         {
-            TempData["ErrorMessage"] = "Định dạng tệp không được hỗ trợ. Chỉ chấp nhận JPG, JPEG, PNG, WEBP hoặc DICOM (.dcm).";
+            TempData["ErrorMessage"] = "Định dạng tệp không được hỗ trợ. Chỉ chấp nhận JPG, JPEG, PNG hoặc DICOM (.dcm, .dicom).";
             return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
         }
 
