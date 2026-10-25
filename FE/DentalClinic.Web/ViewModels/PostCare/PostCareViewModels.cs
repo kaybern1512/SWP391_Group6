@@ -10,6 +10,7 @@ public class DentistReferralIndexViewModel
     public List<DepartmentDto> Departments { get; set; } = new();
     public List<TreatmentSessionDto> RecentSessions { get; set; } = new();
     public string? ActiveTab { get; set; } = "referrals";
+    public long? SelectedSessionId { get; set; }
 }
 
 public class DepartmentReferralIndexViewModel

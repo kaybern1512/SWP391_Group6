@@ -48,7 +48,13 @@ public class PostCareServiceTests
 
         // Patients
         var patientUser = new UserAccount { UserId = 10, Email = "patient@test.com", Role = UserRole.Patient, Status = AccountStatus.Active };
-        var patientProfile = new PatientProfile { UserId = 10, PatientCode = "PAT-001", FullName = "Nguyễn Văn A" };
+        var patientProfile = new PatientProfile
+        {
+            UserId = 10,
+            PatientCode = "PAT-001",
+            FullName = "Nguyễn Văn A",
+            EmergencyContact = "0987654321"
+        };
         db.UserAccounts.Add(patientUser);
         db.PatientProfiles.Add(patientProfile);
 
@@ -59,6 +65,14 @@ public class PostCareServiceTests
         db.UserAccounts.Add(dentistUser);
         db.StaffProfiles.Add(dentistStaff);
         db.DentistProfiles.Add(dentistProfile);
+        db.DentistDepartments.Add(new DentistDepartment
+        {
+            DentistDepartmentId = 1,
+            DentistUserId = 20,
+            DepartmentId = 1,
+            Status = "Active",
+            AssignedAt = DateTime.UtcNow
+        });
 
         var orthoDentistUser = new UserAccount { UserId = 30, Email = "ortho@test.com", Role = UserRole.Dentist, Status = AccountStatus.Active };
         var orthoDentistStaff = new StaffProfile { UserId = 30, EmployeeCode = "D002", FullName = "BS Trần Thị C (Chỉnh Nha)", EmploymentStatus = "Active" };
@@ -66,6 +80,14 @@ public class PostCareServiceTests
         db.UserAccounts.Add(orthoDentistUser);
         db.StaffProfiles.Add(orthoDentistStaff);
         db.DentistProfiles.Add(orthoDentistProfile);
+        db.DentistDepartments.Add(new DentistDepartment
+        {
+            DentistDepartmentId = 2,
+            DentistUserId = 30,
+            DepartmentId = 2,
+            Status = "Active",
+            AssignedAt = DateTime.UtcNow
+        });
 
         var mgrUser = new UserAccount { UserId = 102, Email = "mgr_ortho@test.com", Role = UserRole.DepartmentManager, Status = AccountStatus.Active };
         var mgrStaff = new StaffProfile { UserId = 102, EmployeeCode = "M001", FullName = "Trưởng Khoa Chỉnh Nha", EmploymentStatus = "Active" };
@@ -135,6 +157,7 @@ public class PostCareServiceTests
         {
             TreatmentSessionId = 401,
             ToDepartmentId = 2,
+            Urgency = "Urgent",
             Reason = "Cần chỉnh nha do răng lệch lạc nặng"
         };
 
@@ -143,6 +166,7 @@ public class PostCareServiceTests
         Assert.True(response.Success);
         Assert.NotNull(response.Data);
         Assert.Equal(2, response.Data.ToDepartmentId);
+        Assert.Equal("Urgent", response.Data.Urgency);
         Assert.Equal("Pending", response.Data.Status);
         Assert.Equal("Cần chỉnh nha do răng lệch lạc nặng", response.Data.Reason);
         Assert.Equal("Nguyễn Văn A", response.Data.PatientName);
@@ -151,6 +175,24 @@ public class PostCareServiceTests
         var saved = await db.DepartmentReferrals.FirstOrDefaultAsync(r => r.ReferralId == response.Data.ReferralId);
         Assert.NotNull(saved);
         Assert.Equal("Pending", saved.Status);
+    }
+
+    [Fact]
+    public async Task CreateReferral_OtherDentistsSession_Fails()
+    {
+        using var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedPostCareDataAsync(db);
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        var result = await service.CreateReferralAsync(30, new CreateReferralRequest
+        {
+            TreatmentSessionId = 401,
+            ToDepartmentId = 2,
+            Reason = "Cần hội chẩn"
+        });
+
+        Assert.False(result.Success);
+        Assert.Contains("do mình phụ trách", result.Message);
     }
 
     [Fact]
@@ -212,6 +254,30 @@ public class PostCareServiceTests
     }
 
     [Fact]
+    public async Task ReviewReferral_AssignedDentistFromAnotherDepartment_Fails()
+    {
+        using var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedPostCareDataAsync(db);
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+        var referral = await service.CreateReferralAsync(20, new CreateReferralRequest
+        {
+            TreatmentSessionId = 401,
+            ToDepartmentId = 2,
+            Reason = "Cần hội chẩn chuyên khoa"
+        });
+        Assert.True(referral.Success);
+
+        var result = await service.ReviewReferralAsync(102, referral.Data!.ReferralId, new ReviewReferralRequest
+        {
+            Status = "Accepted",
+            AssignedDentistUserId = 20
+        });
+
+        Assert.False(result.Success);
+        Assert.Contains("không thuộc chuyên khoa", result.Message);
+    }
+
+    [Fact]
     public async Task CreateFollowUp_ValidFutureDate_CreatesScheduleSuccessfully()
     {
         var dbName = Guid.NewGuid().ToString();
@@ -238,7 +304,16 @@ public class PostCareServiceTests
         // Verify patient gets follow-ups
         var patientFollowUps = await service.GetPatientFollowUpsAsync(10);
         Assert.True(patientFollowUps.Success);
-        Assert.Single(patientFollowUps.Data!);
-        Assert.Equal("Tái khám sau trám răng 2 tuần", patientFollowUps.Data![0].Reason);
+        var patientFollowUpList = patientFollowUps.Data!;
+        Assert.Single(patientFollowUpList);
+        Assert.Equal("Tái khám sau trám răng 2 tuần", patientFollowUpList[0].Reason);
+        Assert.Equal("0987654321", patientFollowUpList[0].PatientPhoneNumber);
+
+        var receptionistFollowUps = await service.GetReceptionistFollowUpsAsync();
+        Assert.True(receptionistFollowUps.Success);
+        var receptionistFollowUpList = receptionistFollowUps.Data!;
+        Assert.Single(receptionistFollowUpList);
+        Assert.Equal(10, receptionistFollowUpList[0].PatientUserId);
+        Assert.Equal("0987654321", receptionistFollowUpList[0].PatientPhoneNumber);
     }
 }
