@@ -399,4 +399,179 @@ public class MedicalRecordApiServiceTests
         statusCode.Should().Be(403);
         stream.Should().BeNull();
     }
+
+    [Fact]
+    public async Task GetClinicalEntryImagingAsync_WhenEmpty_ReturnsEmptyList()
+    {
+        // Arrange
+        var clinicalEntryId = 44L;
+        var responseJson = JsonSerializer.Serialize(new ApiResponse<List<ImagingRecordDto>>
+        {
+            Success = true,
+            Data = new List<ImagingRecordDto>()
+        });
+
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.Method == HttpMethod.Get &&
+                    req.RequestUri!.AbsolutePath == $"/api/medical-records/clinical-entries/{clinicalEntryId}/imaging"),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
+            });
+
+        // Act
+        var result = await _apiService.GetClinicalEntryImagingAsync(clinicalEntryId);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Data.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetClinicalEntryImagingAsync_WhenUnauthorized_Returns401()
+    {
+        // Arrange
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+            {
+                Content = new StringContent("{\"message\":\"Vui lòng đăng nhập.\"}", Encoding.UTF8, "application/json")
+            });
+
+        // Act
+        var result = await _apiService.GetClinicalEntryImagingAsync(1);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(401);
+    }
+
+    [Fact]
+    public async Task GetClinicalEntryImagingAsync_WhenForbidden_Returns403()
+    {
+        // Arrange
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.Forbidden)
+            {
+                Content = new StringContent("{\"message\":\"Không có quyền truy cập.\"}", Encoding.UTF8, "application/json")
+            });
+
+        // Act
+        var result = await _apiService.GetClinicalEntryImagingAsync(1);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task GetClinicalEntryImagingAsync_WhenNotFound_Returns404()
+    {
+        // Arrange
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                Content = new StringContent("{\"message\":\"Không tìm thấy ca khám.\"}", Encoding.UTF8, "application/json")
+            });
+
+        // Act
+        var result = await _apiService.GetClinicalEntryImagingAsync(999);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public async Task GetClinicalEntryImagingAsync_WhenNetworkFails_Returns503()
+    {
+        // Arrange
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("Network failure"));
+
+        // Act
+        var result = await _apiService.GetClinicalEntryImagingAsync(1);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.StatusCode.Should().Be((int)HttpStatusCode.ServiceUnavailable);
+        result.Message.Should().Contain("Không thể kết nối");
+    }
+
+    [Fact]
+    public async Task GetImagingStreamAsync_WhenUnauthorized_Returns401()
+    {
+        // Arrange
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.Unauthorized));
+
+        // Act
+        var (stream, contentType, statusCode) = await _apiService.GetImagingStreamAsync(1);
+
+        // Assert
+        statusCode.Should().Be(401);
+        stream.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetImagingStreamAsync_WhenNotFound_Returns404()
+    {
+        // Arrange
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        // Act
+        var (stream, contentType, statusCode) = await _apiService.GetImagingStreamAsync(999);
+
+        // Assert
+        statusCode.Should().Be(404);
+        stream.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetImagingStreamAsync_WhenNetworkFails_Returns503()
+    {
+        // Arrange
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("Timeout"));
+
+        // Act
+        var (stream, contentType, statusCode) = await _apiService.GetImagingStreamAsync(1);
+
+        // Assert
+        statusCode.Should().Be((int)HttpStatusCode.ServiceUnavailable);
+        stream.Should().BeNull();
+    }
 }

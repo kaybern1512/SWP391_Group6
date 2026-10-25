@@ -349,4 +349,169 @@ public class MedicalRecordWebControllerTests
         vm.SelectedRecord.ClinicalEntries[0].ImagingRecords.Should().HaveCount(1);
         vm.SelectedRecord.ClinicalEntries[0].ImagingRecords[0].ImagingType.Should().Be("Periapical");
     }
+
+    [Fact]
+    public void PatientMedicalRecordController_HasAuthorizeAttribute_WithRolePatient()
+    {
+        var authAttr = System.Attribute.GetCustomAttribute(
+            typeof(PatientMedicalRecordController),
+            typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute)) as Microsoft.AspNetCore.Authorization.AuthorizeAttribute;
+
+        authAttr.Should().NotBeNull();
+        authAttr!.Roles.Should().Be("Patient");
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_Index_WithImagingRecords_PopulatesPatientViewModel()
+    {
+        var record = new MedicalRecordDto
+        {
+            PatientUserId = 101,
+            PatientName = "Lê Thị B",
+            ClinicalEntries = new List<ClinicalEntryDto>
+            {
+                new()
+                {
+                    ClinicalEntryId = 12,
+                    Diagnosis = "Chỉnh nha toàn hàm",
+                    CreatedAt = System.DateTime.UtcNow,
+                    ImagingRecords = new List<ImagingRecordDto>
+                    {
+                        new()
+                        {
+                            ImagingRecordId = 55,
+                            ClinicalEntryId = 12,
+                            ImagingType = "Cephalometric",
+                            FileUrl = "https://res.cloudinary.com/demo/image/upload/ceph.jpg",
+                            ResultSummary = "Góc ANB tăng nhẹ, hạng II xương",
+                            CreatedAt = System.DateTime.UtcNow
+                        }
+                    }
+                }
+            }
+        };
+
+        _apiMock.Setup(x => x.GetMyMedicalRecordAsync())
+            .ReturnsAsync(ApiResult<MedicalRecordDto>.Success(record));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient", "Lê Thị B")
+        };
+
+        var result = await controller.Index();
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        viewResult.ViewName.Should().Be("~/Views/Patient/MedicalRecords/Index.cshtml");
+        var vm = viewResult.Model.Should().BeOfType<PatientMedicalRecordIndexViewModel>().Subject;
+        vm.Record.Should().NotBeNull();
+        vm.Record!.PatientUserId.Should().Be(101);
+        vm.Record.ClinicalEntries.Should().HaveCount(1);
+        vm.Record.ClinicalEntries[0].ImagingRecords.Should().HaveCount(1);
+        vm.Record.ClinicalEntries[0].ImagingRecords[0].ImagingType.Should().Be("Cephalometric");
+        vm.Record.ClinicalEntries[0].ImagingRecords[0].ResultSummary.Should().Be("Góc ANB tăng nhẹ, hạng II xương");
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_Index_WhenNoRecord_ReturnsNullRecordInViewModel()
+    {
+        _apiMock.Setup(x => x.GetMyMedicalRecordAsync())
+            .ReturnsAsync(ApiResult<MedicalRecordDto>.Failure("NotFound", statusCode: 404));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient", "Lê Thị B")
+        };
+
+        var result = await controller.Index();
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = viewResult.Model.Should().BeOfType<PatientMedicalRecordIndexViewModel>().Subject;
+        vm.Record.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_ImagingContent_WhenFound_ReturnsFileResult()
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes("patient-image-content");
+        var ms = new System.IO.MemoryStream(bytes);
+        _apiMock.Setup(x => x.GetImagingStreamAsync(55))
+            .ReturnsAsync((ms, "image/jpeg", 200));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.ImagingContent(55);
+
+        var fileResult = result.Should().BeOfType<FileStreamResult>().Subject;
+        fileResult.ContentType.Should().Be("image/jpeg");
+        fileResult.FileStream.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_ImagingContent_WhenForbidden_ReturnsForbid()
+    {
+        _apiMock.Setup(x => x.GetImagingStreamAsync(99))
+            .ReturnsAsync((null, string.Empty, 403));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.ImagingContent(99);
+
+        result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_ImagingContent_WhenNotFound_ReturnsNotFound()
+    {
+        _apiMock.Setup(x => x.GetImagingStreamAsync(404))
+            .ReturnsAsync((null, string.Empty, 404));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.ImagingContent(404);
+
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task PatientMedicalRecordController_ImagingContent_WhenUnauthorized_ReturnsUnauthorized()
+    {
+        _apiMock.Setup(x => x.GetImagingStreamAsync(401))
+            .ReturnsAsync((null, string.Empty, 401));
+
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.ImagingContent(401);
+
+        result.Should().BeOfType<UnauthorizedResult>();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-100)]
+    public async Task PatientMedicalRecordController_ImagingContent_WhenInvalidId_ReturnsNotFound(long invalidId)
+    {
+        var controller = new PatientMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.ImagingContent(invalidId);
+
+        result.Should().BeOfType<NotFoundResult>();
+        _apiMock.Verify(x => x.GetImagingStreamAsync(It.IsAny<long>()), Times.Never);
+    }
 }
