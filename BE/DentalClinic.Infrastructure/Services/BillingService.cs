@@ -589,12 +589,22 @@ public class BillingService : IBillingService
 
     private static InvoiceDto MapToInvoiceDto(Invoice invoice, ClinicProfile? clinic)
     {
-        var subTotal = invoice.InvoiceItems.Sum(i => i.Quantity * i.UnitPrice);
+        const string taxItemPrefix = "Thuế giá trị gia tăng (VAT ";
+        var taxItems = invoice.InvoiceItems
+            .Where(i => i.Description.StartsWith(taxItemPrefix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var taxAmount = taxItems.Sum(i => i.Quantity * i.UnitPrice);
+        var subTotal = invoice.InvoiceItems
+            .Where(i => !i.Description.StartsWith(taxItemPrefix, StringComparison.OrdinalIgnoreCase))
+            .Sum(i => i.Quantity * i.UnitPrice);
         var paidAmount = invoice.Payments.Where(p => p.Status == "Successful").Sum(p => p.Amount);
         var remainingAmount = Math.Max(0, invoice.TotalAmount - paidAmount);
 
-        // Derive discount amount if total amount is less than subtotal
-        var discountAmount = subTotal > invoice.TotalAmount ? (subTotal - invoice.TotalAmount) : 0m;
+        var discountAmount = Math.Clamp(subTotal + taxAmount - invoice.TotalAmount, 0m, subTotal);
+        var discountedSubTotal = subTotal - discountAmount;
+        var taxPercent = discountedSubTotal > 0
+            ? Math.Round(taxAmount / discountedSubTotal * 100m, 2)
+            : 0m;
 
         return new InvoiceDto
         {
@@ -614,8 +624,8 @@ public class BillingService : IBillingService
             GeneratedByName = invoice.GeneratedByUser?.FullName ?? "Nhân viên thu ngân",
             SubTotal = subTotal,
             DiscountAmount = discountAmount,
-            TaxPercent = 0,
-            TaxAmount = 0,
+            TaxPercent = taxPercent,
+            TaxAmount = taxAmount,
             TotalAmount = invoice.TotalAmount,
             PaidAmount = paidAmount,
             RemainingAmount = remainingAmount,
@@ -629,16 +639,18 @@ public class BillingService : IBillingService
             ClinicPhone = clinic?.PhoneNumber ?? "028 3822 9999",
             ClinicEmail = clinic?.Email ?? "contact@dentalcare.vn",
 
-            Items = invoice.InvoiceItems.Select(item => new InvoiceItemDto
-            {
-                InvoiceItemId = item.InvoiceItemId,
-                InvoiceId = item.InvoiceId,
-                PerformedServiceId = item.PerformedServiceId,
-                Description = item.Description,
-                Quantity = item.Quantity,
-                UnitPrice = item.UnitPrice,
-                Amount = item.Quantity * item.UnitPrice
-            }).ToList(),
+            Items = invoice.InvoiceItems
+                .Where(item => !item.Description.StartsWith(taxItemPrefix, StringComparison.OrdinalIgnoreCase))
+                .Select(item => new InvoiceItemDto
+                {
+                    InvoiceItemId = item.InvoiceItemId,
+                    InvoiceId = item.InvoiceId,
+                    PerformedServiceId = item.PerformedServiceId,
+                    Description = item.Description,
+                    Quantity = item.Quantity,
+                    UnitPrice = item.UnitPrice,
+                    Amount = item.Quantity * item.UnitPrice
+                }).ToList(),
 
             Payments = invoice.Payments.OrderByDescending(p => p.CreatedAt).Select(p => new PaymentDto
             {

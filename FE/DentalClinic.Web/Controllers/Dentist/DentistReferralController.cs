@@ -28,7 +28,7 @@ public class DentistReferralController : Controller
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index(string? tab = "referrals")
+    public async Task<IActionResult> Index(string? tab = "referrals", long? sessionId = null)
     {
         var referralsResult = await _postCareApi.GetDentistReferralsAsync();
         var followUpsResult = await _postCareApi.GetDentistFollowUpsAsync();
@@ -41,7 +41,8 @@ public class DentistReferralController : Controller
             FollowUps = followUpsResult.IsSuccess && followUpsResult.Data != null ? followUpsResult.Data : new List<FollowUpScheduleDto>(),
             Departments = deptsResult.IsSuccess && deptsResult.Data != null ? deptsResult.Data : new List<DepartmentDto>(),
             RecentSessions = sessionsResult.IsSuccess && sessionsResult.Data != null ? sessionsResult.Data : new List<TreatmentSessionDto>(),
-            ActiveTab = tab
+            ActiveTab = tab,
+            SelectedSessionId = sessionId
         };
 
         return View("~/Views/Dentist/Referrals/Index.cshtml", vm);

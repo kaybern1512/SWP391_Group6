@@ -83,6 +83,10 @@
                                             </td>
                                             <td>
                                                 <span class="badge bg-primary">@r.ToDepartmentName</span>
+                                                @if (r.Urgency == "Urgent")
+                                                {
+                                                    <span class="badge bg-danger ms-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Khẩn</span>
+                                                }
                                             </td>
                                             <td>
                                                 @if (!string.IsNullOrEmpty(r.AssignedDentistName))
@@ -227,7 +231,7 @@
                             <option value="">-- Chọn buổi điều trị của bệnh nhân --</option>
                             @foreach (var s in Model.RecentSessions)
                             {
-                                <option value="@s.TreatmentSessionId">
+                                <option value="@s.TreatmentSessionId" selected="@(Model.SelectedSessionId == s.TreatmentSessionId)">
                                     [Buổi #@s.TreatmentSessionId] BN: @s.PatientName (@s.PatientCode) - Ngày: @s.SessionDate.ToString("dd/MM/yyyy") - Giai đoạn @s.PhaseSequenceNo: @(s.PhaseServiceName ?? "Thủ thuật")
                                 </option>
                             }
@@ -243,6 +247,14 @@
                             {
                                 <option value="@d.DepartmentId">@d.Name</option>
                             }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mức độ ưu tiên <span class="text-danger">*</span></label>
+                        <select name="Urgency" class="form-select" required>
+                            <option value="Normal" selected>Bình thường</option>
+                            <option value="Urgent">Khẩn cấp</option>
                         </select>
                     </div>
 
@@ -281,7 +293,7 @@
                             <option value="">-- Chọn ca điều trị của bệnh nhân --</option>
                             @foreach (var s in Model.RecentSessions)
                             {
-                                <option value="@s.TreatmentSessionId">
+                                <option value="@s.TreatmentSessionId" selected="@(Model.SelectedSessionId == s.TreatmentSessionId)">
                                     [Buổi #@s.TreatmentSessionId] BN: @s.PatientName (@s.PatientCode) - Ngày: @s.SessionDate.ToString("dd/MM/yyyy")
                                 </option>
                             }
@@ -317,6 +329,17 @@
             popoverTriggerList.map(function (popoverTriggerEl) {
                 return new bootstrap.Popover(popoverTriggerEl);
             });
+
+            @if (Model.SelectedSessionId.HasValue)
+            {
+                <text>
+                var modalId = '@(Model.ActiveTab == "followups" ? "createFollowUpModal" : "createReferralModal")';
+                var postCareModal = document.getElementById(modalId);
+                if (postCareModal) {
+                    bootstrap.Modal.getOrCreateInstance(postCareModal).show();
+                }
+                </text>
+            }
         });
     </script>
 }

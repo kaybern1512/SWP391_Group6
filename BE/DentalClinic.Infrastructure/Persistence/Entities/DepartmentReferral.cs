@@ -19,6 +19,8 @@ public partial class DepartmentReferral
 
     public string Reason { get; set; } = null!;
 
+    public string Urgency { get; set; } = "Normal";
+
     public string Status { get; set; } = null!;
 
     public DateTime CreatedAt { get; set; }
