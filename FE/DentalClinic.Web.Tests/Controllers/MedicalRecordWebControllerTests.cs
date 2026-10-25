@@ -133,4 +133,120 @@ public class MedicalRecordWebControllerTests
         vm.Record.Should().NotBeNull();
         vm.Record!.PatientName.Should().Be("Lê Thị B");
     }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_UploadImaging_WhenValid_RedirectsToIndexWithSuccessMessage()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("xray.jpg");
+        fileMock.Setup(f => f.Length).Returns(1024);
+
+        _apiMock.Setup(x => x.UploadImagingRecordAsync(15, fileMock.Object, "Panorama", "Bình thường"))
+            .ReturnsAsync(ApiResult<ImagingRecordMetadataDto>.Success(new ImagingRecordMetadataDto { ImagingRecordId = 1 }));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var model = new UploadDentalImagingFormModel
+        {
+            ClinicalEntryId = 15,
+            PatientUserId = 10,
+            File = fileMock.Object,
+            ImagingType = "Panorama",
+            ResultSummary = "Bình thường"
+        };
+
+        var result = await controller.UploadImaging(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        redirect.RouteValues!["patientId"].Should().Be(10L);
+        controller.TempData["SuccessMessage"].Should().Be("Tải lên phim X-quang / ảnh răng thành công!");
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_UploadImaging_WhenFileMissing_RedirectsToIndexWithErrorMessage()
+    {
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var model = new UploadDentalImagingFormModel
+        {
+            ClinicalEntryId = 15,
+            PatientUserId = 10,
+            File = null,
+            ImagingType = "Panorama"
+        };
+
+        var result = await controller.UploadImaging(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("chọn tập tin");
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_UploadImaging_WhenFileExtensionInvalid_RedirectsToIndexWithErrorMessage()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("virus.exe");
+        fileMock.Setup(f => f.Length).Returns(1024);
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var model = new UploadDentalImagingFormModel
+        {
+            ClinicalEntryId = 15,
+            PatientUserId = 10,
+            File = fileMock.Object,
+            ImagingType = "Panorama"
+        };
+
+        var result = await controller.UploadImaging(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("không được hỗ trợ");
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_UploadImaging_WhenApiFails_RedirectsToIndexWithErrorMessage()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("xray.png");
+        fileMock.Setup(f => f.Length).Returns(1024);
+
+        _apiMock.Setup(x => x.UploadImagingRecordAsync(15, fileMock.Object, "Panorama", null))
+            .ReturnsAsync(ApiResult<ImagingRecordMetadataDto>.Failure("Cloudinary quota exceeded", statusCode: 500));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var model = new UploadDentalImagingFormModel
+        {
+            ClinicalEntryId = 15,
+            PatientUserId = 10,
+            File = fileMock.Object,
+            ImagingType = "Panorama"
+        };
+
+        var result = await controller.UploadImaging(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"].Should().Be("Cloudinary quota exceeded");
+    }
 }

@@ -416,11 +416,14 @@
                                                 </div>
                                             }
 
-                                            <div class="col-12 text-end mt-2">
-                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openAddImagingModal(@entry.ClinicalEntryId, '@(entry.Diagnosis?.Replace("'", "\\'") ?? "")')">
-                                                    <i class="bi bi-camera me-1"></i> Bổ sung phim X-quang
-                                                </button>
-                                            </div>
+                                            @if (User.IsInRole("Dentist"))
+                                            {
+                                                <div class="col-12 text-end mt-2">
+                                                    <button type="button" class="btn btn-sm btn-outline-primary fw-medium" onclick="openUploadImagingModal(@entry.ClinicalEntryId, '@(entry.Diagnosis?.Replace("'", "\\'") ?? "")')">
+                                                        <i class="bi bi-cloud-arrow-up-fill me-1"></i> Upload Phim X-quang / Ảnh Răng
+                                                    </button>
+                                                </div>
+                                            }
                                         </div>
                                     </div>
                                 }
@@ -558,49 +561,57 @@
         </div>
     </div>
 
-    <!-- Modal Bổ Sung Phim X-Quang -->
-    <div class="modal fade" id="modalAddImaging" tabindex="-1" aria-labelledby="modalAddImagingLabel" aria-hidden="true">
+    <!-- Modal Upload Phim X-Quang / Ảnh Răng -->
+    <div class="modal fade" id="modalUploadImaging" tabindex="-1" aria-labelledby="modalUploadImagingLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow">
-                <div class="modal-header bg-info text-white">
-                    <h5 class="modal-title fw-bold" id="modalAddImagingLabel">
-                        <i class="bi bi-camera me-2"></i>Bổ Sung Kết Quả Phim X-Quang
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="modalUploadImagingLabel">
+                        <i class="bi bi-cloud-arrow-up-fill me-2"></i>Upload Phim X-Quang / Ảnh Răng
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form asp-action="AddImagingRecord" method="post">
+                <form id="formUploadImaging" asp-action="UploadImaging" method="post" enctype="multipart/form-data">
                     @Html.AntiForgeryToken()
-                    <input type="hidden" id="addImagingClinicalEntryId" name="ClinicalEntryId" value="0" />
+                    <input type="hidden" id="uploadImagingClinicalEntryId" name="ClinicalEntryId" value="0" />
                     <input type="hidden" name="PatientUserId" value="@(record.PatientUserId)" />
                     <div class="modal-body p-4">
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold text-slate-700">Đợt khám:</label>
-                            <div id="addImagingDiagnosisPreview" class="fw-bold text-primary small"></div>
+                        <div class="mb-3 p-2 bg-light rounded border">
+                            <label class="form-label fw-semibold text-slate-700 mb-0 small">Đợt khám liên kết:</label>
+                            <div id="uploadImagingDiagnosisPreview" class="fw-bold text-primary small"></div>
                         </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-slate-700">Tệp phim X-quang / ảnh răng <span class="text-danger">*</span></label>
+                            <input type="file" id="uploadImagingFileInput" name="File" class="form-control" accept=".jpg,.jpeg,.png,.webp,.dcm" required />
+                            <div class="form-text small text-muted">
+                                <i class="bi bi-info-circle me-1"></i>Hỗ trợ JPG, PNG, WEBP, DICOM (.dcm) — Tối đa 15 MB.
+                            </div>
+                            <div id="fileValidationFeedback" class="text-danger small mt-1 d-none"></div>
+                        </div>
+
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-slate-700">Loại phim X-quang <span class="text-danger">*</span></label>
-                            <select name="ImagingType" class="form-select" required>
+                            <select id="uploadImagingTypeSelect" name="ImagingType" class="form-select" required>
                                 <option value="">-- Chọn loại phim --</option>
-                                <option value="X-Quang chóp răng (Periapical)">X-Quang chóp răng (Periapical)</option>
-                                <option value="X-Quang cánh cắn (Bitewing)">X-Quang cánh cắn (Bitewing)</option>
-                                <option value="Toàn cảnh Panorama">Toàn cảnh Panorama</option>
-                                <option value="Phim sọ nghiêng Cephalometric">Phim sọ nghiêng Cephalometric</option>
-                                <option value="Chụp CT Cone Beam 3D">Chụp CT Cone Beam 3D</option>
+                                <option value="Panorama">Panorama (Toàn cảnh OPG)</option>
+                                <option value="Periapical">Periapical (Cận chóp / Quanh chóp)</option>
+                                <option value="Cephalometric">Cephalometric (Sọ nghiêng Ceph)</option>
+                                <option value="Intraoral">Intraoral (Ảnh chụp trong miệng)</option>
                             </select>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold text-slate-700">Đường dẫn file ảnh phim (File URL / Cloud URL)</label>
-                            <input type="text" name="FileUrl" class="form-control" placeholder="https://... hoặc /uploads/xray_01.jpg" />
-                        </div>
+
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-slate-700">Kết luận đọc phim / Mô tả tổn thương</label>
-                            <textarea name="ResultSummary" class="form-control" rows="3" placeholder="Ghi nhận cấu trúc xương ổ, cuống răng, nang quanh cuống hoặc hướng mọc của răng..."></textarea>
+                            <textarea id="uploadImagingResultSummary" name="ResultSummary" class="form-control" rows="3" placeholder="Ghi nhận cấu trúc xương ổ, cuống răng, nang quanh cuống hoặc hướng mọc của răng..."></textarea>
                         </div>
                     </div>
                     <div class="modal-footer bg-light">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-                        <button type="submit" class="btn btn-info text-white px-4 fw-medium">
-                            <i class="bi bi-save me-1"></i> Lưu Kết Quả Phim
+                        <button type="submit" id="btnSubmitUploadImaging" class="btn btn-primary px-4 fw-medium">
+                            <span id="uploadSpinner" class="spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
+                            <i class="bi bi-cloud-arrow-up-fill me-1" id="uploadIcon"></i>
+                            <span id="uploadBtnText">Upload Phim</span>
                         </button>
                     </div>
                 </form>
@@ -611,10 +622,32 @@
 
 @section Scripts {
     <script>
+        function openUploadImagingModal(entryId, diagnosis) {
+            document.getElementById('uploadImagingClinicalEntryId').value = entryId;
+            document.getElementById('uploadImagingDiagnosisPreview').textContent = diagnosis || ('Đợt khám #' + entryId);
+            const fileInput = document.getElementById('uploadImagingFileInput');
+            if (fileInput) fileInput.value = '';
+            const typeSelect = document.getElementById('uploadImagingTypeSelect');
+            if (typeSelect) typeSelect.selectedIndex = 0;
+            const summaryInput = document.getElementById('uploadImagingResultSummary');
+            if (summaryInput) summaryInput.value = '';
+            const feedback = document.getElementById('fileValidationFeedback');
+            if (feedback) { feedback.textContent = ''; feedback.classList.add('d-none'); }
+            const submitBtn = document.getElementById('btnSubmitUploadImaging');
+            if (submitBtn) { submitBtn.disabled = false; }
+            const spinner = document.getElementById('uploadSpinner');
+            if (spinner) spinner.classList.add('d-none');
+            const icon = document.getElementById('uploadIcon');
+            if (icon) icon.classList.remove('d-none');
+            const btnText = document.getElementById('uploadBtnText');
+            if (btnText) btnText.textContent = 'Upload Phim';
+
+            new bootstrap.Modal(document.getElementById('modalUploadImaging')).show();
+        }
+
+        // Backward compatibility
         function openAddImagingModal(entryId, diagnosis) {
-            document.getElementById('addImagingClinicalEntryId').value = entryId;
-            document.getElementById('addImagingDiagnosisPreview').textContent = diagnosis || ('Đợt khám #' + entryId);
-            new bootstrap.Modal(document.getElementById('modalAddImaging')).show();
+            openUploadImagingModal(entryId, diagnosis);
         }
 
         function addToothRow() {
@@ -671,10 +704,61 @@
             document.getElementById("toothConditionsJsonInput").value = JSON.stringify(list);
         }
 
-        // Add 1 default row when modal is loaded
+        // Client-side file validation & double submit prevention
         document.addEventListener("DOMContentLoaded", function() {
             if (document.getElementById("toothRowsContainer")) {
                 addToothRow();
+            }
+
+            const fileInput = document.getElementById('uploadImagingFileInput');
+            const uploadForm = document.getElementById('formUploadImaging');
+            const feedback = document.getElementById('fileValidationFeedback');
+            const maxSizeBytes = 15 * 1024 * 1024;
+            const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.dcm'];
+
+            if (fileInput) {
+                fileInput.addEventListener('change', function () {
+                    if (!this.files || this.files.length === 0) return;
+                    const file = this.files[0];
+                    const name = file.name.toLowerCase();
+                    const hasValidExt = allowedExts.some(ext => name.endsWith(ext));
+
+                    if (!hasValidExt) {
+                        feedback.textContent = 'Định dạng tệp không hợp lệ! Vui lòng chỉ chọn .jpg, .jpeg, .png, .webp hoặc .dcm';
+                        feedback.classList.remove('d-none');
+                        this.value = '';
+                        return;
+                    }
+
+                    if (file.size > maxSizeBytes) {
+                        feedback.textContent = `Dung lượng tệp (${(file.size / (1024 * 1024)).toFixed(2)} MB) vượt quá giới hạn 15 MB!`;
+                        feedback.classList.remove('d-none');
+                        this.value = '';
+                        return;
+                    }
+
+                    feedback.textContent = '';
+                    feedback.classList.add('d-none');
+                });
+            }
+
+            if (uploadForm) {
+                uploadForm.addEventListener('submit', function (e) {
+                    const submitBtn = document.getElementById('btnSubmitUploadImaging');
+                    const spinner = document.getElementById('uploadSpinner');
+                    const icon = document.getElementById('uploadIcon');
+                    const btnText = document.getElementById('uploadBtnText');
+
+                    if (submitBtn.disabled) {
+                        e.preventDefault();
+                        return;
+                    }
+
+                    submitBtn.disabled = true;
+                    if (spinner) spinner.classList.remove('d-none');
+                    if (icon) icon.classList.add('d-none');
+                    if (btnText) btnText.textContent = 'Đang tải lên...';
+                });
             }
         });
     </script>
