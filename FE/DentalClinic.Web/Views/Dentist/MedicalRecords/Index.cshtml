@@ -480,6 +480,16 @@
                                                                                 <span class="text-muted fst-italic">Chưa có kết luận</span>
                                                                             }
                                                                         </div>
+                                                                        @if (User.IsInRole("Dentist"))
+                                                                        {
+                                                                            <div class="d-flex justify-content-end mt-2 pt-1 border-top border-light">
+                                                                                <button type="button" class="btn btn-xs btn-outline-danger"
+                                                                                        onclick="openDeleteImagingModal(@img.ImagingRecordId, '@(img.ImagingType)', '@(img.CreatedAt.ToString("dd/MM/yyyy HH:mm"))', @(record.PatientUserId))"
+                                                                                        title="Xóa phim X-quang">
+                                                                                    <i class="bi bi-trash3-fill me-1"></i> Xóa
+                                                                                </button>
+                                                                            </div>
+                                                                        }
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -750,6 +760,46 @@
             </div>
         </div>
     </div>
+
+    <!-- Modal Xác Nhận Xóa Phim X-Quang (Commit 22) -->
+    <div class="modal fade" id="modalDeleteImagingConfirm" tabindex="-1" aria-labelledby="modalDeleteImagingConfirmLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold" id="modalDeleteImagingConfirmLabel">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Xác Nhận Xóa Phim X-Quang
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="formDeleteImaging" asp-action="DeleteImaging" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="deleteImagingRecordId" name="imagingRecordId" value="0" />
+                    <input type="hidden" id="deleteImagingPatientUserId" name="patientUserId" value="@(record.PatientUserId)" />
+                    <div class="modal-body p-4">
+                        <p class="text-slate-800 mb-3">
+                            Bạn có chắc chắn muốn xóa phim X-quang này khỏi hồ sơ bệnh án không? Thao tác này sẽ gỡ bỏ bản ghi chẩn đoán hình ảnh và tệp liên quan.
+                        </p>
+                        <div class="alert alert-warning py-2 px-3 small border-0 bg-warning-subtle text-dark">
+                            <div><i class="bi bi-info-circle-fill text-warning me-1"></i><strong>Loại phim:</strong> <span id="deleteImagingTypeLabel" class="fw-bold"></span></div>
+                            <div><i class="bi bi-calendar-event me-1"></i><strong>Ngày tạo:</strong> <span id="deleteImagingDateLabel"></span></div>
+                            <div><i class="bi bi-hash me-1"></i><strong>Mã bản ghi:</strong> #<span id="deleteImagingIdLabel"></span></div>
+                        </div>
+                        <div class="text-muted small fst-italic">
+                            Lưu ý: Chỉ bác sĩ được phân công phụ trách ca khám mới có quyền xóa phim X-quang này.
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                        <button type="submit" id="btnConfirmDeleteImaging" class="btn btn-danger px-4 fw-medium">
+                            <span id="deleteSpinner" class="spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
+                            <i class="bi bi-trash3-fill me-1" id="deleteIcon"></i>
+                            <span id="deleteBtnText">Xác nhận xóa</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 }
 
 @section Scripts {
@@ -830,6 +880,25 @@
             if (btnText) btnText.textContent = 'Upload Phim';
 
             new bootstrap.Modal(document.getElementById('modalUploadImaging')).show();
+        }
+
+        function openDeleteImagingModal(imagingRecordId, imagingType, createdAt, patientUserId) {
+            document.getElementById('deleteImagingRecordId').value = imagingRecordId;
+            document.getElementById('deleteImagingPatientUserId').value = patientUserId;
+            document.getElementById('deleteImagingTypeLabel').textContent = imagingType || 'X-Quang';
+            document.getElementById('deleteImagingDateLabel').textContent = createdAt || '—';
+            document.getElementById('deleteImagingIdLabel').textContent = imagingRecordId;
+
+            const submitBtn = document.getElementById('btnConfirmDeleteImaging');
+            if (submitBtn) submitBtn.disabled = false;
+            const spinner = document.getElementById('deleteSpinner');
+            if (spinner) spinner.classList.add('d-none');
+            const icon = document.getElementById('deleteIcon');
+            if (icon) icon.classList.remove('d-none');
+            const btnText = document.getElementById('deleteBtnText');
+            if (btnText) btnText.textContent = 'Xác nhận xóa';
+
+            new bootstrap.Modal(document.getElementById('modalDeleteImagingConfirm')).show();
         }
 
         // Backward compatibility
@@ -945,6 +1014,26 @@
                     if (spinner) spinner.classList.remove('d-none');
                     if (icon) icon.classList.add('d-none');
                     if (btnText) btnText.textContent = 'Đang tải lên...';
+                });
+            }
+
+            const deleteForm = document.getElementById('formDeleteImaging');
+            if (deleteForm) {
+                deleteForm.addEventListener('submit', function (e) {
+                    const submitBtn = document.getElementById('btnConfirmDeleteImaging');
+                    const spinner = document.getElementById('deleteSpinner');
+                    const icon = document.getElementById('deleteIcon');
+                    const btnText = document.getElementById('deleteBtnText');
+
+                    if (submitBtn.disabled) {
+                        e.preventDefault();
+                        return;
+                    }
+
+                    submitBtn.disabled = true;
+                    if (spinner) spinner.classList.remove('d-none');
+                    if (icon) icon.classList.add('d-none');
+                    if (btnText) btnText.textContent = 'Đang xóa...';
                 });
             }
         });

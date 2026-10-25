@@ -240,4 +240,27 @@ public class DentistMedicalRecordController : Controller
 
         return File(stream, contentType);
     }
+
+    [HttpPost("DeleteImaging")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteImaging(long imagingRecordId, long patientUserId)
+    {
+        if (imagingRecordId <= 0)
+        {
+            TempData["ErrorMessage"] = "Mã bản ghi hình ảnh không hợp lệ.";
+            return RedirectToAction(nameof(Index), new { patientId = patientUserId });
+        }
+
+        var result = await _medicalRecordApi.DeleteImagingRecordAsync(imagingRecordId);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đã xóa phim X-quang thành công!";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể xóa phim X-quang.";
+        }
+
+        return RedirectToAction(nameof(Index), new { patientId = patientUserId });
+    }
 }
