@@ -114,6 +114,9 @@ public class CloudinaryImageStorageServiceTests
     [InlineData("https://10.0.0.1/internal")] // Private network
     [InlineData("https://attacker.com/exploit.jpg")] // Arbitrary domain
     [InlineData("https://notcloudinary.com/evil.jpg")] // Spoofed domain
+    [InlineData("https://user:password@res.cloudinary.com/demo/image/upload/sample.jpg")] // Embedded URL credentials
+    [InlineData("https://res.cloudinary.com:8443/demo/image/upload/sample.jpg")] // Non-standard port
+    [InlineData("https://res.cloudinary.com:8080/demo/image/upload/sample.jpg")] // Non-standard port
     public void IsAllowedCloudinaryStorageUri_SsrfAndDisallowedUrls_ReturnsFalse(string disallowedUrl)
     {
         var uri = new Uri(disallowedUrl);
