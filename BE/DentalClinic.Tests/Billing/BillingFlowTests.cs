@@ -138,6 +138,11 @@ public class BillingFlowTests
         // Discount = 100000 -> DiscountedSubTotal = 1500000
         // Tax 10% = 150000
         // Total = 1500000 + 150000 = 1650000
+        Assert.Equal(1600000m, result.Data.SubTotal);
+        Assert.Equal(100000m, result.Data.DiscountAmount);
+        Assert.Equal(10m, result.Data.TaxPercent);
+        Assert.Equal(150000m, result.Data.TaxAmount);
+        Assert.Equal(2, result.Data.Items.Count);
         Assert.Equal(1650000m, result.Data.TotalAmount);
         Assert.Equal("Unpaid", result.Data.Status);
         Assert.Equal(1650000m, result.Data.RemainingAmount);

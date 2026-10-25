@@ -197,6 +197,13 @@
                         <td class="text-end fw-bold text-danger">-@Model.DiscountAmount.ToString("N0") đ</td>
                     </tr>
                 }
+                @if (Model.TaxAmount > 0)
+                {
+                    <tr>
+                        <td colspan="4" class="text-end">Thuế VAT (@Model.TaxPercent.ToString("0.##")%):</td>
+                        <td class="text-end fw-bold">@Model.TaxAmount.ToString("N0") đ</td>
+                    </tr>
+                }
                 <tr>
                     <td colspan="4" class="text-end fw-bold text-uppercase fs-6">TỔNG TIỀN PHẢI THANH TOÁN:</td>
                     <td class="text-end fw-bold text-primary fs-5">@Model.TotalAmount.ToString("N0") đ</td>
