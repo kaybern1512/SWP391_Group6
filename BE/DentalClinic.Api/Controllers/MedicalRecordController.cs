@@ -187,4 +187,48 @@ public class MedicalRecordController : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpGet("clinical-entries/{id:long}/imaging")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Patient},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetClinicalEntryImaging(
+        [FromRoute] long id,
+        CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId <= 0)
+        {
+            return Unauthorized(ApiResponse<List<ImagingRecordDto>>.Fail("Không xác định được danh tính người dùng đăng nhập."));
+        }
+
+        var currentUserRole = GetCurrentUserRole();
+
+        if (id <= 0)
+        {
+            return BadRequest(ApiResponse<List<ImagingRecordDto>>.Fail("Mã đợt khám (ClinicalEntryId) không hợp lệ."));
+        }
+
+        var result = await _medicalRecordService.GetImagingRecordsByClinicalEntryIdAsync(currentUserId, currentUserRole, id, ct);
+
+        if (!result.Success)
+        {
+            if (result.Message != null && result.Message.Contains("Không tìm thấy đợt khám"))
+            {
+                return NotFound(result);
+            }
+
+            if (result.Message != null && (result.Message.Contains("không có quyền") || result.Message.Contains("quyền thao tác")))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
+
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
 }

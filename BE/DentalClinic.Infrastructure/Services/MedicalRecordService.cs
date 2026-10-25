@@ -114,6 +114,7 @@ public class MedicalRecordService : IMedicalRecordService
                 ImagingRecords = c.ImagingRecords.Select(img => new ImagingRecordDto
                 {
                     ImagingRecordId = img.ImagingRecordId,
+                    ClinicalEntryId = img.ClinicalEntryId,
                     ImagingType = img.ImagingType,
                     FileUrl = img.FileUrl,
                     ResultSummary = img.ResultSummary,
@@ -451,6 +452,7 @@ public class MedicalRecordService : IMedicalRecordService
         var dto = new ImagingRecordDto
         {
             ImagingRecordId = imagingRecord.ImagingRecordId,
+            ClinicalEntryId = imagingRecord.ClinicalEntryId,
             ImagingType = imagingRecord.ImagingType,
             FileUrl = imagingRecord.FileUrl,
             ResultSummary = imagingRecord.ResultSummary,
@@ -620,5 +622,86 @@ public class MedicalRecordService : IMedicalRecordService
         };
 
         return ApiResponse<ImagingRecordMetadataDto>.Ok(responseDto, "Tải lên và lưu hồ sơ hình ảnh X-quang thành công.");
+    }
+
+    public Task<ApiResponse<List<ImagingRecordDto>>> GetImagingRecordsByClinicalEntryIdAsync(
+        long clinicalEntryId,
+        CancellationToken ct = default)
+    {
+        return GetImagingRecordsByClinicalEntryIdAsync(0, null, clinicalEntryId, ct);
+    }
+
+    public async Task<ApiResponse<List<ImagingRecordDto>>> GetImagingRecordsByClinicalEntryIdAsync(
+        long currentUserId,
+        string? currentUserRole,
+        long clinicalEntryId,
+        CancellationToken ct = default)
+    {
+        if (clinicalEntryId <= 0)
+        {
+            return ApiResponse<List<ImagingRecordDto>>.Fail("Mã đợt khám (ClinicalEntryId) không hợp lệ.");
+        }
+
+        var entry = await _dbContext.ClinicalEntries
+            .Include(c => c.MedicalRecord)
+            .Include(c => c.Appointment)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ClinicalEntryId == clinicalEntryId, ct);
+
+        if (entry == null)
+        {
+            return ApiResponse<List<ImagingRecordDto>>.Fail("Không tìm thấy đợt khám lâm sàng tương ứng.");
+        }
+
+        if (currentUserId > 0 || !string.IsNullOrEmpty(currentUserRole))
+        {
+            if (currentUserId <= 0)
+            {
+                return ApiResponse<List<ImagingRecordDto>>.Fail("Người dùng chưa đăng nhập hoặc danh tính không hợp lệ.");
+            }
+
+            if (string.Equals(currentUserRole, UserRole.Dentist, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(currentUserRole))
+            {
+                var isAssignedDentist = entry.DentistUserId == currentUserId ||
+                    (entry.Appointment != null && entry.Appointment.AssignedDentistUserId == currentUserId);
+
+                if (!isAssignedDentist)
+                {
+                    return ApiResponse<List<ImagingRecordDto>>.Fail(
+                        "Bác sĩ không có quyền thao tác truy cập hình ảnh của đợt khám của bác sĩ khác.");
+                }
+            }
+            else if (string.Equals(currentUserRole, UserRole.Patient, StringComparison.OrdinalIgnoreCase))
+            {
+                if (entry.MedicalRecord == null || entry.MedicalRecord.PatientUserId != currentUserId)
+                {
+                    return ApiResponse<List<ImagingRecordDto>>.Fail(
+                        "Bệnh nhân không có quyền truy cập hồ sơ hình ảnh của bệnh nhân khác.");
+                }
+            }
+            else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase) &&
+                     !string.Equals(currentUserRole, UserRole.DepartmentManager, StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiResponse<List<ImagingRecordDto>>.Fail(
+                    "Bạn không có quyền truy cập danh sách hình ảnh y tế.");
+            }
+        }
+
+        var images = await _dbContext.ImagingRecords
+            .Where(img => img.ClinicalEntryId == clinicalEntryId)
+            .OrderByDescending(img => img.CreatedAt)
+            .Select(img => new ImagingRecordDto
+            {
+                ImagingRecordId = img.ImagingRecordId,
+                ClinicalEntryId = img.ClinicalEntryId,
+                ImagingType = img.ImagingType,
+                FileUrl = img.FileUrl,
+                ResultSummary = img.ResultSummary,
+                CreatedAt = img.CreatedAt
+            })
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        return ApiResponse<List<ImagingRecordDto>>.Ok(images);
     }
 }

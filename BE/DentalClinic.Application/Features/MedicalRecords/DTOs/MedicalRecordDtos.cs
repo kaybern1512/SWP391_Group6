@@ -53,6 +53,7 @@ public class OdontogramEntryDto
 public class ImagingRecordDto
 {
     public long ImagingRecordId { get; set; }
+    public long ClinicalEntryId { get; set; }
     public string ImagingType { get; set; } = string.Empty;
     public string? FileUrl { get; set; }
     public string? ResultSummary { get; set; }
