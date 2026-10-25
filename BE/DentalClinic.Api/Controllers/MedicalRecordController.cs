@@ -307,4 +307,56 @@ public class MedicalRecordController : ControllerBase
 
         return File(result.Data.Stream, result.Data.ContentType, result.Data.FileName);
     }
+
+    [HttpDelete("imaging/{imagingRecordId:long}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteImagingRecord(
+        [FromRoute] long imagingRecordId,
+        CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId <= 0)
+        {
+            return Unauthorized(ApiResponse<bool>.Fail("Không xác định được danh tính người dùng đăng nhập."));
+        }
+
+        var currentUserRole = GetCurrentUserRole();
+
+        var result = await _medicalRecordService.DeleteImagingRecordAsync(currentUserId, currentUserRole, imagingRecordId, ct);
+
+        if (!result.Success)
+        {
+            if (result.Message != null && result.Message.Contains("Không tìm thấy"))
+            {
+                return NotFound(result);
+            }
+
+            if (result.Message != null && (result.Message.Contains("không có quyền") || result.Message.Contains("quyền thao tác")))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
+
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpDelete("clinical-entries/{id:long}/imaging/{imagingRecordId:long}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteClinicalEntryImaging(
+        [FromRoute] long id,
+        [FromRoute] long imagingRecordId,
+        CancellationToken ct)
+    {
+        return await DeleteImagingRecord(imagingRecordId, ct);
+    }
 }

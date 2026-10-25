@@ -19,4 +19,6 @@ public interface IMedicalRecordService
     Task<ApiResponse<List<ImagingRecordDto>>> GetImagingRecordsByClinicalEntryIdAsync(long currentUserId, string? currentUserRole, long clinicalEntryId, CancellationToken ct = default);
     Task<ApiResponse<ImagingRecordDto>> GetImagingRecordByIdAsync(long currentUserId, string? currentUserRole, long imagingRecordId, CancellationToken ct = default);
     Task<ApiResponse<DentalImageStreamResult>> GetImagingFileStreamAsync(long currentUserId, string? currentUserRole, long imagingRecordId, CancellationToken ct = default);
+    Task<ApiResponse<bool>> DeleteImagingRecordAsync(long currentUserId, string? currentUserRole, long imagingRecordId, CancellationToken ct = default);
+    Task<ApiResponse<bool>> DeleteImagingRecordAsync(long currentUserId, long imagingRecordId, CancellationToken ct = default);
 }

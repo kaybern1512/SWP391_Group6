@@ -876,4 +876,159 @@ public class MedicalRecordService : IMedicalRecordService
             FileName = fileName
         });
     }
+
+    public Task<ApiResponse<bool>> DeleteImagingRecordAsync(long currentUserId, long imagingRecordId, CancellationToken ct = default)
+    {
+        return DeleteImagingRecordAsync(currentUserId, null, imagingRecordId, ct);
+    }
+
+    public async Task<ApiResponse<bool>> DeleteImagingRecordAsync(
+        long currentUserId,
+        string? currentUserRole,
+        long imagingRecordId,
+        CancellationToken ct = default)
+    {
+        if (imagingRecordId <= 0)
+        {
+            return ApiResponse<bool>.Fail("Mã bản ghi hình ảnh không hợp lệ.");
+        }
+
+        if (currentUserId <= 0)
+        {
+            return ApiResponse<bool>.Fail("Người dùng chưa đăng nhập hoặc danh tính không hợp lệ.");
+        }
+
+        var img = await _dbContext.ImagingRecords
+            .Include(i => i.ClinicalEntry)
+                .ThenInclude(c => c.MedicalRecord)
+            .Include(i => i.ClinicalEntry)
+                .ThenInclude(c => c.Appointment)
+            .FirstOrDefaultAsync(i => i.ImagingRecordId == imagingRecordId, ct);
+
+        if (img == null)
+        {
+            return ApiResponse<bool>.Fail("Không tìm thấy bản ghi hình ảnh tương ứng.");
+        }
+
+        var entry = img.ClinicalEntry;
+        if (entry == null)
+        {
+            return ApiResponse<bool>.Fail("Không tìm thấy đợt khám lâm sàng của bản ghi hình ảnh.");
+        }
+
+        // 1. Role-based & ownership validation
+        if (string.Equals(currentUserRole, UserRole.Patient, StringComparison.OrdinalIgnoreCase))
+        {
+            return ApiResponse<bool>.Fail("Bệnh nhân không có quyền xóa hình ảnh bệnh án.");
+        }
+
+        if (string.Equals(currentUserRole, UserRole.Dentist, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(currentUserRole))
+        {
+            var isAssignedDentist = entry.DentistUserId == currentUserId ||
+                (entry.Appointment != null && entry.Appointment.AssignedDentistUserId == currentUserId);
+
+            if (!isAssignedDentist)
+            {
+                return ApiResponse<bool>.Fail("Bác sĩ không có quyền thao tác xóa hình ảnh của đợt khám của bác sĩ khác.");
+            }
+        }
+        else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(currentUserRole, UserRole.DepartmentManager, StringComparison.OrdinalIgnoreCase))
+        {
+            return ApiResponse<bool>.Fail("Bạn không có quyền thực hiện thao tác xóa hình ảnh y tế.");
+        }
+
+        // 2. Storage asset cleanup
+        if (!string.IsNullOrWhiteSpace(img.FileUrl))
+        {
+            if (_imageStorageService == null)
+            {
+                _logger.LogError("Image storage service is not configured for deleting ImagingRecord {Id}", imagingRecordId);
+                return ApiResponse<bool>.Fail("Dịch vụ lưu trữ hình ảnh chưa sẵn sàng để xóa tệp an toàn.");
+            }
+
+            if (TryExtractDentalImagingPublicId(img.FileUrl, entry.ClinicalEntryId, out var publicId))
+            {
+                try
+                {
+                    var deleted = await _imageStorageService.DeleteDentalImageAsync(publicId!, ct);
+                    if (!deleted)
+                    {
+                        _logger.LogWarning("Storage provider failed to delete asset with public ID {PublicId} for ImagingRecord {Id}", publicId, imagingRecordId);
+                        return ApiResponse<bool>.Fail("Xóa tệp hình ảnh từ hệ thống lưu trữ thất bại. Thao tác xóa đã bị hủy để đảm bảo tính toàn vẹn dữ liệu.");
+                    }
+                }
+                catch (Exception storageEx)
+                {
+                    _logger.LogError(storageEx, "Exception occurred while deleting storage asset {PublicId} for ImagingRecord {Id}", publicId, imagingRecordId);
+                    return ApiResponse<bool>.Fail($"Xóa tệp hình ảnh từ hệ thống lưu trữ thất bại: {storageEx.Message}");
+                }
+            }
+            else
+            {
+                _logger.LogWarning("FileUrl '{FileUrl}' does not match standard Cloudinary dental imaging pattern for ClinicalEntry {EntryId}. Skipping cloud storage deletion to avoid deleting unintended resources.",
+                    img.FileUrl, entry.ClinicalEntryId);
+            }
+        }
+
+        // 3. Database deletion
+        try
+        {
+            _dbContext.ImagingRecords.Remove(img);
+            if (entry.MedicalRecord != null)
+            {
+                entry.MedicalRecord.UpdatedAt = DateTime.UtcNow;
+            }
+            await _dbContext.SaveChangesAsync(ct);
+        }
+        catch (Exception dbEx)
+        {
+            _logger.LogError(dbEx, "Failed to delete ImagingRecord {Id} from database.", imagingRecordId);
+            return ApiResponse<bool>.Fail("Xóa bản ghi hình ảnh khỏi cơ sở dữ liệu thất bại.");
+        }
+
+        return ApiResponse<bool>.Ok(true, "Đã xóa bản ghi hình ảnh y tế thành công.");
+    }
+
+    /// <summary>
+    /// Safely extracts Cloudinary public ID only if it strictly matches the dental imaging path convention
+    /// for the specific clinical entry, ensuring no unintended files of other entries or patients are deleted.
+    /// </summary>
+    public static bool TryExtractDentalImagingPublicId(string? fileUrl, long clinicalEntryId, out string? publicId)
+    {
+        publicId = null;
+        if (string.IsNullOrWhiteSpace(fileUrl) || clinicalEntryId <= 0)
+        {
+            return false;
+        }
+
+        var expectedPrefix = $"dental-clinic/medical-imaging/entry_{clinicalEntryId}/";
+        var index = fileUrl.IndexOf(expectedPrefix, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        var path = fileUrl.Substring(index);
+
+        var qIdx = path.IndexOf('?');
+        if (qIdx >= 0)
+        {
+            path = path.Substring(0, qIdx);
+        }
+
+        var lastSlash = path.LastIndexOf('/');
+        if (lastSlash >= 0)
+        {
+            var fileName = path.Substring(lastSlash + 1);
+            var dotIdx = fileName.LastIndexOf('.');
+            if (dotIdx > 0)
+            {
+                path = path.Substring(0, lastSlash + 1 + dotIdx);
+            }
+        }
+
+        publicId = path;
+        return true;
+    }
 }
