@@ -18,6 +18,7 @@ public interface IMedicalRecordApiService
     Task<ApiResult<ImagingRecordMetadataDto>> UploadImagingRecordAsync(long clinicalEntryId, IFormFile file, string imagingType, string? resultSummary = null);
     Task<ApiResult<ImagingRecordMetadataDto>> UploadImagingRecordAsync(long clinicalEntryId, Stream fileStream, string fileName, string contentType, string imagingType, string? resultSummary = null);
     Task<ApiResult<List<ImagingRecordDto>>> GetClinicalEntryImagingAsync(long clinicalEntryId);
+    Task<ApiResult<ImagingRecordDto>> GetImagingRecordByIdAsync(long imagingRecordId);
     Task<ApiResult<bool>> DeleteImagingRecordAsync(long imagingRecordId);
     Task<(Stream? Stream, string ContentType, int StatusCode)> GetImagingStreamAsync(long imagingRecordId);
 }

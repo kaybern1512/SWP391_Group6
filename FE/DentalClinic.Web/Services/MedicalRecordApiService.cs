@@ -175,6 +175,11 @@ public class MedicalRecordApiService : IMedicalRecordApiService
         return await SendGetAsync<List<ImagingRecordDto>>($"/api/medical-records/clinical-entries/{clinicalEntryId}/imaging");
     }
 
+    public async Task<ApiResult<ImagingRecordDto>> GetImagingRecordByIdAsync(long imagingRecordId)
+    {
+        return await SendGetAsync<ImagingRecordDto>($"/api/medical-records/imaging/{imagingRecordId}");
+    }
+
     public async Task<ApiResult<bool>> DeleteImagingRecordAsync(long imagingRecordId)
     {
         var endpoint = $"/api/medical-records/imaging/{imagingRecordId}";

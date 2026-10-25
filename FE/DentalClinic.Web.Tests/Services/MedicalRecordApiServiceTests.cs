@@ -303,4 +303,100 @@ public class MedicalRecordApiServiceTests
         result.IsSuccess.Should().BeTrue();
         result.Data.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task GetImagingRecordByIdAsync_SendsGet_ReturnsDto()
+    {
+        // Arrange
+        var imagingRecordId = 55L;
+        var dto = new ImagingRecordDto
+        {
+            ImagingRecordId = imagingRecordId,
+            ClinicalEntryId = 12,
+            ImagingType = "Panorama",
+            ResultSummary = "Răng khôn mọc lệch"
+        };
+
+        var responseJson = JsonSerializer.Serialize(new ApiResponse<ImagingRecordDto>
+        {
+            Success = true,
+            Data = dto
+        });
+
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.Method == HttpMethod.Get &&
+                    req.RequestUri!.AbsolutePath == $"/api/medical-records/imaging/{imagingRecordId}"),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
+            });
+
+        // Act
+        var result = await _apiService.GetImagingRecordByIdAsync(imagingRecordId);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Data.Should().NotBeNull();
+        result.Data!.ImagingRecordId.Should().Be(imagingRecordId);
+        result.Data.ImagingType.Should().Be("Panorama");
+    }
+
+    [Fact]
+    public async Task GetImagingStreamAsync_WhenSuccessful_ReturnsStreamAndContentType()
+    {
+        // Arrange
+        var imagingRecordId = 66L;
+        var bytes = Encoding.UTF8.GetBytes("fake-jpeg-stream");
+        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(bytes)
+        };
+        httpResponse.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/jpeg");
+
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.Method == HttpMethod.Get &&
+                    req.RequestUri!.AbsolutePath == $"/api/medical-records/imaging/{imagingRecordId}/content"),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(httpResponse);
+
+        // Act
+        var (stream, contentType, statusCode) = await _apiService.GetImagingStreamAsync(imagingRecordId);
+
+        // Assert
+        statusCode.Should().Be(200);
+        contentType.Should().Be("image/jpeg");
+        stream.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task GetImagingStreamAsync_WhenForbidden_Returns403()
+    {
+        // Arrange
+        var imagingRecordId = 99L;
+        var httpResponse = new HttpResponseMessage(HttpStatusCode.Forbidden);
+
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.Method == HttpMethod.Get &&
+                    req.RequestUri!.AbsolutePath == $"/api/medical-records/imaging/{imagingRecordId}/content"),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(httpResponse);
+
+        // Act
+        var (stream, contentType, statusCode) = await _apiService.GetImagingStreamAsync(imagingRecordId);
+
+        // Assert
+        statusCode.Should().Be(403);
+        stream.Should().BeNull();
+    }
 }
