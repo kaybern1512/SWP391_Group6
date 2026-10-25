@@ -93,4 +93,42 @@ public class CloudinaryImageStorageServiceTests
         Assert.StartsWith("https://res.cloudinary.com/", url);
         Assert.Contains("dental-clinic/avatars/user_999", url);
     }
+
+    [Theory]
+    [InlineData("https://res.cloudinary.com/myclinic/image/upload/sample.jpg")]
+    [InlineData("https://api.cloudinary.com/v1_1/myclinic/resources/image")]
+    [InlineData("https://subdomain.cloudinary.com/raw/upload/test.dcm")]
+    public void IsAllowedCloudinaryStorageUri_ValidHttpsCloudinaryUrls_ReturnsTrue(string validUrl)
+    {
+        var uri = new Uri(validUrl);
+        var isAllowed = CloudinaryImageStorageService.IsAllowedCloudinaryStorageUri(uri);
+        Assert.True(isAllowed);
+    }
+
+    [Theory]
+    [InlineData("http://res.cloudinary.com/demo/image/upload/sample.jpg")] // Insecure HTTP
+    [InlineData("https://169.254.169.254/latest/meta-data")] // AWS metadata SSRF
+    [InlineData("https://127.0.0.1:8080/admin")] // Loopback IPv4
+    [InlineData("https://localhost:5001/api/keys")] // Localhost
+    [InlineData("https://192.168.1.1/router")] // Private network
+    [InlineData("https://10.0.0.1/internal")] // Private network
+    [InlineData("https://attacker.com/exploit.jpg")] // Arbitrary domain
+    [InlineData("https://notcloudinary.com/evil.jpg")] // Spoofed domain
+    public void IsAllowedCloudinaryStorageUri_SsrfAndDisallowedUrls_ReturnsFalse(string disallowedUrl)
+    {
+        var uri = new Uri(disallowedUrl);
+        var isAllowed = CloudinaryImageStorageService.IsAllowedCloudinaryStorageUri(uri);
+        Assert.False(isAllowed);
+    }
+
+    [Fact]
+    public async Task GetImageStreamAsync_WhenSsrfAttempt_ReturnsNullImmediately()
+    {
+        var config = CreateConfig();
+        var service = new CloudinaryImageStorageService(config, _mockLogger.Object);
+
+        var stream = await service.GetImageStreamAsync("https://169.254.169.254/latest/meta-data");
+
+        Assert.Null(stream);
+    }
 }

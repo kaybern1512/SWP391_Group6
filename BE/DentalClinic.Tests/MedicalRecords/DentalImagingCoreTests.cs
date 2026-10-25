@@ -397,4 +397,59 @@ public class DentalImagingCoreTests
         Assert.True(result.IsValid);
         Assert.Equal(4, stream.Position); // Position must be restored!
     }
+
+    [Fact]
+    public void Validate_DicomFile_DisguisedAsPng_ReturnsFailureWithSpecificWarning()
+    {
+        var validator = new DentalImageFileValidator();
+
+        // File named .dcm but content is actually PNG
+        var bytes = new byte[200];
+        bytes[0] = 0x89;
+        bytes[1] = 0x50;
+        bytes[2] = 0x4E;
+        bytes[3] = 0x47;
+        bytes[4] = 0x0D;
+        bytes[5] = 0x0A;
+        bytes[6] = 0x1A;
+        bytes[7] = 0x0A;
+
+        using var stream = new MemoryStream(bytes);
+        var result = validator.Validate(stream, "disguised_scan.dcm", "application/dicom");
+
+        Assert.False(result.IsValid);
+        Assert.Contains("Tệp mang phần mở rộng DICOM nhưng nội dung thực tế là ảnh PNG", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void Validate_WebpFile_ReturnsFailureUnsupportedFormat()
+    {
+        var validator = new DentalImageFileValidator();
+        var bytes = new byte[100];
+        using var stream = new MemoryStream(bytes);
+
+        var result = validator.Validate(stream, "photo.webp", "image/webp");
+
+        Assert.False(result.IsValid);
+        Assert.Contains("không được hỗ trợ", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void Validate_DicomFile_WithDicomExtensionVariation_ReturnsSuccess()
+    {
+        var validator = new DentalImageFileValidator();
+
+        var bytes = new byte[140];
+        bytes[128] = 0x44; // 'D'
+        bytes[129] = 0x49; // 'I'
+        bytes[130] = 0x43; // 'C'
+        bytes[131] = 0x4D; // 'M'
+
+        using var stream = new MemoryStream(bytes);
+        var result = validator.Validate(stream, "cephalometric_study.dicom", "application/dicom");
+
+        Assert.True(result.IsValid);
+        Assert.Equal("DICOM", result.DetectedFormat);
+        Assert.Equal("application/dicom", result.NormalizedContentType);
+    }
 }
