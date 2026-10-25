@@ -231,4 +231,80 @@ public class MedicalRecordController : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpGet("imaging/{imagingRecordId:long}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Patient},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordDto>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordDto>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<ImagingRecordDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetImagingRecordById(
+        [FromRoute] long imagingRecordId,
+        CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId <= 0)
+        {
+            return Unauthorized(ApiResponse<ImagingRecordDto>.Fail("Không xác định được danh tính người dùng đăng nhập."));
+        }
+
+        var currentUserRole = GetCurrentUserRole();
+
+        var result = await _medicalRecordService.GetImagingRecordByIdAsync(currentUserId, currentUserRole, imagingRecordId, ct);
+
+        if (!result.Success)
+        {
+            if (result.Message != null && result.Message.Contains("Không tìm thấy"))
+            {
+                return NotFound(result);
+            }
+
+            if (result.Message != null && (result.Message.Contains("không có quyền") || result.Message.Contains("quyền thao tác")))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
+
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("imaging/{imagingRecordId:long}/content")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Patient},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetImagingContent(
+        [FromRoute] long imagingRecordId,
+        CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId <= 0)
+        {
+            return Unauthorized(ApiResponse.Fail("Không xác định được danh tính người dùng đăng nhập."));
+        }
+
+        var currentUserRole = GetCurrentUserRole();
+
+        var result = await _medicalRecordService.GetImagingFileStreamAsync(currentUserId, currentUserRole, imagingRecordId, ct);
+
+        if (!result.Success || result.Data == null)
+        {
+            if (result.Message != null && result.Message.Contains("Không tìm thấy"))
+            {
+                return NotFound(ApiResponse.Fail(result.Message));
+            }
+
+            if (result.Message != null && (result.Message.Contains("không có quyền") || result.Message.Contains("quyền thao tác")))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, ApiResponse.Fail(result.Message));
+            }
+
+            return BadRequest(ApiResponse.Fail(result.Message ?? "Không thể lấy nội dung hình ảnh y tế."));
+        }
+
+        return File(result.Data.Stream, result.Data.ContentType, result.Data.FileName);
+    }
 }

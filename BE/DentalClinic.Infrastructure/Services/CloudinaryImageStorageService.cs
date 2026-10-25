@@ -258,4 +258,35 @@ public class CloudinaryImageStorageService : IImageStorageService
             return false;
         }
     }
+
+    /// <summary>
+    /// Retrieves a secure read stream of an image asset from storage for authorized server-side delivery.
+    /// </summary>
+    public async Task<Stream?> GetImageStreamAsync(string fileUrl, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(fileUrl) || !Uri.TryCreate(fileUrl, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var httpClient = new System.Net.Http.HttpClient();
+            var response = await httpClient.GetAsync(uri, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var ms = new MemoryStream();
+            await response.Content.CopyToAsync(ms, ct);
+            ms.Position = 0;
+            return ms;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to retrieve image stream from URL {FileUrl}", fileUrl);
+            return null;
+        }
+    }
 }

@@ -56,6 +56,7 @@ public class ImagingRecordDto
     public long ClinicalEntryId { get; set; }
     public string ImagingType { get; set; } = string.Empty;
     public string? FileUrl { get; set; }
+    public string? ViewUrl { get; set; }
     public string? ResultSummary { get; set; }
     public DateTime CreatedAt { get; set; }
 }

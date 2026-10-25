@@ -36,4 +36,9 @@ public interface IImageStorageService
     /// Deletes or cleans up an uploaded asset from cloud storage if a downstream database operation fails.
     /// </summary>
     Task<bool> DeleteDentalImageAsync(string publicId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Retrieves a secure read stream of an image asset from storage for authorized server-side delivery.
+    /// </summary>
+    Task<Stream?> GetImageStreamAsync(string fileUrl, CancellationToken ct = default);
 }

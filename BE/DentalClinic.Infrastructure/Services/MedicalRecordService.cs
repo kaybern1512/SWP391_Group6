@@ -696,6 +696,7 @@ public class MedicalRecordService : IMedicalRecordService
                 ClinicalEntryId = img.ClinicalEntryId,
                 ImagingType = img.ImagingType,
                 FileUrl = img.FileUrl,
+                ViewUrl = $"/api/medical-records/imaging/{img.ImagingRecordId}/content",
                 ResultSummary = img.ResultSummary,
                 CreatedAt = img.CreatedAt
             })
@@ -703,5 +704,176 @@ public class MedicalRecordService : IMedicalRecordService
             .ToListAsync(ct);
 
         return ApiResponse<List<ImagingRecordDto>>.Ok(images);
+    }
+
+    public async Task<ApiResponse<ImagingRecordDto>> GetImagingRecordByIdAsync(
+        long currentUserId,
+        string? currentUserRole,
+        long imagingRecordId,
+        CancellationToken ct = default)
+    {
+        if (imagingRecordId <= 0)
+        {
+            return ApiResponse<ImagingRecordDto>.Fail("Mã bản ghi hình ảnh không hợp lệ.");
+        }
+
+        if (currentUserId <= 0)
+        {
+            return ApiResponse<ImagingRecordDto>.Fail("Người dùng chưa đăng nhập hoặc danh tính không hợp lệ.");
+        }
+
+        var img = await _dbContext.ImagingRecords
+            .Include(i => i.ClinicalEntry)
+                .ThenInclude(c => c.MedicalRecord)
+            .Include(i => i.ClinicalEntry)
+                .ThenInclude(c => c.Appointment)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(i => i.ImagingRecordId == imagingRecordId, ct);
+
+        if (img == null)
+        {
+            return ApiResponse<ImagingRecordDto>.Fail("Không tìm thấy bản ghi hình ảnh tương ứng.");
+        }
+
+        var entry = img.ClinicalEntry;
+        if (entry == null)
+        {
+            return ApiResponse<ImagingRecordDto>.Fail("Không tìm thấy đợt khám lâm sàng của bản ghi hình ảnh.");
+        }
+
+        if (string.Equals(currentUserRole, UserRole.Dentist, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(currentUserRole))
+        {
+            var isAssignedDentist = entry.DentistUserId == currentUserId ||
+                (entry.Appointment != null && entry.Appointment.AssignedDentistUserId == currentUserId);
+
+            if (!isAssignedDentist)
+            {
+                return ApiResponse<ImagingRecordDto>.Fail(
+                    "Bác sĩ không có quyền thao tác truy cập hình ảnh của đợt khám của bác sĩ khác.");
+            }
+        }
+        else if (string.Equals(currentUserRole, UserRole.Patient, StringComparison.OrdinalIgnoreCase))
+        {
+            if (entry.MedicalRecord == null || entry.MedicalRecord.PatientUserId != currentUserId)
+            {
+                return ApiResponse<ImagingRecordDto>.Fail(
+                    "Bệnh nhân không có quyền truy cập hồ sơ hình ảnh của bệnh nhân khác.");
+            }
+        }
+        else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(currentUserRole, UserRole.DepartmentManager, StringComparison.OrdinalIgnoreCase))
+        {
+            return ApiResponse<ImagingRecordDto>.Fail(
+                "Bạn không có quyền truy cập hồ sơ hình ảnh y tế.");
+        }
+
+        var dto = new ImagingRecordDto
+        {
+            ImagingRecordId = img.ImagingRecordId,
+            ClinicalEntryId = img.ClinicalEntryId,
+            ImagingType = img.ImagingType,
+            FileUrl = img.FileUrl,
+            ViewUrl = $"/api/medical-records/imaging/{img.ImagingRecordId}/content",
+            ResultSummary = img.ResultSummary,
+            CreatedAt = img.CreatedAt
+        };
+
+        return ApiResponse<ImagingRecordDto>.Ok(dto);
+    }
+
+    public async Task<ApiResponse<DentalImageStreamResult>> GetImagingFileStreamAsync(
+        long currentUserId,
+        string? currentUserRole,
+        long imagingRecordId,
+        CancellationToken ct = default)
+    {
+        if (imagingRecordId <= 0)
+        {
+            return ApiResponse<DentalImageStreamResult>.Fail("Mã bản ghi hình ảnh không hợp lệ.");
+        }
+
+        if (currentUserId <= 0)
+        {
+            return ApiResponse<DentalImageStreamResult>.Fail("Người dùng chưa đăng nhập hoặc danh tính không hợp lệ.");
+        }
+
+        var img = await _dbContext.ImagingRecords
+            .Include(i => i.ClinicalEntry)
+                .ThenInclude(c => c.MedicalRecord)
+            .Include(i => i.ClinicalEntry)
+                .ThenInclude(c => c.Appointment)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(i => i.ImagingRecordId == imagingRecordId, ct);
+
+        if (img == null)
+        {
+            return ApiResponse<DentalImageStreamResult>.Fail("Không tìm thấy bản ghi hình ảnh tương ứng.");
+        }
+
+        var entry = img.ClinicalEntry;
+        if (entry == null)
+        {
+            return ApiResponse<DentalImageStreamResult>.Fail("Không tìm thấy đợt khám lâm sàng của bản ghi hình ảnh.");
+        }
+
+        if (string.Equals(currentUserRole, UserRole.Dentist, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(currentUserRole))
+        {
+            var isAssignedDentist = entry.DentistUserId == currentUserId ||
+                (entry.Appointment != null && entry.Appointment.AssignedDentistUserId == currentUserId);
+
+            if (!isAssignedDentist)
+            {
+                return ApiResponse<DentalImageStreamResult>.Fail(
+                    "Bác sĩ không có quyền thao tác truy cập hình ảnh của đợt khám của bác sĩ khác.");
+            }
+        }
+        else if (string.Equals(currentUserRole, UserRole.Patient, StringComparison.OrdinalIgnoreCase))
+        {
+            if (entry.MedicalRecord == null || entry.MedicalRecord.PatientUserId != currentUserId)
+            {
+                return ApiResponse<DentalImageStreamResult>.Fail(
+                    "Bệnh nhân không có quyền truy cập hồ sơ hình ảnh của bệnh nhân khác.");
+            }
+        }
+        else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(currentUserRole, UserRole.DepartmentManager, StringComparison.OrdinalIgnoreCase))
+        {
+            return ApiResponse<DentalImageStreamResult>.Fail(
+                "Bạn không có quyền truy cập hồ sơ hình ảnh y tế.");
+        }
+
+        if (string.IsNullOrWhiteSpace(img.FileUrl))
+        {
+            return ApiResponse<DentalImageStreamResult>.Fail("Bản ghi hình ảnh không có liên kết tệp hợp lệ.");
+        }
+
+        if (_imageStorageService == null)
+        {
+            return ApiResponse<DentalImageStreamResult>.Fail("Dịch vụ lưu trữ hình ảnh chưa sẵn sàng.");
+        }
+
+        var stream = await _imageStorageService.GetImageStreamAsync(img.FileUrl, ct);
+        if (stream == null)
+        {
+            return ApiResponse<DentalImageStreamResult>.Fail("Không thể tải luồng dữ liệu hình ảnh từ hệ thống lưu trữ.");
+        }
+
+        var ext = Path.GetExtension(img.FileUrl.Split('?')[0]).ToLowerInvariant();
+        var contentType = ext switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            ".dcm" or ".dicom" => "application/dicom",
+            _ => "application/octet-stream"
+        };
+        var fileName = $"imaging_{img.ImagingRecordId}_{img.ImagingType.ToLowerInvariant()}{ext}";
+
+        return ApiResponse<DentalImageStreamResult>.Ok(new DentalImageStreamResult
+        {
+            Stream = stream,
+            ContentType = contentType,
+            FileName = fileName
+        });
     }
 }
