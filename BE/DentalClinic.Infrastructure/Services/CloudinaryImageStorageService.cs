@@ -281,10 +281,18 @@ public class CloudinaryImageStorageService : IImageStorageService
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(15));
 
-            using var httpClient = new System.Net.Http.HttpClient();
+            using var handler = new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false };
+            using var httpClient = new System.Net.Http.HttpClient(handler);
             var response = await httpClient.GetAsync(uri, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cts.Token);
             if (!response.IsSuccessStatusCode)
             {
+                return null;
+            }
+
+            const long maxAllowedBytes = 20 * 1024 * 1024; // 20 MB limit to prevent OOM
+            if (response.Content.Headers.ContentLength.HasValue && response.Content.Headers.ContentLength.Value > maxAllowedBytes)
+            {
+                _logger.LogWarning("Storage response exceeds maximum permitted size of 20 MB: {FileUrl}", fileUrl);
                 return null;
             }
 
@@ -307,6 +315,18 @@ public class CloudinaryImageStorageService : IImageStorageService
     public static bool IsAllowedCloudinaryStorageUri(Uri uri)
     {
         if (uri == null || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            return false;
+        }
+
+        // Reject credentials in URL
+        if (!string.IsNullOrEmpty(uri.UserInfo))
+        {
+            return false;
+        }
+
+        // Reject non-standard HTTPS ports
+        if (!uri.IsDefaultPort && uri.Port != 443)
         {
             return false;
         }

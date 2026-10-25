@@ -1036,6 +1036,19 @@
                     if (btnText) btnText.textContent = 'Đang xóa...';
                 });
             }
+
+            const lightboxModalEl = document.getElementById('imagingLightboxModal');
+            if (lightboxModalEl) {
+                lightboxModalEl.addEventListener('hidden.bs.modal', function () {
+                    const imgEl = document.getElementById('lightboxImage');
+                    if (imgEl) {
+                        imgEl.onload = null;
+                        imgEl.onerror = null;
+                        imgEl.src = '';
+                        imgEl.classList.add('d-none');
+                    }
+                });
+            }
         });
     </script>
 }

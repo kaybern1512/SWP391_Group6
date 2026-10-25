@@ -615,7 +615,7 @@ public class MedicalRecordService : IMedicalRecordService
             FileUrl = imagingRecord.FileUrl,
             ResultSummary = imagingRecord.ResultSummary,
             CreatedAt = imagingRecord.CreatedAt,
-            OriginalFileName = request.File.FileName,
+            OriginalFileName = System.IO.Path.GetFileName(request.File.FileName),
             MimeType = request.File.ContentType,
             FileSizeBytes = uploadResult.FileSizeBytes,
             StorageProvider = uploadResult.StorageProvider
