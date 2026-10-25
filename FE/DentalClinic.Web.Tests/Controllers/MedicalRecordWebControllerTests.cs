@@ -301,4 +301,52 @@ public class MedicalRecordWebControllerTests
 
         result.Should().BeOfType<ForbidResult>();
     }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_Index_WithClinicalEntriesAndImaging_PopulatesViewModelForGallery()
+    {
+        var record = new MedicalRecordDto
+        {
+            PatientUserId = 12,
+            PatientName = "Trần Văn C",
+            ClinicalEntries = new List<ClinicalEntryDto>
+            {
+                new()
+                {
+                    ClinicalEntryId = 5,
+                    Diagnosis = "Viêm tủy cấp R46",
+                    ImagingRecords = new List<ImagingRecordDto>
+                    {
+                        new()
+                        {
+                            ImagingRecordId = 88,
+                            ClinicalEntryId = 5,
+                            ImagingType = "Periapical",
+                            FileUrl = "https://cloudinary.com/sample.jpg",
+                            ResultSummary = "Nang quanh cuống chân răng 46"
+                        }
+                    }
+                }
+            }
+        };
+
+        _apiMock.Setup(x => x.SearchPatientsAsync(null))
+            .ReturnsAsync(ApiResult<List<PatientLookupDto>>.Success(new List<PatientLookupDto> { new() { PatientUserId = 12, FullName = "Trần Văn C" } }));
+        _apiMock.Setup(x => x.GetByPatientIdAsync(12))
+            .ReturnsAsync(ApiResult<MedicalRecordDto>.Success(record));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist")
+        };
+
+        var result = await controller.Index(12);
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = viewResult.Model.Should().BeOfType<DentistMedicalRecordIndexViewModel>().Subject;
+        vm.SelectedRecord.Should().NotBeNull();
+        vm.SelectedRecord!.ClinicalEntries.Should().HaveCount(1);
+        vm.SelectedRecord.ClinicalEntries[0].ImagingRecords.Should().HaveCount(1);
+        vm.SelectedRecord.ClinicalEntries[0].ImagingRecords[0].ImagingType.Should().Be("Periapical");
+    }
 }

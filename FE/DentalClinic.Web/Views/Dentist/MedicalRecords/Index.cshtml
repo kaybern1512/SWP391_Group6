@@ -697,10 +697,118 @@
             </div>
         </div>
     </div>
+
+    <!-- Modal Phóng To Ảnh X-Quang (Lightbox - Commit 16) -->
+    <div class="modal fade" id="imagingLightboxModal" tabindex="-1" aria-labelledby="imagingLightboxModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content bg-dark text-white border-0 shadow-lg overflow-hidden">
+                <div class="modal-header border-secondary border-opacity-50 py-2 px-3 bg-dark">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-aspect-ratio text-info fs-5"></i>
+                        <span class="badge bg-primary text-white px-2 py-1" id="lightboxTypeBadge">X-Quang</span>
+                        <span class="text-white-50 small ms-2" id="lightboxDate"></span>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng (Esc)"></button>
+                </div>
+                <div class="modal-body p-0 position-relative d-flex justify-content-center align-items-center bg-black" style="min-height: 420px; max-height: 75vh; overflow: hidden;">
+                    <!-- Loading State -->
+                    <div id="lightboxLoadingSpinner" class="position-absolute d-flex flex-column align-items-center justify-content-center text-white">
+                        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                            <span class="visually-hidden">Đang tải phim X-quang...</span>
+                        </div>
+                        <span class="small text-white-50 mt-2">Đang tải ảnh chuẩn nét...</span>
+                    </div>
+
+                    <!-- Error State -->
+                    <div id="lightboxErrorAlert" class="p-4 text-center text-warning d-none">
+                        <i class="bi bi-exclamation-triangle-fill fs-1 text-warning mb-2 d-block"></i>
+                        <h6 class="text-white">Không thể hiển thị ảnh phóng to</h6>
+                        <p class="small text-white-50 mb-0">Tệp ảnh có thể đã bị xóa hoặc phiên truy cập đã hết hạn. Vui lòng thử tải lại trang.</p>
+                    </div>
+
+                    <!-- Large Image (Aspect Ratio Preserved) -->
+                    <img id="lightboxImage"
+                         src=""
+                         class="img-fluid d-none"
+                         style="max-height: 75vh; max-width: 100%; object-fit: contain;"
+                         alt="Phóng to phim X-quang nha khoa" />
+                </div>
+                <div class="modal-footer border-secondary border-opacity-50 py-2 px-3 justify-content-between bg-dark">
+                    <div class="text-start flex-grow-1 me-3">
+                        <div class="small fw-semibold text-info mb-0"><i class="bi bi-journal-text me-1"></i>Kết luận đọc phim:</div>
+                        <div id="lightboxResultSummary" class="text-white-50 small text-wrap"></div>
+                    </div>
+                    <div class="d-flex gap-2 align-items-center">
+                        <a id="lightboxDownloadBtn" href="#" download class="btn btn-sm btn-outline-light">
+                            <i class="bi bi-download me-1"></i> Tải ảnh
+                        </a>
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+                            <i class="bi bi-x-lg me-1"></i> Đóng (Esc)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 }
 
 @section Scripts {
     <script>
+        let lightboxModalInstance = null;
+
+        function openImagingLightbox(imageUrl, imagingType, resultSummary, createdAt, isDicom) {
+            if (isDicom) {
+                return;
+            }
+
+            const modalEl = document.getElementById('imagingLightboxModal');
+            if (!modalEl) return;
+
+            const imgEl = document.getElementById('lightboxImage');
+            const spinner = document.getElementById('lightboxLoadingSpinner');
+            const errorAlert = document.getElementById('lightboxErrorAlert');
+            const typeBadge = document.getElementById('lightboxTypeBadge');
+            const dateEl = document.getElementById('lightboxDate');
+            const summaryEl = document.getElementById('lightboxResultSummary');
+            const downloadBtn = document.getElementById('lightboxDownloadBtn');
+
+            // Reset UI states
+            if (imgEl) {
+                imgEl.classList.add('d-none');
+                imgEl.src = '';
+            }
+            if (spinner) spinner.classList.remove('d-none');
+            if (errorAlert) errorAlert.classList.add('d-none');
+
+            if (typeBadge) typeBadge.textContent = imagingType || 'X-Quang';
+            if (dateEl) dateEl.textContent = createdAt ? ('Ngày chụp: ' + createdAt) : '';
+            if (summaryEl) summaryEl.textContent = resultSummary && resultSummary.trim().length > 0 ? resultSummary : 'Chưa có ghi nhận kết luận đọc phim.';
+            if (downloadBtn) {
+                downloadBtn.href = imageUrl;
+            }
+
+            // Bind image load events
+            if (imgEl) {
+                imgEl.onload = function () {
+                    if (spinner) spinner.classList.add('d-none');
+                    imgEl.classList.remove('d-none');
+                };
+                imgEl.onerror = function () {
+                    if (spinner) spinner.classList.add('d-none');
+                    if (errorAlert) errorAlert.classList.remove('d-none');
+                };
+                imgEl.src = imageUrl;
+            }
+
+            if (!lightboxModalInstance) {
+                lightboxModalInstance = new bootstrap.Modal(modalEl, {
+                    keyboard: true,
+                    backdrop: true
+                });
+            }
+            lightboxModalInstance.show();
+        }
+
         function openUploadImagingModal(entryId, diagnosis) {
             document.getElementById('uploadImagingClinicalEntryId').value = entryId;
             document.getElementById('uploadImagingDiagnosisPreview').textContent = diagnosis || ('Đợt khám #' + entryId);
