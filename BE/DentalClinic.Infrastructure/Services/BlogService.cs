@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using AngleSharp.Html.Dom;
 using DentalClinic.Application.Common.Helpers;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
@@ -21,20 +22,76 @@ public class BlogService : IBlogService
 {
     private readonly DentalClinicDbContext _dbContext;
     private readonly IAuditLogService _auditLogService;
+    private readonly IMediaStorageService _mediaStorageService;
+    private readonly IBlogMediaFileValidator _fileValidator;
     private readonly ILogger<BlogService> _logger;
     private readonly HtmlSanitizer _htmlSanitizer;
 
     public BlogService(
         DentalClinicDbContext dbContext,
         IAuditLogService auditLogService,
+        IMediaStorageService mediaStorageService,
+        IBlogMediaFileValidator fileValidator,
         ILogger<BlogService> logger)
     {
         _dbContext = dbContext;
         _auditLogService = auditLogService;
+        _mediaStorageService = mediaStorageService;
+        _fileValidator = fileValidator;
         _logger = logger;
 
         _htmlSanitizer = new HtmlSanitizer();
         _htmlSanitizer.AllowedSchemes.Add("data");
+
+        // Allow video & source elements
+        _htmlSanitizer.AllowedTags.Add("video");
+        _htmlSanitizer.AllowedTags.Add("source");
+
+        // Allow rich media attributes
+        _htmlSanitizer.AllowedAttributes.Add("controls");
+        _htmlSanitizer.AllowedAttributes.Add("preload");
+        _htmlSanitizer.AllowedAttributes.Add("poster");
+        _htmlSanitizer.AllowedAttributes.Add("loading");
+        _htmlSanitizer.AllowedAttributes.Add("playsinline");
+        _htmlSanitizer.AllowedAttributes.Add("type");
+
+        // Explicitly block iframe
+        _htmlSanitizer.AllowedTags.Remove("iframe");
+
+        // Only allow Cloudinary, relative, or data image URLs
+        _htmlSanitizer.FilterUrl += (sender, args) =>
+        {
+            var url = args.OriginalUrl;
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                args.SanitizedUrl = null;
+                return;
+            }
+
+            var trimmed = url.Trim();
+            if (trimmed.StartsWith("/") || trimmed.StartsWith("data:image/"))
+            {
+                return;
+            }
+
+            if (trimmed.StartsWith("https://res.cloudinary.com/", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("http://res.cloudinary.com/", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            // Reject untrusted external domains (e.g. evil.com)
+            args.SanitizedUrl = null;
+        };
+
+        // Remove <img> tags whose src was rejected/empty
+        _htmlSanitizer.PostProcessNode += (sender, args) =>
+        {
+            if (args.Node is IHtmlImageElement img && string.IsNullOrWhiteSpace(img.Source))
+            {
+                args.Node.Parent?.RemoveChild(args.Node);
+            }
+        };
     }
 
     // ==========================================
@@ -316,6 +373,7 @@ public class BlogService : IBlogService
                 Summary = string.IsNullOrWhiteSpace(request.Summary) ? null : request.Summary.Trim(),
                 Content = sanitizedContent,
                 ThumbnailUrl = string.IsNullOrWhiteSpace(request.ThumbnailUrl) ? null : request.ThumbnailUrl.Trim(),
+                VideoUrl = string.IsNullOrWhiteSpace(request.VideoUrl) ? null : request.VideoUrl.Trim(),
                 Status = status,
                 IsFeatured = false,
                 ViewCount = 0,
@@ -326,6 +384,20 @@ public class BlogService : IBlogService
 
             _dbContext.BlogPosts.Add(post);
             await _dbContext.SaveChangesAsync(ct);
+
+            // Associate any uploaded media belonging to this author used in content
+            var unlinkedMedia = await _dbContext.BlogPostMedia
+                .Where(m => m.UploadedByUserId == authorUserId && m.BlogPostId == null && post.Content.Contains(m.FileUrl))
+                .ToListAsync(ct);
+
+            if (unlinkedMedia.Count > 0)
+            {
+                foreach (var media in unlinkedMedia)
+                {
+                    media.BlogPostId = post.BlogPostId;
+                }
+                await _dbContext.SaveChangesAsync(ct);
+            }
 
             // Re-load relationships for mapping
             await _dbContext.Entry(post).Reference(p => p.Category).LoadAsync(ct);
@@ -381,6 +453,7 @@ public class BlogService : IBlogService
             post.Summary = string.IsNullOrWhiteSpace(request.Summary) ? null : request.Summary.Trim();
             post.Content = _htmlSanitizer.Sanitize(request.Content ?? string.Empty);
             post.ThumbnailUrl = string.IsNullOrWhiteSpace(request.ThumbnailUrl) ? null : request.ThumbnailUrl.Trim();
+            post.VideoUrl = string.IsNullOrWhiteSpace(request.VideoUrl) ? null : request.VideoUrl.Trim();
             post.UpdatedAt = DateTime.UtcNow;
 
             if (!string.IsNullOrWhiteSpace(request.Status))
@@ -398,25 +471,30 @@ public class BlogService : IBlogService
                 }
                 else
                 {
-                    // Dentists can only set Draft or PendingReview
                     if (request.Status == BlogPostStatus.Draft || request.Status == BlogPostStatus.PendingReview)
                     {
                         post.Status = request.Status;
                     }
                     else if (post.Status == BlogPostStatus.Published)
                     {
-                        // Editing a published post by dentist resets it to PendingReview
                         post.Status = BlogPostStatus.PendingReview;
                     }
                 }
             }
 
-            await _dbContext.SaveChangesAsync(ct);
+            // Link any orphan media used in content
+            var unlinkedMedia = await _dbContext.BlogPostMedia
+                .Where(m => m.BlogPostId == null && post.Content.Contains(m.FileUrl))
+                .ToListAsync(ct);
 
-            // Reload category if changed
+            foreach (var media in unlinkedMedia)
+            {
+                media.BlogPostId = post.BlogPostId;
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
             await _dbContext.Entry(post).Reference(p => p.Category).LoadAsync(ct);
 
-            // Audit log if modified by admin or status changed
             if (isAdmin || oldStatus != post.Status)
             {
                 await _auditLogService.LogAsync(
@@ -456,6 +534,14 @@ public class BlogService : IBlogService
             var deletedTitle = post.Title;
             var deletedStatus = post.Status;
 
+            // Delete all associated media files from Cloudinary
+            var mediaList = await _dbContext.BlogPostMedia.Where(m => m.BlogPostId == postId).ToListAsync(ct);
+            foreach (var media in mediaList)
+            {
+                await _mediaStorageService.DeleteMediaAsync(media.PublicId, media.MediaType, ct);
+            }
+            _dbContext.BlogPostMedia.RemoveRange(mediaList);
+
             _dbContext.BlogPosts.Remove(post);
             await _dbContext.SaveChangesAsync(ct);
 
@@ -464,11 +550,11 @@ public class BlogService : IBlogService
                 "DeleteBlogPost",
                 "BlogPost",
                 postId.ToString(),
-                JsonSerializer.Serialize(new { Title = deletedTitle, Status = deletedStatus }),
+                JsonSerializer.Serialize(new { Title = deletedTitle, Status = deletedStatus, DeletedMediaCount = mediaList.Count }),
                 null,
                 ct);
 
-            return ApiResponse<bool>.Ok(true, "Xóa bài viết thành công.");
+            return ApiResponse<bool>.Ok(true, "Xóa bài viết và toàn bộ tệp phương tiện thành công.");
         }
         catch (Exception ex)
         {
@@ -788,6 +874,151 @@ public class BlogService : IBlogService
     }
 
     // ==========================================
+    // MEDIA (IMAGES & VIDEOS)
+    // ==========================================
+
+    public async Task<ApiResponse<UploadBlogMediaResponse>> UploadMediaAsync(
+        long userId,
+        Stream fileStream,
+        string fileName,
+        string contentType,
+        long? blogPostId = null,
+        string? declaredMediaType = null,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var validation = _fileValidator.Validate(fileStream, fileName, contentType);
+            if (!validation.IsValid)
+            {
+                return ApiResponse<UploadBlogMediaResponse>.Fail(validation.ErrorMessage ?? "Tập tin không hợp lệ.");
+            }
+
+            MediaUploadResult uploadResult;
+            if (validation.MediaType == "Image")
+            {
+                uploadResult = await _mediaStorageService.UploadImageAsync(fileStream, fileName, validation.ContentType, null, ct);
+            }
+            else
+            {
+                uploadResult = await _mediaStorageService.UploadVideoAsync(fileStream, fileName, validation.ContentType, null, ct);
+            }
+
+            var media = new BlogPostMedia
+            {
+                BlogPostId = blogPostId,
+                UploadedByUserId = userId,
+                MediaType = uploadResult.MediaType,
+                FileUrl = uploadResult.Url,
+                PublicId = uploadResult.PublicId,
+                ThumbnailUrl = uploadResult.ThumbnailUrl,
+                ContentType = uploadResult.ContentType,
+                SizeBytes = uploadResult.SizeBytes,
+                DurationSeconds = uploadResult.DurationSeconds,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.BlogPostMedia.Add(media);
+            await _dbContext.SaveChangesAsync(ct);
+
+            await _auditLogService.LogAsync(
+                userId,
+                "UploadBlogMedia",
+                "BlogPostMedia",
+                media.MediaId.ToString(),
+                null,
+                JsonSerializer.Serialize(new { media.MediaType, media.FileUrl, media.PublicId, media.SizeBytes }),
+                ct);
+
+            return ApiResponse<UploadBlogMediaResponse>.Ok(new UploadBlogMediaResponse
+            {
+                MediaId = media.MediaId,
+                Url = media.FileUrl,
+                ThumbnailUrl = media.ThumbnailUrl,
+                MediaType = media.MediaType,
+                ContentType = media.ContentType,
+                SizeBytes = media.SizeBytes,
+                DurationSeconds = media.DurationSeconds
+            }, "Tải lên phương tiện thành công.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi tải phương tiện lên bởi người dùng {UserId}", userId);
+            return ApiResponse<UploadBlogMediaResponse>.Fail($"Tải tập tin thất bại: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResponse<bool>> DeleteMediaAsync(long mediaId, long userId, bool isAdmin = false, CancellationToken ct = default)
+    {
+        try
+        {
+            var media = await _dbContext.BlogPostMedia.FirstOrDefaultAsync(m => m.MediaId == mediaId, ct);
+            if (media == null)
+            {
+                return ApiResponse<bool>.Fail("Không tìm thấy tệp phương tiện.");
+            }
+
+            if (!isAdmin && media.UploadedByUserId != userId)
+            {
+                return ApiResponse<bool>.Fail("Bạn không có quyền xóa tệp phương tiện này.");
+            }
+
+            await _mediaStorageService.DeleteMediaAsync(media.PublicId, media.MediaType, ct);
+
+            _dbContext.BlogPostMedia.Remove(media);
+            await _dbContext.SaveChangesAsync(ct);
+
+            await _auditLogService.LogAsync(
+                userId,
+                "DeleteBlogMedia",
+                "BlogPostMedia",
+                mediaId.ToString(),
+                JsonSerializer.Serialize(new { media.MediaType, media.FileUrl, media.PublicId }),
+                null,
+                ct);
+
+            return ApiResponse<bool>.Ok(true, "Xóa tệp phương tiện thành công.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi xóa phương tiện {MediaId}", mediaId);
+            return ApiResponse<bool>.Fail("Không thể xóa tệp phương tiện.");
+        }
+    }
+
+    public async Task<ApiResponse<int>> CleanupOrphanMediaAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var cutoff = DateTime.UtcNow.AddHours(-24);
+            var orphans = await _dbContext.BlogPostMedia
+                .Where(m => m.BlogPostId == null && m.CreatedAt < cutoff)
+                .Take(50)
+                .ToListAsync(ct);
+
+            int count = 0;
+            foreach (var orphan in orphans)
+            {
+                await _mediaStorageService.DeleteMediaAsync(orphan.PublicId, orphan.MediaType, ct);
+                _dbContext.BlogPostMedia.Remove(orphan);
+                count++;
+            }
+
+            if (count > 0)
+            {
+                await _dbContext.SaveChangesAsync(ct);
+            }
+
+            return ApiResponse<int>.Ok(count, $"Đã dọn dẹp {count} tệp phương tiện mồ côi.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi dọn dẹp media mồ côi.");
+            return ApiResponse<int>.Fail("Không thể hoàn tất dọn dẹp media mồ côi.");
+        }
+    }
+
+    // ==========================================
     // HELPERS & MAPPERS
     // ==========================================
 
@@ -837,6 +1068,7 @@ public class BlogService : IBlogService
             Slug = post.Slug,
             Summary = post.Summary,
             ThumbnailUrl = post.ThumbnailUrl,
+            VideoUrl = post.VideoUrl,
             Status = post.Status,
             IsFeatured = post.IsFeatured,
             ViewCount = post.ViewCount,
@@ -863,6 +1095,7 @@ public class BlogService : IBlogService
             Summary = post.Summary,
             Content = post.Content,
             ThumbnailUrl = post.ThumbnailUrl,
+            VideoUrl = post.VideoUrl,
             Status = post.Status,
             IsFeatured = post.IsFeatured,
             ViewCount = post.ViewCount,

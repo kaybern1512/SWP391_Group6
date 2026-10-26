@@ -104,6 +104,7 @@ public class DentistBlogController : Controller
             Summary = model.Summary,
             Content = model.Content,
             ThumbnailUrl = model.ThumbnailUrl,
+            VideoUrl = model.VideoUrl,
             Status = model.Status
         };
 
@@ -142,6 +143,7 @@ public class DentistBlogController : Controller
             Summary = post.Summary,
             Content = post.Content,
             ThumbnailUrl = post.ThumbnailUrl,
+            VideoUrl = post.VideoUrl,
             Status = post.Status,
             Categories = categoriesResult.IsSuccess && categoriesResult.Data != null
                 ? categoriesResult.Data
@@ -187,6 +189,7 @@ public class DentistBlogController : Controller
             Summary = model.Summary,
             Content = model.Content,
             ThumbnailUrl = model.ThumbnailUrl,
+            VideoUrl = model.VideoUrl,
             Status = model.Status
         };
 
@@ -235,5 +238,39 @@ public class DentistBlogController : Controller
         }
 
         return Json(new { error = new { message = result.Message ?? "Lỗi tải ảnh." } });
+    }
+
+    [HttpPost("UploadMedia")]
+    [RequestSizeLimit(52_428_800)]
+    public async Task<IActionResult> UploadMedia([FromForm] IFormFile file, [FromForm] string? mediaType, [FromForm] long? blogPostId)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return Json(new { success = false, message = "Vui lòng chọn tập tin ảnh hoặc video." });
+        }
+
+        var result = await _blogApi.UploadMediaAsync(file, mediaType, blogPostId);
+        if (result.IsSuccess && result.Data != null)
+        {
+            return Json(new
+            {
+                success = true,
+                url = result.Data.FileUrl,
+                thumbnailUrl = result.Data.ThumbnailUrl,
+                mediaType = result.Data.MediaType,
+                mediaId = result.Data.MediaId,
+                sizeBytes = result.Data.SizeBytes,
+                durationSeconds = result.Data.DurationSeconds
+            });
+        }
+
+        return Json(new { success = false, message = result.Message ?? "Tải tập tin lên máy chủ thất bại." });
+    }
+
+    [HttpDelete("Media/{id}")]
+    public async Task<IActionResult> DeleteMedia(long id)
+    {
+        var result = await _blogApi.DeleteMediaAsync(id);
+        return Json(new { success = result.IsSuccess, message = result.Message });
     }
 }

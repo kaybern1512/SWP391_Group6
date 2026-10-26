@@ -29,4 +29,7 @@ public interface IBlogApiService
     Task<ApiResult<BlogCategoryDto>> CreateCategoryAsync(CreateBlogCategoryRequest request);
     Task<ApiResult<BlogCategoryDto>> UpdateCategoryAsync(int id, UpdateBlogCategoryRequest request);
     Task<ApiResult<bool>> DeleteCategoryAsync(int id);
+    // Media Upload & Storage
+    Task<ApiResult<BlogMediaDto>> UploadMediaAsync(IFormFile file, string? mediaType = null, long? blogPostId = null);
+    Task<ApiResult<bool>> DeleteMediaAsync(long mediaId);
 }

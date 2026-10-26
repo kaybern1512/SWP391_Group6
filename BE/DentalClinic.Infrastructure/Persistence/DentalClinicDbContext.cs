@@ -24,6 +24,8 @@ public partial class DentalClinicDbContext : DbContext
 
     public virtual DbSet<BlogPost> BlogPosts { get; set; }
 
+    public virtual DbSet<BlogPostMedia> BlogPostMedia { get; set; }
+
     public virtual DbSet<ClinicProfile> ClinicProfiles { get; set; }
 
     public virtual DbSet<ClinicalEntry> ClinicalEntries { get; set; }
@@ -262,6 +264,7 @@ public partial class DentalClinicDbContext : DbContext
                 .IsUnicode(false);
             entity.Property(e => e.Summary).HasMaxLength(1000);
             entity.Property(e => e.ThumbnailUrl).HasMaxLength(500);
+            entity.Property(e => e.VideoUrl).HasMaxLength(500);
             entity.Property(e => e.Status)
                 .HasMaxLength(30)
                 .IsUnicode(false)
@@ -279,6 +282,36 @@ public partial class DentalClinicDbContext : DbContext
                 .HasForeignKey(d => d.AuthorUserId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK_BlogPosts_UserAccounts");
+        });
+
+        modelBuilder.Entity<BlogPostMedia>(entity =>
+        {
+            entity.HasKey(e => e.MediaId).HasName("PK_BlogPostMedia");
+
+            entity.HasIndex(e => e.BlogPostId, "IX_BlogPostMedia_BlogPostId");
+            entity.HasIndex(e => e.UploadedByUserId, "IX_BlogPostMedia_UploadedByUserId");
+            entity.HasIndex(e => e.CreatedAt, "IX_BlogPostMedia_CreatedAt");
+
+            entity.Property(e => e.MediaType)
+                .HasMaxLength(20)
+                .IsUnicode(false);
+            entity.Property(e => e.FileUrl).HasMaxLength(500);
+            entity.Property(e => e.PublicId).HasMaxLength(200);
+            entity.Property(e => e.ThumbnailUrl).HasMaxLength(500);
+            entity.Property(e => e.ContentType)
+                .HasMaxLength(100)
+                .IsUnicode(false);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
+
+            entity.HasOne(d => d.BlogPost).WithMany(p => p.MediaItems)
+                .HasForeignKey(d => d.BlogPostId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_BlogPostMedia_BlogPosts");
+
+            entity.HasOne(d => d.UploadedByUser).WithMany()
+                .HasForeignKey(d => d.UploadedByUserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_BlogPostMedia_UserAccounts");
         });
 
         modelBuilder.Entity<ClinicProfile>(entity =>

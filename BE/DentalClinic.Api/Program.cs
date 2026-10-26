@@ -30,6 +30,11 @@ builder.Services.AddSignalR();
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>();
 
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 52_428_800;
+});
+
 // 3. Add Controllers with JsonOptions
 builder.Services.AddControllers()
     .AddJsonOptions(options =>

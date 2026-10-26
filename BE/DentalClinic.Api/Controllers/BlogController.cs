@@ -219,6 +219,56 @@ public class BlogController : ControllerBase
         }
     }
 
+    [HttpPost("media")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(52_428_800)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 52_428_800)]
+    [ProducesResponseType(typeof(ApiResponse<UploadBlogMediaResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<UploadBlogMediaResponse>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UploadMedia([FromForm] IFormFile file, [FromForm] long? blogPostId = null, [FromForm] string? mediaType = null, CancellationToken ct = default)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId <= 0)
+        {
+            return Unauthorized(ApiResponse<UploadBlogMediaResponse>.Fail("Không xác định được danh tính người dùng."));
+        }
+
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(ApiResponse<UploadBlogMediaResponse>.Fail("Vui lòng chọn tập tin phương tiện (ảnh hoặc video)."));
+        }
+
+        using var stream = file.OpenReadStream();
+        var result = await _blogService.UploadMediaAsync(currentUserId, stream, file.FileName, file.ContentType, blogPostId, mediaType, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpDelete("media/{mediaId}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> DeleteMedia(long mediaId, CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId <= 0)
+        {
+            return Unauthorized(ApiResponse<bool>.Fail("Không xác định được danh tính người dùng."));
+        }
+
+        var result = await _blogService.DeleteMediaAsync(mediaId, currentUserId, IsAdmin(), ct);
+        if (!result.Success)
+        {
+            return result.Message?.Contains("quyền") == true ? StatusCode(StatusCodes.Status403Forbidden, result) : BadRequest(result);
+        }
+        return Ok(result);
+    }
+
     // ==========================================
     // SYSTEM ADMINISTRATOR
     // ==========================================

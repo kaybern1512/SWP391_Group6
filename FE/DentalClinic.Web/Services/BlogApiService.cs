@@ -116,6 +116,40 @@ public class BlogApiService : IBlogApiService
         }
     }
 
+    public async Task<ApiResult<BlogMediaDto>> UploadMediaAsync(IFormFile file, string? mediaType = null, long? blogPostId = null)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            using var stream = file.OpenReadStream();
+            using var streamContent = new StreamContent(stream);
+            streamContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+            content.Add(streamContent, "file", file.FileName);
+
+            if (!string.IsNullOrWhiteSpace(mediaType))
+            {
+                content.Add(new StringContent(mediaType), "mediaType");
+            }
+            if (blogPostId.HasValue && blogPostId.Value > 0)
+            {
+                content.Add(new StringContent(blogPostId.Value.ToString()), "blogPostId");
+            }
+
+            var response = await _httpClient.PostAsync("/api/Blog/media", content);
+            return await HandleApiResponseAsync<BlogMediaDto>(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "HTTP POST /api/Blog/media failed");
+            return ApiResult<BlogMediaDto>.Failure("Không thể kết nối đến máy chủ.");
+        }
+    }
+
+    public async Task<ApiResult<bool>> DeleteMediaAsync(long mediaId)
+    {
+        return await SendDeleteAsync<bool>($"/api/Blog/media/{mediaId}");
+    }
+
     // ==========================================
     // SYSTEM ADMINISTRATOR
     // ==========================================

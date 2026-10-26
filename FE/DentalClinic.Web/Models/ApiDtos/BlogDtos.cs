@@ -38,6 +38,7 @@ public class BlogPostListItemDto
     public string Slug { get; set; } = string.Empty;
     public string? Summary { get; set; }
     public string? ThumbnailUrl { get; set; }
+    public string? VideoUrl { get; set; }
     public string Status { get; set; } = string.Empty;
     public bool IsFeatured { get; set; }
     public int ViewCount { get; set; }
@@ -68,6 +69,7 @@ public class CreateBlogPostRequest
     public string? Summary { get; set; }
     public string Content { get; set; } = string.Empty;
     public string? ThumbnailUrl { get; set; }
+    public string? VideoUrl { get; set; }
     public string Status { get; set; } = "Draft";
 }
 
@@ -78,6 +80,7 @@ public class UpdateBlogPostRequest
     public string? Summary { get; set; }
     public string Content { get; set; } = string.Empty;
     public string? ThumbnailUrl { get; set; }
+    public string? VideoUrl { get; set; }
     public string? Status { get; set; }
 }
 
@@ -86,6 +89,33 @@ public class ReviewBlogPostRequest
     public string Status { get; set; } = string.Empty;
     public bool? IsFeatured { get; set; }
     public string? ReviewNotes { get; set; }
+}
+
+public class BlogMediaDto
+{
+    public long MediaId { get; set; }
+    public long? BlogPostId { get; set; }
+    public long UploadedByUserId { get; set; }
+    public string MediaType { get; set; } = string.Empty;
+    public string FileUrl { get; set; } = string.Empty;
+    public string PublicId { get; set; } = string.Empty;
+    public string? ThumbnailUrl { get; set; }
+    public string ContentType { get; set; } = string.Empty;
+    public long SizeBytes { get; set; }
+    public int? DurationSeconds { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class UploadBlogMediaResponse
+{
+    public bool Success { get; set; }
+    public string? Message { get; set; }
+    public string? Url { get; set; }
+    public string? ThumbnailUrl { get; set; }
+    public string? MediaType { get; set; }
+    public long? MediaId { get; set; }
+    public long SizeBytes { get; set; }
+    public int? DurationSeconds { get; set; }
 }
 
 public class BlogFilterRequest

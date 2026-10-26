@@ -52,6 +52,9 @@ public class DentistBlogEditViewModel
     [Display(Name = "Ảnh bìa bài viết")]
     public string? ThumbnailUrl { get; set; }
 
+    [Display(Name = "Video giới thiệu (URL hoặc tải lên)")]
+    public string? VideoUrl { get; set; }
+
     [Display(Name = "Trạng thái lưu")]
     public string Status { get; set; } = "Draft";
 

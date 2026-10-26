@@ -167,6 +167,38 @@
                     </div>
                 </div>
 
+                <!-- Video Cover Card -->
+                <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+                    <h6 class="fw-bold text-dark mb-3">
+                        <i class="bi bi-play-circle text-primary me-2"></i>Video Giới Thiệu (Tùy chọn)
+                    </h6>
+                    <div class="mb-3">
+                        <label asp-for="VideoUrl" class="form-label small text-muted">Đường dẫn video (.mp4, .webm)</label>
+                        <div class="input-group">
+                            <input asp-for="VideoUrl"
+                                   id="coverVideoUrlInput"
+                                   class="form-control form-control-sm"
+                                   placeholder="https://res.cloudinary.com/.../video.mp4" />
+                            <button class="btn btn-outline-primary btn-sm" type="button" id="uploadCoverVideoBtn">
+                                <i class="bi bi-cloud-arrow-up"></i> Tải lên
+                            </button>
+                        </div>
+                        <input type="file" id="coverVideoFileInput" accept=".mp4,.webm" style="display:none;" />
+                        <span asp-validation-for="VideoUrl" class="text-danger small"></span>
+                        <div class="form-text text-muted" style="font-size: 0.75rem;">
+                            Chấp nhận .mp4, .webm (Tối đa 50 MB, có thanh tiến trình).
+                        </div>
+                    </div>
+                    <div>
+                        <video id="coverVideoPreview"
+                               controls
+                               preload="metadata"
+                               style="max-width: 100%; border-radius: 8px; @(string.IsNullOrWhiteSpace(Model.VideoUrl) ? "display:none;" : "")"
+                               src="@Model.VideoUrl">
+                        </video>
+                    </div>
+                </div>
+
                 <!-- Submit / Actions Card -->
                 <div class="card border-0 shadow-sm rounded-4 p-4">
                     <h6 class="fw-bold text-dark mb-3">
@@ -192,63 +224,18 @@
 @section Scripts {
     <!-- Quill Rich Text Editor CDN JS -->
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+    <!-- Blog Editor & Media Upload Manager JS -->
+    <script src="~/js/blog-editor.js" asp-append-version="true"></script>
     <script>
-        // 1. Initialize Quill Editor
-        const quill = new Quill('#quillEditorContainer', {
-            theme: 'snow',
-            placeholder: 'Nhập nội dung bài viết chi tiết tại đây...',
-            modules: {
-                toolbar: [
-                    [{ 'header': [1, 2, 3, 4, false] }],
-                    ['bold', 'italic', 'underline', 'strike'],
-                    [{ 'color': [] }, { 'background': [] }],
-                    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-                    [{ 'align': [] }],
-                    ['blockquote'],
-                    ['link', 'image'],
-                    ['clean']
-                ]
-            }
+        // 1. Initialize Blog Editor Manager (handles Quill, Image & Video uploads with progress bar & cancel)
+        const blogEditor = new BlogEditorManager({
+            quillContainerSelector: '#quillEditorContainer',
+            hiddenContentSelector: '#hiddenContent',
+            uploadUrl: '/Dentist/Blog/UploadMedia',
+            blogPostId: @(Model.BlogPostId.HasValue ? Model.BlogPostId.Value.ToString() : "null")
         });
 
-        // 2. Custom Image Upload Handler for Quill via Backend API
-        const toolbar = quill.getModule('toolbar');
-        toolbar.addHandler('image', function() {
-            const input = document.createElement('input');
-            input.setAttribute('type', 'file');
-            input.setAttribute('accept', 'image/png, image/jpeg, image/jpg, image/webp');
-            input.click();
-
-            input.onchange = async () => {
-                const file = input.files[0];
-                if (file) {
-                    if (file.size > 5 * 1024 * 1024) {
-                        alert('Kích thước ảnh không được vượt quá 5 MB.');
-                        return;
-                    }
-                    const formData = new FormData();
-                    formData.append('upload', file);
-
-                    try {
-                        const response = await fetch('/Dentist/Blog/UploadEditorImage', {
-                            method: 'POST',
-                            body: formData
-                        });
-                        const data = await response.json();
-                        if (data && data.url) {
-                            const range = quill.getSelection(true);
-                            quill.insertEmbed(range.index, 'image', data.url);
-                        } else {
-                            alert(data?.error?.message || 'Tải ảnh lên thất bại.');
-                        }
-                    } catch (err) {
-                        alert('Lỗi khi tải ảnh lên máy chủ.');
-                    }
-                }
-            };
-        });
-
-        // 3. Live Thumbnail Preview
+        // 2. Live Thumbnail Preview
         const thumbnailFileInput = document.getElementById('thumbnailFileInput');
         const previewImg = document.getElementById('thumbnailPreviewImg');
         const previewPlaceholder = document.getElementById('previewPlaceholder');
@@ -266,19 +253,16 @@
             }
         });
 
-        // 4. Submit Handlers
+        // 3. Submit Handlers
         const form = document.getElementById('blogPostForm');
-        const hiddenContent = document.getElementById('hiddenContent');
         const postStatusInput = document.getElementById('postStatusInput');
 
         function prepareAndSubmit(status) {
-            // Transfer HTML from Quill editor to hidden textarea
-            const html = quill.root.innerHTML;
+            const html = blogEditor.syncContent();
             if (!html || html === '<p><br></p>') {
                 alert('Vui lòng nhập nội dung bài viết.');
                 return;
             }
-            hiddenContent.value = html;
             postStatusInput.value = status;
             form.submit();
         }

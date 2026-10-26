@@ -20,6 +20,8 @@ public partial class BlogPost
 
     public string? ThumbnailUrl { get; set; }
 
+    public string? VideoUrl { get; set; }
+
     public string Status { get; set; } = "Draft";
 
     public bool IsFeatured { get; set; }
@@ -35,4 +37,6 @@ public partial class BlogPost
     public virtual BlogCategory Category { get; set; } = null!;
 
     public virtual UserAccount AuthorUser { get; set; } = null!;
+
+    public virtual ICollection<BlogPostMedia> MediaItems { get; set; } = new List<BlogPostMedia>();
 }

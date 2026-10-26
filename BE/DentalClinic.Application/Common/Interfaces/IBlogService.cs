@@ -36,4 +36,11 @@ public interface IBlogService
     Task<ApiResponse<BlogCategoryDto>> CreateCategoryAsync(long adminUserId, CreateBlogCategoryRequest request, CancellationToken ct = default);
     Task<ApiResponse<BlogCategoryDto>> UpdateCategoryAsync(int categoryId, long adminUserId, UpdateBlogCategoryRequest request, CancellationToken ct = default);
     Task<ApiResponse<bool>> DeleteCategoryAsync(int categoryId, long adminUserId, CancellationToken ct = default);
+
+    // ==========================================
+    // MEDIA (IMAGES & VIDEOS)
+    // ==========================================
+    Task<ApiResponse<UploadBlogMediaResponse>> UploadMediaAsync(long userId, Stream fileStream, string fileName, string contentType, long? blogPostId = null, string? declaredMediaType = null, CancellationToken ct = default);
+    Task<ApiResponse<bool>> DeleteMediaAsync(long mediaId, long userId, bool isAdmin = false, CancellationToken ct = default);
+    Task<ApiResponse<int>> CleanupOrphanMediaAsync(CancellationToken ct = default);
 }

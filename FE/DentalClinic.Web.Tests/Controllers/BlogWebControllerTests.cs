@@ -257,4 +257,96 @@ public class BlogWebControllerTests
         redirect.ActionName.Should().Be(nameof(AdminBlogController.Index));
         controller.TempData["SuccessMessage"].Should().Be("Thêm chuyên mục mới thành công!");
     }
+
+    // ==========================================
+    // MEDIA UPLOAD & DELETE (DENTIST & ADMIN)
+    // ==========================================
+
+    [Fact]
+    public async Task DentistBlog_UploadMedia_ValidFile_ReturnsJsonWithUrl()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.Length).Returns(1024);
+        fileMock.Setup(f => f.FileName).Returns("video.mp4");
+
+        _mockBlogApi.Setup(x => x.UploadMediaAsync(fileMock.Object, "Video", null))
+            .ReturnsAsync(ApiResult<BlogMediaDto>.Success(new BlogMediaDto
+            {
+                MediaId = 1,
+                FileUrl = "https://res.cloudinary.com/demo/video/upload/sample.mp4",
+                ThumbnailUrl = "https://res.cloudinary.com/demo/video/upload/sample.jpg",
+                MediaType = "Video",
+                SizeBytes = 1024
+            }));
+
+        var controller = new DentistBlogController(_mockBlogApi.Object);
+
+        var result = await controller.UploadMedia(fileMock.Object, "Video", null);
+
+        var jsonResult = result.Should().BeOfType<JsonResult>().Subject;
+        jsonResult.Value.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DentistBlog_UploadMedia_EmptyFile_ReturnsFailureJson()
+    {
+        var controller = new DentistBlogController(_mockBlogApi.Object);
+
+        var result = await controller.UploadMedia(null!, null, null);
+
+        var jsonResult = result.Should().BeOfType<JsonResult>().Subject;
+        jsonResult.Value.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DentistBlog_DeleteMedia_ValidId_ReturnsSuccessJson()
+    {
+        _mockBlogApi.Setup(x => x.DeleteMediaAsync(10))
+            .ReturnsAsync(ApiResult<bool>.Success(true, "Xóa media thành công."));
+
+        var controller = new DentistBlogController(_mockBlogApi.Object);
+
+        var result = await controller.DeleteMedia(10);
+
+        var jsonResult = result.Should().BeOfType<JsonResult>().Subject;
+        jsonResult.Value.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task AdminBlog_UploadMedia_ValidFile_ReturnsJsonWithUrl()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.Length).Returns(500);
+        fileMock.Setup(f => f.FileName).Returns("photo.png");
+
+        _mockBlogApi.Setup(x => x.UploadMediaAsync(fileMock.Object, "Image", null))
+            .ReturnsAsync(ApiResult<BlogMediaDto>.Success(new BlogMediaDto
+            {
+                MediaId = 2,
+                FileUrl = "https://res.cloudinary.com/demo/image/upload/photo.png",
+                MediaType = "Image",
+                SizeBytes = 500
+            }));
+
+        var controller = new AdminBlogController(_mockBlogApi.Object);
+
+        var result = await controller.UploadMedia(fileMock.Object, "Image", null);
+
+        var jsonResult = result.Should().BeOfType<JsonResult>().Subject;
+        jsonResult.Value.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task AdminBlog_DeleteMedia_ValidId_ReturnsSuccessJson()
+    {
+        _mockBlogApi.Setup(x => x.DeleteMediaAsync(20))
+            .ReturnsAsync(ApiResult<bool>.Success(true, "Xóa media thành công."));
+
+        var controller = new AdminBlogController(_mockBlogApi.Object);
+
+        var result = await controller.DeleteMedia(20);
+
+        var jsonResult = result.Should().BeOfType<JsonResult>().Subject;
+        jsonResult.Value.Should().NotBeNull();
+    }
 }

@@ -1,7 +1,7 @@
 -- ========================================================
 -- Task 6: Dental Blog & Health Articles Module Tables
 -- Target: SQL Server / Azure SQL / LocalDB
--- Description: Idempotent script for BlogCategories & BlogPosts
+-- Description: Idempotent script for BlogCategories, BlogPosts & BlogPostMedia
 -- ========================================================
 
 IF DB_ID(N'DentalClinicManagementDB') IS NOT NULL
@@ -38,6 +38,7 @@ BEGIN
         Summary NVARCHAR(1000) NULL,
         Content NVARCHAR(MAX) NOT NULL,
         ThumbnailUrl NVARCHAR(500) NULL,
+        VideoUrl NVARCHAR(500) NULL,
         Status VARCHAR(30) NOT NULL CONSTRAINT DF_BlogPosts_Status DEFAULT 'Draft',
         IsFeatured BIT NOT NULL CONSTRAINT DF_BlogPosts_IsFeatured DEFAULT 0,
         ViewCount INT NOT NULL CONSTRAINT DF_BlogPosts_ViewCount DEFAULT 0,
@@ -55,7 +56,55 @@ BEGIN
 END;
 GO
 
--- 3. Seed Default BlogCategories if none exist
+-- Ensure VideoUrl column exists if table was created previously
+IF COL_LENGTH('dbo.BlogPosts', 'VideoUrl') IS NULL
+BEGIN
+    ALTER TABLE dbo.BlogPosts ADD VideoUrl NVARCHAR(500) NULL;
+END;
+GO
+
+-- 3. BlogPostMedia Table (Images & Videos in articles)
+IF OBJECT_ID(N'dbo.BlogPostMedia', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.BlogPostMedia (
+        MediaId BIGINT IDENTITY(1,1) CONSTRAINT PK_BlogPostMedia PRIMARY KEY,
+        BlogPostId BIGINT NULL,
+        UploadedByUserId BIGINT NOT NULL,
+        MediaType VARCHAR(20) NOT NULL, -- 'Image' or 'Video'
+        FileUrl NVARCHAR(500) NOT NULL,
+        PublicId NVARCHAR(200) NOT NULL,
+        ThumbnailUrl NVARCHAR(500) NULL,
+        ContentType VARCHAR(100) NOT NULL,
+        SizeBytes BIGINT NOT NULL,
+        DurationSeconds INT NULL,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_BlogPostMedia_CreatedAt DEFAULT SYSDATETIME(),
+        CONSTRAINT FK_BlogPostMedia_BlogPosts FOREIGN KEY (BlogPostId) REFERENCES dbo.BlogPosts (BlogPostId) ON DELETE SET NULL,
+        CONSTRAINT FK_BlogPostMedia_UserAccounts FOREIGN KEY (UploadedByUserId) REFERENCES dbo.UserAccounts (UserId) ON DELETE CASCADE,
+        CONSTRAINT CK_BlogPostMedia_Type CHECK (MediaType IN ('Image', 'Video'))
+    );
+
+    CREATE NONCLUSTERED INDEX IX_BlogPostMedia_BlogPostId ON dbo.BlogPostMedia(BlogPostId);
+    CREATE NONCLUSTERED INDEX IX_BlogPostMedia_UploadedByUserId ON dbo.BlogPostMedia(UploadedByUserId);
+    CREATE NONCLUSTERED INDEX IX_BlogPostMedia_CreatedAt ON dbo.BlogPostMedia(CreatedAt);
+END;
+GO
+
+-- 4. Cleanup Procedure for Orphan Media (Older than 24 hours)
+IF OBJECT_ID(N'dbo.sp_CleanupOrphanBlogPostMedia', N'P') IS NOT NULL
+    DROP PROCEDURE dbo.sp_CleanupOrphanBlogPostMedia;
+GO
+
+CREATE PROCEDURE dbo.sp_CleanupOrphanBlogPostMedia
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DELETE FROM dbo.BlogPostMedia
+    WHERE BlogPostId IS NULL
+      AND CreatedAt < DATEADD(HOUR, -24, SYSDATETIME());
+END;
+GO
+
+-- 5. Seed Default BlogCategories if none exist
 IF NOT EXISTS (SELECT 1 FROM dbo.BlogCategories)
 BEGIN
     INSERT INTO dbo.BlogCategories (Name, Slug, CreatedAt)

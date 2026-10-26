@@ -24,9 +24,11 @@ public static class DependencyInjection
         services.AddSingleton<IOtpService, OtpService>();
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
         services.AddSingleton<IDentalImageFileValidator, DentalImageFileValidator>();
+        services.AddSingleton<IBlogMediaFileValidator, BlogMediaFileValidator>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IGoogleAuthService, GoogleAuthService>();
         services.AddScoped<IImageStorageService, CloudinaryImageStorageService>();
+        services.AddScoped<IMediaStorageService, CloudinaryMediaStorageService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
 
         services.AddScoped<IAuthService, AuthService>();

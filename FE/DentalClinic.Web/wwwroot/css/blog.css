@@ -310,3 +310,25 @@
 .share-btn-twitter { background-color: #1da1f2; }
 .share-btn-zalo { background-color: #0068ff; }
 .share-btn-copy { background-color: #475569; }
+
+/* Media & Lightbox Zoom */
+.blog-zoomable-img {
+    cursor: zoom-in;
+    transition: transform 0.25s ease, filter 0.25s ease;
+}
+
+.blog-zoomable-img:hover {
+    filter: brightness(0.97);
+}
+
+.blog-featured-video video,
+.blog-article-content video {
+    max-width: 100%;
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    margin: 1.25rem 0;
+    display: block;
+    background-color: #0f172a;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+}

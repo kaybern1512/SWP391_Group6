@@ -16,6 +16,7 @@ public class BlogPostListItemDto
     public string Slug { get; set; } = string.Empty;
     public string? Summary { get; set; }
     public string? ThumbnailUrl { get; set; }
+    public string? VideoUrl { get; set; }
     public string Status { get; set; } = string.Empty;
     public bool IsFeatured { get; set; }
     public int ViewCount { get; set; }

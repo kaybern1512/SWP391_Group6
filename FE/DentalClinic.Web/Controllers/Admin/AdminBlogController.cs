@@ -5,6 +5,7 @@ using DentalClinic.Web.Models.ApiDtos;
 using DentalClinic.Web.Services;
 using DentalClinic.Web.ViewModels.Blog;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DentalClinic.Web.Controllers.Admin;
@@ -169,5 +170,39 @@ public class AdminBlogController : Controller
         }
 
         return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost("UploadMedia")]
+    [RequestSizeLimit(52_428_800)]
+    public async Task<IActionResult> UploadMedia([FromForm] IFormFile file, [FromForm] string? mediaType, [FromForm] long? blogPostId)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return Json(new { success = false, message = "Vui lòng chọn tập tin ảnh hoặc video." });
+        }
+
+        var result = await _blogApi.UploadMediaAsync(file, mediaType, blogPostId);
+        if (result.IsSuccess && result.Data != null)
+        {
+            return Json(new
+            {
+                success = true,
+                url = result.Data.FileUrl,
+                thumbnailUrl = result.Data.ThumbnailUrl,
+                mediaType = result.Data.MediaType,
+                mediaId = result.Data.MediaId,
+                sizeBytes = result.Data.SizeBytes,
+                durationSeconds = result.Data.DurationSeconds
+            });
+        }
+
+        return Json(new { success = false, message = result.Message ?? "Tải tập tin lên máy chủ thất bại." });
+    }
+
+    [HttpDelete("Media/{id}")]
+    public async Task<IActionResult> DeleteMedia(long id)
+    {
+        var result = await _blogApi.DeleteMediaAsync(id);
+        return Json(new { success = result.IsSuccess, message = result.Message });
     }
 }

@@ -1,15 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Helpers;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Validation;
 using DentalClinic.Application.Features.Blog.DTOs;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using DentalClinic.Infrastructure.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -29,12 +32,20 @@ public class BlogServiceTests
 
     private static (BlogService service, DentalClinicDbContext db, Mock<IAuditLogService> mockAudit) CreateService(string? dbName = null)
     {
+        var (service, db, mockAudit, _, _) = CreateFullService(dbName);
+        return (service, db, mockAudit);
+    }
+
+    private static (BlogService service, DentalClinicDbContext db, Mock<IAuditLogService> mockAudit, Mock<IMediaStorageService> mockStorage, BlogMediaFileValidator validator) CreateFullService(string? dbName = null)
+    {
         var db = CreateDbContext(dbName ?? Guid.NewGuid().ToString());
         var mockAudit = new Mock<IAuditLogService>();
         var mockLogger = new Mock<ILogger<BlogService>>();
+        var mockStorage = new Mock<IMediaStorageService>();
+        var validator = new BlogMediaFileValidator();
 
-        var service = new BlogService(db, mockAudit.Object, mockLogger.Object);
-        return (service, db, mockAudit);
+        var service = new BlogService(db, mockAudit.Object, mockStorage.Object, validator, mockLogger.Object);
+        return (service, db, mockAudit, mockStorage, validator);
     }
 
     private async Task SeedDataAsync(DentalClinicDbContext db)
@@ -507,5 +518,390 @@ public class BlogServiceTests
             It.IsAny<string>(),
             null,
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ==========================================
+    // SUPPLEMENT TESTS: MAGIC BYTES & MEDIA VALIDATION
+    // ==========================================
+
+    [Fact]
+    public void ValidateMedia_ValidJpeg_PassesValidation()
+    {
+        var validator = new BlogMediaFileValidator();
+        var jpegBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01 };
+        using var stream = new MemoryStream(jpegBytes);
+
+        var result = validator.Validate(stream, "photo.jpg", "image/jpeg", jpegBytes.Length);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("Image", result.MediaType);
+        Assert.Null(result.ErrorMessage);
+    }
+
+    [Fact]
+    public void ValidateMedia_ValidPng_PassesValidation()
+    {
+        var validator = new BlogMediaFileValidator();
+        var pngBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D };
+        using var stream = new MemoryStream(pngBytes);
+
+        var result = validator.Validate(stream, "graphic.png", "image/png", pngBytes.Length);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("Image", result.MediaType);
+        Assert.Null(result.ErrorMessage);
+    }
+
+    [Fact]
+    public void ValidateMedia_ValidWebp_PassesValidation()
+    {
+        var validator = new BlogMediaFileValidator();
+        var webpBytes = new byte[] { 0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50 };
+        using var stream = new MemoryStream(webpBytes);
+
+        var result = validator.Validate(stream, "image.webp", "image/webp", webpBytes.Length);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("Image", result.MediaType);
+        Assert.Null(result.ErrorMessage);
+    }
+
+    [Fact]
+    public void ValidateMedia_ValidMp4_PassesValidation()
+    {
+        var validator = new BlogMediaFileValidator();
+        var mp4Bytes = new byte[] { 0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6D, 0x70, 0x34, 0x32 };
+        using var stream = new MemoryStream(mp4Bytes);
+
+        var result = validator.Validate(stream, "clip.mp4", "video/mp4", mp4Bytes.Length);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("Video", result.MediaType);
+        Assert.Null(result.ErrorMessage);
+    }
+
+    [Fact]
+    public void ValidateMedia_ValidWebm_PassesValidation()
+    {
+        var validator = new BlogMediaFileValidator();
+        var webmBytes = new byte[] { 0x1A, 0x45, 0xDF, 0xA3, 0x9F, 0x42, 0x86, 0x81, 0x01, 0x42, 0xF7, 0x81 };
+        using var stream = new MemoryStream(webmBytes);
+
+        var result = validator.Validate(stream, "intro.webm", "video/webm", webmBytes.Length);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("Video", result.MediaType);
+        Assert.Null(result.ErrorMessage);
+    }
+
+    [Fact]
+    public void ValidateMedia_DisguisedExe_RejectedWithClearErrorMessage()
+    {
+        var validator = new BlogMediaFileValidator();
+        // MZ DOS header disguised with .mp4 extension
+        var fakeExeBytes = new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00 };
+        using var stream = new MemoryStream(fakeExeBytes);
+
+        var result = validator.Validate(stream, "malicious.mp4", "video/mp4", fakeExeBytes.Length);
+
+        Assert.False(result.IsValid);
+        Assert.NotNull(result.ErrorMessage);
+        Assert.Contains("thực thi", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void ValidateMedia_DisguisedJpgExe_RejectedWithClearErrorMessage()
+    {
+        var validator = new BlogMediaFileValidator();
+        // MZ DOS header disguised with .jpg extension
+        var fakeExeBytes = new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00 };
+        using var stream = new MemoryStream(fakeExeBytes);
+
+        var result = validator.Validate(stream, "virus.jpg", "image/jpeg", fakeExeBytes.Length);
+
+        Assert.False(result.IsValid);
+        Assert.NotNull(result.ErrorMessage);
+        Assert.Contains("thực thi", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void ValidateMedia_UnsupportedExtension_Rejected()
+    {
+        var validator = new BlogMediaFileValidator();
+        var bytes = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+        using var stream = new MemoryStream(bytes);
+
+        var result = validator.Validate(stream, "document.pdf", "application/pdf", bytes.Length);
+
+        Assert.False(result.IsValid);
+        Assert.NotNull(result.ErrorMessage);
+        Assert.Contains("không được hỗ trợ", result.ErrorMessage);
+    }
+
+    // ==========================================
+    // SUPPLEMENT TESTS: SANITIZATION & DOMAIN RESTRICTION
+    // ==========================================
+
+    [Fact]
+    public async Task SanitizeHtml_UntrustedDomainImage_StripsImageTag()
+    {
+        var (service, db, _) = CreateService();
+        await SeedDataAsync(db);
+
+        var request = new CreateBlogPostRequest
+        {
+            CategoryId = 1,
+            Title = "Kiểm tra XSS Hình Ảnh Độc Hại",
+            Content = "<p>Nội dung an toàn <img src=\"https://evil.com/malicious.png\" alt=\"evil\" /></p>",
+            Status = "Published"
+        };
+
+        var result = await service.CreatePostAsync(10, request);
+
+        Assert.True(result.Success);
+        // The evil image should be removed because its domain is not res.cloudinary.com
+        Assert.DoesNotContain("evil.com", result.Data!.Content);
+        Assert.DoesNotContain("<img", result.Data.Content);
+        Assert.Contains("Nội dung an toàn", result.Data.Content);
+    }
+
+    [Fact]
+    public async Task SanitizeHtml_CloudinaryImage_PreservesImageTag()
+    {
+        var (service, db, _) = CreateService();
+        await SeedDataAsync(db);
+
+        var request = new CreateBlogPostRequest
+        {
+            CategoryId = 1,
+            Title = "Kiểm tra Ảnh Hợp Lệ Cloudinary",
+            Content = "<p>Ảnh răng đẹp: <img src=\"https://res.cloudinary.com/dental-demo/image/upload/v123/smile.jpg\" alt=\"smile\" /></p>",
+            Status = "Published"
+        };
+
+        var result = await service.CreatePostAsync(10, request);
+
+        Assert.True(result.Success);
+        Assert.Contains("https://res.cloudinary.com/dental-demo/image/upload/v123/smile.jpg", result.Data!.Content);
+        Assert.Contains("<img", result.Data.Content);
+    }
+
+    [Fact]
+    public async Task SanitizeHtml_IframeAndScripts_AreCompletelyRemoved()
+    {
+        var (service, db, _) = CreateService();
+        await SeedDataAsync(db);
+
+        var request = new CreateBlogPostRequest
+        {
+            CategoryId = 1,
+            Title = "Kiểm tra Chặn Iframe và Script",
+            Content = "<p>Bài viết</p><iframe src=\"https://evil.com/embed\"></iframe><script>alert(1)</script><img src=\"data:image/png;base64,abc\" onerror=\"alert(2)\" />",
+            Status = "Published"
+        };
+
+        var result = await service.CreatePostAsync(10, request);
+
+        Assert.True(result.Success);
+        Assert.DoesNotContain("<iframe", result.Data!.Content);
+        Assert.DoesNotContain("<script", result.Data.Content);
+        Assert.DoesNotContain("onerror", result.Data.Content);
+    }
+
+    // ==========================================
+    // SUPPLEMENT TESTS: MEDIA UPLOAD & DELETION
+    // ==========================================
+
+    [Fact]
+    public async Task UploadMedia_ValidImage_SucceedsAndLogsAudit()
+    {
+        var (service, db, mockAudit, mockStorage, _) = CreateFullService();
+        await SeedDataAsync(db);
+
+        var jpegBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01 };
+        using var stream = new MemoryStream(jpegBytes);
+
+        mockStorage.Setup(s => s.UploadImageAsync(
+            It.IsAny<Stream>(),
+            "tooth.jpg",
+            "image/jpeg",
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MediaUploadResult
+            {
+                Url = "https://res.cloudinary.com/demo/image/upload/tooth_123.jpg",
+                PublicId = "tooth_123",
+                MediaType = "Image",
+                ContentType = "image/jpeg",
+                SizeBytes = jpegBytes.Length
+            });
+
+        var result = await service.UploadMediaAsync(10, stream, "tooth.jpg", "image/jpeg", declaredMediaType: "Image");
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.Equal("Image", result.Data.MediaType);
+        Assert.Equal("https://res.cloudinary.com/demo/image/upload/tooth_123.jpg", result.Data.Url);
+
+        var savedMedia = await db.BlogPostMedia.FirstOrDefaultAsync(m => m.PublicId == "tooth_123");
+        Assert.NotNull(savedMedia);
+        Assert.Equal(10, savedMedia.UploadedByUserId);
+        Assert.Equal("tooth_123", savedMedia.PublicId);
+
+        mockAudit.Verify(a => a.LogAsync(
+            10,
+            "UploadBlogMedia",
+            "BlogPostMedia",
+            savedMedia.MediaId.ToString(),
+            null,
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UploadMedia_DisguisedExe_RejectedBeforeStorage()
+    {
+        var (service, db, _, mockStorage, _) = CreateFullService();
+        await SeedDataAsync(db);
+
+        var fakeExeBytes = new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00 };
+        using var stream = new MemoryStream(fakeExeBytes);
+
+        var result = await service.UploadMediaAsync(10, stream, "teaser.mp4", "video/mp4", declaredMediaType: "Video");
+
+        Assert.False(result.Success);
+        Assert.Contains("thực thi", result.Message);
+        mockStorage.Verify(s => s.UploadVideoAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteMedia_AuthorUser_DeletesFromStorageAndDb()
+    {
+        var (service, db, mockAudit, mockStorage, _) = CreateFullService();
+        await SeedDataAsync(db);
+
+        var media = new BlogPostMedia
+        {
+            MediaId = 100,
+            UploadedByUserId = 10,
+            MediaType = "Image",
+            FileUrl = "https://res.cloudinary.com/demo/image/upload/pic1.jpg",
+            PublicId = "pic1",
+            ContentType = "image/jpeg",
+            SizeBytes = 1024,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.BlogPostMedia.Add(media);
+        await db.SaveChangesAsync();
+
+        mockStorage.Setup(s => s.DeleteMediaAsync("pic1", "Image", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await service.DeleteMediaAsync(100, userId: 10, isAdmin: false);
+
+        Assert.True(result.Success);
+        Assert.Null(await db.BlogPostMedia.FirstOrDefaultAsync(m => m.MediaId == 100));
+        mockStorage.Verify(s => s.DeleteMediaAsync("pic1", "Image", It.IsAny<CancellationToken>()), Times.Once);
+
+        mockAudit.Verify(a => a.LogAsync(
+            10,
+            "DeleteBlogMedia",
+            "BlogPostMedia",
+            "100",
+            It.IsAny<string>(),
+            null,
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteMedia_OtherNonAdminUser_ForbiddenFail()
+    {
+        var (service, db, _, mockStorage, _) = CreateFullService();
+        await SeedDataAsync(db);
+
+        var media = new BlogPostMedia
+        {
+            MediaId = 101,
+            UploadedByUserId = 10, // Uploaded by user 10
+            MediaType = "Image",
+            FileUrl = "https://res.cloudinary.com/demo/image/upload/pic2.jpg",
+            PublicId = "pic2",
+            ContentType = "image/jpeg",
+            SizeBytes = 1024,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.BlogPostMedia.Add(media);
+        await db.SaveChangesAsync();
+
+        // User 20 tries to delete user 10's media
+        var result = await service.DeleteMediaAsync(101, userId: 20, isAdmin: false);
+
+        Assert.False(result.Success);
+        Assert.Contains("Bạn không có quyền xóa", result.Message);
+        Assert.NotNull(await db.BlogPostMedia.FirstOrDefaultAsync(m => m.MediaId == 101));
+        mockStorage.Verify(s => s.DeleteMediaAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CleanupOrphanMedia_DeletesOrphansOlderThan24Hours()
+    {
+        var (service, db, _, mockStorage, _) = CreateFullService();
+        await SeedDataAsync(db);
+
+        // Orphan 1: > 24h old, BlogPostId == null -> SHOULD be deleted
+        var oldOrphan = new BlogPostMedia
+        {
+            MediaId = 201,
+            BlogPostId = null,
+            UploadedByUserId = 10,
+            MediaType = "Image",
+            FileUrl = "https://res.cloudinary.com/demo/image/upload/old_orphan.jpg",
+            PublicId = "old_orphan",
+            ContentType = "image/jpeg",
+            SizeBytes = 500,
+            CreatedAt = DateTime.UtcNow.AddHours(-30)
+        };
+
+        // Orphan 2: fresh (< 24h old), BlogPostId == null -> SHOULD NOT be deleted
+        var freshOrphan = new BlogPostMedia
+        {
+            MediaId = 202,
+            BlogPostId = null,
+            UploadedByUserId = 10,
+            MediaType = "Image",
+            FileUrl = "https://res.cloudinary.com/demo/image/upload/fresh_orphan.jpg",
+            PublicId = "fresh_orphan",
+            ContentType = "image/jpeg",
+            SizeBytes = 500,
+            CreatedAt = DateTime.UtcNow.AddHours(-2)
+        };
+
+        // Attached media: > 24h old, but attached to a post -> SHOULD NOT be deleted
+        var attached = new BlogPostMedia
+        {
+            MediaId = 203,
+            BlogPostId = 1,
+            UploadedByUserId = 10,
+            MediaType = "Image",
+            FileUrl = "https://res.cloudinary.com/demo/image/upload/attached.jpg",
+            PublicId = "attached",
+            ContentType = "image/jpeg",
+            SizeBytes = 500,
+            CreatedAt = DateTime.UtcNow.AddHours(-30)
+        };
+
+        db.BlogPostMedia.AddRange(oldOrphan, freshOrphan, attached);
+        await db.SaveChangesAsync();
+
+        mockStorage.Setup(s => s.DeleteMediaAsync("old_orphan", "Image", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await service.CleanupOrphanMediaAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(1, result.Data);
+        Assert.Null(await db.BlogPostMedia.FirstOrDefaultAsync(m => m.MediaId == 201));
+        Assert.NotNull(await db.BlogPostMedia.FirstOrDefaultAsync(m => m.MediaId == 202));
+        Assert.NotNull(await db.BlogPostMedia.FirstOrDefaultAsync(m => m.MediaId == 203));
     }
 }
