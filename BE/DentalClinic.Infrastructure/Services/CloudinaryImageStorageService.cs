@@ -103,6 +103,62 @@ public class CloudinaryImageStorageService : IImageStorageService
         return url;
     }
 
+    public async Task<string> UploadBlogImageAsync(Stream fileStream, string originalFileName, string contentType, CancellationToken ct = default)
+    {
+        if (fileStream == null || fileStream.Length == 0)
+        {
+            throw new ArgumentException("Tập tin hình ảnh không hợp lệ hoặc rỗng.");
+        }
+
+        if (fileStream.Length > 5 * 1024 * 1024)
+        {
+            throw new ArgumentException("Kích thước ảnh không được vượt quá 5 MB.");
+        }
+
+        var ext = Path.GetExtension(originalFileName).ToLowerInvariant();
+        var allowedExts = new[] { ".jpg", ".jpeg", ".png", ".webp" };
+        if (!allowedExts.Contains(ext))
+        {
+            throw new ArgumentException("Định dạng file không hợp lệ. Chỉ chấp nhận .jpg, .jpeg, .png, .webp.");
+        }
+
+        if (!_isConfigured || _cloudinary == null)
+        {
+            throw new InvalidOperationException("Dịch vụ lưu trữ Cloudinary chưa được cấu hình. Vui lòng thiết lập CloudName, ApiKey và ApiSecret qua dotnet user-secrets.");
+        }
+
+        var publicId = $"dental-clinic/blogs/blog_{Guid.NewGuid():N}";
+
+        var uploadParams = new ImageUploadParams
+        {
+            File = new FileDescription(originalFileName, fileStream),
+            PublicId = publicId,
+            Overwrite = true,
+            Invalidate = true,
+            Transformation = new Transformation()
+                .Width(1200)
+                .Crop("limit")
+                .Quality("auto")
+                .FetchFormat("auto")
+        };
+
+        var uploadResult = await _cloudinary.UploadAsync(uploadParams, ct);
+
+        if (uploadResult.Error != null)
+        {
+            _logger.LogError("Cloudinary blog upload failed: {Error}", uploadResult.Error.Message);
+            throw new InvalidOperationException($"Lỗi tải ảnh bài viết lên Cloudinary: {uploadResult.Error.Message}");
+        }
+
+        var url = uploadResult.SecureUrl?.ToString() ?? uploadResult.Url?.ToString();
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            throw new InvalidOperationException("Không nhận được URL ảnh từ Cloudinary.");
+        }
+
+        return url;
+    }
+
     /// <summary>
     /// Uploads a dental medical imaging file using the DentalImageFileInput abstraction.
     /// </summary>

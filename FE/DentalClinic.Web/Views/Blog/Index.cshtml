@@ -1,0 +1,214 @@
+@model DentalClinic.Web.ViewModels.Blog.BlogIndexViewModel
+@{
+    ViewData["Title"] = "Kiến Thức Nha Khoa - Cẩm Nang Sức Khỏe Răng Miệng";
+    var items = Model.PagedResult.Items;
+    var totalPages = Model.PagedResult.TotalPages;
+    var currentPage = Model.CurrentPage;
+}
+
+<div class="blog-index-container pb-5">
+    <!-- Hero Banner -->
+    <section class="py-5 bg-white border-bottom mb-4">
+        <div class="container py-2 text-center">
+            <span class="badge-dc badge-role-patient mb-2">
+                <i class="bi bi-journal-medical me-1"></i> Kiến Thức Chuyên Môn Chuẩn Y Khoa
+            </span>
+            <h1 class="display-6 fw-bold text-dark mb-2">Cẩm Nang Sức Khỏe & Thẩm Mỹ Nha Khoa</h1>
+            <p class="lead text-muted fs-6 mx-auto mb-4" style="max-width: 680px;">
+                Tổng hợp bài viết, kiến thức điều trị và lời khuyên chăm sóc răng miệng từ đội ngũ bác sĩ chuyên khoa DentalCare.
+            </p>
+
+            <!-- Search Bar -->
+            <form method="get" asp-controller="Blog" asp-action="Index" class="mx-auto" style="max-width: 540px;">
+                @if (!string.IsNullOrWhiteSpace(Model.CurrentCategorySlug))
+                {
+                    <input type="hidden" name="category" value="@Model.CurrentCategorySlug" />
+                }
+                <div class="input-group input-group-lg shadow-sm rounded-pill overflow-hidden border">
+                    <span class="input-group-text bg-white border-0 ps-3">
+                        <i class="bi bi-search text-muted"></i>
+                    </span>
+                    <input type="text"
+                           name="keyword"
+                           value="@Model.CurrentKeyword"
+                           class="form-control border-0 fs-6 shadow-none"
+                           placeholder="Tìm kiếm bài viết (VD: niềng răng, sâu răng, implant...)" />
+                    @if (!string.IsNullOrWhiteSpace(Model.CurrentKeyword))
+                    {
+                        <a asp-controller="Blog" asp-action="Index" asp-route-category="@Model.CurrentCategorySlug" class="btn btn-white border-0 text-muted d-flex align-items-center" title="Xóa tìm kiếm">
+                            <i class="bi bi-x-circle"></i>
+                        </a>
+                    }
+                    <button class="btn btn-primary px-4 fw-semibold border-0" type="submit">
+                        Tìm Kiếm
+                    </button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <div class="container">
+        <!-- Category Filter Pills -->
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-4 pb-2 border-bottom">
+            <span class="text-muted small fw-semibold me-2 d-none d-md-inline">
+                <i class="bi bi-funnel me-1"></i>Chuyên mục:
+            </span>
+            <a asp-controller="Blog" asp-action="Index" asp-route-keyword="@Model.CurrentKeyword"
+               class="blog-cat-pill @(string.IsNullOrWhiteSpace(Model.CurrentCategorySlug) ? "active" : "")">
+                Tất Cả
+            </a>
+            @foreach (var cat in Model.Categories)
+            {
+                <a asp-controller="Blog" asp-action="Index"
+                   asp-route-category="@cat.Slug"
+                   asp-route-keyword="@Model.CurrentKeyword"
+                   class="blog-cat-pill @(string.Equals(Model.CurrentCategorySlug, cat.Slug, StringComparison.OrdinalIgnoreCase) ? "active" : "")">
+                    <span>@cat.Name</span>
+                    @if (cat.PostCount > 0)
+                    {
+                        <span class="badge rounded-pill">@cat.PostCount</span>
+                    }
+                </a>
+            }
+        </div>
+
+        <!-- Search / Category Summary Info -->
+        @if (!string.IsNullOrWhiteSpace(Model.CurrentCategorySlug) || !string.IsNullOrWhiteSpace(Model.CurrentKeyword))
+        {
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="small text-muted">
+                    Tìm thấy <strong class="text-dark">@Model.PagedResult.TotalCount</strong> bài viết
+                    @if (!string.IsNullOrWhiteSpace(Model.CurrentCategorySlug))
+                    {
+                        var activeCat = Model.Categories.FirstOrDefault(c => string.Equals(c.Slug, Model.CurrentCategorySlug, StringComparison.OrdinalIgnoreCase));
+                        <span>trong chuyên mục <strong>@(activeCat?.Name ?? Model.CurrentCategorySlug)</strong></span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Model.CurrentKeyword))
+                    {
+                        <span>với từ khóa <em>"@Model.CurrentKeyword"</em></span>
+                    }
+                </div>
+                <a asp-controller="Blog" asp-action="Index" class="btn btn-link btn-sm text-decoration-none text-muted p-0">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Xem tất cả bài viết
+                </a>
+            </div>
+        }
+
+        <!-- Post Cards Grid -->
+        @if (items != null && items.Count > 0)
+        {
+            <div class="row g-4">
+                @foreach (var post in items)
+                {
+                    <div class="col-md-6 col-lg-4">
+                        <div class="blog-card">
+                            <div class="blog-card-thumb-wrapper">
+                                <a asp-controller="Blog" asp-action="Detail" asp-route-slug="@post.Slug">
+                                    <img src="@(!string.IsNullOrWhiteSpace(post.ThumbnailUrl) ? post.ThumbnailUrl : "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=600&q=80")"
+                                         alt="@post.Title"
+                                         class="blog-card-thumb"
+                                         loading="lazy" />
+                                </a>
+                                <a asp-controller="Blog" asp-action="Index" asp-route-category="@post.CategorySlug" class="blog-badge-category">
+                                    @post.CategoryName
+                                </a>
+                                @if (post.IsFeatured)
+                                {
+                                    <span class="blog-badge-featured">
+                                        <i class="bi bi-star-fill me-1"></i>Nổi bật
+                                    </span>
+                                }
+                            </div>
+                            <div class="blog-card-body">
+                                <h2 class="blog-card-title">
+                                    <a asp-controller="Blog" asp-action="Detail" asp-route-slug="@post.Slug">
+                                        @post.Title
+                                    </a>
+                                </h2>
+                                <p class="blog-card-summary">
+                                    @(!string.IsNullOrWhiteSpace(post.Summary) ? post.Summary : "Đọc bài viết chi tiết để hiểu rõ hơn về các phương pháp chăm sóc và điều trị nha khoa hiện đại...")
+                                </p>
+                                <div class="blog-card-footer">
+                                    <div class="blog-card-author">
+                                        @if (!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl))
+                                        {
+                                            <img src="@post.AuthorAvatarUrl" alt="@post.AuthorName" />
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-person-circle fs-6 text-primary"></i>
+                                        }
+                                        <span class="fw-semibold text-dark text-truncate" style="max-width: 140px;" title="@post.AuthorName">
+                                            @post.AuthorName
+                                        </span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span title="Ngày đăng"><i class="bi bi-clock me-1"></i>@((post.PublishedAt ?? post.CreatedAt).ToString("dd/MM/yyyy"))</span>
+                                        <span title="Lượt xem"><i class="bi bi-eye me-1"></i>@post.ViewCount</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Pagination -->
+            @if (totalPages > 1)
+            {
+                <nav class="mt-5" aria-label="Blog navigation">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                            <a class="page-link rounded-start-pill"
+                               asp-controller="Blog"
+                               asp-action="Index"
+                               asp-route-category="@Model.CurrentCategorySlug"
+                               asp-route-keyword="@Model.CurrentKeyword"
+                               asp-route-page="@(currentPage - 1)">
+                                <i class="bi bi-chevron-left me-1"></i>Trước
+                            </a>
+                        </li>
+                        @for (int p = 1; p <= totalPages; p++)
+                        {
+                            <li class="page-item @(p == currentPage ? "active" : "")">
+                                <a class="page-link"
+                                   asp-controller="Blog"
+                                   asp-action="Index"
+                                   asp-route-category="@Model.CurrentCategorySlug"
+                                   asp-route-keyword="@Model.CurrentKeyword"
+                                   asp-route-page="@p">
+                                    @p
+                                </a>
+                            </li>
+                        }
+                        <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                            <a class="page-link rounded-end-pill"
+                               asp-controller="Blog"
+                               asp-action="Index"
+                               asp-route-category="@Model.CurrentCategorySlug"
+                               asp-route-keyword="@Model.CurrentKeyword"
+                               asp-route-page="@(currentPage + 1)">
+                                Sau<i class="bi bi-chevron-right ms-1"></i>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            }
+        }
+        else
+        {
+            <div class="bg-white rounded-4 p-5 text-center border my-4">
+                <div class="mb-3 text-muted">
+                    <i class="bi bi-journal-x display-4"></i>
+                </div>
+                <h4 class="fw-bold text-dark mb-2">Không tìm thấy bài viết phù hợp</h4>
+                <p class="text-muted small mb-4" style="max-width: 480px; margin: 0 auto;">
+                    Không có bài viết nào khớp với từ khóa tìm kiếm hoặc chuyên mục đã chọn. Vui lòng thử lại với từ khóa khác.
+                </p>
+                <a asp-controller="Blog" asp-action="Index" class="btn btn-outline-primary rounded-pill px-4">
+                    <i class="bi bi-arrow-left me-1"></i> Xem Tất Cả Bài Viết
+                </a>
+            </div>
+        }
+    </div>
+</div>

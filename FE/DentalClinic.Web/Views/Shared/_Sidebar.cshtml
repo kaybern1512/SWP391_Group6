@@ -172,6 +172,11 @@
                 <i class="bi bi-star"></i>
                 <span>Đánh Giá Từ Bệnh Nhân</span>
             </a>
+            <div class="nav-group-title">Truyền Thông & Bài Viết</div>
+            <a class="sidebar-link @(currentCtrl == "DentistBlog" ? "active" : "")" asp-controller="DentistBlog" asp-action="Index">
+                <i class="bi bi-journal-richtext"></i>
+                <span>Bài Viết Của Tôi</span>
+            </a>
         }
         else if (role == "DepartmentManager")
         {
@@ -253,6 +258,11 @@
             <a class="sidebar-link @(currentCtrl == "AdminAuditLog" ? "active" : "")" asp-controller="AdminAuditLog" asp-action="Index">
                 <i class="bi bi-shield-check"></i>
                 <span>Nhật ký Kiểm toán (Logs)</span>
+            </a>
+            <div class="nav-group-title">Tin Tức & Blog</div>
+            <a class="sidebar-link @(currentCtrl == "AdminBlog" ? "active" : "")" asp-controller="AdminBlog" asp-action="Index">
+                <i class="bi bi-journal-album"></i>
+                <span>Quản Lý Blog Kiến Thức</span>
             </a>
         }
 

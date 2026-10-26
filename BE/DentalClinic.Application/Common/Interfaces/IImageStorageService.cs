@@ -22,6 +22,11 @@ public interface IImageStorageService
     Task<string> UploadAvatarAsync(long userId, Stream fileStream, string originalFileName, string contentType, CancellationToken ct = default);
 
     /// <summary>
+    /// Uploads a blog thumbnail or article image to cloud storage.
+    /// </summary>
+    Task<string> UploadBlogImageAsync(Stream fileStream, string originalFileName, string contentType, CancellationToken ct = default);
+
+    /// <summary>
     /// Uploads a dental medical imaging file (X-Ray, CT, Intraoral, DICOM) to cloud storage using a stream.
     /// Preserves full resolution without lossy cropping for clinical diagnostics.
     /// </summary>

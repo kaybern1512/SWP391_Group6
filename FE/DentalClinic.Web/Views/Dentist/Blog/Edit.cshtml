@@ -1,0 +1,294 @@
+@model DentalClinic.Web.ViewModels.Blog.DentistBlogEditViewModel
+@{
+    var isEdit = Model.BlogPostId.HasValue && Model.BlogPostId.Value > 0;
+    ViewData["Title"] = isEdit ? "Chỉnh Sửa Bài Viết - Bác Sĩ" : "Viết Bài Mới - Bác Sĩ";
+}
+
+@section Styles {
+    <!-- Quill Rich Text Editor CDN CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet" />
+    <style>
+        .ql-editor {
+            min-height: 350px;
+            font-size: 1.05rem;
+            line-height: 1.7;
+        }
+        .thumbnail-preview-box {
+            width: 100%;
+            height: 200px;
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8fafc;
+            overflow: hidden;
+            position: relative;
+        }
+        .thumbnail-preview-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+    </style>
+}
+
+<div class="container-fluid py-3" style="max-width: 1000px;">
+    <!-- Breadcrumb & Header -->
+    <div class="mb-4">
+        <a asp-controller="DentistBlog" asp-action="Index" class="btn btn-link text-decoration-none p-0 text-muted small mb-2">
+            <i class="bi bi-arrow-left me-1"></i> Quay lại danh sách bài viết
+        </a>
+        <h3 class="fw-bold text-dark mb-1">
+            <i class="bi bi-pencil-square text-primary me-2"></i>@(isEdit ? "Chỉnh Sửa Bài Viết" : "Soạn Thảo Bài Viết Mới")
+        </h3>
+        <p class="text-muted small mb-0">Chia sẻ thông tin y khoa chuẩn xác, hình ảnh trực quan giúp người bệnh hiểu rõ tình trạng sức khỏe.</p>
+    </div>
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger alert-dismissible fade show rounded-3 mb-4" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Vui lòng kiểm tra lại thông tin:</strong>
+            <div asp-validation-summary="All" class="small mt-1 text-danger"></div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <form method="post"
+          asp-controller="DentistBlog"
+          asp-action="@(isEdit ? "Edit" : "Create")"
+          asp-route-id="@Model.BlogPostId"
+          enctype="multipart/form-data"
+          id="blogPostForm">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="BlogPostId" />
+        <input type="hidden" asp-for="ThumbnailUrl" id="hiddenThumbnailUrl" />
+        <input type="hidden" asp-for="Status" id="postStatusInput" value="@Model.Status" />
+
+        <div class="row g-4">
+            <!-- Left Column: Title, Summary, Rich Content -->
+            <div class="col-lg-8">
+                <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+                    <!-- Title -->
+                    <div class="mb-3">
+                        <label asp-for="Title" class="form-label fw-bold small text-muted text-uppercase">
+                            Tiêu Đề Bài Viết <span class="text-danger">*</span>
+                        </label>
+                        <input asp-for="Title"
+                               class="form-control form-control-lg fw-bold fs-5"
+                               placeholder="VD: Niềng răng có đau không? Những lưu ý cần biết"
+                               maxlength="200"
+                               required />
+                        <span asp-validation-for="Title" class="text-danger small"></span>
+                        <div class="form-text text-muted small">Slug đường dẫn sẽ được sinh tự động từ tiêu đề (chuẩn SEO tiếng Việt).</div>
+                    </div>
+
+                    <!-- Summary -->
+                    <div class="mb-3">
+                        <label asp-for="Summary" class="form-label fw-bold small text-muted text-uppercase">
+                            Tóm Tắt Ngắn (Mô tả hiển thị trên thẻ bài)
+                        </label>
+                        <textarea asp-for="Summary"
+                                  class="form-control"
+                                  rows="3"
+                                  placeholder="Mô tả ngắn gọn nội dung bài viết trong 1-2 câu để thu hút người đọc..."
+                                  maxlength="1000"></textarea>
+                        <span asp-validation-for="Summary" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Rich Content Editor -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted text-uppercase">
+                            Nội Dung Bài Viết <span class="text-danger">*</span>
+                        </label>
+                        <!-- Hidden textarea bound to model -->
+                        <textarea asp-for="Content" id="hiddenContent" style="display:none;"></textarea>
+                        <!-- Quill Editor Container -->
+                        <div id="quillEditorContainer">@Html.Raw(Model.Content)</div>
+                        <span asp-validation-for="Content" class="text-danger small"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Settings, Category & Thumbnail -->
+            <div class="col-lg-4">
+                <!-- Category Card -->
+                <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+                    <h6 class="fw-bold text-dark mb-3">
+                        <i class="bi bi-tag text-primary me-2"></i>Chuyên Mục
+                    </h6>
+                    <div class="mb-3">
+                        <label asp-for="CategoryId" class="form-label small text-muted">Chọn chuyên mục bài viết <span class="text-danger">*</span></label>
+                        <select asp-for="CategoryId" class="form-select" required>
+                            <option value="">-- Chọn chuyên mục --</option>
+                            @foreach (var cat in Model.Categories)
+                            {
+                                <option value="@cat.CategoryId" selected="@(Model.CategoryId == cat.CategoryId)">
+                                    @cat.Name
+                                </option>
+                            }
+                        </select>
+                        <span asp-validation-for="CategoryId" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <!-- Thumbnail Card -->
+                <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+                    <h6 class="fw-bold text-dark mb-3">
+                        <i class="bi bi-image text-primary me-2"></i>Ảnh Bìa Bài Viết
+                    </h6>
+
+                    <div class="thumbnail-preview-box mb-3" id="previewContainer">
+                        @if (!string.IsNullOrWhiteSpace(Model.ThumbnailUrl))
+                        {
+                            <img src="@Model.ThumbnailUrl" alt="Thumbnail Preview" id="thumbnailPreviewImg" />
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted" id="previewPlaceholder">
+                                <i class="bi bi-cloud-arrow-up fs-1 text-secondary d-block"></i>
+                                <span class="small">Chưa chọn ảnh bìa</span>
+                            </div>
+                            <img src="" alt="Thumbnail Preview" id="thumbnailPreviewImg" style="display:none;" />
+                        }
+                    </div>
+
+                    <div class="mb-2">
+                        <label for="thumbnailFileInput" class="form-label small text-muted">Tải ảnh bìa mới (Cloudinary)</label>
+                        <input type="file"
+                               name="thumbnailFile"
+                               id="thumbnailFileInput"
+                               class="form-control form-control-sm"
+                               accept=".jpg,.jpeg,.png,.webp" />
+                        <div class="form-text text-muted" style="font-size: 0.75rem;">
+                            Chấp nhận .jpg, .jpeg, .png, .webp (Tối đa 5 MB).
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit / Actions Card -->
+                <div class="card border-0 shadow-sm rounded-4 p-4">
+                    <h6 class="fw-bold text-dark mb-3">
+                        <i class="bi bi-send-check text-primary me-2"></i>Xuất Bản
+                    </h6>
+                    <div class="d-grid gap-2">
+                        <button type="button" class="btn btn-primary rounded-pill py-2 fw-semibold" id="submitPendingBtn">
+                            <i class="bi bi-send-fill me-1"></i> Gửi Duyệt Bài Viết
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary rounded-pill py-2" id="submitDraftBtn">
+                            <i class="bi bi-save me-1"></i> Lưu Nháp
+                        </button>
+                        <a asp-controller="DentistBlog" asp-action="Index" class="btn btn-link text-muted small text-decoration-none mt-1">
+                            Hủy bỏ
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <!-- Quill Rich Text Editor CDN JS -->
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+    <script>
+        // 1. Initialize Quill Editor
+        const quill = new Quill('#quillEditorContainer', {
+            theme: 'snow',
+            placeholder: 'Nhập nội dung bài viết chi tiết tại đây...',
+            modules: {
+                toolbar: [
+                    [{ 'header': [1, 2, 3, 4, false] }],
+                    ['bold', 'italic', 'underline', 'strike'],
+                    [{ 'color': [] }, { 'background': [] }],
+                    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                    [{ 'align': [] }],
+                    ['blockquote'],
+                    ['link', 'image'],
+                    ['clean']
+                ]
+            }
+        });
+
+        // 2. Custom Image Upload Handler for Quill via Backend API
+        const toolbar = quill.getModule('toolbar');
+        toolbar.addHandler('image', function() {
+            const input = document.createElement('input');
+            input.setAttribute('type', 'file');
+            input.setAttribute('accept', 'image/png, image/jpeg, image/jpg, image/webp');
+            input.click();
+
+            input.onchange = async () => {
+                const file = input.files[0];
+                if (file) {
+                    if (file.size > 5 * 1024 * 1024) {
+                        alert('Kích thước ảnh không được vượt quá 5 MB.');
+                        return;
+                    }
+                    const formData = new FormData();
+                    formData.append('upload', file);
+
+                    try {
+                        const response = await fetch('/Dentist/Blog/UploadEditorImage', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const data = await response.json();
+                        if (data && data.url) {
+                            const range = quill.getSelection(true);
+                            quill.insertEmbed(range.index, 'image', data.url);
+                        } else {
+                            alert(data?.error?.message || 'Tải ảnh lên thất bại.');
+                        }
+                    } catch (err) {
+                        alert('Lỗi khi tải ảnh lên máy chủ.');
+                    }
+                }
+            };
+        });
+
+        // 3. Live Thumbnail Preview
+        const thumbnailFileInput = document.getElementById('thumbnailFileInput');
+        const previewImg = document.getElementById('thumbnailPreviewImg');
+        const previewPlaceholder = document.getElementById('previewPlaceholder');
+
+        thumbnailFileInput?.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    previewImg.src = evt.target.result;
+                    previewImg.style.display = 'block';
+                    if (previewPlaceholder) previewPlaceholder.style.display = 'none';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // 4. Submit Handlers
+        const form = document.getElementById('blogPostForm');
+        const hiddenContent = document.getElementById('hiddenContent');
+        const postStatusInput = document.getElementById('postStatusInput');
+
+        function prepareAndSubmit(status) {
+            // Transfer HTML from Quill editor to hidden textarea
+            const html = quill.root.innerHTML;
+            if (!html || html === '<p><br></p>') {
+                alert('Vui lòng nhập nội dung bài viết.');
+                return;
+            }
+            hiddenContent.value = html;
+            postStatusInput.value = status;
+            form.submit();
+        }
+
+        document.getElementById('submitPendingBtn')?.addEventListener('click', function() {
+            prepareAndSubmit('PendingReview');
+        });
+
+        document.getElementById('submitDraftBtn')?.addEventListener('click', function() {
+            prepareAndSubmit('Draft');
+        });
+    </script>
+}

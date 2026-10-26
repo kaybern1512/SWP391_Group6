@@ -20,6 +20,10 @@ public partial class DentalClinicDbContext : DbContext
 
     public virtual DbSet<AuditLog> AuditLogs { get; set; }
 
+    public virtual DbSet<BlogCategory> BlogCategories { get; set; }
+
+    public virtual DbSet<BlogPost> BlogPosts { get; set; }
+
     public virtual DbSet<ClinicProfile> ClinicProfiles { get; set; }
 
     public virtual DbSet<ClinicalEntry> ClinicalEntries { get; set; }
@@ -228,6 +232,53 @@ public partial class DentalClinicDbContext : DbContext
             entity.HasOne(d => d.User).WithMany(p => p.AuditLogs)
                 .HasForeignKey(d => d.UserId)
                 .HasConstraintName("FK_AuditLogs_User");
+        });
+
+        modelBuilder.Entity<BlogCategory>(entity =>
+        {
+            entity.HasKey(e => e.CategoryId).HasName("PK_BlogCategories");
+
+            entity.HasIndex(e => e.Slug, "UQ_BlogCategories_Slug").IsUnique();
+
+            entity.Property(e => e.Name).HasMaxLength(100);
+            entity.Property(e => e.Slug)
+                .HasMaxLength(150)
+                .IsUnicode(false);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
+        });
+
+        modelBuilder.Entity<BlogPost>(entity =>
+        {
+            entity.HasKey(e => e.BlogPostId).HasName("PK_BlogPosts");
+
+            entity.HasIndex(e => e.CategoryId, "IX_BlogPosts_CategoryId");
+            entity.HasIndex(e => e.AuthorUserId, "IX_BlogPosts_AuthorUserId");
+            entity.HasIndex(e => new { e.Status, e.PublishedAt }, "IX_BlogPosts_Status_PublishedAt");
+            entity.HasIndex(e => e.Slug, "UQ_BlogPosts_Slug").IsUnique();
+
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.Slug)
+                .HasMaxLength(250)
+                .IsUnicode(false);
+            entity.Property(e => e.Summary).HasMaxLength(1000);
+            entity.Property(e => e.ThumbnailUrl).HasMaxLength(500);
+            entity.Property(e => e.Status)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .HasDefaultValue("Draft");
+            entity.Property(e => e.IsFeatured).HasDefaultValue(false);
+            entity.Property(e => e.ViewCount).HasDefaultValue(0);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
+
+            entity.HasOne(d => d.Category).WithMany(p => p.BlogPosts)
+                .HasForeignKey(d => d.CategoryId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_BlogPosts_BlogCategories");
+
+            entity.HasOne(d => d.AuthorUser).WithMany(p => p.BlogPosts)
+                .HasForeignKey(d => d.AuthorUserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_BlogPosts_UserAccounts");
         });
 
         modelBuilder.Entity<ClinicProfile>(entity =>

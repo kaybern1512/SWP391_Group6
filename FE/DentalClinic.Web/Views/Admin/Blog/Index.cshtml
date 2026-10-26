@@ -1,0 +1,460 @@
+@model DentalClinic.Web.ViewModels.Blog.AdminBlogIndexViewModel
+@{
+    ViewData["Title"] = "Quản Trị Blog & Kiến Thức Nha Khoa - DentalCare";
+    var posts = Model.PagedResult.Items;
+    var totalPages = Model.PagedResult.TotalPages;
+    var currentPage = Model.CurrentPage;
+
+    var pendingCount = posts.Count(p => p.Status == "PendingReview");
+    var publishedCount = posts.Count(p => p.Status == "Published");
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <h3 class="fw-bold text-dark mb-1">
+                <i class="bi bi-journal-album text-primary me-2"></i>Quản Trị Phân Hệ Blog & Kiến Thức
+            </h3>
+            <p class="text-muted small mb-0">Kiểm duyệt bài viết của bác sĩ, quản lý danh mục và điều phối nội dung công khai.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-2 rounded-pill px-3 shadow-sm"
+                    data-bs-toggle="modal" data-bs-target="#createCategoryModal">
+                <i class="bi bi-folder-plus"></i>
+                <span>Thêm Chuyên Mục</span>
+            </button>
+            <a asp-controller="DentistBlog" asp-action="Create" class="btn btn-primary d-inline-flex align-items-center gap-2 rounded-pill px-3 shadow-sm">
+                <i class="bi bi-pencil-square"></i>
+                <span>Đăng Bài Mới</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-pills mb-4" id="adminBlogTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active rounded-pill px-4" id="posts-tab" data-bs-toggle="tab" data-bs-target="#posts-panel" type="button" role="tab">
+                <i class="bi bi-card-text me-1"></i> Quản Lý & Duyệt Bài Viết
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link rounded-pill px-4" id="categories-tab" data-bs-toggle="tab" data-bs-target="#categories-panel" type="button" role="tab">
+                <i class="bi bi-folder2 me-1"></i> Quản Lý Chuyên Mục (@Model.Categories.Count)
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="adminBlogTabsContent">
+        <!-- TAB 1: POSTS & REVIEW -->
+        <div class="tab-pane fade show active" id="posts-panel" role="tabpanel">
+            <!-- Filter Bar -->
+            <div class="card border-0 shadow-sm rounded-4 p-3 mb-4">
+                <form method="get" asp-controller="AdminBlog" asp-action="Index" class="row g-2 align-items-center">
+                    <div class="col-md-4">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+                            <input type="text" name="keyword" value="@Model.CurrentKeyword" class="form-control bg-light border-start-0" placeholder="Tìm theo tiêu đề hoặc tác giả..." />
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select name="status" class="form-select form-select-sm bg-light">
+                            <option value="">-- Tất cả trạng thái --</option>
+                            <option value="PendingReview" selected="@(Model.CurrentStatus == "PendingReview")">⏳ Chờ duyệt (PendingReview)</option>
+                            <option value="Published" selected="@(Model.CurrentStatus == "Published")">✅ Đã xuất bản (Published)</option>
+                            <option value="Draft" selected="@(Model.CurrentStatus == "Draft")">📝 Lưu nháp (Draft)</option>
+                            <option value="Archived" selected="@(Model.CurrentStatus == "Archived")">📦 Lưu trữ (Archived)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select name="categoryId" class="form-select form-select-sm bg-light">
+                            <option value="">-- Tất cả chuyên mục --</option>
+                            @foreach (var c in Model.Categories)
+                            {
+                                <option value="@c.CategoryId" selected="@(Model.CurrentCategoryId == c.CategoryId)">@c.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-auto d-flex gap-2">
+                        <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3">
+                            <i class="bi bi-funnel me-1"></i> Lọc
+                        </button>
+                        <a asp-controller="AdminBlog" asp-action="Index" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+                            <i class="bi bi-arrow-counterclockwise"></i>
+                        </a>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Posts Table -->
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+                @if (posts != null && posts.Count > 0)
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light text-muted small text-uppercase" style="letter-spacing: 0.05em;">
+                                <tr>
+                                    <th style="width: 70px;" class="text-center">Ảnh</th>
+                                    <th>Tiêu Đề & Tác Giả</th>
+                                    <th>Chuyên Mục</th>
+                                    <th class="text-center">Trạng Thái</th>
+                                    <th class="text-center">Nổi Bật</th>
+                                    <th class="text-center">Lượt Xem</th>
+                                    <th>Ngày Tạo</th>
+                                    <th class="text-end" style="width: 170px;">Hành Động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var post in posts)
+                                {
+                                    <tr>
+                                        <td class="text-center">
+                                            <img src="@(!string.IsNullOrWhiteSpace(post.ThumbnailUrl) ? post.ThumbnailUrl : "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=120&q=80")"
+                                                 alt="@post.Title"
+                                                 class="rounded-3 border"
+                                                 style="width: 54px; height: 38px; object-fit: cover;" />
+                                        </td>
+                                        <td>
+                                            <div class="fw-bold text-dark mb-1">
+                                                @post.Title
+                                            </div>
+                                            <div class="small text-muted d-flex align-items-center gap-1">
+                                                <i class="bi bi-person-circle"></i>
+                                                <span>@post.AuthorName</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-light text-dark border">
+                                                @post.CategoryName
+                                            </span>
+                                        </td>
+                                        <td class="text-center">
+                                            @switch (post.Status)
+                                            {
+                                                case "Draft":
+                                                    <span class="badge badge-status-draft px-2 py-1 rounded-pill">Lưu Nháp</span>
+                                                    break;
+                                                case "PendingReview":
+                                                    <span class="badge badge-status-pendingreview px-2 py-1 rounded-pill">Chờ Duyệt</span>
+                                                    break;
+                                                case "Published":
+                                                    <span class="badge badge-status-published px-2 py-1 rounded-pill">Đã Xuất Bản</span>
+                                                    break;
+                                                case "Archived":
+                                                    <span class="badge badge-status-archived px-2 py-1 rounded-pill">Lưu Trữ</span>
+                                                    break;
+                                                default:
+                                                    <span class="badge bg-secondary px-2 py-1 rounded-pill">@post.Status</span>
+                                                    break;
+                                            }
+                                        </td>
+                                        <td class="text-center">
+                                            <form method="post" asp-controller="AdminBlog" asp-action="ToggleFeatured" asp-route-id="@post.BlogPostId" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-link p-0 text-decoration-none" title="@(post.IsFeatured ? "Bỏ ghim nổi bật" : "Ghim nổi bật")">
+                                                    @if (post.IsFeatured)
+                                                    {
+                                                        <i class="bi bi-star-fill text-warning fs-5"></i>
+                                                    }
+                                                    else
+                                                    {
+                                                        <i class="bi bi-star text-muted fs-5"></i>
+                                                    }
+                                                </button>
+                                            </form>
+                                        </td>
+                                        <td class="text-center small text-muted">
+                                            @post.ViewCount
+                                        </td>
+                                        <td class="small text-muted">
+                                            @post.CreatedAt.ToString("dd/MM/yyyy")
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="btn-group btn-group-sm">
+                                                <!-- Review Modal Trigger -->
+                                                <button type="button" class="btn btn-outline-success" title="Duyệt bài viết"
+                                                        data-bs-toggle="modal" data-bs-target="#reviewModal-@post.BlogPostId">
+                                                    <i class="bi bi-check2-circle"></i> Duyệt
+                                                </button>
+
+                                                @if (post.Status == "Published")
+                                                {
+                                                    <a asp-controller="Blog" asp-action="Detail" asp-route-slug="@post.Slug" target="_blank" class="btn btn-outline-info" title="Xem trên web">
+                                                        <i class="bi bi-box-arrow-up-right"></i>
+                                                    </a>
+                                                }
+
+                                                <a asp-controller="DentistBlog" asp-action="Edit" asp-route-id="@post.BlogPostId" class="btn btn-outline-primary" title="Sửa nội dung">
+                                                    <i class="bi bi-pencil"></i>
+                                                </a>
+
+                                                <button type="button" class="btn btn-outline-danger" title="Xóa bài viết"
+                                                        data-bs-toggle="modal" data-bs-target="#deletePostAdminModal-@post.BlogPostId">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </div>
+
+                                            <!-- Review Modal -->
+                                            <div class="modal fade" id="reviewModal-@post.BlogPostId" tabindex="-1" aria-hidden="true">
+                                                <div class="modal-dialog modal-dialog-centered text-start">
+                                                    <div class="modal-content border-0 shadow">
+                                                        <form method="post" asp-controller="AdminBlog" asp-action="Review" asp-route-id="@post.BlogPostId">
+                                                            @Html.AntiForgeryToken()
+                                                            <div class="modal-header">
+                                                                <h5 class="modal-title fw-bold">
+                                                                    <i class="bi bi-shield-check text-primary me-2"></i>Duyệt & Quản Lý Bài Viết
+                                                                </h5>
+                                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                            </div>
+                                                            <div class="modal-body">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label small text-muted">Tiêu đề bài viết</label>
+                                                                    <div class="fw-bold">@post.Title</div>
+                                                                    <div class="small text-muted">Tác giả: @post.AuthorName</div>
+                                                                </div>
+
+                                                                <div class="mb-3">
+                                                                    <label class="form-label small text-muted">Chuyển trạng thái bài viết <span class="text-danger">*</span></label>
+                                                                    <select name="Status" class="form-select" required>
+                                                                        <option value="Published" selected="@(post.Status == "Published" || post.Status == "PendingReview")">✅ Xuất bản công khai (Published)</option>
+                                                                        <option value="Draft" selected="@(post.Status == "Draft")">📝 Trả về nháp / Yêu cầu sửa (Draft)</option>
+                                                                        <option value="Archived" selected="@(post.Status == "Archived")">📦 Lưu trữ / Ẩn bài viết (Archived)</option>
+                                                                    </select>
+                                                                </div>
+
+                                                                <div class="form-check form-switch mb-3">
+                                                                    <input class="form-check-input" type="checkbox" name="IsFeatured" value="true" id="featSwitch-@post.BlogPostId" @(post.IsFeatured ? "checked" : "") />
+                                                                    <label class="form-check-label" for="featSwitch-@post.BlogPostId">Ghim lên bài viết nổi bật</label>
+                                                                </div>
+
+                                                                <div class="mb-3">
+                                                                    <label class="form-label small text-muted">Ghi chú kiểm duyệt (Lưu nhật ký kiểm toán)</label>
+                                                                    <textarea name="ReviewNotes" class="form-control" rows="2" placeholder="Nhập lý do duyệt hoặc yêu cầu chỉnh sửa..."></textarea>
+                                                                </div>
+                                                            </div>
+                                                            <div class="modal-footer">
+                                                                <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Đóng</button>
+                                                                <button type="submit" class="btn btn-sm btn-primary">Lưu Phê Duyệt</button>
+                                                            </div>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Delete Post Modal -->
+                                            <div class="modal fade" id="deletePostAdminModal-@post.BlogPostId" tabindex="-1" aria-hidden="true">
+                                                <div class="modal-dialog modal-dialog-centered text-start">
+                                                    <div class="modal-content border-0 shadow">
+                                                        <div class="modal-header">
+                                                            <h5 class="modal-title text-danger">
+                                                                <i class="bi bi-exclamation-triangle-fill me-1"></i> Xác nhận xóa bài viết
+                                                            </h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            Bạn có chắc chắn muốn xóa bài viết <strong>"@post.Title"</strong>? Hành động sẽ được ghi nhận vào nhật ký kiểm toán.
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Hủy</button>
+                                                            <form method="post" asp-controller="AdminBlog" asp-action="DeletePost" asp-route-id="@post.BlogPostId">
+                                                                @Html.AntiForgeryToken()
+                                                                <button type="submit" class="btn btn-sm btn-danger">Xóa Vĩnh Viễn</button>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    @if (totalPages > 1)
+                    {
+                        <div class="p-3 border-top d-flex justify-content-between align-items-center">
+                            <span class="small text-muted">
+                                Trang <strong>@currentPage</strong> / <strong>@totalPages</strong> (Tổng @Model.PagedResult.TotalCount bài viết)
+                            </span>
+                            <ul class="pagination pagination-sm mb-0">
+                                <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                                    <a class="page-link" asp-controller="AdminBlog" asp-action="Index"
+                                       asp-route-status="@Model.CurrentStatus"
+                                       asp-route-categoryId="@Model.CurrentCategoryId"
+                                       asp-route-keyword="@Model.CurrentKeyword"
+                                       asp-route-page="@(currentPage - 1)">Trước</a>
+                                </li>
+                                @for (int p = 1; p <= totalPages; p++)
+                                {
+                                    <li class="page-item @(p == currentPage ? "active" : "")">
+                                        <a class="page-link" asp-controller="AdminBlog" asp-action="Index"
+                                           asp-route-status="@Model.CurrentStatus"
+                                           asp-route-categoryId="@Model.CurrentCategoryId"
+                                           asp-route-keyword="@Model.CurrentKeyword"
+                                           asp-route-page="@p">@p</a>
+                                    </li>
+                                }
+                                <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                                    <a class="page-link" asp-controller="AdminBlog" asp-action="Index"
+                                       asp-route-status="@Model.CurrentStatus"
+                                       asp-route-categoryId="@Model.CurrentCategoryId"
+                                       asp-route-keyword="@Model.CurrentKeyword"
+                                       asp-route-page="@(currentPage + 1)">Sau</a>
+                                </li>
+                            </ul>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="p-5 text-center text-muted">
+                        <i class="bi bi-inbox fs-1 mb-2 d-block"></i>
+                        <h6>Không có bài viết nào trong danh sách.</h6>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- TAB 2: CATEGORIES CRUD -->
+        <div class="tab-pane fade" id="categories-panel" role="tabpanel">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+                <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold text-dark mb-0">
+                        <i class="bi bi-tags me-1"></i> Danh Sách Chuyên Mục Bài Viết
+                    </h6>
+                    <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#createCategoryModal">
+                        <i class="bi bi-plus-circle me-1"></i> Thêm Chuyên Mục
+                    </button>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light text-muted small text-uppercase">
+                            <tr>
+                                <th style="width: 70px;">ID</th>
+                                <th>Tên Chuyên Mục</th>
+                                <th>Đường Dẫn (Slug)</th>
+                                <th class="text-center">Số Bài Viết</th>
+                                <th>Ngày Tạo</th>
+                                <th class="text-end" style="width: 140px;">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var cat in Model.Categories)
+                            {
+                                <tr>
+                                    <td><strong>#@cat.CategoryId</strong></td>
+                                    <td><span class="fw-bold text-dark">@cat.Name</span></td>
+                                    <td><code>@cat.Slug</code></td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary-subtle text-primary rounded-pill">
+                                            @cat.PostCount bài
+                                        </span>
+                                    </td>
+                                    <td class="small text-muted">@cat.CreatedAt.ToString("dd/MM/yyyy")</td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                                data-bs-toggle="modal" data-bs-target="#editCategoryModal-@cat.CategoryId" title="Sửa chuyên mục">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                                data-bs-toggle="modal" data-bs-target="#deleteCategoryModal-@cat.CategoryId" title="Xóa chuyên mục">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+
+                                        <!-- Edit Category Modal -->
+                                        <div class="modal fade" id="editCategoryModal-@cat.CategoryId" tabindex="-1" aria-hidden="true">
+                                            <div class="modal-dialog modal-dialog-centered text-start">
+                                                <div class="modal-content border-0 shadow">
+                                                    <form method="post" asp-controller="AdminBlog" asp-action="EditCategory" asp-route-id="@cat.CategoryId">
+                                                        @Html.AntiForgeryToken()
+                                                        <div class="modal-header">
+                                                            <h5 class="modal-title fw-bold">Chỉnh Sửa Chuyên Mục</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            <div class="mb-3">
+                                                                <label class="form-label small text-muted">Tên chuyên mục <span class="text-danger">*</span></label>
+                                                                <input type="text" name="Name" value="@cat.Name" class="form-control" required maxlength="100" />
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small text-muted">Slug (Đường dẫn tĩnh)</label>
+                                                                <input type="text" name="Slug" value="@cat.Slug" class="form-control" placeholder="Tự sinh nếu để trống" />
+                                                            </div>
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Hủy</button>
+                                                            <button type="submit" class="btn btn-sm btn-primary">Lưu Thay Đổi</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Delete Category Modal -->
+                                        <div class="modal fade" id="deleteCategoryModal-@cat.CategoryId" tabindex="-1" aria-hidden="true">
+                                            <div class="modal-dialog modal-dialog-centered text-start">
+                                                <div class="modal-content border-0 shadow">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title text-danger">
+                                                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Xóa Chuyên Mục
+                                                        </h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        Bạn có chắc chắn muốn xóa chuyên mục <strong>"@cat.Name"</strong>?
+                                                        <div class="text-muted small mt-2">Lưu ý: Không thể xóa chuyên mục nếu đang có bài viết liên kết.</div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Hủy</button>
+                                                        <form method="post" asp-controller="AdminBlog" asp-action="DeleteCategory" asp-route-id="@cat.CategoryId">
+                                                            @Html.AntiForgeryToken()
+                                                            <button type="submit" class="btn btn-sm btn-danger">Xác Nhận Xóa</button>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Category Modal -->
+<div class="modal fade" id="createCategoryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post" asp-controller="AdminBlog" asp-action="CreateCategory">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-folder-plus text-primary me-2"></i>Thêm Chuyên Mục Mới
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Tên chuyên mục <span class="text-danger">*</span></label>
+                        <input type="text" name="Name" class="form-control" placeholder="VD: Niềng Răng - Chỉnh Nha" required maxlength="100" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Slug (Tùy chọn)</label>
+                        <input type="text" name="Slug" class="form-control" placeholder="VD: nieng-rang-chinh-nha (để trống sẽ tự sinh)" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Thêm Chuyên Mục</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
