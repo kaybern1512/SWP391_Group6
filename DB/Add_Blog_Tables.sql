@@ -79,7 +79,7 @@ BEGIN
         DurationSeconds INT NULL,
         CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_BlogPostMedia_CreatedAt DEFAULT SYSDATETIME(),
         CONSTRAINT FK_BlogPostMedia_BlogPosts FOREIGN KEY (BlogPostId) REFERENCES dbo.BlogPosts (BlogPostId) ON DELETE SET NULL,
-        CONSTRAINT FK_BlogPostMedia_UserAccounts FOREIGN KEY (UploadedByUserId) REFERENCES dbo.UserAccounts (UserId) ON DELETE CASCADE,
+        CONSTRAINT FK_BlogPostMedia_UserAccounts FOREIGN KEY (UploadedByUserId) REFERENCES dbo.UserAccounts (UserId) ON DELETE NO ACTION,
         CONSTRAINT CK_BlogPostMedia_Type CHECK (MediaType IN ('Image', 'Video'))
     );
 
@@ -121,11 +121,10 @@ GO
 -- 6. Seed Sample Dental Knowledge Articles if none exist
 -- (Reference: Benh vien Rang Ham Mat TP. Da Nang)
 DECLARE @AuthorUserId BIGINT;
-SELECT TOP 1 @AuthorUserId = u.UserId
-FROM dbo.UserAccounts u
-LEFT JOIN dbo.Roles r ON u.RoleId = r.RoleId
-WHERE r.RoleName = 'Dentist'
-ORDER BY u.UserId ASC;
+SELECT TOP 1 @AuthorUserId = UserId
+FROM dbo.UserAccounts
+WHERE Role = 'Dentist'
+ORDER BY UserId ASC;
 
 IF @AuthorUserId IS NULL
 BEGIN

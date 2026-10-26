@@ -17,11 +17,10 @@ GO
 
 DECLARE @AuthorUserId BIGINT;
 -- Find a dentist account, or fallback to first active user
-SELECT TOP 1 @AuthorUserId = u.UserId
-FROM dbo.UserAccounts u
-LEFT JOIN dbo.Roles r ON u.RoleId = r.RoleId
-WHERE r.RoleName = 'Dentist'
-ORDER BY u.UserId ASC;
+SELECT TOP 1 @AuthorUserId = UserId
+FROM dbo.UserAccounts
+WHERE Role = 'Dentist'
+ORDER BY UserId ASC;
 
 IF @AuthorUserId IS NULL
 BEGIN
@@ -125,7 +124,6 @@ BEGIN
         DATEADD(DAY, -2, SYSDATETIME())
     );
 END;
-GO
 
 -- ========================================================
 -- BÀI VIẾT 2: NHỔ RĂNG KHÔN MỌC LỆCH BẰNG PIEZOTOME
@@ -179,7 +177,6 @@ BEGIN
         DATEADD(DAY, -4, SYSDATETIME())
     );
 END;
-GO
 
 -- ========================================================
 -- BÀI VIẾT 3: CẤY GHÉP IMPLANT NHA KHOA
@@ -263,7 +260,6 @@ BEGIN
         DATEADD(DAY, -6, SYSDATETIME())
     );
 END;
-GO
 
 -- ========================================================
 -- BÀI VIẾT 4: NIỀNG RĂNG MẮC CÀI HAY INVISALIGN
@@ -310,7 +306,6 @@ BEGIN
         DATEADD(DAY, -8, SYSDATETIME())
     );
 END;
-GO
 
 -- ========================================================
 -- BÀI VIẾT 5: 6 THÓI QUEN CHĂM SÓC RĂNG MIỆNG ĐÚNG CÁCH
