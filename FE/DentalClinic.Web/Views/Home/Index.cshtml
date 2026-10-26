@@ -116,88 +116,461 @@
     </div>
 </section>
 
-<!-- Latest Dental Blog & Health Articles Section (Periopixel Design with Instruments Background) -->
+<!-- ========================================================
+     MASTER GIỚI THIỆU HUB: THÔNG TIN PHÒNG KHÁM, ĐỘI NGŨ BÁC SĨ, BLOG & VIDEO 3D
+     ======================================================== -->
 @{
     var latestBlogPosts = ViewBag.LatestBlogPosts as List<DentalClinic.Web.Models.ApiDtos.BlogPostListItemDto>;
 }
-<section id="latest-blog-articles" class="blog-periopixel-section border-bottom">
+<section id="about-intro" class="about-intro-section py-5 border-bottom">
     <div class="container py-2">
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end mb-4 gap-2">
-            <div>
-                <span class="badge-dc badge-role-patient mb-2">
-                    <i class="bi bi-journal-medical me-1"></i> Kiến Thức Nha Khoa
-                </span>
-                <h2 class="display-6 fw-bold text-dark mb-1 fs-2">Cẩm Nang Sức Khỏe &amp; Bài Viết Chuyên Gia</h2>
-                <p class="text-muted small mb-0">Cập nhật những kiến thức chuẩn y khoa từ đội ngũ bác sĩ chuyên khoa đầu ngành.</p>
-            </div>
-            <div>
-                <a asp-controller="Blog" asp-action="Index" class="btn btn-outline-primary rounded-pill px-4 py-2 fw-semibold">
-                    Xem Tất Cả Bài Viết <i class="bi bi-arrow-right ms-1"></i>
-                </a>
+        <!-- Hub Header & Navigation -->
+        <div class="text-center mx-auto mb-4" style="max-width: 800px;">
+            <span class="badge-dc badge-role-patient mb-2">
+                <i class="bi bi-hospital me-1"></i> Giới Thiệu Nha Khoa DentalCare
+            </span>
+            <h2 class="display-6 fw-bold text-dark mb-2 fs-2">Trung Tâm Nha Khoa Kỹ Thuật Cao &amp; Chuyên Gia Đầu Ngành</h2>
+            <p class="text-muted small mb-4">
+                Hội tụ đội ngũ Tiến sĩ, Thạc sĩ, Bác sĩ CKI tu nghiệp quốc tế, hệ thống chẩn đoán hình ảnh kỹ thuật số 4.0 cùng kho kiến thức y khoa trực quan cho bệnh nhân.
+            </p>
+
+            <!-- Navigation Pills: Switch between 3 functions -->
+            <div class="d-inline-block">
+                <ul class="nav nav-pills about-nav-pills justify-content-center gap-1" id="aboutHubTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="tab-clinic-btn" data-bs-toggle="pill" data-bs-target="#about-clinic" type="button" role="tab" aria-controls="about-clinic" aria-selected="true">
+                            <i class="bi bi-building me-1.5"></i> Thông Tin Phòng Khám
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-doctors-btn" data-bs-toggle="pill" data-bs-target="#about-doctors" type="button" role="tab" aria-controls="about-doctors" aria-selected="false">
+                            <i class="bi bi-person-badge-fill me-1.5"></i> Đội Ngũ Bác Sĩ &amp; Kinh Nghiệm
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-blog-btn" data-bs-toggle="pill" data-bs-target="#about-blog" type="button" role="tab" aria-controls="about-blog" aria-selected="false">
+                            <i class="bi bi-journal-medical me-1.5"></i> Cẩm Nang Blog &amp; Video 3D
+                        </button>
+                    </li>
+                </ul>
             </div>
         </div>
 
-        @if (latestBlogPosts != null && latestBlogPosts.Count > 0)
-        {
-            <div class="row g-4">
-                @foreach (var post in latestBlogPosts)
-                {
-                    <div class="col-md-4">
-                        <div class="blog-card bg-white">
-                            <div class="blog-card-thumb-wrapper">
-                                <img src="@(!string.IsNullOrWhiteSpace(post.ThumbnailUrl) ? post.ThumbnailUrl : "/images/blog/viem-tuy-rang-banner.svg")"
-                                     alt="@post.Title"
-                                     class="blog-card-thumb"
-                                     loading="lazy"
-                                     onerror="this.src='/images/blog/viem-tuy-rang-banner.svg'" />
-                                <span class="blog-badge-category">@post.CategoryName</span>
-                                @if (post.IsFeatured)
-                                {
-                                    <span class="blog-badge-featured"><i class="bi bi-star-fill me-1"></i>Nổi bật</span>
-                                }
+        <!-- Tab Panes Content -->
+        <div class="tab-content pt-3" id="aboutHubTabContent">
+
+            <!-- ==========================================
+                 TAB 1: THÔNG TIN PHÒNG KHÁM & CƠ SỞ VẬT CHẤT
+                 ========================================== -->
+            <div class="tab-pane fade show active" id="about-clinic" role="tabpanel" aria-labelledby="tab-clinic-btn">
+                <div class="row align-items-center g-4 mb-5">
+                    <div class="col-lg-7">
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-1.5 rounded-pill fw-semibold small mb-2">
+                            <i class="bi bi-shield-check me-1"></i> Tiêu Chuẩn Vô Trùng Khép Kín Class B
+                        </span>
+                        <h3 class="fw-bold text-dark mb-3">Kiến Tạo Nụ Cười Khỏe Đẹp Với Công Nghệ Nha Khoa 4.0</h3>
+                        <p class="text-muted lh-base mb-3">
+                            Phòng khám Nha khoa <strong>DentalCare</strong> được thành lập với sứ mệnh mang đến trải nghiệm điều trị nha khoa nhẹ nhàng, không đau, chuẩn xác và bền vững theo tiêu chuẩn Bộ Y tế &amp; Quốc tế. Chúng tôi tiên phong ứng dụng giải pháp số hóa toàn diện: từ bệnh án điện tử (EMR), sơ đồ 32 răng FDI đến chẩn đoán hình ảnh 3D.
+                        </p>
+                        <div class="row g-3 pt-2">
+                            <div class="col-sm-6">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="text-primary fs-4"><i class="bi bi-check-circle-fill"></i></div>
+                                    <span class="small fw-semibold text-dark">100% Bác sĩ Chuyên khoa RHM</span>
+                                </div>
                             </div>
-                            <div class="blog-card-body">
-                                <h3 class="blog-card-title">
-                                    <a asp-controller="Blog" asp-action="Detail" asp-route-slug="@post.Slug">
-                                        @post.Title
-                                    </a>
-                                </h3>
-                                <p class="blog-card-summary">
-                                    @(!string.IsNullOrWhiteSpace(post.Summary) ? post.Summary : "Đọc bài viết chi tiết để hiểu rõ hơn về các phương pháp chăm sóc và điều trị nha khoa hiện đại...")
-                                </p>
-                                <div class="blog-card-footer">
-                                    <div class="blog-card-author">
-                                        <img src="@(!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl) ? post.AuthorAvatarUrl : "/images/doctors/dr-phuong-thao.svg")"
-                                             alt="@post.AuthorName"
-                                             class="rounded-circle border"
-                                             style="width: 28px; height: 28px; object-fit: cover;"
-                                             onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
-                                        <span class="fw-semibold text-dark">@post.AuthorName</span>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span><i class="bi bi-clock me-1"></i>@((post.PublishedAt ?? post.CreatedAt).ToString("dd/MM/yyyy"))</span>
-                                        <span><i class="bi bi-eye me-1"></i>@post.ViewCount</span>
-                                    </div>
+                            <div class="col-sm-6">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="text-primary fs-4"><i class="bi bi-check-circle-fill"></i></div>
+                                    <span class="small fw-semibold text-dark">Bệnh án điện tử bảo mật trọn đời</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="text-primary fs-4"><i class="bi bi-check-circle-fill"></i></div>
+                                    <span class="small fw-semibold text-dark">Thiết bị nhập khẩu Đức &amp; Pháp</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="text-primary fs-4"><i class="bi bi-check-circle-fill"></i></div>
+                                    <span class="small fw-semibold text-dark">Minh bạch bảng giá &amp; bảo hành</span>
                                 </div>
                             </div>
                         </div>
                     </div>
-                }
+                    <div class="col-lg-5">
+                        <div class="card-dc p-4 bg-light border shadow-sm rounded-4">
+                            <div class="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
+                                <div class="clinic-brand-logo" style="width: 48px; height: 48px;">
+                                    <i class="bi bi-hospital fs-3"></i>
+                                </div>
+                                <div>
+                                    <h5 class="fw-bold mb-0 text-dark">Trung Tâm DentalCare</h5>
+                                    <span class="small text-muted">Cơ sở khám chữa bệnh kỹ thuật cao</span>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-column gap-2.5 small mb-3">
+                                <div><i class="bi bi-geo-alt-fill text-primary me-2"></i><strong>Địa chỉ:</strong> Khu Công Nghệ Cao, TP. Thủ Đức, TP. Hồ Chí Minh</div>
+                                <div><i class="bi bi-telephone-fill text-primary me-2"></i><strong>Tổng đài hỗ trợ:</strong> <span class="fw-bold text-primary fs-6">1900 1234</span></div>
+                                <div><i class="bi bi-envelope-fill text-primary me-2"></i><strong>Email:</strong> contact@dentalclinic.edu.vn</div>
+                                <div><i class="bi bi-clock-fill text-primary me-2"></i><strong>Giờ làm việc:</strong> T2 - T6 (08:00 - 20:00) | T7 (08:00 - 18:00) | CN (08:00 - 12:00)</div>
+                            </div>
+                            <div class="pt-2">
+                                <a href="/Patient/Appointment/Book" class="btn btn-primary w-100 rounded-pill py-2 fw-semibold shadow-sm">
+                                    <i class="bi bi-calendar2-plus me-1"></i> Đặt Lịch Khám Ngay
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4 Tech Pillars -->
+                <div class="row g-3">
+                    <div class="col-md-3 col-sm-6">
+                        <div class="tech-pillar-card">
+                            <div class="tech-icon-box bg-primary-subtle text-primary">
+                                <i class="bi bi-cpu"></i>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1">Máy CT Cone Beam 3D</h6>
+                            <p class="text-muted small mb-0">Chụp cắt lớp toàn hàm đa chiều KaVo (Đức), hỗ trợ định vị chính xác dây thần kinh và xoang hàm.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="tech-pillar-card">
+                            <div class="tech-icon-box bg-info-subtle text-info">
+                                <i class="bi bi-soundwave"></i>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1">Sóng Siêu Âm Piezotome</h6>
+                            <p class="text-muted small mb-0">Công nghệ nhổ răng khôn không đau của Pháp, bóc tách mô chọn lọc, hạn chế chảy máu và nhanh lành thương.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="tech-pillar-card">
+                            <div class="tech-icon-box bg-warning-subtle text-warning">
+                                <i class="bi bi-camera-video"></i>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1">Scan 3D iTero Element 5D</h6>
+                            <p class="text-muted small mb-0">Quét mẫu hàm kỹ thuật số 60s, mô phỏng trước kết quả nụ cười tương lai ClinCheck trực quan.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="tech-pillar-card">
+                            <div class="tech-icon-box bg-success-subtle text-success">
+                                <i class="bi bi-shield-check"></i>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1">Vô Trùng Autoclave Class B</h6>
+                            <p class="text-muted small mb-0">Hệ thống sấy tiệt trùng nhiệt độ cao Melag tiêu chuẩn Châu Âu, 1 bệnh nhân - 1 bộ dụng cụ riêng biệt.</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-        }
-        else
-        {
-            <div class="bg-white rounded-4 p-4 text-center border shadow-sm">
-                <i class="bi bi-journal-text fs-1 text-muted mb-2 d-block"></i>
-                <h6 class="fw-bold text-dark mb-1">Chưa có bài viết mới</h6>
-                <p class="text-muted small mb-3">Các bài viết chia sẻ kiến thức nha khoa từ bác sĩ sẽ sớm được cập nhật tại đây.</p>
-                <a asp-controller="Blog" asp-action="Index" class="btn btn-sm btn-primary rounded-pill px-3">
-                    Đến Chuyên Mục Blog
-                </a>
+
+            <!-- ==========================================
+                 TAB 2: ĐỘI NGŨ BÁC SĨ & KINH NGHIỆM CÔNG TÁC
+                 ========================================== -->
+            <div class="tab-pane fade" id="about-doctors" role="tabpanel" aria-labelledby="tab-doctors-btn">
+                <div class="text-center mx-auto mb-4" style="max-width: 650px;">
+                    <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-1.5 rounded-pill fw-semibold small mb-2">
+                        <i class="bi bi-award-fill me-1"></i> Bác Sĩ Chuyên Khoa Giàu Y Đức
+                    </span>
+                    <h3 class="fw-bold text-dark mb-2">Đội Ngũ Bác Sĩ &amp; Quá Trình Đào Tạo - Công Tác</h3>
+                    <p class="text-muted small">Quy tụ các chuyên gia tốt nghiệp Đại học Y Dược TP.HCM và từng tu nghiệp tại các trung tâm nha khoa uy tín ở Pháp, Thụy Sĩ, Hoa Kỳ.</p>
+                </div>
+
+                <div class="row g-4">
+                    <!-- Bác sĩ 1: TS. BS. Nguyễn Thị Phương Thảo -->
+                    <div class="col-lg-3 col-md-6">
+                        <div class="doctor-team-card">
+                            <div>
+                                <div class="doctor-team-avatar-wrapper">
+                                    <img src="/images/doctors/dr-phuong-thao.svg" alt="TS. BS. Nguyễn Thị Phương Thảo" class="doctor-team-avatar" />
+                                    <span class="badge bg-primary text-white rounded-pill doctor-team-badge-pos">
+                                        <i class="bi bi-patch-check-fill me-1"></i>Tiến Sĩ Y Khoa
+                                    </span>
+                                </div>
+                                <div class="text-center mb-3">
+                                    <h5 class="fw-bold text-dark mb-0.5">TS. BS. Phương Thảo</h5>
+                                    <div class="text-primary small fw-semibold">Trưởng Khoa Nội Nha &amp; Phục Hình</div>
+                                    <div class="mt-1">
+                                        <span class="doctor-experience-tag"><i class="bi bi-clock-history"></i> 15 năm kinh nghiệm</span>
+                                    </div>
+                                </div>
+                                <ul class="doctor-work-list">
+                                    <li>Tiến sĩ Y khoa (PhD) chuyên ngành Răng Hàm Mặt &ndash; ĐHYD TP.HCM.</li>
+                                    <li>Tu nghiệp chuyên sâu Nội nha vi phẫu &amp; Mão toàn sứ tại Đại học Bordeaux (Cộng hòa Pháp).</li>
+                                    <li>Tác giả nhiều công trình nghiên cứu bảo tồn tủy răng và điều trị răng phức tạp.</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <a href="/Patient/Appointment/Book" class="btn btn-sm btn-primary w-100 rounded-pill py-2 fw-semibold shadow-sm">
+                                    <i class="bi bi-calendar2-plus me-1"></i> Đặt Hẹn Khám Riêng
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bác sĩ 2: ThS. BS. Trần Văn Hùng -->
+                    <div class="col-lg-3 col-md-6">
+                        <div class="doctor-team-card">
+                            <div>
+                                <div class="doctor-team-avatar-wrapper">
+                                    <img src="/images/doctors/dr-tran-van-hung.svg" alt="ThS. BS. Trần Văn Hùng" class="doctor-team-avatar" />
+                                    <span class="badge bg-success text-white rounded-pill doctor-team-badge-pos">
+                                        <i class="bi bi-patch-check-fill me-1"></i>Thạc Sĩ Y Khoa
+                                    </span>
+                                </div>
+                                <div class="text-center mb-3">
+                                    <h5 class="fw-bold text-dark mb-0.5">ThS. BS. Trần Văn Hùng</h5>
+                                    <div class="text-success small fw-semibold">Cố Vấn Chỉnh Nha &amp; Thẩm Mỹ</div>
+                                    <div class="mt-1">
+                                        <span class="doctor-experience-tag" style="background: #dcfce7; color: #15803d;"><i class="bi bi-clock-history"></i> 12 năm kinh nghiệm</span>
+                                    </div>
+                                </div>
+                                <ul class="doctor-work-list">
+                                    <li>Thạc sĩ Y khoa Răng Hàm Mặt &ndash; Đại học Y Dược TP.HCM.</li>
+                                    <li>Chứng nhận Bác sĩ Chỉnh nha Khay trong suốt Invisalign Platinum Provider quốc tế.</li>
+                                    <li>Chứng chỉ Chỉnh nha tăng trưởng &amp; Khớp cắn Roth-Williams (Hoa Kỳ).</li>
+                                    <li>Đã kiến tạo nụ cười cho hơn 1.800 ca niềng răng hô, móm, khấp khểnh.</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <a href="/Patient/Appointment/Book" class="btn btn-sm btn-outline-primary w-100 rounded-pill py-2 fw-semibold">
+                                    <i class="bi bi-calendar2-plus me-1"></i> Đặt Hẹn Khám Riêng
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bác sĩ 3: BS. CKI Lê Hoàng Nam -->
+                    <div class="col-lg-3 col-md-6">
+                        <div class="doctor-team-card">
+                            <div>
+                                <div class="doctor-team-avatar-wrapper">
+                                    <img src="/images/doctors/dr-le-hoang-nam.svg" alt="BS. CKI Lê Hoàng Nam" class="doctor-team-avatar" />
+                                    <span class="badge bg-info text-white rounded-pill doctor-team-badge-pos">
+                                        <i class="bi bi-patch-check-fill me-1"></i>Bác Sĩ CKI
+                                    </span>
+                                </div>
+                                <div class="text-center mb-3">
+                                    <h5 class="fw-bold text-dark mb-0.5">BS. CKI Lê Hoàng Nam</h5>
+                                    <div class="text-info-emphasis small fw-semibold">Trưởng Khoa Phẫu Thuật &amp; Implant</div>
+                                    <div class="mt-1">
+                                        <span class="doctor-experience-tag" style="background: #e0f2fe; color: #0369a1;"><i class="bi bi-clock-history"></i> 10 năm kinh nghiệm</span>
+                                    </div>
+                                </div>
+                                <ul class="doctor-work-list">
+                                    <li>Bác sĩ Chuyên khoa I Phẫu thuật Tạo hình Hàm mặt &ndash; BV RHM Trung Ương.</li>
+                                    <li>Thành viên Hiệp hội Cấy ghép Nha khoa Quốc tế (ITI &ndash; Thụy Sĩ).</li>
+                                    <li>Chứng chỉ Cấy ghép toàn hàm All-on-4 / All-on-6 kỹ thuật số.</li>
+                                    <li>Hơn 2.500 ca cấy ghép Implant và nhổ răng khôn sóng siêu âm Piezotome không đau.</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <a href="/Patient/Appointment/Book" class="btn btn-sm btn-outline-primary w-100 rounded-pill py-2 fw-semibold">
+                                    <i class="bi bi-calendar2-plus me-1"></i> Đặt Hẹn Khám Riêng
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bác sĩ 4: BS. Mai Hương -->
+                    <div class="col-lg-3 col-md-6">
+                        <div class="doctor-team-card">
+                            <div>
+                                <div class="doctor-team-avatar-wrapper">
+                                    <img src="/images/doctors/dr-mai-huong.svg" alt="BS. Mai Hương" class="doctor-team-avatar" />
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill doctor-team-badge-pos">
+                                        <i class="bi bi-heart-fill me-1"></i>Nha Khoa Nhi
+                                    </span>
+                                </div>
+                                <div class="text-center mb-3">
+                                    <h5 class="fw-bold text-dark mb-0.5">BS. Mai Hương</h5>
+                                    <div class="text-danger small fw-semibold">Chuyên Khoa Nha Khoa Trẻ Em</div>
+                                    <div class="mt-1">
+                                        <span class="doctor-experience-tag" style="background: #ffe4e6; color: #e11d48;"><i class="bi bi-clock-history"></i> 8 năm kinh nghiệm</span>
+                                    </div>
+                                </div>
+                                <ul class="doctor-work-list">
+                                    <li>Bác sĩ Răng Hàm Mặt &ndash; Đại học Y Dược TP.HCM.</li>
+                                    <li>Chứng chỉ Tiền chỉnh nha Trainer (Myobrace &ndash; Úc) cho trẻ từ 6 &ndash; 12 tuổi.</li>
+                                    <li>Chuyên sâu tâm lý trẻ em, thao tác nhẹ nhàng, không gây sợ hãi khi khám chữa răng sữa.</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <a href="/Patient/Appointment/Book" class="btn btn-sm btn-outline-primary w-100 rounded-pill py-2 fw-semibold">
+                                    <i class="bi bi-calendar2-plus me-1"></i> Đặt Hẹn Khám Riêng
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-        }
+
+            <!-- ==========================================
+                 TAB 3: CẨM NANG BLOG & VIDEO 3D Y KHOA
+                 ========================================== -->
+            <div class="tab-pane fade" id="about-blog" role="tabpanel" aria-labelledby="tab-blog-btn">
+                <div class="blog-periopixel-section rounded-4 p-4 p-md-5 mb-4 border">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end mb-4 gap-2">
+                        <div>
+                            <span class="badge-dc badge-role-patient mb-2">
+                                <i class="bi bi-journal-medical me-1"></i> Kiến Thức Nha Khoa
+                            </span>
+                            <h3 class="fw-bold text-dark mb-1">Cẩm Nang Sức Khỏe &amp; Bài Viết Chuyên Gia</h3>
+                            <p class="text-muted small mb-0">Cập nhật những kiến thức chuẩn y khoa từ đội ngũ bác sĩ chuyên khoa đầu ngành.</p>
+                        </div>
+                        <div>
+                            <a asp-controller="Blog" asp-action="Index" class="btn btn-outline-primary rounded-pill px-4 py-2 fw-semibold">
+                                Xem Tất Cả Bài Viết <i class="bi bi-arrow-right ms-1"></i>
+                            </a>
+                        </div>
+                    </div>
+
+                    @if (latestBlogPosts != null && latestBlogPosts.Count > 0)
+                    {
+                        <div class="row g-4 mb-5">
+                            @foreach (var post in latestBlogPosts)
+                            {
+                                <div class="col-md-4">
+                                    <div class="blog-card bg-white">
+                                        <div class="blog-card-thumb-wrapper">
+                                            <img src="@(!string.IsNullOrWhiteSpace(post.ThumbnailUrl) ? post.ThumbnailUrl : "/images/blog/viem-tuy-rang-banner.svg")"
+                                                 alt="@post.Title"
+                                                 class="blog-card-thumb"
+                                                 loading="lazy"
+                                                 onerror="this.src='/images/blog/viem-tuy-rang-banner.svg'" />
+                                            <span class="blog-badge-category">@post.CategoryName</span>
+                                            @if (post.IsFeatured)
+                                            {
+                                                <span class="blog-badge-featured"><i class="bi bi-star-fill me-1"></i>Nổi bật</span>
+                                            }
+                                        </div>
+                                        <div class="blog-card-body">
+                                            <h3 class="blog-card-title">
+                                                <a asp-controller="Blog" asp-action="Detail" asp-route-slug="@post.Slug">
+                                                    @post.Title
+                                                </a>
+                                            </h3>
+                                            <p class="blog-card-summary">
+                                                @(!string.IsNullOrWhiteSpace(post.Summary) ? post.Summary : "Đọc bài viết chi tiết để hiểu rõ hơn về các phương pháp chăm sóc và điều trị nha khoa hiện đại...")
+                                            </p>
+                                            <div class="blog-card-footer">
+                                                <div class="blog-card-author">
+                                                    <img src="@(!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl) ? post.AuthorAvatarUrl : "/images/doctors/dr-phuong-thao.svg")"
+                                                         alt="@post.AuthorName"
+                                                         class="rounded-circle border"
+                                                         style="width: 28px; height: 28px; object-fit: cover;"
+                                                         onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
+                                                    <span class="fw-semibold text-dark">@post.AuthorName</span>
+                                                </div>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <span><i class="bi bi-clock me-1"></i>@((post.PublishedAt ?? post.CreatedAt).ToString("dd/MM/yyyy"))</span>
+                                                    <span><i class="bi bi-eye me-1"></i>@post.ViewCount</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <!-- Interactive 3D Medical Video Showcase for Patients -->
+                    <div class="video-3d-box">
+                        <div class="row align-items-center g-4">
+                            <div class="col-lg-7">
+                                <div class="ratio ratio-16x9 rounded-3 overflow-hidden border border-secondary shadow">
+                                    <iframe id="home3dVideoFrame" 
+                                            src="https://www.youtube.com/embed/VR8IQ9QFdWw" 
+                                            title="Mô phỏng 3D y khoa nha khoa" 
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                            allowfullscreen></iframe>
+                                </div>
+                            </div>
+                            <div class="col-lg-5">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <span class="badge bg-danger rounded-pill px-2.5 py-1 small">
+                                        <i class="bi bi-play-circle-fill me-1"></i> Video 3D Y Khoa
+                                    </span>
+                                    <span class="text-light small opacity-75">Giáo dục bệnh nhân (Periopixel 3D)</span>
+                                </div>
+                                <h4 class="fw-bold text-white mb-2" id="home3dVideoTitle">Điều Trị Viêm Tủy Răng Vi Phẫu 3D</h4>
+                                <p class="text-light opacity-75 small mb-3" id="home3dVideoDesc">
+                                    Mô phỏng 3D chi tiết từng bước bóc tách buồng tủy bị nhiễm trùng, làm sạch hệ thống ống tủy và trám bít sinh học Gutta-percha bảo tồn răng thật.
+                                </p>
+                                <div class="d-flex flex-column gap-2">
+                                    <button type="button" class="video-selector-btn active" onclick="switchHomeVideo('VR8IQ9QFdWw', 'Điều Trị Viêm Tủy Răng Vi Phẫu 3D', 'Mô phỏng 3D chi tiết từng bước bóc tách buồng tủy bị nhiễm trùng, làm sạch hệ thống ống tủy và trám bít sinh học Gutta-percha bảo tồn răng thật.', this)">
+                                        <i class="bi bi-film me-2"></i> 1. Video 3D Điều Trị Tủy Răng
+                                    </button>
+                                    <button type="button" class="video-selector-btn" onclick="switchHomeVideo('9KtA83_tUFQ', 'Nhổ Răng Khôn Mọc Lệch Sóng Siêu Âm Piezotome 3D', 'Mô phỏng 3D quy trình bóc tách dây chằng nha chu bằng sóng siêu âm cao tần, không đau, không sang chấn nẹp xương.', this)">
+                                        <i class="bi bi-film me-2"></i> 2. Video 3D Nhổ Răng Khôn Piezotome
+                                    </button>
+                                    <button type="button" class="video-selector-btn" onclick="switchHomeVideo('B-sNEYkqoCk', 'Cấy Ghép Trụ Răng Implant Sinh Học 3D', 'Visual hóa 3D quá trình đặt trụ Titanium vào xương hàm, gắn khớp nối Abutment và chụp mão toàn sứ CAD/CAM chịu lực.', this)">
+                                        <i class="bi bi-film me-2"></i> 3. Video 3D Cấy Ghép Implant
+                                    </button>
+                                    <button type="button" class="video-selector-btn" onclick="switchHomeVideo('so1FkkahF4U', 'Niềng Răng Trong Suốt Invisalign 3D ClinCheck', 'Mô phỏng dịch chuyển từng răng chuẩn vi điểm thông qua phác đồ số hóa 3D khay niềng vô hình Invisalign.', this)">
+                                        <i class="bi bi-film me-2"></i> 4. Video 3D Chỉnh Nha Invisalign
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </section>
+
+<script>
+    function switchHomeVideo(videoId, title, desc, btnEl) {
+        var frame = document.getElementById('home3dVideoFrame');
+        if (frame) {
+            frame.src = 'https://www.youtube.com/embed/' + videoId + '?autoplay=1';
+        }
+        var titleEl = document.getElementById('home3dVideoTitle');
+        if (titleEl) titleEl.innerText = title;
+        var descEl = document.getElementById('home3dVideoDesc');
+        if (descEl) descEl.innerText = desc;
+
+        document.querySelectorAll('.video-selector-btn').forEach(function(b) {
+            b.classList.remove('active');
+        });
+        if (btnEl) btnEl.classList.add('active');
+    }
+
+    window.switchAboutTab = function(tabKey) {
+        var tabBtnId = 'tab-clinic-btn';
+        if (tabKey === 'tab-doctors' || tabKey === '#about-doctors') tabBtnId = 'tab-doctors-btn';
+        else if (tabKey === 'tab-blog' || tabKey === '#about-blog') tabBtnId = 'tab-blog-btn';
+
+        var tabBtn = document.getElementById(tabBtnId);
+        if (tabBtn && window.bootstrap && window.bootstrap.Tab) {
+            var tabObj = new bootstrap.Tab(tabBtn);
+            tabObj.show();
+        } else if (tabBtn) {
+            tabBtn.click();
+        }
+
+        var targetSection = document.getElementById('about-intro');
+        if (targetSection) {
+            targetSection.scrollIntoView({ behavior: 'smooth' });
+        }
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+        var hash = window.location.hash;
+        if (hash === '#about-clinic' || hash === '#about-doctors' || hash === '#about-blog' || hash === '#about-intro') {
+            if (hash === '#about-doctors') {
+                window.switchAboutTab('tab-doctors');
+            } else if (hash === '#about-blog') {
+                window.switchAboutTab('tab-blog');
+            } else {
+                window.switchAboutTab('tab-clinic');
+            }
+        }
+    });
+</script>
 
 <!-- Specialties Section -->
 <section id="specialties" class="py-5">
@@ -1046,46 +1419,6 @@
                     <p class="text-muted small mb-0">
                         Dễ dàng chuyển tiếp ca bệnh phức tạp sang bác sĩ chuyên khoa phù hợp với đầy đủ lịch sử khám và chẩn đoán.
                     </p>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- Clinic Info & Operating Hours -->
-<section id="clinic-info" class="py-5">
-    <div class="container py-3">
-        <div class="row align-items-center g-4">
-            <div class="col-lg-6">
-                <span class="badge-dc badge-role-patient mb-2">Thông Tin Liên Hệ</span>
-                <h3 class="fw-bold text-dark mb-3">Trung Tâm Nha Khoa Kỹ Thuật Cao</h3>
-                <p class="text-muted small mb-4">
-                    Cơ sở nha khoa hiện đại quy tụ đầy đủ các chuyên khoa với hệ thống trang thiết bị chẩn đoán hình ảnh tiên tiến.
-                </p>
-                <div class="d-flex flex-column gap-2 small">
-                    <div><i class="bi bi-geo-alt-fill text-primary me-2"></i> Khu Công Nghệ Cao, TP. Thủ Đức, TP. Hồ Chí Minh</div>
-                    <div><i class="bi bi-telephone-fill text-primary me-2"></i> Tổng đài tiếp tân: <strong>1900 1234</strong></div>
-                    <div><i class="bi bi-envelope-fill text-primary me-2"></i> Email hỗ trợ: contact@dentalclinic.edu.vn</div>
-                </div>
-            </div>
-            <div class="col-lg-6">
-                <div class="card-dc p-4 bg-white border">
-                    <h5 class="fw-bold text-dark mb-2">Lịch Làm Việc Phòng Khám</h5>
-                    <p class="text-muted small mb-3">Khung giờ phục vụ bệnh nhân tại tất cả các chuyên khoa:</p>
-                    <ul class="list-unstyled mb-0 small">
-                        <li class="d-flex justify-content-between py-2 border-bottom">
-                            <span>Thứ Hai &ndash; Thứ Sáu:</span>
-                            <strong class="text-dark">08:00 &ndash; 20:00</strong>
-                        </li>
-                        <li class="d-flex justify-content-between py-2 border-bottom">
-                            <span>Thứ Bảy:</span>
-                            <strong class="text-dark">08:00 &ndash; 18:00</strong>
-                        </li>
-                        <li class="d-flex justify-content-between py-2">
-                            <span>Chủ Nhật & Ngày Lễ:</span>
-                            <strong class="text-dark">08:00 &ndash; 12:00</strong>
-                        </li>
-                    </ul>
                 </div>
             </div>
         </div>

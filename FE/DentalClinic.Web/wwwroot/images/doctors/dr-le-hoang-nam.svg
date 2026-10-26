@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="namBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#eff6ff"/>
+      <stop offset="50%" stop-color="#dbeafe"/>
+      <stop offset="100%" stop-color="#bfdbfe"/>
+    </linearGradient>
+    <linearGradient id="namCoat" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f8fafc"/>
+    </linearGradient>
+    <linearGradient id="namSkin" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="namHair" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#475569"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <filter id="namShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#1e40af" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Background Circle -->
+  <circle cx="200" cy="200" r="190" fill="url(#namBg)"/>
+  <circle cx="200" cy="200" r="185" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.8"/>
+
+  <!-- Medical Crosses -->
+  <path d="M200,45 L200,85 M180,65 L220,65" stroke="#3b82f6" stroke-width="4" stroke-linecap="round" opacity="0.4"/>
+  <path d="M70,160 L70,190 M55,175 L85,175" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" opacity="0.3"/>
+  <path d="M330,160 L330,190 M315,175 L345,175" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" opacity="0.3"/>
+
+  <!-- Shoulders and Doctor Coat -->
+  <path d="M65,395 C65,285 115,250 200,250 C285,250 335,285 335,395 Z" fill="url(#namCoat)" filter="url(#namShadow)"/>
+
+  <!-- Surgical Teal V-Neck Scrub -->
+  <polygon points="160,250 240,250 200,335" fill="#0d9488"/>
+  <polygon points="180,250 220,250 200,285" fill="#ccfbf1"/>
+
+  <!-- Doctor Coat Collars (Lapels) -->
+  <path d="M115,270 L175,370 L195,295 L155,250 Z" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <path d="M285,270 L225,370 L205,295 L245,250 Z" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+
+  <!-- Surgeon Headlamp / Headband (Symbol of Oral Surgeon) -->
+  <path d="M142,120 Q200,105 258,120" stroke="#0284c7" stroke-width="7" stroke-linecap="round" fill="none"/>
+  <circle cx="200" cy="112" r="12" fill="#e2e8f0" stroke="#0284c7" stroke-width="3"/>
+  <circle cx="200" cy="112" r="6" fill="#38bdf8"/>
+
+  <!-- Neck -->
+  <rect x="178" y="195" width="44" height="60" rx="8" fill="url(#namSkin)"/>
+
+  <!-- Head / Face -->
+  <ellipse cx="200" cy="160" rx="55" ry="65" fill="url(#namSkin)"/>
+
+  <!-- Hair Cut -->
+  <path d="M145,145 C145,90 170,75 200,75 C230,75 255,90 255,145 C248,110 230,105 200,105 C170,105 152,112 145,145 Z" fill="url(#namHair)"/>
+
+  <!-- Eyebrows -->
+  <path d="M162,138 Q178,132 190,136" stroke="#0f172a" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M210,136 Q222,132 238,138" stroke="#0f172a" stroke-width="4" stroke-linecap="round" fill="none"/>
+
+  <!-- Eyes -->
+  <circle cx="176" cy="153" r="4" fill="#0f172a"/>
+  <circle cx="224" cy="153" r="4" fill="#0f172a"/>
+  <circle cx="178" cy="151" r="1.5" fill="#ffffff"/>
+  <circle cx="226" cy="151" r="1.5" fill="#ffffff"/>
+
+  <!-- Nose -->
+  <path d="M198,158 L196,176 L204,176" stroke="#d97706" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+
+  <!-- Confident Oral Surgeon Smile -->
+  <path d="M180,192 Q200,208 220,192" stroke="#991b1b" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M184,192 Q200,202 216,192" fill="#ffffff"/>
+</svg>

@@ -47,24 +47,68 @@ ELSE
     UPDATE dbo.BlogCategories SET Name = N'Nha khoa trẻ em' WHERE Slug = 'nha-khoa-tre-em';
 GO
 
--- 2. Ensure Doctor Profile with PhD degree
-DECLARE @DentistId BIGINT;
-SELECT TOP 1 @DentistId = UserId FROM dbo.UserAccounts WHERE Role = 'Dentist' ORDER BY UserId ASC;
-IF @DentistId IS NOT NULL
+-- 2. Ensure Doctor Profiles with PhD and specialist credentials
+IF EXISTS (SELECT 1 FROM dbo.UserAccounts WHERE UserId = 1)
 BEGIN
     UPDATE dbo.StaffProfiles 
     SET FullName = N'TS. BS. Nguyễn Thị Phương Thảo' 
-    WHERE UserId = @DentistId;
+    WHERE UserId = 1;
 
-    UPDATE dbo.DentistProfiles 
-    SET Qualification = N'Tiến sĩ Y khoa (PhD) - Chuyên khoa Răng Hàm Mặt',
-        YearsOfExperience = 15,
-        Biography = N'Tiến sĩ Y khoa (PhD) chuyên ngành Răng Hàm Mặt - Đại học Y Dược. Trưởng khoa Nội nha & Nha khoa Phục hình tại DentalCare. Hơn 15 năm kinh nghiệm điều trị tủy vi phẫu và cấy ghép Implant phức tạp.'
-    WHERE UserId = @DentistId;
+    IF EXISTS (SELECT 1 FROM dbo.DentistProfiles WHERE UserId = 1)
+        UPDATE dbo.DentistProfiles 
+        SET Qualification = N'Tiến sĩ Y khoa (PhD) - Chuyên khoa Răng Hàm Mặt',
+            YearsOfExperience = 15,
+            Biography = N'Tiến sĩ Y khoa (PhD) chuyên ngành Răng Hàm Mặt - Đại học Y Dược TP.HCM. Từng tu nghiệp chuyên sâu về Nội nha vi phẫu và Phục hình răng sứ tại Đại học Bordeaux (Pháp). Hơn 15 năm kinh nghiệm điều trị và nghiên cứu lâm sàng.'
+        WHERE UserId = 1;
+    ELSE
+        INSERT INTO dbo.DentistProfiles (UserId, Qualification, YearsOfExperience, Biography)
+        VALUES (1, N'Tiến sĩ Y khoa (PhD) - Chuyên khoa Răng Hàm Mặt', 15, N'Tiến sĩ Y khoa (PhD) chuyên ngành Răng Hàm Mặt - Đại học Y Dược TP.HCM. Từng tu nghiệp chuyên sâu về Nội nha vi phẫu và Phục hình răng sứ tại Đại học Bordeaux (Pháp). Hơn 15 năm kinh nghiệm điều trị và nghiên cứu lâm sàng.');
 
     UPDATE dbo.UserAccounts 
     SET AvatarUrl = '/images/doctors/dr-phuong-thao.svg' 
-    WHERE UserId = @DentistId;
+    WHERE UserId = 1;
+END;
+
+IF EXISTS (SELECT 1 FROM dbo.UserAccounts WHERE UserId = 4)
+BEGIN
+    UPDATE dbo.StaffProfiles 
+    SET FullName = N'ThS. BS. Trần Văn Hùng' 
+    WHERE UserId = 4;
+
+    IF EXISTS (SELECT 1 FROM dbo.DentistProfiles WHERE UserId = 4)
+        UPDATE dbo.DentistProfiles 
+        SET Qualification = N'Thạc sĩ Y khoa (MSc) - Chuyên khoa Chỉnh nha & Thẩm mỹ',
+            YearsOfExperience = 12,
+            Biography = N'Thạc sĩ Răng Hàm Mặt - Đại học Y Dược TP.HCM. Chuyên gia nắn chỉnh răng và niềng răng trong suốt Invisalign Platinum Provider. 12 năm kinh nghiệm tái tạo nụ cười chuẩn thẩm mỹ.'
+        WHERE UserId = 4;
+    ELSE
+        INSERT INTO dbo.DentistProfiles (UserId, Qualification, YearsOfExperience, Biography)
+        VALUES (4, N'Thạc sĩ Y khoa (MSc) - Chuyên khoa Chỉnh nha & Thẩm mỹ', 12, N'Thạc sĩ Răng Hàm Mặt - Đại học Y Dược TP.HCM. Chuyên gia nắn chỉnh răng và niềng răng trong suốt Invisalign Platinum Provider. 12 năm kinh nghiệm tái tạo nụ cười chuẩn thẩm mỹ.');
+
+    UPDATE dbo.UserAccounts 
+    SET AvatarUrl = '/images/doctors/dr-tran-van-hung.svg' 
+    WHERE UserId = 4;
+END;
+
+IF EXISTS (SELECT 1 FROM dbo.UserAccounts WHERE UserId = 5)
+BEGIN
+    UPDATE dbo.StaffProfiles 
+    SET FullName = N'BS. CKI Lê Hoàng Nam' 
+    WHERE UserId = 5;
+
+    IF EXISTS (SELECT 1 FROM dbo.DentistProfiles WHERE UserId = 5)
+        UPDATE dbo.DentistProfiles 
+        SET Qualification = N'Bác sĩ Chuyên khoa I (CKI) - Phẫu thuật Hàm mặt & Implant',
+            YearsOfExperience = 10,
+            Biography = N'Bác sĩ Chuyên khoa I Phẫu thuật Tạo hình Hàm mặt. Trưởng khoa Phẫu thuật & Implant DentalCare. Đã thực hiện hơn 2.500 ca cấy ghép Implant kỹ thuật số và nhổ răng khôn Piezotome không đau.'
+        WHERE UserId = 5;
+    ELSE
+        INSERT INTO dbo.DentistProfiles (UserId, Qualification, YearsOfExperience, Biography)
+        VALUES (5, N'Bác sĩ Chuyên khoa I (CKI) - Phẫu thuật Hàm mặt & Implant', 10, N'Bác sĩ Chuyên khoa I Phẫu thuật Tạo hình Hàm mặt. Trưởng khoa Phẫu thuật & Implant DentalCare. Đã thực hiện hơn 2.500 ca cấy ghép Implant kỹ thuật số và nhổ răng khôn Piezotome không đau.');
+
+    UPDATE dbo.UserAccounts 
+    SET AvatarUrl = '/images/doctors/dr-le-hoang-nam.svg' 
+    WHERE UserId = 5;
 END;
 GO
 
@@ -142,7 +186,7 @@ BEGIN
         N'Tủy răng được ví như "trái tim" nuôi dưỡng sự sống của chiếc răng. Khi bị viêm tủy, người bệnh thường chịu đựng những cơn đau nhức dữ dội từng cơn, đặc biệt về ban đêm. Cùng tìm hiểu nguyên nhân, dấu hiệu nhận biết và quy trình điều trị viêm tủy răng chuẩn y khoa, an toàn, không đau tại phòng khám.',
         @Content1,
         '/images/blog/viem-tuy-rang-banner.svg',
-        'https://www.youtube.com/embed/5F_T2vK4x2I',
+        'https://www.youtube.com/embed/VR8IQ9QFdWw',
         'Published', 1, 350, DATEADD(DAY, -2, SYSDATETIME()), DATEADD(DAY, -2, SYSDATETIME())
     );
 END
@@ -152,7 +196,7 @@ BEGIN
     SET Title = N'Điều trị viêm tủy răng như thế nào? Dấu hiệu và quy trình chuẩn y khoa',
         Content = @Content1,
         ThumbnailUrl = '/images/blog/viem-tuy-rang-banner.svg',
-        VideoUrl = 'https://www.youtube.com/embed/5F_T2vK4x2I',
+        VideoUrl = 'https://www.youtube.com/embed/VR8IQ9QFdWw',
         Status = 'Published',
         IsFeatured = 1,
         AuthorUserId = @AuthorUserId
@@ -205,7 +249,7 @@ BEGIN
         N'Răng khôn (răng số 8) mọc lệch, mọc ngầm thường gây sưng đau, sốt, viêm lợi trùm và phá hủy răng số 7 kề bên. Cùng tìm hiểu thời điểm vàng nên nhổ răng khôn và công nghệ nhổ răng siêu âm Piezotome giúp giảm chấn thương, hạn chế chảy máu và nhanh hồi phục.',
         @Content2,
         '/images/blog/nho-rang-khon-banner.svg',
-        'https://www.youtube.com/embed/s2m_XzF94xU',
+        'https://www.youtube.com/embed/9KtA83_tUFQ',
         'Published', 1, 260, DATEADD(DAY, -4, SYSDATETIME()), DATEADD(DAY, -4, SYSDATETIME())
     );
 END
@@ -215,7 +259,7 @@ BEGIN
     SET Title = N'Nhổ răng khôn mọc lệch khi nào? Quy trình nhổ răng không đau bằng công nghệ Piezotome',
         Content = @Content2,
         ThumbnailUrl = '/images/blog/nho-rang-khon-banner.svg',
-        VideoUrl = 'https://www.youtube.com/embed/s2m_XzF94xU',
+        VideoUrl = 'https://www.youtube.com/embed/9KtA83_tUFQ',
         Status = 'Published',
         IsFeatured = 1,
         AuthorUserId = @AuthorUserId
@@ -287,7 +331,7 @@ BEGIN
         N'Mất răng không chỉ ảnh hưởng đến thẩm mỹ và chức năng ăn nhai mà còn dẫn đến tiêu xương hàm, lão hóa cơ mặt. Cấy ghép Implant là kỹ thuật hiện đại duy nhất phục hồi trọn vẹn cả chân răng và thân răng, mang lại cảm giác ăn nhai vững chắc như răng thật.',
         @Content3,
         '/images/blog/implant-banner.svg',
-        'https://www.youtube.com/embed/0gE2T_4d1v0',
+        'https://www.youtube.com/embed/B-sNEYkqoCk',
         'Published', 1, 520, DATEADD(DAY, -6, SYSDATETIME()), DATEADD(DAY, -6, SYSDATETIME())
     );
 END
@@ -297,7 +341,7 @@ BEGIN
     SET Title = N'Cấy ghép Implant nha khoa: Giải pháp phục hồi răng đã mất hoàn hảo nhất hiện nay',
         Content = @Content3,
         ThumbnailUrl = '/images/blog/implant-banner.svg',
-        VideoUrl = 'https://www.youtube.com/embed/0gE2T_4d1v0',
+        VideoUrl = 'https://www.youtube.com/embed/B-sNEYkqoCk',
         Status = 'Published',
         IsFeatured = 1,
         AuthorUserId = @AuthorUserId
@@ -339,7 +383,7 @@ BEGIN
         N'Bạn đang phân vân giữa niềng răng mắc cài truyền thống và niềng răng khay trong suốt Invisalign? Bài viết phân tích chi tiết ưu nhược điểm, chi phí và hiệu quả của từng phương pháp giúp bạn dễ dàng đưa ra quyết định phù hợp nhất.',
         @Content4,
         '/images/blog/nieng-rang-banner.svg',
-        'https://www.youtube.com/embed/P_6mR_k20wA',
+        'https://www.youtube.com/embed/so1FkkahF4U',
         'Published', 0, 195, DATEADD(DAY, -8, SYSDATETIME()), DATEADD(DAY, -8, SYSDATETIME())
     );
 END
@@ -349,7 +393,7 @@ BEGIN
     SET Title = N'Niềng răng mắc cài hay máng trong suốt Invisalign: Nên chọn phương pháp nào?',
         Content = @Content4,
         ThumbnailUrl = '/images/blog/nieng-rang-banner.svg',
-        VideoUrl = 'https://www.youtube.com/embed/P_6mR_k20wA',
+        VideoUrl = 'https://www.youtube.com/embed/so1FkkahF4U',
         Status = 'Published',
         AuthorUserId = @AuthorUserId
     WHERE Slug = 'nieng-rang-mac-cai-hay-invisalign-nen-chon-phuong-phap-nao';
@@ -397,7 +441,7 @@ BEGIN
         N'Đánh răng 2 lần mỗi ngày đã thực sự đủ để bảo vệ hàm răng của bạn khỏi sâu răng và viêm nướu? Khám phá 6 thói quen chăm sóc răng miệng chuẩn nha khoa từ việc chải răng đúng kỹ thuật Bass đến sử dụng chỉ nha khoa và máy tăm nước.',
         @Content5,
         '/images/blog/cham-soc-rang-banner.svg',
-        'https://www.youtube.com/embed/4iwtZomJc4A',
+        'https://www.youtube.com/embed/VdjmGxq-X7M',
         'Published', 0, 150, DATEADD(DAY, -10, SYSDATETIME()), DATEADD(DAY, -10, SYSDATETIME())
     );
 END
@@ -407,7 +451,7 @@ BEGIN
     SET Title = N'Hướng dẫn chăm sóc răng miệng đúng cách: 6 thói quen bảo vệ nụ cười khỏe đẹp',
         Content = @Content5,
         ThumbnailUrl = '/images/blog/cham-soc-rang-banner.svg',
-        VideoUrl = 'https://www.youtube.com/embed/4iwtZomJc4A',
+        VideoUrl = 'https://www.youtube.com/embed/VdjmGxq-X7M',
         Status = 'Published',
         AuthorUserId = @AuthorUserId
     WHERE Slug = 'huong-dan-cham-soc-rang-mieng-dung-cach-6-thoi-quen';

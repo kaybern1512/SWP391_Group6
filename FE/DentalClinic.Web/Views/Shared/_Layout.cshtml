@@ -74,6 +74,18 @@ else
                     <li class="nav-item">
                         <a class="nav-link text-dark fw-semibold" asp-controller="Home" asp-action="Index">Trang Chủ</a>
                     </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle text-dark fw-semibold" href="/#about-intro" id="aboutDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Giới Thiệu
+                        </a>
+                        <ul class="dropdown-menu shadow-sm border-0 py-2" aria-labelledby="aboutDropdown" style="border-radius: 12px;">
+                            <li><a class="dropdown-item py-2" href="/#about-clinic" onclick="if(window.switchAboutTab) window.switchAboutTab('tab-clinic')"><i class="bi bi-hospital text-primary me-2"></i>Thông Tin Phòng Khám</a></li>
+                            <li><a class="dropdown-item py-2" href="/#about-doctors" onclick="if(window.switchAboutTab) window.switchAboutTab('tab-doctors')"><i class="bi bi-person-badge text-primary me-2"></i>Đội Ngũ Bác Sĩ &amp; Kinh Nghiệm</a></li>
+                            <li><a class="dropdown-item py-2" href="/#about-blog" onclick="if(window.switchAboutTab) window.switchAboutTab('tab-blog')"><i class="bi bi-journal-medical text-primary me-2"></i>Cẩm Nang Blog &amp; Video 3D</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item py-2 text-primary fw-semibold" href="/#about-intro"><i class="bi bi-arrow-right-circle me-2"></i>Xem Tổng Quan Giới Thiệu</a></li>
+                        </ul>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link text-muted" href="/#pricing">Bảng Giá Dịch Vụ</a>
                     </li>
@@ -81,10 +93,7 @@ else
                         <a class="nav-link text-muted" href="/#specialties">Chuyên Khoa</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link text-muted" href="/#features">Hồ Sơ Điện Tử</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link text-muted" href="/#clinic-info">Thông Tin Phòng Khám</a>
+                        <a class="nav-link text-muted" asp-controller="Blog" asp-action="Index">Cẩm Nang Blog</a>
                     </li>
                 </ul>
                 <div class="d-flex align-items-center gap-2">

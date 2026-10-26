@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="huongBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fff1f2"/>
+      <stop offset="50%" stop-color="#ffe4e6"/>
+      <stop offset="100%" stop-color="#fecdd3"/>
+    </linearGradient>
+    <linearGradient id="huongCoat" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f8fafc"/>
+    </linearGradient>
+    <linearGradient id="huongSkin" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="100%" stop-color="#fbbf24"/>
+    </linearGradient>
+    <linearGradient id="huongHair" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#78350f"/>
+      <stop offset="100%" stop-color="#451a03"/>
+    </linearGradient>
+    <filter id="huongShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#f43f5e" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Background Circle -->
+  <circle cx="200" cy="200" r="190" fill="url(#huongBg)"/>
+  <circle cx="200" cy="200" r="185" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.8"/>
+
+  <!-- Cheerful Dental Symbols for Pediatric Care -->
+  <path d="M200,45 L200,85 M180,65 L220,65" stroke="#f43f5e" stroke-width="4" stroke-linecap="round" opacity="0.4"/>
+  <circle cx="70" cy="175" r="8" fill="#fda4af" opacity="0.5"/>
+  <circle cx="330" cy="175" r="8" fill="#fda4af" opacity="0.5"/>
+
+  <!-- Shoulders and Doctor Coat -->
+  <path d="M75,395 C75,295 125,260 200,260 C275,260 325,295 325,395 Z" fill="url(#huongCoat)" filter="url(#huongShadow)"/>
+
+  <!-- Pink Scrub Inner Shirt (Friendly for Children) -->
+  <polygon points="170,260 230,260 200,325" fill="#f43f5e"/>
+  <polygon points="185,260 215,260 200,295" fill="#fff1f2"/>
+
+  <!-- Doctor Coat Collars (Lapels) -->
+  <path d="M125,280 L180,370 L195,300 L160,260 Z" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <path d="M275,280 L220,370 L205,300 L240,260 Z" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+
+  <!-- Little Smiley Tooth Badge on Coat Pocket -->
+  <circle cx="140" cy="330" r="14" fill="#38bdf8"/>
+  <path d="M135,326 Q140,320 145,326 Q148,335 144,338 Q140,332 136,338 Q132,335 135,326 Z" fill="#ffffff"/>
+
+  <!-- Neck -->
+  <rect x="180" y="200" width="40" height="65" rx="10" fill="url(#huongSkin)"/>
+
+  <!-- Hair Bun / Soft Waves -->
+  <ellipse cx="200" cy="140" rx="72" ry="80" fill="url(#huongHair)"/>
+  <circle cx="200" cy="80" r="28" fill="url(#huongHair)"/>
+
+  <!-- Head / Face -->
+  <ellipse cx="200" cy="160" rx="52" ry="62" fill="url(#huongSkin)"/>
+
+  <!-- Hair Bangs (Gentle Friendly) -->
+  <path d="M150,145 C150,95 175,90 200,90 C225,90 250,95 250,145 C235,115 220,110 200,115 C175,110 160,115 150,145 Z" fill="url(#huongHair)"/>
+
+  <!-- Eyebrows -->
+  <path d="M165,138 Q178,132 188,136" stroke="#451a03" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M212,136 Q222,132 235,138" stroke="#451a03" stroke-width="3" stroke-linecap="round" fill="none"/>
+
+  <!-- Sparkly Big Eyes -->
+  <circle cx="176" cy="153" r="4.5" fill="#1e1b4b"/>
+  <circle cx="224" cy="153" r="4.5" fill="#1e1b4b"/>
+  <circle cx="178" cy="151" r="1.8" fill="#ffffff"/>
+  <circle cx="226" cy="151" r="1.8" fill="#ffffff"/>
+
+  <!-- Cheeks Blush -->
+  <ellipse cx="164" cy="168" rx="8" ry="5" fill="#f43f5e" opacity="0.3"/>
+  <ellipse cx="236" cy="168" rx="8" ry="5" fill="#f43f5e" opacity="0.3"/>
+
+  <!-- Friendly Warm Smile -->
+  <path d="M180,186 Q200,204 220,186" stroke="#e11d48" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M184,186 Q200,198 216,186" fill="#ffffff"/>
+</svg>

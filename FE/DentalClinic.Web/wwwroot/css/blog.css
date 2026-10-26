@@ -393,3 +393,186 @@
     box-shadow: 0 6px 16px rgba(2, 132, 199, 0.2);
     background-color: #e0f2fe;
 }
+
+/* ========================================================
+   ABOUT HUB INTEGRATION (GIỚI THIỆU PHÒNG KHÁM, BÁC SĨ, BLOG)
+   ======================================================== */
+.about-intro-section {
+    position: relative;
+    background-color: #ffffff;
+}
+
+.about-nav-pills {
+    display: inline-flex;
+    background: #f1f5f9;
+    padding: 6px;
+    border-radius: 50px;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.about-nav-pills .nav-link {
+    border-radius: 40px;
+    padding: 10px 24px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #475569;
+    border: none;
+    transition: all 0.25s ease-in-out;
+}
+
+.about-nav-pills .nav-link:hover {
+    color: #0284c7;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.about-nav-pills .nav-link.active {
+    color: #ffffff;
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+}
+
+/* Doctor Team Profile Cards */
+.doctor-team-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    background: #ffffff;
+    padding: 1.75rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    position: relative;
+}
+
+.doctor-team-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 30px rgba(2, 132, 199, 0.12);
+    border-color: #bae6fd;
+}
+
+.doctor-team-avatar-wrapper {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 1rem auto;
+}
+
+.doctor-team-avatar {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #ffffff;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+}
+
+.doctor-team-badge-pos {
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 3px 10px;
+}
+
+.doctor-experience-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #e0f2fe;
+    color: #0369a1;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+}
+
+.doctor-work-list {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 1.25rem;
+    font-size: 0.85rem;
+    color: #475569;
+}
+
+.doctor-work-list li {
+    position: relative;
+    padding-left: 1.25rem;
+    margin-bottom: 0.4rem;
+    line-height: 1.4;
+}
+
+.doctor-work-list li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: #0284c7;
+    font-weight: bold;
+}
+
+/* Facility & Tech Pillar Card */
+.tech-pillar-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 1.5rem;
+    height: 100%;
+    transition: all 0.25s ease;
+}
+
+.tech-pillar-card:hover {
+    border-color: #38bdf8;
+    box-shadow: 0 8px 24px rgba(2, 132, 199, 0.08);
+}
+
+.tech-icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    margin-bottom: 1rem;
+}
+
+/* 3D Video Showcase Box */
+.video-3d-box {
+    background: #0f172a;
+    border-radius: 20px;
+    padding: 1.25rem;
+    color: #ffffff;
+    box-shadow: 0 12px 35px rgba(15, 23, 42, 0.25);
+}
+
+.video-selector-btn {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    color: #e2e8f0;
+    border-radius: 12px;
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-align: left;
+    width: 100%;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.video-selector-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.video-selector-btn.active {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #ffffff;
+    border-color: #38bdf8;
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
+}
+
