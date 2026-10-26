@@ -139,6 +139,54 @@ public class MedicalRecordApiServiceTests
     }
 
     [Fact]
+    public async Task UploadImagingRecordAsync_WithDicomFormFile_Succeeds()
+    {
+        // Arrange
+        var fileMock = new Mock<IFormFile>();
+        var content = "dicom-binary-bytes";
+        var fileName = "scan_skull.dicom";
+        var ms = new MemoryStream(Encoding.UTF8.GetBytes(content));
+
+        fileMock.Setup(f => f.OpenReadStream()).Returns(ms);
+        fileMock.Setup(f => f.FileName).Returns(fileName);
+        fileMock.Setup(f => f.Length).Returns(ms.Length);
+        fileMock.Setup(f => f.ContentType).Returns("application/dicom");
+
+        var responseDto = new ImagingRecordMetadataDto
+        {
+            ImagingRecordId = 105,
+            ClinicalEntryId = 30,
+            ImagingType = "Cephalometric"
+        };
+
+        var responseJson = JsonSerializer.Serialize(new ApiResponse<ImagingRecordMetadataDto>
+        {
+            Success = true,
+            Data = responseDto
+        });
+
+        _handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.Method == HttpMethod.Post &&
+                    req.RequestUri!.AbsolutePath == "/api/medical-records/clinical-entries/30/imaging"),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
+            });
+
+        // Act
+        var result = await _apiService.UploadImagingRecordAsync(30, fileMock.Object, "Cephalometric", "Chụp chỉnh nha");
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Data!.ImagingRecordId.Should().Be(105);
+    }
+
+    [Fact]
     public async Task UploadImagingRecordAsync_WhenFileEmpty_ReturnsBadRequestWithoutApiCall()
     {
         // Arrange

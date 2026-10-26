@@ -674,4 +674,283 @@ public class MedicalRecordWebControllerTests
         controller.Response.Headers.CacheControl.ToString().Should().Contain("no-store");
         controller.Response.Headers.Pragma.ToString().Should().Contain("no-cache");
     }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_CreateEntry_WithAttachedImage_CallsCreateEntryThenUploadImaging_AndRedirectsWithSuccess()
+    {
+        // Arrange: CreateClinicalEntry succeeds and returns ID 42
+        _apiMock.Setup(x => x.CreateClinicalEntryAsync(It.IsAny<CreateClinicalEntryRequest>()))
+            .ReturnsAsync(ApiResult<ClinicalEntryDto>.Success(new ClinicalEntryDto { ClinicalEntryId = 42 }));
+
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("panoramic_xray.png");
+        fileMock.Setup(f => f.Length).Returns(2 * 1024 * 1024);
+
+        _apiMock.Setup(x => x.UploadImagingRecordAsync(42, fileMock.Object, "Panorama", "Chụp kiểm tra chân răng"))
+            .ReturnsAsync(ApiResult<ImagingRecordMetadataDto>.Success(new ImagingRecordMetadataDto { ImagingRecordId = 101 }));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var form = new CreateClinicalEntryFormModel
+        {
+            PatientUserId = 10,
+            Diagnosis = "Viêm quanh cuống R16",
+            ImagingType = "Panorama",
+            ImagingResultSummary = "Chụp kiểm tra chân răng",
+            ImagingFile = fileMock.Object
+        };
+
+        // Act
+        var result = await controller.CreateEntry(form);
+
+        // Assert
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["SuccessMessage"]!.ToString().Should().Contain("tải lên phim X-quang thành công");
+
+        _apiMock.Verify(x => x.CreateClinicalEntryAsync(It.Is<CreateClinicalEntryRequest>(r =>
+            r.ImagingOrders.Count == 0 // Crucial requirement 6: No dummy ImagingRecord created during initial entry creation
+        )), Times.Once);
+
+        _apiMock.Verify(x => x.UploadImagingRecordAsync(42, fileMock.Object, "Panorama", "Chụp kiểm tra chân răng"), Times.Once);
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_CreateEntry_WithAttachedDicomFile_CallsCreateEntryThenUploadImaging()
+    {
+        // Arrange
+        _apiMock.Setup(x => x.CreateClinicalEntryAsync(It.IsAny<CreateClinicalEntryRequest>()))
+            .ReturnsAsync(ApiResult<ClinicalEntryDto>.Success(new ClinicalEntryDto { ClinicalEntryId = 55 }));
+
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("patient_study.dicom");
+        fileMock.Setup(f => f.Length).Returns(5 * 1024 * 1024);
+
+        _apiMock.Setup(x => x.UploadImagingRecordAsync(55, fileMock.Object, "Cephalometric", "Khảo sát sọ nghiêng"))
+            .ReturnsAsync(ApiResult<ImagingRecordMetadataDto>.Success(new ImagingRecordMetadataDto { ImagingRecordId = 102 }));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var form = new CreateClinicalEntryFormModel
+        {
+            PatientUserId = 10,
+            Diagnosis = "Chỉnh nha tiền phẫu",
+            ImagingType = "Cephalometric",
+            ImagingResultSummary = "Khảo sát sọ nghiêng",
+            ImagingFile = fileMock.Object
+        };
+
+        // Act
+        var result = await controller.CreateEntry(form);
+
+        // Assert
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["SuccessMessage"]!.ToString().Should().Contain("tải lên phim X-quang thành công");
+        _apiMock.Verify(x => x.UploadImagingRecordAsync(55, fileMock.Object, "Cephalometric", "Khảo sát sọ nghiêng"), Times.Once);
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_CreateEntry_WhenImageExceeds15MB_FailsValidationWithoutApiCall()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("huge_scan.png");
+        fileMock.Setup(f => f.Length).Returns(16 * 1024 * 1024); // 16 MB
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var form = new CreateClinicalEntryFormModel
+        {
+            PatientUserId = 10,
+            Diagnosis = "Viêm tủy cấp",
+            ImagingType = "Periapical",
+            ImagingFile = fileMock.Object
+        };
+
+        var result = await controller.CreateEntry(form);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("vượt quá 15 MB");
+        _apiMock.Verify(x => x.CreateClinicalEntryAsync(It.IsAny<CreateClinicalEntryRequest>()), Times.Never);
+        _apiMock.Verify(x => x.UploadImagingRecordAsync(It.IsAny<long>(), It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_CreateEntry_WhenImageInvalidExtension_FailsValidationWithoutApiCall()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("document.pdf");
+        fileMock.Setup(f => f.Length).Returns(500 * 1024);
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var form = new CreateClinicalEntryFormModel
+        {
+            PatientUserId = 10,
+            Diagnosis = "Khám răng định kỳ",
+            ImagingType = "Panorama",
+            ImagingFile = fileMock.Object
+        };
+
+        var result = await controller.CreateEntry(form);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("không được hỗ trợ");
+        _apiMock.Verify(x => x.CreateClinicalEntryAsync(It.IsAny<CreateClinicalEntryRequest>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_CreateEntry_WhenFileAttachedWithoutImagingType_FailsValidation()
+    {
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("tooth.jpg");
+        fileMock.Setup(f => f.Length).Returns(500 * 1024);
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var form = new CreateClinicalEntryFormModel
+        {
+            PatientUserId = 10,
+            Diagnosis = "Khám răng",
+            ImagingType = null, // Missing imaging type
+            ImagingFile = fileMock.Object
+        };
+
+        var result = await controller.CreateEntry(form);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("Vui lòng chọn loại phim X-quang");
+        _apiMock.Verify(x => x.CreateClinicalEntryAsync(It.IsAny<CreateClinicalEntryRequest>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_CreateEntry_WhenFileAttachedAndEntryCreationFails_DoesNotCallUpload()
+    {
+        _apiMock.Setup(x => x.CreateClinicalEntryAsync(It.IsAny<CreateClinicalEntryRequest>()))
+            .ReturnsAsync(ApiResult<ClinicalEntryDto>.Failure("Không tìm thấy thông tin bệnh nhân."));
+
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("scan.png");
+        fileMock.Setup(f => f.Length).Returns(500 * 1024);
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var form = new CreateClinicalEntryFormModel
+        {
+            PatientUserId = 10,
+            Diagnosis = "Sâu răng",
+            ImagingType = "Periapical",
+            ImagingFile = fileMock.Object
+        };
+
+        var result = await controller.CreateEntry(form);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("Không tìm thấy thông tin bệnh nhân");
+        _apiMock.Verify(x => x.UploadImagingRecordAsync(It.IsAny<long>(), It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_CreateEntry_WhenFileAttachedAndUploadFails_SetsErrorMessageWithRetryNotice()
+    {
+        // Entry succeeds with ID 77
+        _apiMock.Setup(x => x.CreateClinicalEntryAsync(It.IsAny<CreateClinicalEntryRequest>()))
+            .ReturnsAsync(ApiResult<ClinicalEntryDto>.Success(new ClinicalEntryDto { ClinicalEntryId = 77 }));
+
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.FileName).Returns("periapical.png");
+        fileMock.Setup(f => f.Length).Returns(1 * 1024 * 1024);
+
+        // Upload fails
+        _apiMock.Setup(x => x.UploadImagingRecordAsync(77, fileMock.Object, "Periapical", null))
+            .ReturnsAsync(ApiResult<ImagingRecordMetadataDto>.Failure("Cloudinary network timeout", statusCode: 500));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var form = new CreateClinicalEntryFormModel
+        {
+            PatientUserId = 10,
+            Diagnosis = "Viêm nướu",
+            ImagingType = "Periapical",
+            ImagingFile = fileMock.Object
+        };
+
+        var result = await controller.CreateEntry(form);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        // Must inform failure and allow retry
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("thất bại");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("Upload Phim");
+        controller.TempData["SuccessMessage"].Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_CreateEntry_WhenOnlyImagingOrderWithoutFile_SetsImagingOrderWithNullFileUrl_AndDoesNotCallUpload()
+    {
+        // Doctor only orders an X-ray without file attached
+        _apiMock.Setup(x => x.CreateClinicalEntryAsync(It.IsAny<CreateClinicalEntryRequest>()))
+            .ReturnsAsync(ApiResult<ClinicalEntryDto>.Success(new ClinicalEntryDto { ClinicalEntryId = 88 }));
+
+        var controller = new DentistMedicalRecordController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var form = new CreateClinicalEntryFormModel
+        {
+            PatientUserId = 10,
+            Diagnosis = "Chỉ định chụp phim kiểm tra",
+            ImagingType = "Panorama",
+            ImagingResultSummary = "Chụp toàn cảnh khảo sát",
+            ImagingFile = null // No file attached
+        };
+
+        var result = await controller.CreateEntry(form);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["SuccessMessage"]!.ToString().Should().Contain("thành công");
+
+        _apiMock.Verify(x => x.CreateClinicalEntryAsync(It.Is<CreateClinicalEntryRequest>(r =>
+            r.ImagingOrders.Count == 1 &&
+            r.ImagingOrders[0].ImagingType == "Panorama" &&
+            r.ImagingOrders[0].FileUrl == null
+        )), Times.Once);
+
+        _apiMock.Verify(x => x.UploadImagingRecordAsync(It.IsAny<long>(), It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Never);
+    }
 }

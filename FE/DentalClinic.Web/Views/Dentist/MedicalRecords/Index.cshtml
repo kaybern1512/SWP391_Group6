@@ -553,7 +553,7 @@
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form asp-action="CreateEntry" method="post">
+                <form asp-action="CreateEntry" method="post" enctype="multipart/form-data" id="formCreateClinicalEntry">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="PatientUserId" value="@record.PatientUserId" />
                     <input type="hidden" name="AppointmentId" value="@(Model.NewEntryForm?.AppointmentId)" />
@@ -595,20 +595,91 @@
                             </label>
                             <div class="row g-2">
                                 <div class="col-md-5">
-                                    <select name="ImagingType" class="form-select form-select-sm">
+                                    <select name="ImagingType" id="createEntryImagingType" class="form-select form-select-sm">
                                         <option value="">-- Không yêu cầu chụp phim --</option>
-                                        <option value="X-Quang chóp răng (Periapical)">X-Quang chóp răng (Periapical)</option>
-                                        <option value="X-Quang cánh cắn (Bitewing)">X-Quang cánh cắn (Bitewing)</option>
-                                        <option value="Toàn cảnh Panorama">Toàn cảnh Panorama</option>
-                                        <option value="Phim sọ nghiêng Cephalometric">Phim sọ nghiêng Cephalometric</option>
-                                        <option value="Chụp CT Cone Beam 3D">Chụp CT Cone Beam 3D</option>
+                                        <option value="Panorama">Toàn cảnh Panorama (OPG)</option>
+                                        <option value="Periapical">Cận chóp / Quanh chóp (Periapical)</option>
+                                        <option value="Cephalometric">Phim sọ nghiêng Cephalometric</option>
+                                        <option value="Intraoral">Ảnh chụp trong miệng (Intraoral)</option>
                                     </select>
                                 </div>
                                 <div class="col-md-7">
-                                    <input type="text" name="ImagingResultSummary" class="form-control form-control-sm" placeholder="Vị trí/mục đích chụp (VD: Khảo sát răng ngầm R48, cuống răng R16...)" />
+                                    <input type="text" name="ImagingResultSummary" id="createEntryImagingResultSummary" class="form-control form-control-sm" placeholder="Vị trí/mục đích chụp (VD: Khảo sát răng ngầm R48, cuống răng R16...)" />
                                 </div>
-                                <div class="col-12 mt-1">
-                                    <input type="text" name="ImagingFileUrl" class="form-control form-control-sm" placeholder="URL hình ảnh phim chụp nếu đã có sẵn (tùy chọn)" />
+
+                                <!-- File Upload & Preview Section -->
+                                <div class="col-12 mt-2">
+                                    <div class="card border rounded-3 p-2 bg-white">
+                                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <input type="file"
+                                                       id="createEntryImagingFileInput"
+                                                       name="ImagingFile"
+                                                       class="d-none"
+                                                       accept=".jpg,.jpeg,.png,.dcm,.dicom" />
+                                                <button type="button"
+                                                        id="btnSelectImagingFile"
+                                                        class="btn btn-sm btn-outline-primary fw-medium"
+                                                        onclick="document.getElementById('createEntryImagingFileInput').click()">
+                                                    <i class="bi bi-cloud-arrow-up-fill me-1"></i> Chọn ảnh X-quang
+                                                </button>
+                                                <span class="text-muted small" id="createEntryFileHint">
+                                                    <i class="bi bi-info-circle me-1"></i>(Tùy chọn nếu đã chụp) Hỗ trợ JPG, JPEG, PNG, DICOM (.dcm, .dicom) — Tối đa 15 MB.
+                                                </span>
+                                            </div>
+                                            <button type="button"
+                                                    id="btnRemoveImagingFile"
+                                                    class="btn btn-sm btn-link text-danger text-decoration-none p-0 d-none"
+                                                    onclick="clearCreateEntryImagingFile()">
+                                                <i class="bi bi-x-circle me-1"></i>Hủy chọn ảnh
+                                            </button>
+                                        </div>
+
+                                        <!-- Validation Error Alert -->
+                                        <div id="createEntryFileError" class="text-danger small mt-2 d-none">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i><span id="createEntryFileErrorText"></span>
+                                        </div>
+
+                                        <!-- Preview Box -->
+                                        <div id="createEntryFilePreviewContainer" class="mt-2 pt-2 border-top d-none">
+                                            <!-- Image Preview (JPG / PNG) -->
+                                            <div id="createEntryImagePreviewCard" class="d-none d-flex align-items-center gap-3 p-2 rounded bg-light border">
+                                                <div class="position-relative" style="width: 72px; height: 72px; flex-shrink: 0;">
+                                                    <img id="createEntryImagePreviewThumb"
+                                                         src=""
+                                                         alt="Xem trước ảnh X-quang"
+                                                         class="w-100 h-100 rounded object-fit-cover border" />
+                                                </div>
+                                                <div class="flex-grow-1 overflow-hidden">
+                                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                                        <span class="badge bg-success-subtle text-success border border-success-subtle small fw-semibold">
+                                                            <i class="bi bi-image me-1"></i>Hình ảnh hợp lệ
+                                                        </span>
+                                                        <span class="text-muted small" id="createEntryImageFileSize"></span>
+                                                    </div>
+                                                    <div class="fw-semibold text-slate-800 small text-truncate" id="createEntryImageFileName"></div>
+                                                    <div class="text-muted small" style="font-size: 0.75rem;">Sẽ tự động upload lên Cloudinary khi bấm "Lưu Bệnh Án".</div>
+                                                </div>
+                                            </div>
+
+                                            <!-- DICOM Card (No simulated image preview) -->
+                                            <div id="createEntryDicomPreviewCard" class="d-none d-flex align-items-center gap-3 p-2 rounded bg-light border">
+                                                <div class="d-flex align-items-center justify-content-center bg-primary-subtle text-primary rounded border border-primary-subtle" style="width: 72px; height: 72px; flex-shrink: 0;">
+                                                    <i class="bi bi-file-earmark-medical-fill fs-2"></i>
+                                                </div>
+                                                <div class="flex-grow-1 overflow-hidden">
+                                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle small fw-semibold">
+                                                            <i class="bi bi-hospital me-1"></i>DICOM PS 3.10
+                                                        </span>
+                                                        <span class="text-muted small" id="createEntryDicomFileSize"></span>
+                                                    </div>
+                                                    <div class="fw-semibold text-slate-800 small text-truncate" id="createEntryDicomFileName"></div>
+                                                    <div class="text-muted small" style="font-size: 0.75rem;">Tập tin y tế chuyên dụng (không hiển thị preview ảnh phẳng). Sẽ được upload lên Cloudinary Raw Storage.</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -960,10 +1031,147 @@
             document.getElementById("toothConditionsJsonInput").value = JSON.stringify(list);
         }
 
+        function clearCreateEntryImagingFile() {
+            const fileInput = document.getElementById('createEntryImagingFileInput');
+            if (fileInput) fileInput.value = '';
+
+            const previewContainer = document.getElementById('createEntryFilePreviewContainer');
+            if (previewContainer) previewContainer.classList.add('d-none');
+
+            const imgCard = document.getElementById('createEntryImagePreviewCard');
+            if (imgCard) imgCard.classList.add('d-none');
+
+            const dicomCard = document.getElementById('createEntryDicomPreviewCard');
+            if (dicomCard) dicomCard.classList.add('d-none');
+
+            const thumb = document.getElementById('createEntryImagePreviewThumb');
+            if (thumb) {
+                if (thumb.src && thumb.src.startsWith('blob:')) {
+                    URL.revokeObjectURL(thumb.src);
+                }
+                thumb.src = '';
+            }
+
+            const removeBtn = document.getElementById('btnRemoveImagingFile');
+            if (removeBtn) removeBtn.classList.add('d-none');
+
+            const errorAlert = document.getElementById('createEntryFileError');
+            if (errorAlert) errorAlert.classList.add('d-none');
+
+            const hint = document.getElementById('createEntryFileHint');
+            if (hint) hint.classList.remove('d-none');
+        }
+
         // Client-side file validation & double submit prevention
         document.addEventListener("DOMContentLoaded", function() {
             if (document.getElementById("toothRowsContainer")) {
                 addToothRow();
+            }
+
+            // --- Interactive X-Ray File Selection & Preview in New Clinical Entry Modal ---
+            const createEntryFileInput = document.getElementById('createEntryImagingFileInput');
+            const maxImageSizeBytes = 15 * 1024 * 1024;
+            const allowedImageExts = ['.jpg', '.jpeg', '.png', '.dcm', '.dicom'];
+
+            if (createEntryFileInput) {
+                createEntryFileInput.addEventListener('change', function () {
+                    const errorAlert = document.getElementById('createEntryFileError');
+                    const errorText = document.getElementById('createEntryFileErrorText');
+                    const previewContainer = document.getElementById('createEntryFilePreviewContainer');
+                    const imgCard = document.getElementById('createEntryImagePreviewCard');
+                    const dicomCard = document.getElementById('createEntryDicomPreviewCard');
+                    const removeBtn = document.getElementById('btnRemoveImagingFile');
+
+                    if (!this.files || this.files.length === 0) {
+                        clearCreateEntryImagingFile();
+                        return;
+                    }
+
+                    const file = this.files[0];
+                    const fileName = file.name;
+                    const ext = '.' + fileName.split('.').pop().toLowerCase();
+
+                    if (!allowedImageExts.includes(ext)) {
+                        if (errorText) errorText.textContent = `Định dạng tệp "${ext}" không được hỗ trợ. Chỉ chấp nhận JPG, JPEG, PNG hoặc DICOM (.dcm, .dicom).`;
+                        if (errorAlert) errorAlert.classList.remove('d-none');
+                        clearCreateEntryImagingFile();
+                        return;
+                    }
+
+                    if (file.size > maxImageSizeBytes) {
+                        const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+                        if (errorText) errorText.textContent = `Dung lượng tệp (${sizeMb} MB) vượt quá giới hạn tối đa 15 MB.`;
+                        if (errorAlert) errorAlert.classList.remove('d-none');
+                        clearCreateEntryImagingFile();
+                        return;
+                    }
+
+                    if (errorAlert) errorAlert.classList.add('d-none');
+                    if (removeBtn) removeBtn.classList.remove('d-none');
+                    if (previewContainer) previewContainer.classList.remove('d-none');
+
+                    const formattedSize = file.size < 1024 * 1024
+                        ? `${(file.size / 1024).toFixed(1)} KB`
+                        : `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
+
+                    // DICOM: only display file name and metadata, no fake image preview
+                    if (ext === '.dcm' || ext === '.dicom') {
+                        if (imgCard) imgCard.classList.add('d-none');
+                        if (dicomCard) dicomCard.classList.remove('d-none');
+                        const nameEl = document.getElementById('createEntryDicomFileName');
+                        if (nameEl) nameEl.textContent = fileName;
+                        const sizeEl = document.getElementById('createEntryDicomFileSize');
+                        if (sizeEl) sizeEl.textContent = formattedSize;
+                    } else {
+                        // JPEG / PNG: display image preview thumbnail
+                        if (dicomCard) dicomCard.classList.add('d-none');
+                        if (imgCard) imgCard.classList.remove('d-none');
+                        const nameEl = document.getElementById('createEntryImageFileName');
+                        if (nameEl) nameEl.textContent = fileName;
+                        const sizeEl = document.getElementById('createEntryImageFileSize');
+                        if (sizeEl) sizeEl.textContent = formattedSize;
+                        const thumb = document.getElementById('createEntryImagePreviewThumb');
+                        if (thumb) {
+                            if (thumb.src && thumb.src.startsWith('blob:')) {
+                                URL.revokeObjectURL(thumb.src);
+                            }
+                            thumb.src = URL.createObjectURL(file);
+                        }
+                    }
+
+                    // Auto-focus selecting ImagingType if not chosen yet
+                    const typeSelect = document.getElementById('createEntryImagingType');
+                    if (typeSelect && !typeSelect.value) {
+                        typeSelect.focus();
+                    }
+                });
+            }
+
+            const createEntryForm = document.getElementById('formCreateClinicalEntry');
+            if (createEntryForm) {
+                createEntryForm.addEventListener('submit', function (e) {
+                    const fileInput = document.getElementById('createEntryImagingFileInput');
+                    const typeSelect = document.getElementById('createEntryImagingType');
+                    const errorAlert = document.getElementById('createEntryFileError');
+                    const errorText = document.getElementById('createEntryFileErrorText');
+
+                    if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                        if (typeSelect && !typeSelect.value) {
+                            e.preventDefault();
+                            if (errorText) errorText.textContent = 'Bác sĩ vui lòng chọn phân loại phim X-quang tương ứng với tệp ảnh đính kèm.';
+                            if (errorAlert) errorAlert.classList.remove('d-none');
+                            typeSelect.focus();
+                            return false;
+                        }
+                    }
+                });
+            }
+
+            const createEntryModalEl = document.getElementById('modalCreateClinicalEntry');
+            if (createEntryModalEl) {
+                createEntryModalEl.addEventListener('hidden.bs.modal', function () {
+                    clearCreateEntryImagingFile();
+                });
             }
 
             const fileInput = document.getElementById('uploadImagingFileInput');
