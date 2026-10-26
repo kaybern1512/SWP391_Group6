@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="800" height="450">
+  <defs>
+    <linearGradient id="bgImplant" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#022c22"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <linearGradient id="metalGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#cbd5e1"/>
+      <stop offset="40%" stop-color="#f8fafc"/>
+      <stop offset="70%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="50%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="800" height="450" fill="url(#bgImplant)"/>
+
+  <!-- Jawbone Surface -->
+  <path d="M100,250 C250,230 550,230 700,250 L700,450 L100,450 Z" fill="#fde68a" opacity="0.25"/>
+
+  <!-- Exploded 3D Implant System in Center -->
+  <g transform="translate(400, 30)">
+    <!-- 1. Ceramic Crown (Mao su) -->
+    <g transform="translate(0, 20)">
+      <path d="M-55,20 C-55,-25 55,-25 55,20 C55,60 45,85 0,90 C-45,85 -55,60 -55,20 Z" fill="#ffffff" stroke="#cbd5e1" stroke-width="2.5"/>
+      <text x="90" y="45" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="13" font-weight="bold" fill="#ffffff">1. Mão Răng Toàn Sứ</text>
+      <text x="90" y="63" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="11" fill="#94a3b8">Thẩm mỹ & Chịu lực ăn nhai 100%</text>
+      <line x1="60" y1="45" x2="80" y2="45" stroke="#38bdf8" stroke-width="2"/>
+    </g>
+
+    <!-- 2. Abutment (Khop noi Titan) -->
+    <g transform="translate(0, 130)">
+      <polygon points="-25,0 25,0 18,55 -18,55" fill="url(#goldGrad)" stroke="#b45309" stroke-width="1.5"/>
+      <rect x="-10" y="55" width="20" height="15" fill="url(#goldGrad)"/>
+      <text x="90" y="35" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="13" font-weight="bold" fill="#fbbf24">2. Khớp Nối Abutment</text>
+      <text x="90" y="53" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="11" fill="#94a3b8">Khóa liên kết vững chắc không rỉ sét</text>
+      <line x1="30" y1="35" x2="80" y2="35" stroke="#fbbf24" stroke-width="2"/>
+    </g>
+
+    <!-- 3. Titanium Fixture (Tru Implant) -->
+    <g transform="translate(0, 220)">
+      <!-- Main cylinder -->
+      <path d="M-28,0 L28,0 L22,150 C20,165 0,175 0,175 C0,175 -20,165 -22,150 Z" fill="url(#metalGrad)" stroke="#475569" stroke-width="2"/>
+      <!-- Screw threads -->
+      <path d="M-28,20 L28,30 M-27,45 L27,55 M-26,70 L26,80 M-25,95 L25,105 M-24,120 L24,130" stroke="#334155" stroke-width="3"/>
+      <text x="90" y="80" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="13" font-weight="bold" fill="#38bdf8">3. Trụ Titanium Tinh Khiết</text>
+      <text x="90" y="98" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="11" fill="#94a3b8">Tương thích sinh học, bền trọn đời</text>
+      <line x1="32" y1="80" x2="80" y2="80" stroke="#38bdf8" stroke-width="2"/>
+    </g>
+  </g>
+
+  <!-- Bottom Badge -->
+  <g transform="translate(40, 370)">
+    <rect width="360" height="50" rx="12" fill="#0f172a" fill-opacity="0.85" stroke="#38bdf8" stroke-width="1.5"/>
+    <text x="20" y="24" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="14" font-weight="bold" fill="#38bdf8">CẤY GHÉP IMPLANT NHA KHOA</text>
+    <text x="20" y="40" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="11" fill="#94a3b8">Khôi phục răng mất toàn diện không mài răng thật</text>
+  </g>
+</svg>

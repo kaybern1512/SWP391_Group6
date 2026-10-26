@@ -8,7 +8,7 @@
 
 <div class="blog-index-container pb-5">
     <!-- Hero Banner -->
-    <section class="py-5 bg-white border-bottom mb-4">
+    <section class="blog-periopixel-section border-bottom mb-4">
         <div class="container py-2 text-center">
             <span class="badge-dc badge-role-patient mb-2">
                 <i class="bi bi-journal-medical me-1"></i> Kiến Thức Chuyên Môn Chuẩn Y Khoa
@@ -48,6 +48,93 @@
     </section>
 
     <div class="container">
+        <!-- Doctor PhD Advisory Board Banner -->
+        <div class="doctor-phd-card mb-4">
+            <div class="row align-items-center g-3">
+                <div class="col-auto text-center">
+                    <img src="/images/doctors/dr-phuong-thao.svg" alt="TS. BS. Nguyễn Thị Phương Thảo" class="doctor-phd-avatar" onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
+                </div>
+                <div class="col">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge bg-primary text-white rounded-pill px-2.5 py-1 small">
+                            <i class="bi bi-patch-check-fill me-1"></i>Hội Đồng Cố Vấn Chuyên Môn
+                        </span>
+                        <span class="text-muted small"><i class="bi bi-award-fill text-warning me-1"></i>Tiến Sĩ Y Khoa (PhD)</span>
+                    </div>
+                    <h4 class="fw-bold text-dark mb-1">TS. BS. Nguyễn Thị Phương Thảo &amp; Ban Chuyên Gia Nha Khoa</h4>
+                    <p class="text-muted small mb-0">
+                        100% bài viết kiến thức y khoa được trực tiếp biên soạn, kiểm duyệt và cập nhật bởi Tiến sĩ Y khoa, Trưởng khoa và các bác sĩ chuyên khoa cấp I tại DentalCare.
+                    </p>
+                </div>
+                <div class="col-md-auto text-md-end">
+                    <a href="/Patient/Appointment/Book" class="btn btn-outline-primary rounded-pill px-3 py-2 fw-semibold">
+                        <i class="bi bi-calendar2-check me-1"></i> Đặt Hẹn Tư Vấn
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Periopixel 3D Dental Education Showcase -->
+        @if (string.IsNullOrWhiteSpace(Model.CurrentKeyword) && string.IsNullOrWhiteSpace(Model.CurrentCategorySlug) && Model.CurrentPage <= 1)
+        {
+            <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                    <div class="card h-100 border-0 shadow-sm rounded-4 overflow-hidden position-relative" style="background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%); border-left: 4px solid #16a34a !important;">
+                        <div class="p-4 d-flex flex-column justify-content-between h-100">
+                            <div>
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <span class="badge bg-success text-white rounded-pill px-2.5 py-1 small">
+                                        <i class="bi bi-play-circle-fill me-1"></i>3D Dental Education
+                                    </span>
+                                    <span class="text-muted small">Mô Phỏng Trực Quan</span>
+                                </div>
+                                <h4 class="fw-bold text-dark mb-2">Video Mô Phỏng 3D Điều Trị Viêm Tủy Răng &amp; Implant</h4>
+                                <p class="text-muted small mb-3">
+                                    Quan sát chi tiết cấu trúc giải phẫu buồng tủy, quá trình vi khuẩn xâm lấn và quy trình điều trị tủy vi phẫu đạt chuẩn y khoa quốc tế.
+                                </p>
+                            </div>
+                            <div class="text-center my-2 p-2 bg-white rounded-3 border">
+                                <img src="/images/blog/periopixel-dental-arch.png" alt="Mô phỏng 3D cung răng và nướu" class="img-fluid rounded-3 blog-zoomable-img" style="max-height: 180px; object-fit: contain;" />
+                            </div>
+                            <div class="pt-3 border-top mt-3 d-flex justify-content-between align-items-center">
+                                <a asp-controller="Blog" asp-action="Detail" asp-route-slug="dieu-tri-viem-tuy-rang-nhu-the-nao" class="btn btn-sm btn-outline-success rounded-pill px-3 fw-semibold">
+                                    Xem Bài Viết &amp; Video <i class="bi bi-arrow-right ms-1"></i>
+                                </a>
+                                <span class="text-muted small"><i class="bi bi-check-circle-fill text-success me-1"></i>Nguồn: Periopixel 3D</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100 border-0 shadow-sm rounded-4 overflow-hidden position-relative" style="background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%); border-left: 4px solid #2563eb !important;">
+                        <div class="p-4 d-flex flex-column justify-content-between h-100">
+                            <div>
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <span class="badge bg-primary text-white rounded-pill px-2.5 py-1 small">
+                                        <i class="bi bi-camera-reels-fill me-1"></i>Bespoke 3D Patient Guide
+                                    </span>
+                                    <span class="text-muted small">Cẩm Nang Sức Khỏe</span>
+                                </div>
+                                <h4 class="fw-bold text-dark mb-2">Video 3D Kỹ Thuật Chải Răng Bass Cải Tiến &amp; Bảo Vệ Nướu</h4>
+                                <p class="text-muted small mb-3">
+                                    Hướng dẫn góc đặt lông bàn chải 45 độ, vệ sinh mảng bám viền nướu và sử dụng chỉ nha khoa bảo tồn men răng không mòn.
+                                </p>
+                            </div>
+                            <div class="text-center my-2 p-2 bg-white rounded-3 border">
+                                <img src="/images/blog/cham-soc-rang-mieng-3d.png" alt="Mô phỏng 3D kỹ thuật chải răng" class="img-fluid rounded-3 blog-zoomable-img" style="max-height: 180px; object-fit: contain;" />
+                            </div>
+                            <div class="pt-3 border-top mt-3 d-flex justify-content-between align-items-center">
+                                <a asp-controller="Blog" asp-action="Detail" asp-route-slug="huong-dan-cham-soc-rang-mieng-dung-cach-6-thoi-quen" class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-semibold">
+                                    Xem Hướng Dẫn 3D <i class="bi bi-arrow-right ms-1"></i>
+                                </a>
+                                <span class="text-muted small"><i class="bi bi-check-circle-fill text-primary me-1"></i>Nguồn: Periopixel 3D</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
         <!-- Category Filter Pills -->
         <div class="d-flex flex-wrap align-items-center gap-2 mb-4 pb-2 border-bottom">
             <span class="text-muted small fw-semibold me-2 d-none d-md-inline">
@@ -104,7 +191,8 @@
                         <div class="blog-card">
                             <div class="blog-card-thumb-wrapper">
                                 <a asp-controller="Blog" asp-action="Detail" asp-route-slug="@post.Slug">
-                                    <img src="@(!string.IsNullOrWhiteSpace(post.ThumbnailUrl) ? post.ThumbnailUrl : "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=600&q=80")"
+                                    <img src="@(!string.IsNullOrWhiteSpace(post.ThumbnailUrl) ? post.ThumbnailUrl : "/images/blog/viem-tuy-rang-banner.svg")"
+                                         onerror="this.src='/images/blog/viem-tuy-rang-banner.svg'"
                                          alt="@post.Title"
                                          class="blog-card-thumb"
                                          loading="lazy" />
@@ -132,7 +220,7 @@
                                     <div class="blog-card-author">
                                         @if (!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl))
                                         {
-                                            <img src="@post.AuthorAvatarUrl" alt="@post.AuthorName" />
+                                            <img src="@(!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl) ? post.AuthorAvatarUrl : "/images/doctors/dr-phuong-thao.svg")" alt="@post.AuthorName" onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
                                         }
                                         else
                                         {

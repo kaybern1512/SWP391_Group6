@@ -116,6 +116,89 @@
     </div>
 </section>
 
+<!-- Latest Dental Blog & Health Articles Section (Periopixel Design with Instruments Background) -->
+@{
+    var latestBlogPosts = ViewBag.LatestBlogPosts as List<DentalClinic.Web.Models.ApiDtos.BlogPostListItemDto>;
+}
+<section id="latest-blog-articles" class="blog-periopixel-section border-bottom">
+    <div class="container py-2">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end mb-4 gap-2">
+            <div>
+                <span class="badge-dc badge-role-patient mb-2">
+                    <i class="bi bi-journal-medical me-1"></i> Kiến Thức Nha Khoa
+                </span>
+                <h2 class="display-6 fw-bold text-dark mb-1 fs-2">Cẩm Nang Sức Khỏe &amp; Bài Viết Chuyên Gia</h2>
+                <p class="text-muted small mb-0">Cập nhật những kiến thức chuẩn y khoa từ đội ngũ bác sĩ chuyên khoa đầu ngành.</p>
+            </div>
+            <div>
+                <a asp-controller="Blog" asp-action="Index" class="btn btn-outline-primary rounded-pill px-4 py-2 fw-semibold">
+                    Xem Tất Cả Bài Viết <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        @if (latestBlogPosts != null && latestBlogPosts.Count > 0)
+        {
+            <div class="row g-4">
+                @foreach (var post in latestBlogPosts)
+                {
+                    <div class="col-md-4">
+                        <div class="blog-card bg-white">
+                            <div class="blog-card-thumb-wrapper">
+                                <img src="@(!string.IsNullOrWhiteSpace(post.ThumbnailUrl) ? post.ThumbnailUrl : "/images/blog/viem-tuy-rang-banner.svg")"
+                                     alt="@post.Title"
+                                     class="blog-card-thumb"
+                                     loading="lazy"
+                                     onerror="this.src='/images/blog/viem-tuy-rang-banner.svg'" />
+                                <span class="blog-badge-category">@post.CategoryName</span>
+                                @if (post.IsFeatured)
+                                {
+                                    <span class="blog-badge-featured"><i class="bi bi-star-fill me-1"></i>Nổi bật</span>
+                                }
+                            </div>
+                            <div class="blog-card-body">
+                                <h3 class="blog-card-title">
+                                    <a asp-controller="Blog" asp-action="Detail" asp-route-slug="@post.Slug">
+                                        @post.Title
+                                    </a>
+                                </h3>
+                                <p class="blog-card-summary">
+                                    @(!string.IsNullOrWhiteSpace(post.Summary) ? post.Summary : "Đọc bài viết chi tiết để hiểu rõ hơn về các phương pháp chăm sóc và điều trị nha khoa hiện đại...")
+                                </p>
+                                <div class="blog-card-footer">
+                                    <div class="blog-card-author">
+                                        <img src="@(!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl) ? post.AuthorAvatarUrl : "/images/doctors/dr-phuong-thao.svg")"
+                                             alt="@post.AuthorName"
+                                             class="rounded-circle border"
+                                             style="width: 28px; height: 28px; object-fit: cover;"
+                                             onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
+                                        <span class="fw-semibold text-dark">@post.AuthorName</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span><i class="bi bi-clock me-1"></i>@((post.PublishedAt ?? post.CreatedAt).ToString("dd/MM/yyyy"))</span>
+                                        <span><i class="bi bi-eye me-1"></i>@post.ViewCount</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="bg-white rounded-4 p-4 text-center border shadow-sm">
+                <i class="bi bi-journal-text fs-1 text-muted mb-2 d-block"></i>
+                <h6 class="fw-bold text-dark mb-1">Chưa có bài viết mới</h6>
+                <p class="text-muted small mb-3">Các bài viết chia sẻ kiến thức nha khoa từ bác sĩ sẽ sớm được cập nhật tại đây.</p>
+                <a asp-controller="Blog" asp-action="Index" class="btn btn-sm btn-primary rounded-pill px-3">
+                    Đến Chuyên Mục Blog
+                </a>
+            </div>
+        }
+    </div>
+</section>
+
 <!-- Specialties Section -->
 <section id="specialties" class="py-5">
     <div class="container py-3">
@@ -966,84 +1049,6 @@
                 </div>
             </div>
         </div>
-    </div>
-</section>
-
-<!-- Latest Dental Blog & Health Articles Section -->
-@{
-    var latestBlogPosts = ViewBag.LatestBlogPosts as List<DentalClinic.Web.Models.ApiDtos.BlogPostListItemDto>;
-}
-<section id="latest-blog-articles" class="py-5 bg-light border-top border-bottom">
-    <div class="container py-3">
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end mb-4 gap-2">
-            <div>
-                <span class="badge-dc badge-role-patient mb-2">
-                    <i class="bi bi-journal-medical me-1"></i> Kiến Thức Nha Khoa
-                </span>
-                <h2 class="fw-bold text-dark mb-1">Cẩm Nang Sức Khỏe & Bài Viết Chuyên Gia</h2>
-                <p class="text-muted small mb-0">Cập nhật những kiến thức chuẩn y khoa từ đội ngũ bác sĩ chuyên khoa đầu ngành.</p>
-            </div>
-            <div>
-                <a asp-controller="Blog" asp-action="Index" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-2 fw-semibold">
-                    Xem Tất Cả Bài Viết <i class="bi bi-arrow-right ms-1"></i>
-                </a>
-            </div>
-        </div>
-
-        @if (latestBlogPosts != null && latestBlogPosts.Count > 0)
-        {
-            <div class="row g-4">
-                @foreach (var post in latestBlogPosts)
-                {
-                    <div class="col-md-4">
-                        <div class="blog-card">
-                            <div class="blog-card-thumb-wrapper">
-                                <img src="@(!string.IsNullOrWhiteSpace(post.ThumbnailUrl) ? post.ThumbnailUrl : "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=600&q=80")"
-                                     alt="@post.Title"
-                                     class="blog-card-thumb"
-                                     loading="lazy" />
-                                <span class="blog-badge-category">@post.CategoryName</span>
-                                @if (post.IsFeatured)
-                                {
-                                    <span class="blog-badge-featured"><i class="bi bi-star-fill me-1"></i>Nổi bật</span>
-                                }
-                            </div>
-                            <div class="blog-card-body">
-                                <h3 class="blog-card-title">
-                                    <a asp-controller="Blog" asp-action="Detail" asp-route-slug="@post.Slug">
-                                        @post.Title
-                                    </a>
-                                </h3>
-                                <p class="blog-card-summary">
-                                    @(!string.IsNullOrWhiteSpace(post.Summary) ? post.Summary : "Đọc bài viết chi tiết để hiểu rõ hơn về các phương pháp chăm sóc và điều trị nha khoa hiện đại...")
-                                </p>
-                                <div class="blog-card-footer">
-                                    <div class="blog-card-author">
-                                        <i class="bi bi-person-circle fs-6 text-primary"></i>
-                                        <span class="fw-semibold text-dark">@post.AuthorName</span>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span><i class="bi bi-clock me-1"></i>@((post.PublishedAt ?? post.CreatedAt).ToString("dd/MM/yyyy"))</span>
-                                        <span><i class="bi bi-eye me-1"></i>@post.ViewCount</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                }
-            </div>
-        }
-        else
-        {
-            <div class="bg-white rounded-3 p-4 text-center border">
-                <i class="bi bi-journal-text fs-1 text-muted mb-2 d-block"></i>
-                <h6 class="fw-bold text-dark mb-1">Chưa có bài viết mới</h6>
-                <p class="text-muted small mb-3">Các bài viết chia sẻ kiến thức nha khoa từ bác sĩ sẽ sớm được cập nhật tại đây.</p>
-                <a asp-controller="Blog" asp-action="Index" class="btn btn-sm btn-primary rounded-pill px-3">
-                    Đến Chuyên Mục Blog
-                </a>
-            </div>
-        }
     </div>
 </section>
 

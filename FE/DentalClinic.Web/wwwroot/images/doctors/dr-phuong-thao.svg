@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0f9ff"/>
+      <stop offset="50%" stop-color="#e0f2fe"/>
+      <stop offset="100%" stop-color="#bae6fd"/>
+    </linearGradient>
+    <linearGradient id="coatGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f1f5f9"/>
+    </linearGradient>
+    <linearGradient id="skinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="100%" stop-color="#fdba74"/>
+    </linearGradient>
+    <linearGradient id="hairGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#0369a1" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Background Circle -->
+  <circle cx="200" cy="200" r="190" fill="url(#bgGrad)"/>
+  <circle cx="200" cy="200" r="185" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.8"/>
+
+  <!-- Medical Cross Pattern -->
+  <path d="M200,45 L200,85 M180,65 L220,65" stroke="#38bdf8" stroke-width="4" stroke-linecap="round" opacity="0.4"/>
+  <path d="M70,160 L70,190 M55,175 L85,175" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" opacity="0.3"/>
+  <path d="M330,160 L330,190 M315,175 L345,175" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" opacity="0.3"/>
+
+  <!-- Shoulders and Doctor Coat -->
+  <path d="M75,395 C75,295 125,260 200,260 C275,260 325,295 325,395 Z" fill="url(#coatGrad)" filter="url(#shadow)"/>
+
+  <!-- Medical Blue Scrub -->
+  <polygon points="170,260 230,260 200,325" fill="#0284c7"/>
+  <polygon points="185,260 215,260 200,295" fill="#e0f2fe"/>
+
+  <!-- Doctor Coat Collars (Lapels) -->
+  <path d="M125,280 L180,370 L195,300 L160,260 Z" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <path d="M275,280 L220,370 L205,300 L240,260 Z" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+
+  <!-- Stethoscope -->
+  <path d="M150,270 C150,340 185,365 200,365 C215,365 250,340 250,270" fill="none" stroke="#475569" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="200" cy="370" r="10" fill="#94a3b8" stroke="#64748b" stroke-width="3"/>
+  <circle cx="200" cy="370" r="4" fill="#0284c7"/>
+
+  <!-- Neck -->
+  <rect x="180" y="200" width="40" height="65" rx="10" fill="url(#skinGrad)"/>
+
+  <!-- Hair Back -->
+  <ellipse cx="200" cy="145" rx="75" ry="85" fill="url(#hairGrad)"/>
+
+  <!-- Head / Face -->
+  <ellipse cx="200" cy="160" rx="55" ry="65" fill="url(#skinGrad)"/>
+
+  <!-- Hair Front (Neat Professional Bun/Bob) -->
+  <path d="M145,145 C145,95 170,85 200,85 C230,85 255,95 255,145 C240,110 220,105 200,110 C175,105 155,115 145,145 Z" fill="url(#hairGrad)"/>
+  <path d="M145,140 C140,165 142,200 148,215 C154,195 152,160 145,140 Z" fill="url(#hairGrad)"/>
+  <path d="M255,140 C260,165 258,200 252,215 C246,195 248,160 255,140 Z" fill="url(#hairGrad)"/>
+
+  <!-- Eyes -->
+  <ellipse cx="180" cy="160" rx="4.5" ry="5" fill="#0f172a"/>
+  <ellipse cx="220" cy="160" rx="4.5" ry="5" fill="#0f172a"/>
+  <circle cx="182" cy="158" r="1.5" fill="#ffffff"/>
+  <circle cx="222" cy="158" r="1.5" fill="#ffffff"/>
+
+  <!-- Eyebrows -->
+  <path d="M172,148 Q180,144 188,147" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M212,147 Q220,144 228,148" fill="none" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Nose -->
+  <path d="M198,160 L196,173 L204,175" fill="none" stroke="#ea580c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+
+  <!-- Smiling Mouth -->
+  <path d="M186,188 Q200,200 214,188" fill="none" stroke="#be123c" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M188,189 Q200,197 212,189 Z" fill="#ffffff" opacity="0.9"/>
+
+  <!-- Doctor PhD Badge -->
+  <g transform="translate(200, 360)">
+    <rect x="-80" y="-12" width="160" height="24" rx="12" fill="#0284c7" stroke="#ffffff" stroke-width="2" filter="url(#shadow)"/>
+    <text x="0" y="4.5" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="10.5" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="0.5">TS. BS. PHƯƠNG THẢO</text>
+  </g>
+</svg>

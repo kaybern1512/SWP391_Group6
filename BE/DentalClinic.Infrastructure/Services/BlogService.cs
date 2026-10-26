@@ -1108,12 +1108,22 @@ public class BlogService : IBlogService
 
     private static string GetAuthorName(UserAccount? user)
     {
-        if (user == null) return "Nha khoa DentalClinic";
+        if (user == null) return "Nha khoa DentalCare";
         if (user.StaffProfile != null && !string.IsNullOrWhiteSpace(user.StaffProfile.FullName))
         {
+            var name = user.StaffProfile.FullName.Trim();
+            if (name.StartsWith("BS.", StringComparison.OrdinalIgnoreCase) ||
+                name.StartsWith("TS.", StringComparison.OrdinalIgnoreCase) ||
+                name.StartsWith("ThS.", StringComparison.OrdinalIgnoreCase) ||
+                name.StartsWith("Bác sĩ", StringComparison.OrdinalIgnoreCase) ||
+                name.StartsWith("PGS.", StringComparison.OrdinalIgnoreCase))
+            {
+                return name;
+            }
+
             return (user.Role == UserRole.Dentist || user.Role == UserRole.DepartmentManager)
-                ? $"BS. {user.StaffProfile.FullName}"
-                : user.StaffProfile.FullName;
+                ? $"BS. {name}"
+                : name;
         }
         if (user.PatientProfile != null && !string.IsNullOrWhiteSpace(user.PatientProfile.FullName))
         {

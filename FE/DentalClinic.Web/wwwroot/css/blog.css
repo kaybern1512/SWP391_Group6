@@ -332,3 +332,64 @@
     background-color: #0f172a;
     box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
 }
+
+/* ========================================================
+   PERIOPIXEL DESIGN: DENTAL INSTRUMENTS BACKGROUND
+   ======================================================== */
+.blog-periopixel-section {
+    position: relative;
+    background-color: #f8fafc;
+    background-image: 
+        url('/images/backgrounds/dental-forceps-left.png'),
+        url('/images/backgrounds/dental-probe-right.png');
+    background-position: left 2% center, right 2% bottom 15%;
+    background-repeat: no-repeat, no-repeat;
+    background-size: 140px auto, 120px auto;
+    padding: 3.5rem 0;
+    overflow: hidden;
+}
+
+@media (max-width: 1200px) {
+    .blog-periopixel-section {
+        background-size: 100px auto, 90px auto;
+        background-position: left -10px center, right -10px bottom 10%;
+    }
+}
+
+@media (max-width: 768px) {
+    .blog-periopixel-section {
+        background-image: none; /* Hide instrument backgrounds on small mobile screens */
+        padding: 2.5rem 0;
+    }
+}
+
+/* Doctor PhD Profile Card */
+.doctor-phd-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
+    box-shadow: 0 10px 25px rgba(2, 132, 199, 0.08);
+    position: relative;
+    overflow: hidden;
+    padding: 1.75rem;
+}
+
+.doctor-phd-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 100%;
+    background: linear-gradient(180deg, #0284c7 0%, #38bdf8 100%);
+}
+
+.doctor-phd-avatar {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #ffffff;
+    box-shadow: 0 6px 16px rgba(2, 132, 199, 0.2);
+    background-color: #e0f2fe;
+}

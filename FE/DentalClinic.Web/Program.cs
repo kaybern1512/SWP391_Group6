@@ -8,6 +8,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Add MVC with Views
 builder.Services.AddControllersWithViews();
 
+// Support full Unicode range (Vietnamese, etc.) without HTML-entity encoding
+builder.Services.AddSingleton<System.Text.Encodings.Web.HtmlEncoder>(
+    System.Text.Encodings.Web.HtmlEncoder.Create(System.Text.Unicode.UnicodeRanges.All));
+
 // HttpContextAccessor
 builder.Services.AddHttpContextAccessor();
 

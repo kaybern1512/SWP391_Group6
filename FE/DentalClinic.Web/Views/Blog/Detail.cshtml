@@ -54,7 +54,7 @@
                 <div class="d-flex align-items-center gap-3">
                     @if (!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl))
                     {
-                        <img src="@post.AuthorAvatarUrl" alt="@post.AuthorName" class="rounded-circle border" style="width: 44px; height: 44px; object-fit: cover;" />
+                        <img src="@(!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl) ? post.AuthorAvatarUrl : "/images/doctors/dr-phuong-thao.svg")" alt="@post.AuthorName" class="rounded-circle border" style="width: 44px; height: 44px; object-fit: cover;" onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
                     }
                     else
                     {
@@ -64,7 +64,7 @@
                     }
                     <div>
                         <div class="fw-bold text-dark">@post.AuthorName</div>
-                        <div class="text-muted small">Chuyên khoa Răng Hàm Mặt</div>
+                        <div class="text-muted small"><i class="bi bi-mortarboard-fill text-primary me-1"></i>Tiến sĩ Y khoa (PhD) - Trưởng khoa Nội nha &amp; Phục hình</div>
                     </div>
                 </div>
 
@@ -82,16 +82,25 @@
         @if (!string.IsNullOrWhiteSpace(post.VideoUrl))
         {
             <div class="blog-featured-video mb-4">
-                <video controls preload="metadata" poster="@post.ThumbnailUrl" class="w-100 rounded-4 shadow-sm" style="max-height: 480px; object-fit: contain; background: #000;">
-                    <source src="@post.VideoUrl" />
-                    Trình duyệt của bạn không hỗ trợ phát thẻ video.
-                </video>
+                @if (post.VideoUrl.Contains("youtube.com") || post.VideoUrl.Contains("youtu.be"))
+                {
+                    <div class="ratio ratio-16x9 rounded-4 overflow-hidden shadow-sm border">
+                        <iframe src="@post.VideoUrl" title="@post.Title" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                    </div>
+                }
+                else
+                {
+                    <video controls preload="metadata" poster="@post.ThumbnailUrl" class="w-100 rounded-4 shadow-sm" style="max-height: 480px; object-fit: contain; background: #000;">
+                        <source src="@post.VideoUrl" />
+                        Trình duyệt của bạn không hỗ trợ phát thẻ video.
+                    </video>
+                }
             </div>
         }
         else if (!string.IsNullOrWhiteSpace(post.ThumbnailUrl))
         {
             <div class="blog-article-thumb-hero mb-4">
-                <img src="@post.ThumbnailUrl" alt="@post.Title" class="img-fluid w-100 blog-zoomable-img" loading="lazy" />
+                <img src="@post.ThumbnailUrl" alt="@post.Title" class="img-fluid w-100 rounded-4 shadow-sm blog-zoomable-img" loading="lazy" onerror="this.src='/images/blog/viem-tuy-rang-banner.svg'" />
             </div>
         }
 
@@ -120,31 +129,36 @@
             @Html.Raw(post.Content)
         </article>
 
-        <!-- Doctor / Author Box & Booking CTA -->
-        <div class="card border-0 shadow-sm rounded-4 p-4 mb-5" style="background: linear-gradient(135deg, #eef6ff 0%, #ffffff 100%);">
-            <div class="row align-items-center g-3">
-                <div class="col-auto">
-                    @if (!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl))
-                    {
-                        <img src="@post.AuthorAvatarUrl" alt="@post.AuthorName" class="rounded-circle border border-2 border-white shadow-sm" style="width: 72px; height: 72px; object-fit: cover;" />
-                    }
-                    else
-                    {
-                        <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 72px; height: 72px;">
-                            <i class="bi bi-person-badge fs-2"></i>
-                        </div>
-                    }
+        <!-- Doctor PhD Profile Box & Booking CTA -->
+        <div class="doctor-phd-card mb-5">
+            <div class="row align-items-center g-4">
+                <div class="col-auto text-center">
+                    <img src="@(!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl) ? post.AuthorAvatarUrl : "/images/doctors/dr-phuong-thao.svg")" 
+                         alt="@post.AuthorName" 
+                         class="doctor-phd-avatar"
+                         onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
+                    <div class="mt-2">
+                        <span class="badge bg-primary text-white rounded-pill px-2.5 py-1 small">
+                            <i class="bi bi-patch-check-fill me-1"></i>Tiến Sĩ Y Khoa
+                        </span>
+                    </div>
                 </div>
                 <div class="col">
-                    <span class="badge bg-primary-subtle text-primary mb-1">Tác Giả Bài Viết</span>
-                    <h5 class="fw-bold text-dark mb-1">@post.AuthorName</h5>
-                    <p class="text-muted small mb-0">
-                        Đội ngũ bác sĩ chuyên khoa răng hàm mặt hàng đầu tại DentalCare, luôn tận tâm vì sức khỏe và nụ cười rạng rỡ của bạn.
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge bg-info-subtle text-info-emphasis rounded-pill px-2 py-0.5 fw-semibold small">Bác Sĩ Cố Vấn Chuyên Môn</span>
+                        <span class="text-muted small"><i class="bi bi-award-fill text-warning me-1"></i>15 năm kinh nghiệm</span>
+                    </div>
+                    <h4 class="fw-bold text-dark mb-1">@post.AuthorName</h4>
+                    <p class="text-primary fw-medium small mb-2">
+                        <i class="bi bi-mortarboard-fill me-1"></i>Tiến sĩ Y khoa (PhD) - Đại học Y Dược | Trưởng khoa Nội nha &amp; Phục hình DentalCare
+                    </p>
+                    <p class="text-muted small mb-0 lh-sm">
+                        Chuyên gia đầu ngành về điều trị tủy vi phẫu, cấy ghép Implant kỹ thuật số và phục hình răng sứ thẩm mỹ. Từng tu nghiệp chuyên sâu tại Đại học Bordeaux (Pháp).
                     </p>
                 </div>
                 <div class="col-md-auto text-md-end">
-                    <a href="/Patient/Appointment/Book" class="btn btn-primary rounded-pill px-4 py-2 fw-semibold">
-                        <i class="bi bi-calendar2-plus me-1"></i> Đặt Lịch Khám Ngay
+                    <a href="/Patient/Appointment/Book" class="btn btn-primary rounded-pill px-4 py-2.5 fw-semibold shadow-sm">
+                        <i class="bi bi-calendar2-plus me-1"></i> Đặt Lịch Khám Với TS. BS.
                     </a>
                 </div>
             </div>
@@ -170,7 +184,7 @@
                             <div class="card h-100 border rounded-3 p-3 shadow-sm hover-shadow transition">
                                 <div class="d-flex gap-3">
                                     <div style="width: 100px; height: 75px; flex-shrink: 0; border-radius: 8px; overflow: hidden;">
-                                        <img src="@(!string.IsNullOrWhiteSpace(rel.ThumbnailUrl) ? rel.ThumbnailUrl : "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=300&q=80")"
+                                        <img src="@(!string.IsNullOrWhiteSpace(rel.ThumbnailUrl) ? rel.ThumbnailUrl : "/images/blog/viem-tuy-rang-banner.svg")"
                                              alt="@rel.Title"
                                              style="width: 100%; height: 100%; object-fit: cover;" />
                                     </div>
