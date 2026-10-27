@@ -5,6 +5,7 @@ using DentalClinic.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace DentalClinic.Infrastructure;
 
@@ -26,7 +27,24 @@ public static class DependencyInjection
         services.AddSingleton<IDentalImageFileValidator, DentalImageFileValidator>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IGoogleAuthService, GoogleAuthService>();
-        services.AddScoped<IImageStorageService, CloudinaryImageStorageService>();
+
+        // Storage services: Cloudinary retained for Profile avatars and external media
+        services.AddScoped<CloudinaryImageStorageService>();
+        services.AddScoped<IImageStorageService>(sp => sp.GetRequiredService<CloudinaryImageStorageService>());
+
+        // Storage services: Dedicated Medical Imaging Storage (Defaults to Local)
+        services.AddScoped<LocalImageStorageService>();
+        services.AddScoped<IMedicalImagingStorageService>(sp =>
+        {
+            var config = sp.GetRequiredService<IConfiguration>();
+            var provider = config["MedicalImagingStorage:Provider"] ?? "Local";
+            if (string.Equals(provider, "Cloudinary", StringComparison.OrdinalIgnoreCase))
+            {
+                return sp.GetRequiredService<CloudinaryImageStorageService>();
+            }
+            return sp.GetRequiredService<LocalImageStorageService>();
+        });
+
         services.AddScoped<IAuditLogService, AuditLogService>();
 
         services.AddScoped<IAuthService, AuthService>();
@@ -37,7 +55,11 @@ public static class DependencyInjection
         services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<IDentistScheduleService, DentistScheduleService>();
         services.AddScoped<IFeedbackService, FeedbackService>();
-        services.AddScoped<IMedicalRecordService, MedicalRecordService>();
+        services.AddScoped<IMedicalRecordService>(sp => new MedicalRecordService(
+            sp.GetRequiredService<DentalClinicDbContext>(),
+            sp.GetRequiredService<IMedicalImagingStorageService>(),
+            sp.GetRequiredService<IDentalImageFileValidator>(),
+            sp.GetRequiredService<ILogger<MedicalRecordService>>()));
         services.AddScoped<IPrescriptionService, PrescriptionService>();
         services.AddScoped<ITreatmentService, TreatmentService>();
         services.AddScoped<IBillingService, BillingService>();

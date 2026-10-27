@@ -568,24 +568,24 @@
                             </div>
                         }
                         <div class="mb-3">
-                            <label class="form-label fw-semibold text-slate-700">Chẩn đoán chính của bác sĩ <span class="text-danger">*</span></label>
-                            <input type="text" name="Diagnosis" class="form-control" placeholder="Ví dụ: Sâu răng mặt nhai R16, Viêm nướu quanh răng R46..." required />
+                            <label class="form-label fw-semibold text-slate-700" for="newEntryDiagnosis">Chẩn đoán chính của bác sĩ <span class="text-danger">*</span></label>
+                            <input type="text" id="newEntryDiagnosis" name="Diagnosis" class="form-control" placeholder="Ví dụ: Sâu răng mặt nhai R16, Viêm nướu quanh răng R46..." required />
                         </div>
 
                         <div class="row g-3 mb-3">
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold text-slate-700">Triệu chứng đến khám</label>
-                                <textarea name="Symptoms" class="form-control" rows="2" placeholder="Ví dụ: Ê buốt khi ăn đồ lạnh, đau nhức về đêm..."></textarea>
+                                <label class="form-label fw-semibold text-slate-700" for="newEntrySymptoms">Triệu chứng đến khám</label>
+                                <textarea id="newEntrySymptoms" name="Symptoms" class="form-control" rows="2" placeholder="Ví dụ: Ê buốt khi ăn đồ lạnh, đau nhức về đêm..."></textarea>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold text-slate-700">Tiền sử bệnh & Dấu hiệu lâm sàng</label>
-                                <textarea name="ClinicalFindings" class="form-control" rows="2" placeholder="Ví dụ: Dị ứng Penicillin, huyết áp ổn định..."></textarea>
+                                <label class="form-label fw-semibold text-slate-700" for="newEntryClinicalFindings">Tiền sử bệnh & Dấu hiệu lâm sàng</label>
+                                <textarea id="newEntryClinicalFindings" name="ClinicalFindings" class="form-control" rows="2" placeholder="Ví dụ: Dị ứng Penicillin, huyết áp ổn định..."></textarea>
                             </div>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-semibold text-slate-700">Kế hoạch điều trị & Lời dặn</label>
-                            <textarea name="ClinicalNotes" class="form-control" rows="2" placeholder="Ví dụ: Trám composite R16, hẹn tái khám sau 1 tuần..."></textarea>
+                            <label class="form-label fw-semibold text-slate-700" for="newEntryClinicalNotes">Kế hoạch điều trị & Lời dặn</label>
+                            <textarea id="newEntryClinicalNotes" name="ClinicalNotes" class="form-control" rows="2" placeholder="Ví dụ: Trám composite R16, hẹn tái khám sau 1 tuần..."></textarea>
                         </div>
 
                         <!-- Chỉ Định Chụp X-Quang / Cận Lâm Sàng -->
@@ -658,7 +658,7 @@
                                                         <span class="text-muted small" id="createEntryImageFileSize"></span>
                                                     </div>
                                                     <div class="fw-semibold text-slate-800 small text-truncate" id="createEntryImageFileName"></div>
-                                                    <div class="text-muted small" style="font-size: 0.75rem;">Sẽ tự động upload lên Cloudinary khi bấm "Lưu Bệnh Án".</div>
+                                                    <div class="text-muted small" style="font-size: 0.75rem;">Sẽ tự động đính kèm và lưu ảnh X-quang khi bấm "Lưu Bệnh Án".</div>
                                                 </div>
                                             </div>
 
@@ -675,7 +675,7 @@
                                                         <span class="text-muted small" id="createEntryDicomFileSize"></span>
                                                     </div>
                                                     <div class="fw-semibold text-slate-800 small text-truncate" id="createEntryDicomFileName"></div>
-                                                    <div class="text-muted small" style="font-size: 0.75rem;">Tập tin y tế chuyên dụng (không hiển thị preview ảnh phẳng). Sẽ được upload lên Cloudinary Raw Storage.</div>
+                                                    <div class="text-muted small" style="font-size: 0.75rem;">Tập tin y tế chuyên dụng (không hiển thị preview ảnh phẳng). Sẽ được đính kèm và lưu trữ an toàn cùng bệnh án.</div>
                                                 </div>
                                             </div>
                                         </div>

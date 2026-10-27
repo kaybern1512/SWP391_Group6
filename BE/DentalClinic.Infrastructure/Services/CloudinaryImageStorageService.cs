@@ -12,8 +12,12 @@ using Microsoft.Extensions.Logging;
 
 namespace DentalClinic.Infrastructure.Services;
 
-public class CloudinaryImageStorageService : IImageStorageService
+public class CloudinaryImageStorageService : IImageStorageService, IMedicalImagingStorageService
 {
+    public string StorageProviderName => "Cloudinary";
+
+    public bool IsLocalReference(string? fileUrl) => false;
+
     private readonly Cloudinary? _cloudinary;
     private readonly ILogger<CloudinaryImageStorageService> _logger;
     private readonly bool _isConfigured;
