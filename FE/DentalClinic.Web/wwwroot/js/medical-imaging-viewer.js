@@ -1,7 +1,8 @@
 /**
- * MedicalImagingViewer - High-Precision Dental X-Ray Zoom & Pan Viewer
+ * MedicalImagingViewer - High-Precision Dental X-Ray Zoom, Pan & Rotate Viewer
  * Day 01: Zoom In / Zoom Out / Fit to Screen / Reset View
  * Day 02: Pan / Drag / Pointer Events / Boundary Clamping / Cursor States
+ * Day 03: Rotate 90° Left/Right / Rotation State / Bounding Box Recalculation / Fit on Rotation
  * DentalCare Clinical EMR
  */
 (function (global) {
@@ -25,6 +26,9 @@
     let panStartX = 0;
     let panStartY = 0;
 
+    // Rotation state variable (0, 90, 180, 270)
+    let rotationDegrees = 0;
+
     // Cached DOM elements
     let modalEl = null;
     let viewportEl = null;
@@ -33,10 +37,25 @@
     let btnZoomOut = null;
     let btnFitScreen = null;
     let btnResetView = null;
+    let btnRotateLeft = null;
+    let btnRotateRight = null;
+    let btnResetRotation = null;
     let badgeZoom = null;
+    let badgeRotation = null;
 
     function clamp(val, min, max) {
         return Math.min(Math.max(val, min), max);
+    }
+
+    function normalizeRotation(deg) {
+        let r = deg % 360;
+        if (r < 0) r += 360;
+        return r;
+    }
+
+    function isRotated90(deg) {
+        const r = typeof deg === 'number' ? normalizeRotation(deg) : rotationDegrees;
+        return r === 90 || r === 270;
     }
 
     function getImageDimensions() {
@@ -58,13 +77,21 @@
         };
     }
 
-    function getMaxPan(zoom) {
+    function getVisualDimensions(deg) {
         const imgDim = getImageDimensions();
+        if (isRotated90(deg)) {
+            return { width: imgDim.height, height: imgDim.width };
+        }
+        return { width: imgDim.width, height: imgDim.height };
+    }
+
+    function getMaxPan(zoom, deg) {
+        const visualDim = getVisualDimensions(deg);
         const vpDim = getViewportDimensions();
         const z = typeof zoom === 'number' ? zoom : currentZoom;
 
-        const scaledW = imgDim.width * z;
-        const scaledH = imgDim.height * z;
+        const scaledW = visualDim.width * z;
+        const scaledH = visualDim.height * z;
 
         const maxX = Math.max(0, (scaledW - vpDim.width) / 2);
         const maxY = Math.max(0, (scaledH - vpDim.height) / 2);
@@ -75,19 +102,31 @@
         };
     }
 
-    function canPan(zoom) {
-        const bounds = getMaxPan(zoom);
+    function canPan(zoom, deg) {
+        const bounds = getMaxPan(zoom, deg);
         return bounds.maxX > 0 || bounds.maxY > 0;
     }
 
-    function clampPan(x, y, zoom) {
-        const bounds = getMaxPan(zoom);
+    function clampPan(x, y, zoom, deg) {
+        const bounds = getMaxPan(zoom, deg);
         const clampedX = bounds.maxX > 0 ? clamp(x, -bounds.maxX, bounds.maxX) : 0;
         const clampedY = bounds.maxY > 0 ? clamp(y, -bounds.maxY, bounds.maxY) : 0;
         return {
             x: Math.round(clampedX * 100) / 100,
             y: Math.round(clampedY * 100) / 100
         };
+    }
+
+    function calculateFitZoom(deg) {
+        const vpDim = getViewportDimensions();
+        const visualDim = getVisualDimensions(deg);
+        if (visualDim.width <= 0 || visualDim.height <= 0 || vpDim.width <= 0 || vpDim.height <= 0) {
+            return 1.0;
+        }
+        const scaleX = vpDim.width / visualDim.width;
+        const scaleY = vpDim.height / visualDim.height;
+        const fitScale = Math.min(scaleX, scaleY, 1.0);
+        return clamp(Math.round(fitScale * 100) / 100, MIN_ZOOM, MAX_ZOOM);
     }
 
     function updateCursor() {
@@ -116,15 +155,19 @@
     }
 
     function updateUI(statusText) {
-        if (!badgeZoom) return;
+        if (badgeZoom) {
+            const percent = Math.round(currentZoom * 100);
+            if (statusText) {
+                badgeZoom.textContent = statusText;
+            } else if (isFitToScreen) {
+                badgeZoom.textContent = percent + '% (Vừa khung)';
+            } else {
+                badgeZoom.textContent = percent + '%';
+            }
+        }
 
-        const percent = Math.round(currentZoom * 100);
-        if (statusText) {
-            badgeZoom.textContent = statusText;
-        } else if (isFitToScreen && currentZoom === 1.0) {
-            badgeZoom.textContent = '100% (Vừa khung)';
-        } else {
-            badgeZoom.textContent = percent + '%';
+        if (badgeRotation) {
+            badgeRotation.textContent = rotationDegrees + '°';
         }
 
         if (btnZoomIn) {
@@ -145,7 +188,7 @@
             imgEl.style.transition = 'none';
         }
         imgEl.style.transformOrigin = 'center center';
-        imgEl.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + currentZoom + ')';
+        imgEl.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) rotate(' + rotationDegrees + 'deg) scale(' + currentZoom + ')';
     }
 
     function setZoom(newZoom, focalX, focalY, isFit) {
@@ -163,7 +206,7 @@
                 panX = panX * ratio;
                 panY = panY * ratio;
             }
-            const clamped = clampPan(panX, panY, currentZoom);
+            const clamped = clampPan(panX, panY, currentZoom, rotationDegrees);
             panX = clamped.x;
             panY = clamped.y;
         }
@@ -172,6 +215,32 @@
         updateUI();
         updateCursor();
         return currentZoom;
+    }
+
+    function setRotation(newDeg) {
+        rotationDegrees = normalizeRotation(newDeg);
+
+        // Re-clamp pan according to new rotated dimensions
+        const clamped = clampPan(panX, panY, currentZoom, rotationDegrees);
+        panX = clamped.x;
+        panY = clamped.y;
+
+        applyTransform(true);
+        updateUI();
+        updateCursor();
+        return rotationDegrees;
+    }
+
+    function rotateRight() {
+        return setRotation(rotationDegrees + 90);
+    }
+
+    function rotateLeft() {
+        return setRotation(rotationDegrees - 90);
+    }
+
+    function resetRotation() {
+        return setRotation(0);
     }
 
     function zoomIn(step) {
@@ -193,10 +262,12 @@
         }
         panX = 0;
         panY = 0;
-        currentZoom = 1.0;
+        const fitZoom = calculateFitZoom(rotationDegrees);
+        currentZoom = fitZoom;
         isFitToScreen = true;
         applyTransform(true);
-        updateUI('100% (Vừa khung)');
+        const percent = Math.round(currentZoom * 100);
+        updateUI(percent + '% (Vừa khung)');
         updateCursor();
         return currentZoom;
     }
@@ -209,6 +280,7 @@
         panX = 0;
         panY = 0;
         currentZoom = 1.0;
+        rotationDegrees = 0;
         isFitToScreen = false;
         applyTransform(true);
         updateUI('100%');
@@ -296,7 +368,7 @@
         const newX = panStartX + dx;
         const newY = panStartY + dy;
 
-        const clamped = clampPan(newX, newY, currentZoom);
+        const clamped = clampPan(newX, newY, currentZoom, rotationDegrees);
         panX = clamped.x;
         panY = clamped.y;
 
@@ -348,12 +420,18 @@
         } else if (e.key === '-' || e.key === '_') {
             e.preventDefault();
             zoomOut();
-        } else if (e.key === '0' || e.key === 'r' || e.key === 'R') {
+        } else if (e.key === '0') {
             e.preventDefault();
             resetView();
         } else if (e.key === 'f' || e.key === 'F') {
             e.preventDefault();
             fitToScreen();
+        } else if (e.key === '[') {
+            e.preventDefault();
+            rotateLeft();
+        } else if (e.key === ']') {
+            e.preventDefault();
+            rotateRight();
         }
     }
 
@@ -367,7 +445,11 @@
         btnZoomOut = document.getElementById('btnZoomOut');
         btnFitScreen = document.getElementById('btnFitScreen');
         btnResetView = document.getElementById('btnResetView');
+        btnRotateLeft = document.getElementById('btnRotateLeft');
+        btnRotateRight = document.getElementById('btnRotateRight');
+        btnResetRotation = document.getElementById('btnResetRotation');
         badgeZoom = document.getElementById('zoomPercentageBadge');
+        badgeRotation = document.getElementById('rotationBadge');
 
         // Only register DOM event listeners once to prevent duplicate listeners
         if (!isInitialized) {
@@ -399,6 +481,27 @@
                 });
             }
 
+            if (btnRotateLeft) {
+                btnRotateLeft.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    rotateLeft();
+                });
+            }
+
+            if (btnRotateRight) {
+                btnRotateRight.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    rotateRight();
+                });
+            }
+
+            if (btnResetRotation) {
+                btnResetRotation.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    resetRotation();
+                });
+            }
+
             if (viewportEl) {
                 viewportEl.addEventListener('wheel', onWheel, { passive: false });
                 viewportEl.addEventListener('pointerdown', onPointerDown);
@@ -420,7 +523,7 @@
 
             window.addEventListener('resize', function () {
                 if (modalEl && modalEl.classList.contains('show')) {
-                    const clamped = clampPan(panX, panY, currentZoom);
+                    const clamped = clampPan(panX, panY, currentZoom, rotationDegrees);
                     panX = clamped.x;
                     panY = clamped.y;
                     applyTransform(true);
@@ -456,8 +559,18 @@
         fitToScreen: fitToScreen,
         resetView: resetView,
         resetPan: resetPan,
+        rotateLeft: rotateLeft,
+        rotateRight: rotateRight,
+        setRotation: setRotation,
+        resetRotation: resetRotation,
+        getRotation: function () {
+            return rotationDegrees;
+        },
+        calculateFitZoom: function (deg) {
+            return calculateFitZoom(deg);
+        },
         panTo: function (x, y) {
-            const clamped = clampPan(x, y, currentZoom);
+            const clamped = clampPan(x, y, currentZoom, rotationDegrees);
             panX = clamped.x;
             panY = clamped.y;
             applyTransform(true);
@@ -467,11 +580,11 @@
         getPan: function () {
             return { x: panX, y: panY };
         },
-        getMaxPan: function (zoom) {
-            return getMaxPan(zoom);
+        getMaxPan: function (zoom, deg) {
+            return getMaxPan(zoom, deg);
         },
-        canPan: function (zoom) {
-            return canPan(zoom);
+        canPan: function (zoom, deg) {
+            return canPan(zoom, deg);
         },
         isPanning: function () {
             return isPanning;

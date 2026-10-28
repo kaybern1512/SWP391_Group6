@@ -794,8 +794,8 @@
                         <span class="text-white-50 small ms-2" id="lightboxDate"></span>
                     </div>
 
-                    <!-- Medical Imaging Zoom Toolbar (Day 01) -->
-                    <div class="imaging-zoom-toolbar btn-toolbar d-flex align-items-center gap-1 px-2 py-1" role="toolbar" aria-label="Thanh công cụ thu phóng X-quang">
+                    <!-- Medical Imaging Zoom & Rotate Toolbar (Day 01, 02, 03) -->
+                    <div class="imaging-zoom-toolbar btn-toolbar d-flex align-items-center gap-1 px-2 py-1" role="toolbar" aria-label="Thanh công cụ thu phóng và xoay X-quang">
                         <button type="button" id="btnZoomOut" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Thu nhỏ (-)" aria-label="Thu nhỏ">
                             <i class="bi bi-dash-lg"></i>
                         </button>
@@ -805,13 +805,27 @@
                         <button type="button" id="btnZoomIn" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Phóng to (+)" aria-label="Phóng to">
                             <i class="bi bi-plus-lg"></i>
                         </button>
+
                         <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
+
+                        <button type="button" id="btnRotateLeft" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Xoay trái 90° (Phím [)" aria-label="Xoay trái 90 độ">
+                            <i class="bi bi-arrow-counterclockwise"></i>
+                        </button>
+                        <button type="button" id="btnRotateRight" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Xoay phải 90° (Phím ])" aria-label="Xoay phải 90 độ">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                        <button type="button" id="btnResetRotation" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Đặt lại góc xoay về 0°" aria-label="Đặt lại góc xoay">
+                            <span id="rotationBadge" class="badge font-monospace px-1">0°</span>
+                        </button>
+
+                        <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
+
                         <button type="button" id="btnFitScreen" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Vừa khung nhìn (Fit to Screen - Phím F)" aria-label="Vừa khung nhìn">
                             <i class="bi bi-arrows-angle-contract"></i>
                             <span class="d-none d-sm-inline small">Vừa khung</span>
                         </button>
-                        <button type="button" id="btnResetView" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Đặt lại góc nhìn (Reset 100% Zoom & Pan - Phím 0 / R)" aria-label="Đặt lại góc nhìn">
-                            <i class="bi bi-arrow-counterclockwise"></i>
+                        <button type="button" id="btnResetView" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Đặt lại toàn bộ (Zoom, Pan & Xoay - Phím 0)" aria-label="Đặt lại góc nhìn">
+                            <i class="bi bi-arrow-repeat"></i>
                             <span class="d-none d-sm-inline small">Đặt lại</span>
                         </button>
                     </div>
@@ -850,7 +864,7 @@
                     </div>
                     <div class="d-flex gap-2 align-items-center">
                         <span class="text-white-50 small me-2 d-none d-lg-inline">
-                            <i class="bi bi-arrows-move me-1"></i>Cuộn chuột để thu phóng, kéo chuột để di chuyển
+                            <i class="bi bi-arrows-move me-1"></i>Cuộn chuột để thu phóng, kéo chuột để di chuyển, phím [ / ] để xoay ảnh
                         </span>
                         <a id="lightboxDownloadBtn" href="#" download class="btn btn-sm btn-outline-light">
                             <i class="bi bi-download me-1"></i> Tải ảnh
