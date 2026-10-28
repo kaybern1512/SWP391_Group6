@@ -1288,6 +1288,7 @@ public class AppointmentService : IAppointmentService
         var scheduledDentistIds = await _dbContext.DentistWorkSchedules
             .AsNoTracking()
             .Where(ws => candidateIds.Contains(ws.DentistUserId) &&
+                         ws.DepartmentId == deptId &&
                          ws.WorkDate == targetDateOnly &&
                          ws.Status == "Scheduled" &&
                          ws.StartTime <= startTimeOnly &&

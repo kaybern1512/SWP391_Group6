@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -41,6 +41,7 @@ public class ReportService : IReportService
 
         var query = _dbContext.Invoices
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
@@ -58,7 +59,7 @@ public class ReportService : IReportService
             query = query.Where(i => i.Appointment.DepartmentId == departmentId.Value);
         }
 
-        var invoices = await query.OrderByDescending(i => i.CreatedAt).ToListAsync(ct);
+        var invoices = await query.OrderByDescending(i => i.CreatedAt).ThenBy(i => i.InvoiceId).ToListAsync(ct);
 
         var totalRevenue = invoices.Sum(i => i.TotalAmount);
         var totalPaid = invoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" || p.Status == "Paid" || p.Status == "Completed").Sum(p => p.Amount);
@@ -124,7 +125,7 @@ public class ReportService : IReportService
             }
         }
 
-        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().FirstOrDefaultAsync(ct);
+        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().OrderBy(c => c.ClinicId).FirstOrDefaultAsync(ct);
         var invoiceDtos = invoices.Select(i => MapToInvoiceDto(i, clinic)).ToList();
 
         var report = new RevenueReportDto

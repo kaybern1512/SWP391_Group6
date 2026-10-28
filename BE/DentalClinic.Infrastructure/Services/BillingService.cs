@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -75,7 +75,7 @@ public class BillingService : IBillingService
         var staffExists = await _dbContext.StaffProfiles.AnyAsync(s => s.UserId == staffUserId, ct);
         if (!staffExists)
         {
-            var defaultStaff = await _dbContext.StaffProfiles.FirstOrDefaultAsync(ct);
+            var defaultStaff = await _dbContext.StaffProfiles.OrderBy(s => s.UserId).FirstOrDefaultAsync(ct);
             if (defaultStaff != null)
             {
                 validStaffUserId = defaultStaff.UserId;
@@ -274,6 +274,7 @@ public class BillingService : IBillingService
     {
         var invoice = await _dbContext.Invoices
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
@@ -289,7 +290,7 @@ public class BillingService : IBillingService
         if (invoice == null)
             return ApiResponse<InvoiceDto>.Fail("Không tìm thấy thông tin hóa đơn.");
 
-        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().FirstOrDefaultAsync(ct);
+        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().OrderBy(c => c.ClinicId).FirstOrDefaultAsync(ct);
         var dto = MapToInvoiceDto(invoice, clinic);
         return ApiResponse<InvoiceDto>.Ok(dto);
     }
@@ -298,6 +299,7 @@ public class BillingService : IBillingService
     {
         var invoice = await _dbContext.Invoices
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
@@ -313,7 +315,7 @@ public class BillingService : IBillingService
         if (invoice == null)
             return ApiResponse<InvoiceDto>.Fail("Ca khám chưa có hóa đơn.");
 
-        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().FirstOrDefaultAsync(ct);
+        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().OrderBy(c => c.ClinicId).FirstOrDefaultAsync(ct);
         var dto = MapToInvoiceDto(invoice, clinic);
         return ApiResponse<InvoiceDto>.Ok(dto);
     }
@@ -327,6 +329,7 @@ public class BillingService : IBillingService
     {
         var query = _dbContext.Invoices
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
@@ -369,9 +372,10 @@ public class BillingService : IBillingService
 
         var list = await query
             .OrderByDescending(i => i.CreatedAt)
+            .ThenBy(i => i.InvoiceId)
             .ToListAsync(ct);
 
-        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().FirstOrDefaultAsync(ct);
+        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().OrderBy(c => c.ClinicId).FirstOrDefaultAsync(ct);
         var dtos = list.Select(i => MapToInvoiceDto(i, clinic)).ToList();
         return ApiResponse<List<InvoiceDto>>.Ok(dtos);
     }
@@ -380,6 +384,7 @@ public class BillingService : IBillingService
     {
         var list = await _dbContext.Invoices
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
@@ -392,9 +397,10 @@ public class BillingService : IBillingService
                 .ThenInclude(a => a.Department)
             .Where(i => i.Appointment.PatientUserId == patientUserId)
             .OrderByDescending(i => i.CreatedAt)
+            .ThenBy(i => i.InvoiceId)
             .ToListAsync(ct);
 
-        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().FirstOrDefaultAsync(ct);
+        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().OrderBy(c => c.ClinicId).FirstOrDefaultAsync(ct);
         var dtos = list.Select(i => MapToInvoiceDto(i, clinic)).ToList();
         return ApiResponse<List<InvoiceDto>>.Ok(dtos);
     }

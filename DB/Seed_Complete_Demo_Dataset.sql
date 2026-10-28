@@ -1,4 +1,4 @@
--- ============================================================================
+﻿-- ============================================================================
 -- SCRIPT: Seed_Complete_Demo_Dataset.sql
 -- TARGET: DentalClinicManagementDB
 -- PURPOSE: Bo du lieu hoan chinh 30 tai khoan & day du kich ban lam sang,

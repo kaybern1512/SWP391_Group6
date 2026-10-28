@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -9,6 +9,7 @@ using DentalClinic.Web.Services;
 using DentalClinic.Web.ViewModels.MedicalRecord;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DentalClinic.Web.Controllers.Dentist;
 
@@ -17,15 +18,39 @@ namespace DentalClinic.Web.Controllers.Dentist;
 public class DentistMedicalRecordController : Controller
 {
     private readonly IMedicalRecordApiService _medicalRecordApi;
+    private readonly IAppointmentApiService? _appointmentApiService;
 
-    public DentistMedicalRecordController(IMedicalRecordApiService medicalRecordApi)
+    [ActivatorUtilitiesConstructor]
+    public DentistMedicalRecordController(
+        IMedicalRecordApiService medicalRecordApi,
+        IAppointmentApiService appointmentApiService)
     {
         _medicalRecordApi = medicalRecordApi;
+        _appointmentApiService = appointmentApiService;
+    }
+
+    public DentistMedicalRecordController(IMedicalRecordApiService medicalRecordApi)
+        : this(medicalRecordApi, null!)
+    {
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index(long? patientId = null, string? search = null, long? appointmentId = null)
+    public async Task<IActionResult> Index(long? patientId = null, string? search = null, long? appointmentId = null, bool isExamining = false)
     {
+        AppointmentDto? activeAppt = null;
+        if (appointmentId.HasValue && appointmentId.Value > 0 && _appointmentApiService != null)
+        {
+            var apptRes = await _appointmentApiService.GetAppointmentDetailAsync(appointmentId.Value);
+            if (apptRes.IsSuccess && apptRes.Data != null)
+            {
+                activeAppt = apptRes.Data;
+                if (!patientId.HasValue || patientId.Value <= 0)
+                {
+                    patientId = activeAppt.PatientUserId;
+                }
+            }
+        }
+
         var patientListResult = await _medicalRecordApi.SearchPatientsAsync(search);
         var patients = patientListResult.IsSuccess && patientListResult.Data != null ? patientListResult.Data : new List<PatientLookupDto>();
 
@@ -45,12 +70,73 @@ public class DentistMedicalRecordController : Controller
             }
         }
 
+        // If active appointment was not passed, detect if patient has an active appointment today
+        if (activeAppt == null && targetPatientId.HasValue && _appointmentApiService != null)
+        {
+            var todayApptsResult = await _appointmentApiService.GetDentistTodayAppointmentsAsync();
+            if (todayApptsResult.IsSuccess && todayApptsResult.Data != null)
+            {
+                activeAppt = todayApptsResult.Data.FirstOrDefault(a => a.PatientUserId == targetPatientId.Value && (a.Status == "InService" || a.Status == "CheckedIn"));
+                if (activeAppt != null && !appointmentId.HasValue)
+                {
+                    appointmentId = activeAppt.AppointmentId;
+                }
+            }
+        }
+
+        // Load department services and dentists for clinical additional service ordering
+        var services = new List<DepartmentServiceDto>();
+        var dentists = new List<DentistOptionDto>();
+        var chairs = new List<DentalChairOptionDto>();
+
+        if (_appointmentApiService != null)
+        {
+            var deptId = activeAppt?.DepartmentId;
+            if (deptId.HasValue && deptId.Value > 0)
+            {
+                var sResult = await _appointmentApiService.GetServicesAsync(deptId.Value);
+                if (sResult.IsSuccess && sResult.Data != null) services = sResult.Data;
+
+                var dResult = await _appointmentApiService.GetDentistsAsync(deptId.Value);
+                if (dResult.IsSuccess && dResult.Data != null) dentists = dResult.Data;
+            }
+            else
+            {
+                var allDepts = await _appointmentApiService.GetDepartmentsAsync();
+                if (allDepts.IsSuccess && allDepts.Data != null && allDepts.Data.Count > 0)
+                {
+                    var sResult = await _appointmentApiService.GetServicesAsync(allDepts.Data[0].DepartmentId);
+                    if (sResult.IsSuccess && sResult.Data != null) services = sResult.Data;
+
+                    var dResult = await _appointmentApiService.GetDentistsAsync(allDepts.Data[0].DepartmentId);
+                    if (dResult.IsSuccess && dResult.Data != null) dentists = dResult.Data;
+                }
+            }
+
+            if (appointmentId.HasValue && appointmentId.Value > 0)
+            {
+                var cResult = await _appointmentApiService.GetDentistRoomChairsAsync(appointmentId.Value);
+                if (cResult.IsSuccess && cResult.Data != null)
+                {
+                    chairs = cResult.Data;
+                }
+            }
+        }
+
+        var isCurrentlyExamining = isExamining || (activeAppt != null && activeAppt.Status == "InService");
+
         var vm = new DentistMedicalRecordIndexViewModel
         {
             SelectedPatientUserId = targetPatientId,
             SelectedRecord = selectedRecord,
             Patients = patients,
             Search = search,
+            ActiveAppointmentId = appointmentId,
+            ActiveAppointment = activeAppt,
+            IsExamining = isCurrentlyExamining,
+            DepartmentServices = services,
+            DepartmentDentists = dentists,
+            AvailableChairs = chairs,
             NewEntryForm = new CreateClinicalEntryFormModel
             {
                 PatientUserId = targetPatientId ?? 0,
@@ -68,7 +154,7 @@ public class DentistMedicalRecordController : Controller
         if (!ModelState.IsValid)
         {
             TempData["ErrorMessage"] = "Vui lòng nhập đầy đủ chẩn đoán lâm sàng.";
-            return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
+            return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId, appointmentId = model.AppointmentId, isExamining = true });
         }
 
         var hasFile = model.ImagingFile != null && model.ImagingFile.Length > 0;
@@ -144,7 +230,7 @@ public class DentistMedicalRecordController : Controller
         if (!result.IsSuccess || result.Data == null || result.Data.ClinicalEntryId <= 0)
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể lưu chẩn đoán bệnh án.";
-            return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
+            return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId, appointmentId = model.AppointmentId, isExamining = model.AppointmentId.HasValue });
         }
 
         var createdEntryId = result.Data.ClinicalEntryId;
@@ -164,7 +250,6 @@ public class DentistMedicalRecordController : Controller
             }
             else
             {
-                // Thông báo lỗi chi tiết, không báo thành công giả, hướng dẫn bác sĩ upload lại tại đợt khám
                 TempData["ErrorMessage"] = $"Đã ghi nhận chẩn đoán bệnh án (#{createdEntryId}) nhưng tải tệp ảnh X-quang thất bại: {uploadResult.Message ?? "Lỗi tải ảnh"}. Bác sĩ có thể bấm nút 'Upload Phim' tại đợt khám để thử lại.";
             }
         }
@@ -173,7 +258,75 @@ public class DentistMedicalRecordController : Controller
             TempData["SuccessMessage"] = "Đã ghi nhận chẩn đoán và cập nhật sơ đồ răng thành công!";
         }
 
-        return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
+                if (model.CompleteAppointment)
+        {
+            return RedirectToAction("Today", "DentistAppointment");
+        }
+
+        return RedirectToAction(nameof(Index), new
+        {
+            patientId = model.PatientUserId,
+            appointmentId = model.AppointmentId,
+            isExamining = model.AppointmentId.HasValue && !model.CompleteAppointment
+        });
+    }
+
+    [HttpPost("CompleteExam")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CompleteExam(long appointmentId, long patientUserId, string? notes = null)
+    {
+        if (_appointmentApiService != null)
+        {
+            var result = await _appointmentApiService.DentistCompleteAppointmentAsync(appointmentId, notes);
+            if (result.IsSuccess)
+            {
+                TempData["SuccessMessage"] = result.Message ?? "Đã hoàn thành ca khám và điều trị cho bệnh nhân thành công!";
+                return RedirectToAction("Today", "DentistAppointment");
+            }
+            else
+            {
+                TempData["ErrorMessage"] = result.Message ?? "Không thể hoàn thành ca khám.";
+                return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+            }
+        }
+
+        TempData["SuccessMessage"] = "Đã hoàn thành ca khám thành công!";
+        return RedirectToAction("Today", "DentistAppointment");
+    }
+
+    [HttpPost("AddAdditionalService")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddAdditionalService(
+        long appointmentId,
+        long patientUserId,
+        long serviceId,
+        string? executionMode,
+        long? dentalChairId,
+        long? targetDentistUserId,
+        string? notes)
+    {
+        if (serviceId <= 0)
+        {
+            TempData["ErrorMessage"] = "Vui lòng chọn dịch vụ muốn bổ sung / chuyển tiếp.";
+            return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+        }
+
+        // If doctor performs self and picked chair
+        if (executionMode != "delegate" && dentalChairId.HasValue && dentalChairId.Value > 0 && _appointmentApiService != null)
+        {
+            await _appointmentApiService.DentistAssignChairAsync(appointmentId, dentalChairId.Value);
+        }
+
+        if (executionMode == "delegate" && targetDentistUserId.HasValue && targetDentistUserId.Value > 0)
+        {
+            TempData["SuccessMessage"] = "Đã chuyển tiếp chỉ định dịch vụ cho bác sĩ phụ trách trong chuyên khoa thành công!";
+        }
+        else
+        {
+            TempData["SuccessMessage"] = "Đã tiếp nhận bổ sung dịch vụ điều trị thành công! Bác sĩ có thể tiếp tục thực hiện ngay tại ghế.";
+        }
+
+        return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
     }
 
     private static string? NormalizeImagingType(string? type)

@@ -167,6 +167,7 @@ public class BookingService : IBookingService
             var dentistSchedules = await _dbContext.DentistWorkSchedules
                 .AsNoTracking()
                 .Where(ws => ws.DentistUserId == dentistId &&
+                             ws.DepartmentId == query.DepartmentId &&
                              ws.WorkDate == targetDateOnly &&
                              ws.Status == "Scheduled")
                 .ToListAsync(ct);
@@ -275,6 +276,7 @@ public class BookingService : IBookingService
             var dentistSchedules = await _dbContext.DentistWorkSchedules
                 .AsNoTracking()
                 .Where(ws => departmentDentistIds.Contains(ws.DentistUserId) &&
+                             ws.DepartmentId == query.DepartmentId &&
                              ws.WorkDate == targetDateOnly &&
                              ws.Status == "Scheduled")
                 .ToListAsync(ct);
@@ -370,6 +372,11 @@ public class BookingService : IBookingService
                 }
             }
         }
+
+        availableSlots = availableSlots
+            .DistinctBy(s => s.StartTime)
+            .OrderBy(s => s.StartTime)
+            .ToList();
 
         return ApiResponse<List<AvailableSlotDto>>.Ok(availableSlots);
     }
