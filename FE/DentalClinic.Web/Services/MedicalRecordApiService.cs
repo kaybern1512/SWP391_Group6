@@ -84,10 +84,10 @@ public class MedicalRecordApiService : IMedicalRecordApiService
         }
 
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-        var allowedExts = new[] { ".jpg", ".jpeg", ".png", ".webp", ".dcm" };
+        var allowedExts = new[] { ".jpg", ".jpeg", ".png", ".webp", ".dcm", ".dicom" };
         if (!allowedExts.Contains(ext))
         {
-            return ApiResult<ImagingRecordMetadataDto>.Failure("Định dạng tệp không được hỗ trợ. Chỉ chấp nhận .jpg, .jpeg, .png, .webp, .dcm.", statusCode: 400);
+            return ApiResult<ImagingRecordMetadataDto>.Failure("Định dạng tệp không được hỗ trợ. Chỉ chấp nhận .jpg, .jpeg, .png, .webp, .dcm, .dicom.", statusCode: 400);
         }
 
         if (string.IsNullOrWhiteSpace(imagingType))

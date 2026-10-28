@@ -50,6 +50,9 @@ public class CreateClinicalEntryFormModel
 
     [Display(Name = "Đường dẫn file ảnh phim")]
     public string? ImagingFileUrl { get; set; }
+
+    [Display(Name = "Tập tin phim X-quang đính kèm")]
+    public IFormFile? ImagingFile { get; set; }
 }
 
 public class UploadDentalImagingFormModel

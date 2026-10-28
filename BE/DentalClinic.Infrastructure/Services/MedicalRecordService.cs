@@ -12,6 +12,7 @@ using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace DentalClinic.Infrastructure.Services;
@@ -19,7 +20,7 @@ namespace DentalClinic.Infrastructure.Services;
 public class MedicalRecordService : IMedicalRecordService
 {
     private readonly DentalClinicDbContext _dbContext;
-    private readonly IImageStorageService? _imageStorageService;
+    private readonly IMedicalImagingStorageService? _imagingStorageService;
     private readonly IDentalImageFileValidator _fileValidator;
     private readonly ILogger<MedicalRecordService> _logger;
 
@@ -36,8 +37,21 @@ public class MedicalRecordService : IMedicalRecordService
     public MedicalRecordService(
         DentalClinicDbContext dbContext,
         ILogger<MedicalRecordService> logger)
-        : this(dbContext, null, null, logger)
+        : this(dbContext, (IMedicalImagingStorageService?)null, null, logger)
     {
+    }
+
+    [ActivatorUtilitiesConstructor]
+    public MedicalRecordService(
+        DentalClinicDbContext dbContext,
+        IMedicalImagingStorageService? imagingStorageService,
+        IDentalImageFileValidator? fileValidator,
+        ILogger<MedicalRecordService> logger)
+    {
+        _dbContext = dbContext;
+        _imagingStorageService = imagingStorageService;
+        _fileValidator = fileValidator ?? new DentalImageFileValidator();
+        _logger = logger;
     }
 
     public MedicalRecordService(
@@ -45,11 +59,14 @@ public class MedicalRecordService : IMedicalRecordService
         IImageStorageService? imageStorageService,
         IDentalImageFileValidator? fileValidator,
         ILogger<MedicalRecordService> logger)
+        : this(
+            dbContext,
+            imageStorageService is IMedicalImagingStorageService mis
+                ? mis
+                : (imageStorageService != null ? new MedicalImagingStorageServiceAdapter(imageStorageService) : null),
+            fileValidator,
+            logger)
     {
-        _dbContext = dbContext;
-        _imageStorageService = imageStorageService;
-        _fileValidator = fileValidator ?? new DentalImageFileValidator();
-        _logger = logger;
     }
 
     public async Task<ApiResponse<MedicalRecordDto>> GetMedicalRecordByPatientIdAsync(long patientUserId, CancellationToken ct = default)
@@ -543,7 +560,7 @@ public class MedicalRecordService : IMedicalRecordService
         }
 
         // 6. Upload file through storage service
-        if (_imageStorageService == null)
+        if (_imagingStorageService == null)
         {
             _logger.LogError("Image storage service is not configured or resolved.");
             return ApiResponse<ImagingRecordMetadataDto>.Fail("Dịch vụ lưu trữ hình ảnh chưa sẵn sàng.");
@@ -553,7 +570,7 @@ public class MedicalRecordService : IMedicalRecordService
         try
         {
             var subFolder = $"entry_{entry.ClinicalEntryId}";
-            uploadResult = await _imageStorageService.UploadDentalImageAsync(request.File, subFolder, ct);
+            uploadResult = await _imagingStorageService.UploadDentalImageAsync(request.File, subFolder, ct);
         }
         catch (Exception ex)
         {
@@ -595,7 +612,7 @@ public class MedicalRecordService : IMedicalRecordService
             {
                 try
                 {
-                    await _imageStorageService.DeleteDentalImageAsync(uploadResult.PublicId, CancellationToken.None);
+                    await _imagingStorageService.DeleteDentalImageAsync(uploadResult.PublicId, CancellationToken.None);
                 }
                 catch (Exception cleanupEx)
                 {
@@ -847,12 +864,12 @@ public class MedicalRecordService : IMedicalRecordService
             return ApiResponse<DentalImageStreamResult>.Fail("Bản ghi hình ảnh không có liên kết tệp hợp lệ.");
         }
 
-        if (_imageStorageService == null)
+        if (_imagingStorageService == null)
         {
             return ApiResponse<DentalImageStreamResult>.Fail("Dịch vụ lưu trữ hình ảnh chưa sẵn sàng.");
         }
 
-        var stream = await _imageStorageService.GetImageStreamAsync(img.FileUrl, ct);
+        var stream = await _imagingStorageService.GetImageStreamAsync(img.FileUrl, ct);
         if (stream == null)
         {
             return ApiResponse<DentalImageStreamResult>.Fail("Không thể tải luồng dữ liệu hình ảnh từ hệ thống lưu trữ.");
@@ -940,7 +957,7 @@ public class MedicalRecordService : IMedicalRecordService
         // 2. Storage asset cleanup
         if (!string.IsNullOrWhiteSpace(img.FileUrl))
         {
-            if (_imageStorageService == null)
+            if (_imagingStorageService == null)
             {
                 _logger.LogError("Image storage service is not configured for deleting ImagingRecord {Id}", imagingRecordId);
                 return ApiResponse<bool>.Fail("Dịch vụ lưu trữ hình ảnh chưa sẵn sàng để xóa tệp an toàn.");
@@ -950,7 +967,7 @@ public class MedicalRecordService : IMedicalRecordService
             {
                 try
                 {
-                    var deleted = await _imageStorageService.DeleteDentalImageAsync(publicId!, ct);
+                    var deleted = await _imagingStorageService.DeleteDentalImageAsync(publicId!, ct);
                     if (!deleted)
                     {
                         _logger.LogWarning("Storage provider failed to delete asset with public ID {PublicId} for ImagingRecord {Id}", publicId, imagingRecordId);
@@ -990,7 +1007,7 @@ public class MedicalRecordService : IMedicalRecordService
     }
 
     /// <summary>
-    /// Safely extracts Cloudinary public ID only if it strictly matches the dental imaging path convention
+    /// Safely extracts Local URI or Cloudinary public ID only if it strictly matches the dental imaging path convention
     /// for the specific clinical entry, ensuring no unintended files of other entries or patients are deleted.
     /// </summary>
     public static bool TryExtractDentalImagingPublicId(string? fileUrl, long clinicalEntryId, out string? publicId)
@@ -1001,33 +1018,79 @@ public class MedicalRecordService : IMedicalRecordService
             return false;
         }
 
+        // 1. Local reference pattern: local://medical-imaging/entry_{clinicalEntryId}/...
+        var localPrefix = $"local://medical-imaging/entry_{clinicalEntryId}/";
+        if (fileUrl.StartsWith(localPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            publicId = fileUrl;
+            return true;
+        }
+
+        // 2. Cloudinary pattern: .../dental-clinic/medical-imaging/entry_{clinicalEntryId}/...
         var expectedPrefix = $"dental-clinic/medical-imaging/entry_{clinicalEntryId}/";
         var index = fileUrl.IndexOf(expectedPrefix, StringComparison.OrdinalIgnoreCase);
-        if (index < 0)
+        if (index >= 0)
         {
-            return false;
-        }
-
-        var path = fileUrl.Substring(index);
-
-        var qIdx = path.IndexOf('?');
-        if (qIdx >= 0)
-        {
-            path = path.Substring(0, qIdx);
-        }
-
-        var lastSlash = path.LastIndexOf('/');
-        if (lastSlash >= 0)
-        {
-            var fileName = path.Substring(lastSlash + 1);
-            var dotIdx = fileName.LastIndexOf('.');
-            if (dotIdx > 0)
+            var path = fileUrl.Substring(index);
+            var qIdx = path.IndexOf('?');
+            if (qIdx >= 0)
             {
-                path = path.Substring(0, lastSlash + 1 + dotIdx);
+                path = path.Substring(0, qIdx);
             }
+
+            var lastSlash = path.LastIndexOf('/');
+            if (lastSlash >= 0)
+            {
+                var fileName = path.Substring(lastSlash + 1);
+                var dotIdx = fileName.LastIndexOf('.');
+                if (dotIdx > 0)
+                {
+                    path = path.Substring(0, lastSlash + 1 + dotIdx);
+                }
+            }
+
+            publicId = path;
+            return true;
         }
 
-        publicId = path;
-        return true;
+        return false;
     }
+}
+
+/// <summary>
+/// Internal adapter that allows existing IImageStorageService instances to satisfy IMedicalImagingStorageService.
+/// </summary>
+internal class MedicalImagingStorageServiceAdapter : IMedicalImagingStorageService
+{
+    private readonly IImageStorageService _inner;
+
+    public MedicalImagingStorageServiceAdapter(IImageStorageService inner)
+    {
+        _inner = inner;
+    }
+
+    public string StorageProviderName => "Adapter";
+
+    public bool IsLocalReference(string? fileUrl) =>
+        fileUrl != null && fileUrl.StartsWith(LocalImageStorageService.SchemePrefix, StringComparison.OrdinalIgnoreCase);
+
+    public Task<DentalImageUploadResult> UploadDentalImageAsync(
+        Stream fileStream,
+        string originalFileName,
+        string contentType,
+        string? subFolder = null,
+        CancellationToken ct = default)
+        => _inner.UploadDentalImageAsync(fileStream, originalFileName, contentType, subFolder, ct);
+
+    public Task<DentalImageUploadResult> UploadDentalImageAsync(
+        DentalImageFileInput file,
+        string? subFolder = null,
+        CancellationToken ct = default)
+        => _inner.UploadDentalImageAsync(file, subFolder, ct);
+
+    public Task<bool> DeleteDentalImageAsync(string fileReferenceOrPublicId, CancellationToken ct = default)
+        => _inner.DeleteDentalImageAsync(fileReferenceOrPublicId, ct);
+
+    public Task<Stream?> GetImageStreamAsync(string fileUrl, CancellationToken ct = default)
+        => _inner.GetImageStreamAsync(fileUrl, ct);
 }

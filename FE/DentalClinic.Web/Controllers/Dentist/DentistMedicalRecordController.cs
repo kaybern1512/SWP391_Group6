@@ -71,6 +71,33 @@ public class DentistMedicalRecordController : Controller
             return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
         }
 
+        var hasFile = model.ImagingFile != null && model.ImagingFile.Length > 0;
+        var normalizedImagingType = NormalizeImagingType(model.ImagingType);
+
+        // Pre-validate file before creating clinical entry
+        if (hasFile)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedImagingType))
+            {
+                TempData["ErrorMessage"] = "Vui lòng chọn loại phim X-quang khi đính kèm tệp ảnh.";
+                return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
+            }
+
+            if (model.ImagingFile!.Length > 15 * 1024 * 1024)
+            {
+                TempData["ErrorMessage"] = "Dung lượng tệp phim không được vượt quá 15 MB.";
+                return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
+            }
+
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".dcm", ".dicom" };
+            var ext = Path.GetExtension(model.ImagingFile.FileName).ToLowerInvariant();
+            if (!allowedExtensions.Contains(ext))
+            {
+                TempData["ErrorMessage"] = "Định dạng tệp không được hỗ trợ. Chỉ chấp nhận JPG, JPEG, PNG hoặc DICOM (.dcm, .dicom).";
+                return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
+            }
+        }
+
         var toothConditions = new List<ToothConditionInput>();
         if (!string.IsNullOrWhiteSpace(model.ToothConditionsJson))
         {
@@ -101,27 +128,63 @@ public class DentistMedicalRecordController : Controller
             ToothConditions = toothConditions
         };
 
-        if (!string.IsNullOrWhiteSpace(model.ImagingType))
+        // Phân biệt: Nếu KHÔNG đính kèm file nhưng có chọn loại phim -> tạo chỉ định chụp chờ thực hiện
+        if (!hasFile && !string.IsNullOrWhiteSpace(normalizedImagingType))
         {
             req.ImagingOrders.Add(new CreateImagingRecordRequest
             {
-                ImagingType = model.ImagingType.Trim(),
+                ImagingType = normalizedImagingType,
                 ResultSummary = model.ImagingResultSummary?.Trim(),
-                FileUrl = model.ImagingFileUrl?.Trim()
+                FileUrl = null
             });
         }
 
+        // Bước 1: Lưu ClinicalEntry trước để lấy ID hợp lệ (không tạo bản ghi giả hay gán URL thủ công)
         var result = await _medicalRecordApi.CreateClinicalEntryAsync(req);
-        if (result.IsSuccess)
+        if (!result.IsSuccess || result.Data == null || result.Data.ClinicalEntryId <= 0)
         {
-            TempData["SuccessMessage"] = "Đã ghi nhận chẩn đoán và cập nhật sơ đồ răng thành công!";
+            TempData["ErrorMessage"] = result.Message ?? "Không thể lưu chẩn đoán bệnh án.";
+            return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
+        }
+
+        var createdEntryId = result.Data.ClinicalEntryId;
+
+        // Bước 2: Nếu có đính kèm file ảnh, gọi API upload chuyên dụng với ID đợt khám vừa tạo
+        if (hasFile)
+        {
+            var uploadResult = await _medicalRecordApi.UploadImagingRecordAsync(
+                createdEntryId,
+                model.ImagingFile!,
+                normalizedImagingType!,
+                model.ImagingResultSummary?.Trim());
+
+            if (uploadResult.IsSuccess)
+            {
+                TempData["SuccessMessage"] = "Đã ghi nhận chẩn đoán và tải lên phim X-quang thành công!";
+            }
+            else
+            {
+                // Thông báo lỗi chi tiết, không báo thành công giả, hướng dẫn bác sĩ upload lại tại đợt khám
+                TempData["ErrorMessage"] = $"Đã ghi nhận chẩn đoán bệnh án (#{createdEntryId}) nhưng tải tệp ảnh X-quang thất bại: {uploadResult.Message ?? "Lỗi tải ảnh"}. Bác sĩ có thể bấm nút 'Upload Phim' tại đợt khám để thử lại.";
+            }
         }
         else
         {
-            TempData["ErrorMessage"] = result.Message ?? "Không thể lưu chẩn đoán bệnh án.";
+            TempData["SuccessMessage"] = "Đã ghi nhận chẩn đoán và cập nhật sơ đồ răng thành công!";
         }
 
         return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
+    }
+
+    private static string? NormalizeImagingType(string? type)
+    {
+        if (string.IsNullOrWhiteSpace(type)) return null;
+        var t = type.Trim();
+        if (t.Contains("Panorama", StringComparison.OrdinalIgnoreCase)) return "Panorama";
+        if (t.Contains("Periapical", StringComparison.OrdinalIgnoreCase) || t.Contains("chóp", StringComparison.OrdinalIgnoreCase)) return "Periapical";
+        if (t.Contains("Cephalometric", StringComparison.OrdinalIgnoreCase) || t.Contains("sọ nghiêng", StringComparison.OrdinalIgnoreCase)) return "Cephalometric";
+        if (t.Contains("Intraoral", StringComparison.OrdinalIgnoreCase) || t.Contains("miệng", StringComparison.OrdinalIgnoreCase)) return "Intraoral";
+        return t;
     }
 
     [HttpPost("UploadImaging")]
