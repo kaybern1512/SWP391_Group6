@@ -2,6 +2,22 @@
 @{
     var post = Model.Post;
     ViewData["Title"] = $"{post.Title} - Nha Khoa DentalCare";
+    var embedVideoUrl = post.VideoUrl;
+    if (!string.IsNullOrWhiteSpace(embedVideoUrl))
+    {
+        if (embedVideoUrl.Contains("watch?v="))
+        {
+            var vIdx = embedVideoUrl.IndexOf("watch?v=");
+            var vid = embedVideoUrl.Substring(vIdx + 8).Split('&')[0];
+            embedVideoUrl = $"https://www.youtube.com/embed/{vid}";
+        }
+        else if (embedVideoUrl.Contains("youtu.be/"))
+        {
+            var vIdx = embedVideoUrl.IndexOf("youtu.be/");
+            var vid = embedVideoUrl.Substring(vIdx + 9).Split('?')[0];
+            embedVideoUrl = $"https://www.youtube.com/embed/{vid}";
+        }
+    }
 }
 
 <div class="blog-detail-container pb-5">
@@ -85,7 +101,7 @@
                 @if (post.VideoUrl.Contains("youtube.com") || post.VideoUrl.Contains("youtu.be"))
                 {
                     <div class="ratio ratio-16x9 rounded-4 overflow-hidden shadow-sm border">
-                        <iframe src="@post.VideoUrl" title="@post.Title" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                        <iframe src="@embedVideoUrl" title="@post.Title" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
                     </div>
                 }
                 else

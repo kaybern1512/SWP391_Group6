@@ -166,13 +166,13 @@ public class DentistMedicalRecordController : Controller
             if (string.IsNullOrWhiteSpace(normalizedImagingType))
             {
                 TempData["ErrorMessage"] = "Vui lòng chọn loại phim X-quang khi đính kèm tệp ảnh.";
-                return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
+                return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId, appointmentId = model.AppointmentId, isExamining = model.AppointmentId.HasValue });
             }
 
             if (model.ImagingFile!.Length > 15 * 1024 * 1024)
             {
                 TempData["ErrorMessage"] = "Dung lượng tệp phim không được vượt quá 15 MB.";
-                return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
+                return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId, appointmentId = model.AppointmentId, isExamining = model.AppointmentId.HasValue });
             }
 
             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".dcm", ".dicom" };
@@ -180,7 +180,7 @@ public class DentistMedicalRecordController : Controller
             if (!allowedExtensions.Contains(ext))
             {
                 TempData["ErrorMessage"] = "Định dạng tệp không được hỗ trợ. Chỉ chấp nhận JPG, JPEG, PNG hoặc DICOM (.dcm, .dicom).";
-                return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId });
+                return RedirectToAction(nameof(Index), new { patientId = model.PatientUserId, appointmentId = model.AppointmentId, isExamining = model.AppointmentId.HasValue });
             }
         }
 

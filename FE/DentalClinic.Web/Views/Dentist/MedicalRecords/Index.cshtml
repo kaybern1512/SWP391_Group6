@@ -285,7 +285,7 @@
                                 <i class="bi bi-badge-hd me-1 text-danger"></i> Ghế: 
                                 <strong>@(activeAppt.DentalChairName ?? "Chưa gán ghế")</strong>
                             </span>
-                            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 fw-semibold" onclick="openPickChairModal(@activeAppt.AppointmentId, '@(activeAppt.PatientName.Replace("'", "\\'"))', '@(activeAppt.RoomName ?? "")', @(activeAppt.DentalChairId ?? 0))">
+                            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 fw-semibold" onclick="openPickChairModal(@activeAppt.AppointmentId, '@(activeAppt.PatientName?.Replace("'", "\\'") ?? "")', '@(activeAppt.RoomName ?? "")', @(activeAppt.DentalChairId ?? 0))">
                                 <i class="bi bi-pin-map me-1"></i>Chọn/Đổi Ghế
                             </button>
                         </div>
@@ -300,7 +300,7 @@
                         <a asp-controller="DentistPrescription" asp-action="Index" asp-route-search="@record.PatientCode" class="btn btn-outline-success btn-sm bg-white shadow-sm" title="Kê đơn thuốc điện tử">
                             <i class="bi bi-capsule me-1"></i> Kê Đơn Thuốc
                         </a>
-                        <button type="button" class="btn btn-danger btn-sm fw-bold shadow-sm" onclick="openCompleteExamModal(@activeAppt.AppointmentId, '@(record.PatientName.Replace("'", "\\'"))', '@activeAppt.AppointmentCode')">
+                        <button type="button" class="btn btn-danger btn-sm fw-bold shadow-sm" onclick="openCompleteExamModal(@activeAppt.AppointmentId, '@(record.PatientName?.Replace("'", "\\'") ?? "")', '@activeAppt.AppointmentCode')">
                             <i class="bi bi-check-circle-fill me-1"></i> Hoàn Thành Ca Khám
                         </button>
                     </div>
@@ -1750,8 +1750,7 @@
                 });
             }
 
-        // Initialize Odontogram view on page load
-        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize Odontogram view on page load
             switchOdontogramVisit('all');
         });
     </script>
