@@ -141,18 +141,32 @@
                                     {
                                         <div class="text-success small fw-semibold d-flex align-items-center gap-1 mt-1">
                                             <i class="bi bi-check-circle"></i> Ghế: @appt.DentalChairName
-                                            <button type="button" class="btn btn-link p-0 text-muted ms-1" style="font-size: 0.75rem;" title="Đổi ghế khác" onclick="openPickChairModal(@appt.AppointmentId, '@appt.PatientName', '@(appt.RoomName ?? "")', @appt.DentalChairId.Value)">
-                                                <i class="bi bi-arrow-repeat"></i>
-                                            </button>
+                                            @if (appt.Status != "Completed" && appt.Status != "Cancelled")
+                                            {
+                                                <button type="button" class="btn btn-link p-0 text-muted ms-1" style="font-size: 0.75rem;" title="Đổi ghế khác" onclick="openPickChairModal(@appt.AppointmentId, '@appt.PatientName', '@(appt.RoomName ?? "")', @appt.DentalChairId.Value)">
+                                                    <i class="bi bi-arrow-repeat"></i>
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted ms-1 small" title="Ca khám đã hoàn tất, vị trí ghế đã được khóa"><i class="bi bi-lock-fill"></i></span>
+                                            }
                                         </div>
                                     }
                                     else
                                     {
-                                        <div class="mt-1">
-                                            <button type="button" class="btn btn-sm btn-outline-warning text-dark py-0 px-2 d-inline-flex align-items-center gap-1 shadow-sm" style="font-size: 0.78rem;" onclick="openPickChairModal(@appt.AppointmentId, '@appt.PatientName', '@(appt.RoomName ?? "")', 0)">
-                                                <i class="bi bi-pin-map text-warning"></i> <strong>Pick Ghế</strong>
-                                            </button>
-                                        </div>
+                                        @if (appt.Status != "Completed" && appt.Status != "Cancelled")
+                                        {
+                                            <div class="mt-1">
+                                                <button type="button" class="btn btn-sm btn-outline-warning text-dark py-0 px-2 d-inline-flex align-items-center gap-1 shadow-sm" style="font-size: 0.78rem;" onclick="openPickChairModal(@appt.AppointmentId, '@appt.PatientName', '@(appt.RoomName ?? "")', 0)">
+                                                    <i class="bi bi-pin-map text-warning"></i> <strong>Pick Ghế</strong>
+                                                </button>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="text-muted small mt-1"><em>(Chưa gán ghế)</em></div>
+                                        }
                                     }
                                 </td>
                                 <td style="max-width: 220px;">

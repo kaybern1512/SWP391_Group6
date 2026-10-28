@@ -2157,6 +2157,11 @@ public class AppointmentService : IAppointmentService
             return ApiResponse.Fail("Không tìm thấy thông tin lịch hẹn.");
         }
 
+        if (appt.Status == AppointmentStatus.Completed || appt.Status == AppointmentStatus.Cancelled)
+        {
+            return ApiResponse.Fail("Ca khám đã hoàn tất hoặc đã hủy, vị trí ghế điều trị đã được khóa và không thể thay đổi.");
+        }
+
         if (appt.AssignedDentistUserId != dentistUserId)
         {
             return ApiResponse.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");

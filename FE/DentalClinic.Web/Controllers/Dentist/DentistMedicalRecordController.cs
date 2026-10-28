@@ -123,7 +123,8 @@ public class DentistMedicalRecordController : Controller
             }
         }
 
-        var isCurrentlyExamining = isExamining || (activeAppt != null && activeAppt.Status == "InService");
+        var isCompleted = activeAppt != null && (activeAppt.Status == "Completed" || activeAppt.Status == "Cancelled");
+        var isCurrentlyExamining = !isCompleted && (isExamining || (activeAppt != null && activeAppt.Status == "InService"));
 
         var vm = new DentistMedicalRecordIndexViewModel
         {
@@ -314,7 +315,11 @@ public class DentistMedicalRecordController : Controller
         // If doctor performs self and picked chair
         if (executionMode != "delegate" && dentalChairId.HasValue && dentalChairId.Value > 0 && _appointmentApiService != null)
         {
-            await _appointmentApiService.DentistAssignChairAsync(appointmentId, dentalChairId.Value);
+            var apptDetail = await _appointmentApiService.GetAppointmentDetailAsync(appointmentId);
+            if (apptDetail?.Data != null && apptDetail.Data.Status != "Completed" && apptDetail.Data.Status != "Cancelled")
+            {
+                await _appointmentApiService.DentistAssignChairAsync(appointmentId, dentalChairId.Value);
+            }
         }
 
         if (executionMode == "delegate" && targetDentistUserId.HasValue && targetDentistUserId.Value > 0)
