@@ -1,0 +1,70 @@
+/* ==========================================================================
+   DentalCare - Medical Imaging Viewer Styles (Day 01: Zoom In / Out)
+   ========================================================================== */
+
+.imaging-viewport {
+    background: #000000 !important;
+    min-height: 440px;
+    height: 72vh;
+    max-height: 75vh;
+    overflow: hidden;
+    position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.imaging-stage {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+}
+
+.imaging-viewer-img {
+    max-height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+    transform-origin: center center;
+    transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    pointer-events: auto;
+}
+
+/* Zoom Toolbar Styling */
+.imaging-zoom-toolbar {
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.imaging-zoom-toolbar .btn {
+    color: #e2e8f0;
+    transition: all 0.15s ease;
+}
+
+.imaging-zoom-toolbar .btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    color: #38bdf8;
+    transform: translateY(-1px);
+}
+
+.imaging-zoom-toolbar .btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+#zoomPercentageBadge {
+    min-width: 58px;
+    text-align: center;
+    font-size: 0.8rem;
+    letter-spacing: 0.02em;
+    background: rgba(0, 0, 0, 0.6) !important;
+    border: 1px solid rgba(56, 189, 248, 0.4) !important;
+    color: #38bdf8 !important;
+}

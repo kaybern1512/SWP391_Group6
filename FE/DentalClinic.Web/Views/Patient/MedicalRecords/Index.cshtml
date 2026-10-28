@@ -5,6 +5,10 @@
     var record = Model.Record;
 }
 
+@section Styles {
+    <link rel="stylesheet" href="~/css/medical-imaging-viewer.css" asp-append-version="true" />
+}
+
 <style>
     .odontogram-wrapper {
         background: #f8fafc;
@@ -396,21 +400,44 @@
             </div>
         </div>
 
-        <!-- Modal Phóng To Ảnh X-Quang Cho Bệnh Nhân (Lightbox - Commit 19) -->
+        <!-- Modal Phóng To Ảnh X-Quang Cho Bệnh Nhân (Lightbox - Commit 19 & Day 01: Zoom In / Zoom Out) -->
         <div class="modal fade" id="imagingLightboxModal" tabindex="-1" aria-labelledby="imagingLightboxModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
             <div class="modal-dialog modal-xl modal-dialog-centered">
                 <div class="modal-content bg-dark text-white border-0 shadow-lg overflow-hidden">
-                    <div class="modal-header border-secondary border-opacity-50 py-2 px-3 bg-dark">
+                    <div class="modal-header border-secondary border-opacity-50 py-2 px-3 bg-dark d-flex flex-wrap align-items-center justify-content-between gap-2">
                         <div class="d-flex align-items-center gap-2">
                             <i class="bi bi-aspect-ratio text-info fs-5"></i>
                             <span class="badge bg-primary text-white px-2 py-1" id="lightboxTypeBadge">X-Quang</span>
                             <span class="text-white-50 small ms-2" id="lightboxDate"></span>
                         </div>
+
+                        <!-- Medical Imaging Zoom Toolbar (Day 01) -->
+                        <div class="imaging-zoom-toolbar btn-toolbar d-flex align-items-center gap-1 px-2 py-1" role="toolbar" aria-label="Thanh công cụ thu phóng X-quang">
+                            <button type="button" id="btnZoomOut" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Thu nhỏ (-)" aria-label="Thu nhỏ">
+                                <i class="bi bi-dash-lg"></i>
+                            </button>
+                            <span id="zoomPercentageBadge" class="badge font-monospace px-2 py-1" title="Tỷ lệ thu phóng hiện tại" aria-live="polite">
+                                100%
+                            </span>
+                            <button type="button" id="btnZoomIn" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Phóng to (+)" aria-label="Phóng to">
+                                <i class="bi bi-plus-lg"></i>
+                            </button>
+                            <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
+                            <button type="button" id="btnFitScreen" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Vừa khung nhìn (Fit to Screen - Phím F)" aria-label="Vừa khung nhìn">
+                                <i class="bi bi-arrows-angle-contract"></i>
+                                <span class="d-none d-sm-inline small">Vừa khung</span>
+                            </button>
+                            <button type="button" id="btnResetView" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Đặt lại góc nhìn (Reset 100% - Phím 0 / R)" aria-label="Đặt lại góc nhìn">
+                                <i class="bi bi-arrow-counterclockwise"></i>
+                                <span class="d-none d-sm-inline small">Đặt lại</span>
+                            </button>
+                        </div>
+
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng (Esc)"></button>
                     </div>
-                    <div class="modal-body p-0 position-relative d-flex justify-content-center align-items-center bg-black" style="min-height: 420px; max-height: 75vh; overflow: hidden;">
+                    <div id="imagingViewport" class="modal-body p-0 position-relative d-flex justify-content-center align-items-center bg-black imaging-viewport" style="min-height: 440px; height: 72vh; max-height: 75vh; overflow: hidden; user-select: none;">
                         <!-- Loading State -->
-                        <div id="lightboxLoadingSpinner" class="position-absolute d-flex flex-column align-items-center justify-content-center text-white">
+                        <div id="lightboxLoadingSpinner" class="position-absolute d-flex flex-column align-items-center justify-content-center text-white" style="z-index: 10;">
                             <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
                                 <span class="visually-hidden">Đang tải phim X-quang...</span>
                             </div>
@@ -418,18 +445,20 @@
                         </div>
 
                         <!-- Error State -->
-                        <div id="lightboxErrorAlert" class="p-4 text-center text-warning d-none">
+                        <div id="lightboxErrorAlert" class="p-4 text-center text-warning d-none" style="z-index: 10;">
                             <i class="bi bi-exclamation-triangle-fill fs-1 text-warning mb-2 d-block"></i>
                             <h6 class="text-white">Không thể hiển thị ảnh phóng to</h6>
                             <p class="small text-white-50 mb-0">Tệp ảnh có thể đã bị xóa hoặc phiên truy cập đã hết hạn. Vui lòng thử tải lại trang.</p>
                         </div>
 
-                        <!-- Large Image (Aspect Ratio Preserved) -->
-                        <img id="lightboxImage"
-                             src=""
-                             class="img-fluid d-none"
-                             style="max-height: 75vh; max-width: 100%; object-fit: contain;"
-                             alt="Phóng to phim X-quang nha khoa" />
+                        <!-- Image Stage & Viewer Image -->
+                        <div id="imagingStage" class="imaging-stage">
+                            <img id="lightboxImage"
+                                 src=""
+                                 class="img-fluid d-none imaging-viewer-img"
+                                 alt="Phóng to phim X-quang nha khoa"
+                                 draggable="false" />
+                        </div>
                     </div>
                     <div class="modal-footer border-secondary border-opacity-50 py-2 px-3 justify-content-between bg-dark">
                         <div class="text-start flex-grow-1 me-3">
@@ -437,6 +466,9 @@
                             <div id="lightboxResultSummary" class="text-white-50 small text-wrap"></div>
                         </div>
                         <div class="d-flex gap-2 align-items-center">
+                            <span class="text-white-50 small me-2 d-none d-lg-inline">
+                                <i class="bi bi-mouse me-1"></i>Cuộn chuột hoặc bấm +/- để thu phóng
+                            </span>
                             <a id="lightboxDownloadBtn" href="#" download class="btn btn-sm btn-outline-light">
                                 <i class="bi bi-download me-1"></i> Tải ảnh
                             </a>
@@ -460,6 +492,7 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/medical-imaging-viewer.js" asp-append-version="true"></script>
     <script>
         let lightboxModalInstance = null;
 
@@ -499,6 +532,9 @@
                 imgEl.onload = function () {
                     if (spinner) spinner.classList.add('d-none');
                     imgEl.classList.remove('d-none');
+                    if (window.MedicalImagingViewer) {
+                        window.MedicalImagingViewer.resetView();
+                    }
                 };
                 imgEl.onerror = function () {
                     if (spinner) spinner.classList.add('d-none');
@@ -512,6 +548,10 @@
                     keyboard: true,
                     backdrop: true
                 });
+            }
+            if (window.MedicalImagingViewer) {
+                window.MedicalImagingViewer.init();
+                window.MedicalImagingViewer.resetView();
             }
             lightboxModalInstance.show();
         }
