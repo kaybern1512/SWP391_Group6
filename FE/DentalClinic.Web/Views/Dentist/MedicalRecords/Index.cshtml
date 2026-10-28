@@ -3,6 +3,8 @@
 @{
     ViewData["Title"] = "Hồ Sơ Bệnh Án & Sơ Đồ Răng (EMR)";
     var record = Model.SelectedRecord;
+    var activeAppt = Model.ActiveAppointment;
+    var isExamining = Model.IsExamining;
 }
 
 <style>
@@ -10,28 +12,36 @@
     .odontogram-wrapper {
         background: #f8fafc;
         border-radius: 12px;
-        padding: 20px;
+        padding: 18px 12px;
         border: 1px solid #e2e8f0;
+        overflow-x: auto;
     }
     .arch-container {
         display: flex;
         justify-content: center;
-        gap: 6px;
-        flex-wrap: wrap;
-        margin-bottom: 12px;
+        align-items: center;
+        gap: 3px;
+        flex-wrap: nowrap !important;
+        min-width: 720px;
+        margin: 0 auto 6px auto;
+        padding: 2px 0;
     }
     .quadrant-group {
         display: flex;
-        gap: 5px;
+        gap: 3px;
+        flex-shrink: 0;
     }
     .quadrant-divider {
-        width: 2px;
-        background: #cbd5e1;
-        margin: 0 8px;
+        width: 3px;
+        height: 64px;
+        background: #94a3b8;
+        border-radius: 2px;
+        margin: 0 6px;
+        flex-shrink: 0;
     }
     .tooth-card {
         width: 44px;
-        height: 65px;
+        min-height: 70px;
         background: #ffffff;
         border: 2px solid #cbd5e1;
         border-radius: 8px;
@@ -39,67 +49,142 @@
         flex-direction: column;
         align-items: center;
         justify-content: space-between;
-        padding: 4px 2px;
+        padding: 4px 2px 3px 2px;
         cursor: pointer;
         transition: all 0.2s ease;
         position: relative;
+        user-select: none;
+        flex-shrink: 0;
     }
     .tooth-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.12);
         border-color: #0284c7;
     }
     .tooth-number {
-        font-size: 0.75rem;
+        font-size: 0.78rem;
         font-weight: 700;
         color: #1e293b;
+        line-height: 1;
     }
     .tooth-icon {
-        font-size: 1.1rem;
+        font-size: 1.15rem;
+        line-height: 1;
+        margin: 2px 0;
     }
     .tooth-status-tag {
-        font-size: 0.55rem;
+        font-size: 0.58rem;
         font-weight: 700;
         padding: 1px 2px;
-        border-radius: 3px;
-        text-transform: uppercase;
+        border-radius: 4px;
         width: 100%;
+        max-width: 100%;
         text-align: center;
+        line-height: 1.15;
+        white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        white-space: nowrap;
+        box-sizing: border-box;
     }
 
-    /* Tooth Condition Colors */
-    .tooth-healthy { border-color: #94a3b8; }
-    .tooth-healthy .tooth-icon { color: #64748b; }
-    .tooth-healthy .tooth-status-tag { background: #f1f5f9; color: #475569; }
+    /* Distinct Tooth Condition Colors */
+    .tooth-healthy { border-color: #86efac; background: #f0fdf4; }
+    .tooth-healthy .tooth-icon { color: #16a34a; }
+    .tooth-healthy .tooth-status-tag { background: #dcfce7; color: #15803d; }
 
-    .tooth-caries { border-color: #ef4444; background: #fff1f2; }
+    .tooth-caries { border-color: #f87171; background: #fef2f2; box-shadow: 0 0 6px rgba(220, 38, 38, 0.2); }
     .tooth-caries .tooth-icon { color: #dc2626; }
     .tooth-caries .tooth-status-tag { background: #fee2e2; color: #b91c1c; }
 
-    .tooth-filled { border-color: #0284c7; background: #f0f9ff; }
-    .tooth-filled .tooth-icon { color: #0284c7; }
-    .tooth-filled .tooth-status-tag { background: #e0f2fe; color: #0369a1; }
+    .tooth-filled { border-color: #60a5fa; background: #eff6ff; }
+    .tooth-filled .tooth-icon { color: #2563eb; }
+    .tooth-filled .tooth-status-tag { background: #dbeafe; color: #1d4ed8; }
 
-    .tooth-missing { border-color: #64748b; background: #e2e8f0; opacity: 0.6; }
+    .tooth-missing { border-color: #94a3b8; background: #f1f5f9; opacity: 0.75; }
     .tooth-missing .tooth-icon { color: #475569; }
-    .tooth-missing .tooth-status-tag { background: #cbd5e1; color: #334155; }
+    .tooth-missing .tooth-status-tag { background: #e2e8f0; color: #334155; }
 
-    .tooth-crown { border-color: #eab308; background: #fefce8; }
-    .tooth-crown .tooth-icon { color: #ca8a04; }
-    .tooth-crown .tooth-status-tag { background: #fef9c3; color: #a16207; }
+    .tooth-crown { border-color: #fcd34d; background: #fffbeb; }
+    .tooth-crown .tooth-icon { color: #d97706; }
+    .tooth-crown .tooth-status-tag { background: #fef3c7; color: #b45309; }
 
-    .tooth-pulpitis { border-color: #a855f7; background: #faf5ff; }
+    .tooth-pulpitis { border-color: #d8b4fe; background: #faf5ff; }
     .tooth-pulpitis .tooth-icon { color: #9333ea; }
     .tooth-pulpitis .tooth-status-tag { background: #f3e8ff; color: #7e22ce; }
 
-    .tooth-extractionneeded { border-color: #f97316; background: #fff7ed; }
+    .tooth-extractionneeded { border-color: #fdba74; background: #fff7ed; }
     .tooth-extractionneeded .tooth-icon { color: #ea580c; }
     .tooth-extractionneeded .tooth-status-tag { background: #ffedd5; color: #c2410c; }
 
-    /* Imaging Gallery & Lightbox Styles */
+    .tooth-highlighted {
+        transform: scale(1.08) !important;
+        box-shadow: 0 0 12px rgba(2, 132, 199, 0.6) !important;
+        border-width: 3px !important;
+        z-index: 10;
+    }
+
+    /* Interactive Color Legend */
+    .legend-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border-radius: 6px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 1px solid transparent;
+        user-select: none;
+    }
+    .legend-badge:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+    .legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    .badge-healthy { background: #dcfce7; color: #15803d; border-color: #86efac; }
+    .badge-healthy .legend-dot { background: #16a34a; }
+
+    .badge-caries { background: #fee2e2; color: #b91c1c; border-color: #f87171; }
+    .badge-caries .legend-dot { background: #dc2626; }
+
+    .badge-filled { background: #dbeafe; color: #1d4ed8; border-color: #60a5fa; }
+    .badge-filled .legend-dot { background: #2563eb; }
+
+    .badge-missing { background: #e2e8f0; color: #334155; border-color: #94a3b8; }
+    .badge-missing .legend-dot { background: #475569; }
+
+    .badge-crown { background: #fef3c7; color: #b45309; border-color: #fcd34d; }
+    .badge-crown .legend-dot { background: #d97706; }
+
+    .badge-pulpitis { background: #f3e8ff; color: #7e22ce; border-color: #d8b4fe; }
+    .badge-pulpitis .legend-dot { background: #9333ea; }
+
+    .badge-extractionneeded { background: #ffedd5; color: #c2410c; border-color: #fdba74; }
+    .badge-extractionneeded .legend-dot { background: #ea580c; }
+
+    /* Past visit card in sidebar */
+    .visit-card-active {
+        border-left: 4px solid #0284c7 !important;
+        background-color: #f0f9ff !important;
+    }
+
+    @@keyframes pulse-ring {
+        0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.5); }
+        70% { box-shadow: 0 0 0 8px rgba(22, 163, 74, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+    }
+    .animate-pulse {
+        animation: pulse-ring 2s infinite;
+    }
+
+    /* Imaging preview */
     .img-thumbnail-fit {
         object-fit: cover;
         object-position: center;
@@ -108,144 +193,264 @@
     .imaging-preview-container:hover .img-thumbnail-fit {
         transform: scale(1.05);
     }
-    .imaging-zoom-overlay {
-        transition: opacity 0.2s ease;
-        pointer-events: none;
-    }
-    .imaging-preview-container:hover .imaging-zoom-overlay {
-        opacity: 1 !important;
-    }
     .fs-11 { font-size: 0.72rem; }
-    .text-truncate-2 {
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-    }
-    .btn-xs {
-        padding: 0.15rem 0.5rem;
-        font-size: 0.75rem;
-        border-radius: 4px;
-    }
-    .bg-purple-subtle { background-color: #f3e8ff; color: #7e22ce; }
-    .border-purple-subtle { border-color: #d8b4fe !important; }
+    .fs-12 { font-size: 0.78rem; }
+    .fs-13 { font-size: 0.84rem; }
+    .fs-14 { font-size: 0.88rem; }
+    .fs-15 { font-size: 0.95rem; }
 </style>
 
 <div class="container-fluid px-4 py-4">
     <!-- Header -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-3">
         <div>
             <div class="d-flex align-items-center gap-2 mb-1">
                 <span class="badge bg-primary-subtle text-primary fw-medium px-2 py-1 fs-12">
                     <i class="bi bi-journal-medical me-1"></i> Bác sĩ nha khoa
                 </span>
                 <span class="badge bg-light text-muted fw-normal px-2 py-1 fs-12">Clinical EMR & Odontogram</span>
+                @if (isExamining)
+                {
+                    <span class="badge bg-success text-white px-2 py-1 fs-12 animate-pulse">
+                        <i class="bi bi-heart-pulse-fill me-1"></i> Đang trong ca khám trực tiếp
+                    </span>
+                }
             </div>
             <h1 class="h3 fw-bold text-slate-800 mb-0">Hồ Sơ Bệnh Án & Sơ Đồ Răng Điện Tử</h1>
-            <p class="text-muted small mb-0 mt-1">Tra cứu bệnh án, theo dõi tình trạng răng miệng 32 răng và ghi nhận chẩn đoán điều trị</p>
+            <p class="text-muted small mb-0 mt-1">Theo dõi tiền sử lâm sàng, sơ đồ răng theo từng đợt khám và điều trị dịch vụ tại ghế</p>
         </div>
-        @if (record != null)
-        {
-            <button type="button" class="btn btn-primary d-flex align-items-center gap-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCreateClinicalEntry">
-                <i class="bi bi-clipboard2-plus-fill"></i>
-                <span>Ghi Nhận Chẩn Đoán Mới</span>
-            </button>
-        }
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <a asp-controller="DentistAppointment" asp-action="Today" class="btn btn-outline-secondary btn-sm shadow-sm">
+                <i class="bi bi-arrow-left me-1"></i> Về Ca Khám Hôm Nay
+            </a>
+            @if (record != null)
+            {
+                <button type="button" class="btn btn-outline-primary btn-sm shadow-sm" data-bs-toggle="modal" data-bs-target="#modalSwitchPatient">
+                    <i class="bi bi-people me-1"></i> Đổi Bệnh Nhân
+                </button>
+                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center gap-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCreateClinicalEntry">
+                    <i class="bi bi-clipboard2-plus-fill"></i>
+                    <span>Ghi Nhận Chẩn Đoán Mới</span>
+                </button>
+            }
+        </div>
     </div>
 
-
-    <div class="row g-4">
-        <!-- Left: Patient Search & List -->
-        <div class="col-lg-4 col-xl-3">
-            <div class="card border-0 shadow-sm rounded-3">
-                <div class="card-header bg-white border-0 py-3">
-                    <h6 class="fw-bold text-slate-800 mb-2">Tra Cứu Bệnh Nhân</h6>
-                    <form method="get" class="input-group input-group-sm">
-                        <input type="text" name="search" value="@Model.Search" class="form-control" placeholder="Tên, Mã BN, SĐT...">
-                        <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i></button>
-                        @if (!string.IsNullOrEmpty(Model.Search))
-                        {
-                            <a asp-action="Index" class="btn btn-outline-secondary"><i class="bi bi-x-lg"></i></a>
-                        }
-                    </form>
-                </div>
-                <div class="list-group list-group-flush overflow-auto" style="max-height: 650px;">
-                    @if (Model.Patients.Any())
-                    {
-                        foreach (var p in Model.Patients)
-                        {
-                            var isActive = p.PatientUserId == Model.SelectedPatientUserId;
-                            <a asp-action="Index" asp-route-patientId="@p.PatientUserId" asp-route-search="@Model.Search" 
-                               class="list-group-item list-group-item-action p-3 @(isActive ? "active text-white bg-primary border-primary" : "")">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div class="fw-bold @(isActive ? "text-white" : "text-dark")">@p.FullName</div>
-                                    <span class="badge @(isActive ? "bg-white text-primary" : "bg-light text-muted border") fs-11">@p.PatientCode</span>
-                                </div>
-                                <div class="small @(isActive ? "text-white-50" : "text-muted") mt-1">
-                                    <i class="bi bi-telephone me-1"></i>@(p.PhoneNumber ?? "Chưa có SĐT")
-                                </div>
-                                <div class="small @(isActive ? "text-white-50" : "text-muted")">
-                                    <i class="bi bi-gender-ambiguous me-1"></i>@(p.Gender ?? "—") • @(p.DateOfBirth?.ToString("dd/MM/yyyy") ?? "—")
-                                </div>
-                            </a>
-                        }
-                    }
-                    else
-                    {
-                        <div class="text-center py-4 text-muted small">
-                            <i class="bi bi-person-x fs-3 d-block mb-1"></i>
-                            Không tìm thấy bệnh nhân nào.
+    @if (record != null)
+    {
+        <!-- Patient Banner -->
+        <div class="card border-0 shadow-sm rounded-3 mb-3 bg-white p-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-primary-subtle text-primary p-3 rounded-circle fs-3 fw-bold">
+                        <i class="bi bi-person"></i>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <h4 class="fw-bold text-slate-800 mb-0">@record.PatientName</h4>
+                            <span class="badge bg-secondary-subtle text-secondary border">@record.PatientCode</span>
                         </div>
-                    }
+                        <div class="text-muted small mt-1 d-flex flex-wrap gap-3">
+                            <span><i class="bi bi-telephone me-1"></i>@(record.PatientPhone ?? "—")</span>
+                            <span><i class="bi bi-gender-ambiguous me-1"></i>@(record.Gender ?? "—")</span>
+                            <span><i class="bi bi-calendar3 me-1"></i>@(record.DateOfBirth?.ToString("dd/MM/yyyy") ?? "—") (@(record.Age.HasValue ? $"{record.Age} tuổi" : "—"))</span>
+                            <span><i class="bi bi-geo-alt me-1"></i>@(record.Address ?? "—")</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <div class="text-muted small">Ngày mở hồ sơ:</div>
+                    <div class="fw-bold text-dark">@record.CreatedAt.ToString("dd/MM/yyyy")</div>
                 </div>
             </div>
         </div>
 
-        <!-- Right: Medical Record Detail & Odontogram -->
-        <div class="col-lg-8 col-xl-9">
-            @if (record != null)
-            {
-                <!-- Patient Banner -->
-                <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white p-3">
-                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="bg-primary-subtle text-primary p-3 rounded-circle fs-3 fw-bold">
-                                <i class="bi bi-person"></i>
-                            </div>
-                            <div>
-                                <div class="d-flex align-items-center gap-2">
-                                    <h4 class="fw-bold text-slate-800 mb-0">@record.PatientName</h4>
-                                    <span class="badge bg-secondary-subtle text-secondary border">@record.PatientCode</span>
-                                </div>
-                                <div class="text-muted small mt-1 d-flex flex-wrap gap-3">
-                                    <span><i class="bi bi-telephone me-1"></i>@(record.PatientPhone ?? "—")</span>
-                                    <span><i class="bi bi-gender-ambiguous me-1"></i>@(record.Gender ?? "—")</span>
-                                    <span><i class="bi bi-calendar3 me-1"></i>@(record.DateOfBirth?.ToString("dd/MM/yyyy") ?? "—") (@(record.Age.HasValue ? $"{record.Age} tuổi" : "—"))</span>
-                                    <span><i class="bi bi-geo-alt me-1"></i>@(record.Address ?? "—")</span>
-                                </div>
-                            </div>
+        <!-- Live Examination Active Console (when doctor is in active appointment) -->
+        @if (activeAppt != null)
+        {
+            <div class="card border-primary border-2 shadow-sm rounded-3 mb-4 bg-primary-subtle p-3">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-success px-3 py-2 fs-13">
+                                <i class="bi bi-heart-pulse-fill me-1"></i> ĐANG TRONG CA KHÁM
+                            </span>
+                            <span class="fw-bold font-monospace text-dark fs-15">@activeAppt.AppointmentCode</span>
+                            <span class="badge bg-primary text-white">@activeAppt.ServiceName</span>
                         </div>
-                        <div class="text-end">
-                            <div class="text-muted small">Ngày mở hồ sơ:</div>
-                            <div class="fw-bold text-dark">@record.CreatedAt.ToString("dd/MM/yyyy")</div>
+                        <div class="text-dark small mt-2 d-flex align-items-center gap-2 flex-wrap">
+                            <span><i class="bi bi-door-closed me-1 text-primary"></i> Phòng: <strong>@(activeAppt.RoomName ?? "Phòng khám chung")</strong></span>
+                            &bull;
+                            <span>
+                                <i class="bi bi-badge-hd me-1 text-danger"></i> Ghế: 
+                                <strong>@(activeAppt.DentalChairName ?? "Chưa gán ghế")</strong>
+                            </span>
+                            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 fw-semibold" onclick="openPickChairModal(@activeAppt.AppointmentId, '@(activeAppt.PatientName.Replace("'", "\\'"))', '@(activeAppt.RoomName ?? "")', @(activeAppt.DentalChairId ?? 0))">
+                                <i class="bi bi-pin-map me-1"></i>Chọn/Đổi Ghế
+                            </button>
                         </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <button type="button" class="btn btn-primary btn-sm fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCreateClinicalEntry">
+                            <i class="bi bi-pencil-square me-1"></i> Ghi Nhận Khám & Răng
+                        </button>
+                        <button type="button" class="btn btn-warning text-dark btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAddAdditionalService">
+                            <i class="bi bi-plus-circle-fill me-1"></i> Thêm Dịch Vụ / Ghế Làm Tiếp
+                        </button>
+                        <a asp-controller="DentistPrescription" asp-action="Index" asp-route-search="@record.PatientCode" class="btn btn-outline-success btn-sm bg-white shadow-sm" title="Kê đơn thuốc điện tử">
+                            <i class="bi bi-capsule me-1"></i> Kê Đơn Thuốc
+                        </a>
+                        <button type="button" class="btn btn-danger btn-sm fw-bold shadow-sm" onclick="openCompleteExamModal(@activeAppt.AppointmentId, '@(record.PatientName.Replace("'", "\\'"))', '@activeAppt.AppointmentCode')">
+                            <i class="bi bi-check-circle-fill me-1"></i> Hoàn Thành Ca Khám
+                        </button>
                     </div>
                 </div>
+            </div>
+        }
 
-                <!-- Odontogram (32 FDI Teeth Chart) -->
-                <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="row g-4">
+            <!-- Left Column: Patient's Past Clinical Visits History (Hồ sơ các lần khám trước) -->
+            <div class="col-lg-4 col-xl-3">
+                <div class="card border-0 shadow-sm rounded-3">
                     <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
-                        <h5 class="card-title fw-bold text-slate-800 mb-0 d-flex align-items-center gap-2">
-                            <i class="bi bi-grid-3x3-gap-fill text-primary"></i>
-                            <span>Sơ Đồ Răng Khám Bệnh (Odontogram - Hệ FDI)</span>
-                        </h5>
-                        <span class="badge bg-light text-muted border">32 Răng người lớn</span>
+                        <div>
+                            <h6 class="fw-bold text-slate-800 mb-0">
+                                <i class="bi bi-clock-history text-primary me-1"></i> Các Lần Khám Trước
+                            </h6>
+                            <small class="text-muted">@record.ClinicalEntries.Count đợt khám của bệnh nhân</small>
+                        </div>
+                        <button type="button" class="btn btn-xs btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalSwitchPatient" title="Tra cứu bệnh nhân khác">
+                            <i class="bi bi-search"></i>
+                        </button>
                     </div>
-                    <div class="card-body p-4">
+
+                    <div class="list-group list-group-flush overflow-auto p-2" style="max-height: 650px;">
+                        <!-- Button to show Cumulative Odontogram -->
+                        <button type="button" id="btnSideAll" class="list-group-item list-group-item-action p-3 rounded-3 mb-2 border visit-card-active text-start" onclick="switchOdontogramVisit('all')">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-bold text-primary small">
+                                    <i class="bi bi-diagram-3-fill me-1"></i> Hiện Trạng Tổng Thể
+                                </span>
+                                <span class="badge bg-primary text-white fs-11">32 răng</span>
+                            </div>
+                            <div class="small text-muted mt-1">
+                                Tổng hợp tình trạng răng mới nhất qua mọi đợt điều trị.
+                            </div>
+                        </button>
+
+                        @if (record.ClinicalEntries.Any())
+                        {
+                            @for (int idx = 0; idx < record.ClinicalEntries.Count; idx++)
+                            {
+                                var entry = record.ClinicalEntries[idx];
+                                var isLatest = idx == 0;
+                                <button type="button" id="btnSide_@entry.ClinicalEntryId" class="list-group-item list-group-item-action p-3 rounded-3 mb-2 border text-start bg-white" onclick="switchOdontogramVisit('@entry.ClinicalEntryId')">
+                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                        <div class="fw-bold text-dark fs-13">
+                                            <i class="bi bi-calendar2-check text-primary me-1"></i>
+                                            @entry.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+                                        </div>
+                                        @if (isLatest)
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle fs-11">Gần nhất</span>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(entry.AppointmentCode))
+                                    {
+                                        <div class="font-monospace small text-primary mb-1">
+                                            <i class="bi bi-ticket-perforated me-1"></i>@entry.AppointmentCode
+                                        </div>
+                                    }
+                                    <div class="small text-muted">
+                                        BS: <strong>@entry.DentistName</strong>
+                                    </div>
+                                    <div class="small fw-semibold text-dark mt-1 text-truncate" title="@entry.Diagnosis">
+                                        Chẩn đoán: @entry.Diagnosis
+                                    </div>
+
+                                    @if (entry.OdontogramEntries.Any())
+                                    {
+                                        <div class="d-flex flex-wrap gap-1 mt-2">
+                                            @foreach (var t in entry.OdontogramEntries)
+                                            {
+                                                var condBadge = t.Condition.ToLower() switch
+                                                {
+                                                    "caries" => "badge-caries",
+                                                    "filled" => "badge-filled",
+                                                    "missing" => "badge-missing",
+                                                    "crown" => "badge-crown",
+                                                    "pulpitis" => "badge-pulpitis",
+                                                    "extractionneeded" => "badge-extractionneeded",
+                                                    _ => "badge-healthy"
+                                                };
+                                                <span class="legend-badge @condBadge py-0 px-2 fs-11">
+                                                    R@(t.ToothNumber): @t.Condition
+                                                </span>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="text-muted small fst-italic mt-1" style="font-size: 0.72rem;">
+                                            Khám tổng quát, không ghi nhận can thiệp răng.
+                                        </div>
+                                    }
+                                </button>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-center py-4 text-muted small">
+                                <i class="bi bi-journal-x fs-3 d-block mb-1 text-secondary"></i>
+                                Bệnh nhân chưa có lịch sử đợt khám nào trước đây.
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Odontogram (Hệ FDI) & Detailed Visits Timeline -->
+            <div class="col-lg-8 col-xl-9">
+                <!-- Odontogram (32 FDI Teeth Chart) with Interactive Visit Switcher -->
+                <div class="card border-0 shadow-sm rounded-3 mb-4">
+                    <div class="card-header bg-white border-0 py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <h5 class="card-title fw-bold text-slate-800 mb-0 d-flex align-items-center gap-2">
+                                <i class="bi bi-grid-3x3-gap-fill text-primary"></i>
+                                <span>Sơ Đồ Răng Khám Bệnh (Odontogram - Hệ FDI)</span>
+                            </h5>
+                            <small class="text-muted">Theo dõi và phân tích tình trạng răng theo từng lần khám riêng biệt</small>
+                        </div>
+                        <span class="badge bg-light text-muted border px-3 py-2">32 Răng người lớn</span>
+                    </div>
+
+                    <div class="card-body p-4 pt-2">
+                        <!-- Visit Selection Tabs for Odontogram -->
+                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 pb-2 border-bottom">
+                            <div class="btn-group btn-group-sm flex-wrap shadow-sm" role="group" id="visitButtonsGroup">
+                                <button type="button" class="btn btn-primary active" id="btnTop_all" onclick="switchOdontogramVisit('all')">
+                                    <i class="bi bi-diagram-3-fill me-1"></i> Hiện Trạng Tổng Thể
+                                </button>
+                                @foreach (var entry in record.ClinicalEntries)
+                                {
+                                    <button type="button" class="btn btn-outline-primary" id="btnTop_@entry.ClinicalEntryId" onclick="switchOdontogramVisit('@entry.ClinicalEntryId')">
+                                        <i class="bi bi-calendar-event me-1"></i> Đợt @entry.CreatedAt.ToString("dd/MM/yyyy")
+                                    </button>
+                                }
+                            </div>
+                            <span id="odontogramStatusBanner" class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fw-semibold">
+                                Đang hiển thị: Hiện trạng răng tổng thể
+                            </span>
+                        </div>
+
+                        <!-- 32 Teeth Layout Wrapper (Mỗi hàm trên 1 hàng ngang duy nhất) -->
                         <div class="odontogram-wrapper">
-                            <!-- Upper Arch (Hàm Trên) -->
-                            <div class="text-center small fw-bold text-muted mb-2 text-uppercase letter-spacing-1">
-                                <i class="bi bi-arrow-up-circle me-1"></i> Hàm Trên (Maxillary)
+                            <!-- Upper Arch (Hàm Trên: 16 răng trên 1 hàng ngang) -->
+                            <div class="d-flex align-items-center justify-content-between mb-2 px-2">
+                                <span class="small fw-bold text-muted text-uppercase letter-spacing-1">
+                                    <i class="bi bi-arrow-up-circle me-1 text-primary"></i> Hàm Trên (Maxillary)
+                                </span>
+                                <span class="small text-muted fs-11">Phải (Q1: 18 &rarr; 11) &bull; Trái (Q2: 21 &rarr; 28)</span>
                             </div>
                             <div class="arch-container">
                                 <!-- Q1: 18 -> 11 -->
@@ -253,91 +458,112 @@
                                     @for (int i = 18; i >= 11; i--)
                                     {
                                         var tStr = i.ToString();
-                                        var tooth = record.CurrentOdontogram.FirstOrDefault(x => x.ToothNumber == tStr) ?? new OdontogramEntryDto { ToothNumber = tStr, Condition = "Healthy" };
-                                        var condClass = $"tooth-{tooth.Condition.ToLower()}";
-                                        <div class="tooth-card @condClass" title="Răng @tStr: @tooth.Condition @(string.IsNullOrEmpty(tooth.Note) ? "" : $"({tooth.Note})")">
+                                        <div class="tooth-card tooth-healthy" id="toothCard_@tStr" data-tooth="@tStr" title="Răng @tStr: Khỏe mạnh">
                                             <span class="tooth-number">@tStr</span>
-                                            <i class="bi bi-shield-fill tooth-icon"></i>
-                                            <span class="tooth-status-tag">@tooth.Condition</span>
+                                            <i class="bi bi-shield-check tooth-icon" id="toothIcon_@tStr"></i>
+                                            <span class="tooth-status-tag" id="toothTag_@tStr">Khỏe</span>
                                         </div>
                                     }
                                 </div>
-                                <div class="quadrant-divider"></div>
+                                <div class="quadrant-divider" title="Đường chính giữa cung hàm (Midline)"></div>
                                 <!-- Q2: 21 -> 28 -->
                                 <div class="quadrant-group">
                                     @for (int i = 21; i <= 28; i++)
                                     {
                                         var tStr = i.ToString();
-                                        var tooth = record.CurrentOdontogram.FirstOrDefault(x => x.ToothNumber == tStr) ?? new OdontogramEntryDto { ToothNumber = tStr, Condition = "Healthy" };
-                                        var condClass = $"tooth-{tooth.Condition.ToLower()}";
-                                        <div class="tooth-card @condClass" title="Răng @tStr: @tooth.Condition @(string.IsNullOrEmpty(tooth.Note) ? "" : $"({tooth.Note})")">
+                                        <div class="tooth-card tooth-healthy" id="toothCard_@tStr" data-tooth="@tStr" title="Răng @tStr: Khỏe mạnh">
                                             <span class="tooth-number">@tStr</span>
-                                            <i class="bi bi-shield-fill tooth-icon"></i>
-                                            <span class="tooth-status-tag">@tooth.Condition</span>
+                                            <i class="bi bi-shield-check tooth-icon" id="toothIcon_@tStr"></i>
+                                            <span class="tooth-status-tag" id="toothTag_@tStr">Khỏe</span>
                                         </div>
                                     }
                                 </div>
                             </div>
 
-                            <hr class="my-3 text-slate-300" />
+                            <div class="my-3 border-top border-secondary-subtle opacity-50 position-relative">
+                                <span class="position-absolute top-50 start-50 translate-middle bg-slate-100 px-3 py-0 fs-11 text-muted fw-semibold rounded-pill border">
+                                    Mặt Nhai / Khớp Cắn
+                                </span>
+                            </div>
 
-                            <!-- Lower Arch (Hàm Dưới) -->
+                            <!-- Lower Arch (Hàm Dưới: 16 răng trên 1 hàng ngang) -->
                             <div class="arch-container">
                                 <!-- Q4: 48 -> 41 -->
                                 <div class="quadrant-group">
                                     @for (int i = 48; i >= 41; i--)
                                     {
                                         var tStr = i.ToString();
-                                        var tooth = record.CurrentOdontogram.FirstOrDefault(x => x.ToothNumber == tStr) ?? new OdontogramEntryDto { ToothNumber = tStr, Condition = "Healthy" };
-                                        var condClass = $"tooth-{tooth.Condition.ToLower()}";
-                                        <div class="tooth-card @condClass" title="Răng @tStr: @tooth.Condition @(string.IsNullOrEmpty(tooth.Note) ? "" : $"({tooth.Note})")">
+                                        <div class="tooth-card tooth-healthy" id="toothCard_@tStr" data-tooth="@tStr" title="Răng @tStr: Khỏe mạnh">
                                             <span class="tooth-number">@tStr</span>
-                                            <i class="bi bi-shield-fill tooth-icon"></i>
-                                            <span class="tooth-status-tag">@tooth.Condition</span>
+                                            <i class="bi bi-shield-check tooth-icon" id="toothIcon_@tStr"></i>
+                                            <span class="tooth-status-tag" id="toothTag_@tStr">Khỏe</span>
                                         </div>
                                     }
                                 </div>
-                                <div class="quadrant-divider"></div>
+                                <div class="quadrant-divider" title="Đường chính giữa cung hàm (Midline)"></div>
                                 <!-- Q3: 31 -> 38 -->
                                 <div class="quadrant-group">
                                     @for (int i = 31; i <= 38; i++)
                                     {
                                         var tStr = i.ToString();
-                                        var tooth = record.CurrentOdontogram.FirstOrDefault(x => x.ToothNumber == tStr) ?? new OdontogramEntryDto { ToothNumber = tStr, Condition = "Healthy" };
-                                        var condClass = $"tooth-{tooth.Condition.ToLower()}";
-                                        <div class="tooth-card @condClass" title="Răng @tStr: @tooth.Condition @(string.IsNullOrEmpty(tooth.Note) ? "" : $"({tooth.Note})")">
+                                        <div class="tooth-card tooth-healthy" id="toothCard_@tStr" data-tooth="@tStr" title="Răng @tStr: Khỏe mạnh">
                                             <span class="tooth-number">@tStr</span>
-                                            <i class="bi bi-shield-fill tooth-icon"></i>
-                                            <span class="tooth-status-tag">@tooth.Condition</span>
+                                            <i class="bi bi-shield-check tooth-icon" id="toothIcon_@tStr"></i>
+                                            <span class="tooth-status-tag" id="toothTag_@tStr">Khỏe</span>
                                         </div>
                                     }
                                 </div>
                             </div>
-                            <div class="text-center small fw-bold text-muted mt-2 text-uppercase letter-spacing-1">
-                                <i class="bi bi-arrow-down-circle me-1"></i> Hàm Dưới (Mandibular)
+                            <div class="d-flex align-items-center justify-content-between mt-2 px-2">
+                                <span class="small fw-bold text-muted text-uppercase letter-spacing-1">
+                                    <i class="bi bi-arrow-down-circle me-1 text-primary"></i> Hàm Dưới (Mandibular)
+                                </span>
+                                <span class="small text-muted fs-11">Phải (Q4: 48 &rarr; 41) &bull; Trái (Q3: 31 &rarr; 38)</span>
                             </div>
                         </div>
 
-                        <!-- Odontogram Color Legend -->
-                        <div class="d-flex flex-wrap align-items-center justify-content-center gap-3 mt-3 pt-2 text-muted fs-12">
-                            <span class="d-flex align-items-center gap-1"><span class="badge bg-secondary p-1 rounded-circle"></span> Khỏe mạnh</span>
-                            <span class="d-flex align-items-center gap-1"><span class="badge bg-danger p-1 rounded-circle"></span> Sâu răng (Caries)</span>
-                            <span class="d-flex align-items-center gap-1"><span class="badge bg-primary p-1 rounded-circle"></span> Đã trám (Filled)</span>
-                            <span class="d-flex align-items-center gap-1"><span class="badge bg-dark p-1 rounded-circle"></span> Mất răng (Missing)</span>
-                            <span class="d-flex align-items-center gap-1"><span class="badge bg-warning p-1 rounded-circle"></span> Bọc sứ (Crown)</span>
-                            <span class="d-flex align-items-center gap-1"><span class="badge bg-info p-1 rounded-circle"></span> Viêm tủy (Pulpitis)</span>
-                            <span class="d-flex align-items-center gap-1"><span class="badge bg-danger-subtle border border-danger p-1 rounded-circle"></span> Cần nhổ</span>
+                        <!-- Odontogram Color Legend & Counter -->
+                        <div class="p-3 bg-white border rounded-3 mt-3 shadow-sm">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                                <span class="fw-bold text-dark small">
+                                    <i class="bi bi-palette2 me-1 text-primary"></i> Bảng Màu Phân Biệt Tình Trạng Răng (Hệ FDI):
+                                </span>
+                                <span class="text-muted small fs-11">Nhấn vào màu để lọc làm nổi bật các răng tương ứng</span>
+                            </div>
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                <span class="legend-badge badge-healthy" onclick="highlightTeethByCondition('healthy')">
+                                    <span class="legend-dot"></span> Khỏe mạnh (<span id="count-healthy">32</span>)
+                                </span>
+                                <span class="legend-badge badge-caries" onclick="highlightTeethByCondition('caries')">
+                                    <span class="legend-dot"></span> Sâu răng (Caries) (<span id="count-caries">0</span>)
+                                </span>
+                                <span class="legend-badge badge-filled" onclick="highlightTeethByCondition('filled')">
+                                    <span class="legend-dot"></span> Đã trám (Filled) (<span id="count-filled">0</span>)
+                                </span>
+                                <span class="legend-badge badge-missing" onclick="highlightTeethByCondition('missing')">
+                                    <span class="legend-dot"></span> Mất răng (Missing) (<span id="count-missing">0</span>)
+                                </span>
+                                <span class="legend-badge badge-crown" onclick="highlightTeethByCondition('crown')">
+                                    <span class="legend-dot"></span> Bọc sứ (Crown) (<span id="count-crown">0</span>)
+                                </span>
+                                <span class="legend-badge badge-pulpitis" onclick="highlightTeethByCondition('pulpitis')">
+                                    <span class="legend-dot"></span> Viêm tủy (Pulpitis) (<span id="count-pulpitis">0</span>)
+                                </span>
+                                <span class="legend-badge badge-extractionneeded" onclick="highlightTeethByCondition('extractionneeded')">
+                                    <span class="legend-dot"></span> Cần nhổ (<span id="count-extractionneeded">0</span>)
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Clinical Entries History Timeline -->
+                <!-- Detailed Clinical Entries History Timeline -->
                 <div class="card border-0 shadow-sm rounded-3">
                     <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
                         <h5 class="card-title fw-bold text-slate-800 mb-0 d-flex align-items-center gap-2">
-                            <i class="bi bi-clock-history text-primary"></i>
-                            <span>Lịch Sử Khám & Chẩn Đoán Lâm Sàng</span>
-                            <span class="badge bg-secondary-subtle text-secondary rounded-pill fs-12 ms-1">@record.ClinicalEntries.Count đợt khám</span>
+                            <i class="bi bi-journal-text text-primary"></i>
+                            <span>Chi Tiết Lịch Sử Khám & Chẩn Đoán Lâm Sàng</span>
+                            <span class="badge bg-secondary-subtle text-secondary rounded-pill fs-12 ms-1">@record.ClinicalEntries.Count đợt</span>
                         </h5>
                     </div>
                     <div class="card-body p-4 pt-2">
@@ -346,7 +572,7 @@
                             <div class="timeline-container">
                                 @foreach (var entry in record.ClinicalEntries)
                                 {
-                                    <div class="card border rounded-3 p-3 mb-3 bg-light-subtle">
+                                    <div class="card border rounded-3 p-3 mb-3 bg-light-subtle shadow-none" id="entryCard_@entry.ClinicalEntryId">
                                         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2 pb-2 border-bottom">
                                             <div>
                                                 <span class="fw-bold text-dark fs-15">
@@ -354,12 +580,17 @@
                                                 </span>
                                                 <span class="text-muted small ms-2">Bác sĩ: <strong>@entry.DentistName</strong></span>
                                             </div>
-                                            @if (!string.IsNullOrEmpty(entry.AppointmentCode))
-                                            {
-                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
-                                                    <i class="bi bi-ticket-perforated me-1"></i>@entry.AppointmentCode
-                                                </span>
-                                            }
+                                            <div class="d-flex align-items-center gap-2">
+                                                @if (!string.IsNullOrEmpty(entry.AppointmentCode))
+                                                {
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                                        <i class="bi bi-ticket-perforated me-1"></i>@entry.AppointmentCode
+                                                    </span>
+                                                }
+                                                <button type="button" class="btn btn-xs btn-outline-primary" onclick="switchOdontogramVisit('@entry.ClinicalEntryId')">
+                                                    <i class="bi bi-diagram-3 me-1"></i> Xem Sơ Đồ Răng Đợt Này
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <div class="row g-3 fs-14">
@@ -421,76 +652,32 @@
                                                             var isDicom = (!string.IsNullOrEmpty(img.FileUrl) && (img.FileUrl.EndsWith(".dcm", StringComparison.OrdinalIgnoreCase) || img.FileUrl.EndsWith(".dicom", StringComparison.OrdinalIgnoreCase))) ||
                                                                           img.ImagingType.Equals("DICOM", StringComparison.OrdinalIgnoreCase);
                                                             var safeUrl = Url.Action("ImagingContent", "DentistMedicalRecord", new { imagingRecordId = img.ImagingRecordId });
-                                                            var badgeColor = img.ImagingType switch
-                                                            {
-                                                                "Panorama" => "bg-primary-subtle text-primary border-primary-subtle",
-                                                                "Periapical" => "bg-info-subtle text-info border-info-subtle",
-                                                                "Cephalometric" => "bg-purple-subtle text-purple border-purple-subtle",
-                                                                "Intraoral" => "bg-success-subtle text-success border-success-subtle",
-                                                                _ => "bg-secondary-subtle text-secondary border-secondary-subtle"
-                                                            };
 
                                                             <div class="col-6 col-md-4 col-lg-3">
-                                                                <div class="card h-100 border rounded-3 shadow-none overflow-hidden imaging-thumbnail-card bg-white">
+                                                                <div class="card h-100 border rounded-3 shadow-none overflow-hidden bg-white">
                                                                     <div class="d-flex align-items-center justify-content-between px-2 pt-2 pb-1 border-bottom bg-light-subtle">
-                                                                        <span class="badge @badgeColor small text-truncate fw-semibold">
+                                                                        <span class="badge bg-primary-subtle text-primary small text-truncate fw-semibold">
                                                                             <i class="bi bi-film me-1"></i>@img.ImagingType
                                                                         </span>
-                                                                        <span class="text-muted fs-11" title="@img.CreatedAt.ToString("dd/MM/yyyy HH:mm")">
+                                                                        <span class="text-muted fs-11">
                                                                             @img.CreatedAt.ToString("dd/MM/yyyy")
                                                                         </span>
                                                                     </div>
 
                                                                     @if (isDicom)
                                                                     {
-                                                                        <div class="p-3 text-center bg-light d-flex flex-column align-items-center justify-content-center" style="min-height: 140px;">
-                                                                            <i class="bi bi-file-earmark-medical-fill text-primary" style="font-size: 2.2rem;"></i>
-                                                                            <span class="badge bg-primary-subtle text-primary border mt-2 small">DICOM PS 3.10</span>
-                                                                            <span class="text-muted small mt-1" style="font-size: 0.75rem;">Định dạng y tế chuyên dụng</span>
-                                                                            <a href="@safeUrl" class="btn btn-xs btn-outline-primary mt-2" download>
-                                                                                <i class="bi bi-download me-1"></i> Tải file .dcm
-                                                                            </a>
+                                                                        <div class="p-3 text-center bg-light d-flex flex-column align-items-center justify-content-center" style="min-height: 120px;">
+                                                                            <i class="bi bi-file-earmark-medical-fill text-primary" style="font-size: 2rem;"></i>
+                                                                            <span class="badge bg-primary-subtle text-primary border mt-2 small">DICOM</span>
+                                                                            <a href="@safeUrl" class="btn btn-xs btn-outline-primary mt-2" download>Tải file</a>
                                                                         </div>
                                                                     }
                                                                     else
                                                                     {
-                                                                        <div class="imaging-preview-container position-relative bg-dark text-center" style="height: 140px; cursor: pointer;"
-                                                                             onclick="openImagingLightbox('@safeUrl', '@img.ImagingType', '@(img.ResultSummary?.Replace("'", "\\'") ?? "")', '@img.CreatedAt.ToString("dd/MM/yyyy HH:mm")', false)"
-                                                                             title="Nhấn để phóng to xem chi tiết">
-                                                                            <img src="@safeUrl"
-                                                                                 class="w-100 h-100 img-thumbnail-fit"
-                                                                                 alt="@img.ImagingType"
-                                                                                 loading="lazy"
-                                                                                 onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'p-3 text-center text-muted small h-100 d-flex flex-column align-items-center justify-content-center\'><i class=\'bi bi-image-fill fs-2 text-secondary mb-1\'></i> Không thể tải ảnh an toàn</div>';" />
-                                                                            <div class="imaging-zoom-overlay position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center text-white bg-dark bg-opacity-25 opacity-0">
-                                                                                <i class="bi bi-zoom-in fs-4"></i>
-                                                                            </div>
+                                                                        <div class="imaging-preview-container position-relative cursor-pointer" style="height: 130px; overflow: hidden;" onclick="openLightbox('@safeUrl', '@img.ImagingType', '@(img.ResultSummary?.Replace("'", "\\'") ?? "")')">
+                                                                            <img src="@safeUrl" alt="@img.ImagingType" class="w-100 h-100 img-thumbnail-fit" />
                                                                         </div>
                                                                     }
-
-                                                                    <div class="p-2 border-top bg-white flex-grow-1 d-flex flex-column justify-content-between">
-                                                                        <div class="small text-slate-700 text-truncate-2" title="@img.ResultSummary">
-                                                                            <i class="bi bi-chat-left-text me-1 text-muted"></i>
-                                                                            @if (!string.IsNullOrWhiteSpace(img.ResultSummary))
-                                                                            {
-                                                                                <span>@img.ResultSummary</span>
-                                                                            }
-                                                                            else
-                                                                            {
-                                                                                <span class="text-muted fst-italic">Chưa có kết luận</span>
-                                                                            }
-                                                                        </div>
-                                                                        @if (User.IsInRole("Dentist"))
-                                                                        {
-                                                                            <div class="d-flex justify-content-end mt-2 pt-1 border-top border-light">
-                                                                                <button type="button" class="btn btn-xs btn-outline-danger"
-                                                                                        onclick="openDeleteImagingModal(@img.ImagingRecordId, '@(img.ImagingType)', '@(img.CreatedAt.ToString("dd/MM/yyyy HH:mm"))', @(record.PatientUserId))"
-                                                                                        title="Xóa phim X-quang">
-                                                                                    <i class="bi bi-trash3-fill me-1"></i> Xóa
-                                                                                </button>
-                                                                            </div>
-                                                                        }
-                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         }
@@ -498,21 +685,17 @@
                                                 }
                                                 else
                                                 {
-                                                    <div class="text-center py-3 px-2 bg-light-subtle rounded-3 border border-dashed text-muted small my-2">
-                                                        <i class="bi bi-film fs-4 d-block mb-1 text-secondary opacity-50"></i>
+                                                    <div class="text-center py-2 px-2 bg-light rounded-3 text-muted small my-1">
                                                         <span>Chưa có phim X-quang hoặc ảnh răng nào cho ca khám này.</span>
                                                     </div>
                                                 }
                                             </div>
 
-                                            @if (User.IsInRole("Dentist"))
-                                            {
-                                                <div class="col-12 text-end mt-2">
-                                                    <button type="button" class="btn btn-sm btn-outline-primary fw-medium" onclick="openUploadImagingModal(@entry.ClinicalEntryId, '@(entry.Diagnosis?.Replace("'", "\\'") ?? "")')">
-                                                        <i class="bi bi-cloud-arrow-up-fill me-1"></i> Upload Phim X-quang / Ảnh Răng
-                                                    </button>
-                                                </div>
-                                            }
+                                            <div class="col-12 text-end mt-2">
+                                                <button type="button" class="btn btn-sm btn-outline-primary fw-medium" onclick="openUploadImagingModal(@entry.ClinicalEntryId, '@(entry.Diagnosis?.Replace("'", "\\'") ?? "")')">
+                                                    <i class="bi bi-cloud-arrow-up-fill me-1"></i> Upload Phim X-quang / Ảnh Răng
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 }
@@ -527,14 +710,67 @@
                         }
                     </div>
                 </div>
-            }
-            else
-            {
-                <div class="card border-0 shadow-sm rounded-3 p-5 text-center text-muted">
-                    <i class="bi bi-person-lines-fill fs-1 d-block mb-2 text-secondary"></i>
-                    <h5>Vui lòng chọn một bệnh nhân từ danh sách bên trái để xem hồ sơ bệnh án điện tử và sơ đồ răng.</h5>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm rounded-3 p-5 text-center text-muted">
+            <i class="bi bi-person-lines-fill fs-1 d-block mb-2 text-secondary"></i>
+            <h5>Vui lòng chọn một bệnh nhân để xem hồ sơ bệnh án điện tử và sơ đồ răng.</h5>
+            <div class="mt-3">
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalSwitchPatient">
+                    <i class="bi bi-search me-1"></i> Tra Cứu Danh Sách Bệnh Nhân
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- ==================================================== -->
+<!-- MODAL: ĐỔI / TRA CỨU BỆNH NHÂN KHÁC                  -->
+<!-- ==================================================== -->
+<div class="modal fade" id="modalSwitchPatient" tabindex="-1" aria-labelledby="modalSwitchPatientLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-white border-bottom">
+                <h5 class="modal-title fw-bold text-dark" id="modalSwitchPatientLabel">
+                    <i class="bi bi-people text-primary me-2"></i>Chọn Bệnh Nhân Khác
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <form method="get" class="input-group input-group-sm mb-3">
+                    <input type="text" name="search" value="@Model.Search" class="form-control" placeholder="Tìm theo tên, Mã BN, SĐT...">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i></button>
+                </form>
+
+                <div class="list-group overflow-auto" style="max-height: 400px;">
+                    @if (Model.Patients.Any())
+                    {
+                        foreach (var p in Model.Patients)
+                        {
+                            var isActive = p.PatientUserId == Model.SelectedPatientUserId;
+                            <a asp-action="Index" asp-route-patientId="@p.PatientUserId" 
+                               class="list-group-item list-group-item-action p-2 @(isActive ? "active text-white bg-primary" : "")">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="fw-bold">@p.FullName</div>
+                                    <span class="badge @(isActive ? "bg-white text-primary" : "bg-light text-muted border") fs-11">@p.PatientCode</span>
+                                </div>
+                                <div class="small @(isActive ? "text-white-50" : "text-muted")">
+                                    SĐT: @(p.PhoneNumber ?? "N/A") &bull; @(p.Gender ?? "—")
+                                </div>
+                            </a>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-center py-3 text-muted small">
+                            Không tìm thấy bệnh nhân nào.
+                        </div>
+                    }
                 </div>
-            }
+            </div>
         </div>
     </div>
 </div>
@@ -556,17 +792,18 @@
                 <form asp-action="CreateEntry" method="post">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="PatientUserId" value="@record.PatientUserId" />
-                    <input type="hidden" name="AppointmentId" value="@(Model.NewEntryForm?.AppointmentId)" />
+                    <input type="hidden" name="AppointmentId" value="@(Model.ActiveAppointmentId ?? Model.NewEntryForm?.AppointmentId)" />
                     <input type="hidden" id="toothConditionsJsonInput" name="ToothConditionsJson" value="[]" />
 
                     <div class="modal-body p-4">
-                        @if (Model.NewEntryForm?.AppointmentId.HasValue == true)
+                        @if (Model.ActiveAppointmentId.HasValue)
                         {
                             <div class="alert alert-info py-2 px-3 mb-3 small d-flex align-items-center gap-2">
                                 <i class="bi bi-calendar2-check-fill text-primary"></i>
-                                <span>Đang ghi nhận chẩn đoán liên kết ca khám bệnh ID: <strong>#@Model.NewEntryForm.AppointmentId</strong>.</span>
+                                <span>Đang ghi nhận chẩn đoán cho ca khám: <strong>@(activeAppt?.AppointmentCode ?? $"#{Model.ActiveAppointmentId}")</strong>.</span>
                             </div>
                         }
+
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-slate-700">Chẩn đoán chính của bác sĩ <span class="text-danger">*</span></label>
                             <input type="text" name="Diagnosis" class="form-control" placeholder="Ví dụ: Sâu răng mặt nhai R16, Viêm nướu quanh răng R46..." required />
@@ -607,13 +844,10 @@
                                 <div class="col-md-7">
                                     <input type="text" name="ImagingResultSummary" class="form-control form-control-sm" placeholder="Vị trí/mục đích chụp (VD: Khảo sát răng ngầm R48, cuống răng R16...)" />
                                 </div>
-                                <div class="col-12 mt-1">
-                                    <input type="text" name="ImagingFileUrl" class="form-control form-control-sm" placeholder="URL hình ảnh phim chụp nếu đã có sẵn (tùy chọn)" />
-                                </div>
                             </div>
                         </div>
 
-                        <!-- Interactive Tooth Condition Picker for this Entry -->
+                        <!-- Ghi Nhận Răng Có Can Thiệp / Tổn Thương -->
                         <div class="border rounded-3 p-3 bg-light mb-3">
                             <label class="form-label fw-bold text-slate-800 d-flex justify-content-between align-items-center mb-2">
                                 <span><i class="bi bi-tools me-1 text-primary"></i> Ghi Nhận Răng Có Tổn Thương / Thủ Thuật:</span>
@@ -625,19 +859,6 @@
                                 <!-- Dynamic rows added by JS -->
                             </div>
                         </div>
-
-                        @if (Model.NewEntryForm?.AppointmentId.HasValue == true)
-                        {
-                            <div class="form-check form-switch p-2 bg-light rounded border">
-                                <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="completeAppointmentSwitch" name="CompleteAppointment" value="true">
-                                <label class="form-check-label fw-semibold text-slate-800" for="completeAppointmentSwitch">
-                                    Đánh dấu hoàn thành toàn bộ ca khám này
-                                </label>
-                                <div class="text-muted small ms-4">
-                                    (Để trống nếu bác sĩ vẫn đang tư vấn dịch vụ, chỉ định chụp X-quang hoặc chuẩn bị đưa bệnh nhân vào ghế điều trị)
-                                </div>
-                            </div>
-                        }
                     </div>
                     <div class="modal-footer bg-light">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy Bỏ</button>
@@ -650,57 +871,95 @@
         </div>
     </div>
 
-    <!-- Modal Upload Phim X-Quang / Ảnh Răng -->
-    <div class="modal fade" id="modalUploadImaging" tabindex="-1" aria-labelledby="modalUploadImagingLabel" aria-hidden="true">
+    <!-- ==================================================== -->
+    <!-- MODAL: THÊM DỊCH VỤ / GHẾ LÀM TIẾP (SERVICE TRANSITION) -->
+    <!-- ==================================================== -->
+    <div class="modal fade" id="modalAddAdditionalService" tabindex="-1" aria-labelledby="modalAddAdditionalServiceLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title fw-bold" id="modalUploadImagingLabel">
-                        <i class="bi bi-cloud-arrow-up-fill me-2"></i>Upload Phim X-Quang / Ảnh Răng
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title fw-bold" id="modalAddAdditionalServiceLabel">
+                        <i class="bi bi-plus-circle-fill me-2"></i>Chuyển Tiếp Dịch Vụ / Ghế Làm Tiếp
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form id="formUploadImaging" asp-action="UploadImaging" method="post" enctype="multipart/form-data">
+                <form asp-action="AddAdditionalService" method="post">
                     @Html.AntiForgeryToken()
-                    <input type="hidden" id="uploadImagingClinicalEntryId" name="ClinicalEntryId" value="0" />
-                    <input type="hidden" name="PatientUserId" value="@(record.PatientUserId)" />
+                    <input type="hidden" name="AppointmentId" value="@(Model.ActiveAppointmentId ?? 0)" />
+                    <input type="hidden" name="PatientUserId" value="@record.PatientUserId" />
+
                     <div class="modal-body p-4">
-                        <div class="mb-3 p-2 bg-light rounded border">
-                            <label class="form-label fw-semibold text-slate-700 mb-0 small">Đợt khám liên kết:</label>
-                            <div id="uploadImagingDiagnosisPreview" class="fw-bold text-primary small"></div>
+                        <div class="alert alert-light border mb-3 small">
+                            Bệnh nhân: <strong>@record.PatientName</strong> &bull; Ca khám hiện tại: <strong>@(activeAppt?.AppointmentCode ?? "--")</strong>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-semibold text-slate-700">Tệp phim X-quang / ảnh răng <span class="text-danger">*</span></label>
-                            <input type="file" id="uploadImagingFileInput" name="File" class="form-control" accept=".jpg,.jpeg,.png,.dcm,.dicom" required />
-                            <div class="form-text small text-muted">
-                                <i class="bi bi-info-circle me-1"></i>Hỗ trợ JPG, PNG, DICOM (.dcm, .dicom) — Tối đa 15 MB.
-                            </div>
-                            <div id="fileValidationFeedback" class="text-danger small mt-1 d-none"></div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold text-slate-700">Loại phim X-quang <span class="text-danger">*</span></label>
-                            <select id="uploadImagingTypeSelect" name="ImagingType" class="form-select" required>
-                                <option value="">-- Chọn loại phim --</option>
-                                <option value="Panorama">Panorama (Toàn cảnh OPG)</option>
-                                <option value="Periapical">Periapical (Cận chóp / Quanh chóp)</option>
-                                <option value="Cephalometric">Cephalometric (Sọ nghiêng Ceph)</option>
-                                <option value="Intraoral">Intraoral (Ảnh chụp trong miệng)</option>
+                            <label class="form-label fw-semibold">Chọn Dịch Vụ Cần Làm Thêm / Chuyển Tiếp <span class="text-danger">*</span></label>
+                            <select name="serviceId" class="form-select" required>
+                                <option value="">-- Chọn dịch vụ nha khoa --</option>
+                                @foreach (var s in Model.DepartmentServices)
+                                {
+                                    <option value="@s.DepartmentServiceId">@s.ServiceName - @(s.Price.HasValue ? $"{s.Price:N0} đ" : "Theo chẩn đoán") (@(s.DurationMinutes ?? 30) phút)</option>
+                                }
                             </select>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-semibold text-slate-700">Kết luận đọc phim / Mô tả tổn thương</label>
-                            <textarea id="uploadImagingResultSummary" name="ResultSummary" class="form-control" rows="3" placeholder="Ghi nhận cấu trúc xương ổ, cuống răng, nang quanh cuống hoặc hướng mọc của răng..."></textarea>
+                            <label class="form-label fw-semibold">Hình Thức Tiếp Nhận & Phục Vụ <span class="text-danger">*</span></label>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" name="executionMode" id="execSelf" value="self" checked onchange="toggleExecMode()">
+                                <label class="form-check-label fw-bold text-dark" for="execSelf">
+                                    <i class="bi bi-person-check text-success me-1"></i> Bác sĩ tự thực hiện ngay cho bệnh nhân tại ghế
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="executionMode" id="execDelegate" value="delegate" onchange="toggleExecMode()">
+                                <label class="form-check-label fw-bold text-dark" for="execDelegate">
+                                    <i class="bi bi-arrow-left-right text-primary me-1"></i> Chuyển giao cho bác sĩ khác trong chuyên khoa đang rảnh
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Panel: Chọn ghế nếu bác sĩ tự làm -->
+                        <div id="panelChairSelection" class="p-3 bg-light rounded border mb-3">
+                            <label class="form-label fw-semibold small text-muted mb-1">Ghế nha khoa điều trị:</label>
+                            <select name="dentalChairId" class="form-select form-select-sm">
+                                @if (Model.AvailableChairs.Any())
+                                {
+                                    foreach (var c in Model.AvailableChairs)
+                                    {
+                                        var isSelected = activeAppt?.DentalChairId == c.DentalChairId;
+                                        <option value="@c.DentalChairId" selected="@isSelected">Ghế @c.ChairCode @(isSelected ? "(Ghế hiện tại)" : "")</option>
+                                    }
+                                }
+                                else
+                                {
+                                    <option value="0">Ghế hiện tại của ca khám</option>
+                                }
+                            </select>
+                        </div>
+
+                        <!-- Panel: Chọn bác sĩ nếu chuyển giao -->
+                        <div id="panelDentistSelection" class="p-3 bg-light rounded border mb-3" style="display: none;">
+                            <label class="form-label fw-semibold small text-muted mb-1">Bác sĩ tiếp nhận chuyển giao:</label>
+                            <select name="targetDentistUserId" class="form-select form-select-sm">
+                                <option value="">-- Chọn bác sĩ cùng chuyên khoa --</option>
+                                @foreach (var d in Model.DepartmentDentists)
+                                {
+                                    <option value="@d.UserId">@d.FullName - @d.Qualification</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label fw-semibold">Ghi chú & Chỉ định bổ sung:</label>
+                            <textarea name="notes" class="form-control" rows="2" placeholder="Ví dụ: Bệnh nhân muốn cạo vôi răng và đánh bóng sau khi khám..."></textarea>
                         </div>
                     </div>
                     <div class="modal-footer bg-light">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-                        <button type="submit" id="btnSubmitUploadImaging" class="btn btn-primary px-4 fw-medium">
-                            <span id="uploadSpinner" class="spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
-                            <i class="bi bi-cloud-arrow-up-fill me-1" id="uploadIcon"></i>
-                            <span id="uploadBtnText">Upload Phim</span>
+                        <button type="submit" class="btn btn-warning fw-semibold px-4">
+                            <i class="bi bi-check2-circle me-1"></i> Xác Nhận Chuyển Tiếp
                         </button>
                     </div>
                 </form>
@@ -708,92 +967,92 @@
         </div>
     </div>
 
-    <!-- Modal Phóng To Ảnh X-Quang (Lightbox - Commit 16) -->
-    <div class="modal fade" id="imagingLightboxModal" tabindex="-1" aria-labelledby="imagingLightboxModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
-        <div class="modal-dialog modal-xl modal-dialog-centered">
-            <div class="modal-content bg-dark text-white border-0 shadow-lg overflow-hidden">
-                <div class="modal-header border-secondary border-opacity-50 py-2 px-3 bg-dark">
-                    <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-aspect-ratio text-info fs-5"></i>
-                        <span class="badge bg-primary text-white px-2 py-1" id="lightboxTypeBadge">X-Quang</span>
-                        <span class="text-white-50 small ms-2" id="lightboxDate"></span>
-                    </div>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng (Esc)"></button>
+    <!-- ==================================================== -->
+    <!-- MODAL: HOÀN THÀNH CA KHÁM VÀ ĐIỀU TRỊ                -->
+    <!-- ==================================================== -->
+    <div class="modal fade" id="modalCompleteExam" tabindex="-1" aria-labelledby="modalCompleteExamLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold" id="modalCompleteExamLabel">
+                        <i class="bi bi-check-circle-fill me-2"></i>Xác Nhận Hoàn Thành Ca Khám
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body p-0 position-relative d-flex justify-content-center align-items-center bg-black" style="min-height: 420px; max-height: 75vh; overflow: hidden;">
-                    <!-- Loading State -->
-                    <div id="lightboxLoadingSpinner" class="position-absolute d-flex flex-column align-items-center justify-content-center text-white">
-                        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-                            <span class="visually-hidden">Đang tải phim X-quang...</span>
+                <form asp-action="CompleteExam" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="completeAppointmentId" name="appointmentId" value="@(Model.ActiveAppointmentId ?? 0)" />
+                    <input type="hidden" name="patientUserId" value="@record.PatientUserId" />
+
+                    <div class="modal-body p-4">
+                        <div class="alert alert-light border mb-3">
+                            <div class="small text-muted">Mã lịch hẹn: <strong id="completeApptCode" class="font-monospace text-primary">@(activeAppt?.AppointmentCode ?? "--")</strong></div>
+                            <div class="small text-muted">Bệnh nhân: <strong class="text-dark">@record.PatientName</strong></div>
                         </div>
-                        <span class="small text-white-50 mt-2">Đang tải ảnh chuẩn nét...</span>
-                    </div>
 
-                    <!-- Error State -->
-                    <div id="lightboxErrorAlert" class="p-4 text-center text-warning d-none">
-                        <i class="bi bi-exclamation-triangle-fill fs-1 text-warning mb-2 d-block"></i>
-                        <h6 class="text-white">Không thể hiển thị ảnh phóng to</h6>
-                        <p class="small text-white-50 mb-0">Tệp ảnh có thể đã bị xóa hoặc phiên truy cập đã hết hạn. Vui lòng thử tải lại trang.</p>
-                    </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Lời dặn dò bệnh nhân & Kết luận buổi điều trị:</label>
+                            <textarea name="notes" class="form-control" rows="3" placeholder="Nhập lời dặn sau khi điều trị (kiêng ăn uống, vệ sinh răng miệng, tái khám...)..."></textarea>
+                        </div>
 
-                    <!-- Large Image (Aspect Ratio Preserved) -->
-                    <img id="lightboxImage"
-                         src=""
-                         class="img-fluid d-none"
-                         style="max-height: 75vh; max-width: 100%; object-fit: contain;"
-                         alt="Phóng to phim X-quang nha khoa" />
-                </div>
-                <div class="modal-footer border-secondary border-opacity-50 py-2 px-3 justify-content-between bg-dark">
-                    <div class="text-start flex-grow-1 me-3">
-                        <div class="small fw-semibold text-info mb-0"><i class="bi bi-journal-text me-1"></i>Kết luận đọc phim:</div>
-                        <div id="lightboxResultSummary" class="text-white-50 small text-wrap"></div>
+                        <div class="alert alert-warning py-2 small mb-0">
+                            <i class="bi bi-info-circle me-1"></i> Ca khám sẽ được chuyển sang trạng thái <strong>Hoàn thành (Completed)</strong> và giải phóng ghế điều trị.
+                        </div>
                     </div>
-                    <div class="d-flex gap-2 align-items-center">
-                        <a id="lightboxDownloadBtn" href="#" download class="btn btn-sm btn-outline-light">
-                            <i class="bi bi-download me-1"></i> Tải ảnh
-                        </a>
-                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
-                            <i class="bi bi-x-lg me-1"></i> Đóng (Esc)
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Quay Lại</button>
+                        <button type="submit" class="btn btn-danger fw-bold px-4">
+                            <i class="bi bi-check-circle-fill me-1"></i> Hoàn Thành Ca Khám
                         </button>
                     </div>
-                </div>
+                </form>
             </div>
         </div>
     </div>
 
-    <!-- Modal Xác Nhận Xóa Phim X-Quang (Commit 22) -->
-    <div class="modal fade" id="modalDeleteImagingConfirm" tabindex="-1" aria-labelledby="modalDeleteImagingConfirmLabel" aria-hidden="true">
+    <!-- Modal Upload Phim X-Quang -->
+    <div class="modal fade" id="modalUploadImaging" tabindex="-1" aria-labelledby="modalUploadImagingLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow">
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title fw-bold" id="modalDeleteImagingConfirmLabel">
-                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Xác Nhận Xóa Phim X-Quang
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="modalUploadImagingLabel">
+                        <i class="bi bi-cloud-arrow-up-fill me-2"></i>Upload Phim X-quang / Ảnh Răng
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form id="formDeleteImaging" asp-action="DeleteImaging" method="post">
+                <form asp-action="UploadImaging" method="post" enctype="multipart/form-data">
                     @Html.AntiForgeryToken()
-                    <input type="hidden" id="deleteImagingRecordId" name="imagingRecordId" value="0" />
-                    <input type="hidden" id="deleteImagingPatientUserId" name="patientUserId" value="@(record.PatientUserId)" />
+                    <input type="hidden" id="uploadClinicalEntryId" name="ClinicalEntryId" value="0" />
+                    <input type="hidden" name="PatientUserId" value="@record.PatientUserId" />
+
                     <div class="modal-body p-4">
-                        <p class="text-slate-800 mb-3">
-                            Bạn có chắc chắn muốn xóa phim X-quang này khỏi hồ sơ bệnh án không? Thao tác này sẽ gỡ bỏ bản ghi chẩn đoán hình ảnh và tệp liên quan.
-                        </p>
-                        <div class="alert alert-warning py-2 px-3 small border-0 bg-warning-subtle text-dark">
-                            <div><i class="bi bi-info-circle-fill text-warning me-1"></i><strong>Loại phim:</strong> <span id="deleteImagingTypeLabel" class="fw-bold"></span></div>
-                            <div><i class="bi bi-calendar-event me-1"></i><strong>Ngày tạo:</strong> <span id="deleteImagingDateLabel"></span></div>
-                            <div><i class="bi bi-hash me-1"></i><strong>Mã bản ghi:</strong> #<span id="deleteImagingIdLabel"></span></div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Chọn tập tin ảnh / DICOM <span class="text-danger">*</span></label>
+                            <input type="file" name="File" class="form-control" accept=".jpg,.jpeg,.png,.dcm,.dicom" required />
+                            <div class="form-text small">Hỗ trợ JPG, PNG hoặc file y tế DICOM (tối đa 15MB).</div>
                         </div>
-                        <div class="text-muted small fst-italic">
-                            Lưu ý: Chỉ bác sĩ được phân công phụ trách ca khám mới có quyền xóa phim X-quang này.
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Loại phim chụp <span class="text-danger">*</span></label>
+                            <select name="ImagingType" class="form-select" required>
+                                <option value="Panorama">Toàn cảnh Panorama</option>
+                                <option value="Periapical">Cận chóp răng (Periapical)</option>
+                                <option value="Cephalometric">Sọ nghiêng Cephalometric</option>
+                                <option value="Bitewing">Cánh cắn (Bitewing)</option>
+                                <option value="Intraoral">Ảnh chụp trong miệng (Intraoral)</option>
+                                <option value="DICOM">File y tế DICOM chuyên dụng</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Kết luận đọc phim / Mô tả tổn thương</label>
+                            <textarea name="ResultSummary" class="form-control" rows="2" placeholder="Ví dụ: Răng 16 sâu mặt nhai, tiêu xương nhẹ..."></textarea>
                         </div>
                     </div>
                     <div class="modal-footer bg-light">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-                        <button type="submit" id="btnConfirmDeleteImaging" class="btn btn-danger px-4 fw-medium">
-                            <span id="deleteSpinner" class="spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
-                            <i class="bi bi-trash3-fill me-1" id="deleteIcon"></i>
-                            <span id="deleteBtnText">Xác nhận xóa</span>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                        <button type="submit" class="btn btn-primary fw-medium px-4">
+                            <i class="bi bi-upload me-1"></i> Tải Lên Phim
                         </button>
                     </div>
                 </form>
@@ -802,253 +1061,397 @@
     </div>
 }
 
+<!-- Modal Pick Chair (if needed from medical record screen) -->
+<div class="modal fade" id="pickChairModal" tabindex="-1" aria-labelledby="pickChairModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold" id="pickChairModalLabel">
+                    <i class="bi bi-pin-map me-2"></i>Chọn Ghế Nha Khoa Điều Trị
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="pickChairForm" method="post" action="">
+                @Html.AntiForgeryToken()
+                <div class="modal-body p-4">
+                    <div class="alert alert-light border mb-3 small">
+                        Bệnh nhân: <strong id="modalPatientName">--</strong> &bull; Phòng: <strong id="modalRoomName">--</strong>
+                    </div>
+
+                    <div id="chairsLoading" class="text-center py-3">
+                        <div class="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
+                        <span class="text-muted small">Đang tải danh sách ghế...</span>
+                    </div>
+
+                    <div id="chairsContainer" class="d-flex flex-column gap-2" style="display: none;"></div>
+                    <div id="chairsEmpty" class="text-center py-3 text-muted small" style="display: none;">
+                        Không có ghế khả dụng trong phòng này.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" id="btnSubmitPickChair" class="btn btn-primary fw-semibold" disabled>
+                        <i class="bi bi-check2-circle me-1"></i>Xác Nhận Ghế
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Lightbox Modal for Imaging Preview -->
+<div class="modal fade" id="imageLightboxModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 bg-dark text-white">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title fw-bold" id="lightboxTitle">Xem Phim X-Quang</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center p-3">
+                <img id="lightboxImg" src="" alt="Dental Film" class="img-fluid rounded" style="max-height: 75vh; object-fit: contain;" />
+                <div id="lightboxDesc" class="mt-2 text-white-50 small"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
-        let lightboxModalInstance = null;
+        // Data model embedded for odontogram per visit
+        const odontogramData = {
+            all: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(record?.CurrentOdontogram ?? new())),
+            visits: {
+                @if (record != null)
+                {
+                    foreach (var entry in record.ClinicalEntries)
+                    {
+                        <text>
+                        '@entry.ClinicalEntryId': {
+                            date: '@entry.CreatedAt.ToString("dd/MM/yyyy HH:mm")',
+                            code: '@(entry.AppointmentCode ?? $"#{entry.ClinicalEntryId}")',
+                            dentist: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(entry.DentistName ?? "")),
+                            diagnosis: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(entry.Diagnosis ?? "")),
+                            teeth: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(entry.OdontogramEntries))
+                        },
+                        </text>
+                    }
+                }
+            }
+        };
 
-        function openImagingLightbox(imageUrl, imagingType, resultSummary, createdAt, isDicom) {
-            if (isDicom) {
-                return;
+        const conditionMap = {
+            'healthy': { label: 'Khỏe', class: 'tooth-healthy', icon: 'bi-shield-check' },
+            'caries': { label: 'Sâu răng', class: 'tooth-caries', icon: 'bi-exclamation-triangle-fill' },
+            'filled': { label: 'Đã trám', class: 'tooth-filled', icon: 'bi-tools' },
+            'missing': { label: 'Mất răng', class: 'tooth-missing', icon: 'bi-x-octagon-fill' },
+            'crown': { label: 'Bọc sứ', class: 'tooth-crown', icon: 'bi-gem' },
+            'pulpitis': { label: 'Viêm tủy', class: 'tooth-pulpitis', icon: 'bi-fire' },
+            'extractionneeded': { label: 'Cần nhổ', class: 'tooth-extractionneeded', icon: 'bi-slash-circle-fill' }
+        };
+
+        // All 32 FDI teeth numbers
+        const allTeethNumbers = [
+            '18','17','16','15','14','13','12','11',
+            '21','22','23','24','25','26','27','28',
+            '48','47','46','45','44','43','42','41',
+            '31','32','33','34','35','36','37','38'
+        ];
+
+        function switchOdontogramVisit(visitKey) {
+            // Update buttons active states
+            document.querySelectorAll('#visitButtonsGroup button').forEach(b => {
+                b.classList.remove('btn-primary', 'active');
+                b.classList.add('btn-outline-primary');
+            });
+
+            const topBtn = document.getElementById('btnTop_' + visitKey);
+            if (topBtn) {
+                topBtn.classList.remove('btn-outline-primary');
+                topBtn.classList.add('btn-primary', 'active');
             }
 
-            const modalEl = document.getElementById('imagingLightboxModal');
-            if (!modalEl) return;
-
-            const imgEl = document.getElementById('lightboxImage');
-            const spinner = document.getElementById('lightboxLoadingSpinner');
-            const errorAlert = document.getElementById('lightboxErrorAlert');
-            const typeBadge = document.getElementById('lightboxTypeBadge');
-            const dateEl = document.getElementById('lightboxDate');
-            const summaryEl = document.getElementById('lightboxResultSummary');
-            const downloadBtn = document.getElementById('lightboxDownloadBtn');
-
-            // Reset UI states
-            if (imgEl) {
-                imgEl.classList.add('d-none');
-                imgEl.src = '';
-            }
-            if (spinner) spinner.classList.remove('d-none');
-            if (errorAlert) errorAlert.classList.add('d-none');
-
-            if (typeBadge) typeBadge.textContent = imagingType || 'X-Quang';
-            if (dateEl) dateEl.textContent = createdAt ? ('Ngày chụp: ' + createdAt) : '';
-            if (summaryEl) summaryEl.textContent = resultSummary && resultSummary.trim().length > 0 ? resultSummary : 'Chưa có ghi nhận kết luận đọc phim.';
-            if (downloadBtn) {
-                downloadBtn.href = imageUrl;
+            // Update sidebar buttons active states
+            document.querySelectorAll('[id^="btnSide"]').forEach(b => b.classList.remove('visit-card-active'));
+            const sideBtn = document.getElementById('btnSide_' + visitKey) || document.getElementById('btnSideAll');
+            if (sideBtn && visitKey !== 'all') {
+                sideBtn.classList.add('visit-card-active');
+            } else if (visitKey === 'all' && document.getElementById('btnSideAll')) {
+                document.getElementById('btnSideAll').classList.add('visit-card-active');
             }
 
-            // Bind image load events
-            if (imgEl) {
-                imgEl.onload = function () {
-                    if (spinner) spinner.classList.add('d-none');
-                    imgEl.classList.remove('d-none');
-                };
-                imgEl.onerror = function () {
-                    if (spinner) spinner.classList.add('d-none');
-                    if (errorAlert) errorAlert.classList.remove('d-none');
-                };
-                imgEl.src = imageUrl;
+            // Highlight corresponding clinical entry in history
+            document.querySelectorAll('[id^="entryCard_"]').forEach(c => c.classList.remove('border-primary', 'bg-white'));
+            const targetEntryCard = document.getElementById('entryCard_' + visitKey);
+            if (targetEntryCard) {
+                targetEntryCard.classList.add('border-primary', 'bg-white');
+                targetEntryCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
 
-            if (!lightboxModalInstance) {
-                lightboxModalInstance = new bootstrap.Modal(modalEl, {
-                    keyboard: true,
-                    backdrop: true
+            const banner = document.getElementById('odontogramStatusBanner');
+            const counts = {
+                healthy: 0,
+                caries: 0,
+                filled: 0,
+                missing: 0,
+                crown: 0,
+                pulpitis: 0,
+                extractionneeded: 0
+            };
+
+            if (visitKey === 'all') {
+                if (banner) banner.innerHTML = '<i class="bi bi-diagram-3-fill me-1"></i> Đang hiển thị: <strong>Hiện trạng răng tổng thể</strong> (Tất cả đợt khám)';
+
+                // Render cumulative state
+                const toothMap = {};
+                if (odontogramData.all) {
+                    odontogramData.all.forEach(t => {
+                        toothMap[t.ToothNumber] = t;
+                    });
+                }
+
+                allTeethNumbers.forEach(num => {
+                    const t = toothMap[num];
+                    const cond = (t && t.Condition ? t.Condition.toLowerCase() : 'healthy');
+                    applyToothState(num, cond, t ? t.Note : null);
+                    if (counts[cond] !== undefined) counts[cond]++;
+                    else counts.healthy++;
+                });
+            } else {
+                const visit = odontogramData.visits[visitKey];
+                if (visit && banner) {
+                    banner.innerHTML = `<i class="bi bi-calendar2-check-fill me-1"></i> Đang hiển thị: <strong>Sơ đồ đợt khám ngày ${visit.date}</strong> (Mã: <code>${visit.code}</code> - BS: <strong>${visit.dentist}</strong>)`;
+                }
+
+                const visitToothMap = {};
+                if (visit && visit.teeth) {
+                    visit.teeth.forEach(t => {
+                        visitToothMap[t.ToothNumber] = t;
+                    });
+                }
+
+                allTeethNumbers.forEach(num => {
+                    if (visitToothMap[num]) {
+                        const t = visitToothMap[num];
+                        const cond = t.Condition ? t.Condition.toLowerCase() : 'healthy';
+                        applyToothState(num, cond, t.Note);
+                        if (counts[cond] !== undefined) counts[cond]++;
+                    } else {
+                        // In this visit, tooth was not modified / had no interventions
+                        applyToothState(num, 'healthy', 'Không can thiệp trong đợt này');
+                        counts.healthy++;
+                    }
                 });
             }
-            lightboxModalInstance.show();
+
+            // Update counter badges in legend
+            Object.keys(counts).forEach(k => {
+                const counterEl = document.getElementById('count-' + k);
+                if (counterEl) counterEl.innerText = counts[k];
+            });
+        }
+
+        function applyToothState(toothNum, conditionKey, note) {
+            const card = document.getElementById('toothCard_' + toothNum);
+            const icon = document.getElementById('toothIcon_' + toothNum);
+            const tag = document.getElementById('toothTag_' + toothNum);
+
+            if (!card || !icon || !tag) return;
+
+            // Remove existing condition classes
+            card.className = 'tooth-card';
+            icon.className = 'tooth-icon bi';
+
+            const meta = conditionMap[conditionKey] || conditionMap['healthy'];
+            card.classList.add(meta.class);
+            icon.classList.add(meta.icon);
+            tag.innerText = meta.label;
+
+            const noteText = note ? ` (${note})` : '';
+            card.title = `Răng ${toothNum}: ${meta.label}${noteText}`;
+        }
+
+        function highlightTeethByCondition(cond) {
+            allTeethNumbers.forEach(num => {
+                const card = document.getElementById('toothCard_' + num);
+                if (!card) return;
+                const match = card.classList.contains('tooth-' + cond);
+                if (match) {
+                    card.classList.add('tooth-highlighted');
+                    setTimeout(() => card.classList.remove('tooth-highlighted'), 2200);
+                }
+            });
+        }
+
+        function toggleExecMode() {
+            const isDelegate = document.getElementById('execDelegate').checked;
+            document.getElementById('panelChairSelection').style.display = isDelegate ? 'none' : 'block';
+            document.getElementById('panelDentistSelection').style.display = isDelegate ? 'block' : 'none';
+        }
+
+        function openCompleteExamModal(apptId, patientName, apptCode) {
+            document.getElementById('completeAppointmentId').value = apptId;
+            document.getElementById('completeApptCode').innerText = apptCode;
+            const modal = new bootstrap.Modal(document.getElementById('modalCompleteExam'));
+            modal.show();
         }
 
         function openUploadImagingModal(entryId, diagnosis) {
-            document.getElementById('uploadImagingClinicalEntryId').value = entryId;
-            document.getElementById('uploadImagingDiagnosisPreview').textContent = diagnosis || ('Đợt khám #' + entryId);
-            const fileInput = document.getElementById('uploadImagingFileInput');
-            if (fileInput) fileInput.value = '';
-            const typeSelect = document.getElementById('uploadImagingTypeSelect');
-            if (typeSelect) typeSelect.selectedIndex = 0;
-            const summaryInput = document.getElementById('uploadImagingResultSummary');
-            if (summaryInput) summaryInput.value = '';
-            const feedback = document.getElementById('fileValidationFeedback');
-            if (feedback) { feedback.textContent = ''; feedback.classList.add('d-none'); }
-            const submitBtn = document.getElementById('btnSubmitUploadImaging');
-            if (submitBtn) { submitBtn.disabled = false; }
-            const spinner = document.getElementById('uploadSpinner');
-            if (spinner) spinner.classList.add('d-none');
-            const icon = document.getElementById('uploadIcon');
-            if (icon) icon.classList.remove('d-none');
-            const btnText = document.getElementById('uploadBtnText');
-            if (btnText) btnText.textContent = 'Upload Phim';
-
-            new bootstrap.Modal(document.getElementById('modalUploadImaging')).show();
+            document.getElementById('uploadClinicalEntryId').value = entryId;
+            const modal = new bootstrap.Modal(document.getElementById('modalUploadImaging'));
+            modal.show();
         }
 
-        function openDeleteImagingModal(imagingRecordId, imagingType, createdAt, patientUserId) {
-            document.getElementById('deleteImagingRecordId').value = imagingRecordId;
-            document.getElementById('deleteImagingPatientUserId').value = patientUserId;
-            document.getElementById('deleteImagingTypeLabel').textContent = imagingType || 'X-Quang';
-            document.getElementById('deleteImagingDateLabel').textContent = createdAt || '—';
-            document.getElementById('deleteImagingIdLabel').textContent = imagingRecordId;
-
-            const submitBtn = document.getElementById('btnConfirmDeleteImaging');
-            if (submitBtn) submitBtn.disabled = false;
-            const spinner = document.getElementById('deleteSpinner');
-            if (spinner) spinner.classList.add('d-none');
-            const icon = document.getElementById('deleteIcon');
-            if (icon) icon.classList.remove('d-none');
-            const btnText = document.getElementById('deleteBtnText');
-            if (btnText) btnText.textContent = 'Xác nhận xóa';
-
-            new bootstrap.Modal(document.getElementById('modalDeleteImagingConfirm')).show();
+        function openLightbox(url, title, desc) {
+            document.getElementById('lightboxImg').src = url;
+            document.getElementById('lightboxTitle').innerText = title || 'Phim X-Quang';
+            document.getElementById('lightboxDesc').innerText = desc || '';
+            const modal = new bootstrap.Modal(document.getElementById('imageLightboxModal'));
+            modal.show();
         }
 
-        // Backward compatibility
-        function openAddImagingModal(entryId, diagnosis) {
-            openUploadImagingModal(entryId, diagnosis);
+        function openPickChairModal(apptId, patientName, roomName, currentChairId) {
+            document.getElementById('modalPatientName').innerText = patientName;
+            document.getElementById('modalRoomName').innerText = roomName || 'Phòng khám chuyên khoa';
+            const form = document.getElementById('pickChairForm');
+            form.action = `/Dentist/Appointments/${apptId}/AssignChair`;
+
+            const loading = document.getElementById('chairsLoading');
+            const container = document.getElementById('chairsContainer');
+            const empty = document.getElementById('chairsEmpty');
+            const submitBtn = document.getElementById('btnSubmitPickChair');
+
+            loading.style.display = 'block';
+            container.style.display = 'none';
+            empty.style.display = 'none';
+            submitBtn.disabled = true;
+            container.innerHTML = '';
+
+            fetch(`/Dentist/Appointments/${apptId}/RoomChairs`)
+                .then(res => res.json())
+                .then(result => {
+                    loading.style.display = 'none';
+                    if (result.success && result.data && result.data.length > 0) {
+                        container.style.display = 'flex';
+                        result.data.forEach(chair => {
+                            const isSelected = currentChairId && currentChairId === chair.dentalChairId;
+                            const isOccupied = chair.isOccupied;
+                            const div = document.createElement('div');
+                            div.className = `p-3 rounded border d-flex justify-content-between align-items-center ${isOccupied ? 'bg-light border-danger text-muted' : (isSelected ? 'bg-primary-subtle border-primary' : 'bg-white')}`;
+                            div.style.cursor = isOccupied ? 'not-allowed' : 'pointer';
+
+                            div.innerHTML = `
+                                <div class="d-flex align-items-center gap-2">
+                                    <input class="form-check-input mt-0" type="radio" name="dentalChairId" id="chairRadio_${chair.dentalChairId}" value="${chair.dentalChairId}" ${isSelected ? 'checked' : ''} ${isOccupied ? 'disabled' : ''}>
+                                    <label class="form-check-label fw-semibold cursor-pointer mb-0" for="chairRadio_${chair.dentalChairId}">
+                                        <i class="bi bi-badge-hd me-1"></i> Ghế ${chair.chairCode}
+                                    </label>
+                                </div>
+                                <div>
+                                    ${isOccupied 
+                                        ? '<span class="badge bg-danger-subtle text-danger border border-danger small"><i class="bi bi-person-fill-exclamation me-1"></i>Đang bận</span>' 
+                                        : '<span class="badge bg-success-subtle text-success border border-success small"><i class="bi bi-check-circle me-1"></i>Sẵn sàng</span>'}
+                                </div>
+                            `;
+
+                            if (!isOccupied) {
+                                div.addEventListener('click', () => {
+                                    const radio = div.querySelector('input[type="radio"]');
+                                    radio.checked = true;
+                                    submitBtn.disabled = false;
+                                    container.querySelectorAll('.p-3').forEach(el => el.classList.remove('bg-primary-subtle', 'border-primary'));
+                                    div.classList.add('bg-primary-subtle', 'border-primary');
+                                });
+                            }
+
+                            container.appendChild(div);
+                        });
+
+                        if (currentChairId) {
+                            submitBtn.disabled = false;
+                        }
+                    } else {
+                        empty.style.display = 'block';
+                    }
+                })
+                .catch(err => {
+                    loading.style.display = 'none';
+                    empty.style.display = 'block';
+                    empty.innerText = 'Không thể tải danh sách ghế từ máy chủ.';
+                });
+
+            const modal = new bootstrap.Modal(document.getElementById('pickChairModal'));
+            modal.show();
         }
 
+        // Dynamic rows for Tooth Condition in Create Entry Modal
+        let toothRowCount = 0;
         function addToothRow() {
-            const container = document.getElementById("toothRowsContainer");
-            const rowId = "tooth-row-" + Date.now();
-            const rowHtml = `
-                <div class="row g-2 align-items-center tooth-input-row" id="${rowId}">
-                    <div class="col-md-3">
-                        <select class="form-select form-select-sm tooth-number-select">
-                            <option value="">-- Chọn Răng --</option>
-                            @for (int i = 18; i >= 11; i--) { <option value="@i">Răng @i</option> }
-                            @for (int i = 21; i <= 28; i++) { <option value="@i">Răng @i</option> }
-                            @for (int i = 48; i >= 41; i--) { <option value="@i">Răng @i</option> }
-                            @for (int i = 31; i <= 38; i++) { <option value="@i">Răng @i</option> }
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <select class="form-select form-select-sm tooth-condition-select">
-                            <option value="Caries">Sâu răng (Caries)</option>
-                            <option value="Filled">Đã trám (Filled)</option>
-                            <option value="Pulpitis">Viêm tủy (Pulpitis)</option>
-                            <option value="Crown">Bọc sứ (Crown)</option>
-                            <option value="Missing">Mất răng (Missing)</option>
-                            <option value="ExtractionNeeded">Cần nhổ (Extraction)</option>
-                            <option value="Healthy">Khỏe mạnh (Healthy)</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <input type="text" class="form-control form-control-sm tooth-note-input" placeholder="Ghi chú (mặt răng O, M, D...)" />
-                    </div>
-                    <div class="col-md-1 text-end">
-                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="document.getElementById('${rowId}').remove()"><i class="bi bi-trash"></i></button>
-                    </div>
-                </div>`;
-            container.insertAdjacentHTML('beforeend', rowHtml);
+            toothRowCount++;
+            const container = document.getElementById('toothRowsContainer');
+            const row = document.createElement('div');
+            row.className = 'row g-2 align-items-center bg-white p-2 rounded border';
+            row.id = 'toothRow_' + toothRowCount;
+
+            row.innerHTML = `
+                <div class="col-md-3">
+                    <select class="form-select form-select-sm tooth-number-select" required>
+                        <option value="">-- Số Răng (FDI) --</option>
+                        ${allTeethNumbers.map(n => `<option value="${n}">Răng ${n}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select form-select-sm tooth-condition-select">
+                        <option value="Caries">Sâu răng (Caries)</option>
+                        <option value="Pulpitis">Viêm tủy (Pulpitis)</option>
+                        <option value="Filled">Đã trám (Filled)</option>
+                        <option value="Crown">Bọc sứ (Crown)</option>
+                        <option value="Missing">Mất răng (Missing)</option>
+                        <option value="ExtractionNeeded">Cần nhổ răng</option>
+                        <option value="Healthy">Khỏe mạnh</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <input type="text" class="form-control form-control-sm tooth-note-input" placeholder="Mặt răng / Ghi chú (VD: Mặt nhai, ê buốt...)" />
+                </div>
+                <div class="col-md-1 text-end">
+                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" onclick="removeToothRow(${toothRowCount})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+
+            container.appendChild(row);
+        }
+
+        function removeToothRow(id) {
+            const row = document.getElementById('toothRow_' + id);
+            if (row) row.remove();
         }
 
         function prepareToothConditionsJson() {
-            const rows = document.querySelectorAll(".tooth-input-row");
-            const list = [];
+            const rows = document.querySelectorAll('#toothRowsContainer .row');
+            const items = [];
             rows.forEach(r => {
-                const toothNum = r.querySelector(".tooth-number-select").value;
-                const cond = r.querySelector(".tooth-condition-select").value;
-                const note = r.querySelector(".tooth-note-input").value;
-                if (toothNum) {
-                    list.push({
-                        toothNumber: toothNum,
-                        condition: cond,
-                        surface: "All",
-                        note: note
+                const toothSelect = r.querySelector('.tooth-number-select');
+                const condSelect = r.querySelector('.tooth-condition-select');
+                const noteInput = r.querySelector('.tooth-note-input');
+
+                if (toothSelect && toothSelect.value) {
+                    items.push({
+                        ToothNumber: toothSelect.value,
+                        Condition: condSelect ? condSelect.value : 'Healthy',
+                        Surface: 'All',
+                        Note: noteInput ? noteInput.value : ''
                     });
                 }
             });
-            document.getElementById("toothConditionsJsonInput").value = JSON.stringify(list);
+
+            document.getElementById('toothConditionsJsonInput').value = JSON.stringify(items);
         }
 
-        // Client-side file validation & double submit prevention
-        document.addEventListener("DOMContentLoaded", function() {
-            if (document.getElementById("toothRowsContainer")) {
-                addToothRow();
-            }
-
-            const fileInput = document.getElementById('uploadImagingFileInput');
-            const uploadForm = document.getElementById('formUploadImaging');
-            const feedback = document.getElementById('fileValidationFeedback');
-            const maxSizeBytes = 15 * 1024 * 1024;
-            const allowedExts = ['.jpg', '.jpeg', '.png', '.dcm', '.dicom'];
-
-            if (fileInput) {
-                fileInput.addEventListener('change', function () {
-                    if (!this.files || this.files.length === 0) return;
-                    const file = this.files[0];
-                    const name = file.name.toLowerCase();
-                    const hasValidExt = allowedExts.some(ext => name.endsWith(ext));
-
-                    if (!hasValidExt) {
-                        feedback.textContent = 'Định dạng tệp không hợp lệ! Vui lòng chỉ chọn .jpg, .jpeg, .png hoặc .dcm/.dicom';
-                        feedback.classList.remove('d-none');
-                        this.value = '';
-                        return;
-                    }
-
-                    if (file.size > maxSizeBytes) {
-                        feedback.textContent = `Dung lượng tệp (${(file.size / (1024 * 1024)).toFixed(2)} MB) vượt quá giới hạn 15 MB!`;
-                        feedback.classList.remove('d-none');
-                        this.value = '';
-                        return;
-                    }
-
-                    feedback.textContent = '';
-                    feedback.classList.add('d-none');
-                });
-            }
-
-            if (uploadForm) {
-                uploadForm.addEventListener('submit', function (e) {
-                    const submitBtn = document.getElementById('btnSubmitUploadImaging');
-                    const spinner = document.getElementById('uploadSpinner');
-                    const icon = document.getElementById('uploadIcon');
-                    const btnText = document.getElementById('uploadBtnText');
-
-                    if (submitBtn.disabled) {
-                        e.preventDefault();
-                        return;
-                    }
-
-                    submitBtn.disabled = true;
-                    if (spinner) spinner.classList.remove('d-none');
-                    if (icon) icon.classList.add('d-none');
-                    if (btnText) btnText.textContent = 'Đang tải lên...';
-                });
-            }
-
-            const deleteForm = document.getElementById('formDeleteImaging');
-            if (deleteForm) {
-                deleteForm.addEventListener('submit', function (e) {
-                    const submitBtn = document.getElementById('btnConfirmDeleteImaging');
-                    const spinner = document.getElementById('deleteSpinner');
-                    const icon = document.getElementById('deleteIcon');
-                    const btnText = document.getElementById('deleteBtnText');
-
-                    if (submitBtn.disabled) {
-                        e.preventDefault();
-                        return;
-                    }
-
-                    submitBtn.disabled = true;
-                    if (spinner) spinner.classList.remove('d-none');
-                    if (icon) icon.classList.add('d-none');
-                    if (btnText) btnText.textContent = 'Đang xóa...';
-                });
-            }
-
-            const lightboxModalEl = document.getElementById('imagingLightboxModal');
-            if (lightboxModalEl) {
-                lightboxModalEl.addEventListener('hidden.bs.modal', function () {
-                    const imgEl = document.getElementById('lightboxImage');
-                    if (imgEl) {
-                        imgEl.onload = null;
-                        imgEl.onerror = null;
-                        imgEl.src = '';
-                        imgEl.classList.add('d-none');
-                    }
-                });
-            }
+        // Initialize Odontogram view on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            switchOdontogramVisit('all');
         });
     </script>
 }

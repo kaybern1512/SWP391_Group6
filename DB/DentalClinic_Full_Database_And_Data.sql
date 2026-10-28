@@ -1,4 +1,4 @@
-﻿-- =========================================================================================
+-- =========================================================================================
 -- DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)
 -- FULL DATABASE SCHEMA & COMPLETE 30+ DEMO ACCOUNTS SEED DATASET
 -- Target: SQL Server (2017 / 2019 / 2022 / LocalDB / SQLEXPRESS)
@@ -272,7 +272,7 @@ CREATE TABLE Notifications (
     Channel VARCHAR(30) NOT NULL DEFAULT 'InApp' CHECK (Channel IN ('InApp','Email')),
     Subject NVARCHAR(250) NULL,
     Content NVARCHAR(MAX) NOT NULL,
-    DeliveryStatus VARCHAR(30) NOT NULL DEFAULT 'Pending' CHECK (DeliveryStatus IN ('Pending','Sent','Failed')),
+    DeliveryStatus VARCHAR(30) NOT NULL DEFAULT 'Pending' CHECK (DeliveryStatus IN ('Pending','Sent','Failed','Read')),
     SentAt DATETIME2 NULL,
     ReadAt DATETIME2 NULL,
     CONSTRAINT FK_Notifications_User FOREIGN KEY (UserId) REFERENCES UserAccounts(UserId),

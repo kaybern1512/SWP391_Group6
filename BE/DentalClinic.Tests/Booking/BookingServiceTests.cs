@@ -429,4 +429,59 @@ public class BookingServiceTests
         Assert.Equal(2, result.Data!.Count); // 08:00, 08:30 only
         Assert.DoesNotContain(result.Data!, s => s.StartTime >= targetDate.AddHours(9));
     }
+
+    [Fact]
+    public async Task GetAvailableSlots_FiltersByDepartment_And_DeduplicatesSlots()
+    {
+        using var db = CreateDbContext(nameof(GetAvailableSlots_FiltersByDepartment_And_DeduplicatesSlots));
+        await SeedBasicDataAsync(db);
+
+        var targetDate = DateTime.Today.AddDays(2);
+        var targetDateOnly = DateOnly.FromDateTime(targetDate);
+
+        // Schedule 1 in Dept 1: 08:00 - 10:00 (4 slots of 30 mins: 08:00, 08:30, 09:00, 09:30)
+        db.DentistWorkSchedules.Add(new DentistWorkSchedule
+        {
+            DentistScheduleId = 1,
+            DentistUserId = 401,
+            DepartmentId = 1,
+            WorkDate = targetDateOnly,
+            StartTime = new TimeOnly(8, 0),
+            EndTime = new TimeOnly(10, 0),
+            Status = "Scheduled"
+        });
+
+        // Schedule 2 in Dept 2 (different department) on same date: 08:30 - 11:00
+        db.DentistWorkSchedules.Add(new DentistWorkSchedule
+        {
+            DentistScheduleId = 2,
+            DentistUserId = 401,
+            DepartmentId = 2,
+            WorkDate = targetDateOnly,
+            StartTime = new TimeOnly(8, 30),
+            EndTime = new TimeOnly(11, 0),
+            Status = "Scheduled"
+        });
+        await db.SaveChangesAsync();
+
+        var service = new BookingService(db, _mockLogger.Object);
+
+        var query = new AvailableSlotsQuery
+        {
+            DepartmentId = 1,
+            ServiceId = 10,
+            Date = targetDate,
+            DentistUserId = 401
+        };
+
+        var result = await service.GetAvailableSlotsAsync(query);
+
+        Assert.True(result.Success);
+        // Only Dept 1 slots should be returned (08:00, 08:30, 09:00, 09:30) - no slots from Dept 2 or duplicates
+        Assert.Equal(4, result.Data!.Count);
+        Assert.Equal(new DateTime(targetDate.Year, targetDate.Month, targetDate.Day, 8, 0, 0), result.Data![0].StartTime);
+        Assert.Equal(new DateTime(targetDate.Year, targetDate.Month, targetDate.Day, 8, 30, 0), result.Data![1].StartTime);
+        Assert.Equal(new DateTime(targetDate.Year, targetDate.Month, targetDate.Day, 9, 0, 0), result.Data![2].StartTime);
+        Assert.Equal(new DateTime(targetDate.Year, targetDate.Month, targetDate.Day, 9, 30, 0), result.Data![3].StartTime);
+    }
 }

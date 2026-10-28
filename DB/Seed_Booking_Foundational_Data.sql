@@ -61,7 +61,7 @@ BEGIN TRY
         END;
     END;
 
-    -- Assign Dentist 2 to Dept 1 and Dept 3
+    -- Assign Dentist 2 to Dept 1
     IF @Dentist2UserId IS NOT NULL
     BEGIN
         IF @DeptGeneralId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM DentistDepartments WHERE DentistUserId = @Dentist2UserId AND DepartmentId = @DeptGeneralId)
@@ -70,11 +70,7 @@ BEGIN TRY
             VALUES (@Dentist2UserId, @DeptGeneralId, 'Active', @Now);
         END;
 
-        IF @DeptImplantId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM DentistDepartments WHERE DentistUserId = @Dentist2UserId AND DepartmentId = @DeptImplantId)
-        BEGIN
-            INSERT INTO DentistDepartments (DentistUserId, DepartmentId, Status, AssignedAt)
-            VALUES (@Dentist2UserId, @DeptImplantId, 'Active', @Now);
-        END;
+
     END;
 
     ---------------------------------------------------------------------
@@ -334,24 +330,16 @@ BEGIN TRY
             END;
         END;
 
-        -- Dr. Thao (Dentist 2) for Dept 3 and Dept 1
+        -- Dr. Thao (Dentist 2) for Dept 1
         IF @Dentist2UserId IS NOT NULL
         BEGIN
-            IF @DeptImplantId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM DentistWorkSchedules 
-                           WHERE DentistUserId = @Dentist2UserId AND DepartmentId = @DeptImplantId AND WorkDate = @targetDate)
-            BEGIN
-                INSERT INTO DentistWorkSchedules (DentistUserId, DepartmentId, WorkDate, StartTime, EndTime, Status, Note)
-                VALUES (@Dentist2UserId, @DeptImplantId, @targetDate, '08:30:00', '17:00:00', 'Scheduled', N'Ca làm việc tiêu chuẩn');
-            END;
-
-            IF @DeptGeneralId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM DentistWorkSchedules 
+            IF @DeptGeneralId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM DentistWorkSchedules
                            WHERE DentistUserId = @Dentist2UserId AND DepartmentId = @DeptGeneralId AND WorkDate = @targetDate)
             BEGIN
                 INSERT INTO DentistWorkSchedules (DentistUserId, DepartmentId, WorkDate, StartTime, EndTime, Status, Note)
-                VALUES (@Dentist2UserId, @DeptGeneralId, @targetDate, '08:00:00', '12:00:00', 'Scheduled', N'Ca buổi sáng khám tổng quát');
+                VALUES (@Dentist2UserId, @DeptGeneralId, @targetDate, '08:00:00', '17:00:00', 'Scheduled', N'Ca làm việc tiêu chuẩn');
             END;
         END;
-
         SET @dayOffset = @dayOffset + 1;
     END;
 

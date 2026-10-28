@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -64,6 +64,7 @@ public class MedicalRecordService : IMedicalRecordService
         }
 
         var record = await _dbContext.DentalMedicalRecords
+            .AsSplitQuery()
             .Include(r => r.ClinicalEntries)
                 .ThenInclude(c => c.DentistUser)
                     .ThenInclude(d => d.User)
@@ -286,6 +287,7 @@ public class MedicalRecordService : IMedicalRecordService
         await _dbContext.SaveChangesAsync(ct);
 
         var savedEntry = await _dbContext.ClinicalEntries
+            .AsSplitQuery()
             .Include(c => c.DentistUser)
             .Include(c => c.Appointment)
             .Include(c => c.OdontogramEntries)
@@ -358,6 +360,7 @@ public class MedicalRecordService : IMedicalRecordService
     public async Task<ApiResponse<List<OdontogramEntryDto>>> GetCurrentOdontogramAsync(long patientUserId, CancellationToken ct = default)
     {
         var record = await _dbContext.DentalMedicalRecords
+            .AsSplitQuery()
             .Include(r => r.ClinicalEntries)
                 .ThenInclude(c => c.OdontogramEntries)
             .FirstOrDefaultAsync(r => r.PatientUserId == patientUserId, ct);

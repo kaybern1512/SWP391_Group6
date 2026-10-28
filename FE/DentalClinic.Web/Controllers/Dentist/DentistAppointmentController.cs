@@ -45,10 +45,21 @@ public class DentistAppointmentController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Start(long id, [FromForm] string? date = null)
     {
+        var apptDetail = await _appointmentApiService.GetAppointmentDetailAsync(id);
         var result = await _appointmentApiService.DentistStartAppointmentAsync(id);
         if (result.IsSuccess)
         {
-            TempData["SuccessMessage"] = result.Message ?? "Đã bắt đầu buổi khám và điều trị cho bệnh nhân.";
+            TempData["SuccessMessage"] = result.Message ?? "Đã tiếp nhận bệnh nhân vào ghế điều trị và bắt đầu ca khám.";
+            var patientId = apptDetail?.Data?.PatientUserId;
+            if (patientId.HasValue && patientId.Value > 0)
+            {
+                return RedirectToAction("Index", "DentistMedicalRecord", new
+                {
+                    patientId = patientId.Value,
+                    appointmentId = id,
+                    isExamining = true
+                });
+            }
         }
         else
         {
@@ -102,4 +113,3 @@ public class DentistAppointmentController : Controller
         return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
     }
 }
-
