@@ -11,6 +11,15 @@
     position: relative;
     user-select: none;
     -webkit-user-select: none;
+    touch-action: none;
+}
+
+.imaging-viewport.can-pan {
+    cursor: grab;
+}
+
+.imaging-viewport.is-panning {
+    cursor: grabbing !important;
 }
 
 .imaging-stage {
@@ -31,6 +40,15 @@
     transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
     pointer-events: auto;
+}
+
+.imaging-viewer-img.can-pan {
+    cursor: grab;
+}
+
+.imaging-viewer-img.is-panning {
+    cursor: grabbing !important;
+    transition: none !important;
 }
 
 /* Zoom Toolbar Styling */

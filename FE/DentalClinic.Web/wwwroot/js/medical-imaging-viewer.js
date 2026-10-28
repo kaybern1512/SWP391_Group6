@@ -1,6 +1,7 @@
 /**
- * MedicalImagingViewer - High-Precision Dental X-Ray Zoom & Inspection Viewer
+ * MedicalImagingViewer - High-Precision Dental X-Ray Zoom & Pan Viewer
  * Day 01: Zoom In / Zoom Out / Fit to Screen / Reset View
+ * Day 02: Pan / Drag / Pointer Events / Boundary Clamping / Cursor States
  * DentalCare Clinical EMR
  */
 (function (global) {
@@ -14,6 +15,16 @@
     let currentZoom = 1.0;
     let isFitToScreen = true;
 
+    // Pan state variables
+    let panX = 0;
+    let panY = 0;
+    let isPanning = false;
+    let activePointerId = null;
+    let pointerStartX = 0;
+    let pointerStartY = 0;
+    let panStartX = 0;
+    let panStartY = 0;
+
     // Cached DOM elements
     let modalEl = null;
     let viewportEl = null;
@@ -26,6 +37,82 @@
 
     function clamp(val, min, max) {
         return Math.min(Math.max(val, min), max);
+    }
+
+    function getImageDimensions() {
+        if (!imgEl) return { width: 0, height: 0 };
+        let w = imgEl.clientWidth;
+        let h = imgEl.clientHeight;
+        if (!w || !h) {
+            w = imgEl.naturalWidth || 0;
+            h = imgEl.naturalHeight || 0;
+        }
+        return { width: w, height: h };
+    }
+
+    function getViewportDimensions() {
+        if (!viewportEl) return { width: 0, height: 0 };
+        return {
+            width: viewportEl.clientWidth,
+            height: viewportEl.clientHeight
+        };
+    }
+
+    function getMaxPan(zoom) {
+        const imgDim = getImageDimensions();
+        const vpDim = getViewportDimensions();
+        const z = typeof zoom === 'number' ? zoom : currentZoom;
+
+        const scaledW = imgDim.width * z;
+        const scaledH = imgDim.height * z;
+
+        const maxX = Math.max(0, (scaledW - vpDim.width) / 2);
+        const maxY = Math.max(0, (scaledH - vpDim.height) / 2);
+
+        return {
+            maxX: Math.round(maxX * 100) / 100,
+            maxY: Math.round(maxY * 100) / 100
+        };
+    }
+
+    function canPan(zoom) {
+        const bounds = getMaxPan(zoom);
+        return bounds.maxX > 0 || bounds.maxY > 0;
+    }
+
+    function clampPan(x, y, zoom) {
+        const bounds = getMaxPan(zoom);
+        const clampedX = bounds.maxX > 0 ? clamp(x, -bounds.maxX, bounds.maxX) : 0;
+        const clampedY = bounds.maxY > 0 ? clamp(y, -bounds.maxY, bounds.maxY) : 0;
+        return {
+            x: Math.round(clampedX * 100) / 100,
+            y: Math.round(clampedY * 100) / 100
+        };
+    }
+
+    function updateCursor() {
+        if (!viewportEl || !imgEl) return;
+
+        if (isPanning) {
+            viewportEl.style.cursor = 'grabbing';
+            imgEl.style.cursor = 'grabbing';
+            viewportEl.classList.add('is-panning');
+            imgEl.classList.add('is-panning');
+            viewportEl.classList.remove('can-pan');
+            imgEl.classList.remove('can-pan');
+        } else if (canPan()) {
+            viewportEl.style.cursor = 'grab';
+            imgEl.style.cursor = 'grab';
+            viewportEl.classList.remove('is-panning');
+            imgEl.classList.remove('is-panning');
+            viewportEl.classList.add('can-pan');
+            imgEl.classList.add('can-pan');
+        } else {
+            viewportEl.style.cursor = 'default';
+            imgEl.style.cursor = 'default';
+            viewportEl.classList.remove('is-panning', 'can-pan');
+            imgEl.classList.remove('is-panning', 'can-pan');
+        }
     }
 
     function updateUI(statusText) {
@@ -50,58 +137,94 @@
         }
     }
 
-    function applyTransform() {
+    function applyTransform(withTransition) {
         if (!imgEl) return;
-        imgEl.style.transform = 'scale(' + currentZoom + ')';
+        if (withTransition) {
+            imgEl.style.transition = 'transform 0.12s cubic-bezier(0.2, 0, 0, 1)';
+        } else {
+            imgEl.style.transition = 'none';
+        }
+        imgEl.style.transformOrigin = 'center center';
+        imgEl.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + currentZoom + ')';
     }
 
-    function setZoom(newZoom, originX, originY, isFit) {
+    function setZoom(newZoom, focalX, focalY, isFit) {
+        const oldZoom = currentZoom;
         currentZoom = clamp(Math.round(newZoom * 100) / 100, MIN_ZOOM, MAX_ZOOM);
         isFitToScreen = !!isFit;
 
-        if (imgEl) {
-            if (typeof originX === 'number' && typeof originY === 'number') {
-                imgEl.style.transformOrigin = originX.toFixed(1) + '% ' + originY.toFixed(1) + '%';
+        if (currentZoom !== oldZoom && oldZoom > 0) {
+            if (typeof focalX === 'number' && typeof focalY === 'number') {
+                const ratio = currentZoom / oldZoom;
+                panX = focalX - (focalX - panX) * ratio;
+                panY = focalY - (focalY - panY) * ratio;
             } else {
-                imgEl.style.transformOrigin = 'center center';
+                const ratio = currentZoom / oldZoom;
+                panX = panX * ratio;
+                panY = panY * ratio;
             }
-            applyTransform();
+            const clamped = clampPan(panX, panY, currentZoom);
+            panX = clamped.x;
+            panY = clamped.y;
         }
 
+        applyTransform(true);
         updateUI();
+        updateCursor();
         return currentZoom;
     }
 
     function zoomIn(step) {
         isFitToScreen = false;
         const delta = typeof step === 'number' ? step : ZOOM_STEP;
-        return setZoom(currentZoom + delta);
+        return setZoom(currentZoom + delta, null, null, false);
     }
 
     function zoomOut(step) {
         isFitToScreen = false;
         const delta = typeof step === 'number' ? step : ZOOM_STEP;
-        return setZoom(currentZoom - delta);
+        return setZoom(currentZoom - delta, null, null, false);
     }
 
     function fitToScreen() {
         if (!imgEl) return currentZoom;
-        imgEl.style.transformOrigin = 'center center';
+        if (isPanning) {
+            endPan();
+        }
+        panX = 0;
+        panY = 0;
         currentZoom = 1.0;
         isFitToScreen = true;
-        applyTransform();
+        applyTransform(true);
         updateUI('100% (Vừa khung)');
+        updateCursor();
         return currentZoom;
     }
 
     function resetView() {
         if (!imgEl) return currentZoom;
-        imgEl.style.transformOrigin = 'center center';
+        if (isPanning) {
+            endPan();
+        }
+        panX = 0;
+        panY = 0;
         currentZoom = 1.0;
         isFitToScreen = false;
-        applyTransform();
+        applyTransform(true);
         updateUI('100%');
+        updateCursor();
         return currentZoom;
+    }
+
+    function resetPan() {
+        if (isPanning) {
+            endPan();
+        }
+        panX = 0;
+        panY = 0;
+        applyTransform(true);
+        updateCursor();
+        return { x: panX, y: panY };
     }
 
     function onWheel(e) {
@@ -111,20 +234,107 @@
         e.preventDefault();
         e.stopPropagation();
 
-        const rect = imgEl.getBoundingClientRect();
-        let originX = 50;
-        let originY = 50;
+        const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+        const oldZoom = currentZoom;
+        const newZoom = clamp(Math.round((oldZoom + delta) * 100) / 100, MIN_ZOOM, MAX_ZOOM);
 
-        if (rect.width > 0 && rect.height > 0) {
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            originX = clamp((mouseX / rect.width) * 100, 0, 100);
-            originY = clamp((mouseY / rect.height) * 100, 0, 100);
+        if (newZoom === oldZoom) return;
+
+        isFitToScreen = false;
+
+        // Focal zoom calculation relative to viewport center
+        const vpRect = viewportEl.getBoundingClientRect();
+        const vpCenterX = vpRect.left + vpRect.width / 2;
+        const vpCenterY = vpRect.top + vpRect.height / 2;
+
+        const focalX = e.clientX - vpCenterX;
+        const focalY = e.clientY - vpCenterY;
+
+        setZoom(newZoom, focalX, focalY, false);
+    }
+
+    function onPointerDown(e) {
+        // Only respond to primary/left mouse button (button 0)
+        if (e.button !== 0) return;
+        if (!viewportEl || !imgEl || imgEl.classList.contains('d-none')) return;
+
+        // Only start pan if image overflows viewport
+        if (!canPan()) {
+            return;
         }
 
-        const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
-        isFitToScreen = false;
-        setZoom(currentZoom + delta, originX, originY);
+        e.preventDefault();
+
+        isPanning = true;
+        activePointerId = e.pointerId;
+        pointerStartX = e.clientX;
+        pointerStartY = e.clientY;
+        panStartX = panX;
+        panStartY = panY;
+
+        try {
+            if (viewportEl.setPointerCapture) {
+                viewportEl.setPointerCapture(e.pointerId);
+            }
+        } catch (err) {
+            // Ignore capture failure in mock or non-supporting environments
+        }
+
+        updateCursor();
+        applyTransform(false); // Disable transition for instant, lag-free dragging
+    }
+
+    function onPointerMove(e) {
+        if (!isPanning) return;
+        if (activePointerId !== null && e.pointerId !== activePointerId) return;
+
+        e.preventDefault();
+
+        const dx = e.clientX - pointerStartX;
+        const dy = e.clientY - pointerStartY;
+
+        const newX = panStartX + dx;
+        const newY = panStartY + dy;
+
+        const clamped = clampPan(newX, newY, currentZoom);
+        panX = clamped.x;
+        panY = clamped.y;
+
+        applyTransform(false);
+    }
+
+    function onPointerUp(e) {
+        if (!isPanning) return;
+        if (activePointerId !== null && e.pointerId !== activePointerId) return;
+        endPan();
+    }
+
+    function onPointerCancel(e) {
+        if (!isPanning) return;
+        endPan();
+    }
+
+    function onLostPointerCapture(e) {
+        if (isPanning) {
+            endPan();
+        }
+    }
+
+    function endPan() {
+        if (!isPanning) return;
+        isPanning = false;
+
+        if (activePointerId !== null && viewportEl && viewportEl.releasePointerCapture) {
+            try {
+                if (viewportEl.hasPointerCapture && viewportEl.hasPointerCapture(activePointerId)) {
+                    viewportEl.releasePointerCapture(activePointerId);
+                }
+            } catch (err) {}
+        }
+        activePointerId = null;
+
+        updateCursor();
+        applyTransform(true); // Re-enable smooth transition
     }
 
     function onKeyDown(e) {
@@ -191,9 +401,32 @@
 
             if (viewportEl) {
                 viewportEl.addEventListener('wheel', onWheel, { passive: false });
+                viewportEl.addEventListener('pointerdown', onPointerDown);
+                viewportEl.addEventListener('pointermove', onPointerMove);
+                viewportEl.addEventListener('pointerup', onPointerUp);
+                viewportEl.addEventListener('pointercancel', onPointerCancel);
+                viewportEl.addEventListener('lostpointercapture', onLostPointerCapture);
+                viewportEl.addEventListener('dragstart', function (e) { e.preventDefault(); });
+            }
+
+            if (imgEl) {
+                imgEl.addEventListener('dragstart', function (e) { e.preventDefault(); });
+                imgEl.addEventListener('load', function () {
+                    updateCursor();
+                });
             }
 
             document.addEventListener('keydown', onKeyDown);
+
+            window.addEventListener('resize', function () {
+                if (modalEl && modalEl.classList.contains('show')) {
+                    const clamped = clampPan(panX, panY, currentZoom);
+                    panX = clamped.x;
+                    panY = clamped.y;
+                    applyTransform(true);
+                    updateCursor();
+                }
+            });
 
             modalEl.addEventListener('hidden.bs.modal', function () {
                 resetView();
@@ -222,11 +455,42 @@
         setZoom: setZoom,
         fitToScreen: fitToScreen,
         resetView: resetView,
-        getCurrentZoom: function () { return currentZoom; },
-        getMinZoom: function () { return MIN_ZOOM; },
-        getMaxZoom: function () { return MAX_ZOOM; },
-        getZoomStep: function () { return ZOOM_STEP; },
-        isInitialized: function () { return isInitialized; }
+        resetPan: resetPan,
+        panTo: function (x, y) {
+            const clamped = clampPan(x, y, currentZoom);
+            panX = clamped.x;
+            panY = clamped.y;
+            applyTransform(true);
+            updateCursor();
+            return { x: panX, y: panY };
+        },
+        getPan: function () {
+            return { x: panX, y: panY };
+        },
+        getMaxPan: function (zoom) {
+            return getMaxPan(zoom);
+        },
+        canPan: function (zoom) {
+            return canPan(zoom);
+        },
+        isPanning: function () {
+            return isPanning;
+        },
+        getCurrentZoom: function () {
+            return currentZoom;
+        },
+        getMinZoom: function () {
+            return MIN_ZOOM;
+        },
+        getMaxZoom: function () {
+            return MAX_ZOOM;
+        },
+        getZoomStep: function () {
+            return ZOOM_STEP;
+        },
+        isInitialized: function () {
+            return isInitialized;
+        }
     };
 
     global.MedicalImagingViewer = viewerApi;
