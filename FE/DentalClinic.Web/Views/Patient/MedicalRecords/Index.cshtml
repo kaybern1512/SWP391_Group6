@@ -437,11 +437,46 @@
 
                             <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
 
+                            <!-- Day 04: Brightness & Contrast Controls -->
+                            <div class="dropdown d-inline-block">
+                                <button type="button" id="btnFilterDropdown" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1 dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Điều chỉnh Độ sáng & Độ tương phản (Brightness & Contrast)">
+                                    <i class="bi bi-sliders"></i>
+                                    <span class="d-none d-sm-inline small">Bộ lọc</span>
+                                </button>
+                                <div class="dropdown-menu dropdown-menu-dark imaging-filter-menu p-3 shadow-lg" style="min-width: 280px;" aria-labelledby="btnFilterDropdown">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label for="brightnessSlider" class="form-label small text-info fw-semibold mb-0">
+                                            <i class="bi bi-brightness-high me-1"></i>Độ sáng
+                                        </label>
+                                        <span id="brightnessBadge" class="badge imaging-filter-badge font-monospace">100%</span>
+                                    </div>
+                                    <input type="range" class="form-range" id="brightnessSlider" min="50" max="150" step="5" value="100" aria-label="Điều chỉnh độ sáng ảnh X-quang">
+
+                                    <div class="d-flex justify-content-between align-items-center mt-3 mb-1">
+                                        <label for="contrastSlider" class="form-label small text-info fw-semibold mb-0">
+                                            <i class="bi bi-circle-half me-1"></i>Độ tương phản
+                                        </label>
+                                        <span id="contrastBadge" class="badge imaging-filter-badge font-monospace">100%</span>
+                                    </div>
+                                    <input type="range" class="form-range" id="contrastSlider" min="50" max="200" step="5" value="100" aria-label="Điều chỉnh độ tương phản ảnh X-quang">
+
+                                    <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top border-secondary border-opacity-50">
+                                        <span class="text-white-50 small" style="font-size: 0.7rem;">Hiệu ứng hiển thị</span>
+                                        <button type="button" id="btnResetFilters" class="btn btn-xs btn-outline-light d-flex align-items-center gap-1" title="Khôi phục độ sáng và tương phản về 100%">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                            <span class="small">Đặt lại bộ lọc</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
+
                             <button type="button" id="btnFitScreen" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Vừa khung nhìn (Fit to Screen - Phím F)" aria-label="Vừa khung nhìn">
                                 <i class="bi bi-arrows-angle-contract"></i>
                                 <span class="d-none d-sm-inline small">Vừa khung</span>
                             </button>
-                            <button type="button" id="btnResetView" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Đặt lại toàn bộ (Zoom, Pan & Xoay - Phím 0)" aria-label="Đặt lại góc nhìn">
+                            <button type="button" id="btnResetView" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Đặt lại toàn bộ (Zoom, Pan, Xoay & Bộ lọc - Phím 0)" aria-label="Đặt lại góc nhìn">
                                 <i class="bi bi-arrow-repeat"></i>
                                 <span class="d-none d-sm-inline small">Đặt lại</span>
                             </button>

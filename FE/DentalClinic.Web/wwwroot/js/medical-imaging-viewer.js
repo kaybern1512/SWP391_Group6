@@ -1,16 +1,29 @@
 /**
- * MedicalImagingViewer - High-Precision Dental X-Ray Zoom, Pan & Rotate Viewer
+ * MedicalImagingViewer - High-Precision Dental X-Ray Zoom, Pan, Rotate & Filter Viewer
  * Day 01: Zoom In / Zoom Out / Fit to Screen / Reset View
  * Day 02: Pan / Drag / Pointer Events / Boundary Clamping / Cursor States
  * Day 03: Rotate 90° Left/Right / Rotation State / Bounding Box Recalculation / Fit on Rotation
+ * Day 04: Brightness & Contrast Adjustment / CSS Image Filters / Real-time Sliders / Reset Filters
  * DentalCare Clinical EMR
  */
 (function (global) {
     'use strict';
 
+    // Zoom constants
     const MIN_ZOOM = 0.25; // 25%
     const MAX_ZOOM = 4.0;  // 400%
     const ZOOM_STEP = 0.25; // 25%
+
+    // Filter constants (Day 04)
+    const MIN_BRIGHTNESS = 50;  // 50%
+    const MAX_BRIGHTNESS = 150; // 150%
+    const DEFAULT_BRIGHTNESS = 100;
+    const BRIGHTNESS_STEP = 5;
+
+    const MIN_CONTRAST = 50;    // 50%
+    const MAX_CONTRAST = 200;   // 200%
+    const DEFAULT_CONTRAST = 100;
+    const CONTRAST_STEP = 5;
 
     let isInitialized = false;
     let currentZoom = 1.0;
@@ -29,6 +42,10 @@
     // Rotation state variable (0, 90, 180, 270)
     let rotationDegrees = 0;
 
+    // Filter state variables (Day 04)
+    let brightnessValue = DEFAULT_BRIGHTNESS;
+    let contrastValue = DEFAULT_CONTRAST;
+
     // Cached DOM elements
     let modalEl = null;
     let viewportEl = null;
@@ -42,6 +59,14 @@
     let btnResetRotation = null;
     let badgeZoom = null;
     let badgeRotation = null;
+
+    // Filter DOM elements (Day 04)
+    let sliderBrightness = null;
+    let sliderContrast = null;
+    let badgeBrightness = null;
+    let badgeContrast = null;
+    let btnResetFilters = null;
+    let btnFilterDropdown = null;
 
     function clamp(val, min, max) {
         return Math.min(Math.max(val, min), max);
@@ -178,6 +203,68 @@
             btnZoomOut.disabled = currentZoom <= MIN_ZOOM;
             btnZoomOut.setAttribute('aria-disabled', currentZoom <= MIN_ZOOM ? 'true' : 'false');
         }
+
+        updateFilterUI();
+    }
+
+    // Day 04: Brightness & Contrast Filter Management
+    function setBrightness(val) {
+        const num = parseFloat(val);
+        if (isNaN(num)) return brightnessValue;
+        brightnessValue = clamp(Math.round(num), MIN_BRIGHTNESS, MAX_BRIGHTNESS);
+        applyImageFilters();
+        updateFilterUI();
+        return brightnessValue;
+    }
+
+    function setContrast(val) {
+        const num = parseFloat(val);
+        if (isNaN(num)) return contrastValue;
+        contrastValue = clamp(Math.round(num), MIN_CONTRAST, MAX_CONTRAST);
+        applyImageFilters();
+        updateFilterUI();
+        return contrastValue;
+    }
+
+    function applyImageFilters() {
+        if (!imgEl) return;
+        if (brightnessValue === 100 && contrastValue === 100) {
+            imgEl.style.filter = 'none';
+        } else {
+            const b = (brightnessValue / 100).toFixed(2);
+            const c = (contrastValue / 100).toFixed(2);
+            imgEl.style.filter = 'brightness(' + b + ') contrast(' + c + ')';
+        }
+    }
+
+    function resetFilters() {
+        brightnessValue = DEFAULT_BRIGHTNESS;
+        contrastValue = DEFAULT_CONTRAST;
+        applyImageFilters();
+        updateFilterUI();
+        return { brightness: brightnessValue, contrast: contrastValue };
+    }
+
+    function updateFilterUI() {
+        if (badgeBrightness) {
+            badgeBrightness.textContent = brightnessValue + '%';
+        }
+        if (sliderBrightness && parseInt(sliderBrightness.value, 10) !== brightnessValue) {
+            sliderBrightness.value = brightnessValue;
+        }
+        if (badgeContrast) {
+            badgeContrast.textContent = contrastValue + '%';
+        }
+        if (sliderContrast && parseInt(sliderContrast.value, 10) !== contrastValue) {
+            sliderContrast.value = contrastValue;
+        }
+        if (btnFilterDropdown) {
+            if (brightnessValue !== 100 || contrastValue !== 100) {
+                btnFilterDropdown.classList.add('text-info');
+            } else {
+                btnFilterDropdown.classList.remove('text-info');
+            }
+        }
     }
 
     function applyTransform(withTransition) {
@@ -282,6 +369,7 @@
         currentZoom = 1.0;
         rotationDegrees = 0;
         isFitToScreen = false;
+        resetFilters(); // Reset brightness & contrast alongside zoom, pan, and rotation
         applyTransform(true);
         updateUI('100%');
         updateCursor();
@@ -451,6 +539,14 @@
         badgeZoom = document.getElementById('zoomPercentageBadge');
         badgeRotation = document.getElementById('rotationBadge');
 
+        // Filter elements (Day 04)
+        sliderBrightness = document.getElementById('brightnessSlider');
+        sliderContrast = document.getElementById('contrastSlider');
+        badgeBrightness = document.getElementById('brightnessBadge');
+        badgeContrast = document.getElementById('contrastBadge');
+        btnResetFilters = document.getElementById('btnResetFilters');
+        btnFilterDropdown = document.getElementById('btnFilterDropdown');
+
         // Only register DOM event listeners once to prevent duplicate listeners
         if (!isInitialized) {
             if (btnZoomIn) {
@@ -499,6 +595,26 @@
                 btnResetRotation.addEventListener('click', function (e) {
                     e.preventDefault();
                     resetRotation();
+                });
+            }
+
+            // Filter event listeners (Day 04)
+            if (sliderBrightness) {
+                sliderBrightness.addEventListener('input', function (e) {
+                    setBrightness(e.target.value);
+                });
+            }
+
+            if (sliderContrast) {
+                sliderContrast.addEventListener('input', function (e) {
+                    setContrast(e.target.value);
+                });
+            }
+
+            if (btnResetFilters) {
+                btnResetFilters.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    resetFilters();
                 });
             }
 
@@ -566,6 +682,21 @@
         getRotation: function () {
             return rotationDegrees;
         },
+        // Filter methods (Day 04)
+        setBrightness: setBrightness,
+        setContrast: setContrast,
+        getBrightness: function () {
+            return brightnessValue;
+        },
+        getContrast: function () {
+            return contrastValue;
+        },
+        resetFilters: resetFilters,
+        applyImageFilters: applyImageFilters,
+        getMinBrightness: function () { return MIN_BRIGHTNESS; },
+        getMaxBrightness: function () { return MAX_BRIGHTNESS; },
+        getMinContrast: function () { return MIN_CONTRAST; },
+        getMaxContrast: function () { return MAX_CONTRAST; },
         calculateFitZoom: function (deg) {
             return calculateFitZoom(deg);
         },
