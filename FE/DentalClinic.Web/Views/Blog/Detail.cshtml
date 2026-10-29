@@ -2,7 +2,39 @@
 @{
     var post = Model.Post;
     ViewData["Title"] = $"{post.Title} - Nha Khoa DentalCare";
+
+    // Extract YouTube video ID for facade pattern (avoids loading heavy iframe at page load)
+    string? ytId = null;
+    if (!string.IsNullOrWhiteSpace(post.VideoUrl))
+    {
+        var vUrl = post.VideoUrl.Trim();
+        if (vUrl.Contains("/embed/"))
+        {
+            var s = vUrl.IndexOf("/embed/") + 7;
+            var e = vUrl.IndexOf('?', s);
+            ytId = e > 0 ? vUrl.Substring(s, e - s) : vUrl.Substring(s);
+        }
+        else if (vUrl.Contains("youtu.be/"))
+        {
+            var s = vUrl.IndexOf("youtu.be/") + 9;
+            var e = vUrl.IndexOf('?', s);
+            ytId = e > 0 ? vUrl.Substring(s, e - s) : vUrl.Substring(s);
+        }
+        else if (vUrl.Contains("?v="))
+        {
+            var s = vUrl.IndexOf("?v=") + 3;
+            var e = vUrl.IndexOf('&', s);
+            ytId = e > 0 ? vUrl.Substring(s, e - s) : vUrl.Substring(s);
+        }
+    }
+    bool isYouTube = !string.IsNullOrWhiteSpace(ytId);
 }
+
+<!-- Reading Progress Bar -->
+<div id="blogReadingProgressWrapper" style="position:fixed;top:0;left:0;right:0;z-index:1050;height:3px;background:transparent;pointer-events:none;" aria-hidden="true">
+    <div id="blogReadingProgress" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
+         style="height:100%;width:0%;background:linear-gradient(90deg,#0d6efd,#0dcaf0);transition:width 0.1s linear;"></div>
+</div>
 
 <div class="blog-detail-container pb-5">
     <!-- Breadcrumb -->
@@ -27,13 +59,20 @@
     <header class="py-4 bg-white border-bottom">
         <div class="container" style="max-width: 900px;">
             <div class="d-flex align-items-center gap-2 mb-3">
-                <a asp-controller="Blog" asp-action="Index" asp-route-category="@post.CategorySlug" class="badge bg-primary text-decoration-none px-3 py-2 rounded-pill">
+                <a asp-controller="Blog" asp-action="Index" asp-route-category="@post.CategorySlug"
+                   class="badge bg-primary text-decoration-none px-3 py-2 rounded-pill">
                     @post.CategoryName
                 </a>
                 @if (post.IsFeatured)
                 {
                     <span class="badge bg-warning text-dark px-3 py-2 rounded-pill fw-bold">
                         <i class="bi bi-star-fill me-1"></i>Nổi Bật
+                    </span>
+                }
+                @if (isYouTube)
+                {
+                    <span class="badge bg-danger text-white px-3 py-2 rounded-pill">
+                        <i class="bi bi-play-circle-fill me-1"></i>Có Video 3D
                     </span>
                 }
             </div>
@@ -54,7 +93,13 @@
                 <div class="d-flex align-items-center gap-3">
                     @if (!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl))
                     {
-                        <img src="@(!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl) ? post.AuthorAvatarUrl : "/images/doctors/dr-phuong-thao.svg")" alt="@post.AuthorName" class="rounded-circle border" style="width: 44px; height: 44px; object-fit: cover;" onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
+                        <img src="@post.AuthorAvatarUrl"
+                             alt="@post.AuthorName"
+                             class="rounded-circle border"
+                             style="width: 44px; height: 44px; object-fit: cover;"
+                             loading="lazy"
+                             decoding="async"
+                             onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
                     }
                     else
                     {
@@ -71,6 +116,7 @@
                 <div class="d-flex align-items-center gap-3 text-muted small">
                     <span title="Ngày xuất bản"><i class="bi bi-calendar3 me-1"></i>@((post.PublishedAt ?? post.CreatedAt).ToString("dd/MM/yyyy"))</span>
                     <span title="Lượt xem"><i class="bi bi-eye me-1"></i>@post.ViewCount lượt xem</span>
+                    <span title="Thời gian đọc"><i class="bi bi-clock me-1"></i>~@(Math.Max(1, (post.Content?.Split(' ')?.Length ?? 250) / 250)) phút đọc</span>
                 </div>
             </div>
         </div>
@@ -78,29 +124,45 @@
 
     <!-- Main Content Area -->
     <div class="container py-4" style="max-width: 900px;">
-        <!-- Featured Media (Video or Thumbnail) -->
-        @if (!string.IsNullOrWhiteSpace(post.VideoUrl))
+
+        <!-- Featured Media: YouTube Facade (lazy) or local video or thumbnail -->
+        @if (isYouTube)
         {
             <div class="blog-featured-video mb-4">
-                @if (post.VideoUrl.Contains("youtube.com") || post.VideoUrl.Contains("youtu.be"))
-                {
-                    <div class="ratio ratio-16x9 rounded-4 overflow-hidden shadow-sm border">
-                        <iframe src="@post.VideoUrl" title="@post.Title" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-                    </div>
-                }
-                else
-                {
-                    <video controls preload="metadata" poster="@post.ThumbnailUrl" class="w-100 rounded-4 shadow-sm" style="max-height: 480px; object-fit: contain; background: #000;">
-                        <source src="@post.VideoUrl" />
-                        Trình duyệt của bạn không hỗ trợ phát thẻ video.
-                    </video>
-                }
+                <!-- YouTube Facade: renders thumbnail + play button, loads iframe only on click -->
+                <div class="yt-facade ratio ratio-16x9 rounded-4 overflow-hidden shadow-sm border"
+                     data-yt-facade
+                     data-yt-id="@ytId"
+                     data-yt-title="@post.Title">
+                    <!-- JS in blog-lazy.js will render thumbnail + play button here -->
+                </div>
+                <p class="text-muted small text-center mt-2 mb-0">
+                    <i class="bi bi-play-circle text-danger me-1"></i>
+                    Video mô phỏng 3D — Bấm để phát · Nguồn: YouTube (No-Cookie Embed)
+                </p>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(post.VideoUrl))
+        {
+            <div class="blog-featured-video mb-4">
+                <video controls preload="metadata"
+                       poster="@post.ThumbnailUrl"
+                       class="w-100 rounded-4 shadow-sm"
+                       style="max-height: 480px; object-fit: contain; background: #000;">
+                    <source src="@post.VideoUrl" />
+                    Trình duyệt của bạn không hỗ trợ phát thẻ video.
+                </video>
             </div>
         }
         else if (!string.IsNullOrWhiteSpace(post.ThumbnailUrl))
         {
             <div class="blog-article-thumb-hero mb-4">
-                <img src="@post.ThumbnailUrl" alt="@post.Title" class="img-fluid w-100 rounded-4 shadow-sm blog-zoomable-img" loading="lazy" onerror="this.src='/images/blog/viem-tuy-rang-banner.svg'" />
+                <img src="@post.ThumbnailUrl"
+                     alt="@post.Title"
+                     class="img-fluid w-100 rounded-4 shadow-sm blog-zoomable-img"
+                     loading="lazy"
+                     decoding="async"
+                     onerror="this.src='/images/blog/viem-tuy-rang-banner.svg'" />
             </div>
         }
 
@@ -133,9 +195,11 @@
         <div class="doctor-phd-card mb-5">
             <div class="row align-items-center g-4">
                 <div class="col-auto text-center">
-                    <img src="@(!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl) ? post.AuthorAvatarUrl : "/images/doctors/dr-phuong-thao.svg")" 
-                         alt="@post.AuthorName" 
+                    <img src="@(!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl) ? post.AuthorAvatarUrl : "/images/doctors/dr-phuong-thao.svg")"
+                         alt="@post.AuthorName"
                          class="doctor-phd-avatar"
+                         loading="lazy"
+                         decoding="async"
                          onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
                     <div class="mt-2">
                         <span class="badge bg-primary text-white rounded-pill px-2.5 py-1 small">
@@ -145,7 +209,7 @@
                 </div>
                 <div class="col">
                     <div class="d-flex align-items-center gap-2 mb-1">
-                        <span class="badge bg-info-subtle text-info-emphasis rounded-pill px-2 py-0.5 fw-semibold small">Bác Sĩ Cố Vấn Chuyên Môn</span>
+                        <span class="badge bg-info-subtle text-info-emphasis rounded-pill px-2 fw-semibold small">Bác Sĩ Cố Vấn Chuyên Môn</span>
                         <span class="text-muted small"><i class="bi bi-award-fill text-warning me-1"></i>15 năm kinh nghiệm</span>
                     </div>
                     <h4 class="fw-bold text-dark mb-1">@post.AuthorName</h4>
@@ -172,7 +236,8 @@
                     <h3 class="fw-bold text-dark mb-0 fs-5">
                         <i class="bi bi-journal-text text-primary me-2"></i>Bài Viết Liên Quan Cùng Chuyên Mục
                     </h3>
-                    <a asp-controller="Blog" asp-action="Index" asp-route-category="@post.CategorySlug" class="text-decoration-none small text-primary fw-semibold">
+                    <a asp-controller="Blog" asp-action="Index" asp-route-category="@post.CategorySlug"
+                       class="text-decoration-none small text-primary fw-semibold">
                         Xem thêm <i class="bi bi-arrow-right"></i>
                     </a>
                 </div>
@@ -186,11 +251,14 @@
                                     <div style="width: 100px; height: 75px; flex-shrink: 0; border-radius: 8px; overflow: hidden;">
                                         <img src="@(!string.IsNullOrWhiteSpace(rel.ThumbnailUrl) ? rel.ThumbnailUrl : "/images/blog/viem-tuy-rang-banner.svg")"
                                              alt="@rel.Title"
+                                             loading="lazy"
+                                             decoding="async"
                                              style="width: 100%; height: 100%; object-fit: cover;" />
                                     </div>
                                     <div class="d-flex flex-column justify-content-between flex-grow-1 overflow-hidden">
                                         <h6 class="mb-1 fw-bold lh-sm">
-                                            <a asp-controller="Blog" asp-action="Detail" asp-route-slug="@rel.Slug" class="text-dark text-decoration-none text-truncate-2">
+                                            <a asp-controller="Blog" asp-action="Detail" asp-route-slug="@rel.Slug"
+                                               class="text-dark text-decoration-none text-truncate-2">
                                                 @rel.Title
                                             </a>
                                         </h6>
@@ -213,46 +281,27 @@
 <div class="modal fade" id="blogImageLightboxModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content bg-transparent border-0 text-center position-relative">
-            <button type="button" class="btn-close btn-close-white position-absolute top-0 end-0 m-3 z-3" data-bs-dismiss="modal" aria-label="Close"></button>
-            <img src="" id="blogLightboxModalImg" class="img-fluid rounded-4 shadow-lg mx-auto" style="max-height: 85vh; object-fit: contain; background: #000;" />
+            <button type="button" class="btn-close btn-close-white position-absolute top-0 end-0 m-3 z-3"
+                    data-bs-dismiss="modal" aria-label="Close"></button>
+            <img src="" id="blogLightboxModalImg"
+                 class="img-fluid rounded-4 shadow-lg mx-auto"
+                 style="max-height: 85vh; object-fit: contain; background: #000;" />
         </div>
     </div>
 </div>
 
 @section Scripts {
+    <!-- blog-lazy.js handles: YouTube facade, lazy images, lightbox, reading progress, smooth scroll -->
+    <script src="~/js/blog-lazy.js" defer></script>
     <script>
-        // 1. Copy Share URL
+        // Copy Share URL
         document.getElementById('copyShareBtn')?.addEventListener('click', function () {
             navigator.clipboard.writeText(window.location.href).then(function () {
                 var btn = document.getElementById('copyShareBtn');
-                var originalHtml = btn.innerHTML;
+                var orig = btn.innerHTML;
                 btn.innerHTML = '<i class="bi bi-check-lg text-success"></i> Đã sao chép!';
-                setTimeout(function () {
-                    btn.innerHTML = originalHtml;
-                }, 2500);
-            }).catch(function () {
-                alert('Không thể sao chép liên kết.');
-            });
+                setTimeout(function () { btn.innerHTML = orig; }, 2500);
+            }).catch(function () { alert('Không thể sao chép liên kết.'); });
         });
-
-        // 2. Lightbox Zoom & Lazy Loading for all article images
-        (function() {
-            var articleImgs = document.querySelectorAll('.blog-article-content img, .blog-zoomable-img');
-            var lightboxModalEl = document.getElementById('blogImageLightboxModal');
-            var lightboxImg = document.getElementById('blogLightboxModalImg');
-            var lightboxModal = (lightboxModalEl && window.bootstrap) ? new bootstrap.Modal(lightboxModalEl) : null;
-
-            articleImgs.forEach(function(img) {
-                img.setAttribute('loading', 'lazy');
-                img.classList.add('blog-zoomable-img');
-                img.addEventListener('click', function() {
-                    if (lightboxImg && lightboxModal) {
-                        lightboxImg.src = this.src;
-                        lightboxImg.alt = this.alt || 'Ảnh bài viết phóng to';
-                        lightboxModal.show();
-                    }
-                });
-            });
-        })();
     </script>
 }

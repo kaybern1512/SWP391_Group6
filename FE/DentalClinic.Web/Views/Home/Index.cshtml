@@ -482,7 +482,7 @@
                             <div class="col-lg-7">
                                 <div class="ratio ratio-16x9 rounded-3 overflow-hidden border border-secondary shadow">
                                     <iframe id="home3dVideoFrame" 
-                                            src="https://www.youtube.com/embed/VR8IQ9QFdWw" 
+                                            src="https://www.youtube-nocookie.com/embed/VR8IQ9QFdWw" loading="lazy" 
                                             title="Mô phỏng 3D y khoa nha khoa" 
                                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                                             allowfullscreen></iframe>
@@ -526,7 +526,7 @@
     function switchHomeVideo(videoId, title, desc, btnEl) {
         var frame = document.getElementById('home3dVideoFrame');
         if (frame) {
-            frame.src = 'https://www.youtube.com/embed/' + videoId + '?autoplay=1';
+            frame.src = 'https://www.youtube-nocookie.com/embed/' + videoId + '?autoplay=1&rel=0&modestbranding=1';
         }
         var titleEl = document.getElementById('home3dVideoTitle');
         if (titleEl) titleEl.innerText = title;

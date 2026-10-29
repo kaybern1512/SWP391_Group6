@@ -52,7 +52,7 @@
         <div class="doctor-phd-card mb-4">
             <div class="row align-items-center g-3">
                 <div class="col-auto text-center">
-                    <img src="/images/doctors/dr-phuong-thao.svg" alt="TS. BS. Nguyễn Thị Phương Thảo" class="doctor-phd-avatar" onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
+                    <img src="/images/doctors/dr-phuong-thao.svg" alt="TS. BS. Nguyễn Thị Phương Thảo" class="doctor-phd-avatar" loading="lazy" decoding="async" onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
                 </div>
                 <div class="col">
                     <div class="d-flex align-items-center gap-2 mb-1">
@@ -94,7 +94,7 @@
                                 </p>
                             </div>
                             <div class="text-center my-2 p-2 bg-white rounded-3 border">
-                                <img src="/images/blog/periopixel-dental-arch.png" alt="Mô phỏng 3D cung răng và nướu" class="img-fluid rounded-3 blog-zoomable-img" style="max-height: 180px; object-fit: contain;" />
+                                <img src="/images/blog/periopixel-dental-arch.png" alt="Mô phỏng 3D cung răng và nướu" class="img-fluid rounded-3 blog-zoomable-img" loading="lazy" decoding="async" style="max-height: 180px; object-fit: contain;" />
                             </div>
                             <div class="pt-3 border-top mt-3 d-flex justify-content-between align-items-center">
                                 <a asp-controller="Blog" asp-action="Detail" asp-route-slug="dieu-tri-viem-tuy-rang-nhu-the-nao" class="btn btn-sm btn-outline-success rounded-pill px-3 fw-semibold">
@@ -121,7 +121,7 @@
                                 </p>
                             </div>
                             <div class="text-center my-2 p-2 bg-white rounded-3 border">
-                                <img src="/images/blog/cham-soc-rang-mieng-3d.png" alt="Mô phỏng 3D kỹ thuật chải răng" class="img-fluid rounded-3 blog-zoomable-img" style="max-height: 180px; object-fit: contain;" />
+                                <img src="/images/blog/cham-soc-rang-mieng-3d.png" alt="Mô phỏng 3D kỹ thuật chải răng" class="img-fluid rounded-3 blog-zoomable-img" loading="lazy" decoding="async" style="max-height: 180px; object-fit: contain;" />
                             </div>
                             <div class="pt-3 border-top mt-3 d-flex justify-content-between align-items-center">
                                 <a asp-controller="Blog" asp-action="Detail" asp-route-slug="huong-dan-cham-soc-rang-mieng-dung-cach-6-thoi-quen" class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-semibold">
@@ -195,7 +195,7 @@
                                          onerror="this.src='/images/blog/viem-tuy-rang-banner.svg'"
                                          alt="@post.Title"
                                          class="blog-card-thumb"
-                                         loading="lazy" />
+                                         loading="lazy" decoding="async" />
                                 </a>
                                 <a asp-controller="Blog" asp-action="Index" asp-route-category="@post.CategorySlug" class="blog-badge-category">
                                     @post.CategoryName
@@ -220,7 +220,7 @@
                                     <div class="blog-card-author">
                                         @if (!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl))
                                         {
-                                            <img src="@(!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl) ? post.AuthorAvatarUrl : "/images/doctors/dr-phuong-thao.svg")" alt="@post.AuthorName" onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
+                                            <img src="@(!string.IsNullOrWhiteSpace(post.AuthorAvatarUrl) ? post.AuthorAvatarUrl : "/images/doctors/dr-phuong-thao.svg")" alt="@post.AuthorName" loading="lazy" decoding="async" onerror="this.src='/images/doctors/dr-phuong-thao.svg'" />
                                         }
                                         else
                                         {
@@ -300,3 +300,17 @@
         }
     </div>
 </div>
+
+@section Scripts {
+    <script src="~/js/blog-lazy.js" defer></script>
+    <script>
+        // Apply loaded class to images when they finish loading (for fade-in CSS)
+        document.querySelectorAll('img[loading="lazy"]').forEach(function (img) {
+            if (img.complete) {
+                img.classList.add('loaded');
+            } else {
+                img.addEventListener('load', function () { this.classList.add('loaded'); });
+            }
+        });
+    </script>
+}
