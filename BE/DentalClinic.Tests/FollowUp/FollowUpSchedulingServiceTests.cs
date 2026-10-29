@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Features.FollowUp.DTOs;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
@@ -9,6 +10,7 @@ using DentalClinic.Infrastructure.Persistence.Entities;
 using DentalClinic.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Xunit;
 
 namespace DentalClinic.Tests.FollowUp;
@@ -474,5 +476,153 @@ public class FollowUpSchedulingServiceTests
         Assert.Equal(targetDate.AddHours(8), response.Data[0].StartTime);
         Assert.Equal(targetDate.AddHours(9), response.Data[1].StartTime);
         Assert.Equal(targetDate.AddHours(9).AddMinutes(30), response.Data[2].StartTime);
+    }
+
+    [Fact]
+    public async Task CreateDoctorFollowUpAppointment_ValidRequest_CreatesAppointmentAndFollowUp()
+    {
+        var db = CreateDbContext(nameof(CreateDoctorFollowUpAppointment_ValidRequest_CreatesAppointmentAndFollowUp));
+        await SeedDoctorAndPatientAsync(db);
+
+        var targetDate = DateTime.Today.AddDays(2);
+        db.DentistWorkSchedules.Add(new DentistWorkSchedule
+        {
+            DentistScheduleId = 1,
+            DentistUserId = 20,
+            DepartmentId = 1,
+            WorkDate = DateOnly.FromDateTime(targetDate),
+            StartTime = new TimeOnly(8, 0),
+            EndTime = new TimeOnly(12, 0),
+            Status = "Scheduled"
+        });
+
+        // Add a treatment plan and session for patient 10
+        var plan = new TreatmentPlan
+        {
+            TreatmentPlanId = 1,
+            PatientUserId = 10,
+            CreatedByDentistUserId = 20,
+            Status = "Active"
+        };
+        db.TreatmentPlans.Add(plan);
+        var item = new TreatmentPlanItem
+        {
+            TreatmentPlanItemId = 1,
+            TreatmentPlanId = 1,
+            Status = "InProgress",
+            EstimatedCost = 1000000
+        };
+        db.TreatmentPlanItems.Add(item);
+        var session = new TreatmentSession
+        {
+            TreatmentSessionId = 1,
+            TreatmentPlanItemId = 1,
+            AppointmentId = 9999,
+            DentistUserId = 20,
+            SessionDate = DateTime.UtcNow.AddDays(-1),
+            TreatmentResult = "Thành công"
+        };
+        db.TreatmentSessions.Add(session);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var request = new CreateFollowUpAppointmentRequest
+        {
+            PatientUserId = 10,
+            TreatmentSessionId = 1,
+            DepartmentId = 1,
+            ScheduledStart = targetDate.AddHours(8).AddMinutes(30),
+            ScheduledEnd = targetDate.AddHours(9),
+            Reason = "Kiểm tra tiến độ phục hồi sau nhổ răng"
+        };
+
+        var response = await service.CreateDoctorFollowUpAppointmentAsync(20, request);
+
+        Assert.True(response.Success);
+        Assert.NotNull(response.Data);
+        Assert.Equal(10, response.Data.PatientUserId);
+        Assert.Equal(20, response.Data.DentistUserId);
+        Assert.Equal(AppointmentStatus.Confirmed, response.Data.Status);
+
+        // Verify database persistence
+        var savedApt = await db.Appointments.FirstOrDefaultAsync(a => a.AppointmentId == response.Data.AppointmentId);
+        Assert.NotNull(savedApt);
+        Assert.Equal(AppointmentStatus.Confirmed, savedApt.Status);
+
+        var savedFollowUp = await db.FollowUpSchedules.FirstOrDefaultAsync(f => f.AppointmentId == savedApt.AppointmentId);
+        Assert.NotNull(savedFollowUp);
+        Assert.Equal("Scheduled", savedFollowUp.Status);
+    }
+
+    [Fact]
+    public async Task CreateDoctorFollowUpAppointment_ConflictingSlot_Fails()
+    {
+        var db = CreateDbContext(nameof(CreateDoctorFollowUpAppointment_ConflictingSlot_Fails));
+        await SeedDoctorAndPatientAsync(db);
+
+        var targetDate = DateTime.Today.AddDays(2);
+        db.DentistWorkSchedules.Add(new DentistWorkSchedule
+        {
+            DentistScheduleId = 1,
+            DentistUserId = 20,
+            DepartmentId = 1,
+            WorkDate = DateOnly.FromDateTime(targetDate),
+            StartTime = new TimeOnly(8, 0),
+            EndTime = new TimeOnly(12, 0),
+            Status = "Scheduled"
+        });
+
+        // Existing conflicting appointment for doctor
+        db.Appointments.Add(new Appointment
+        {
+            AppointmentId = 70,
+            AppointmentCode = "APT-70",
+            PatientUserId = 999,
+            AssignedDentistUserId = 20,
+            ScheduledStart = targetDate.AddHours(9),
+            ScheduledEnd = targetDate.AddHours(9).AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Khám tổng quát",
+            BookingSource = BookingSource.Patient
+        });
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var request = new CreateFollowUpAppointmentRequest
+        {
+            PatientUserId = 10,
+            ScheduledStart = targetDate.AddHours(9).AddMinutes(15),
+            ScheduledEnd = targetDate.AddHours(9).AddMinutes(45),
+            Reason = "Tái khám"
+        };
+
+        var response = await service.CreateDoctorFollowUpAppointmentAsync(20, request);
+
+        Assert.False(response.Success);
+        Assert.Contains("trùng", response.Message);
+    }
+
+    [Fact]
+    public async Task CreateDoctorFollowUpAppointment_PastTime_Fails()
+    {
+        var db = CreateDbContext(nameof(CreateDoctorFollowUpAppointment_PastTime_Fails));
+        await SeedDoctorAndPatientAsync(db);
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var request = new CreateFollowUpAppointmentRequest
+        {
+            PatientUserId = 10,
+            ScheduledStart = DateTime.Today.AddDays(-1).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(-1).AddHours(9).AddMinutes(30),
+            Reason = "Tái khám quá khứ"
+        };
+
+        var response = await service.CreateDoctorFollowUpAppointmentAsync(20, request);
+
+        Assert.False(response.Success);
+        Assert.Contains("quá khứ", response.Message);
     }
 }
