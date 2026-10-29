@@ -148,4 +148,18 @@ public class PostCareController : ControllerBase
         if (!result.Success) return BadRequest(result);
         return Ok(result);
     }
+
+    [HttpPost("follow-ups/doctor-book")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpAppointmentDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpAppointmentDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DoctorBookFollowUp(
+        [FromBody] CreateFollowUpAppointmentRequest request,
+        CancellationToken ct = default)
+    {
+        var doctorUserId = GetCurrentUserId();
+        var result = await _schedulingService.CreateDoctorFollowUpAppointmentAsync(doctorUserId, request, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
 }

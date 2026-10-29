@@ -54,4 +54,13 @@ public interface IFollowUpSchedulingService
         DateTime end,
         long? excludeAppointmentId = null,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Bác sĩ đặt lịch hẹn tái khám trực tiếp cho bệnh nhân trong transaction an toàn,
+    /// đồng thời liên kết hoặc tạo FollowUpSchedule và gửi thông báo cho bệnh nhân.
+    /// </summary>
+    Task<ApiResponse<FollowUpAppointmentDto>> CreateDoctorFollowUpAppointmentAsync(
+        long doctorUserId,
+        CreateFollowUpAppointmentRequest request,
+        CancellationToken ct = default);
 }
