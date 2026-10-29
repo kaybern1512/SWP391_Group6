@@ -279,3 +279,92 @@
     font-size: 0.72rem;
     letter-spacing: 0.01em;
 }
+
+/* ==========================================================================
+   Day 06: Medical Imaging Before / After Comparison Styles
+   ========================================================================== */
+
+.compare-viewport {
+    background: #000000 !important;
+    min-height: 400px;
+    height: 58vh;
+    max-height: 65vh;
+    overflow: hidden;
+    position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.compare-stage {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+}
+
+.compare-img {
+    max-height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+    transform-origin: center center;
+    transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    pointer-events: auto;
+}
+
+.compare-img.can-pan,
+.compare-viewport.can-pan {
+    cursor: grab;
+}
+
+.compare-img.is-panning,
+.compare-viewport.is-panning {
+    cursor: grabbing !important;
+    transition: none !important;
+}
+
+.compare-toolbar {
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 6px;
+}
+
+.compare-toolbar .btn {
+    color: #e2e8f0;
+    transition: all 0.15s ease;
+}
+
+.compare-toolbar .btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    color: #38bdf8;
+    transform: translateY(-1px);
+}
+
+.compare-toolbar .btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.compare-zoom-badge {
+    min-width: 52px;
+    text-align: center;
+    font-size: 0.78rem;
+    background: rgba(0, 0, 0, 0.6) !important;
+    border: 1px solid rgba(56, 189, 248, 0.4) !important;
+    color: #38bdf8 !important;
+}
+
+.compare-meta-card {
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    font-size: 0.8rem;
+}

@@ -1591,4 +1591,734 @@
 
     global.MedicalImagingViewer = viewerApi;
 
+    // =========================================================================
+    // Day 06: Reusable Viewer Panel Architecture & Comparison Controller
+    // Independent Zoom & Pan per panel / Symmetrical layout / Swap / Metadata
+    // =========================================================================
+
+    function createViewerPanel(config) {
+        let panelZoom = 1.0;
+        let panelIsFitToScreen = true;
+        let panelPanX = 0;
+        let panelPanY = 0;
+        let panelIsPanning = false;
+        let panelActivePointerId = null;
+        let panelPointerStartX = 0;
+        let panelPointerStartY = 0;
+        let panelPanStartX = 0;
+        let panelPanStartY = 0;
+        let panelIsInitialized = false;
+
+        let viewportEl = null;
+        let imgEl = null;
+        let badgeZoom = null;
+        let btnZoomIn = null;
+        let btnZoomOut = null;
+        let btnFit = null;
+        let btnReset = null;
+        let spinnerEl = null;
+        let errorEl = null;
+
+        function resolveElements() {
+            if (typeof document === 'undefined') return;
+            viewportEl = document.getElementById(config.viewportId);
+            imgEl = document.getElementById(config.imgId);
+            badgeZoom = document.getElementById(config.badgeZoomId);
+            btnZoomIn = document.getElementById(config.btnZoomInId);
+            btnZoomOut = document.getElementById(config.btnZoomOutId);
+            btnFit = document.getElementById(config.btnFitId);
+            btnReset = document.getElementById(config.btnResetId);
+            spinnerEl = document.getElementById(config.spinnerId);
+            errorEl = document.getElementById(config.errorId);
+        }
+
+        function getImageDimensions() {
+            if (!imgEl) return { width: 0, height: 0 };
+            let w = imgEl.clientWidth;
+            let h = imgEl.clientHeight;
+            if (!w || !h) {
+                w = imgEl.naturalWidth || 800;
+                h = imgEl.naturalHeight || 600;
+            }
+            return { width: w, height: h };
+        }
+
+        function getViewportDimensions() {
+            if (!viewportEl) return { width: 0, height: 0 };
+            return {
+                width: viewportEl.clientWidth || 400,
+                height: viewportEl.clientHeight || 300
+            };
+        }
+
+        function getMaxPan(zoom) {
+            const imgDim = getImageDimensions();
+            const vpDim = getViewportDimensions();
+            const z = typeof zoom === 'number' ? zoom : panelZoom;
+
+            const scaledW = imgDim.width * z;
+            const scaledH = imgDim.height * z;
+
+            const maxX = Math.max(0, (scaledW - vpDim.width) / 2);
+            const maxY = Math.max(0, (scaledH - vpDim.height) / 2);
+
+            return {
+                maxX: Math.round(maxX * 100) / 100,
+                maxY: Math.round(maxY * 100) / 100
+            };
+        }
+
+        function canPan(zoom) {
+            const bounds = getMaxPan(zoom);
+            return bounds.maxX > 0 || bounds.maxY > 0;
+        }
+
+        function clampPan(x, y, zoom) {
+            const bounds = getMaxPan(zoom);
+            const clampedX = bounds.maxX > 0 ? clamp(x, -bounds.maxX, bounds.maxX) : 0;
+            const clampedY = bounds.maxY > 0 ? clamp(y, -bounds.maxY, bounds.maxY) : 0;
+            return {
+                x: Math.round(clampedX * 100) / 100,
+                y: Math.round(clampedY * 100) / 100
+            };
+        }
+
+        function calculateFitZoom() {
+            const vpDim = getViewportDimensions();
+            const imgDim = getImageDimensions();
+            if (imgDim.width <= 0 || imgDim.height <= 0 || vpDim.width <= 0 || vpDim.height <= 0) {
+                return 1.0;
+            }
+            const scaleX = vpDim.width / imgDim.width;
+            const scaleY = vpDim.height / imgDim.height;
+            const fitScale = Math.min(scaleX, scaleY, 1.0);
+            return clamp(Math.round(fitScale * 100) / 100, MIN_ZOOM, MAX_ZOOM);
+        }
+
+        function applyTransform(withTransition) {
+            if (!imgEl) return;
+            imgEl.style.transition = withTransition ? 'transform 0.12s cubic-bezier(0.2, 0, 0, 1)' : 'none';
+            imgEl.style.transformOrigin = 'center center';
+            imgEl.style.transform = 'translate(' + panelPanX + 'px, ' + panelPanY + 'px) scale(' + panelZoom + ')';
+        }
+
+        function updateCursor() {
+            if (!viewportEl || !imgEl) return;
+            if (panelIsPanning) {
+                viewportEl.style.cursor = 'grabbing';
+                imgEl.style.cursor = 'grabbing';
+                viewportEl.classList.add('is-panning');
+                imgEl.classList.add('is-panning');
+                viewportEl.classList.remove('can-pan');
+                imgEl.classList.remove('can-pan');
+            } else if (canPan()) {
+                viewportEl.style.cursor = 'grab';
+                imgEl.style.cursor = 'grab';
+                viewportEl.classList.remove('is-panning');
+                imgEl.classList.remove('is-panning');
+                viewportEl.classList.add('can-pan');
+                imgEl.classList.add('can-pan');
+            } else {
+                viewportEl.style.cursor = 'default';
+                imgEl.style.cursor = 'default';
+                viewportEl.classList.remove('is-panning', 'can-pan');
+                imgEl.classList.remove('is-panning', 'can-pan');
+            }
+        }
+
+        function updateUI(statusText) {
+            if (badgeZoom) {
+                const percent = Math.round(panelZoom * 100);
+                badgeZoom.textContent = statusText || (percent + '%');
+            }
+            if (btnZoomIn) {
+                btnZoomIn.disabled = panelZoom >= MAX_ZOOM;
+                btnZoomIn.setAttribute('aria-disabled', panelZoom >= MAX_ZOOM ? 'true' : 'false');
+            }
+            if (btnZoomOut) {
+                btnZoomOut.disabled = panelZoom <= MIN_ZOOM;
+                btnZoomOut.setAttribute('aria-disabled', panelZoom <= MIN_ZOOM ? 'true' : 'false');
+            }
+        }
+
+        function setZoom(newZoom, focalX, focalY, isFit) {
+            const oldZoom = panelZoom;
+            panelZoom = clamp(Math.round(newZoom * 100) / 100, MIN_ZOOM, MAX_ZOOM);
+            panelIsFitToScreen = !!isFit;
+
+            if (panelZoom !== oldZoom && oldZoom > 0) {
+                const ratio = panelZoom / oldZoom;
+                if (typeof focalX === 'number' && typeof focalY === 'number') {
+                    panelPanX = focalX - (focalX - panelPanX) * ratio;
+                    panelPanY = focalY - (focalY - panelPanY) * ratio;
+                } else {
+                    panelPanX = panelPanX * ratio;
+                    panelPanY = panelPanY * ratio;
+                }
+                const clamped = clampPan(panelPanX, panelPanY, panelZoom);
+                panelPanX = clamped.x;
+                panelPanY = clamped.y;
+            }
+
+            applyTransform(true);
+            updateUI();
+            updateCursor();
+            return panelZoom;
+        }
+
+        function zoomIn(step) {
+            panelIsFitToScreen = false;
+            const delta = typeof step === 'number' ? step : ZOOM_STEP;
+            return setZoom(panelZoom + delta, null, null, false);
+        }
+
+        function zoomOut(step) {
+            panelIsFitToScreen = false;
+            const delta = typeof step === 'number' ? step : ZOOM_STEP;
+            return setZoom(panelZoom - delta, null, null, false);
+        }
+
+        function fitToScreen() {
+            if (!imgEl) return panelZoom;
+            if (panelIsPanning) {
+                endPan();
+            }
+            panelPanX = 0;
+            panelPanY = 0;
+            panelZoom = calculateFitZoom();
+            panelIsFitToScreen = true;
+            applyTransform(true);
+            const percent = Math.round(panelZoom * 100);
+            updateUI(percent + '%');
+            updateCursor();
+            return panelZoom;
+        }
+
+        function resetView() {
+            if (!imgEl) return panelZoom;
+            if (panelIsPanning) {
+                endPan();
+            }
+            panelPanX = 0;
+            panelPanY = 0;
+            panelZoom = 1.0;
+            panelIsFitToScreen = false;
+            applyTransform(true);
+            updateUI('100%');
+            updateCursor();
+            return panelZoom;
+        }
+
+        function panTo(x, y) {
+            const clamped = clampPan(x, y, panelZoom);
+            panelPanX = clamped.x;
+            panelPanY = clamped.y;
+            applyTransform(true);
+            updateCursor();
+            return { x: panelPanX, y: panelPanY };
+        }
+
+        function onWheel(e) {
+            if (!viewportEl || !imgEl || imgEl.classList.contains('d-none')) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+            const oldZoom = panelZoom;
+            const newZoom = clamp(Math.round((oldZoom + delta) * 100) / 100, MIN_ZOOM, MAX_ZOOM);
+            if (newZoom === oldZoom) return;
+
+            panelIsFitToScreen = false;
+            const vpRect = viewportEl.getBoundingClientRect();
+            const focalX = e.clientX - (vpRect.left + vpRect.width / 2);
+            const focalY = e.clientY - (vpRect.top + vpRect.height / 2);
+
+            setZoom(newZoom, focalX, focalY, false);
+        }
+
+        function onPointerDown(e) {
+            if (e.button !== 0) return;
+            if (!viewportEl || !imgEl || imgEl.classList.contains('d-none')) return;
+            if (!canPan()) return;
+
+            e.preventDefault();
+            panelIsPanning = true;
+            panelActivePointerId = e.pointerId;
+            panelPointerStartX = e.clientX;
+            panelPointerStartY = e.clientY;
+            panelPanStartX = panelPanX;
+            panelPanStartY = panelPanY;
+
+            try {
+                if (viewportEl.setPointerCapture) {
+                    viewportEl.setPointerCapture(e.pointerId);
+                }
+            } catch (err) {}
+
+            updateCursor();
+            applyTransform(false);
+        }
+
+        function onPointerMove(e) {
+            if (!panelIsPanning) return;
+            if (panelActivePointerId !== null && e.pointerId !== panelActivePointerId) return;
+
+            e.preventDefault();
+            const dx = e.clientX - panelPointerStartX;
+            const dy = e.clientY - panelPointerStartY;
+            const newX = panelPanStartX + dx;
+            const newY = panelPanStartY + dy;
+
+            const clamped = clampPan(newX, newY, panelZoom);
+            panelPanX = clamped.x;
+            panelPanY = clamped.y;
+            applyTransform(false);
+        }
+
+        function onPointerUp(e) {
+            if (!panelIsPanning) return;
+            if (panelActivePointerId !== null && e.pointerId !== panelActivePointerId) return;
+            endPan();
+        }
+
+        function onPointerCancel(e) {
+            if (!panelIsPanning) return;
+            endPan();
+        }
+
+        function onLostPointerCapture(e) {
+            if (panelIsPanning) {
+                endPan();
+            }
+        }
+
+        function endPan() {
+            if (!panelIsPanning) return;
+            panelIsPanning = false;
+
+            if (panelActivePointerId !== null && viewportEl && viewportEl.releasePointerCapture) {
+                try {
+                    if (viewportEl.hasPointerCapture && viewportEl.hasPointerCapture(panelActivePointerId)) {
+                        viewportEl.releasePointerCapture(panelActivePointerId);
+                    }
+                } catch (err) {}
+            }
+            panelActivePointerId = null;
+
+            updateCursor();
+            applyTransform(true);
+        }
+
+        function attachEvents() {
+            resolveElements();
+            if (panelIsInitialized) return;
+
+            if (btnZoomIn) {
+                btnZoomIn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    zoomIn();
+                });
+            }
+            if (btnZoomOut) {
+                btnZoomOut.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    zoomOut();
+                });
+            }
+            if (btnFit) {
+                btnFit.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    fitToScreen();
+                });
+            }
+            if (btnReset) {
+                btnReset.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    resetView();
+                });
+            }
+            if (viewportEl) {
+                viewportEl.addEventListener('wheel', onWheel, { passive: false });
+                viewportEl.addEventListener('pointerdown', onPointerDown);
+                viewportEl.addEventListener('pointermove', onPointerMove);
+                viewportEl.addEventListener('pointerup', onPointerUp);
+                viewportEl.addEventListener('pointercancel', onPointerCancel);
+                viewportEl.addEventListener('lostpointercapture', onLostPointerCapture);
+                viewportEl.addEventListener('dragstart', function (e) { e.preventDefault(); });
+            }
+            if (imgEl) {
+                imgEl.addEventListener('dragstart', function (e) { e.preventDefault(); });
+                imgEl.addEventListener('load', function () {
+                    updateCursor();
+                });
+            }
+
+            panelIsInitialized = true;
+        }
+
+        function loadImage(url, onLoaded, onError) {
+            resolveElements();
+            if (!imgEl) return;
+
+            if (spinnerEl) spinnerEl.classList.remove('d-none');
+            if (errorEl) errorEl.classList.add('d-none');
+            imgEl.classList.add('d-none');
+            imgEl.src = '';
+
+            imgEl.onload = function () {
+                if (spinnerEl) spinnerEl.classList.add('d-none');
+                imgEl.classList.remove('d-none');
+                resetView();
+                if (typeof onLoaded === 'function') onLoaded();
+            };
+
+            imgEl.onerror = function () {
+                if (spinnerEl) spinnerEl.classList.add('d-none');
+                if (errorEl) errorEl.classList.remove('d-none');
+                imgEl.classList.add('d-none');
+                if (typeof onError === 'function') onError();
+            };
+
+            imgEl.src = url;
+        }
+
+        function clearImage() {
+            resolveElements();
+            if (imgEl) {
+                imgEl.onload = null;
+                imgEl.onerror = null;
+                imgEl.src = '';
+                imgEl.classList.add('d-none');
+            }
+            if (spinnerEl) spinnerEl.classList.add('d-none');
+            if (errorEl) errorEl.classList.add('d-none');
+            resetView();
+        }
+
+        return {
+            zoomIn: zoomIn,
+            zoomOut: zoomOut,
+            setZoom: setZoom,
+            fitToScreen: fitToScreen,
+            resetView: resetView,
+            panTo: panTo,
+            canPan: canPan,
+            isPanning: function () { return panelIsPanning; },
+            getCurrentZoom: function () { return panelZoom; },
+            getPan: function () { return { x: panelPanX, y: panelPanY }; },
+            getMaxPan: getMaxPan,
+            calculateFitZoom: calculateFitZoom,
+            loadImage: loadImage,
+            clearImage: clearImage,
+            attachEvents: attachEvents,
+            isInitialized: function () { return panelIsInitialized; }
+        };
+    }
+
+    // =========================================================================
+    // MedicalImagingComparisonViewer Controller
+    // =========================================================================
+
+    let isComparisonInitialized = false;
+    let comparisonModalEl = null;
+    let comparisonModalInstance = null;
+    let selectCompareBefore = null;
+    let selectCompareAfter = null;
+    let btnSwapComparison = null;
+    let btnResetBoth = null;
+    let compareEmptyAlert = null;
+    let compareGridContainer = null;
+
+    let availableImages = [];
+    let selectedBeforeId = null;
+    let selectedAfterId = null;
+
+    const panelBefore = createViewerPanel({
+        panelKey: 'before',
+        viewportId: 'compareViewportBefore',
+        imgId: 'compareImageBefore',
+        badgeZoomId: 'zoomBadgeBefore',
+        btnZoomInId: 'btnZoomInBefore',
+        btnZoomOutId: 'btnZoomOutBefore',
+        btnFitId: 'btnFitBefore',
+        btnResetId: 'btnResetBefore',
+        spinnerId: 'spinnerBefore',
+        errorId: 'errorBefore'
+    });
+
+    const panelAfter = createViewerPanel({
+        panelKey: 'after',
+        viewportId: 'compareViewportAfter',
+        imgId: 'compareImageAfter',
+        badgeZoomId: 'zoomBadgeAfter',
+        btnZoomInId: 'btnZoomInAfter',
+        btnZoomOutId: 'btnZoomOutAfter',
+        btnFitId: 'btnFitAfter',
+        btnResetId: 'btnResetAfter',
+        spinnerId: 'spinnerAfter',
+        errorId: 'errorAfter'
+    });
+
+    function initComparison() {
+        if (typeof document === 'undefined') return;
+        comparisonModalEl = document.getElementById('imagingComparisonModal');
+        if (!comparisonModalEl) return;
+
+        selectCompareBefore = document.getElementById('selectCompareBefore');
+        selectCompareAfter = document.getElementById('selectCompareAfter');
+        btnSwapComparison = document.getElementById('btnSwapComparison');
+        btnResetBoth = document.getElementById('btnResetBoth');
+        compareEmptyAlert = document.getElementById('compareEmptyAlert');
+        compareGridContainer = document.getElementById('compareGridContainer');
+
+        panelBefore.attachEvents();
+        panelAfter.attachEvents();
+
+        if (!isComparisonInitialized) {
+            if (selectCompareBefore) {
+                selectCompareBefore.addEventListener('change', function (e) {
+                    const id = parseInt(e.target.value, 10);
+                    selectBefore(id);
+                });
+            }
+
+            if (selectCompareAfter) {
+                selectCompareAfter.addEventListener('change', function (e) {
+                    const id = parseInt(e.target.value, 10);
+                    selectAfter(id);
+                });
+            }
+
+            if (btnSwapComparison) {
+                btnSwapComparison.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    swapImages();
+                });
+            }
+
+            if (btnResetBoth) {
+                btnResetBoth.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    resetBoth();
+                });
+            }
+
+            comparisonModalEl.addEventListener('hidden.bs.modal', function () {
+                closeComparison();
+            });
+
+            isComparisonInitialized = true;
+        }
+    }
+
+    function populateSelectOptions() {
+        if (!selectCompareBefore || !selectCompareAfter) return;
+        selectCompareBefore.innerHTML = '';
+        selectCompareAfter.innerHTML = '';
+
+        availableImages.forEach(function (img) {
+            const optBefore = document.createElement('option');
+            optBefore.value = img.id.toString();
+            optBefore.textContent = (img.type || 'X-quang') + ' — ' + (img.savedAt ? ('Lưu: ' + img.savedAt) : (img.entryDate ? ('Khám: ' + img.entryDate) : ('#' + img.id)));
+            selectCompareBefore.appendChild(optBefore);
+
+            const optAfter = document.createElement('option');
+            optAfter.value = img.id.toString();
+            optAfter.textContent = (img.type || 'X-quang') + ' — ' + (img.savedAt ? ('Lưu: ' + img.savedAt) : (img.entryDate ? ('Khám: ' + img.entryDate) : ('#' + img.id)));
+            selectCompareAfter.appendChild(optAfter);
+        });
+    }
+
+    function updateMetadataCard(panelKey, image) {
+        if (typeof document === 'undefined') return;
+        const metaEl = document.getElementById('compareMeta' + (panelKey === 'before' ? 'Before' : 'After'));
+        if (!metaEl) return;
+
+        if (!image) {
+            metaEl.innerHTML = '<span class="text-white-50 small fst-italic">Chưa chọn ảnh</span>';
+            return;
+        }
+
+        const dateStr = image.savedAt ? ('Ngày lưu ảnh: ' + image.savedAt) : 'Không có thông tin ngày.';
+        const typeStr = image.type || 'X-Quang';
+        const summaryStr = (image.summary && image.summary.trim().length > 0) ? image.summary : 'Chưa có kết luận đọc phim.';
+        const entryStr = image.entryDate ? ('Đợt khám: ' + image.entryDate + (image.diagnosis ? (' — ' + image.diagnosis) : '')) : '';
+
+        let html = '<div class="d-flex flex-wrap justify-content-between align-items-center mb-1">';
+        html += '<span class="fw-bold text-info"><i class="bi bi-film me-1"></i>' + escapeHtml(typeStr) + '</span>';
+        html += '<span class="text-white-50 small"><i class="bi bi-calendar3 me-1"></i>' + escapeHtml(dateStr) + '</span>';
+        html += '</div>';
+
+        if (entryStr) {
+            html += '<div class="text-white-50 small mb-1"><i class="bi bi-journal-medical me-1 text-primary"></i>' + escapeHtml(entryStr) + '</div>';
+        }
+
+        html += '<div class="text-slate-300 small text-truncate-2" title="' + escapeHtml(summaryStr) + '"><i class="bi bi-chat-left-text me-1 text-secondary"></i>' + escapeHtml(summaryStr) + '</div>';
+
+        metaEl.innerHTML = html;
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function selectBefore(id) {
+        if (id === selectedAfterId && availableImages.length >= 2) {
+            if (typeof window !== 'undefined' && window.alert) {
+                window.alert('Không thể chọn cùng một ảnh cho cả hai bên Before và After. Vui lòng chọn hai ảnh khác nhau để so sánh.');
+            }
+            if (selectCompareBefore) selectCompareBefore.value = selectedBeforeId ? selectedBeforeId.toString() : '';
+            return false;
+        }
+
+        const found = availableImages.find(function (img) { return img.id === id; });
+        if (!found) return false;
+
+        selectedBeforeId = id;
+        if (selectCompareBefore) selectCompareBefore.value = id.toString();
+        panelBefore.loadImage(found.url);
+        updateMetadataCard('before', found);
+        return true;
+    }
+
+    function selectAfter(id) {
+        if (id === selectedBeforeId && availableImages.length >= 2) {
+            if (typeof window !== 'undefined' && window.alert) {
+                window.alert('Không thể chọn cùng một ảnh cho cả hai bên Before và After. Vui lòng chọn hai ảnh khác nhau để so sánh.');
+            }
+            if (selectCompareAfter) selectCompareAfter.value = selectedAfterId ? selectedAfterId.toString() : '';
+            return false;
+        }
+
+        const found = availableImages.find(function (img) { return img.id === id; });
+        if (!found) return false;
+
+        selectedAfterId = id;
+        if (selectCompareAfter) selectCompareAfter.value = id.toString();
+        panelAfter.loadImage(found.url);
+        updateMetadataCard('after', found);
+        return true;
+    }
+
+    function swapImages() {
+        if (!selectedBeforeId || !selectedAfterId) return false;
+        const tempId = selectedBeforeId;
+        const imgBefore = availableImages.find(function (img) { return img.id === selectedAfterId; });
+        const imgAfter = availableImages.find(function (img) { return img.id === tempId; });
+
+        if (!imgBefore || !imgAfter) return false;
+
+        selectedBeforeId = imgBefore.id;
+        selectedAfterId = imgAfter.id;
+
+        if (selectCompareBefore) selectCompareBefore.value = selectedBeforeId.toString();
+        if (selectCompareAfter) selectCompareAfter.value = selectedAfterId.toString();
+
+        panelBefore.loadImage(imgBefore.url);
+        panelAfter.loadImage(imgAfter.url);
+
+        updateMetadataCard('before', imgBefore);
+        updateMetadataCard('after', imgAfter);
+        return true;
+    }
+
+    function resetBefore() {
+        return panelBefore.resetView();
+    }
+
+    function resetAfter() {
+        return panelAfter.resetView();
+    }
+
+    function resetBoth() {
+        panelBefore.resetView();
+        panelAfter.resetView();
+        return true;
+    }
+
+    function openComparison(images, initialBeforeId, initialAfterId) {
+        initComparison();
+        availableImages = Array.isArray(images) ? images.slice() : [];
+
+        if (availableImages.length < 2) {
+            if (compareEmptyAlert) {
+                compareEmptyAlert.classList.remove('d-none');
+                const alertText = compareEmptyAlert.querySelector('.compare-alert-text');
+                if (alertText) {
+                    alertText.textContent = availableImages.length === 1
+                        ? 'Không đủ hai ảnh X-quang để thực hiện so sánh.'
+                        : 'Chưa có ảnh X-quang nào để thực hiện so sánh.';
+                }
+            }
+            if (compareGridContainer) compareGridContainer.classList.add('d-none');
+            showModal();
+            return false;
+        }
+
+        if (compareEmptyAlert) compareEmptyAlert.classList.add('d-none');
+        if (compareGridContainer) compareGridContainer.classList.remove('d-none');
+
+        populateSelectOptions();
+
+        // Default selection: initial IDs or first 2 available images
+        const bId = initialBeforeId || availableImages[0].id;
+        let aId = initialAfterId || (availableImages.length > 1 ? availableImages[1].id : null);
+        if (aId === bId && availableImages.length > 1) {
+            aId = availableImages.find(function (img) { return img.id !== bId; })?.id || null;
+        }
+
+        selectBefore(bId);
+        if (aId) selectAfter(aId);
+
+        showModal();
+        return true;
+    }
+
+    function showModal() {
+        if (!comparisonModalEl || typeof bootstrap === 'undefined') return;
+        if (!comparisonModalInstance) {
+            comparisonModalInstance = new bootstrap.Modal(comparisonModalEl, {
+                backdrop: true,
+                keyboard: true
+            });
+        }
+        comparisonModalInstance.show();
+    }
+
+    function closeComparison() {
+        panelBefore.clearImage();
+        panelAfter.clearImage();
+        selectedBeforeId = null;
+        selectedAfterId = null;
+        if (compareEmptyAlert) compareEmptyAlert.classList.add('d-none');
+        if (compareGridContainer) compareGridContainer.classList.remove('d-none');
+    }
+
+    const comparisonViewerApi = {
+        init: initComparison,
+        openComparison: openComparison,
+        selectBefore: selectBefore,
+        selectAfter: selectAfter,
+        swapImages: swapImages,
+        resetBefore: resetBefore,
+        resetAfter: resetAfter,
+        resetBoth: resetBoth,
+        closeComparison: closeComparison,
+        getBeforePanel: function () { return panelBefore; },
+        getAfterPanel: function () { return panelAfter; },
+        getAvailableImages: function () { return availableImages.slice(); },
+        getSelectedBeforeId: function () { return selectedBeforeId; },
+        getSelectedAfterId: function () { return selectedAfterId; },
+        createViewerPanel: createViewerPanel,
+        isInitialized: function () { return isComparisonInitialized; }
+    };
+
+    global.MedicalImagingComparisonViewer = comparisonViewerApi;
+
 })(typeof window !== 'undefined' ? window : this);

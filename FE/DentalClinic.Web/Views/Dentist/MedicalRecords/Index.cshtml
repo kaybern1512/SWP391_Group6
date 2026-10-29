@@ -337,12 +337,18 @@
 
                 <!-- Clinical Entries History Timeline -->
                 <div class="card border-0 shadow-sm rounded-3">
-                    <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                    <div class="card-header bg-white border-0 py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h5 class="card-title fw-bold text-slate-800 mb-0 d-flex align-items-center gap-2">
                             <i class="bi bi-clock-history text-primary"></i>
                             <span>Lịch Sử Khám & Chẩn Đoán Lâm Sàng</span>
                             <span class="badge bg-secondary-subtle text-secondary rounded-pill fs-12 ms-1">@record.ClinicalEntries.Count đợt khám</span>
                         </h5>
+                        <div class="d-flex align-items-center gap-2">
+                            <button type="button" id="btnOpenComparison" class="btn btn-sm btn-outline-primary fw-semibold d-inline-flex align-items-center gap-1 shadow-sm" onclick="openComparisonModal()" title="So sánh 2 ảnh X-quang Trước / Sau của bệnh nhân">
+                                <i class="bi bi-layout-split"></i>
+                                <span>So Sánh Phim (Before / After)</span>
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body p-4 pt-2">
                         @if (record.ClinicalEntries.Any())
@@ -486,7 +492,15 @@
                                                                         </div>
                                                                         @if (User.IsInRole("Dentist"))
                                                                         {
-                                                                            <div class="d-flex justify-content-end mt-2 pt-1 border-top border-light">
+                                                                            <div class="d-flex justify-content-end align-items-center gap-1 mt-2 pt-1 border-top border-light">
+                                                                                @if (!isDicom)
+                                                                                {
+                                                                                    <button type="button" class="btn btn-xs btn-outline-primary"
+                                                                                            onclick="openComparisonWithImage(@img.ImagingRecordId)"
+                                                                                            title="Mở so sánh với ảnh này">
+                                                                                        <i class="bi bi-layout-split me-1"></i> So sánh
+                                                                                    </button>
+                                                                                }
                                                                                 <button type="button" class="btn btn-xs btn-outline-danger"
                                                                                         onclick="openDeleteImagingModal(@img.ImagingRecordId, '@(img.ImagingType)', '@(img.CreatedAt.ToString("dd/MM/yyyy HH:mm"))', @(record.PatientUserId))"
                                                                                         title="Xóa phim X-quang">
@@ -1053,6 +1067,188 @@
         </div>
     </div>
 
+    <!-- Modal So Sánh Phim X-Quang (Day 06: Before / After Comparison) -->
+    <div class="modal fade" id="imagingComparisonModal" tabindex="-1" aria-labelledby="imagingComparisonModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-fullscreen-xl-down modal-xl modal-dialog-centered" style="max-width: 95vw;">
+            <div class="modal-content bg-dark text-white border-0 shadow-lg overflow-hidden">
+                <div class="modal-header border-secondary border-opacity-50 py-2 px-3 bg-dark d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-layout-split text-info fs-5"></i>
+                        <h6 class="modal-title fw-bold text-white mb-0" id="imagingComparisonModalLabel">
+                            So Sánh Phim X-Quang (Before / After Comparison)
+                        </h6>
+                        <span class="badge bg-secondary-subtle text-secondary small border border-secondary border-opacity-50 ms-1">
+                            Bệnh nhân: @record.PatientName
+                        </span>
+                    </div>
+
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <button type="button" id="btnSwapComparison" class="btn btn-sm btn-outline-warning d-inline-flex align-items-center gap-1 shadow-sm" title="Đảo vị trí hai ảnh Trước và Sau (Swap Images)">
+                            <i class="bi bi-arrow-left-right"></i>
+                            <span class="d-none d-sm-inline">Đảo vị trí (Swap)</span>
+                        </button>
+                        <button type="button" id="btnResetBoth" class="btn btn-sm btn-outline-light d-inline-flex align-items-center gap-1 shadow-sm" title="Reset thu phóng và vị trí cả hai ảnh">
+                            <i class="bi bi-arrow-clockwise"></i>
+                            <span class="d-none d-sm-inline">Reset cả hai</span>
+                        </button>
+                        <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal" aria-label="Đóng (Esc)"></button>
+                    </div>
+                </div>
+
+                <div class="modal-body p-3 bg-dark">
+                    <!-- Empty / Insufficient images alert -->
+                    <div id="compareEmptyAlert" class="p-5 text-center text-warning d-none">
+                        <i class="bi bi-exclamation-circle-fill fs-1 text-warning mb-3 d-block"></i>
+                        <h5 class="text-white fw-bold mb-2">Không đủ điều kiện so sánh</h5>
+                        <p class="small text-white-50 mb-0 compare-alert-text">Không đủ hai ảnh X-quang để thực hiện so sánh.</p>
+                    </div>
+
+                    <!-- Two-column Comparison Grid -->
+                    <div id="compareGridContainer" class="row g-3">
+                        <!-- BEFORE PANEL (Left) -->
+                        <div class="col-12 col-lg-6 d-flex flex-column">
+                            <div class="card bg-black border border-secondary border-opacity-50 rounded-3 p-2 h-100 d-flex flex-column">
+                                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2 pb-2 border-bottom border-secondary border-opacity-50">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-primary text-white px-2 py-1 fw-bold">
+                                            <i class="bi bi-clock-history me-1"></i>BEFORE — Trước điều trị
+                                        </span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 flex-grow-1 justify-content-end">
+                                        <label for="selectCompareBefore" class="visually-hidden">Chọn ảnh Trước</label>
+                                        <select id="selectCompareBefore" class="form-select form-select-sm bg-dark text-white border-secondary small text-truncate" style="max-width: 240px;" title="Chọn phim X-quang Trước điều trị">
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Toolbar BEFORE -->
+                                <div class="d-flex align-items-center justify-content-between gap-1 mb-2 px-2 py-1 compare-toolbar">
+                                    <div class="d-flex align-items-center gap-1">
+                                        <button type="button" id="btnZoomInBefore" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Phóng to ảnh Before (+)" aria-label="Phóng to Before">
+                                            <i class="bi bi-zoom-in"></i>
+                                        </button>
+                                        <button type="button" id="btnZoomOutBefore" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Thu nhỏ ảnh Before (-)" aria-label="Thu nhỏ Before">
+                                            <i class="bi bi-zoom-out"></i>
+                                        </button>
+                                        <span id="zoomBadgeBefore" class="badge bg-dark text-info border border-info border-opacity-50 px-2 py-1 compare-zoom-badge" title="Tỷ lệ thu phóng Before">100%</span>
+                                        <button type="button" id="btnFitBefore" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Khớp khung nhìn Before" aria-label="Khớp khung nhìn Before">
+                                            <i class="bi bi-arrows-angle-contract"></i>
+                                        </button>
+                                    </div>
+                                    <div>
+                                        <button type="button" id="btnResetBefore" class="btn btn-sm btn-outline-light border-0 px-2 py-1 text-warning" title="Reset ảnh Before về ban đầu" aria-label="Reset Before">
+                                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Viewport BEFORE -->
+                                <div id="compareViewportBefore" class="compare-viewport flex-grow-1 d-flex justify-content-center align-items-center position-relative">
+                                    <div id="spinnerBefore" class="position-absolute d-flex flex-column align-items-center justify-content-center text-white d-none" style="z-index: 10;">
+                                        <div class="spinner-border text-primary spinner-border-sm" role="status">
+                                            <span class="visually-hidden">Đang tải ảnh Before...</span>
+                                        </div>
+                                        <span class="small text-white-50 mt-1" style="font-size: 0.75rem;">Đang tải...</span>
+                                    </div>
+
+                                    <div id="errorBefore" class="p-3 text-center text-warning position-absolute d-none" style="z-index: 10;">
+                                        <i class="bi bi-exclamation-triangle-fill text-warning fs-3 mb-1 d-block"></i>
+                                        <div class="small text-white fw-semibold">Không thể tải ảnh Trước điều trị</div>
+                                        <div class="text-white-50" style="font-size: 0.7rem;">Ảnh có thể đã bị xóa hoặc phiên hết hạn.</div>
+                                    </div>
+
+                                    <div class="compare-stage">
+                                        <img id="compareImageBefore" src="" class="compare-img d-none" alt="Phim X-quang Trước điều trị (Before)" draggable="false" />
+                                    </div>
+                                </div>
+
+                                <!-- Metadata BEFORE -->
+                                <div id="compareMetaBefore" class="compare-meta-card p-2 text-white-50 mt-2">
+                                    <span class="text-white-50 small fst-italic">Chưa chọn ảnh</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AFTER PANEL (Right) -->
+                        <div class="col-12 col-lg-6 d-flex flex-column">
+                            <div class="card bg-black border border-secondary border-opacity-50 rounded-3 p-2 h-100 d-flex flex-column">
+                                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2 pb-2 border-bottom border-secondary border-opacity-50">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-success text-white px-2 py-1 fw-bold">
+                                            <i class="bi bi-check-circle me-1"></i>AFTER — Sau điều trị
+                                        </span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 flex-grow-1 justify-content-end">
+                                        <label for="selectCompareAfter" class="visually-hidden">Chọn ảnh Sau</label>
+                                        <select id="selectCompareAfter" class="form-select form-select-sm bg-dark text-white border-secondary small text-truncate" style="max-width: 240px;" title="Chọn phim X-quang Sau điều trị">
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Toolbar AFTER -->
+                                <div class="d-flex align-items-center justify-content-between gap-1 mb-2 px-2 py-1 compare-toolbar">
+                                    <div class="d-flex align-items-center gap-1">
+                                        <button type="button" id="btnZoomInAfter" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Phóng to ảnh After (+)" aria-label="Phóng to After">
+                                            <i class="bi bi-zoom-in"></i>
+                                        </button>
+                                        <button type="button" id="btnZoomOutAfter" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Thu nhỏ ảnh After (-)" aria-label="Thu nhỏ After">
+                                            <i class="bi bi-zoom-out"></i>
+                                        </button>
+                                        <span id="zoomBadgeAfter" class="badge bg-dark text-info border border-info border-opacity-50 px-2 py-1 compare-zoom-badge" title="Tỷ lệ thu phóng After">100%</span>
+                                        <button type="button" id="btnFitAfter" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Khớp khung nhìn After" aria-label="Khớp khung nhìn After">
+                                            <i class="bi bi-arrows-angle-contract"></i>
+                                        </button>
+                                    </div>
+                                    <div>
+                                        <button type="button" id="btnResetAfter" class="btn btn-sm btn-outline-light border-0 px-2 py-1 text-warning" title="Reset ảnh After về ban đầu" aria-label="Reset After">
+                                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Viewport AFTER -->
+                                <div id="compareViewportAfter" class="compare-viewport flex-grow-1 d-flex justify-content-center align-items-center position-relative">
+                                    <div id="spinnerAfter" class="position-absolute d-flex flex-column align-items-center justify-content-center text-white d-none" style="z-index: 10;">
+                                        <div class="spinner-border text-primary spinner-border-sm" role="status">
+                                            <span class="visually-hidden">Đang tải ảnh After...</span>
+                                        </div>
+                                        <span class="small text-white-50 mt-1" style="font-size: 0.75rem;">Đang tải...</span>
+                                    </div>
+
+                                    <div id="errorAfter" class="p-3 text-center text-warning position-absolute d-none" style="z-index: 10;">
+                                        <i class="bi bi-exclamation-triangle-fill text-warning fs-3 mb-1 d-block"></i>
+                                        <div class="small text-white fw-semibold">Không thể tải ảnh Sau điều trị</div>
+                                        <div class="text-white-50" style="font-size: 0.7rem;">Ảnh có thể đã bị xóa hoặc phiên hết hạn.</div>
+                                    </div>
+
+                                    <div class="compare-stage">
+                                        <img id="compareImageAfter" src="" class="compare-img d-none" alt="Phim X-quang Sau điều trị (After)" draggable="false" />
+                                    </div>
+                                </div>
+
+                                <!-- Metadata AFTER -->
+                                <div id="compareMetaAfter" class="compare-meta-card p-2 text-white-50 mt-2">
+                                    <span class="text-white-50 small fst-italic">Chưa chọn ảnh</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-secondary border-opacity-50 py-2 px-3 justify-content-between bg-dark">
+                    <div class="text-white-50 small d-none d-md-block">
+                        <i class="bi bi-info-circle me-1 text-info"></i>Cuộn chuột để thu phóng, kéo chuột để di chuyển từng khung ảnh độc lập. Nhấn "Đảo vị trí" để đổi hai ảnh Trước/Sau.
+                    </div>
+                    <div class="d-flex gap-2 align-items-center ms-auto">
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+                            <i class="bi bi-x-lg me-1"></i> Đóng (Esc)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal Xác Nhận Xóa Phim X-Quang (Commit 22) -->
     <div class="modal fade" id="modalDeleteImagingConfirm" tabindex="-1" aria-labelledby="modalDeleteImagingConfirmLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -1098,6 +1294,50 @@
     <script src="~/js/medical-imaging-viewer.js" asp-append-version="true"></script>
     <script>
         let lightboxModalInstance = null;
+        let comparisonModalInstance = null;
+
+        @if (record != null)
+        {
+            var comparisonImagesList = record.ClinicalEntries
+                .SelectMany(e => e.ImagingRecords.Where(img => {
+                    var isDcm = (!string.IsNullOrEmpty(img.FileUrl) && (img.FileUrl.EndsWith(".dcm", StringComparison.OrdinalIgnoreCase) || img.FileUrl.EndsWith(".dicom", StringComparison.OrdinalIgnoreCase))) ||
+                                img.ImagingType.Equals("DICOM", StringComparison.OrdinalIgnoreCase);
+                    return !isDcm;
+                }).Select(img => new {
+                    id = img.ImagingRecordId,
+                    patientUserId = record.PatientUserId,
+                    clinicalEntryId = e.ClinicalEntryId,
+                    type = img.ImagingType ?? "X-Quang",
+                    summary = img.ResultSummary ?? "",
+                    savedAt = img.CreatedAt.ToString("dd/MM/yyyy HH:mm"),
+                    entryDate = e.CreatedAt.ToString("dd/MM/yyyy"),
+                    diagnosis = e.Diagnosis ?? "",
+                    dentistName = e.DentistName ?? "",
+                    url = Url.Action("ImagingContent", "DentistMedicalRecord", new { imagingRecordId = img.ImagingRecordId })
+                }))
+                .ToList();
+            <text>
+            const patientAvailableImages = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(comparisonImagesList));
+            </text>
+        }
+        else
+        {
+            <text>
+            const patientAvailableImages = [];
+            </text>
+        }
+
+        function openComparisonModal() {
+            if (window.MedicalImagingComparisonViewer) {
+                window.MedicalImagingComparisonViewer.openComparison(patientAvailableImages);
+            }
+        }
+
+        function openComparisonWithImage(selectedImageId) {
+            if (window.MedicalImagingComparisonViewer) {
+                window.MedicalImagingComparisonViewer.openComparison(patientAvailableImages, selectedImageId);
+            }
+        }
 
         function openImagingLightbox(imageUrl, imagingType, resultSummary, createdAt, isDicom) {
             if (isDicom) {
@@ -1489,6 +1729,15 @@
                     }
                     if (window.MedicalImagingViewer && window.MedicalImagingViewer.clearTemporaryAnnotations) {
                         window.MedicalImagingViewer.clearTemporaryAnnotations();
+                    }
+                });
+            }
+
+            const comparisonModalEl = document.getElementById('imagingComparisonModal');
+            if (comparisonModalEl) {
+                comparisonModalEl.addEventListener('hidden.bs.modal', function () {
+                    if (window.MedicalImagingComparisonViewer) {
+                        window.MedicalImagingComparisonViewer.closeComparison();
                     }
                 });
             }
