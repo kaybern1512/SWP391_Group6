@@ -16,6 +16,7 @@
         border-radius: 12px;
         padding: 20px;
         border: 1px solid #e2e8f0;
+        overflow-x: auto;
     }
     .arch-container {
         display: flex;
@@ -26,15 +27,16 @@
     }
     .quadrant-group {
         display: flex;
-        gap: 5px;
+        gap: 4px;
+        align-items: stretch;
     }
     .quadrant-divider {
         width: 2px;
         background: #cbd5e1;
-        margin: 0 8px;
+        margin: 0 6px;
     }
     .tooth-card {
-        width: 46px;
+        width: 50px;
         min-height: 74px;
         height: auto;
         background: #ffffff;
@@ -44,7 +46,7 @@
         flex-direction: column;
         align-items: center;
         justify-content: space-between;
-        padding: 4px 2px 3px 2px;
+        padding: 4px 1px 3px 1px;
         cursor: pointer;
         transition: all 0.2s ease;
         position: relative;
@@ -68,17 +70,18 @@
         margin: 1px 0;
     }
     .tooth-status-tag {
-        font-size: 0.52rem;
+        font-size: 0.50rem;
         font-weight: 700;
         line-height: 1.15;
+        letter-spacing: -0.2px;
         padding: 2px 1px;
         border-radius: 3px;
         text-transform: uppercase;
         width: 100%;
         text-align: center;
-        word-break: break-word;
-        overflow-wrap: break-word;
-        white-space: normal;
+        white-space: nowrap;
+        word-break: normal;
+        overflow-wrap: normal;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -113,7 +116,16 @@
 
     .tooth-extractionneeded { border-color: #f97316; background: #fff7ed; }
     .tooth-extractionneeded .tooth-icon { color: #ea580c; }
-    .tooth-extractionneeded .tooth-status-tag { background: #ffedd5; color: #c2410c; }
+    .tooth-extractionneeded .tooth-status-tag {
+        background: #ffedd5;
+        color: #c2410c;
+        white-space: normal;
+        word-break: normal;
+        overflow-wrap: break-word;
+        font-size: 0.44rem;
+        line-height: 1.1;
+        letter-spacing: -0.1px;
+    }
 
     /* Imaging Gallery & Lightbox Styles */
     .img-thumbnail-fit {
@@ -274,7 +286,7 @@
                                         <div class="tooth-card @condClass" title="Răng @tStr: @tooth.Condition @(string.IsNullOrEmpty(tooth.Note) ? "" : $"({tooth.Note})")">
                                             <span class="tooth-number">@tStr</span>
                                             <i class="bi bi-shield-fill tooth-icon"></i>
-                                            <span class="tooth-status-tag">@tooth.Condition</span>
+                                            <span class="tooth-status-tag">@(tooth.Condition == "ExtractionNeeded" ? "Extraction Needed" : tooth.Condition)</span>
                                         </div>
                                     }
                                 </div>
@@ -289,7 +301,7 @@
                                         <div class="tooth-card @condClass" title="Răng @tStr: @tooth.Condition @(string.IsNullOrEmpty(tooth.Note) ? "" : $"({tooth.Note})")">
                                             <span class="tooth-number">@tStr</span>
                                             <i class="bi bi-shield-fill tooth-icon"></i>
-                                            <span class="tooth-status-tag">@tooth.Condition</span>
+                                            <span class="tooth-status-tag">@(tooth.Condition == "ExtractionNeeded" ? "Extraction Needed" : tooth.Condition)</span>
                                         </div>
                                     }
                                 </div>
@@ -309,7 +321,7 @@
                                         <div class="tooth-card @condClass" title="Răng @tStr: @tooth.Condition @(string.IsNullOrEmpty(tooth.Note) ? "" : $"({tooth.Note})")">
                                             <span class="tooth-number">@tStr</span>
                                             <i class="bi bi-shield-fill tooth-icon"></i>
-                                            <span class="tooth-status-tag">@tooth.Condition</span>
+                                            <span class="tooth-status-tag">@(tooth.Condition == "ExtractionNeeded" ? "Extraction Needed" : tooth.Condition)</span>
                                         </div>
                                     }
                                 </div>
@@ -324,7 +336,7 @@
                                         <div class="tooth-card @condClass" title="Răng @tStr: @tooth.Condition @(string.IsNullOrEmpty(tooth.Note) ? "" : $"({tooth.Note})")">
                                             <span class="tooth-number">@tStr</span>
                                             <i class="bi bi-shield-fill tooth-icon"></i>
-                                            <span class="tooth-status-tag">@tooth.Condition</span>
+                                            <span class="tooth-status-tag">@(tooth.Condition == "ExtractionNeeded" ? "Extraction Needed" : tooth.Condition)</span>
                                         </div>
                                     }
                                 </div>

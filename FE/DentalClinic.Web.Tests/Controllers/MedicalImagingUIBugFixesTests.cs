@@ -248,41 +248,64 @@ public class MedicalImagingUIBugFixesTests
 
     #endregion
 
-    #region BUG-03 Tests: Odontogram Status Label Clipping
+    #region BUG-03 Tests: Odontogram Status Label Clipping & Wrapping Prevention
 
     [Fact]
-    public void Bug03_ToothCard_UsesFlexibleHeightToPreventLabelClipping()
+    public void Bug03_ToothCard_UsesFlexibleHeightAndAdequateWidthToPreventLabelClipping()
     {
         var dentistView = File.ReadAllText(Path.Combine(_webProjectDir, "Views", "Dentist", "MedicalRecords", "Index.cshtml"));
         var patientView = File.ReadAllText(Path.Combine(_webProjectDir, "Views", "Patient", "MedicalRecords", "Index.cshtml"));
 
-        // Neither view should use rigid "height: 65px;" on .tooth-card
+        // Neither view should use rigid "height: 65px;" or cramped "width: 44px/46px" on .tooth-card
         dentistView.Should().NotContain(".tooth-card {\n        width: 44px;\n        height: 65px;");
+        dentistView.Should().Contain("width: 50px;", "Tooth card must use width: 50px to provide ample room for HEALTHY");
         dentistView.Should().Contain("min-height: 74px;", "Tooth card must use min-height to accommodate status labels");
         dentistView.Should().Contain("height: auto;", "Tooth card must use height: auto for flexible text content");
 
         patientView.Should().NotContain(".tooth-card {\n        width: 44px;\n        height: 65px;");
+        patientView.Should().Contain("width: 50px;", "Tooth card must use width: 50px to provide ample room for HEALTHY");
         patientView.Should().Contain("min-height: 74px;", "Tooth card must use min-height to accommodate status labels");
         patientView.Should().Contain("height: auto;", "Tooth card must use height: auto for flexible text content");
     }
 
     [Fact]
-    public void Bug03_ToothStatusTag_AllowsWordWrapAndDoesNotUseEllipsisClipping()
+    public void Bug03_ToothStatusTag_PreventsHealthyWrappingAndRendersOnSingleLine()
     {
         var dentistView = File.ReadAllText(Path.Combine(_webProjectDir, "Views", "Dentist", "MedicalRecords", "Index.cshtml"));
         var patientView = File.ReadAllText(Path.Combine(_webProjectDir, "Views", "Patient", "MedicalRecords", "Index.cshtml"));
 
         // Verify tooth-status-tag rules in Dentist view
-        dentistView.Should().Contain("word-break: break-word;", "Long condition names must break into readable lines");
-        dentistView.Should().Contain("white-space: normal;", "Must allow wrapping instead of clipping");
+        dentistView.Should().Contain("white-space: nowrap;", "Short status labels like HEALTHY must remain on a single line");
+        dentistView.Should().Contain("word-break: normal;", "Must not break words arbitrarily across letters");
+        dentistView.Should().Contain("letter-spacing: -0.2px;", "Typography must track neatly inside card width");
         dentistView.Should().NotMatchRegex(@"\.tooth-status-tag\s*\{[^}]*text-overflow:\s*ellipsis;",
             "Status tag must not use ellipsis which truncates status names");
 
         // Verify tooth-status-tag rules in Patient view
-        patientView.Should().Contain("word-break: break-word;", "Long condition names must break into readable lines");
-        patientView.Should().Contain("white-space: normal;", "Must allow wrapping instead of clipping");
+        patientView.Should().Contain("white-space: nowrap;", "Short status labels like HEALTHY must remain on a single line");
+        patientView.Should().Contain("word-break: normal;", "Must not break words arbitrarily across letters");
+        patientView.Should().Contain("letter-spacing: -0.2px;", "Typography must track neatly inside card width");
         patientView.Should().NotMatchRegex(@"\.tooth-status-tag\s*\{[^}]*text-overflow:\s*ellipsis;",
             "Status tag must not use ellipsis which truncates status names");
+    }
+
+    [Fact]
+    public void Bug03_ToothStatusTag_ExtractionNeeded_AllowsWordBoundaryWrapping()
+    {
+        var dentistView = File.ReadAllText(Path.Combine(_webProjectDir, "Views", "Dentist", "MedicalRecords", "Index.cshtml"));
+        var patientView = File.ReadAllText(Path.Combine(_webProjectDir, "Views", "Patient", "MedicalRecords", "Index.cshtml"));
+
+        // Verify long condition (ExtractionNeeded) rules in Dentist view
+        dentistView.Should().Contain(".tooth-extractionneeded .tooth-status-tag",
+            "Long condition ExtractionNeeded must have customized wrapping rules");
+        dentistView.Should().Contain("Extraction Needed",
+            "Extraction Needed markup must include space at word boundary for clean multi-line wrapping");
+
+        // Verify long condition in Patient view
+        patientView.Should().Contain(".tooth-extractionneeded .tooth-status-tag",
+            "Long condition ExtractionNeeded must have customized wrapping rules");
+        patientView.Should().Contain("Extraction Needed",
+            "Extraction Needed markup must include space at word boundary for clean multi-line wrapping");
     }
 
     [Fact]
