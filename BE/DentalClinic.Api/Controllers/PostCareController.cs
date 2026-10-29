@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
+using DentalClinic.Application.Features.FollowUp.DTOs;
+
 namespace DentalClinic.Api.Controllers;
 
 [ApiController]
@@ -18,10 +20,14 @@ namespace DentalClinic.Api.Controllers;
 public class PostCareController : ControllerBase
 {
     private readonly IPostCareService _postCareService;
+    private readonly IFollowUpSchedulingService _schedulingService;
 
-    public PostCareController(IPostCareService postCareService)
+    public PostCareController(
+        IPostCareService postCareService,
+        IFollowUpSchedulingService schedulingService)
     {
         _postCareService = postCareService;
+        _schedulingService = schedulingService;
     }
 
     private long GetCurrentUserId()
@@ -120,6 +126,26 @@ public class PostCareController : ControllerBase
     public async Task<IActionResult> GetReceptionistFollowUps(CancellationToken ct)
     {
         var result = await _postCareService.GetReceptionistFollowUpsAsync(ct);
+        return Ok(result);
+    }
+
+    [HttpGet("follow-ups/available-slots")]
+    [Authorize]
+    [ProducesResponseType(typeof(ApiResponse<List<FollowUpSlotDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<List<FollowUpSlotDto>>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetAvailableFollowUpSlots(
+        [FromQuery] long dentistUserId,
+        [FromQuery] DateTime date,
+        [FromQuery] int durationMinutes = 30,
+        CancellationToken ct = default)
+    {
+        if (dentistUserId <= 0)
+        {
+            return BadRequest(ApiResponse<List<FollowUpSlotDto>>.Fail("Vui lòng chọn bác sĩ điều trị."));
+        }
+
+        var result = await _schedulingService.GetDoctorAvailableSlotsAsync(dentistUserId, date, durationMinutes, ct);
+        if (!result.Success) return BadRequest(result);
         return Ok(result);
     }
 }
