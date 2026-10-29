@@ -792,77 +792,200 @@
                         <i class="bi bi-aspect-ratio text-info fs-5"></i>
                         <span class="badge bg-primary text-white px-2 py-1" id="lightboxTypeBadge">X-Quang</span>
                         <span class="text-white-50 small ms-2" id="lightboxDate"></span>
+                        <span class="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-50 small d-none d-xl-inline-flex align-items-center gap-1" id="annotationNoticeBadge" title="Chú thích tạm thời">
+                            <i class="bi bi-info-circle-fill"></i>Chú thích tạm thời — không được lưu vào hồ sơ bệnh án.
+                        </span>
                     </div>
 
-                    <!-- Medical Imaging Zoom & Rotate Toolbar (Day 01, 02, 03) -->
-                    <div class="imaging-zoom-toolbar btn-toolbar d-flex align-items-center gap-1 px-2 py-1" role="toolbar" aria-label="Thanh công cụ thu phóng và xoay X-quang">
-                        <button type="button" id="btnZoomOut" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Thu nhỏ (-)" aria-label="Thu nhỏ">
-                            <i class="bi bi-dash-lg"></i>
-                        </button>
-                        <span id="zoomPercentageBadge" class="badge font-monospace px-2 py-1" title="Tỷ lệ thu phóng hiện tại" aria-live="polite">
-                            100%
-                        </span>
-                        <button type="button" id="btnZoomIn" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Phóng to (+)" aria-label="Phóng to">
-                            <i class="bi bi-plus-lg"></i>
-                        </button>
-
-                        <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
-
-                        <button type="button" id="btnRotateLeft" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Xoay trái 90° (Phím [)" aria-label="Xoay trái 90 độ">
-                            <i class="bi bi-arrow-counterclockwise"></i>
-                        </button>
-                        <button type="button" id="btnRotateRight" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Xoay phải 90° (Phím ])" aria-label="Xoay phải 90 độ">
-                            <i class="bi bi-arrow-clockwise"></i>
-                        </button>
-                        <button type="button" id="btnResetRotation" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Đặt lại góc xoay về 0°" aria-label="Đặt lại góc xoay">
-                            <span id="rotationBadge" class="badge font-monospace px-1">0°</span>
-                        </button>
-
-                        <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
-
-                        <!-- Day 04: Brightness & Contrast Controls -->
-                        <div class="dropdown d-inline-block">
-                            <button type="button" id="btnFilterDropdown" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1 dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Điều chỉnh Độ sáng & Độ tương phản (Brightness & Contrast)">
-                                <i class="bi bi-sliders"></i>
-                                <span class="d-none d-sm-inline small">Bộ lọc</span>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <!-- Medical Imaging Zoom & Rotate Toolbar (Day 01, 02, 03, 04) -->
+                        <div class="imaging-zoom-toolbar btn-toolbar d-flex align-items-center gap-1 px-2 py-1" role="toolbar" aria-label="Thanh công cụ thu phóng và xoay X-quang">
+                            <button type="button" id="btnZoomOut" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Thu nhỏ (-)" aria-label="Thu nhỏ">
+                                <i class="bi bi-dash-lg"></i>
                             </button>
-                            <div class="dropdown-menu dropdown-menu-dark imaging-filter-menu p-3 shadow-lg" style="min-width: 280px;" aria-labelledby="btnFilterDropdown">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <label for="brightnessSlider" class="form-label small text-info fw-semibold mb-0">
-                                        <i class="bi bi-brightness-high me-1"></i>Độ sáng
-                                    </label>
-                                    <span id="brightnessBadge" class="badge imaging-filter-badge font-monospace">100%</span>
-                                </div>
-                                <input type="range" class="form-range" id="brightnessSlider" min="50" max="150" step="5" value="100" aria-label="Điều chỉnh độ sáng ảnh X-quang">
+                            <span id="zoomPercentageBadge" class="badge font-monospace px-2 py-1" title="Tỷ lệ thu phóng hiện tại" aria-live="polite">
+                                100%
+                            </span>
+                            <button type="button" id="btnZoomIn" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Phóng to (+)" aria-label="Phóng to">
+                                <i class="bi bi-plus-lg"></i>
+                            </button>
 
-                                <div class="d-flex justify-content-between align-items-center mt-3 mb-1">
-                                    <label for="contrastSlider" class="form-label small text-info fw-semibold mb-0">
-                                        <i class="bi bi-circle-half me-1"></i>Độ tương phản
-                                    </label>
-                                    <span id="contrastBadge" class="badge imaging-filter-badge font-monospace">100%</span>
-                                </div>
-                                <input type="range" class="form-range" id="contrastSlider" min="50" max="200" step="5" value="100" aria-label="Điều chỉnh độ tương phản ảnh X-quang">
+                            <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
 
-                                <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top border-secondary border-opacity-50">
-                                    <span class="text-white-50 small" style="font-size: 0.7rem;">Hiệu ứng hiển thị</span>
-                                    <button type="button" id="btnResetFilters" class="btn btn-xs btn-outline-light d-flex align-items-center gap-1" title="Khôi phục độ sáng và tương phản về 100%">
-                                        <i class="bi bi-arrow-counterclockwise"></i>
-                                        <span class="small">Đặt lại bộ lọc</span>
-                                    </button>
+                            <button type="button" id="btnRotateLeft" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Xoay trái 90° (Phím [)" aria-label="Xoay trái 90 độ">
+                                <i class="bi bi-arrow-counterclockwise"></i>
+                            </button>
+                            <button type="button" id="btnRotateRight" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Xoay phải 90° (Phím ])" aria-label="Xoay phải 90 độ">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                            <button type="button" id="btnResetRotation" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Đặt lại góc xoay về 0°" aria-label="Đặt lại góc xoay">
+                                <span id="rotationBadge" class="badge font-monospace px-1">0°</span>
+                            </button>
+
+                            <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
+
+                            <!-- Day 04: Brightness & Contrast Controls -->
+                            <div class="dropdown d-inline-block">
+                                <button type="button" id="btnFilterDropdown" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1 dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Điều chỉnh Độ sáng & Độ tương phản (Brightness & Contrast)">
+                                    <i class="bi bi-sliders"></i>
+                                    <span class="d-none d-sm-inline small">Bộ lọc</span>
+                                </button>
+                                <div class="dropdown-menu dropdown-menu-dark imaging-filter-menu p-3 shadow-lg" style="min-width: 280px;" aria-labelledby="btnFilterDropdown">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label for="brightnessSlider" class="form-label small text-info fw-semibold mb-0">
+                                            <i class="bi bi-brightness-high me-1"></i>Độ sáng
+                                        </label>
+                                        <span id="brightnessBadge" class="badge imaging-filter-badge font-monospace">100%</span>
+                                    </div>
+                                    <input type="range" class="form-range" id="brightnessSlider" min="50" max="150" step="5" value="100" aria-label="Điều chỉnh độ sáng ảnh X-quang">
+
+                                    <div class="d-flex justify-content-between align-items-center mt-3 mb-1">
+                                        <label for="contrastSlider" class="form-label small text-info fw-semibold mb-0">
+                                            <i class="bi bi-circle-half me-1"></i>Độ tương phản
+                                        </label>
+                                        <span id="contrastBadge" class="badge imaging-filter-badge font-monospace">100%</span>
+                                    </div>
+                                    <input type="range" class="form-range" id="contrastSlider" min="50" max="200" step="5" value="100" aria-label="Điều chỉnh độ tương phản ảnh X-quang">
+
+                                    <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top border-secondary border-opacity-50">
+                                        <span class="text-white-50 small" style="font-size: 0.7rem;">Hiệu ứng hiển thị</span>
+                                        <button type="button" id="btnResetFilters" class="btn btn-xs btn-outline-light d-flex align-items-center gap-1" title="Khôi phục độ sáng và tương phản về 100%">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                            <span class="small">Đặt lại bộ lọc</span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
+
+                            <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
+
+                            <button type="button" id="btnFitScreen" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Vừa khung nhìn (Fit to Screen - Phím F)" aria-label="Vừa khung nhìn">
+                                <i class="bi bi-arrows-angle-contract"></i>
+                                <span class="d-none d-sm-inline small">Vừa khung</span>
+                            </button>
+                            <button type="button" id="btnResetView" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Đặt lại toàn bộ (Zoom, Pan, Xoay & Bộ lọc - Phím 0)" aria-label="Đặt lại góc nhìn">
+                                <i class="bi bi-arrow-repeat"></i>
+                                <span class="d-none d-sm-inline small">Đặt lại</span>
+                            </button>
                         </div>
 
-                        <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
+                        <!-- Medical Imaging Annotation Toolbar (Day 05) -->
+                        <div class="imaging-annotation-toolbar btn-toolbar d-flex align-items-center gap-1 px-2 py-1" id="imagingAnnotationToolbar" role="toolbar" aria-label="Thanh công cụ chú thích X-quang">
+                            <button type="button" id="btnToolPan" class="btn btn-sm btn-outline-light border-0 px-2 py-1 active" title="Chế độ xem / Kéo ảnh (Pan)" aria-label="Chế độ xem và kéo ảnh">
+                                <i class="bi bi-hand-index"></i>
+                            </button>
+                            <button type="button" id="btnToolSelect" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Chọn chú thích (Select)" aria-label="Chọn chú thích">
+                                <i class="bi bi-cursor"></i>
+                            </button>
 
-                        <button type="button" id="btnFitScreen" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Vừa khung nhìn (Fit to Screen - Phím F)" aria-label="Vừa khung nhìn">
-                            <i class="bi bi-arrows-angle-contract"></i>
-                            <span class="d-none d-sm-inline small">Vừa khung</span>
-                        </button>
-                        <button type="button" id="btnResetView" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1" title="Đặt lại toàn bộ (Zoom, Pan, Xoay & Bộ lọc - Phím 0)" aria-label="Đặt lại góc nhìn">
-                            <i class="bi bi-arrow-repeat"></i>
-                            <span class="d-none d-sm-inline small">Đặt lại</span>
-                        </button>
+                            <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
+
+                            <button type="button" id="btnToolCircle" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Khoanh vùng tổn thương (Circle)" aria-label="Khoanh vùng tròn">
+                                <i class="bi bi-circle"></i>
+                            </button>
+                            <button type="button" id="btnToolArrow" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Mũi tên chỉ dẫn (Arrow)" aria-label="Vẽ mũi tên">
+                                <i class="bi bi-arrow-up-right"></i>
+                            </button>
+                            <button type="button" id="btnToolText" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Ghi chú văn bản (Text Note - Tối đa 200 ký tự)" aria-label="Thêm ghi chú">
+                                <i class="bi bi-chat-square-text"></i>
+                            </button>
+
+                            <!-- FDI Tooth Code Selector -->
+                            <div class="dropdown d-inline-block">
+                                <button type="button" id="btnToolFdi" class="btn btn-sm btn-outline-light border-0 px-2 py-1 d-flex align-items-center gap-1 dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Gắn nhãn răng FDI (Permanent 11-48, Deciduous 51-85)" aria-label="Gắn nhãn răng FDI">
+                                    <i class="bi bi-tag"></i>
+                                    <span id="selectedFdiBadge" class="badge bg-info text-dark font-monospace px-1">16</span>
+                                </button>
+                                <div class="dropdown-menu dropdown-menu-dark imaging-fdi-menu p-3 shadow-lg" aria-labelledby="btnToolFdi">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-info fw-bold small"><i class="bi bi-grid-3x3 me-1"></i>Chọn mã răng FDI</span>
+                                        <span class="text-white-50 small" style="font-size: 0.7rem;">Chuẩn quốc tế ISO 3950</span>
+                                    </div>
+
+                                    <!-- Răng vĩnh viễn (Permanent) -->
+                                    <div class="small text-white-50 fw-semibold mb-1" style="font-size: 0.72rem;">Răng vĩnh viễn (11–48)</div>
+                                    <div class="fdi-grid mb-2">
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="18" title="Răng 18 - Khôn trên phải">18</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="17" title="Răng 17 - Cối lớn 2">17</button>
+                                        <button type="button" class="fdi-tooth-btn active" data-fdi="16" title="Răng 16 - Cối lớn 1">16</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="15" title="Răng 15 - Cối nhỏ 2">15</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="14" title="Răng 14 - Cối nhỏ 1">14</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="13" title="Răng 13 - Nanh">13</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="12" title="Răng 12 - Cửa bên">12</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="11" title="Răng 11 - Cửa giữa">11</button>
+
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="21" title="Răng 21 - Cửa giữa">21</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="22" title="Răng 22 - Cửa bên">22</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="23" title="Răng 23 - Nanh">23</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="24" title="Răng 24 - Cối nhỏ 1">24</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="25" title="Răng 25 - Cối nhỏ 2">25</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="26" title="Răng 26 - Cối lớn 1">26</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="27" title="Răng 27 - Cối lớn 2">27</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="28" title="Răng 28 - Khôn trên trái">28</button>
+
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="48" title="Răng 48 - Khôn dưới phải">48</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="47" title="Răng 47 - Cối lớn 2">47</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="46" title="Răng 46 - Cối lớn 1">46</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="45" title="Răng 45 - Cối nhỏ 2">45</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="44" title="Răng 44 - Cối nhỏ 1">44</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="43" title="Răng 43 - Nanh">43</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="42" title="Răng 42 - Cửa bên">42</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="41" title="Răng 41 - Cửa giữa">41</button>
+
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="31" title="Răng 31 - Cửa giữa">31</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="32" title="Răng 32 - Cửa bên">32</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="33" title="Răng 33 - Nanh">33</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="34" title="Răng 34 - Cối nhỏ 1">34</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="35" title="Răng 35 - Cối nhỏ 2">35</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="36" title="Răng 36 - Cối lớn 1">36</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="37" title="Răng 37 - Cối lớn 2">37</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="38" title="Răng 38 - Khôn dưới trái">38</button>
+                                    </div>
+
+                                    <div class="dropdown-divider border-secondary border-opacity-50 my-2"></div>
+
+                                    <!-- Răng sữa (Deciduous) -->
+                                    <div class="small text-warning fw-semibold mb-1" style="font-size: 0.72rem;">Răng sữa (51–85)</div>
+                                    <div class="fdi-grid-primary">
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="55" title="Răng sữa 55">55</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="54" title="Răng sữa 54">54</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="53" title="Răng sữa 53">53</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="52" title="Răng sữa 52">52</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="51" title="Răng sữa 51">51</button>
+
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="61" title="Răng sữa 61">61</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="62" title="Răng sữa 62">62</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="63" title="Răng sữa 63">63</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="64" title="Răng sữa 64">64</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="65" title="Răng sữa 65">65</button>
+
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="85" title="Răng sữa 85">85</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="84" title="Răng sữa 84">84</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="83" title="Răng sữa 83">83</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="82" title="Răng sữa 82">82</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="81" title="Răng sữa 81">81</button>
+
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="71" title="Răng sữa 71">71</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="72" title="Răng sữa 72">72</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="73" title="Răng sữa 73">73</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="74" title="Răng sữa 74">74</button>
+                                        <button type="button" class="fdi-tooth-btn" data-fdi="75" title="Răng sữa 75">75</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="vr bg-secondary opacity-50 mx-1 my-1"></div>
+
+                            <button type="button" id="btnUndoAnnotation" class="btn btn-sm btn-outline-light border-0 px-2 py-1" title="Hoàn tác chú thích (Undo - Ctrl+Z)" aria-label="Hoàn tác chú thích" disabled>
+                                <i class="bi bi-arrow-counterclockwise"></i>
+                            </button>
+                            <button type="button" id="btnDeleteAnnotation" class="btn btn-sm btn-outline-danger border-0 px-2 py-1" title="Xóa chú thích đang chọn (Delete)" aria-label="Xóa chú thích đã chọn" disabled>
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            <button type="button" id="btnClearAllAnnotations" class="btn btn-sm btn-outline-light border-0 px-2 py-1 text-danger" title="Xóa toàn bộ chú thích tạm thời (Clear All)" aria-label="Xóa toàn bộ chú thích">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                        </div>
                     </div>
 
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng (Esc)"></button>
@@ -883,13 +1006,30 @@
                         <p class="small text-white-50 mb-0">Tệp ảnh có thể đã bị xóa hoặc phiên truy cập đã hết hạn. Vui lòng thử tải lại trang.</p>
                     </div>
 
-                    <!-- Image Stage & Viewer Image -->
+                    <!-- Image Stage, Canvas Wrapper & Viewer Image with SVG Overlay -->
                     <div id="imagingStage" class="imaging-stage">
-                        <img id="lightboxImage"
-                             src=""
-                             class="img-fluid d-none imaging-viewer-img"
-                             alt="Phóng to phim X-quang nha khoa"
-                             draggable="false" />
+                        <div id="imagingCanvasWrapper" class="imaging-canvas-wrapper position-relative">
+                            <img id="lightboxImage"
+                                 src=""
+                                 class="img-fluid d-none imaging-viewer-img"
+                                 alt="Phóng to phim X-quang nha khoa"
+                                 draggable="false" />
+                            <svg id="imagingAnnotationOverlay"
+                                 class="imaging-annotation-overlay position-absolute top-0 start-0 d-none tool-pan"
+                                 xmlns="http://www.w3.org/2000/svg"
+                                 aria-label="Lớp vẽ chú thích X-quang">
+                                <defs>
+                                    <marker id="annotationArrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                                        <polygon points="0 0, 8 3, 0 6" fill="#38bdf8" />
+                                    </marker>
+                                    <marker id="annotationArrowheadSelected" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                                        <polygon points="0 0, 8 3, 0 6" fill="#fbbf24" />
+                                    </marker>
+                                </defs>
+                                <g id="annotationDrawingGroup"></g>
+                                <g id="annotationPreviewGroup"></g>
+                            </svg>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer border-secondary border-opacity-50 py-2 px-3 justify-content-between bg-dark">
@@ -1013,6 +1153,9 @@
                 });
             }
             if (window.MedicalImagingViewer) {
+                if (window.MedicalImagingViewer.clearTemporaryAnnotations) {
+                    window.MedicalImagingViewer.clearTemporaryAnnotations();
+                }
                 window.MedicalImagingViewer.init();
                 window.MedicalImagingViewer.resetView();
             }
@@ -1343,6 +1486,9 @@
                         imgEl.onerror = null;
                         imgEl.src = '';
                         imgEl.classList.add('d-none');
+                    }
+                    if (window.MedicalImagingViewer && window.MedicalImagingViewer.clearTemporaryAnnotations) {
+                        window.MedicalImagingViewer.clearTemporaryAnnotations();
                     }
                 });
             }
