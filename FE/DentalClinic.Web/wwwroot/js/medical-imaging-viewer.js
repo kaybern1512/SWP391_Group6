@@ -209,9 +209,24 @@
         if (visualDim.width <= 0 || visualDim.height <= 0 || vpDim.width <= 0 || vpDim.height <= 0) {
             return 1.0;
         }
-        const scaleX = vpDim.width / visualDim.width;
-        const scaleY = vpDim.height / visualDim.height;
-        const fitScale = Math.min(scaleX, scaleY, 1.0);
+
+        // Leave a clean 16px safety padding (8px on each side) so the image is cleanly framed
+        const padX = 16;
+        const padY = 16;
+        const targetW = Math.max(0, vpDim.width - padX);
+        const targetH = Math.max(0, vpDim.height - padY);
+
+        const scaleX = targetW / visualDim.width;
+        const scaleY = targetH / visualDim.height;
+        const idealFit = Math.min(scaleX, scaleY);
+
+        // For small images where idealFit > 1.0, scale up to fit while capping at 2.0 (200%)
+        // to prevent excessive pixelation/blur as specified in BUG-01
+        let fitScale = idealFit;
+        if (idealFit > 1.0) {
+            fitScale = Math.min(idealFit, 2.0);
+        }
+
         return clamp(Math.round(fitScale * 100) / 100, MIN_ZOOM, MAX_ZOOM);
     }
 
@@ -1427,6 +1442,9 @@
                 imgEl.addEventListener('dragstart', function (e) { e.preventDefault(); });
                 imgEl.addEventListener('load', function () {
                     syncOverlayDimensions();
+                    if (modalEl && modalEl.classList.contains('show')) {
+                        fitToScreen();
+                    }
                     updateCursor();
                 });
             }
@@ -1435,12 +1453,23 @@
 
             window.addEventListener('resize', function () {
                 if (modalEl && modalEl.classList.contains('show')) {
-                    const clamped = clampPan(panX, panY, currentZoom, rotationDegrees);
-                    panX = clamped.x;
-                    panY = clamped.y;
+                    if (isFitToScreen) {
+                        fitToScreen();
+                    } else {
+                        const clamped = clampPan(panX, panY, currentZoom, rotationDegrees);
+                        panX = clamped.x;
+                        panY = clamped.y;
+                        syncOverlayDimensions();
+                        applyTransform(true);
+                        updateCursor();
+                    }
+                }
+            });
+
+            modalEl.addEventListener('shown.bs.modal', function () {
+                if (imgEl && imgEl.src && !imgEl.classList.contains('d-none')) {
                     syncOverlayDimensions();
-                    applyTransform(true);
-                    updateCursor();
+                    fitToScreen();
                 }
             });
 
@@ -1689,9 +1718,17 @@
             if (imgDim.width <= 0 || imgDim.height <= 0 || vpDim.width <= 0 || vpDim.height <= 0) {
                 return 1.0;
             }
-            const scaleX = vpDim.width / imgDim.width;
-            const scaleY = vpDim.height / imgDim.height;
-            const fitScale = Math.min(scaleX, scaleY, 1.0);
+            const padX = 16;
+            const padY = 16;
+            const targetW = Math.max(0, vpDim.width - padX);
+            const targetH = Math.max(0, vpDim.height - padY);
+            const scaleX = targetW / imgDim.width;
+            const scaleY = targetH / imgDim.height;
+            const idealFit = Math.min(scaleX, scaleY);
+            let fitScale = idealFit;
+            if (idealFit > 1.0) {
+                fitScale = Math.min(idealFit, 2.0);
+            }
             return clamp(Math.round(fitScale * 100) / 100, MIN_ZOOM, MAX_ZOOM);
         }
 
@@ -1968,7 +2005,7 @@
             imgEl.onload = function () {
                 if (spinnerEl) spinnerEl.classList.add('d-none');
                 imgEl.classList.remove('d-none');
-                resetView();
+                fitToScreen();
                 if (typeof onLoaded === 'function') onLoaded();
             };
 
@@ -2102,6 +2139,15 @@
                     resetBoth();
                 });
             }
+
+            comparisonModalEl.addEventListener('shown.bs.modal', function () {
+                if (panelBefore && selectedBeforeId) {
+                    panelBefore.fitToScreen();
+                }
+                if (panelAfter && selectedAfterId) {
+                    panelAfter.fitToScreen();
+                }
+            });
 
             comparisonModalEl.addEventListener('hidden.bs.modal', function () {
                 closeComparison();

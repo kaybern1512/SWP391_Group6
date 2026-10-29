@@ -34,8 +34,9 @@
         margin: 0 8px;
     }
     .tooth-card {
-        width: 44px;
-        height: 65px;
+        width: 46px;
+        min-height: 74px;
+        height: auto;
         background: #ffffff;
         border: 2px solid #cbd5e1;
         border-radius: 8px;
@@ -43,10 +44,12 @@
         flex-direction: column;
         align-items: center;
         justify-content: space-between;
-        padding: 4px 2px;
+        padding: 4px 2px 3px 2px;
         cursor: pointer;
         transition: all 0.2s ease;
         position: relative;
+        gap: 2px;
+        box-sizing: border-box;
     }
     .tooth-card:hover {
         transform: translateY(-2px);
@@ -57,21 +60,30 @@
         font-size: 0.75rem;
         font-weight: 700;
         color: #1e293b;
+        line-height: 1.1;
     }
     .tooth-icon {
         font-size: 1.1rem;
+        line-height: 1;
+        margin: 1px 0;
     }
     .tooth-status-tag {
-        font-size: 0.55rem;
+        font-size: 0.52rem;
         font-weight: 700;
-        padding: 1px 2px;
+        line-height: 1.15;
+        padding: 2px 1px;
         border-radius: 3px;
         text-transform: uppercase;
         width: 100%;
         text-align: center;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        white-space: normal;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 14px;
+        box-sizing: border-box;
     }
 
     /* Tooth Condition Colors */
@@ -799,8 +811,8 @@
 
     <!-- Modal Phóng To Ảnh X-Quang (Lightbox - Commit 16 & Day 01: Zoom In / Zoom Out) -->
     <div class="modal fade" id="imagingLightboxModal" tabindex="-1" aria-labelledby="imagingLightboxModalLabel" aria-hidden="true" role="dialog" aria-modal="true">
-        <div class="modal-dialog modal-xl modal-dialog-centered">
-            <div class="modal-content bg-dark text-white border-0 shadow-lg overflow-hidden">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content bg-dark text-white border-0 shadow-lg">
                 <div class="modal-header border-secondary border-opacity-50 py-2 px-3 bg-dark d-flex flex-wrap align-items-center justify-content-between gap-2">
                     <div class="d-flex align-items-center gap-2">
                         <i class="bi bi-aspect-ratio text-info fs-5"></i>
@@ -1004,7 +1016,7 @@
 
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng (Esc)"></button>
                 </div>
-                <div id="imagingViewport" class="modal-body p-0 position-relative d-flex justify-content-center align-items-center bg-black imaging-viewport" style="min-height: 440px; height: 72vh; max-height: 75vh; overflow: hidden; user-select: none;">
+                <div id="imagingViewport" class="modal-body p-0 position-relative d-flex justify-content-center align-items-center bg-black imaging-viewport" style="user-select: none;">
                     <!-- Loading State -->
                     <div id="lightboxLoadingSpinner" class="position-absolute d-flex flex-column align-items-center justify-content-center text-white" style="z-index: 10;">
                         <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
@@ -1376,7 +1388,7 @@
                     if (spinner) spinner.classList.add('d-none');
                     imgEl.classList.remove('d-none');
                     if (window.MedicalImagingViewer) {
-                        window.MedicalImagingViewer.resetView();
+                        window.MedicalImagingViewer.fitToScreen();
                     }
                 };
                 imgEl.onerror = function () {
@@ -1397,7 +1409,6 @@
                     window.MedicalImagingViewer.clearTemporaryAnnotations();
                 }
                 window.MedicalImagingViewer.init();
-                window.MedicalImagingViewer.resetView();
             }
             lightboxModalInstance.show();
         }
