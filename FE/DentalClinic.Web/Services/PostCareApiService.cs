@@ -68,6 +68,17 @@ public class PostCareApiService : IPostCareApiService
         return await SendGetAsync<List<FollowUpScheduleDto>>("/api/post-care/follow-ups/receptionist");
     }
 
+    public async Task<ApiResult<FollowUpAppointmentDto>> DoctorBookFollowUpAsync(CreateFollowUpAppointmentRequest request)
+    {
+        return await SendPostAsync<CreateFollowUpAppointmentRequest, FollowUpAppointmentDto>("/api/post-care/follow-ups/doctor-book", request);
+    }
+
+    public async Task<ApiResult<List<FollowUpSlotDto>>> GetFollowUpAvailableSlotsAsync(long dentistUserId, DateTime date, int durationMinutes = 30)
+    {
+        var url = $"/api/post-care/follow-ups/available-slots?dentistUserId={dentistUserId}&date={date:yyyy-MM-dd}&durationMinutes={durationMinutes}";
+        return await SendGetAsync<List<FollowUpSlotDto>>(url);
+    }
+
     // ==========================================
     // HTTP HELPERS
     // ==========================================

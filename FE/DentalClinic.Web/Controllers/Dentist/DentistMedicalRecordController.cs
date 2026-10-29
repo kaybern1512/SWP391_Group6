@@ -17,10 +17,19 @@ namespace DentalClinic.Web.Controllers.Dentist;
 public class DentistMedicalRecordController : Controller
 {
     private readonly IMedicalRecordApiService _medicalRecordApi;
+    private readonly IPostCareApiService _postCareApi;
 
     public DentistMedicalRecordController(IMedicalRecordApiService medicalRecordApi)
+        : this(medicalRecordApi, null!)
+    {
+    }
+
+    public DentistMedicalRecordController(
+        IMedicalRecordApiService medicalRecordApi,
+        IPostCareApiService postCareApi)
     {
         _medicalRecordApi = medicalRecordApi;
+        _postCareApi = postCareApi;
     }
 
     [HttpGet("")]
@@ -327,5 +336,58 @@ public class DentistMedicalRecordController : Controller
         }
 
         return RedirectToAction(nameof(Index), new { patientId = patientUserId });
+    }
+
+    [HttpPost("BookFollowUp")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> BookFollowUp(CreateFollowUpAppointmentRequest request)
+    {
+        if (request.PatientUserId <= 0)
+        {
+            TempData["ErrorMessage"] = "Thông tin bệnh nhân không hợp lệ.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            TempData["ErrorMessage"] = "Vui lòng nhập lý do hoặc nội dung chỉ định tái khám.";
+            return RedirectToAction(nameof(Index), new { patientId = request.PatientUserId });
+        }
+
+        if (request.ScheduledStart <= DateTime.Now)
+        {
+            TempData["ErrorMessage"] = "Thời gian hẹn tái khám phải là thời điểm trong tương lai.";
+            return RedirectToAction(nameof(Index), new { patientId = request.PatientUserId });
+        }
+
+        var result = await _postCareApi.DoctorBookFollowUpAsync(request);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = $"Đặt lịch tái khám thành công vào lúc {request.ScheduledStart:HH:mm dd/MM/yyyy} (Mã hẹn: #{result.Data?.AppointmentCode})!";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể đặt lịch tái khám.";
+        }
+
+        return RedirectToAction(nameof(Index), new { patientId = request.PatientUserId });
+    }
+
+    [HttpGet("AvailableSlots")]
+    public async Task<IActionResult> AvailableSlots(DateTime date, int durationMinutes = 30)
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!long.TryParse(userIdClaim, out var doctorUserId) || doctorUserId <= 0)
+        {
+            return BadRequest(new { success = false, message = "Không xác định được danh tính bác sĩ." });
+        }
+
+        var result = await _postCareApi.GetFollowUpAvailableSlotsAsync(doctorUserId, date, durationMinutes);
+        if (!result.IsSuccess)
+        {
+            return BadRequest(new { success = false, message = result.Message });
+        }
+
+        return Json(new { success = true, data = result.Data });
     }
 }

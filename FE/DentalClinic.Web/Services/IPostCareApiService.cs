@@ -15,4 +15,6 @@ public interface IPostCareApiService
     Task<ApiResult<List<FollowUpScheduleDto>>> GetPatientFollowUpsAsync();
     Task<ApiResult<List<FollowUpScheduleDto>>> GetDentistFollowUpsAsync();
     Task<ApiResult<List<FollowUpScheduleDto>>> GetReceptionistFollowUpsAsync();
+    Task<ApiResult<FollowUpAppointmentDto>> DoctorBookFollowUpAsync(CreateFollowUpAppointmentRequest request);
+    Task<ApiResult<List<FollowUpSlotDto>>> GetFollowUpAvailableSlotsAsync(long dentistUserId, System.DateTime date, int durationMinutes = 30);
 }

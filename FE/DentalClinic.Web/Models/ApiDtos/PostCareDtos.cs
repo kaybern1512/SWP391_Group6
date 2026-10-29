@@ -65,3 +65,39 @@ public class CreateFollowUpRequest
     public DateTime RecommendedDate { get; set; }
     public string? Reason { get; set; }
 }
+
+public class FollowUpSlotDto
+{
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+    public long DentistUserId { get; set; }
+    public string DentistName { get; set; } = string.Empty;
+}
+
+public class CreateFollowUpAppointmentRequest
+{
+    public long PatientUserId { get; set; }
+    public DateTime ScheduledStart { get; set; }
+    public DateTime ScheduledEnd { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string? Notes { get; set; }
+    public long? TreatmentSessionId { get; set; }
+    public long? DepartmentId { get; set; }
+}
+
+public class FollowUpAppointmentDto
+{
+    public long AppointmentId { get; set; }
+    public string AppointmentCode { get; set; } = string.Empty;
+    public long PatientUserId { get; set; }
+    public string PatientName { get; set; } = string.Empty;
+    public long DentistUserId { get; set; }
+    public string DentistName { get; set; } = string.Empty;
+    public long? DepartmentId { get; set; }
+    public string DepartmentName { get; set; } = string.Empty;
+    public DateTime ScheduledStart { get; set; }
+    public DateTime ScheduledEnd { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public long? FollowUpScheduleId { get; set; }
+}

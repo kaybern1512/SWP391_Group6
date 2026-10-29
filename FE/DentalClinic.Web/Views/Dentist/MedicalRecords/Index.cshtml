@@ -146,10 +146,16 @@
         </div>
         @if (record != null)
         {
-            <button type="button" class="btn btn-primary d-flex align-items-center gap-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCreateClinicalEntry">
-                <i class="bi bi-clipboard2-plus-fill"></i>
-                <span>Ghi Nhận Chẩn Đoán Mới</span>
-            </button>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-success d-flex align-items-center gap-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCreateFollowUpAppointment">
+                    <i class="bi bi-calendar-plus-fill"></i>
+                    <span>Đặt Lịch Tái Khám</span>
+                </button>
+                <button type="button" class="btn btn-primary d-flex align-items-center gap-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCreateClinicalEntry">
+                    <i class="bi bi-clipboard2-plus-fill"></i>
+                    <span>Ghi Nhận Chẩn Đoán Mới</span>
+                </button>
+            </div>
         }
     </div>
 
@@ -871,6 +877,126 @@
             </div>
         </div>
     </div>
+
+    <!-- Modal Đặt Lịch Tái Khám (Day 03) -->
+    <div class="modal fade" id="modalCreateFollowUpAppointment" tabindex="-1" aria-labelledby="modalCreateFollowUpAppointmentLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-success text-white py-3">
+                    <h5 class="modal-title fw-bold" id="modalCreateFollowUpAppointmentLabel">
+                        <i class="bi bi-calendar-heart-fill me-2"></i>Đặt Lịch Hẹn Tái Khám Cho Bệnh Nhân
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="formDoctorBookFollowUp" asp-action="BookFollowUp" method="post" onsubmit="return handleFollowUpSubmit(event);">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="PatientUserId" value="@(record.PatientUserId)" />
+                    <input type="hidden" id="selectedFollowUpStart" name="ScheduledStart" value="" />
+                    <input type="hidden" id="selectedFollowUpEnd" name="ScheduledEnd" value="" />
+
+                    <div class="modal-body p-4">
+                        <!-- Patient & Doctor Info Summary -->
+                        <div class="row g-3 p-3 bg-light rounded-3 mb-4 border">
+                            <div class="col-md-6">
+                                <label class="small text-muted mb-1 d-block"><i class="bi bi-person-fill text-primary me-1"></i>Bệnh nhân:</label>
+                                <div class="fw-bold text-dark fs-6">@record.PatientName</div>
+                                <div class="small text-muted">Mã BN: <span class="badge bg-secondary-subtle text-secondary">@record.PatientCode</span></div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="small text-muted mb-1 d-block"><i class="bi bi-person-badge-fill text-success me-1"></i>Bác sĩ phụ trách tái khám:</label>
+                                <div class="fw-bold text-dark fs-6">@(User.Identity?.Name ?? "Bác sĩ điều trị")</div>
+                                <div class="small text-muted"><i class="bi bi-hospital me-1"></i>Phòng khám Nha Khoa DentalCare</div>
+                            </div>
+                        </div>
+
+                        <!-- Date & Slot Picker -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold text-slate-700">
+                                    <i class="bi bi-calendar-event me-1 text-primary"></i>Chọn ngày tái khám: <span class="text-danger">*</span>
+                                </label>
+                                <input type="date" id="followUpDateInput" class="form-control" 
+                                       value="@(DateTime.Today.AddDays(7).ToString("yyyy-MM-dd"))" 
+                                       min="@(DateTime.Today.ToString("yyyy-MM-dd"))"
+                                       onchange="loadDoctorFollowUpSlots();" required />
+                                <div class="form-text small text-muted">Gợi ý: Mặc định tái khám sau 7 ngày điều trị.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold text-slate-700">
+                                    <i class="bi bi-hourglass-split me-1 text-primary"></i>Thời lượng hẹn:
+                                </label>
+                                <select id="followUpDurationSelect" class="form-select" onchange="loadDoctorFollowUpSlots();">
+                                    <option value="30" selected>30 phút (Tái khám tiêu chuẩn / Cắt chỉ)</option>
+                                    <option value="45">45 phút (Kiểm tra khớp cắn / Chỉnh nha)</option>
+                                    <option value="60">60 phút (Điều trị tủy bước tiếp / Thử mão)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Available Slots Area -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold text-slate-700 d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-clock-history me-1 text-primary"></i>Khung giờ trống khả dụng: <span class="text-danger">*</span></span>
+                                <span id="slotStatusBadge" class="badge bg-light text-muted fw-normal">Đang cập nhật...</span>
+                            </label>
+
+                            <!-- Loading Spinner -->
+                            <div id="followUpSlotsSpinner" class="text-center py-4 bg-light rounded-3 d-none">
+                                <div class="spinner-border spinner-border-sm text-success me-2" role="status"></div>
+                                <span class="small text-muted">Đang kiểm tra lịch làm việc & tìm giờ trống...</span>
+                            </div>
+
+                            <!-- Slots Grid -->
+                            <div id="followUpSlotsGrid" class="d-flex flex-wrap gap-2 p-3 bg-light rounded-3 border" style="min-height: 80px; max-height: 180px; overflow-y: auto;">
+                                <!-- Dynamic buttons generated via JS -->
+                            </div>
+
+                            <!-- Empty alert -->
+                            <div id="followUpSlotsEmptyAlert" class="alert alert-warning py-2 px-3 small border-0 bg-warning-subtle text-dark d-none mt-2">
+                                <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
+                                <span>Bác sĩ không có khung giờ trống nào vào ngày đã chọn. Vui lòng chọn một ngày khác hoặc đổi thời lượng.</span>
+                            </div>
+                        </div>
+
+                        <!-- Reason -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-slate-700">
+                                <i class="bi bi-clipboard-pulse me-1 text-primary"></i>Nội dung / Lý do tái khám: <span class="text-danger">*</span>
+                            </label>
+                            <select id="followUpPresetReason" class="form-select mb-2" onchange="applyPresetReason();">
+                                <option value="">-- Chọn nội dung chỉ định tái khám mẫu --</option>
+                                <option value="Cắt chỉ sau phẫu thuật / nhổ răng">Cắt chỉ sau phẫu thuật / nhổ răng</option>
+                                <option value="Kiểm tra và điều trị tủy giai đoạn tiếp theo">Kiểm tra và điều trị tủy giai đoạn tiếp theo</option>
+                                <option value="Thử sườn / gắn mão sứ phục hình">Thử sườn / gắn mão sứ phục hình</option>
+                                <option value="Tái khám siết cung chỉnh nha">Tái khám siết cung chỉnh nha</option>
+                                <option value="Kiểm tra khớp cắn và theo dõi lành thương">Kiểm tra khớp cắn và theo dõi lành thương</option>
+                                <option value="Tái khám định kỳ sau điều trị nha chu">Tái khám định kỳ sau điều trị nha chu</option>
+                                <option value="other">Lý do khác (tự nhập bên dưới)</option>
+                            </select>
+                            <input type="text" id="followUpReasonInput" name="Reason" class="form-control" placeholder="Nhập lý do hoặc chỉ định cụ thể cho buổi tái khám..." required maxlength="250" />
+                        </div>
+
+                        <!-- Notes for Patient -->
+                        <div class="mb-2">
+                            <label class="form-label fw-semibold text-slate-700">
+                                <i class="bi bi-chat-left-dots me-1 text-primary"></i>Lời dặn thêm cho bệnh nhân (tùy chọn):
+                            </label>
+                            <textarea name="Notes" class="form-control" rows="2" placeholder="Ví dụ: Kiêng nhai đồ cứng, uống thuốc đúng giờ, chườm lạnh nếu còn ê buốt..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer bg-light py-2 px-3">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                        <button type="submit" id="btnSubmitFollowUp" class="btn btn-success px-4 fw-semibold" disabled>
+                            <span id="followUpSubmitSpinner" class="spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true"></span>
+                            <i class="bi bi-calendar-check-fill me-1" id="followUpSubmitIcon"></i>
+                            <span id="followUpSubmitText">Xác Nhận Đặt Lịch Tái Khám</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 }
 
 @section Scripts {
@@ -1245,6 +1371,13 @@
                 });
             }
 
+            const followUpModalEl = document.getElementById('modalCreateFollowUpAppointment');
+            if (followUpModalEl) {
+                followUpModalEl.addEventListener('shown.bs.modal', function () {
+                    loadDoctorFollowUpSlots();
+                });
+            }
+
             const lightboxModalEl = document.getElementById('imagingLightboxModal');
             if (lightboxModalEl) {
                 lightboxModalEl.addEventListener('hidden.bs.modal', function () {
@@ -1258,5 +1391,133 @@
                 });
             }
         });
+
+        function applyPresetReason() {
+            const select = document.getElementById('followUpPresetReason');
+            const input = document.getElementById('followUpReasonInput');
+            if (!select || !input) return;
+            if (select.value === 'other') {
+                input.value = '';
+                input.focus();
+            } else if (select.value) {
+                input.value = select.value;
+            }
+        }
+
+        async function loadDoctorFollowUpSlots() {
+            const dateInput = document.getElementById('followUpDateInput');
+            const durationSelect = document.getElementById('followUpDurationSelect');
+            const grid = document.getElementById('followUpSlotsGrid');
+            const spinner = document.getElementById('followUpSlotsSpinner');
+            const emptyAlert = document.getElementById('followUpSlotsEmptyAlert');
+            const badge = document.getElementById('slotStatusBadge');
+            const submitBtn = document.getElementById('btnSubmitFollowUp');
+            const startInput = document.getElementById('selectedFollowUpStart');
+            const endInput = document.getElementById('selectedFollowUpEnd');
+
+            if (!dateInput || !grid) return;
+
+            const dateVal = dateInput.value;
+            const durationVal = durationSelect ? durationSelect.value : 30;
+
+            if (!dateVal) return;
+
+            // Reset selection
+            if (startInput) startInput.value = '';
+            if (endInput) endInput.value = '';
+            if (submitBtn) submitBtn.disabled = true;
+            grid.innerHTML = '';
+            if (emptyAlert) emptyAlert.classList.add('d-none');
+            if (spinner) spinner.classList.remove('d-none');
+            if (badge) {
+                badge.className = 'badge bg-warning-subtle text-warning';
+                badge.textContent = 'Đang tải...';
+            }
+
+            try {
+                const res = await fetch(`/Dentist/MedicalRecords/AvailableSlots?date=${encodeURIComponent(dateVal)}&durationMinutes=${encodeURIComponent(durationVal)}`);
+                const json = await res.json();
+                if (spinner) spinner.classList.add('d-none');
+
+                if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+                    if (badge) {
+                        badge.className = 'badge bg-success-subtle text-success';
+                        badge.textContent = `${json.data.length} khung giờ trống`;
+                    }
+                    json.data.forEach(slot => {
+                        const start = new Date(slot.startTime);
+                        const end = new Date(slot.endTime);
+                        const formatTime = (d) => ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+                        const label = `${formatTime(start)} - ${formatTime(end)}`;
+
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'btn btn-outline-success btn-sm px-3 py-2 fw-semibold slot-pill-btn';
+                        btn.innerHTML = `<i class="bi bi-clock me-1"></i>${label}`;
+                        btn.onclick = () => selectFollowUpSlot(slot.startTime, slot.endTime, btn);
+                        grid.appendChild(btn);
+                    });
+                } else {
+                    if (emptyAlert) emptyAlert.classList.remove('d-none');
+                    if (badge) {
+                        badge.className = 'badge bg-secondary-subtle text-secondary';
+                        badge.textContent = 'Không có giờ trống';
+                    }
+                }
+            } catch (err) {
+                if (spinner) spinner.classList.add('d-none');
+                if (emptyAlert) {
+                    emptyAlert.classList.remove('d-none');
+                    emptyAlert.querySelector('span').textContent = 'Không thể kết nối đến máy chủ lấy khung giờ trống. Vui lòng thử lại.';
+                }
+            }
+        }
+
+        function selectFollowUpSlot(startIso, endIso, btnElement) {
+            document.querySelectorAll('.slot-pill-btn').forEach(b => {
+                b.classList.remove('btn-success', 'text-white');
+                b.classList.add('btn-outline-success');
+            });
+
+            btnElement.classList.remove('btn-outline-success');
+            btnElement.classList.add('btn-success', 'text-white');
+
+            const startInput = document.getElementById('selectedFollowUpStart');
+            const endInput = document.getElementById('selectedFollowUpEnd');
+            const submitBtn = document.getElementById('btnSubmitFollowUp');
+
+            if (startInput) startInput.value = startIso;
+            if (endInput) endInput.value = endIso;
+            if (submitBtn) submitBtn.disabled = false;
+        }
+
+        function handleFollowUpSubmit(e) {
+            const startInput = document.getElementById('selectedFollowUpStart');
+            const reasonInput = document.getElementById('followUpReasonInput');
+            const submitBtn = document.getElementById('btnSubmitFollowUp');
+            const spinner = document.getElementById('followUpSubmitSpinner');
+            const icon = document.getElementById('followUpSubmitIcon');
+            const btnText = document.getElementById('followUpSubmitText');
+
+            if (!startInput || !startInput.value) {
+                alert('Vui lòng chọn một khung giờ tái khám trống.');
+                return false;
+            }
+
+            if (!reasonInput || !reasonInput.value.trim()) {
+                alert('Vui lòng nhập lý do hoặc nội dung chỉ định tái khám.');
+                if (reasonInput) reasonInput.focus();
+                return false;
+            }
+
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                if (spinner) spinner.classList.remove('d-none');
+                if (icon) icon.classList.add('d-none');
+                if (btnText) btnText.textContent = 'Đang đặt lịch...';
+            }
+
+            return true;
+        }
     </script>
 }
