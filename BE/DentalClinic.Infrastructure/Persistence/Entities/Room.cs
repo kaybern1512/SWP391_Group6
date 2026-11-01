@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -13,7 +13,9 @@ public partial class Room
 
     public long? DepartmentId { get; set; }
 
-    public string Status { get; set; } = null!;
+public string Status { get; set; } = null!;
+
+    public bool IsExclusive { get; set; } = false;
 
     public virtual Department? Department { get; set; }
 

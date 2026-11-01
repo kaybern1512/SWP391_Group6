@@ -1,8 +1,18 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using DentalClinic.Application.Features.Booking.DTOs;
 
 namespace DentalClinic.Application.Features.Appointments.DTOs;
+
+public class CreateReceptionistAppointmentRequest
+{
+    public long PatientUserId { get; set; }
+    public long DepartmentId { get; set; }
+    public long RequestedServiceId { get; set; }
+    public long? RequestedDentistUserId { get; set; }
+    public DateTime ScheduledStart { get; set; }
+    public string ReasonForVisit { get; set; } = string.Empty;
+}
 
 public class CreateAppointmentRequest
 {
@@ -145,7 +155,8 @@ public class RoomOptionDto
     public string RoomCode { get; set; } = string.Empty;
     public string? RoomName { get; set; }
     public long? DepartmentId { get; set; }
-    public string Status { get; set; } = "Active";
+public string Status { get; set; } = "Active";
+    public bool IsExclusive { get; set; } = false;
 }
 
 public class ChairOptionDto
@@ -202,4 +213,24 @@ public class AssignChairRequest
 public class StaffCancelAppointmentRequest
 {
     public string Reason { get; set; } = string.Empty;
+}
+
+public class RegisterWalkInPatientRequest
+{
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string PhoneNumber { get; set; } = string.Empty;
+    public DateTime? DateOfBirth { get; set; }
+    public string? Gender { get; set; }
+}
+
+public class RegisterWalkInPatientResponse
+{
+    public long PatientUserId { get; set; }
+    public string PatientCode { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string PhoneNumber { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
 }

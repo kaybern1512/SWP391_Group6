@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using DentalClinic.Web.Models.Api;
@@ -26,7 +26,10 @@ public interface IAppointmentApiService
     Task<ApiResult> RejectProposalAsync(long id);
     Task<ApiResult<BookingEligibilityDto>> GetBookingEligibilityAsync();
 
-    // Receptionist
+// Receptionist
+    Task<ApiResult<List<AdminUserDto>>> GetPatientsAsync(string? search = null);
+    Task<ApiResult<RegisterWalkInPatientResponse>> RegisterWalkInPatientAsync(RegisterWalkInPatientRequest request);
+    Task<ApiResult<AppointmentDto>> CreateReceptionistAppointmentAsync(CreateReceptionistAppointmentRequest request);
     Task<ApiResult<List<AppointmentDto>>> GetReceptionistRequestsAsync();
     Task<ApiResult> ReceptionistForwardAsync(long id, string? note = null);
     Task<ApiResult> ReceptionistRejectAsync(long id, string reason);

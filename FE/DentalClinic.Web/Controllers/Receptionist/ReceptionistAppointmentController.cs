@@ -1,8 +1,13 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+using DentalClinic.Web.Models.ApiDtos;
 using DentalClinic.Web.Services;
 using DentalClinic.Web.ViewModels.Appointments;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DentalClinic.Web.Controllers.Receptionist;
 
@@ -11,10 +16,20 @@ namespace DentalClinic.Web.Controllers.Receptionist;
 public class ReceptionistAppointmentController : Controller
 {
     private readonly IAppointmentApiService _appointmentApiService;
+    private readonly IAdminApiService? _adminApiService;
 
     public ReceptionistAppointmentController(IAppointmentApiService appointmentApiService)
+        : this(appointmentApiService, null)
+    {
+    }
+
+    [ActivatorUtilitiesConstructor]
+    public ReceptionistAppointmentController(
+        IAppointmentApiService appointmentApiService,
+        IAdminApiService? adminApiService)
     {
         _appointmentApiService = appointmentApiService;
+        _adminApiService = adminApiService;
     }
 
     [HttpGet("")]
@@ -27,6 +42,111 @@ public class ReceptionistAppointmentController : Controller
             Requests = result.Data ?? new()
         };
         return View("~/Views/Receptionist/Appointments/Requests.cshtml", vm);
+    }
+
+    [HttpGet("Create")]
+    public async Task<IActionResult> Create([FromQuery] long? patientId)
+    {
+        var deptResult = await _appointmentApiService.GetDepartmentsAsync();
+        var patients = new List<AdminUserDto>();
+        if (_adminApiService != null)
+        {
+            var pResult = await _appointmentApiService.GetPatientsAsync();
+            if (pResult.IsSuccess && pResult.Data != null)
+            {
+                patients = pResult.Data;
+            }
+        }
+
+        var vm = new ReceptionistBookAppointmentViewModel
+        {
+            Departments = deptResult.Data ?? new(),
+            Patients = patients
+        };
+
+        if (patientId.HasValue && patientId.Value > 0)
+        {
+            vm.PatientUserId = patientId.Value;
+            var targetPatient = patients.FirstOrDefault(p => p.UserId == patientId.Value);
+            if (targetPatient != null)
+            {
+                vm.SelectedPatientName = targetPatient.FullName;
+                vm.SelectedPatientCode = targetPatient.Code;
+                vm.SelectedPatientPhone = targetPatient.PhoneNumber;
+            }
+        }
+
+        return View("~/Views/Receptionist/Appointments/Create.cshtml", vm);
+    }
+
+    [HttpGet("GetServices")]
+    public async Task<IActionResult> GetServices(long departmentId)
+    {
+        var result = await _appointmentApiService.GetServicesAsync(departmentId);
+        return Json(result.Data ?? new());
+    }
+
+    [HttpGet("GetDentists")]
+    public async Task<IActionResult> GetDentists(long departmentId)
+    {
+        var result = await _appointmentApiService.GetDentistsAsync(departmentId);
+        return Json(result.Data ?? new());
+    }
+
+    [HttpGet("GetSlots")]
+    public async Task<IActionResult> GetSlots(long departmentId, long serviceId, string date, long? dentistUserId)
+    {
+        if (!DateOnly.TryParse(date, out var parsedDate))
+        {
+            return BadRequest(new { message = "Ngày khám không đúng định dạng." });
+        }
+
+        var result = await _appointmentApiService.GetAvailableSlotsAsync(departmentId, serviceId, parsedDate, dentistUserId);
+        return Json(result.Data ?? new());
+    }
+
+    [HttpPost("Create")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(ReceptionistBookAppointmentViewModel model)
+    {
+        if (!ModelState.IsValid)
+        {
+            var deptResult = await _appointmentApiService.GetDepartmentsAsync();
+            model.Departments = deptResult.Data ?? new();
+            if (_adminApiService != null)
+            {
+                var pResult = await _appointmentApiService.GetPatientsAsync();
+                model.Patients = pResult.Data ?? new();
+            }
+            return View("~/Views/Receptionist/Appointments/Create.cshtml", model);
+        }
+
+        var request = new CreateReceptionistAppointmentRequest
+        {
+            PatientUserId = model.PatientUserId,
+            DepartmentId = model.DepartmentId,
+            RequestedServiceId = model.RequestedServiceId,
+            RequestedDentistUserId = model.RequestedDentistUserId,
+            ScheduledStart = model.ScheduledStart!.Value,
+            ReasonForVisit = model.ReasonForVisit.Trim()
+        };
+
+        var result = await _appointmentApiService.CreateReceptionistAppointmentAsync(request);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = $"Tạo lịch hẹn thành công! Mã lịch: {result.Data?.AppointmentCode}. Lịch hẹn đã chuyển tiếp cho Trưởng khoa xếp phòng & bác sĩ.";
+            return RedirectToAction(nameof(Requests));
+        }
+
+        TempData["ErrorMessage"] = result.Message ?? "Không thể tạo lịch hẹn tại quầy.";
+        var depts = await _appointmentApiService.GetDepartmentsAsync();
+        model.Departments = depts.Data ?? new();
+        if (_adminApiService != null)
+        {
+            var pList = await _appointmentApiService.GetPatientsAsync();
+            model.Patients = pList.Data ?? new();
+        }
+        return View("~/Views/Receptionist/Appointments/Create.cshtml", model);
     }
 
     [HttpPost("Forward/{id:long}")]

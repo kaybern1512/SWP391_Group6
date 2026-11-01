@@ -19,12 +19,12 @@ namespace DentalClinic.Web.Tests.Controllers;
 public class ReceptionistPatientWebControllerTests
 {
     private readonly Mock<IAdminApiService> _adminApiMock;
-    private readonly Mock<IAuthApiService> _authApiMock;
+    private readonly Mock<IAppointmentApiService> _appointmentApiMock;
 
     public ReceptionistPatientWebControllerTests()
     {
         _adminApiMock = new Mock<IAdminApiService>();
-        _authApiMock = new Mock<IAuthApiService>();
+        _appointmentApiMock = new Mock<IAppointmentApiService>();
     }
 
     private static ControllerContext CreateContext(long userId, string role, string name = "Receptionist")
@@ -64,7 +64,7 @@ public class ReceptionistPatientWebControllerTests
                 }
             }));
 
-        var controller = new ReceptionistPatientController(_adminApiMock.Object, _authApiMock.Object)
+        var controller = new ReceptionistPatientController(_adminApiMock.Object, _appointmentApiMock.Object)
         {
             ControllerContext = CreateContext(201, "Receptionist")
         };
@@ -87,7 +87,7 @@ public class ReceptionistPatientWebControllerTests
         _adminApiMock.Setup(x => x.GetUsersAsync("Patient", null))
             .ReturnsAsync(ApiResult<List<AdminUserDto>>.Failure("Lỗi kết nối máy chủ"));
 
-        var controller = new ReceptionistPatientController(_adminApiMock.Object, _authApiMock.Object)
+        var controller = new ReceptionistPatientController(_adminApiMock.Object, _appointmentApiMock.Object)
         {
             ControllerContext = CreateContext(201, "Receptionist")
         };
@@ -105,7 +105,7 @@ public class ReceptionistPatientWebControllerTests
     public async Task RegisterWalkIn_InvalidModel_RedirectsWithErrorMessage()
     {
         // Arrange
-        var controller = new ReceptionistPatientController(_adminApiMock.Object, _authApiMock.Object)
+        var controller = new ReceptionistPatientController(_adminApiMock.Object, _appointmentApiMock.Object)
         {
             ControllerContext = CreateContext(201, "Receptionist"),
             TempData = CreateTempData()
@@ -128,10 +128,15 @@ public class ReceptionistPatientWebControllerTests
     public async Task RegisterWalkIn_Success_RegistersAndRedirectsWithSuccessMessage()
     {
         // Arrange
-        _authApiMock.Setup(x => x.RegisterAsync(It.IsAny<RegisterRequest>()))
-            .ReturnsAsync(ApiResult.Success("Đăng ký thành công"));
+        _appointmentApiMock.Setup(x => x.RegisterWalkInPatientAsync(It.IsAny<RegisterWalkInPatientRequest>()))
+            .ReturnsAsync(ApiResult<RegisterWalkInPatientResponse>.Success(new RegisterWalkInPatientResponse
+            {
+                PatientUserId = 101,
+                PatientCode = "PAT-202610-0001",
+                FullName = "Trần Thị Bình"
+            }, "Tiếp nhận thành công"));
 
-        var controller = new ReceptionistPatientController(_adminApiMock.Object, _authApiMock.Object)
+        var controller = new ReceptionistPatientController(_adminApiMock.Object, _appointmentApiMock.Object)
         {
             ControllerContext = CreateContext(201, "Receptionist"),
             TempData = CreateTempData()
@@ -154,17 +159,17 @@ public class ReceptionistPatientWebControllerTests
         redirect.ActionName.Should().Be("Index");
         controller.TempData["SuccessMessage"].Should().NotBeNull();
         controller.TempData["SuccessMessage"]!.ToString().Should().Contain("Trần Thị Bình");
-        controller.TempData["SuccessMessage"]!.ToString().Should().Contain("Password123@");
+        controller.TempData["SuccessMessage"]!.ToString().Should().NotContain("Password123@");
     }
 
     [Fact]
     public async Task RegisterWalkIn_ApiFailure_RedirectsWithErrorMessage()
     {
         // Arrange
-        _authApiMock.Setup(x => x.RegisterAsync(It.IsAny<RegisterRequest>()))
-            .ReturnsAsync(ApiResult.Failure("Email đã tồn tại trong hệ thống."));
+        _appointmentApiMock.Setup(x => x.RegisterWalkInPatientAsync(It.IsAny<RegisterWalkInPatientRequest>()))
+            .ReturnsAsync(ApiResult<RegisterWalkInPatientResponse>.Failure("Email đã tồn tại trong hệ thống."));
 
-        var controller = new ReceptionistPatientController(_adminApiMock.Object, _authApiMock.Object)
+        var controller = new ReceptionistPatientController(_adminApiMock.Object, _appointmentApiMock.Object)
         {
             ControllerContext = CreateContext(201, "Receptionist"),
             TempData = CreateTempData()

@@ -16,6 +16,13 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DentalClinic.Api.Controllers;
 
+public class BlogMediaUploadForm
+{
+    public IFormFile? File { get; set; }
+    public long? BlogPostId { get; set; }
+    public string? MediaType { get; set; }
+}
+
 [ApiController]
 [Route("api/[controller]")]
 public class BlogController : ControllerBase
@@ -226,7 +233,7 @@ public class BlogController : ControllerBase
     [RequestFormLimits(MultipartBodyLengthLimit = 52_428_800)]
     [ProducesResponseType(typeof(ApiResponse<UploadBlogMediaResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<UploadBlogMediaResponse>), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> UploadMedia([FromForm] IFormFile file, [FromForm] long? blogPostId = null, [FromForm] string? mediaType = null, CancellationToken ct = default)
+    public async Task<IActionResult> UploadMedia([FromForm] BlogMediaUploadForm form, CancellationToken ct = default)
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId <= 0)
@@ -234,13 +241,13 @@ public class BlogController : ControllerBase
             return Unauthorized(ApiResponse<UploadBlogMediaResponse>.Fail("Không xác định được danh tính người dùng."));
         }
 
-        if (file == null || file.Length == 0)
+        if (form?.File == null || form.File.Length == 0)
         {
             return BadRequest(ApiResponse<UploadBlogMediaResponse>.Fail("Vui lòng chọn tập tin phương tiện (ảnh hoặc video)."));
         }
 
-        using var stream = file.OpenReadStream();
-        var result = await _blogService.UploadMediaAsync(currentUserId, stream, file.FileName, file.ContentType, blogPostId, mediaType, ct);
+        using var stream = form.File.OpenReadStream();
+        var result = await _blogService.UploadMediaAsync(currentUserId, stream, form.File.FileName, form.File.ContentType, form.BlogPostId, form.MediaType, ct);
         if (!result.Success)
         {
             return BadRequest(result);

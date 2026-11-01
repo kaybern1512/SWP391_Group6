@@ -1,10 +1,11 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Features.Admin.DTOs;
 using DentalClinic.Application.Features.Appointments.DTOs;
 using DentalClinic.Application.Features.Booking.DTOs;
 using DentalClinic.Domain.Enums;
@@ -210,6 +211,49 @@ public class AppointmentsController : ControllerBase
     // ==========================================
     // RECEPTIONIST ENDPOINTS
     // ==========================================
+
+    [HttpGet("api/receptionist/patients")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<List<AdminUserDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetReceptionistPatients([FromQuery] string? search, CancellationToken ct)
+    {
+        var result = await _appointmentService.GetPatientsAsync(search, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("api/receptionist/patients")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<RegisterWalkInPatientResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<RegisterWalkInPatientResponse>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RegisterWalkInPatient([FromBody] RegisterWalkInPatientRequest request, CancellationToken ct)
+    {
+        var staffUserId = GetCurrentUserId();
+        if (staffUserId <= 0) return Unauthorized(ApiResponse.Fail("KhÃ´ng thá»ƒ xÃ¡c Ä‘á»‹nh danh tÃ­nh nhÃ¢n viÃªn tiáº¿p Ä‘Ã³n."));
+
+        var result = await _appointmentService.RegisterWalkInPatientAsync(staffUserId, request, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("api/receptionist/appointments")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<AppointmentDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<AppointmentDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CreateReceptionistAppointment([FromBody] CreateReceptionistAppointmentRequest request, CancellationToken ct)
+    {
+        var receptionistUserId = GetCurrentUserId();
+        if (receptionistUserId <= 0) return Unauthorized(ApiResponse.Fail("Không thể xác định danh tính người dùng."));
+
+        var result = await _appointmentService.CreateReceptionistAppointmentAsync(receptionistUserId, request, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
 
     [HttpGet("api/receptionist/appointment-requests")]
     [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]

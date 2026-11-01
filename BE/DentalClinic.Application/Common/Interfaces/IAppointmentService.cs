@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Features.Admin.DTOs;
 using DentalClinic.Application.Features.Appointments.DTOs;
 using DentalClinic.Application.Features.Booking.DTOs;
 
@@ -21,7 +22,10 @@ public interface IAppointmentService
     Task<ApiResponse> PatientRespondProposalAsync(long appointmentId, long patientUserId, bool accept, CancellationToken ct = default);
     Task<ApiResponse<BookingEligibilityDto>> GetBookingEligibilityAsync(long patientUserId, CancellationToken ct = default);
 
-    // Receptionist Operations
+// Receptionist Operations
+    Task<ApiResponse<List<AdminUserDto>>> GetPatientsAsync(string? search = null, CancellationToken ct = default);
+    Task<ApiResponse<RegisterWalkInPatientResponse>> RegisterWalkInPatientAsync(long receptionistUserId, RegisterWalkInPatientRequest request, CancellationToken ct = default);
+    Task<ApiResponse<AppointmentDto>> CreateReceptionistAppointmentAsync(long receptionistUserId, CreateReceptionistAppointmentRequest request, CancellationToken ct = default);
     Task<ApiResponse<List<AppointmentDto>>> GetReceptionistRequestsAsync(CancellationToken ct = default);
     Task<ApiResponse> ReceptionistForwardAsync(long appointmentId, long staffUserId, string? note, CancellationToken ct = default);
     Task<ApiResponse> ReceptionistRejectAsync(long appointmentId, long staffUserId, string reason, CancellationToken ct = default);

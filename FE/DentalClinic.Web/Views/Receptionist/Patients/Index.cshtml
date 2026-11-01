@@ -1,4 +1,4 @@
-@model DentalClinic.Web.ViewModels.Receptionist.ReceptionistPatientListViewModel
+﻿@model DentalClinic.Web.ViewModels.Receptionist.ReceptionistPatientListViewModel
 @{
     ViewData["Title"] = "Hồ Sơ Bệnh Nhân";
     Layout = "~/Views/Shared/_Layout.cshtml";
@@ -145,6 +145,9 @@
                                     <span class="text-muted">@patient.CreatedAt.ToString("dd/MM/yyyy HH:mm")</span>
                                 </td>
                                 <td class="text-end pe-4">
+                                    <a asp-controller="ReceptionistAppointment" asp-action="Create" asp-route-patientId="@patient.UserId" class="btn btn-sm btn-primary me-1" title="Đặt lịch hẹn tại quầy cho bệnh nhân">
+                                        <i class="bi bi-calendar-plus me-1"></i> Đặt Lịch
+                                    </a>
                                     <a asp-controller="ReceptionistAppointment" asp-action="TodayCheckIn" asp-route-search="@(patient.Code ?? patient.FullName)" class="btn btn-sm btn-outline-primary" title="Kiểm tra ca khám và check-in hôm nay">
                                         <i class="bi bi-calendar-check me-1"></i> Check-in
                                     </a>
@@ -173,7 +176,7 @@
                 <div class="modal-body p-4">
                     <div class="alert alert-info py-2 px-3 fs-13 mb-3 d-flex align-items-center gap-2">
                         <i class="bi bi-info-circle-fill fs-5"></i>
-                        <div>Đăng ký nhanh hồ sơ cho bệnh nhân đến khám trực tiếp. Mật khẩu mặc định là <code>Password123@@</code>.</div>
+                        <div>Tiếp nhận hồ sơ hành chính cho bệnh nhân trực tiếp tại quầy.</div>
                     </div>
 
                     <div class="mb-3">

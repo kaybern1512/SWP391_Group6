@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -310,7 +310,7 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasOne(d => d.UploadedByUser).WithMany()
                 .HasForeignKey(d => d.UploadedByUserId)
-                .OnDelete(DeleteBehavior.Cascade)
+                .OnDelete(DeleteBehavior.NoAction)
                 .HasConstraintName("FK_BlogPostMedia_UserAccounts");
         });
 

@@ -216,7 +216,7 @@
                                 </td>
                                 <td class="text-end pe-3">
                                     <div class="d-flex align-items-center justify-content-end gap-1 flex-wrap">
-                                        @if (appt.Status == "CheckedIn" || appt.Status == "Confirmed")
+                                        @if (appt.Status == "CheckedIn")
                                         {
                                             <form asp-controller="DentistAppointment" asp-action="Start" asp-route-id="@appt.AppointmentId" method="post" class="d-inline">
                                                 @Html.AntiForgeryToken()
@@ -225,6 +225,12 @@
                                                     <i class="bi bi-box-arrow-in-right me-1"></i>Vào Khám
                                                 </button>
                                             </form>
+                                        }
+                                        else if (appt.Status == "Confirmed")
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary border px-2 py-1 small" title="Chờ bệnh nhân làm thủ tục check-in tại quầy tiếp đón">
+                                                <i class="bi bi-hourglass me-1"></i>Chờ Check-in
+                                            </span>
                                         }
                                         else if (appt.Status == "InService")
                                         {

@@ -164,126 +164,177 @@ public class PrescriptionService : IPrescriptionService
             return ApiResponse<PrescriptionDto>.Fail("Không tìm thấy thông tin ca khám.");
         }
 
+        if (appointment.AssignedDentistUserId.HasValue && appointment.AssignedDentistUserId.Value != dentistUserId)
+        {
+            return ApiResponse<PrescriptionDto>.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
+        }
+
         if (appointment.Status != AppointmentStatus.InService && appointment.Status != AppointmentStatus.Completed)
         {
             return ApiResponse<PrescriptionDto>.Fail($"Bác sĩ chỉ có thể kê đơn thuốc sau khi ca khám đã bắt đầu diễn ra hoặc đã hoàn tất khám (Trạng thái hiện tại: {appointment.Status}).");
         }
 
-        // Tìm hoặc tạo TreatmentSession cho Appointment này
-        var session = await _dbContext.TreatmentSessions
-            .Include(s => s.Prescription)
-                .ThenInclude(p => p!.PrescriptionItems)
-            .FirstOrDefaultAsync(s => s.AppointmentId == request.AppointmentId, ct);
-
-        if (session == null)
+        if (!appointment.DepartmentId.HasValue || appointment.DepartmentId.Value <= 0)
         {
-            var deptId = appointment.DepartmentId ?? 1;
-            // Tìm hoặc tạo TreatmentPlan
-            var plan = await _dbContext.TreatmentPlans
-                .FirstOrDefaultAsync(tp => tp.PatientUserId == appointment.PatientUserId && tp.DepartmentId == deptId, ct);
+            return ApiResponse<PrescriptionDto>.Fail("Không xác định được chuyên khoa phụ trách ca khám để lập đơn thuốc.");
+        }
 
-            if (plan == null)
+        var deptId = appointment.DepartmentId.Value;
+
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? tx = null;
+        if (_dbContext.Database.IsRelational())
+        {
+            tx = await _dbContext.Database.BeginTransactionAsync(ct);
+        }
+
+        try
+        {
+            // Tìm hoặc tạo TreatmentSession cho Appointment này
+            var session = await _dbContext.TreatmentSessions
+                .Include(s => s.Prescription)
+                    .ThenInclude(p => p!.PrescriptionItems)
+                .FirstOrDefaultAsync(s => s.AppointmentId == request.AppointmentId, ct);
+
+            if (session == null)
             {
-                plan = new TreatmentPlan
+                var appointmentNote = $"Đợt khám {appointment.AppointmentCode}";
+
+                // Tìm hoặc tạo kế hoạch điều trị riêng cho ca khám này (tránh chiếm dụng item của kế hoạch chỉnh nha/phẫu thuật khác)
+                var plan = await _dbContext.TreatmentPlans
+                    .FirstOrDefaultAsync(tp => tp.PatientUserId == appointment.PatientUserId &&
+                                               tp.DepartmentId == deptId &&
+                                               tp.TreatmentPlanItems.Any(tpi => tpi.Note == appointmentNote), ct);
+
+                if (plan == null)
                 {
-                    PatientUserId = appointment.PatientUserId,
-                    DepartmentId = deptId,
-                    CreatedByDentistUserId = dentistUserId,
-                    Status = "Active",
-                    CreatedAt = DateTime.UtcNow
-                };
-                _dbContext.TreatmentPlans.Add(plan);
-                await _dbContext.SaveChangesAsync(ct);
-            }
+                    plan = new TreatmentPlan
+                    {
+                        PatientUserId = appointment.PatientUserId,
+                        DepartmentId = deptId,
+                        CreatedByDentistUserId = dentistUserId,
+                        Status = "Completed",
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _dbContext.TreatmentPlans.Add(plan);
+                    await _dbContext.SaveChangesAsync(ct);
+                }
 
-            // Tìm hoặc tạo TreatmentPlanItem
-            var item = await _dbContext.TreatmentPlanItems
-                .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId, ct);
+                // Tìm hoặc tạo TreatmentPlanItem dành riêng cho ca khám này
+                var item = await _dbContext.TreatmentPlanItems
+                    .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId && tpi.Note == appointmentNote, ct);
 
-            if (item == null)
-            {
-                item = new TreatmentPlanItem
+                if (item == null)
                 {
-                    TreatmentPlanId = plan.TreatmentPlanId,
-                    SequenceNo = 1,
-                    Status = "Completed",
-                    Note = $"Đợt khám {appointment.AppointmentCode}"
+                    var maxSeq = await _dbContext.TreatmentPlanItems
+                        .Where(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId)
+                        .Select(tpi => (int?)tpi.SequenceNo)
+                        .MaxAsync(ct) ?? 0;
+
+                    item = new TreatmentPlanItem
+                    {
+                        TreatmentPlanId = plan.TreatmentPlanId,
+                        SequenceNo = maxSeq + 1,
+                        Status = "Completed",
+                        AssignedDentistUserId = dentistUserId,
+                        Note = appointmentNote
+                    };
+                    _dbContext.TreatmentPlanItems.Add(item);
+                    await _dbContext.SaveChangesAsync(ct);
+                }
+
+                // Tạo TreatmentSession
+                session = new TreatmentSession
+                {
+                    TreatmentPlanItemId = item.TreatmentPlanItemId,
+                    AppointmentId = appointment.AppointmentId,
+                    DentistUserId = dentistUserId,
+                    SessionDate = DateTime.UtcNow,
+                    TreatmentResult = "Khám & Kê đơn thuốc"
                 };
-                _dbContext.TreatmentPlanItems.Add(item);
+                _dbContext.TreatmentSessions.Add(session);
                 await _dbContext.SaveChangesAsync(ct);
             }
 
-            // Tạo TreatmentSession
-            session = new TreatmentSession
+            Prescription pres;
+            if (session.Prescription == null)
             {
-                TreatmentPlanItemId = item.TreatmentPlanItemId,
-                AppointmentId = appointment.AppointmentId,
-                DentistUserId = dentistUserId,
-                SessionDate = DateTime.UtcNow,
-                TreatmentResult = "Khám & Kê đơn thuốc"
-            };
-            _dbContext.TreatmentSessions.Add(session);
-            await _dbContext.SaveChangesAsync(ct);
-        }
-
-        Prescription pres;
-        if (session.Prescription == null)
-        {
-            pres = new Prescription
-            {
-                TreatmentSessionId = session.TreatmentSessionId,
-                GeneralInstructions = request.GeneralInstructions?.Trim(),
-                IssuedAt = DateTime.UtcNow
-            };
-            _dbContext.Prescriptions.Add(pres);
-            await _dbContext.SaveChangesAsync(ct);
-        }
-        else
-        {
-            pres = session.Prescription;
-            pres.GeneralInstructions = request.GeneralInstructions?.Trim();
-            pres.IssuedAt = DateTime.UtcNow;
-
-            // Xóa các items cũ nếu có
-            if (pres.PrescriptionItems.Any())
-            {
-                _dbContext.PrescriptionItems.RemoveRange(pres.PrescriptionItems);
+                pres = new Prescription
+                {
+                    TreatmentSessionId = session.TreatmentSessionId,
+                    GeneralInstructions = request.GeneralInstructions?.Trim(),
+                    IssuedAt = DateTime.UtcNow
+                };
+                _dbContext.Prescriptions.Add(pres);
                 await _dbContext.SaveChangesAsync(ct);
             }
-        }
-
-        // Thêm các thuốc vào đơn
-        foreach (var item in request.Items.Where(i => !string.IsNullOrWhiteSpace(i.MedicationName)))
-        {
-            var pItem = new PrescriptionItem
+            else
             {
-                PrescriptionId = pres.PrescriptionId,
-                MedicationName = item.MedicationName.Trim(),
-                Dosage = item.Dosage?.Trim(),
-                Frequency = item.Frequency?.Trim(),
-                Duration = item.Duration?.Trim(),
-                Instructions = item.Instructions?.Trim()
-            };
-            _dbContext.PrescriptionItems.Add(pItem);
+                pres = session.Prescription;
+                pres.GeneralInstructions = request.GeneralInstructions?.Trim();
+                pres.IssuedAt = DateTime.UtcNow;
+
+                // Xóa các items cũ nếu có (idempotent update)
+                if (pres.PrescriptionItems.Any())
+                {
+                    _dbContext.PrescriptionItems.RemoveRange(pres.PrescriptionItems);
+                    await _dbContext.SaveChangesAsync(ct);
+                }
+            }
+
+            // Thêm các thuốc vào đơn
+            foreach (var item in request.Items.Where(i => !string.IsNullOrWhiteSpace(i.MedicationName)))
+            {
+                var pItem = new PrescriptionItem
+                {
+                    PrescriptionId = pres.PrescriptionId,
+                    MedicationName = item.MedicationName.Trim(),
+                    Dosage = item.Dosage?.Trim(),
+                    Frequency = item.Frequency?.Trim(),
+                    Duration = item.Duration?.Trim(),
+                    Instructions = item.Instructions?.Trim()
+                };
+                _dbContext.PrescriptionItems.Add(pItem);
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
+
+            if (tx != null)
+            {
+                await tx.CommitAsync(ct);
+            }
+
+            var fullPres = await _dbContext.Prescriptions
+                .Include(p => p.PrescriptionItems)
+                .Include(p => p.TreatmentSession)
+                    .ThenInclude(s => s.DentistUser)
+                        .ThenInclude(d => d.User)
+                .Include(p => p.TreatmentSession)
+                    .ThenInclude(s => s.Appointment)
+                        .ThenInclude(a => a.PatientUser)
+                            .ThenInclude(pu => pu.User)
+                .Include(p => p.TreatmentSession)
+                    .ThenInclude(s => s.Appointment)
+                        .ThenInclude(a => a.Department)
+                .FirstAsync(p => p.PrescriptionId == pres.PrescriptionId, ct);
+
+            return ApiResponse<PrescriptionDto>.Ok(MapToDto(fullPres), "Đã kê đơn thuốc thành công!");
         }
-
-        await _dbContext.SaveChangesAsync(ct);
-
-        var fullPres = await _dbContext.Prescriptions
-            .Include(p => p.PrescriptionItems)
-            .Include(p => p.TreatmentSession)
-                .ThenInclude(s => s.DentistUser)
-                    .ThenInclude(d => d.User)
-            .Include(p => p.TreatmentSession)
-                .ThenInclude(s => s.Appointment)
-                    .ThenInclude(a => a.PatientUser)
-                        .ThenInclude(pu => pu.User)
-            .Include(p => p.TreatmentSession)
-                .ThenInclude(s => s.Appointment)
-                    .ThenInclude(a => a.Department)
-            .FirstAsync(p => p.PrescriptionId == pres.PrescriptionId, ct);
-
-        return ApiResponse<PrescriptionDto>.Ok(MapToDto(fullPres), "Đã kê đơn thuốc thành công!");
+        catch (Exception ex)
+        {
+            if (tx != null)
+            {
+                await tx.RollbackAsync(ct);
+            }
+            _logger.LogError(ex, "Lỗi khi kê đơn thuốc cho ca khám {AppointmentId}", request.AppointmentId);
+            return ApiResponse<PrescriptionDto>.Fail("Đã xảy ra lỗi trong quá trình kê đơn thuốc. Dữ liệu đã được hoàn tác an toàn.");
+        }
+        finally
+        {
+            if (tx != null)
+            {
+                await tx.DisposeAsync();
+            }
+        }
     }
 
     private static PrescriptionDto MapToDto(Prescription p)
