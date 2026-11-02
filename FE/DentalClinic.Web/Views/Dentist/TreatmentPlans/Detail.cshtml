@@ -1,4 +1,4 @@
-@model DentalClinic.Web.ViewModels.Treatment.DentistTreatmentPlanDetailViewModel
+﻿@model DentalClinic.Web.ViewModels.Treatment.DentistTreatmentPlanDetailViewModel
 @{
     ViewData["Title"] = $"Chi tiết Phác đồ #{Model.Plan.TreatmentPlanId} - {Model.Plan.PatientName}";
 }
@@ -326,7 +326,7 @@
                                         @svc.ServiceName (@svc.Price.ToString("N0") ₫)
                                     </option>
                                 }
-                            </select>
+                            } </select>
                         </div>
                         <div class="col-12 col-md-4">
                             <label class="form-label fw-bold">Vị Trí Răng Điều Trị</label>
@@ -352,14 +352,14 @@
                                 {
                                     <option value="@d.DentistUserId">@d.FullName @(string.IsNullOrEmpty(d.Specialization) ? "" : $"({d.Specialization})")</option>
                                 }
-                            </select>
+                            } </select>
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label fw-bold">Trạng Thái Ban Đầu</label>
                             <select name="Status" class="form-select">
                                 <option value="Pending" selected>Chờ thực hiện (Pending)</option>
                                 <option value="InProgress">Đang thực hiện (InProgress)</option>
-                            </select>
+                            } </select>
                         </div>
                         <div class="col-12">
                             <label class="form-label fw-bold">Ghi Chú Chỉ Định Lâm Sàng</label>
@@ -412,7 +412,7 @@
                                 <option value="Đã trám / xử lý tạm">Đã trám / xử lý tạm</option>
                                 <option value="Cần theo dõi thêm">Cần theo dõi thêm</option>
                                 <option value="Phát sinh biến chứng nhẹ">Phát sinh biến chứng nhẹ</option>
-                            </select>
+                            } </select>
                         </div>
                         <div class="col-12">
                             <label class="form-label fw-bold">Ghi Chú Tiến Trình Lâm Sàng (Clinical Note)</label>
@@ -424,7 +424,7 @@
                             <select name="MarkPhaseStatus" class="form-select">
                                 <option value="Completed" selected>Hoàn thành giai đoạn này (Completed)</option>
                                 <option value="InProgress">Vẫn đang tiến hành (InProgress)</option>
-                            </select>
+                            } </select>
                         </div>
                     </div>
                 </div>
@@ -458,7 +458,7 @@
                         <option value="Completed" selected="@(Model.Plan.Status == "Completed")">Đã hoàn thành toàn bộ (Completed)</option>
                         <option value="Draft" selected="@(Model.Plan.Status == "Draft")">Bản nháp (Draft)</option>
                         <option value="Cancelled" selected="@(Model.Plan.Status == "Cancelled")">Đã hủy bỏ (Cancelled)</option>
-                    </select>
+                    } </select>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
@@ -504,13 +504,13 @@
                             <label class="form-label fw-bold">Giai Đoạn Kế Hoạch (Tùy chọn)</label>
                             <select name="PlanItemId" class="form-select">
                                 <option value="">-- Tái khám toàn phác đồ chung --</option>
-                                @foreach (var item in Model.Plan.Items)
+                                @if (Model.Plan?.Items != null) { foreach (var item in Model.Plan.Items)
                                 {
                                     <option value="@item.TreatmentPlanItemId">
                                         Giai đoạn @item.SequenceNo: @item.ServiceName @(string.IsNullOrEmpty(item.ToothNumber) ? "" : $" (Răng {item.ToothNumber})") - [@item.Status]
                                     </option>
                                 }
-                            </select>
+                            } </select>
                         </div>
 
                         <div class="col-12 col-md-6">
@@ -520,7 +520,7 @@
                                 <option value="45">45 phút (Thủ thuật nhẹ / Thay thun / Cắt chỉ)</option>
                                 <option value="60">60 phút (Thủ thuật trung bình)</option>
                                 <option value="90">90 phút (Thủ thuật chuyên sâu)</option>
-                            </select>
+                            } </select>
                         </div>
 
                         <div class="col-12 col-md-6">
@@ -541,7 +541,7 @@
                                         <option value="@d.DentistUserId">@d.FullName @(string.IsNullOrEmpty(d.Specialization) ? "" : $"({d.Specialization})")</option>
                                     }
                                 }
-                            </select>
+                            } </select>
                         </div>
 
                         <div class="col-12">
