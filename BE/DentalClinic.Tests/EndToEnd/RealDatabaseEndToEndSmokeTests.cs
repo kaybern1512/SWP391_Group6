@@ -320,7 +320,7 @@ public class RealDatabaseEndToEndSmokeTests
 
         var conf3 = await apptService.ManagerConfirmAsync(appt3.AppointmentId, 10, new ManagerConfirmRequest
         {
-            AssignedDentistUserId = 8,
+            AssignedDentistUserId = 46,
             RoomId = 1,
             DentalChairId = 1, // Already occupied by Appt1!
             ScheduledStart = slotStart,

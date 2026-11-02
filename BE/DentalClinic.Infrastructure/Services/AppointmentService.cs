@@ -1799,6 +1799,27 @@ public class AppointmentService : IAppointmentService
                 return ApiResponse<AppointmentDto>.Fail("Bệnh nhân đã yêu cầu một Bác sĩ cụ thể. Để thay đổi Bác sĩ, bạn phải tạo Đề xuất thay đổi (Proposal) để Bệnh nhân đồng ý.");
             }
 
+            // CRITICAL CLINICAL RULE: Validate Assigned Dentist belongs to this Department
+            var isDentistInDept = await _dbContext.DentistDepartments
+                .AsNoTracking()
+                .AnyAsync(dd => dd.DentistUserId == request.AssignedDentistUserId && dd.DepartmentId == appointment.DepartmentId && dd.Status == "Active", ct);
+            if (!isDentistInDept)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Bác sĩ được chỉ định không thuộc chuyên khoa này hoặc không hoạt động.");
+            }
+
+            // CRITICAL CLINICAL RULE: Validate Requested Service belongs to this Department
+            if (appointment.RequestedServiceId.HasValue)
+            {
+                var validService = await _dbContext.DepartmentServices
+                    .AsNoTracking()
+                    .AnyAsync(s => s.DepartmentServiceId == appointment.RequestedServiceId.Value && s.DepartmentId == appointment.DepartmentId && s.Status == "Active", ct);
+                if (!validService)
+                {
+                    return ApiResponse<AppointmentDto>.Fail("Dịch vụ yêu cầu không thuộc chuyên khoa này.");
+                }
+            }
+
             var finalStart = request.ScheduledStart ?? appointment.ScheduledStart;
             var finalEnd = request.ScheduledEnd ?? appointment.ScheduledEnd;
 
@@ -1824,20 +1845,21 @@ public class AppointmentService : IAppointmentService
                 return ApiResponse<AppointmentDto>.Fail("Phòng khám không thuộc chuyên khoa của lịch hẹn này.");
             }
 
-            // 2. Validate Chair (if specified)
-            DentalChair? chair = null;
-            if (request.DentalChairId.HasValue && request.DentalChairId.Value > 0)
+            // 2. Validate Chair (Mandatory allocation by Department Manager)
+            if (!request.DentalChairId.HasValue || request.DentalChairId.Value <= 0)
             {
-                chair = await _dbContext.DentalChairs
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(c => c.DentalChairId == request.DentalChairId.Value &&
-                                              c.RoomId == request.RoomId &&
-                                              c.Status == "Active", ct);
+                return ApiResponse<AppointmentDto>.Fail("Vui lòng chọn ghế nha khoa điều trị cho ca khám.");
+            }
 
-                if (chair == null)
-                {
-                    return ApiResponse<AppointmentDto>.Fail("Ghế nha khoa không thuộc phòng khám đã chọn hoặc không hoạt động.");
-                }
+            var chair = await _dbContext.DentalChairs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.DentalChairId == request.DentalChairId.Value &&
+                                          c.RoomId == request.RoomId &&
+                                          c.Status == "Active", ct);
+
+            if (chair == null)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Ghế nha khoa không thuộc phòng khám đã chọn hoặc không hoạt động.");
             }
 
             // Phase 2: Multi-Resource Concurrency Lock in Canonical Order (Deadlock-Free, Cross-Department Safe)
@@ -2247,6 +2269,11 @@ public class AppointmentService : IAppointmentService
         if (appointment.Status != AppointmentStatus.CheckedIn)
         {
             return ApiResponse.Fail($"Không thể bắt đầu ca khám ở trạng thái '{appointment.Status}'. Bệnh nhân cần làm thủ tục check-in trước.");
+        }
+
+        if (!appointment.DentalChairId.HasValue || appointment.DentalChairId.Value <= 0)
+        {
+            return ApiResponse.Fail("Ca khám chưa được phân bổ ghế điều trị hợp lệ. Vui lòng liên hệ Trưởng khoa hoặc gán ghế trước khi tiếp nhận.");
         }
 
         var oldStatus = appointment.Status;

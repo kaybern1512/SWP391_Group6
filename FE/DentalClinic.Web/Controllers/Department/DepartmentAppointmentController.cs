@@ -75,9 +75,9 @@ public class DepartmentAppointmentController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Confirm(long id, [FromForm] DepartmentReviewViewModel model)
     {
-        if (model.AssignedDentistUserId <= 0 || model.RoomId <= 0)
+        if (model.AssignedDentistUserId <= 0 || model.RoomId <= 0 || !model.DentalChairId.HasValue || model.DentalChairId.Value <= 0)
         {
-            TempData["ErrorMessage"] = "Vui lòng chọn đầy đủ Bác sĩ và Phòng khám điều trị.";
+            TempData["ErrorMessage"] = "Vui lòng chọn đầy đủ Bác sĩ, Phòng khám và Ghế nha khoa điều trị.";
             return RedirectToAction(nameof(Review), new { id });
         }
 
@@ -85,7 +85,7 @@ public class DepartmentAppointmentController : Controller
         {
             AssignedDentistUserId = model.AssignedDentistUserId,
             RoomId = model.RoomId,
-            DentalChairId = (model.DentalChairId.HasValue && model.DentalChairId.Value > 0) ? model.DentalChairId : null,
+            DentalChairId = model.DentalChairId.Value,
             ScheduledStart = model.ScheduledStart,
             ScheduledEnd = model.ScheduledEnd,
             Note = model.AssignmentNote

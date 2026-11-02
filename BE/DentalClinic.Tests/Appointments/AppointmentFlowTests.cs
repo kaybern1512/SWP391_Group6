@@ -1052,6 +1052,115 @@ public class AppointmentFlowTests
         Assert.False(confirmResult.Success);
         Assert.Contains("không thuộc chuyên khoa", confirmResult.Message);
     }
+
+    [Fact]
+    public async Task Test24B_ManagerConfirm_DentistBelongsToDifferentDepartment_RejectsConfirmation()
+    {
+        using var db = CreateDbContext(nameof(Test24B_ManagerConfirm_DentistBelongsToDifferentDepartment_RejectsConfirmation));
+        await SeedBasicDataAsync(db);
+
+        // Seed Dentist 501 in Department 2 only
+        var otherDentist = new UserAccount
+        {
+            UserId = 501,
+            Email = "otherdentist@dentalcare.com",
+            PhoneNumber = "0988888888",
+            Role = UserRole.Dentist,
+            Status = AccountStatus.Active
+        };
+        db.UserAccounts.Add(otherDentist);
+        db.DentistDepartments.Add(new DentistDepartment
+        {
+            DentistUserId = 501,
+            DepartmentId = 2,
+            Status = "Active"
+        });
+        await db.SaveChangesAsync();
+
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ReasonForVisit = "Khám răng tổng quát"
+        });
+        var apptId = bookResult.Data!.AppointmentId;
+        await service.ReceptionistForwardAsync(apptId, 201, "OK");
+
+        var confirmResult = await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 501, // Belongs to Dept 2, not Dept 1
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(2).AddHours(9).AddMinutes(30)
+        });
+
+        Assert.False(confirmResult.Success);
+        Assert.Contains("không thuộc chuyên khoa", confirmResult.Message);
+    }
+
+    [Fact]
+    public async Task Test24C_ManagerConfirm_MissingDentalChair_RejectsConfirmation()
+    {
+        using var db = CreateDbContext(nameof(Test24C_ManagerConfirm_MissingDentalChair_RejectsConfirmation));
+        await SeedBasicDataAsync(db);
+
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ReasonForVisit = "Khám răng tổng quát"
+        });
+        var apptId = bookResult.Data!.AppointmentId;
+        await service.ReceptionistForwardAsync(apptId, 201, "OK");
+
+        var confirmResult = await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = null, // Missing chair!
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(2).AddHours(9).AddMinutes(30)
+        });
+
+        Assert.False(confirmResult.Success);
+        Assert.Contains("chọn ghế nha khoa", confirmResult.Message);
+    }
+
+    [Fact]
+    public async Task Test24D_DentistStart_WithoutChair_RejectsStart()
+    {
+        using var db = CreateDbContext(nameof(Test24D_DentistStart_WithoutChair_RejectsStart));
+        await SeedBasicDataAsync(db);
+
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var appt = new Appointment
+        {
+            AppointmentCode = "APP-NO-CHAIR-01",
+            PatientUserId = 101,
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = null, // Unassigned chair!
+            Status = AppointmentStatus.CheckedIn,
+            ScheduledStart = DateTime.Today.AddHours(9),
+            ScheduledEnd = DateTime.Today.AddHours(9).AddMinutes(30),
+            ReasonForVisit = "Khám",
+            BookingSource = "Patient",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var startResult = await service.DentistStartAppointmentAsync(appt.AppointmentId, 401);
+        Assert.False(startResult.Success);
+        Assert.Contains("ghế điều trị", startResult.Message);
+    }
     [Fact]
     public async Task Test25_ManagerConfirmAsync_DispatchesEmailToPatient()
     {
