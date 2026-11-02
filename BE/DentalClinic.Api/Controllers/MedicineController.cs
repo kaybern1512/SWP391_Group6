@@ -186,4 +186,49 @@ public class MedicineController : ControllerBase
             return BadRequest(ApiResponse<object>.Fail(ex.Message));
         }
     }
+
+    // ==========================================
+    // DISPENSATION ENDPOINTS (WF-16 & WF-17)
+    // ==========================================
+
+    [HttpPost("dispensations")]
+    [Authorize(Roles = "Dentist,SystemAdministrator")]
+    [ProducesResponseType(typeof(ApiResponse<MedicineDispensationDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DispenseMedicine([FromBody] CreateMedicineDispensationRequest request)
+    {
+        try
+        {
+            var dentistUserId = GetCurrentUserId();
+            var result = await _medicineService.DispenseMedicineAsync(request, dentistUserId);
+            return StatusCode(StatusCodes.Status201Created, ApiResponse<MedicineDispensationDto>.Ok(result, "Cấp thuốc từ kho thành công, đã trừ tồn kho và ghi nhật ký kiểm toán."));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ApiResponse<object>.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<object>.Fail(ex.Message));
+        }
+    }
+
+    [HttpGet("dispensations/appointment/{appointmentId:long}")]
+    [Authorize]
+    [ProducesResponseType(typeof(ApiResponse<List<MedicineDispensationDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDispensationsByAppointment(long appointmentId)
+    {
+        var list = await _medicineService.GetDispensationsByAppointmentIdAsync(appointmentId);
+        return Ok(ApiResponse<List<MedicineDispensationDto>>.Ok(list));
+    }
+
+    [HttpGet("dispensations/prescription/{prescriptionId:long}")]
+    [Authorize]
+    [ProducesResponseType(typeof(ApiResponse<PrescriptionDispensationStatusDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPrescriptionDispensationStatus(long prescriptionId)
+    {
+        var status = await _medicineService.GetPrescriptionDispensationStatusAsync(prescriptionId);
+        return Ok(ApiResponse<PrescriptionDispensationStatusDto>.Ok(status));
+    }
+
 }

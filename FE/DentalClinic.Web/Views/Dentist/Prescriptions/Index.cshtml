@@ -85,6 +85,18 @@
                                 <td class="ps-4">
                                     <div class="fw-bold text-primary">#RX-@p.PrescriptionId</div>
                                     <div class="badge bg-light text-dark border small">Ca: @p.AppointmentCode</div>
+                                    @if (Model.DispensationStatusMap.TryGetValue(p.PrescriptionId, out var dispStatus) && dispStatus.HasDispensation)
+                                    {
+                                        <div class="badge bg-success-subtle text-success small mt-1 d-block text-start">
+                                            <i class="bi bi-box-check-fill me-1"></i>Đã cấp (@dispStatus.TotalUnitsDispensed viên/đv)
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="badge bg-secondary-subtle text-secondary small mt-1 d-block text-start">
+                                            <i class="bi bi-hourglass me-1"></i>Chưa cấp kho
+                                        </div>
+                                    }
                                 </td>
                                 <td>
                                     <div class="fw-bold text-slate-800">@p.PatientName</div>
@@ -109,9 +121,19 @@
                                     <span class="text-muted small fst-italic">@(string.IsNullOrEmpty(p.GeneralInstructions) ? "Không có" : p.GeneralInstructions)</span>
                                 </td>
                                 <td class="text-end pe-4">
-                                    <a asp-action="Print" asp-route-id="@p.PrescriptionId" class="btn btn-sm btn-outline-primary" target="_blank" title="In đơn thuốc chuẩn y tế">
-                                        <i class="bi bi-printer me-1"></i> In Đơn
-                                    </a>
+                                    <div class="d-inline-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-success btn-open-dispense"
+                                                data-bs-toggle="modal" data-bs-target="#modalDispensePrescription"
+                                                data-prescription-id="@p.PrescriptionId"
+                                                data-patient-name="@p.PatientName"
+                                                data-appt-code="@p.AppointmentCode"
+                                                title="Cấp phát thuốc trực tiếp từ kho phòng khám (WF-16)">
+                                            <i class="bi bi-box-arrow-right me-1"></i> Cấp Thuốc
+                                        </button>
+                                        <a asp-action="Print" asp-route-id="@p.PrescriptionId" class="btn btn-sm btn-outline-primary" target="_blank" title="In đơn thuốc chuẩn y tế">
+                                            <i class="bi bi-printer me-1"></i> In Đơn
+                                        </a>
+                                    </div>
                                 </td>
                             </tr>
                         }
@@ -204,6 +226,60 @@
     </div>
 </div>
 
+
+<!-- ============================================== -->
+<!-- MODAL: CẤP THUỐC TỪ KHO CHO ĐƠN (WF-16)        -->
+<!-- ============================================== -->
+<div class="modal fade" id="modalDispensePrescription" tabindex="-1" aria-labelledby="modalDispensePrescriptionLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold" id="modalDispensePrescriptionLabel">
+                    <i class="bi bi-box-arrow-right me-2"></i>Cấp Phát Thuốc Trực Tiếp Từ Kho (WF-16)
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form asp-action="Dispense" method="post" onsubmit="return prepareDispenseJson()">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="dispensePrescriptionIdInput" name="PrescriptionId" />
+                <input type="hidden" id="dispenseItemsJsonInput" name="ItemsJson" value="[]" />
+
+                <div class="modal-body p-4">
+                    <div class="alert alert-info py-2 small mb-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Đơn thuốc: <strong id="dispensePrescriptionNumDisplay">#RX-...</strong> &bull;
+                        Bệnh nhân: <strong id="dispensePatientNameDisplay">...</strong> &bull;
+                        Mã ca: <strong id="dispenseApptCodeDisplay">...</strong>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-semibold text-slate-800">Danh Mục Thuốc Xuất Kho Theo Lô (FEFO)</span>
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="addDispenseRow()">
+                            <i class="bi bi-plus-lg me-1"></i>Thêm Dòng Thuốc
+                        </button>
+                    </div>
+
+                    <div id="dispenseRowsContainer" class="d-flex flex-column gap-2 mb-3">
+                        <!-- Dynamic Dispense Rows -->
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold text-slate-700">Ghi chú lâm sàng / Hướng dẫn dặn dò khi giao thuốc</label>
+                        <input type="text" name="Notes" class="form-control" placeholder="VD: Bác sĩ đã kiểm tra tem nhãn, bàn giao trực tiếp 6 viên Amoxicillin..." />
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-success fw-semibold">
+                        <i class="bi bi-check2-circle me-1"></i> Xác Nhận Bàn Giao & Giảm Tồn Kho
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
     const sampleMedications = [
@@ -280,6 +356,128 @@
             addMedicationRow(sampleMedications[1]);
         }
     });
+
+    const availableMeds = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.AvailableMedicines, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }));
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const dispenseModal = document.getElementById("modalDispensePrescription");
+        if (dispenseModal) {
+            dispenseModal.addEventListener("show.bs.modal", function (event) {
+                const btn = event.relatedTarget;
+                if (!btn) return;
+                const pId = btn.getAttribute("data-prescription-id");
+                const patName = btn.getAttribute("data-patient-name");
+                const apptCode = btn.getAttribute("data-appt-code");
+
+                document.getElementById("dispensePrescriptionIdInput").value = pId;
+                document.getElementById("dispensePrescriptionNumDisplay").textContent = "#RX-" + pId;
+                document.getElementById("dispensePatientNameDisplay").textContent = patName;
+                document.getElementById("dispenseApptCodeDisplay").textContent = apptCode;
+
+                // Clear and add first row
+                const container = document.getElementById("dispenseRowsContainer");
+                container.innerHTML = "";
+                addDispenseRow();
+            });
+        }
+    });
+
+    async function addDispenseRow() {
+        const container = document.getElementById("dispenseRowsContainer");
+        const rowId = "disp_row_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+
+        let medOptions = '<option value="">-- Chọn thuốc trong kho --</option>';
+        availableMeds.forEach(m => {
+            medOptions += `<option value="${m.medicineId}">${m.medicineName} (Tồn: ${m.totalAvailableStock} ${m.unit})</option>`;
+        });
+
+        const row = document.createElement("div");
+        row.className = "row g-2 align-items-center p-2 bg-light rounded border dispense-row";
+        row.id = rowId;
+        row.innerHTML = `
+            <div class="col-12 col-md-5">
+                <label class="form-label text-muted small mb-1">Mặt hàng thuốc</label>
+                <select class="form-select form-select-sm sel-med" onchange="onMedicineSelected('${rowId}')">
+                    ${medOptions}
+                </select>
+            </div>
+            <div class="col-8 col-md-4">
+                <label class="form-label text-muted small mb-1">Lô thuốc (Hạn dùng)</label>
+                <select class="form-select form-select-sm sel-batch">
+                    <option value="">-- Chọn thuốc trước --</option>
+                </select>
+            </div>
+            <div class="col-3 col-md-2">
+                <label class="form-label text-muted small mb-1">Số lượng cấp</label>
+                <input type="number" class="form-control form-select-sm inp-qty" min="1" value="1" />
+            </div>
+            <div class="col-1 col-md-1 text-end pt-3">
+                <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="document.getElementById('${rowId}').remove()" title="Xóa dòng">
+                    <i class="bi bi-trash fs-5"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(row);
+    }
+
+    async function onMedicineSelected(rowId) {
+        const row = document.getElementById(rowId);
+        if (!row) return;
+        const medSelect = row.querySelector(".sel-med");
+        const batchSelect = row.querySelector(".sel-batch");
+        const medId = medSelect.value;
+
+        if (!medId) {
+            batchSelect.innerHTML = '<option value="">-- Chọn thuốc trước --</option>';
+            return;
+        }
+
+        batchSelect.innerHTML = '<option value="">Đang nạp lô...</option>';
+        try {
+            const resp = await fetch(`/Dentist/Prescriptions/${medId}/Batches`);
+            const data = await resp.json();
+            if (data.isSuccess && data.data && data.data.length > 0) {
+                let options = "";
+                data.data.forEach(b => {
+                    if (b.quantityAvailable > 0 && !b.isExpired) {
+                        options += `<option value="${b.medicineBatchId}">${b.batchNumber} (HSD: ${b.expiryDate} - Tồn: ${b.quantityAvailable})</option>`;
+                    }
+                });
+                batchSelect.innerHTML = options || '<option value="">(Không có lô khả dụng)</option>';
+            } else {
+                batchSelect.innerHTML = '<option value="">(Không có lô)</option>';
+            }
+        } catch (e) {
+            batchSelect.innerHTML = '<option value="">(Lỗi nạp lô)</option>';
+        }
+    }
+
+    function prepareDispenseJson() {
+        const rows = document.querySelectorAll(".dispense-row");
+        const list = [];
+        for (const r of rows) {
+            const medId = parseInt(r.querySelector(".sel-med").value);
+            const batchId = parseInt(r.querySelector(".sel-batch").value);
+            const qty = parseInt(r.querySelector(".inp-qty").value);
+
+            if (medId && batchId && qty > 0) {
+                list.push({
+                    medicineId: medId,
+                    medicineBatchId: batchId,
+                    quantity: qty
+                });
+            }
+        }
+
+        if (list.length === 0) {
+            alert("Vui lòng chọn thuốc, lô thuốc và số lượng cấp phát hợp lệ.");
+            return false;
+        }
+
+        document.getElementById("dispenseItemsJsonInput").value = JSON.stringify(list);
+        return true;
+    }
+
 </script>
 }
 

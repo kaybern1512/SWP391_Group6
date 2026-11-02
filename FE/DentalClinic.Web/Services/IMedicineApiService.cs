@@ -18,4 +18,9 @@ public interface IMedicineApiService
     Task<ApiResult<List<MedicineStockTransactionDto>>> GetStockTransactionsAsync(long? batchId = null, long? medicineId = null, int page = 1, int pageSize = 50);
     Task<ApiResult<MedicineInventorySummaryDto>> GetInventorySummaryAsync();
     Task<ApiResult<List<MedicineDto>>> GetAvailableForPrescriptionAsync(string? search = null);
+
+    // Dispensation (WF-16)
+    Task<ApiResult<MedicineDispensationDto>> DispenseMedicineAsync(CreateMedicineDispensationRequest request);
+    Task<ApiResult<List<MedicineDispensationDto>>> GetDispensationsByAppointmentIdAsync(long appointmentId);
+    Task<ApiResult<PrescriptionDispensationStatusDto>> GetPrescriptionDispensationStatusAsync(long prescriptionId);
 }

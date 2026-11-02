@@ -135,3 +135,65 @@ public class MedicineSearchFilter
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 50;
 }
+
+
+// ==========================================
+// DISPENSATION DTOs (WF-16 & WF-17)
+// ==========================================
+
+public class CreateMedicineDispensationRequest
+{
+    public long PrescriptionId { get; set; }
+    public string? Notes { get; set; }
+    public List<DispenseItemInput> Items { get; set; } = new();
+}
+
+public class DispenseItemInput
+{
+    public long? PrescriptionItemId { get; set; }
+    public long MedicineId { get; set; }
+    public long MedicineBatchId { get; set; }
+    public int Quantity { get; set; }
+}
+
+public class MedicineDispensationDto
+{
+    public long DispensationId { get; set; }
+    public long PrescriptionId { get; set; }
+    public long AppointmentId { get; set; }
+    public string AppointmentCode { get; set; } = string.Empty;
+    public long PatientUserId { get; set; }
+    public string PatientName { get; set; } = string.Empty;
+    public long DentistUserId { get; set; }
+    public string DentistName { get; set; } = string.Empty;
+    public DateTime DispensedAt { get; set; }
+    public string? Notes { get; set; }
+    public string Status { get; set; } = "Dispensed";
+    public decimal TotalAmount { get; set; }
+    public List<MedicineDispensationItemDto> Items { get; set; } = new();
+}
+
+public class MedicineDispensationItemDto
+{
+    public long DispensationItemId { get; set; }
+    public long DispensationId { get; set; }
+    public long? PrescriptionItemId { get; set; }
+    public long MedicineId { get; set; }
+    public string MedicineCode { get; set; } = string.Empty;
+    public string MedicineName { get; set; } = string.Empty;
+    public string Unit { get; set; } = string.Empty;
+    public long MedicineBatchId { get; set; }
+    public string BatchNumber { get; set; } = string.Empty;
+    public int QuantityDispensed { get; set; }
+    public decimal UnitPriceSnapshot { get; set; }
+    public decimal TotalPrice { get; set; }
+}
+
+public class PrescriptionDispensationStatusDto
+{
+    public long PrescriptionId { get; set; }
+    public bool HasDispensation { get; set; }
+    public int TotalUnitsDispensed { get; set; }
+    public string Status { get; set; } = "NotDispensed"; // 'NotDispensed', 'PartiallyDispensed', 'FullyDispensed'
+    public List<MedicineDispensationDto> Dispensations { get; set; } = new();
+}

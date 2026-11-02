@@ -104,6 +104,21 @@ public class MedicineApiService : IMedicineApiService
         return await SendGetAsync<List<MedicineDto>>(url);
     }
 
+    public async Task<ApiResult<MedicineDispensationDto>> DispenseMedicineAsync(CreateMedicineDispensationRequest request)
+    {
+        return await SendPostAsync<CreateMedicineDispensationRequest, MedicineDispensationDto>("/api/medicines/dispensations", request);
+    }
+
+    public async Task<ApiResult<List<MedicineDispensationDto>>> GetDispensationsByAppointmentIdAsync(long appointmentId)
+    {
+        return await SendGetAsync<List<MedicineDispensationDto>>($"/api/medicines/dispensations/appointment/{appointmentId}");
+    }
+
+    public async Task<ApiResult<PrescriptionDispensationStatusDto>> GetPrescriptionDispensationStatusAsync(long prescriptionId)
+    {
+        return await SendGetAsync<PrescriptionDispensationStatusDto>($"/api/medicines/dispensations/prescription/{prescriptionId}");
+    }
+
     // ==========================================
     // HTTP HELPERS
     // ==========================================

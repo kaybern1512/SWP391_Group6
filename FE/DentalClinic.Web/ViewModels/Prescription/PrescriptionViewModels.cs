@@ -10,6 +10,16 @@ public class DentistPrescriptionIndexViewModel
     public List<PrescriptionEligibleAppointmentDto> EligibleAppointments { get; set; } = new();
     public string? Search { get; set; }
     public CreatePrescriptionFormModel NewPrescriptionForm { get; set; } = new();
+    public List<MedicineDto> AvailableMedicines { get; set; } = new();
+    public Dictionary<long, PrescriptionDispensationStatusDto> DispensationStatusMap { get; set; } = new();
+}
+
+public class DispensePrescriptionFormModel
+{
+    [Required]
+    public long PrescriptionId { get; set; }
+    public string? Notes { get; set; }
+    public string? ItemsJson { get; set; }
 }
 
 public class CreatePrescriptionFormModel

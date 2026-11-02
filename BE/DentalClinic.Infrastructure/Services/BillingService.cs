@@ -555,6 +555,31 @@ public class BillingService : IBillingService
             });
         }
 
+        // Load dispensed medicines from pharmacy (WF-16 & WF-17)
+        var dispensations = await _dbContext.MedicineDispensations
+            .AsNoTracking()
+            .Include(d => d.DispensationItems)
+                .ThenInclude(i => i.Medicine)
+            .Include(d => d.DispensationItems)
+                .ThenInclude(i => i.MedicineBatch)
+            .Where(d => d.AppointmentId == appt.AppointmentId && d.Status == "Dispensed")
+            .ToListAsync(ct);
+
+        foreach (var disp in dispensations)
+        {
+            foreach (var item in disp.DispensationItems)
+            {
+                performedItems.Add(new BillingPreloadedItemDto
+                {
+                    PerformedServiceId = null,
+                    DepartmentServiceId = null,
+                    Description = $"[Thuốc] {item.Medicine.MedicineName} (Lô {item.MedicineBatch.BatchNumber})",
+                    Quantity = item.QuantityDispensed,
+                    UnitPrice = item.UnitPriceSnapshot
+                });
+            }
+        }
+
         dto.SuggestedItems = performedItems;
 
         // Load available clinic services for receptionist to select additional items if needed

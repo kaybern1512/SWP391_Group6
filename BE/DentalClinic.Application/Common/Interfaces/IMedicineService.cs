@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Features.Medicines.DTOs;
 
@@ -17,4 +18,9 @@ public interface IMedicineService
     Task<List<MedicineStockTransactionDto>> GetStockTransactionsAsync(long? medicineBatchId, long? medicineId, int page, int pageSize);
     Task<MedicineInventorySummaryDto> GetInventorySummaryAsync();
     Task<List<MedicineDto>> GetAvailableMedicinesForDentistAsync(string? searchTerm);
+
+    // Dispensation (WF-16)
+    Task<MedicineDispensationDto> DispenseMedicineAsync(CreateMedicineDispensationRequest request, long dentistUserId, CancellationToken ct = default);
+    Task<List<MedicineDispensationDto>> GetDispensationsByAppointmentIdAsync(long appointmentId, CancellationToken ct = default);
+    Task<PrescriptionDispensationStatusDto> GetPrescriptionDispensationStatusAsync(long prescriptionId, CancellationToken ct = default);
 }
