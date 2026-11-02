@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Features.Appointments.DTOs;
 using DentalClinic.Application.Features.Billing.DTOs;
+using DentalClinic.Application.Features.MedicalRecords.DTOs;
 using DentalClinic.Application.Features.Prescriptions.DTOs;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
@@ -546,5 +547,167 @@ public class RealDatabaseEndToEndSmokeTests
         var nonExistentResult = await prescService.CreatePrescriptionAsync(3, nonExistentReq);
         Assert.False(nonExistentResult.Success);
         Assert.Contains("thông tin ca khám", nonExistentResult.Message);
+    }
+
+    [Fact]
+    public async Task ScenarioE_RootCanal_CompleteLifecycle_WithChairAllocation_Discount_AndPaymentSecurity()
+    {
+        using var db = CreateDbContext();
+        var mockNotification = new Mock<INotificationService>();
+        var mockApptLogger = new Mock<ILogger<AppointmentService>>();
+        var mockBillingLogger = new Mock<ILogger<BillingService>>();
+        var mockMedLogger = new Mock<ILogger<MedicalRecordService>>();
+
+        var apptService = new AppointmentService(db, mockNotification.Object, mockApptLogger.Object);
+        var billingService = new BillingService(db, mockNotification.Object, mockBillingLogger.Object);
+        var medService = new MedicalRecordService(db, mockMedLogger.Object);
+
+        long patientUserId = 13;
+        long receptionistUserId = 2;
+        long managerUserId = 10; // Manager of Dept 1 (Khoa Răng Tổng Quát & Nội Nha)
+        long dentistUserId = 6;  // BS. Nguyễn Thị Phương Thảo (in Dept 1)
+        long departmentId = 1;   // General Dentistry & Endodontics
+        long serviceId = 11;     // Điều trị tủy răng hàm nhiều chân phức tạp
+        long roomId = 1;         // ROOM-101
+        long chairId = 2;        // CHAIR-101-B
+
+        var testDate = DateTime.Today.AddDays(3000 + Random.Shared.Next(1, 50000)).AddHours(Random.Shared.Next(8, 16));
+
+        // Step 1: Patient books root canal service in Department 1
+        var createReq = new CreateAppointmentRequest
+        {
+            DepartmentId = departmentId,
+            RequestedServiceId = serviceId,
+            RequestedDentistUserId = null,
+            ScheduledStart = testDate,
+            ReasonForVisit = "Đau tủy răng hàm cần điều trị chuyên sâu"
+        };
+        var createResult = await apptService.CreatePatientAppointmentAsync(patientUserId, createReq);
+        Assert.True(createResult.Success, createResult.Message);
+        long apptId = createResult.Data!.AppointmentId;
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, createResult.Data.Status);
+
+        // Step 2: Receptionist forwards
+        var fwdResult = await apptService.ReceptionistForwardAsync(apptId, receptionistUserId, "Ca đau tủy răng, chuyển Trưởng khoa xếp phòng");
+        Assert.True(fwdResult.Success, fwdResult.Message);
+
+        // Step 3: Manager allocation rules
+        // Rule 3A: Missing chair MUST be rejected
+        var missingChairReq = new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = dentistUserId,
+            RoomId = roomId,
+            DentalChairId = null, // Missing chair!
+            ScheduledStart = testDate,
+            ScheduledEnd = testDate.AddMinutes(45)
+        };
+        var missingChairResult = await apptService.ManagerConfirmAsync(apptId, managerUserId, missingChairReq);
+        Assert.False(missingChairResult.Success);
+        Assert.Contains("ghế nha khoa", missingChairResult.Message.ToLowerInvariant());
+
+        // Rule 3B: Valid Dentist + Room + Chair succeeds
+        var validConfirmReq = new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = dentistUserId,
+            RoomId = roomId,
+            DentalChairId = chairId,
+            ScheduledStart = testDate,
+            ScheduledEnd = testDate.AddMinutes(45)
+        };
+        var confirmResult = await apptService.ManagerConfirmAsync(apptId, managerUserId, validConfirmReq);
+        Assert.True(confirmResult.Success, confirmResult.Message);
+        Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data!.Status);
+        Assert.Equal(chairId, confirmResult.Data.DentalChairId);
+
+        // Step 4: Receptionist Check-in
+        var checkInResult = await apptService.ReceptionistCheckInAsync(apptId, receptionistUserId, "Bệnh nhân đã có mặt tại sảnh chờ");
+        Assert.True(checkInResult.Success, checkInResult.Message);
+
+        // Step 5: Dentist starts examination
+        var startResult = await apptService.DentistStartAppointmentAsync(apptId, dentistUserId);
+        Assert.True(startResult.Success, startResult.Message);
+
+        var apptInService = await db.Appointments.FindAsync(apptId);
+        Assert.Equal(AppointmentStatus.InService, apptInService!.Status);
+        Assert.Equal(chairId, apptInService.DentalChairId);
+
+        // Step 6: Dentist records ClinicalEntry
+        var entryReq = new CreateClinicalEntryRequest
+        {
+            PatientUserId = patientUserId,
+            AppointmentId = apptId,
+            Diagnosis = "Viêm tủy cấp không hồi phục răng 46",
+            Symptoms = "Đau buốt từng cơn dữ dội lan lên vùng thái dương",
+            ClinicalFindings = "Lỗ sâu mặt nhai chạm tủy, gõ dọc (+), tủy sống",
+            ClinicalNotes = "Gây tê tại chỗ, đặt đê cao su, mở tủy làm sạch 3 ống tủy",
+            CompleteAppointment = false
+        };
+        var entryResult = await medService.CreateClinicalEntryAsync(dentistUserId, entryReq);
+        Assert.True(entryResult.Success, entryResult.Message);
+
+        // Step 7: Integrity check - Creating invoice & processing payment while InService
+        var invoiceReq = new CreateInvoiceRequest
+        {
+            AppointmentId = apptId,
+            DiscountAmount = 180000, // 10% manual discount
+            TaxPercent = 0,
+            Note = "Giảm giá 10% ưu đãi khách hàng",
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new()
+                {
+                    Description = "Điều trị tủy răng hàm nhiều chân phức tạp",
+                    Quantity = 1,
+                    UnitPrice = 1800000
+                }
+            }
+        };
+        var invResult = await billingService.CreateInvoiceAsync(receptionistUserId, invoiceReq);
+        Assert.True(invResult.Success, invResult.Message);
+        long invoiceId = invResult.Data!.InvoiceId;
+        Assert.Equal(1620000, invResult.Data.TotalAmount); // 1,800,000 - 180,000 = 1,620,000
+
+        // Duplicate invoice creation MUST be rejected
+        var dupInvResult = await billingService.CreateInvoiceAsync(receptionistUserId, invoiceReq);
+        Assert.False(dupInvResult.Success);
+        Assert.Contains("đã được lập hóa đơn", dupInvResult.Message.ToLowerInvariant());
+
+        // Process payment
+        var payReq = new ProcessPaymentRequest
+        {
+            InvoiceId = invoiceId,
+            Method = "BankTransfer",
+            Amount = 1620000,
+            Note = "Chuyển khoản QR ngân hàng"
+        };
+        var payResult = await billingService.ProcessPaymentAsync(receptionistUserId, payReq);
+        Assert.True(payResult.Success, payResult.Message);
+        Assert.Equal("Paid", payResult.Data!.Status);
+
+        // CRITICAL INTEGRITY CHECK: Payment MUST NOT silently complete the examination!
+        var apptStillInService = await db.Appointments.FindAsync(apptId);
+        Assert.Equal(AppointmentStatus.InService, apptStillInService!.Status);
+
+        // Step 8: Dentist completes examination
+        var completeResult = await apptService.DentistCompleteAppointmentAsync(apptId, dentistUserId, "Hoàn tất điều trị tủy thì 1, hẹn tái khám trám bít ống tủy");
+        Assert.True(completeResult.Success, completeResult.Message);
+
+        var finalAppt = await db.Appointments.FindAsync(apptId);
+        Assert.Equal(AppointmentStatus.Completed, finalAppt!.Status);
+        Assert.Equal(chairId, finalAppt.DentalChairId);
+
+        // Duplicate payment on already paid invoice MUST be rejected
+        var dupPayResult = await billingService.ProcessPaymentAsync(receptionistUserId, payReq);
+        Assert.False(dupPayResult.Success);
+
+        // Step 9: Patient views invoice & medical records
+        var patientInvoices = await billingService.GetPatientInvoicesAsync(patientUserId);
+        Assert.True(patientInvoices.Success);
+        Assert.Contains(patientInvoices.Data!, inv => inv.InvoiceId == invoiceId && inv.Status == "Paid");
+
+        var medRecordResult = await medService.GetMedicalRecordByPatientIdAsync(patientUserId);
+        Assert.True(medRecordResult.Success);
+        Assert.NotNull(medRecordResult.Data);
+        Assert.Contains(medRecordResult.Data.ClinicalEntries, ce => ce.AppointmentId == apptId && ce.Diagnosis.Contains("Viêm tủy"));
     }
 }
