@@ -14,6 +14,7 @@
 | **TASK B (Billing, Payment & Post-Exam)** | `fix/billing-final` (`D:\SWP391\SWP391_Group6_Billing`) | `fa0cb30` | `feat(billing): stabilize post-exam billing, discounts, concurrency locks, and tests` |
 | **Integration Merge** | `release/preview` (`D:\SWP391\SWP391_Group6`) | `a211ac4` | `chore(integration): merge Task B billing and payment stabilization into release/preview` |
 | **Edge Case & Security Refinement** | `release/preview` (`D:\SWP391\SWP391_Group6`) | `1d5e3e9` | `feat(billing): handle zero-total invoice settlement, 3-visit patient history, and CSRF token security` |
+| **Combined E2E Verification** | `release/preview` (`D:\SWP391\SWP391_Group6`) | `e36056b` | `test(e2e): add ScenarioE verifying combined chair allocation, discount, and payment security on real SQL database` |
 
 - **Xung đột hợp nhất (Merge Conflicts):** **0 xung đột (Clean Merge).**  
   Do hai tác vụ tuân thủ nghiêm ngặt ranh giới sở hữu tệp tin (File Ownership Boundaries), git merge chiến lược `ort` đã tự động hợp nhất hoàn hảo.
@@ -107,11 +108,11 @@ Toàn bộ các bộ kiểm thử của giải pháp đã chạy thành công 10
 | **SQL Server Concurrency (Room/Chair)** | `BE/DentalClinic.Tests` | 2 | **2/2 Passed** | Đạt (SQL Server Lock) |
 | **SQL Server Concurrency (Invoice/Payment)** | `BE/DentalClinic.Tests` | 5 | **5/5 Passed** | Đạt (SQL Server Lock) |
 | **Real Database End-to-End Tests** | `BE/DentalClinic.Tests` | 5 | **5/5 Passed** | Đạt (Real DB Flow) |
-| **Tổng thể Toàn bộ Backend** | `BE/DentalClinic.Tests` | **423** | **423/423 Passed** | **100% PASSED** |
+| **Tổng thể Toàn bộ Backend** | `BE/DentalClinic.Tests` | **424** | **424/424 Passed** | **100% PASSED** |
 | **Tổng thể Toàn bộ Frontend** | `FE/DentalClinic.Web.Tests` | **265** | **265/265 Passed** | **100% PASSED** |
-| **TỔNG CỘNG HỆ THỐNG** | **Full Solution Test Suite** | **688** | **688/688 Passed** | **100% PASSED** |
+| **TỔNG CỘNG HỆ THỐNG** | **Full Solution Test Suite** | **689** | **689/689 Passed** | **100% PASSED** |
 
-> *Ghi chú:* Tổng số test tự động thực tế sau tích hợp là **688 bài test** (tăng từ 677 ban đầu do Task A bổ sung 3 test điều phối, Task B bổ sung 2 test edge cases và Frontend bổ sung 6 test bảo mật controller).
+> *Ghi chú:* Tổng số test tự động thực tế sau tích hợp là **689 bài test** (tăng từ 677 ban đầu do Task A bổ sung 3 test điều phối, Task B bổ sung 2 test edge cases, Frontend bổ sung 6 test bảo mật controller, và bổ sung ScenarioE kiểm thử tích hợp E2E chuỗi khám chuyên sâu trên database SQL Server thật).
 
 ---
 
