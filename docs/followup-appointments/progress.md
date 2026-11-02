@@ -16,7 +16,7 @@
 | **Day 02** | Backend Availability & Scheduling Validation | **COMPLETED** | `58b21c7` | BE 366/367 (12 new tests passed) | Schedule, slot availability & conflict protection |
 | **Day 03** | Doctor Creates Follow-up Appointment | **COMPLETED** | `41a7140` | BE 369/370 (3 new tests passed), FE 259/259 | Doctor booking modal, safeguards, notification |
 | **Day 04** | Patient Requests Reschedule or Rebook | **COMPLETED** | `33ff069` | BE 376/377 (7 new tests passed), FE 261/261 (2 new tests passed) | Patient reschedule & rebook proposals, live slots UI, withdrawal |
-| **Day 05** | Doctor Approves or Rejects Requests | **IN PROGRESS** | — | — | Doctor approval dashboard & resolution |
+| **Day 05** | Doctor Approves or Rejects Requests | **COMPLETED** | `dc4b7c3` | BE 382/383 (6 new tests passed), FE 263/263 (2 new tests passed) | Doctor proposal resolution dashboard, modals, conflict rollback |
 | **Day 06** | Receptionist Reminder Workflow | PENDING | — | — | Receptionist recall dashboard & call tracking |
 | **Day 07** | Full Integration, Regression & Final Hardening | PENDING | — | — | E2E verification, hardening & report |
 
@@ -59,4 +59,20 @@
   - Built Patient Change Proposals UI in `Patient/FollowUps/Index.cshtml` with status badges, proposal tracking, and withdrawal action.
   - Built interactive modal `#modalPatientProposal` with live slot querying from doctor schedule, reason requirement, and anti-double-submission.
   - Added 7 unit tests in `FollowUpSchedulingServiceTests` and 2 web controller tests in `PostCareWebControllerTests`. All passed.
+
+## Day 05 Summary
+- **Tasks completed:**
+  - Implemented `ResolveProposalAsync` in `FollowUpSchedulingService` handling:
+    - Doctor ownership & authorization.
+    - Proposal idempotency & pending status verification.
+    - Future time check & doctor availability verification.
+    - Transactional execution with slot collision rollback.
+    - Separation of `Reschedule` (in-place time update) and `Rebook` (new appointment creation, audit retention).
+    - Reviewer audit tracking and patient notification.
+  - Implemented `GetDoctorPendingProposalsAsync` and exposed endpoints in `PostCareController`.
+  - Added "Duyệt Đổi / Đặt Lịch" tab and interactive cards in `Dentist/Referrals/Index.cshtml`.
+  - Added approval modal `#modalDoctorApproveProposal` and rejection modal `#modalDoctorRejectProposal` with required rejection reason and double-submit prevention.
+  - Added 6 BE unit tests covering approval, rejection, conflict rollback, and authorization.
+  - Added 2 FE unit tests covering controller actions.
+  - Detailed report written to `docs/followup-appointments/DAY05_DOCTOR_APPROVAL_REPORT.md`.
 
