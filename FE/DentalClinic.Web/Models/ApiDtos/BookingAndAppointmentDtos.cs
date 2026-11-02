@@ -16,6 +16,7 @@ public class DepartmentServiceDto
 {
     public long DepartmentServiceId { get; set; }
     public long DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
     public string ServiceName { get; set; } = string.Empty;
     public string? Description { get; set; }
     public int? DurationMinutes { get; set; }

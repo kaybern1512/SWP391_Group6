@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Application.Features.Booking.DTOs;
@@ -6,6 +6,7 @@ namespace DentalClinic.Application.Features.Booking.DTOs;
 public class DepartmentDto
 {
     public long DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public long? ManagerUserId { get; set; }
@@ -16,6 +17,7 @@ public class DepartmentServiceDto
 {
     public long DepartmentServiceId { get; set; }
     public long DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
     public string ServiceName { get; set; } = string.Empty;
     public string? Description { get; set; }
     public int? DurationMinutes { get; set; }
@@ -47,6 +49,7 @@ public class AvailableSlotDto
 public class AvailableSlotsQuery
 {
     public long DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
     public long ServiceId { get; set; }
     public DateTime Date { get; set; }
     public long? DentistUserId { get; set; }
