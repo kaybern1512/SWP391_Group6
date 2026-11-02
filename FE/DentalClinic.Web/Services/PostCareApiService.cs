@@ -104,6 +104,20 @@ public class PostCareApiService : IPostCareApiService
         return await SendPostAsync<ResolveProposalRequest, FollowUpProposalDto>("/api/post-care/follow-ups/proposals/resolve", request);
     }
 
+    public async Task<ApiResult<List<FollowUpReminderDto>>> GetReceptionistRemindersAsync(string? dateFilter = null, string? callStatus = null)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(dateFilter)) query.Add($"dateFilter={Uri.EscapeDataString(dateFilter)}");
+        if (!string.IsNullOrWhiteSpace(callStatus)) query.Add($"callStatus={Uri.EscapeDataString(callStatus)}");
+        var queryString = query.Count > 0 ? "?" + string.Join("&", query) : "";
+        return await SendGetAsync<List<FollowUpReminderDto>>($"/api/post-care/follow-ups/receptionist-reminders{queryString}");
+    }
+
+    public async Task<ApiResult<FollowUpReminderDto>> UpdateReminderCallStatusAsync(UpdateReminderCallStatusRequest request)
+    {
+        return await SendPostAsync<UpdateReminderCallStatusRequest, FollowUpReminderDto>("/api/post-care/follow-ups/receptionist-reminders/call-status", request);
+    }
+
     // ==========================================
     // HTTP HELPERS
     // ==========================================
