@@ -4,7 +4,7 @@
 -- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
 -- Database Name: DentalClinicManagementDB
 -- Shared Demo Password for ALL Accounts: Password123@
--- Generated: 2026-11-03 00:22:46
+-- Generated: 2026-11-03 00:45:48
 -- =========================================================================================
 
 IF DB_ID(N'DentalClinicManagementDB') IS NULL
@@ -1021,6 +1021,127 @@ CREATE TABLE [dbo].[BlogPostMedia](
 GO
 SET ANSI_PADDING OFF
 GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Medicines](
+	[MedicineId] [bigint] IDENTITY(1,1) NOT NULL,
+	[MedicineCode] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[MedicineName] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ActiveIngredient] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Concentration] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[DosageForm] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Unit] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[UnitPrice] [decimal](18, 2) NOT NULL,
+	[MinimumStockAlert] [int] NOT NULL,
+	[UsageInstructions] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Status] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+ CONSTRAINT [PK_Medicines] PRIMARY KEY CLUSTERED 
+(
+	[MedicineId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_Medicines_MedicineCode] UNIQUE NONCLUSTERED 
+(
+	[MedicineCode] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[MedicineBatches](
+	[MedicineBatchId] [bigint] IDENTITY(1,1) NOT NULL,
+	[MedicineId] [bigint] NOT NULL,
+	[BatchNumber] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ExpiryDate] [date] NOT NULL,
+	[QuantityReceived] [int] NOT NULL,
+	[QuantityAvailable] [int] NOT NULL,
+	[CostPrice] [decimal](18, 2) NOT NULL,
+	[Status] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ReceivedDate] [datetime2](7) NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+ CONSTRAINT [PK_MedicineBatches] PRIMARY KEY CLUSTERED 
+(
+	[MedicineBatchId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_MedicineBatches_Medicine_Batch] UNIQUE NONCLUSTERED 
+(
+	[MedicineId] ASC,
+	[BatchNumber] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[MedicineStockTransactions](
+	[TransactionId] [bigint] IDENTITY(1,1) NOT NULL,
+	[MedicineBatchId] [bigint] NOT NULL,
+	[TransactionType] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Quantity] [int] NOT NULL,
+	[QuantityBefore] [int] NOT NULL,
+	[QuantityAfter] [int] NOT NULL,
+	[Reason] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[PerformedByUserId] [bigint] NOT NULL,
+	[ReferenceCode] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+ CONSTRAINT [PK_MedicineStockTransactions] PRIMARY KEY CLUSTERED 
+(
+	[TransactionId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[MedicineDispensations](
+	[DispensationId] [bigint] IDENTITY(1,1) NOT NULL,
+	[PrescriptionId] [bigint] NOT NULL,
+	[AppointmentId] [bigint] NOT NULL,
+	[PatientUserId] [bigint] NOT NULL,
+	[DentistUserId] [bigint] NOT NULL,
+	[DispensedAt] [datetime2](7) NOT NULL,
+	[Notes] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Status] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+ CONSTRAINT [PK_MedicineDispensations] PRIMARY KEY CLUSTERED 
+(
+	[DispensationId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[MedicineDispensationItems](
+	[DispensationItemId] [bigint] IDENTITY(1,1) NOT NULL,
+	[DispensationId] [bigint] NOT NULL,
+	[PrescriptionItemId] [bigint] NULL,
+	[MedicineId] [bigint] NOT NULL,
+	[MedicineBatchId] [bigint] NOT NULL,
+	[QuantityDispensed] [int] NOT NULL,
+	[UnitPriceSnapshot] [decimal](18, 2) NOT NULL,
+	[TotalPrice] [decimal](18, 2) NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+ CONSTRAINT [PK_MedicineDispensationItems] PRIMARY KEY CLUSTERED 
+(
+	[DispensationItemId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
 SET ANSI_PADDING ON
 
 GO
@@ -1294,6 +1415,38 @@ CREATE NONCLUSTERED INDEX [IX_BlogPostMedia_UploadedByUserId] ON [dbo].[BlogPost
 	[UploadedByUserId] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
+CREATE NONCLUSTERED INDEX [IX_MedicineBatches_MedicineId_Expiry] ON [dbo].[MedicineBatches]
+(
+	[MedicineId] ASC,
+	[ExpiryDate] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_MedicineBatches_Status_Available] ON [dbo].[MedicineBatches]
+(
+	[Status] ASC,
+	[QuantityAvailable] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_MedicineStockTransactions_BatchId] ON [dbo].[MedicineStockTransactions]
+(
+	[MedicineBatchId] ASC,
+	[CreatedAt] DESC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_MedicineDispensations_Appt_Prescription] ON [dbo].[MedicineDispensations]
+(
+	[AppointmentId] ASC,
+	[PrescriptionId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_MedicineDispensationItems_Dispensation] ON [dbo].[MedicineDispensationItems]
+(
+	[DispensationId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
 ALTER TABLE [dbo].[ClinicProfile] ADD  DEFAULT (sysdatetime()) FOR [UpdatedAt]
 GO
 ALTER TABLE [dbo].[UserAccounts] ADD  DEFAULT ('Unverified') FOR [Status]
@@ -1403,6 +1556,30 @@ GO
 ALTER TABLE [dbo].[BlogPosts] ADD  CONSTRAINT [DF_BlogPosts_CreatedAt]  DEFAULT (sysdatetime()) FOR [CreatedAt]
 GO
 ALTER TABLE [dbo].[BlogPostMedia] ADD  CONSTRAINT [DF_BlogPostMedia_CreatedAt]  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[Medicines] ADD  CONSTRAINT [DF_Medicines_MinAlert]  DEFAULT ((20)) FOR [MinimumStockAlert]
+GO
+ALTER TABLE [dbo].[Medicines] ADD  CONSTRAINT [DF_Medicines_Status]  DEFAULT ('Active') FOR [Status]
+GO
+ALTER TABLE [dbo].[Medicines] ADD  CONSTRAINT [DF_Medicines_CreatedAt]  DEFAULT (sysutcdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[MedicineBatches] ADD  CONSTRAINT [DF_MedicineBatches_CostPrice]  DEFAULT ((0)) FOR [CostPrice]
+GO
+ALTER TABLE [dbo].[MedicineBatches] ADD  CONSTRAINT [DF_MedicineBatches_Status]  DEFAULT ('Available') FOR [Status]
+GO
+ALTER TABLE [dbo].[MedicineBatches] ADD  CONSTRAINT [DF_MedicineBatches_ReceivedDate]  DEFAULT (sysutcdatetime()) FOR [ReceivedDate]
+GO
+ALTER TABLE [dbo].[MedicineBatches] ADD  CONSTRAINT [DF_MedicineBatches_CreatedAt]  DEFAULT (sysutcdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions] ADD  CONSTRAINT [DF_MedicineStockTransactions_CreatedAt]  DEFAULT (sysutcdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[MedicineDispensations] ADD  CONSTRAINT [DF_MedicineDispensations_DispensedAt]  DEFAULT (sysutcdatetime()) FOR [DispensedAt]
+GO
+ALTER TABLE [dbo].[MedicineDispensations] ADD  CONSTRAINT [DF_MedicineDispensations_Status]  DEFAULT ('Dispensed') FOR [Status]
+GO
+ALTER TABLE [dbo].[MedicineDispensations] ADD  CONSTRAINT [DF_MedicineDispensations_CreatedAt]  DEFAULT (sysutcdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems] ADD  CONSTRAINT [DF_MedicineDispensationItems_CreatedAt]  DEFAULT (sysutcdatetime()) FOR [CreatedAt]
 GO
 ALTER TABLE [dbo].[PatientProfiles]  WITH CHECK ADD  CONSTRAINT [FK_PatientProfiles_UserAccounts] FOREIGN KEY([UserId])
 REFERENCES [dbo].[UserAccounts] ([UserId])
@@ -1752,6 +1929,64 @@ REFERENCES [dbo].[UserAccounts] ([UserId])
 GO
 ALTER TABLE [dbo].[BlogPostMedia] CHECK CONSTRAINT [FK_BlogPostMedia_UserAccounts]
 GO
+ALTER TABLE [dbo].[MedicineBatches]  WITH CHECK ADD  CONSTRAINT [FK_MedicineBatches_Medicines] FOREIGN KEY([MedicineId])
+REFERENCES [dbo].[Medicines] ([MedicineId])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[MedicineBatches] CHECK CONSTRAINT [FK_MedicineBatches_Medicines]
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions]  WITH CHECK ADD  CONSTRAINT [FK_MedicineStockTransactions_Batches] FOREIGN KEY([MedicineBatchId])
+REFERENCES [dbo].[MedicineBatches] ([MedicineBatchId])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions] CHECK CONSTRAINT [FK_MedicineStockTransactions_Batches]
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions]  WITH CHECK ADD  CONSTRAINT [FK_MedicineStockTransactions_Users] FOREIGN KEY([PerformedByUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions] CHECK CONSTRAINT [FK_MedicineStockTransactions_Users]
+GO
+ALTER TABLE [dbo].[MedicineDispensations]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensations_Appointments] FOREIGN KEY([AppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+GO
+ALTER TABLE [dbo].[MedicineDispensations] CHECK CONSTRAINT [FK_MedicineDispensations_Appointments]
+GO
+ALTER TABLE [dbo].[MedicineDispensations]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensations_Dentist] FOREIGN KEY([DentistUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[MedicineDispensations] CHECK CONSTRAINT [FK_MedicineDispensations_Dentist]
+GO
+ALTER TABLE [dbo].[MedicineDispensations]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensations_Patient] FOREIGN KEY([PatientUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[MedicineDispensations] CHECK CONSTRAINT [FK_MedicineDispensations_Patient]
+GO
+ALTER TABLE [dbo].[MedicineDispensations]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensations_Prescriptions] FOREIGN KEY([PrescriptionId])
+REFERENCES [dbo].[Prescriptions] ([PrescriptionId])
+GO
+ALTER TABLE [dbo].[MedicineDispensations] CHECK CONSTRAINT [FK_MedicineDispensations_Prescriptions]
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensationItems_Batches] FOREIGN KEY([MedicineBatchId])
+REFERENCES [dbo].[MedicineBatches] ([MedicineBatchId])
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems] CHECK CONSTRAINT [FK_MedicineDispensationItems_Batches]
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensationItems_Dispensation] FOREIGN KEY([DispensationId])
+REFERENCES [dbo].[MedicineDispensations] ([DispensationId])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems] CHECK CONSTRAINT [FK_MedicineDispensationItems_Dispensation]
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensationItems_Medicines] FOREIGN KEY([MedicineId])
+REFERENCES [dbo].[Medicines] ([MedicineId])
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems] CHECK CONSTRAINT [FK_MedicineDispensationItems_Medicines]
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensationItems_PrescriptionItem] FOREIGN KEY([PrescriptionItemId])
+REFERENCES [dbo].[PrescriptionItems] ([PrescriptionItemId])
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems] CHECK CONSTRAINT [FK_MedicineDispensationItems_PrescriptionItem]
+GO
 ALTER TABLE [dbo].[ClinicProfile]  WITH CHECK ADD CHECK  (([ClinicId]=(1)))
 GO
 ALTER TABLE [dbo].[ClinicProfile]  WITH CHECK ADD  CONSTRAINT [CK_ClinicProfile_OpenClose] CHECK  (([ClosingTime] IS NULL OR [OpeningTime] IS NULL OR [ClosingTime]>[OpeningTime]))
@@ -1894,9 +2129,33 @@ ALTER TABLE [dbo].[BlogPostMedia]  WITH CHECK ADD  CONSTRAINT [CK_BlogPostMedia_
 GO
 ALTER TABLE [dbo].[BlogPostMedia] CHECK CONSTRAINT [CK_BlogPostMedia_Type]
 GO
+ALTER TABLE [dbo].[Medicines]  WITH CHECK ADD  CONSTRAINT [CHK_Medicines_MinAlert] CHECK  (([MinimumStockAlert]>=(0)))
+GO
+ALTER TABLE [dbo].[Medicines] CHECK CONSTRAINT [CHK_Medicines_MinAlert]
+GO
+ALTER TABLE [dbo].[Medicines]  WITH CHECK ADD  CONSTRAINT [CHK_Medicines_UnitPrice] CHECK  (([UnitPrice]>=(0)))
+GO
+ALTER TABLE [dbo].[Medicines] CHECK CONSTRAINT [CHK_Medicines_UnitPrice]
+GO
+ALTER TABLE [dbo].[MedicineBatches]  WITH CHECK ADD  CONSTRAINT [CHK_MedicineBatches_CostPrice] CHECK  (([CostPrice]>=(0)))
+GO
+ALTER TABLE [dbo].[MedicineBatches] CHECK CONSTRAINT [CHK_MedicineBatches_CostPrice]
+GO
+ALTER TABLE [dbo].[MedicineBatches]  WITH CHECK ADD  CONSTRAINT [CHK_MedicineBatches_Qty] CHECK  (([QuantityReceived]>=(0) AND [QuantityAvailable]>=(0) AND [QuantityAvailable]<=[QuantityReceived]))
+GO
+ALTER TABLE [dbo].[MedicineBatches] CHECK CONSTRAINT [CHK_MedicineBatches_Qty]
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions]  WITH CHECK ADD  CONSTRAINT [CHK_MedicineStockTransactions_Qty] CHECK  (([Quantity]>(0)))
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions] CHECK CONSTRAINT [CHK_MedicineStockTransactions_Qty]
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems]  WITH CHECK ADD  CONSTRAINT [CHK_MedicineDispensationItems_Qty] CHECK  (([QuantityDispensed]>(0)))
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems] CHECK CONSTRAINT [CHK_MedicineDispensationItems_Qty]
+GO
 
 -- =========================================================================================
--- PART 2: COMPLETE SYSTEM DATASET SEEDING (38 TABLES, UTF-8 ACCENTED VIETNAMESE)
+-- PART 2: COMPLETE SYSTEM DATASET SEEDING (44 TABLES, UTF-8 ACCENTED VIETNAMESE)
 -- =========================================================================================
 
 -- Disable foreign key checks during data loading
@@ -3548,6 +3807,53 @@ INSERT [dbo].[BlogPosts] ([BlogPostId], [CategoryId], [AuthorUserId], [Title], [
 INSERT [dbo].[BlogPosts] ([BlogPostId], [CategoryId], [AuthorUserId], [Title], [Slug], [Summary], [Content], [ThumbnailUrl], [VideoUrl], [Status], [IsFeatured], [ViewCount], [PublishedAt], [CreatedAt], [UpdatedAt]) VALUES (11, 7, 2, N'Nha Khoa DentalCare chính thức khai trương Trung Tâm Chuẩn Đoán Hình Ảnh & Laser 3D', N'khai-truong-trung-tam-chuan-doan-hinh-anh-conebeam-3d', N'Hệ thống máy chụp CT ConeBeam 3D thế hệ mới nhất cùng công nghệ Laser hiện đại đã chính thức đi vào hoạt động nhằm nâng cao chất lượng chẩn đoán và điều trị.', N'<p>Nhằm không ngừng nâng cao chất lượng khám chữa bệnh, <strong>Hệ thống Nha khoa DentalCare</strong> vừa chính thức đưa vào vận hành <strong>Trung Tâm Chuẩn Đoán Hình Ảnh & Laser</strong> với trang thiết bị nhập khẩu chính hãng từ Đức và Thụy Sĩ.</p><p>Hệ thống CT ConeBeam 3D cho phép chụp cắt lớp vi tính cấu trúc xương hàm với độ chính xác micromet, liều tia X cực thấp, an toàn tối đa cho bệnh nhân ở mọi lứa tuổi.</p>', N'/images/blog/laser-whitening.svg', NULL, N'Published', 1, 150, CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2), CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2), CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2))
 INSERT [dbo].[BlogPosts] ([BlogPostId], [CategoryId], [AuthorUserId], [Title], [Slug], [Summary], [Content], [ThumbnailUrl], [VideoUrl], [Status], [IsFeatured], [ViewCount], [PublishedAt], [CreatedAt], [UpdatedAt]) VALUES (12, 8, 2, N'Thông báo lịch làm việc chuyên khoa và chương trình chăm sóc định kỳ quý 4/2026', N'thong-bao-lich-kham-va-cham-soc-khach-hang-2026', N'DentalCare thông báo lịch làm việc liên tục các ngày trong tuần từ 08:00 đến 20:00 và chương trình thăm khám răng định kỳ miễn phí cho cư dân.', N'<p>Nhằm phục vụ tốt nhất nhu cầu khám chữa bệnh răng miệng, <strong>Nha Khoa DentalCare</strong> thông báo lịch làm việc mở rộng tất cả các ngày trong tuần (kể cả Thứ 7 và Chủ Nhật).</p><p>Quý khách vui lòng đặt lịch hẹn trực tuyến qua website hoặc ứng dụng để được tiếp đón chu đáo và không phải chờ đợi lâu.</p>', N'/images/blog/cham-soc-rang-banner.svg', NULL, N'Published', 0, 85, CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2), CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2), CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2))
 SET IDENTITY_INSERT [dbo].[BlogPosts] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [Medicines] (8 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[Medicines] ON;
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (1, N'MED-AMOX-500', N'Amoxicillin 500mg', N'Amoxicillin trihydrate', N'500mg', N'ViĂªn nang', N'ViĂªn', CAST(5000.00 AS Decimal(18, 2)), 50, N'Uá»‘ng sau Äƒn. NgÆ°á»i lá»›n 1 viĂªn x 3 láº§n/ngĂ y, cĂ¡ch 8 giá».', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (2, N'MED-AUGM-625', N'Augmentin 625mg', N'Amoxicillin + Acid Clavulanic', N'625mg', N'ViĂªn nĂ©n bao phim', N'ViĂªn', CAST(18000.00 AS Decimal(18, 2)), 30, N'Uá»‘ng ngay Ä‘áº§u bá»¯a Äƒn Ä‘á»ƒ giáº£m khĂ³ chá»‹u dáº¡ dĂ y. 1 viĂªn x 2 láº§n/ngĂ y.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (3, N'MED-PARA-500', N'Paracetamol 500mg', N'Paracetamol', N'500mg', N'ViĂªn nĂ©n', N'ViĂªn', CAST(2000.00 AS Decimal(18, 2)), 100, N'Uá»‘ng khi Ä‘au nhá»©c hoáº·c sá»‘t > 38.5Â°C. Má»—i láº§n 1-2 viĂªn, cĂ¡ch nhau tá»‘i thiá»ƒu 4-6 giá».', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (4, N'MED-EFFE-500', N'Efferalgan Codeine', N'Paracetamol 500mg + Codein 30mg', N'500mg/30mg', N'ViĂªn sá»§i', N'ViĂªn', CAST(12000.00 AS Decimal(18, 2)), 25, N'HĂ²a tan 1 viĂªn vĂ o 200ml nÆ°á»›c áº¥m khi Ä‘au dá»¯ dá»™i sau tiá»ƒu pháº«u. Tá»‘i Ä‘a 4 viĂªn/ngĂ y.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (5, N'MED-IBUP-400', N'Ibuprofen 400mg', N'Ibuprofen', N'400mg', N'ViĂªn nĂ©n', N'ViĂªn', CAST(4000.00 AS Decimal(18, 2)), 40, N'KhĂ¡ng viĂªm giáº£m Ä‘au sau nhá»• rÄƒng hoáº·c Ä‘iá»u trá»‹ tá»§y. Uá»‘ng sau Äƒn no.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (6, N'MED-RODO-CL', N'Rodogyl', N'Spiramycin 750.000 IU + Metronidazol 125mg', N'Spiramycin + Metronidazol', N'ViĂªn nĂ©n bao phim', N'ViĂªn', CAST(8000.00 AS Decimal(18, 2)), 40, N'Äáº·c trá»‹ nhiá»…m trĂ¹ng rÄƒng miá»‡ng, viĂªm nha chu, Ă¡p xe nÆ°á»›u. Uá»‘ng trong bá»¯a Äƒn.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (7, N'MED-ALPH-42', N'Alpha Choay', N'Chymotrypsine 4200 UI', N'4.2mg (4200 UI)', N'ViĂªn ngáº­m', N'ViĂªn', CAST(5000.00 AS Decimal(18, 2)), 50, N'Ngáº­m dÆ°á»›i lÆ°á»¡i 2 viĂªn x 2-3 láº§n/ngĂ y Ä‘á»ƒ chá»‘ng phĂ¹ ná» sau pháº«u thuáº­t hĂ m máº·t.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (8, N'MED-CHLO-012', N'NÆ°á»›c sĂºc miá»‡ng Chlorhexidine 0.12%', N'Chlorhexidine Digluconate 0.12%', N'0.12%', N'Dung dá»‹ch sĂºc miá»‡ng', N'Chai', CAST(85000.00 AS Decimal(18, 2)), 15, N'SĂºc miá»‡ng 15ml trong 30 giĂ¢y sau khi cháº£i rÄƒng, 2 láº§n/ngĂ y. KhĂ´ng Ä‘Æ°á»£c nuá»‘t.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+SET IDENTITY_INSERT [dbo].[Medicines] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [MedicineBatches] (9 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[MedicineBatches] ON;
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (1, 1, N'AMX-2026-01', CAST(N'2028-05-03' AS Date), 300, 300, CAST(3200.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5907485' AS DateTime2), CAST(N'2026-11-02T17:33:42.5907485' AS DateTime2), NULL)
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (2, 1, N'AMX-2025-NEAR', CAST(N'2026-12-13' AS Date), 20, 15, CAST(3000.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5918742' AS DateTime2), CAST(N'2026-11-02T17:33:42.5918742' AS DateTime2), NULL)
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (3, 2, N'AUG-2026-01', CAST(N'2028-01-03' AS Date), 150, 150, CAST(14500.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5938644' AS DateTime2), CAST(N'2026-11-02T17:33:42.5938644' AS DateTime2), NULL)
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (4, 3, N'PAR-2026-01', CAST(N'2028-11-03' AS Date), 500, 500, CAST(1100.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5947610' AS DateTime2), CAST(N'2026-11-02T17:33:42.5947610' AS DateTime2), NULL)
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (5, 4, N'EFF-2026-LOW', CAST(N'2027-11-03' AS Date), 50, 12, CAST(9500.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5957623' AS DateTime2), CAST(N'2026-11-02T17:33:42.5957623' AS DateTime2), NULL)
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (6, 5, N'IBU-2026-01', CAST(N'2028-03-03' AS Date), 200, 200, CAST(2600.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5968772' AS DateTime2), CAST(N'2026-11-02T17:33:42.5968772' AS DateTime2), NULL)
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (7, 6, N'ROD-2026-01', CAST(N'2028-07-03' AS Date), 180, 180, CAST(5800.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5981540' AS DateTime2), CAST(N'2026-11-02T17:33:42.5981540' AS DateTime2), NULL)
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (8, 7, N'ALP-2026-01', CAST(N'2028-02-03' AS Date), 250, 250, CAST(3600.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2), CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2), NULL)
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (9, 8, N'CHL-2026-01', CAST(N'2028-05-03' AS Date), 60, 60, CAST(58000.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2), CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2), NULL)
+SET IDENTITY_INSERT [dbo].[MedicineBatches] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [MedicineStockTransactions] (9 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[MedicineStockTransactions] ON;
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (1, 1, N'Import', 300, 0, 300, N'Nháº­p kho ban Ä‘áº§u tá»« NhĂ  cung cáº¥p DÆ°á»£c Háº­u Giang', 2, N'PO-2026-001', CAST(N'2026-11-02T17:33:42.5907485' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (2, 2, N'Import', 20, 0, 15, N'LĂ´ tá»“n kho trÆ°á»›c Ä‘Ă³ luĂ¢n chuyá»ƒn', 2, N'PO-2025-089', CAST(N'2026-11-02T17:33:42.5928760' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (3, 3, N'Import', 150, 0, 150, N'Nháº­p kho GSK Viá»‡t Nam', 2, N'PO-2026-002', CAST(N'2026-11-02T17:33:42.5947610' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (4, 4, N'Import', 500, 0, 500, N'Nháº­p kho Traphaco', 2, N'PO-2026-003', CAST(N'2026-11-02T17:33:42.5957623' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (5, 5, N'Import', 50, 0, 12, N'Nháº­p kho UPSA PhĂ¡p', 2, N'PO-2026-004', CAST(N'2026-11-02T17:33:42.5968772' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (6, 6, N'Import', 200, 0, 200, N'Nháº­p kho Sanofi', 2, N'PO-2026-005', CAST(N'2026-11-02T17:33:42.5981540' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (7, 7, N'Import', 180, 0, 180, N'Nháº­p kho Sanofi Aventis', 2, N'PO-2026-006', CAST(N'2026-11-02T17:33:42.5981540' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (8, 8, N'Import', 250, 0, 250, N'Nháº­p kho Sanofi Winthrop', 2, N'PO-2026-007', CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (9, 9, N'Import', 60, 0, 60, N'Nháº­p kho Kin Dental Care', 2, N'PO-2026-008', CAST(N'2026-11-02T17:33:42.6001720' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[MedicineStockTransactions] OFF;
 GO
 
 -- Re-enable and verify all foreign key constraints

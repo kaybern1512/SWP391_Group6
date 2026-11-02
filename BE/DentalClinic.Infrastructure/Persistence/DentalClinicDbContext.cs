@@ -89,6 +89,12 @@ public partial class DentalClinicDbContext : DbContext
 
     public virtual DbSet<SupportChatMessage> SupportChatMessages { get; set; }
 
+    public virtual DbSet<Medicine> Medicines { get; set; }
+    public virtual DbSet<MedicineBatch> MedicineBatches { get; set; }
+    public virtual DbSet<MedicineStockTransaction> MedicineStockTransactions { get; set; }
+    public virtual DbSet<MedicineDispensation> MedicineDispensations { get; set; }
+    public virtual DbSet<MedicineDispensationItem> MedicineDispensationItems { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AppointmentReminderJob>(entity =>
@@ -1037,6 +1043,120 @@ public partial class DentalClinicDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(d => d.SenderUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Medicine>(entity =>
+        {
+            entity.HasKey(e => e.MedicineId);
+            entity.ToTable("Medicines");
+            entity.HasIndex(e => e.MedicineCode).IsUnique();
+            entity.Property(e => e.MedicineCode).HasMaxLength(50);
+            entity.Property(e => e.MedicineName).HasMaxLength(200);
+            entity.Property(e => e.ActiveIngredient).HasMaxLength(200);
+            entity.Property(e => e.Concentration).HasMaxLength(100);
+            entity.Property(e => e.DosageForm).HasMaxLength(100);
+            entity.Property(e => e.Unit).HasMaxLength(50);
+            entity.Property(e => e.UnitPrice).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.MinimumStockAlert).HasDefaultValue(20);
+            entity.Property(e => e.UsageInstructions).HasMaxLength(500);
+            entity.Property(e => e.Status).HasMaxLength(50).HasDefaultValue("Active");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+        });
+
+        modelBuilder.Entity<MedicineBatch>(entity =>
+        {
+            entity.HasKey(e => e.MedicineBatchId);
+            entity.ToTable("MedicineBatches");
+            entity.HasIndex(e => new { e.MedicineId, e.BatchNumber }).IsUnique();
+            entity.Property(e => e.BatchNumber).HasMaxLength(100);
+            entity.Property(e => e.CostPrice).HasColumnType("decimal(18, 2)").HasDefaultValue(0m);
+            entity.Property(e => e.Status).HasMaxLength(50).HasDefaultValue("Available");
+            entity.Property(e => e.ReceivedDate).HasDefaultValueSql("(sysutcdatetime())");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.Medicine)
+                .WithMany(p => p.MedicineBatches)
+                .HasForeignKey(d => d.MedicineId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MedicineStockTransaction>(entity =>
+        {
+            entity.HasKey(e => e.TransactionId);
+            entity.ToTable("MedicineStockTransactions");
+            entity.Property(e => e.TransactionType).HasMaxLength(50);
+            entity.Property(e => e.Reason).HasMaxLength(500);
+            entity.Property(e => e.ReferenceCode).HasMaxLength(100);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.MedicineBatch)
+                .WithMany(p => p.StockTransactions)
+                .HasForeignKey(d => d.MedicineBatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.PerformedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.PerformedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<MedicineDispensation>(entity =>
+        {
+            entity.HasKey(e => e.DispensationId);
+            entity.ToTable("MedicineDispensations");
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.Property(e => e.Status).HasMaxLength(50).HasDefaultValue("Dispensed");
+            entity.Property(e => e.DispensedAt).HasDefaultValueSql("(sysutcdatetime())");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.Prescription)
+                .WithMany()
+                .HasForeignKey(d => d.PrescriptionId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.Appointment)
+                .WithMany()
+                .HasForeignKey(d => d.AppointmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.PatientUser)
+                .WithMany()
+                .HasForeignKey(d => d.PatientUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.DentistUser)
+                .WithMany()
+                .HasForeignKey(d => d.DentistUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<MedicineDispensationItem>(entity =>
+        {
+            entity.HasKey(e => e.DispensationItemId);
+            entity.ToTable("MedicineDispensationItems");
+            entity.Property(e => e.UnitPriceSnapshot).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.TotalPrice).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.Dispensation)
+                .WithMany(p => p.DispensationItems)
+                .HasForeignKey(d => d.DispensationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.PrescriptionItem)
+                .WithMany()
+                .HasForeignKey(d => d.PrescriptionItemId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.Medicine)
+                .WithMany(p => p.DispensationItems)
+                .HasForeignKey(d => d.MedicineId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.MedicineBatch)
+                .WithMany(p => p.DispensationItems)
+                .HasForeignKey(d => d.MedicineBatchId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
         });
 
         OnModelCreatingPartial(modelBuilder);

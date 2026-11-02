@@ -1,0 +1,315 @@
+@model DentalClinic.Web.ViewModels.Admin.AdminMedicineIndexViewModel
+@{
+    ViewData["Title"] = "Quản lý Kho Thuốc & Dược Phẩm";
+}
+
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-controller="AdminDashboard" asp-action="Dashboard" class="text-decoration-none text-muted small">
+                    <i class="bi bi-chevron-left"></i> Trung Tâm Quản Trị
+                </a>
+                <span class="text-muted small">&bull;</span>
+                <span class="badge-dc badge-role-systemadministrator">Dược Phẩm Nội Bộ</span>
+            </div>
+            <h1 class="page-title"><i class="bi bi-capsule me-2 text-primary"></i>Quản Lý Kho Thuốc & Dược Phẩm</h1>
+            <p class="page-subtitle">Theo dõi danh mục thuốc, quản lý lô hàng, hạn dùng, cảnh báo tồn tối thiểu và kiểm kê biến động kho (WF-15)</p>
+        </div>
+        <div class="page-actions d-flex gap-2">
+            <a asp-controller="AdminMedicine" asp-action="Transactions" class="btn btn-outline-secondary">
+                <i class="bi bi-clock-history me-1"></i> Nhật Ký Biến Động Kho
+            </a>
+            <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createMedicineModal">
+                <i class="bi bi-plus-lg me-1"></i> Thêm Thuốc Mới
+            </button>
+        </div>
+    </div>
+
+    <!-- Inventory Stats Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card-dc h-100 p-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted small fw-semibold">Tổng Danh Mục Thuốc</span>
+                    <div class="avatar-sm bg-primary-subtle text-primary rounded p-2">
+                        <i class="bi bi-prescription fs-5"></i>
+                    </div>
+                </div>
+                <div class="h3 fw-bold mb-1 text-dark">@Model.Summary.TotalMedicines</div>
+                <span class="text-muted small">Đang kích hoạt: <strong class="text-success">@Model.Summary.ActiveMedicines</strong></span>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card-dc h-100 p-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted small fw-semibold">Tổng Đơn Vị Tồn Kho</span>
+                    <div class="avatar-sm bg-info-subtle text-info rounded p-2">
+                        <i class="bi bi-boxes fs-5"></i>
+                    </div>
+                </div>
+                <div class="h3 fw-bold mb-1 text-dark">@Model.Summary.TotalStockUnits.ToString("N0")</div>
+                <span class="text-muted small">Trên tổng số <strong>@Model.Summary.TotalBatches</strong> lô hàng</span>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card-dc h-100 p-3 @(Model.Summary.LowStockMedicinesCount > 0 ? "border-warning" : "")">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted small fw-semibold">Cảnh Báo Tồn Thấp</span>
+                    <div class="avatar-sm bg-warning-subtle text-warning rounded p-2">
+                        <i class="bi bi-exclamation-triangle fs-5"></i>
+                    </div>
+                </div>
+                <div class="h3 fw-bold mb-1 @(Model.Summary.LowStockMedicinesCount > 0 ? "text-warning" : "text-dark")">
+                    @Model.Summary.LowStockMedicinesCount
+                </div>
+                <span class="text-muted small">Thuốc có tồn $\le$ định mức cảnh báo</span>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card-dc h-100 p-3 @(Model.Summary.NearExpiryBatchesCount > 0 ? "border-danger" : "")">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted small fw-semibold">Lô Thuốc Cận Hạn</span>
+                    <div class="avatar-sm bg-danger-subtle text-danger rounded p-2">
+                        <i class="bi bi-calendar-x fs-5"></i>
+                    </div>
+                </div>
+                <div class="h3 fw-bold mb-1 @(Model.Summary.NearExpiryBatchesCount > 0 ? "text-danger" : "text-dark")">
+                    @Model.Summary.NearExpiryBatchesCount
+                </div>
+                <span class="text-muted small">Hạn dùng $\le$ 60 ngày (Cần luân chuyển)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="card-dc mb-4">
+        <div class="card-dc-body p-3">
+            <form method="get" asp-controller="AdminMedicine" asp-action="Index" class="row g-2 align-items-center">
+                <div class="col-12 col-md-4">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" name="SearchTerm" value="@Model.Filter.SearchTerm" class="form-control" placeholder="Tìm theo tên thuốc, mã thuốc, hoạt chất..." />
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <select name="Status" class="form-select form-select-sm">
+                        <option value="">-- Tất cả trạng thái --</option>
+                        <option value="Active" selected="@(Model.Filter.Status == "Active")">Đang hoạt động</option>
+                        <option value="Inactive" selected="@(Model.Filter.Status == "Inactive")">Tạm dừng</option>
+                        <option value="Discontinued" selected="@(Model.Filter.Status == "Discontinued")">Ngừng nhập</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="form-check form-check-inline mt-1">
+                        <input class="form-check-input" type="checkbox" name="LowStockOnly" value="true" id="chkLowStock" @(Model.Filter.LowStockOnly == true ? "checked" : "") />
+                        <label class="form-check-label small" for="chkLowStock">Tồn kho thấp</label>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <div class="form-check form-check-inline mt-1">
+                        <input class="form-check-input" type="checkbox" name="NearExpiryOnly" value="true" id="chkNearExpiry" @(Model.Filter.NearExpiryOnly == true ? "checked" : "") />
+                        <label class="form-check-label small" for="chkNearExpiry">Có lô cận hạn</label>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2 d-flex gap-1 justify-content-end">
+                    <button type="submit" class="btn btn-sm btn-primary flex-grow-1">
+                        <i class="bi bi-funnel me-1"></i> Lọc
+                    </button>
+                    <a asp-controller="AdminMedicine" asp-action="Index" class="btn btn-sm btn-outline-secondary" title="Đặt lại">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Medicines Table -->
+    <div class="card-dc">
+        <div class="card-dc-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-capsule text-primary"></i>
+                <span class="fw-bold">Danh Sách Thuốc Nha Khoa</span>
+                <span class="badge bg-light text-dark border">@Model.Medicines.Count mặt hàng</span>
+            </div>
+        </div>
+        <div class="card-dc-body p-0">
+            <div class="table-responsive">
+                <table class="table-dc mb-0">
+                    <thead>
+                        <tr>
+                            <th>Mã Thuốc</th>
+                            <th>Tên Thuốc & Hoạt Chất</th>
+                            <th>Dạng / Đơn Vị</th>
+                            <th class="text-end">Đơn Giá Bán</th>
+                            <th class="text-center">Tồn Khả Dụng</th>
+                            <th class="text-center">Số Lô Hàng</th>
+                            <th class="text-center">Trạng Thái</th>
+                            <th class="text-end">Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Medicines.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                                    Không tìm thấy mặt hàng thuốc nào phù hợp điều kiện lọc.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var med in Model.Medicines)
+                            {
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-light text-dark border font-monospace fw-bold">@med.MedicineCode</span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@med.MedicineName</div>
+                                        <div class="text-muted small">
+                                            @if (!string.IsNullOrEmpty(med.ActiveIngredient))
+                                            {
+                                                <span>@med.ActiveIngredient</span>
+                                            }
+                                            @if (!string.IsNullOrEmpty(med.Concentration))
+                                            {
+                                                <span> &bull; @med.Concentration</span>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted small">@(med.DosageForm ?? "Dạng chuẩn")</span>
+                                        <div class="badge bg-secondary-subtle text-secondary">@med.Unit</div>
+                                    </td>
+                                    <td class="text-end fw-semibold text-dark">
+                                        @med.UnitPrice.ToString("N0") đ
+                                    </td>
+                                    <td class="text-center">
+                                        @if (med.TotalAvailableStock <= 0)
+                                        {
+                                            <span class="badge bg-danger">Hết hàng (0)</span>
+                                        }
+                                        else if (med.IsLowStock)
+                                        {
+                                            <span class="badge bg-warning text-dark" title="Dưới mức cảnh báo tối thiểu (@med.MinimumStockAlert)">
+                                                <i class="bi bi-exclamation-triangle-fill me-1"></i>@med.TotalAvailableStock @med.Unit
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success-subtle text-success fw-bold">
+                                                @med.TotalAvailableStock @med.Unit
+                                            </span>
+                                        }
+                                        @if (med.HasNearExpiryBatch)
+                                        {
+                                            <div class="badge bg-danger-subtle text-danger small mt-1 d-inline-block" title="Có lô thuốc hạn dùng trong 60 ngày">
+                                                <i class="bi bi-hourglass-bottom me-1"></i>Cận hạn
+                                            </div>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-dark border">@med.ActiveBatchesCount lô</span>
+                                    </td>
+                                    <td class="text-center">
+                                        @if (med.Status == "Active")
+                                        {
+                                            <span class="badge bg-success-subtle text-success">Đang dùng</span>
+                                        }
+                                        else if (med.Status == "Inactive")
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary">Tạm dừng</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-dark-subtle text-dark">Ngừng nhập</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        <a asp-controller="AdminMedicine" asp-action="Detail" asp-route-id="@med.MedicineId" class="btn btn-sm btn-outline-primary" title="Xem chi tiết & quản lý lô">
+                                            <i class="bi bi-box-seam me-1"></i> Quản lý Lô
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: THÊM THUỐC MỚI -->
+<div class="modal fade" id="createMedicineModal" tabindex="-1" aria-labelledby="createMedicineModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post" asp-controller="AdminMedicine" asp-action="Create">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="createMedicineModalLabel">
+                        <i class="bi bi-plus-circle me-2"></i> Thêm Mặt Hàng Thuốc Mới
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label fw-semibold">Mã Thuốc <span class="text-danger">*</span></label>
+                            <input type="text" name="MedicineCode" class="form-control font-monospace" placeholder="VD: MED-AMOX-500" required />
+                            <div class="form-text">Mã định danh duy nhất trong kho.</div>
+                        </div>
+                        <div class="col-12 col-md-8">
+                            <label class="form-label fw-semibold">Tên Thuốc Biệt Dược / Thương Mại <span class="text-danger">*</span></label>
+                            <input type="text" name="MedicineName" class="form-control" placeholder="VD: Amoxicillin 500mg, Augmentin 625mg..." required />
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Hoạt Chất Chính</label>
+                            <input type="text" name="ActiveIngredient" class="form-control" placeholder="VD: Amoxicillin trihydrate" />
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Hàm Lượng</label>
+                            <input type="text" name="Concentration" class="form-control" placeholder="VD: 500mg, 625mg, 250mg/5ml..." />
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label class="form-label fw-semibold">Dạng Bào Chế</label>
+                            <input type="text" name="DosageForm" class="form-control" placeholder="VD: Viên nang, Viên nén, Chai súc miệng..." />
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label fw-semibold">Đơn Vị Tính <span class="text-danger">*</span></label>
+                            <input type="text" name="Unit" class="form-control" placeholder="VD: Viên, Vỉ, Gói, Chai, Lọ..." required />
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label fw-semibold">Đơn Giá Bán (VNĐ) <span class="text-danger">*</span></label>
+                            <input type="number" name="UnitPrice" class="form-control" min="0" step="100" placeholder="VD: 5000" required />
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Ngưỡng Cảnh Báo Tồn Tối Thiểu</label>
+                            <input type="number" name="MinimumStockAlert" class="form-control" min="0" value="20" />
+                            <div class="form-text">Hệ thống sẽ báo động vàng khi tồn khả dụng $\le$ ngưỡng này.</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Chỉ Định & Hướng Dẫn Dùng</label>
+                            <input type="text" name="UsageInstructions" class="form-control" placeholder="VD: Uống sau ăn, tránh dùng cho người dị ứng Penicillin..." />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary fw-semibold">
+                        <i class="bi bi-check-lg me-1"></i> Lưu Mặt Hàng Thuốc
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -245,6 +245,10 @@
                 <i class="bi bi-door-open"></i>
                 <span>Phòng & Ghế nha khoa</span>
             </a>
+            <a class="sidebar-link @(currentCtrl == "AdminMedicine" ? "active" : "")" asp-controller="AdminMedicine" asp-action="Index">
+                <i class="bi bi-capsule"></i>
+                <span>Kho Thuốc & Dược Phẩm</span>
+            </a>
 
             <div class="nav-group-title">Người dùng & Phân quyền</div>
             <a class="sidebar-link @(currentCtrl == "AdminUser" ? "active" : "")" asp-controller="AdminUser" asp-action="Index">

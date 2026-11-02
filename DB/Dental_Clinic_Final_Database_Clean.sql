@@ -1,9 +1,9 @@
 ﻿-- =========================================================================================
 -- DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)
--- MASTER CLEAN DATABASE SCHEMA (SCHEMA ONLY - 38 TABLES)
+-- MASTER CLEAN DATABASE SCHEMA (SCHEMA ONLY - 44 TABLES)
 -- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
 -- Database Name: DentalClinicManagementDB
--- Generated: 2026-11-03 00:22:40
+-- Generated: 2026-11-03 00:45:42
 -- =========================================================================================
 
 IF DB_ID(N'DentalClinicManagementDB') IS NULL
@@ -1016,6 +1016,127 @@ CREATE TABLE [dbo].[BlogPostMedia](
 GO
 SET ANSI_PADDING OFF
 GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Medicines](
+	[MedicineId] [bigint] IDENTITY(1,1) NOT NULL,
+	[MedicineCode] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[MedicineName] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ActiveIngredient] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Concentration] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[DosageForm] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Unit] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[UnitPrice] [decimal](18, 2) NOT NULL,
+	[MinimumStockAlert] [int] NOT NULL,
+	[UsageInstructions] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Status] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+ CONSTRAINT [PK_Medicines] PRIMARY KEY CLUSTERED 
+(
+	[MedicineId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_Medicines_MedicineCode] UNIQUE NONCLUSTERED 
+(
+	[MedicineCode] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[MedicineBatches](
+	[MedicineBatchId] [bigint] IDENTITY(1,1) NOT NULL,
+	[MedicineId] [bigint] NOT NULL,
+	[BatchNumber] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ExpiryDate] [date] NOT NULL,
+	[QuantityReceived] [int] NOT NULL,
+	[QuantityAvailable] [int] NOT NULL,
+	[CostPrice] [decimal](18, 2) NOT NULL,
+	[Status] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ReceivedDate] [datetime2](7) NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+ CONSTRAINT [PK_MedicineBatches] PRIMARY KEY CLUSTERED 
+(
+	[MedicineBatchId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_MedicineBatches_Medicine_Batch] UNIQUE NONCLUSTERED 
+(
+	[MedicineId] ASC,
+	[BatchNumber] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[MedicineStockTransactions](
+	[TransactionId] [bigint] IDENTITY(1,1) NOT NULL,
+	[MedicineBatchId] [bigint] NOT NULL,
+	[TransactionType] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Quantity] [int] NOT NULL,
+	[QuantityBefore] [int] NOT NULL,
+	[QuantityAfter] [int] NOT NULL,
+	[Reason] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[PerformedByUserId] [bigint] NOT NULL,
+	[ReferenceCode] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+ CONSTRAINT [PK_MedicineStockTransactions] PRIMARY KEY CLUSTERED 
+(
+	[TransactionId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[MedicineDispensations](
+	[DispensationId] [bigint] IDENTITY(1,1) NOT NULL,
+	[PrescriptionId] [bigint] NOT NULL,
+	[AppointmentId] [bigint] NOT NULL,
+	[PatientUserId] [bigint] NOT NULL,
+	[DentistUserId] [bigint] NOT NULL,
+	[DispensedAt] [datetime2](7) NOT NULL,
+	[Notes] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Status] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+ CONSTRAINT [PK_MedicineDispensations] PRIMARY KEY CLUSTERED 
+(
+	[DispensationId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[MedicineDispensationItems](
+	[DispensationItemId] [bigint] IDENTITY(1,1) NOT NULL,
+	[DispensationId] [bigint] NOT NULL,
+	[PrescriptionItemId] [bigint] NULL,
+	[MedicineId] [bigint] NOT NULL,
+	[MedicineBatchId] [bigint] NOT NULL,
+	[QuantityDispensed] [int] NOT NULL,
+	[UnitPriceSnapshot] [decimal](18, 2) NOT NULL,
+	[TotalPrice] [decimal](18, 2) NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+ CONSTRAINT [PK_MedicineDispensationItems] PRIMARY KEY CLUSTERED 
+(
+	[DispensationItemId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
 SET ANSI_PADDING ON
 
 GO
@@ -1289,6 +1410,38 @@ CREATE NONCLUSTERED INDEX [IX_BlogPostMedia_UploadedByUserId] ON [dbo].[BlogPost
 	[UploadedByUserId] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
+CREATE NONCLUSTERED INDEX [IX_MedicineBatches_MedicineId_Expiry] ON [dbo].[MedicineBatches]
+(
+	[MedicineId] ASC,
+	[ExpiryDate] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_MedicineBatches_Status_Available] ON [dbo].[MedicineBatches]
+(
+	[Status] ASC,
+	[QuantityAvailable] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_MedicineStockTransactions_BatchId] ON [dbo].[MedicineStockTransactions]
+(
+	[MedicineBatchId] ASC,
+	[CreatedAt] DESC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_MedicineDispensations_Appt_Prescription] ON [dbo].[MedicineDispensations]
+(
+	[AppointmentId] ASC,
+	[PrescriptionId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_MedicineDispensationItems_Dispensation] ON [dbo].[MedicineDispensationItems]
+(
+	[DispensationId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
 ALTER TABLE [dbo].[ClinicProfile] ADD  DEFAULT (sysdatetime()) FOR [UpdatedAt]
 GO
 ALTER TABLE [dbo].[UserAccounts] ADD  DEFAULT ('Unverified') FOR [Status]
@@ -1398,6 +1551,30 @@ GO
 ALTER TABLE [dbo].[BlogPosts] ADD  CONSTRAINT [DF_BlogPosts_CreatedAt]  DEFAULT (sysdatetime()) FOR [CreatedAt]
 GO
 ALTER TABLE [dbo].[BlogPostMedia] ADD  CONSTRAINT [DF_BlogPostMedia_CreatedAt]  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[Medicines] ADD  CONSTRAINT [DF_Medicines_MinAlert]  DEFAULT ((20)) FOR [MinimumStockAlert]
+GO
+ALTER TABLE [dbo].[Medicines] ADD  CONSTRAINT [DF_Medicines_Status]  DEFAULT ('Active') FOR [Status]
+GO
+ALTER TABLE [dbo].[Medicines] ADD  CONSTRAINT [DF_Medicines_CreatedAt]  DEFAULT (sysutcdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[MedicineBatches] ADD  CONSTRAINT [DF_MedicineBatches_CostPrice]  DEFAULT ((0)) FOR [CostPrice]
+GO
+ALTER TABLE [dbo].[MedicineBatches] ADD  CONSTRAINT [DF_MedicineBatches_Status]  DEFAULT ('Available') FOR [Status]
+GO
+ALTER TABLE [dbo].[MedicineBatches] ADD  CONSTRAINT [DF_MedicineBatches_ReceivedDate]  DEFAULT (sysutcdatetime()) FOR [ReceivedDate]
+GO
+ALTER TABLE [dbo].[MedicineBatches] ADD  CONSTRAINT [DF_MedicineBatches_CreatedAt]  DEFAULT (sysutcdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions] ADD  CONSTRAINT [DF_MedicineStockTransactions_CreatedAt]  DEFAULT (sysutcdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[MedicineDispensations] ADD  CONSTRAINT [DF_MedicineDispensations_DispensedAt]  DEFAULT (sysutcdatetime()) FOR [DispensedAt]
+GO
+ALTER TABLE [dbo].[MedicineDispensations] ADD  CONSTRAINT [DF_MedicineDispensations_Status]  DEFAULT ('Dispensed') FOR [Status]
+GO
+ALTER TABLE [dbo].[MedicineDispensations] ADD  CONSTRAINT [DF_MedicineDispensations_CreatedAt]  DEFAULT (sysutcdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems] ADD  CONSTRAINT [DF_MedicineDispensationItems_CreatedAt]  DEFAULT (sysutcdatetime()) FOR [CreatedAt]
 GO
 ALTER TABLE [dbo].[PatientProfiles]  WITH CHECK ADD  CONSTRAINT [FK_PatientProfiles_UserAccounts] FOREIGN KEY([UserId])
 REFERENCES [dbo].[UserAccounts] ([UserId])
@@ -1747,6 +1924,64 @@ REFERENCES [dbo].[UserAccounts] ([UserId])
 GO
 ALTER TABLE [dbo].[BlogPostMedia] CHECK CONSTRAINT [FK_BlogPostMedia_UserAccounts]
 GO
+ALTER TABLE [dbo].[MedicineBatches]  WITH CHECK ADD  CONSTRAINT [FK_MedicineBatches_Medicines] FOREIGN KEY([MedicineId])
+REFERENCES [dbo].[Medicines] ([MedicineId])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[MedicineBatches] CHECK CONSTRAINT [FK_MedicineBatches_Medicines]
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions]  WITH CHECK ADD  CONSTRAINT [FK_MedicineStockTransactions_Batches] FOREIGN KEY([MedicineBatchId])
+REFERENCES [dbo].[MedicineBatches] ([MedicineBatchId])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions] CHECK CONSTRAINT [FK_MedicineStockTransactions_Batches]
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions]  WITH CHECK ADD  CONSTRAINT [FK_MedicineStockTransactions_Users] FOREIGN KEY([PerformedByUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions] CHECK CONSTRAINT [FK_MedicineStockTransactions_Users]
+GO
+ALTER TABLE [dbo].[MedicineDispensations]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensations_Appointments] FOREIGN KEY([AppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+GO
+ALTER TABLE [dbo].[MedicineDispensations] CHECK CONSTRAINT [FK_MedicineDispensations_Appointments]
+GO
+ALTER TABLE [dbo].[MedicineDispensations]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensations_Dentist] FOREIGN KEY([DentistUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[MedicineDispensations] CHECK CONSTRAINT [FK_MedicineDispensations_Dentist]
+GO
+ALTER TABLE [dbo].[MedicineDispensations]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensations_Patient] FOREIGN KEY([PatientUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[MedicineDispensations] CHECK CONSTRAINT [FK_MedicineDispensations_Patient]
+GO
+ALTER TABLE [dbo].[MedicineDispensations]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensations_Prescriptions] FOREIGN KEY([PrescriptionId])
+REFERENCES [dbo].[Prescriptions] ([PrescriptionId])
+GO
+ALTER TABLE [dbo].[MedicineDispensations] CHECK CONSTRAINT [FK_MedicineDispensations_Prescriptions]
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensationItems_Batches] FOREIGN KEY([MedicineBatchId])
+REFERENCES [dbo].[MedicineBatches] ([MedicineBatchId])
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems] CHECK CONSTRAINT [FK_MedicineDispensationItems_Batches]
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensationItems_Dispensation] FOREIGN KEY([DispensationId])
+REFERENCES [dbo].[MedicineDispensations] ([DispensationId])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems] CHECK CONSTRAINT [FK_MedicineDispensationItems_Dispensation]
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensationItems_Medicines] FOREIGN KEY([MedicineId])
+REFERENCES [dbo].[Medicines] ([MedicineId])
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems] CHECK CONSTRAINT [FK_MedicineDispensationItems_Medicines]
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems]  WITH CHECK ADD  CONSTRAINT [FK_MedicineDispensationItems_PrescriptionItem] FOREIGN KEY([PrescriptionItemId])
+REFERENCES [dbo].[PrescriptionItems] ([PrescriptionItemId])
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems] CHECK CONSTRAINT [FK_MedicineDispensationItems_PrescriptionItem]
+GO
 ALTER TABLE [dbo].[ClinicProfile]  WITH CHECK ADD CHECK  (([ClinicId]=(1)))
 GO
 ALTER TABLE [dbo].[ClinicProfile]  WITH CHECK ADD  CONSTRAINT [CK_ClinicProfile_OpenClose] CHECK  (([ClosingTime] IS NULL OR [OpeningTime] IS NULL OR [ClosingTime]>[OpeningTime]))
@@ -1888,4 +2123,28 @@ GO
 ALTER TABLE [dbo].[BlogPostMedia]  WITH CHECK ADD  CONSTRAINT [CK_BlogPostMedia_Type] CHECK  (([MediaType]='Video' OR [MediaType]='Image'))
 GO
 ALTER TABLE [dbo].[BlogPostMedia] CHECK CONSTRAINT [CK_BlogPostMedia_Type]
+GO
+ALTER TABLE [dbo].[Medicines]  WITH CHECK ADD  CONSTRAINT [CHK_Medicines_MinAlert] CHECK  (([MinimumStockAlert]>=(0)))
+GO
+ALTER TABLE [dbo].[Medicines] CHECK CONSTRAINT [CHK_Medicines_MinAlert]
+GO
+ALTER TABLE [dbo].[Medicines]  WITH CHECK ADD  CONSTRAINT [CHK_Medicines_UnitPrice] CHECK  (([UnitPrice]>=(0)))
+GO
+ALTER TABLE [dbo].[Medicines] CHECK CONSTRAINT [CHK_Medicines_UnitPrice]
+GO
+ALTER TABLE [dbo].[MedicineBatches]  WITH CHECK ADD  CONSTRAINT [CHK_MedicineBatches_CostPrice] CHECK  (([CostPrice]>=(0)))
+GO
+ALTER TABLE [dbo].[MedicineBatches] CHECK CONSTRAINT [CHK_MedicineBatches_CostPrice]
+GO
+ALTER TABLE [dbo].[MedicineBatches]  WITH CHECK ADD  CONSTRAINT [CHK_MedicineBatches_Qty] CHECK  (([QuantityReceived]>=(0) AND [QuantityAvailable]>=(0) AND [QuantityAvailable]<=[QuantityReceived]))
+GO
+ALTER TABLE [dbo].[MedicineBatches] CHECK CONSTRAINT [CHK_MedicineBatches_Qty]
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions]  WITH CHECK ADD  CONSTRAINT [CHK_MedicineStockTransactions_Qty] CHECK  (([Quantity]>(0)))
+GO
+ALTER TABLE [dbo].[MedicineStockTransactions] CHECK CONSTRAINT [CHK_MedicineStockTransactions_Qty]
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems]  WITH CHECK ADD  CONSTRAINT [CHK_MedicineDispensationItems_Qty] CHECK  (([QuantityDispensed]>(0)))
+GO
+ALTER TABLE [dbo].[MedicineDispensationItems] CHECK CONSTRAINT [CHK_MedicineDispensationItems_Qty]
 GO

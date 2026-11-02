@@ -3,7 +3,7 @@
 # Purpose: Exports clean schema and complete seed dataset directly from the
 #          live, verified DentalClinicManagementDB instance using SMO.
 # Output:
-#   1. DB\Dental_Clinic_Final_Database_Clean.sql (Schema Only: 39 tables, constraints, indexes)
+#   1. DB\Dental_Clinic_Final_Database_Clean.sql (Schema Only: 44 tables, constraints, indexes)
 #   2. DB\DentalClinic_Full_Database_And_Data.sql (Full DB: Schema + Complete UTF-8 Data)
 #   3. DB\DentalClinicManagementDB.bak (Standard SQL Server compressed backup)
 # ==============================================================================
@@ -30,7 +30,7 @@ if ($null -eq $db) {
 
 Write-Host ">>> Connected to $ServerInstance - Database: $DatabaseName" -ForegroundColor Green
 
-# 39 tables in topological dependency order
+# 44 tables in topological dependency order
 $orderedTableNames = @(
     'ClinicProfile', 'UserAccounts', 'PatientProfiles', 'StaffProfiles', 'DentistProfiles',
     'Departments', 'DentistDepartments', 'DepartmentWorkSchedules', 'DentistWorkSchedules',
@@ -40,7 +40,8 @@ $orderedTableNames = @(
     'TreatmentPlans', 'TreatmentPlanItems', 'TreatmentSessions', 'PerformedServices',
     'Prescriptions', 'PrescriptionItems', 'DepartmentReferrals', 'FollowUpSchedules',
     'Invoices', 'InvoiceItems', 'Payments', 'VisitFeedback', 'AuditLogs',
-    'BlogCategories', 'BlogPosts', 'BlogPostMedia'
+    'BlogCategories', 'BlogPosts', 'BlogPostMedia',
+    'Medicines', 'MedicineBatches', 'MedicineStockTransactions', 'MedicineDispensations', 'MedicineDispensationItems'
 )
 
 $tables = @()
@@ -75,7 +76,7 @@ $schemaScripter.Options.SchemaQualify = $true
 $schemaBuilder = New-Object System.Text.StringBuilder
 [void]$schemaBuilder.AppendLine("-- =========================================================================================")
 [void]$schemaBuilder.AppendLine("-- DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)")
-[void]$schemaBuilder.AppendLine("-- MASTER CLEAN DATABASE SCHEMA (SCHEMA ONLY - 38 TABLES)")
+[void]$schemaBuilder.AppendLine("-- MASTER CLEAN DATABASE SCHEMA (SCHEMA ONLY - 44 TABLES)")
 [void]$schemaBuilder.AppendLine("-- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS")
 [void]$schemaBuilder.AppendLine("-- Database Name: DentalClinicManagementDB")
 [void]$schemaBuilder.AppendLine("-- Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
@@ -152,7 +153,7 @@ foreach ($line in $schemaLines) {
 
 [void]$fullBuilder.AppendLine("")
 [void]$fullBuilder.AppendLine("-- =========================================================================================")
-[void]$fullBuilder.AppendLine("-- PART 2: COMPLETE SYSTEM DATASET SEEDING (38 TABLES, UTF-8 ACCENTED VIETNAMESE)")
+[void]$fullBuilder.AppendLine("-- PART 2: COMPLETE SYSTEM DATASET SEEDING (44 TABLES, UTF-8 ACCENTED VIETNAMESE)")
 [void]$fullBuilder.AppendLine("-- =========================================================================================")
 [void]$fullBuilder.AppendLine("")
 [void]$fullBuilder.AppendLine("-- Disable foreign key checks during data loading")

@@ -69,7 +69,8 @@ public static class DependencyInjection
         services.AddScoped<IPostCareService, PostCareService>();
         services.AddScoped<ISupportService, SupportService>();
         services.AddScoped<IBlogService, BlogService>();
-        services.AddScoped<IAppointmentReminderService, AppointmentReminderService>();
+        services.AddScoped<IAppointmentReminderService, AppointmentReminderService>();
+        services.AddScoped<IMedicineService, MedicineService>();
         services.AddHostedService<AppointmentReminderBackgroundWorker>();
 
         return services;
