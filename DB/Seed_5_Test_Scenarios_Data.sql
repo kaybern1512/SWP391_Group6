@@ -257,6 +257,12 @@ BEGIN TRY
         );
     END;
 
+    -- 11. Chuẩn hóa tên Khoa Chuẩn Đoán Hình Ảnh & Laser
+    UPDATE Departments 
+    SET Name = N'Khoa Chuẩn Đoán Hình Ảnh & Laser',
+        Description = N'Chuyên chụp CT ConeBeam 3D'
+    WHERE DepartmentId = 5;
+
     COMMIT TRANSACTION;
     PRINT N'>>> NẠP DỮ LIỆU ĐẦY ĐỦ CHO 5 KỊCH BẢN THÀNH CÔNG!';
 END TRY
