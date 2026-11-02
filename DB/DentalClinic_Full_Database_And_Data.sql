@@ -1,16 +1,11 @@
--- =========================================================================================
+﻿-- =========================================================================================
 -- DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)
--- FULL DATABASE SCHEMA & COMPLETE 30+ DEMO ACCOUNTS SEED DATASET
--- Target: SQL Server (2017 / 2019 / 2022 / LocalDB / SQLEXPRESS)
+-- FULL DATABASE SCHEMA & COMPLETE VERIFIED SEED DATASET (38 TABLES)
+-- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
 -- Database Name: DentalClinicManagementDB
--- Shared Demo Password for ALL 33 Accounts: Password123@
+-- Shared Demo Password for ALL Accounts: Password123@
+-- Generated: 2026-11-02 23:40:40
 -- =========================================================================================
-
--- Dental Clinic Management System - CLEAN FINAL SINGLE-CLINIC SCHEMA
--- Target: SQL Server
--- Scope: Single clinic, multi-specialty dental clinic
--- Short-lived OTP/reset data is handled outside SQL Server (e.g. IMemoryCache).
--- No AccountVerifications / PasswordResetTokens / RefreshTokens / ExternalLogins tables.
 
 IF DB_ID(N'DentalClinicManagementDB') IS NULL
 BEGIN
@@ -25,1093 +20,3480 @@ SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
 GO
 
-CREATE TABLE ClinicProfile (
-    ClinicId INT NOT NULL CONSTRAINT PK_ClinicProfile PRIMARY KEY CHECK (ClinicId = 1),
-    Name NVARCHAR(200) NOT NULL,
-    Address NVARCHAR(300) NOT NULL,
-    PhoneNumber VARCHAR(20) NULL,
-    Email VARCHAR(150) NULL,
-    Description NVARCHAR(1000) NULL,
-    OpeningTime TIME NULL,
-    ClosingTime TIME NULL,
-    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    CONSTRAINT CK_ClinicProfile_OpenClose CHECK (ClosingTime IS NULL OR OpeningTime IS NULL OR ClosingTime > OpeningTime)
-);
-GO
+-- =========================================================================================
+-- PART 1: DDL TABLE SCHEMAS, CONSTRAINTS & INDEXES
+-- =========================================================================================
 
-CREATE TABLE UserAccounts (
-    UserId BIGINT IDENTITY(1,1) PRIMARY KEY,
-    Email VARCHAR(150) NULL,
-    PhoneNumber VARCHAR(20) NULL,
-    PasswordHash VARCHAR(255) NULL,
-    Role VARCHAR(40) NOT NULL CHECK (Role IN ('Patient','Receptionist','Dentist','DepartmentManager','SystemAdministrator')),
-    Status VARCHAR(30) NOT NULL DEFAULT 'Unverified' CHECK (Status IN ('Unverified','Active','Locked','Inactive')),
-    EmailVerifiedAt DATETIME2 NULL,
-    AvatarUrl NVARCHAR(500) NULL,
-    LastLoginAt DATETIME2 NULL,
-    FailedLoginCount INT NOT NULL DEFAULT 0 CHECK (FailedLoginCount >= 0),
-    LockoutEnd DATETIME2 NULL,
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    UpdatedAt DATETIME2 NULL
-);
+SET ANSI_NULLS ON
 GO
-
-CREATE TABLE PatientProfiles (
-    UserId BIGINT NOT NULL CONSTRAINT PK_PatientProfiles PRIMARY KEY,
-    PatientCode VARCHAR(30) NOT NULL UNIQUE,
-    FullName NVARCHAR(150) NOT NULL,
-    DateOfBirth DATE NULL,
-    Gender VARCHAR(20) NULL CHECK (Gender IS NULL OR Gender IN ('Male','Female','Other')),
-    NationalId VARCHAR(30) NULL,
-    HealthInsuranceNumber VARCHAR(50) NULL,
-    Address NVARCHAR(300) NULL,
-    EmergencyContact NVARCHAR(150) NULL,
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    UpdatedAt DATETIME2 NULL,
-    CONSTRAINT FK_PatientProfiles_UserAccounts FOREIGN KEY (UserId) REFERENCES UserAccounts(UserId)
-);
+SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE TABLE StaffProfiles (
-    UserId BIGINT NOT NULL CONSTRAINT PK_StaffProfiles PRIMARY KEY,
-    EmployeeCode VARCHAR(30) NOT NULL UNIQUE,
-    FullName NVARCHAR(150) NOT NULL,
-    EmploymentStatus VARCHAR(30) NOT NULL DEFAULT 'Active' CHECK (EmploymentStatus IN ('Active','Inactive')),
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    UpdatedAt DATETIME2 NULL,
-    CONSTRAINT FK_StaffProfiles_UserAccounts FOREIGN KEY (UserId) REFERENCES UserAccounts(UserId)
-);
+SET ANSI_PADDING ON
 GO
-
-CREATE TABLE DentistProfiles (
-    UserId BIGINT NOT NULL CONSTRAINT PK_DentistProfiles PRIMARY KEY,
-    LicenseNumber VARCHAR(80) NULL,
-    Qualification NVARCHAR(300) NULL,
-    YearsOfExperience INT NULL CHECK (YearsOfExperience IS NULL OR YearsOfExperience >= 0),
-    Biography NVARCHAR(1000) NULL,
-    CONSTRAINT FK_DentistProfiles_StaffProfiles FOREIGN KEY (UserId) REFERENCES StaffProfiles(UserId)
-);
-GO
-
-CREATE TABLE Departments (
-    DepartmentId BIGINT IDENTITY PRIMARY KEY,
-    Name NVARCHAR(150) NOT NULL UNIQUE,
-    Description NVARCHAR(1000) NULL,
-    ManagerUserId BIGINT NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Active' CHECK (Status IN ('Active','Inactive')),
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    UpdatedAt DATETIME2 NULL,
-    CONSTRAINT FK_Departments_ManagerUser FOREIGN KEY (ManagerUserId) REFERENCES StaffProfiles(UserId)
-);
-GO
-
-CREATE TABLE DentistDepartments (
-    DentistDepartmentId BIGINT IDENTITY PRIMARY KEY,
-    DentistUserId BIGINT NOT NULL,
-    DepartmentId BIGINT NOT NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Active' CHECK (Status IN ('Active','Inactive')),
-    AssignedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    CONSTRAINT UQ_DentistDepartments UNIQUE (DentistUserId, DepartmentId),
-    CONSTRAINT FK_DentistDepartments_Dentist FOREIGN KEY (DentistUserId) REFERENCES DentistProfiles(UserId),
-    CONSTRAINT FK_DentistDepartments_Department FOREIGN KEY (DepartmentId) REFERENCES Departments(DepartmentId)
-);
-GO
-
-CREATE TABLE DepartmentWorkSchedules (
-    DepartmentScheduleId BIGINT IDENTITY PRIMARY KEY,
-    DepartmentId BIGINT NOT NULL,
-    DayOfWeek TINYINT NOT NULL CHECK (DayOfWeek BETWEEN 1 AND 7),
-    StartTime TIME NOT NULL,
-    EndTime TIME NOT NULL,
-    IsActive BIT NOT NULL DEFAULT 1,
-    CONSTRAINT CK_DepartmentWorkSchedules_Time CHECK (EndTime > StartTime),
-    CONSTRAINT UQ_DepartmentWorkSchedules UNIQUE (DepartmentId, DayOfWeek, StartTime, EndTime),
-    CONSTRAINT FK_DepartmentWorkSchedules_Department FOREIGN KEY (DepartmentId) REFERENCES Departments(DepartmentId)
-);
-GO
-
-CREATE TABLE DentistWorkSchedules (
-    DentistScheduleId BIGINT IDENTITY PRIMARY KEY,
-    DentistUserId BIGINT NOT NULL,
-    DepartmentId BIGINT NOT NULL,
-    WorkDate DATE NOT NULL,
-    StartTime TIME NOT NULL,
-    EndTime TIME NOT NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Scheduled' CHECK (Status IN ('Scheduled','Cancelled')),
-    Note NVARCHAR(500) NULL,
-    CONSTRAINT CK_DentistWorkSchedules_Time CHECK (EndTime > StartTime),
-    CONSTRAINT UQ_DentistWorkSchedules UNIQUE (DentistUserId, DepartmentId, WorkDate, StartTime, EndTime),
-    CONSTRAINT FK_DentistWorkSchedules_Dentist FOREIGN KEY (DentistUserId) REFERENCES DentistProfiles(UserId),
-    CONSTRAINT FK_DentistWorkSchedules_Department FOREIGN KEY (DepartmentId) REFERENCES Departments(DepartmentId)
-);
-GO
-
-CREATE TABLE DentistAvailability (
-    AvailabilityId BIGINT IDENTITY PRIMARY KEY,
-    DentistUserId BIGINT NOT NULL,
-    StartDateTime DATETIME2 NOT NULL,
-    EndDateTime DATETIME2 NULL,
-    AvailabilityStatus VARCHAR(30) NOT NULL CHECK (AvailabilityStatus IN ('Available','Busy','OnLeave','Unavailable')),
-    Reason NVARCHAR(500) NULL,
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    CONSTRAINT CK_DentistAvailability_Time CHECK (EndDateTime IS NULL OR EndDateTime > StartDateTime),
-    CONSTRAINT FK_DentistAvailability_Dentist FOREIGN KEY (DentistUserId) REFERENCES DentistProfiles(UserId)
-);
-GO
-
-CREATE TABLE Rooms (
-    RoomId BIGINT IDENTITY PRIMARY KEY,
-    RoomCode VARCHAR(30) NOT NULL UNIQUE,
-    RoomName NVARCHAR(100) NULL,
-    DepartmentId BIGINT NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Active' CHECK (Status IN ('Active','Inactive','Maintenance')),
-    CONSTRAINT FK_Rooms_Department FOREIGN KEY (DepartmentId) REFERENCES Departments(DepartmentId)
-);
-GO
-
-CREATE TABLE DentalChairs (
-    DentalChairId BIGINT IDENTITY PRIMARY KEY,
-    RoomId BIGINT NOT NULL,
-    ChairCode VARCHAR(30) NOT NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Active' CHECK (Status IN ('Active','Inactive','Maintenance')),
-    CONSTRAINT UQ_DentalChairs UNIQUE (RoomId, ChairCode),
-    CONSTRAINT FK_DentalChairs_Room FOREIGN KEY (RoomId) REFERENCES Rooms(RoomId)
-);
-GO
-
-CREATE TABLE DepartmentServices (
-    DepartmentServiceId BIGINT IDENTITY PRIMARY KEY,
-    DepartmentId BIGINT NOT NULL,
-    ServiceName NVARCHAR(200) NOT NULL,
-    Description NVARCHAR(1000) NULL,
-    DurationMinutes INT NULL,
-    Price DECIMAL(18,2) NOT NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Active' CHECK (Status IN ('Active','Inactive')),
-    CONSTRAINT CK_DepartmentServices_Duration CHECK (DurationMinutes IS NULL OR DurationMinutes > 0),
-    CONSTRAINT CK_DepartmentServices_Price CHECK (Price >= 0),
-    CONSTRAINT UQ_DepartmentServices UNIQUE (DepartmentId, ServiceName),
-    CONSTRAINT FK_DepartmentServices_Department FOREIGN KEY (DepartmentId) REFERENCES Departments(DepartmentId)
-);
-GO
-
-CREATE TABLE Appointments (
-    AppointmentId BIGINT IDENTITY PRIMARY KEY,
-    AppointmentCode VARCHAR(30) NOT NULL UNIQUE,
-    PatientUserId BIGINT NOT NULL,
-    DepartmentId BIGINT NULL,
-    RequestedServiceId BIGINT NULL,
-    RequestedDentistUserId BIGINT NULL,
-    AssignedDentistUserId BIGINT NULL,
-    RoomId BIGINT NULL,
-    DentalChairId BIGINT NULL,
-    ScheduledStart DATETIME2 NULL,
-    ScheduledEnd DATETIME2 NULL,
-    ReasonForVisit NVARCHAR(1000) NOT NULL,
-    BookingSource VARCHAR(20) NOT NULL CHECK (BookingSource IN ('Patient','Receptionist')),
-    QueueNumber VARCHAR(30) NULL,
-    Status VARCHAR(50) NOT NULL DEFAULT 'PendingReceptionReview' CHECK (Status IN (
-        'PendingReceptionReview','PendingDepartmentReview','AwaitingPatientResponse','Confirmed','CheckedIn','Waiting','Called','InService','Completed','Rejected','Withdrawn','Expired','Cancelled','NoShow')),
-    CreatedByUserId BIGINT NULL,
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    ConfirmedAt DATETIME2 NULL,
-    CheckedInAt DATETIME2 NULL,
-    CompletedAt DATETIME2 NULL,
-    CancelledAt DATETIME2 NULL,
-    CancellationReason NVARCHAR(500) NULL,
-    UpdatedAt DATETIME2 NULL,
-    CONSTRAINT CK_Appointments_Schedule CHECK (ScheduledEnd IS NULL OR ScheduledStart IS NULL OR ScheduledEnd > ScheduledStart),
-    CONSTRAINT FK_Appointments_Patient FOREIGN KEY (PatientUserId) REFERENCES PatientProfiles(UserId),
-    CONSTRAINT FK_Appointments_Department FOREIGN KEY (DepartmentId) REFERENCES Departments(DepartmentId),
-    CONSTRAINT FK_Appointments_Service FOREIGN KEY (RequestedServiceId) REFERENCES DepartmentServices(DepartmentServiceId),
-    CONSTRAINT FK_Appointments_RequestedDentist FOREIGN KEY (RequestedDentistUserId) REFERENCES DentistProfiles(UserId),
-    CONSTRAINT FK_Appointments_AssignedDentist FOREIGN KEY (AssignedDentistUserId) REFERENCES DentistProfiles(UserId),
-    CONSTRAINT FK_Appointments_Room FOREIGN KEY (RoomId) REFERENCES Rooms(RoomId),
-    CONSTRAINT FK_Appointments_Chair FOREIGN KEY (DentalChairId) REFERENCES DentalChairs(DentalChairId),
-    CONSTRAINT FK_Appointments_CreatedBy FOREIGN KEY (CreatedByUserId) REFERENCES UserAccounts(UserId)
-);
-GO
-
-CREATE TABLE AppointmentChangeProposals (
-    ProposalId BIGINT IDENTITY PRIMARY KEY,
-    AppointmentId BIGINT NOT NULL,
-    ProposedByUserId BIGINT NOT NULL,
-    ProposedDepartmentId BIGINT NULL,
-    ProposedDentistUserId BIGINT NULL,
-    ProposedStart DATETIME2 NULL,
-    ProposedEnd DATETIME2 NULL,
-    Reason NVARCHAR(1000) NOT NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Pending' CHECK (Status IN ('Pending','Accepted','Rejected','Expired')),
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    RespondedAt DATETIME2 NULL,
-    CONSTRAINT CK_AppointmentChangeProposals_Time CHECK (ProposedEnd IS NULL OR ProposedStart IS NULL OR ProposedEnd > ProposedStart),
-    CONSTRAINT FK_AppointmentChangeProposals_Appointment FOREIGN KEY (AppointmentId) REFERENCES Appointments(AppointmentId),
-    CONSTRAINT FK_AppointmentChangeProposals_User FOREIGN KEY (ProposedByUserId) REFERENCES UserAccounts(UserId),
-    CONSTRAINT FK_AppointmentChangeProposals_Department FOREIGN KEY (ProposedDepartmentId) REFERENCES Departments(DepartmentId),
-    CONSTRAINT FK_AppointmentChangeProposals_Dentist FOREIGN KEY (ProposedDentistUserId) REFERENCES DentistProfiles(UserId)
-);
-GO
-
-CREATE TABLE AppointmentStatusHistories (
-    HistoryId BIGINT IDENTITY PRIMARY KEY,
-    AppointmentId BIGINT NOT NULL,
-    OldStatus VARCHAR(50) NULL,
-    NewStatus VARCHAR(50) NOT NULL,
-    ChangedByUserId BIGINT NULL,
-    Note NVARCHAR(500) NULL,
-    ChangedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    CONSTRAINT FK_AppointmentStatusHistories_Appointment FOREIGN KEY (AppointmentId) REFERENCES Appointments(AppointmentId),
-    CONSTRAINT FK_AppointmentStatusHistories_User FOREIGN KEY (ChangedByUserId) REFERENCES UserAccounts(UserId)
-);
-GO
-
-CREATE TABLE Notifications (
-    NotificationId BIGINT IDENTITY PRIMARY KEY,
-    UserId BIGINT NOT NULL,
-    AppointmentId BIGINT NULL,
-    Type VARCHAR(50) NOT NULL,
-    Channel VARCHAR(30) NOT NULL DEFAULT 'InApp' CHECK (Channel IN ('InApp','Email')),
-    Subject NVARCHAR(250) NULL,
-    Content NVARCHAR(MAX) NOT NULL,
-    DeliveryStatus VARCHAR(30) NOT NULL DEFAULT 'Pending' CHECK (DeliveryStatus IN ('Pending','Sent','Failed','Read')),
-    SentAt DATETIME2 NULL,
-    ReadAt DATETIME2 NULL,
-    CONSTRAINT FK_Notifications_User FOREIGN KEY (UserId) REFERENCES UserAccounts(UserId),
-    CONSTRAINT FK_Notifications_Appointment FOREIGN KEY (AppointmentId) REFERENCES Appointments(AppointmentId)
-);
-GO
-
-CREATE TABLE DentalMedicalRecords (
-    MedicalRecordId BIGINT IDENTITY PRIMARY KEY,
-    PatientUserId BIGINT NOT NULL UNIQUE,
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    UpdatedAt DATETIME2 NULL,
-    CONSTRAINT FK_DentalMedicalRecords_Patient FOREIGN KEY (PatientUserId) REFERENCES PatientProfiles(UserId)
-);
-GO
-
-CREATE TABLE ClinicalEntries (
-    ClinicalEntryId BIGINT IDENTITY PRIMARY KEY,
-    MedicalRecordId BIGINT NOT NULL,
-    AppointmentId BIGINT NULL,
-    DentistUserId BIGINT NOT NULL,
-    Symptoms NVARCHAR(MAX) NULL,
-    ClinicalFindings NVARCHAR(MAX) NULL,
-    Diagnosis NVARCHAR(MAX) NULL,
-    DentalConditions NVARCHAR(MAX) NULL,
-    ClinicalNotes NVARCHAR(MAX) NULL,
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    UpdatedAt DATETIME2 NULL,
-    CONSTRAINT FK_ClinicalEntries_Record FOREIGN KEY (MedicalRecordId) REFERENCES DentalMedicalRecords(MedicalRecordId),
-    CONSTRAINT FK_ClinicalEntries_Appointment FOREIGN KEY (AppointmentId) REFERENCES Appointments(AppointmentId),
-    CONSTRAINT FK_ClinicalEntries_Dentist FOREIGN KEY (DentistUserId) REFERENCES DentistProfiles(UserId)
-);
-GO
-
-CREATE TABLE OdontogramEntries (
-    OdontogramEntryId BIGINT IDENTITY PRIMARY KEY,
-    ClinicalEntryId BIGINT NOT NULL,
-    ToothNumber VARCHAR(10) NOT NULL,
-    Surface VARCHAR(30) NULL,
-    Condition NVARCHAR(200) NOT NULL,
-    Note NVARCHAR(500) NULL,
-    CONSTRAINT FK_OdontogramEntries_ClinicalEntry FOREIGN KEY (ClinicalEntryId) REFERENCES ClinicalEntries(ClinicalEntryId)
-);
-GO
-
-CREATE TABLE ImagingRecords (
-    ImagingRecordId BIGINT IDENTITY PRIMARY KEY,
-    ClinicalEntryId BIGINT NOT NULL,
-    ImagingType VARCHAR(50) NOT NULL,
-    FileUrl NVARCHAR(500) NULL,
-    ResultSummary NVARCHAR(MAX) NULL,
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    CONSTRAINT FK_ImagingRecords_ClinicalEntry FOREIGN KEY (ClinicalEntryId) REFERENCES ClinicalEntries(ClinicalEntryId)
-);
-GO
-
-CREATE TABLE TreatmentPlans (
-    TreatmentPlanId BIGINT IDENTITY PRIMARY KEY,
-    PatientUserId BIGINT NOT NULL,
-    DepartmentId BIGINT NOT NULL,
-    CreatedByDentistUserId BIGINT NOT NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Planned' CHECK (Status IN ('Planned','InProgress','Completed','Cancelled')),
-    EstimatedTotal DECIMAL(18,2) NULL,
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    UpdatedAt DATETIME2 NULL,
-    CONSTRAINT CK_TreatmentPlans_EstimatedTotal CHECK (EstimatedTotal IS NULL OR EstimatedTotal >= 0),
-    CONSTRAINT FK_TreatmentPlans_Patient FOREIGN KEY (PatientUserId) REFERENCES PatientProfiles(UserId),
-    CONSTRAINT FK_TreatmentPlans_Department FOREIGN KEY (DepartmentId) REFERENCES Departments(DepartmentId),
-    CONSTRAINT FK_TreatmentPlans_Dentist FOREIGN KEY (CreatedByDentistUserId) REFERENCES DentistProfiles(UserId)
-);
-GO
-
-CREATE TABLE TreatmentPlanItems (
-    TreatmentPlanItemId BIGINT IDENTITY PRIMARY KEY,
-    TreatmentPlanId BIGINT NOT NULL,
-    DepartmentServiceId BIGINT NULL,
-    AssignedDentistUserId BIGINT NULL,
-    ToothNumber VARCHAR(10) NULL,
-    SequenceNo INT NOT NULL,
-    ExpectedDate DATE NULL,
-    EstimatedCost DECIMAL(18,2) NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Planned' CHECK (Status IN ('Planned','InProgress','Completed','Cancelled')),
-    Note NVARCHAR(500) NULL,
-    CONSTRAINT CK_TreatmentPlanItems_Sequence CHECK (SequenceNo > 0),
-    CONSTRAINT CK_TreatmentPlanItems_Cost CHECK (EstimatedCost IS NULL OR EstimatedCost >= 0),
-    CONSTRAINT UQ_TreatmentPlanItems_Sequence UNIQUE (TreatmentPlanId, SequenceNo),
-    CONSTRAINT FK_TreatmentPlanItems_Plan FOREIGN KEY (TreatmentPlanId) REFERENCES TreatmentPlans(TreatmentPlanId),
-    CONSTRAINT FK_TreatmentPlanItems_Service FOREIGN KEY (DepartmentServiceId) REFERENCES DepartmentServices(DepartmentServiceId),
-    CONSTRAINT FK_TreatmentPlanItems_Dentist FOREIGN KEY (AssignedDentistUserId) REFERENCES DentistProfiles(UserId)
-);
-GO
-
-CREATE TABLE TreatmentSessions (
-    TreatmentSessionId BIGINT IDENTITY PRIMARY KEY,
-    TreatmentPlanItemId BIGINT NOT NULL,
-    AppointmentId BIGINT NOT NULL,
-    DentistUserId BIGINT NOT NULL,
-    SessionDate DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    TreatmentResult NVARCHAR(MAX) NULL,
-    ClinicalNote NVARCHAR(MAX) NULL,
-    CONSTRAINT FK_TreatmentSessions_Item FOREIGN KEY (TreatmentPlanItemId) REFERENCES TreatmentPlanItems(TreatmentPlanItemId),
-    CONSTRAINT FK_TreatmentSessions_Appointment FOREIGN KEY (AppointmentId) REFERENCES Appointments(AppointmentId),
-    CONSTRAINT FK_TreatmentSessions_Dentist FOREIGN KEY (DentistUserId) REFERENCES DentistProfiles(UserId)
-);
-GO
-
-CREATE TABLE PerformedServices (
-    PerformedServiceId BIGINT IDENTITY PRIMARY KEY,
-    TreatmentSessionId BIGINT NOT NULL,
-    DepartmentServiceId BIGINT NOT NULL,
-    Quantity INT NOT NULL DEFAULT 1,
-    UnitPrice DECIMAL(18,2) NOT NULL,
-    Amount AS (Quantity * UnitPrice) PERSISTED,
-    CONSTRAINT CK_PerformedServices_Quantity CHECK (Quantity > 0),
-    CONSTRAINT CK_PerformedServices_UnitPrice CHECK (UnitPrice >= 0),
-    CONSTRAINT FK_PerformedServices_Session FOREIGN KEY (TreatmentSessionId) REFERENCES TreatmentSessions(TreatmentSessionId),
-    CONSTRAINT FK_PerformedServices_Service FOREIGN KEY (DepartmentServiceId) REFERENCES DepartmentServices(DepartmentServiceId)
-);
-GO
-
-CREATE TABLE Prescriptions (
-    PrescriptionId BIGINT IDENTITY PRIMARY KEY,
-    TreatmentSessionId BIGINT NOT NULL UNIQUE,
-    GeneralInstructions NVARCHAR(MAX) NULL,
-    IssuedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    CONSTRAINT FK_Prescriptions_TreatmentSession FOREIGN KEY (TreatmentSessionId) REFERENCES TreatmentSessions(TreatmentSessionId)
-);
-GO
-
-CREATE TABLE PrescriptionItems (
-    PrescriptionItemId BIGINT IDENTITY PRIMARY KEY,
-    PrescriptionId BIGINT NOT NULL,
-    MedicationName NVARCHAR(200) NOT NULL,
-    Dosage NVARCHAR(100) NULL,
-    Frequency NVARCHAR(100) NULL,
-    Duration NVARCHAR(100) NULL,
-    Instructions NVARCHAR(500) NULL,
-    CONSTRAINT FK_PrescriptionItems_Prescription FOREIGN KEY (PrescriptionId) REFERENCES Prescriptions(PrescriptionId)
-);
-GO
-
-CREATE TABLE DepartmentReferrals (
-    ReferralId BIGINT IDENTITY PRIMARY KEY,
-    TreatmentSessionId BIGINT NOT NULL,
-    FromDepartmentId BIGINT NOT NULL,
-    ToDepartmentId BIGINT NOT NULL,
-    AssignedDentistUserId BIGINT NULL,
-    ReviewedByUserId BIGINT NULL,
-    Reason NVARCHAR(1000) NOT NULL,
-    Urgency VARCHAR(20) NOT NULL DEFAULT 'Normal' CHECK (Urgency IN ('Normal','Urgent')),
-    Status VARCHAR(30) NOT NULL DEFAULT 'Pending' CHECK (Status IN ('Pending','Accepted','Rejected','Assigned','Completed')),
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    ReviewedAt DATETIME2 NULL,
-    CONSTRAINT CK_DepartmentReferrals_DifferentDepartment CHECK (FromDepartmentId <> ToDepartmentId),
-    CONSTRAINT FK_DepartmentReferrals_TreatmentSession FOREIGN KEY (TreatmentSessionId) REFERENCES TreatmentSessions(TreatmentSessionId),
-    CONSTRAINT FK_DepartmentReferrals_FromDepartment FOREIGN KEY (FromDepartmentId) REFERENCES Departments(DepartmentId),
-    CONSTRAINT FK_DepartmentReferrals_ToDepartment FOREIGN KEY (ToDepartmentId) REFERENCES Departments(DepartmentId),
-    CONSTRAINT FK_DepartmentReferrals_AssignedDentist FOREIGN KEY (AssignedDentistUserId) REFERENCES DentistProfiles(UserId),
-    CONSTRAINT FK_DepartmentReferrals_ReviewedByUser FOREIGN KEY (ReviewedByUserId) REFERENCES StaffProfiles(UserId)
-);
-GO
-
-CREATE TABLE FollowUpSchedules (
-    FollowUpId BIGINT IDENTITY PRIMARY KEY,
-    TreatmentSessionId BIGINT NOT NULL,
-    RecommendedDate DATETIME2 NOT NULL,
-    Reason NVARCHAR(500) NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Pending' CHECK (Status IN ('Pending','Scheduled','Completed','Cancelled')),
-    AppointmentId BIGINT NULL,
-    CONSTRAINT FK_FollowUpSchedules_TreatmentSession FOREIGN KEY (TreatmentSessionId) REFERENCES TreatmentSessions(TreatmentSessionId),
-    CONSTRAINT FK_FollowUpSchedules_Appointment FOREIGN KEY (AppointmentId) REFERENCES Appointments(AppointmentId)
-);
-GO
-
-CREATE TABLE Invoices (
-    InvoiceId BIGINT IDENTITY PRIMARY KEY,
-    InvoiceCode VARCHAR(30) NOT NULL UNIQUE,
-    AppointmentId BIGINT NOT NULL UNIQUE,
-    GeneratedByUserId BIGINT NOT NULL,
-    TotalAmount DECIMAL(18,2) NOT NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Unpaid' CHECK (Status IN ('Unpaid','PartiallyPaid','Paid','Cancelled')),
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    CONSTRAINT CK_Invoices_Total CHECK (TotalAmount >= 0),
-    CONSTRAINT FK_Invoices_Appointment FOREIGN KEY (AppointmentId) REFERENCES Appointments(AppointmentId),
-    CONSTRAINT FK_Invoices_GeneratedByUser FOREIGN KEY (GeneratedByUserId) REFERENCES StaffProfiles(UserId)
-);
-GO
-
-CREATE TABLE InvoiceItems (
-    InvoiceItemId BIGINT IDENTITY PRIMARY KEY,
-    InvoiceId BIGINT NOT NULL,
-    PerformedServiceId BIGINT NULL,
-    Description NVARCHAR(250) NOT NULL,
-    Quantity INT NOT NULL DEFAULT 1,
-    UnitPrice DECIMAL(18,2) NOT NULL,
-    Amount AS (Quantity * UnitPrice) PERSISTED,
-    CONSTRAINT CK_InvoiceItems_Quantity CHECK (Quantity > 0),
-    CONSTRAINT CK_InvoiceItems_UnitPrice CHECK (UnitPrice >= 0),
-    CONSTRAINT FK_InvoiceItems_Invoice FOREIGN KEY (InvoiceId) REFERENCES Invoices(InvoiceId),
-    CONSTRAINT FK_InvoiceItems_PerformedService FOREIGN KEY (PerformedServiceId) REFERENCES PerformedServices(PerformedServiceId)
-);
-GO
-
-CREATE TABLE Payments (
-    PaymentId BIGINT IDENTITY PRIMARY KEY,
-    InvoiceId BIGINT NOT NULL,
-    PaidByPatientUserId BIGINT NOT NULL,
-    Method VARCHAR(30) NOT NULL CHECK (Method IN ('Cash','BankTransfer','CreditCard','Online')),
-    Amount DECIMAL(18,2) NOT NULL,
-    TransactionReference VARCHAR(100) NULL,
-    Status VARCHAR(30) NOT NULL DEFAULT 'Pending' CHECK (Status IN ('Pending','Successful','Failed','Cancelled')),
-    PaidAt DATETIME2 NULL,
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    CONSTRAINT CK_Payments_Amount CHECK (Amount > 0),
-    CONSTRAINT FK_Payments_Invoice FOREIGN KEY (InvoiceId) REFERENCES Invoices(InvoiceId),
-    CONSTRAINT FK_Payments_Patient FOREIGN KEY (PaidByPatientUserId) REFERENCES PatientProfiles(UserId)
-);
-GO
-
-CREATE TABLE VisitFeedback (
-    FeedbackId BIGINT IDENTITY PRIMARY KEY,
-    AppointmentId BIGINT NOT NULL UNIQUE,
-    DentistRating TINYINT NOT NULL CHECK (DentistRating BETWEEN 1 AND 5),
-    ClinicRating TINYINT NOT NULL CHECK (ClinicRating BETWEEN 1 AND 5),
-    Comment NVARCHAR(1000) NULL,
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    CONSTRAINT FK_VisitFeedback_Appointment FOREIGN KEY (AppointmentId) REFERENCES Appointments(AppointmentId)
-);
-GO
-
-CREATE TABLE AuditLogs (
-    AuditLogId BIGINT IDENTITY PRIMARY KEY,
-    UserId BIGINT NULL,
-    Action VARCHAR(100) NOT NULL,
-    EntityName VARCHAR(100) NOT NULL,
-    EntityId VARCHAR(100) NULL,
-    OldValues NVARCHAR(MAX) NULL,
-    NewValues NVARCHAR(MAX) NULL,
-    CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-    CONSTRAINT FK_AuditLogs_User FOREIGN KEY (UserId) REFERENCES UserAccounts(UserId)
-);
-GO
-
-CREATE UNIQUE INDEX UX_UserAccounts_Email_NotNull ON UserAccounts(Email) WHERE Email IS NOT NULL;
-GO
-CREATE UNIQUE INDEX UX_UserAccounts_Phone_NotNull ON UserAccounts(PhoneNumber) WHERE PhoneNumber IS NOT NULL;
-GO
-CREATE UNIQUE INDEX UX_DentistProfiles_LicenseNumber_NotNull ON DentistProfiles(LicenseNumber) WHERE LicenseNumber IS NOT NULL;
-GO
-CREATE INDEX IX_DentistDepartments_Department_Status ON DentistDepartments(DepartmentId, Status);
-GO
-CREATE INDEX IX_DentistWorkSchedules_Dentist_Date ON DentistWorkSchedules(DentistUserId, WorkDate);
-GO
-CREATE INDEX IX_DentistAvailability_Dentist_Time ON DentistAvailability(DentistUserId, StartDateTime, EndDateTime);
-GO
-CREATE INDEX IX_Appointments_Patient_Status ON Appointments(PatientUserId, Status);
-GO
-CREATE INDEX IX_Appointments_Department_Start_Status ON Appointments(DepartmentId, ScheduledStart, Status);
-GO
-CREATE INDEX IX_Appointments_AssignedDentist_Start ON Appointments(AssignedDentistUserId, ScheduledStart);
-GO
-CREATE INDEX IX_Appointments_Room_Start ON Appointments(RoomId, ScheduledStart) WHERE RoomId IS NOT NULL;
-GO
-CREATE INDEX IX_Appointments_Chair_Start ON Appointments(DentalChairId, ScheduledStart) WHERE DentalChairId IS NOT NULL;
-GO
-CREATE INDEX IX_AppointmentChangeProposals_Appointment_Status ON AppointmentChangeProposals(AppointmentId, Status);
-GO
-CREATE INDEX IX_AppointmentStatusHistories_Appointment_ChangedAt ON AppointmentStatusHistories(AppointmentId, ChangedAt);
-GO
-CREATE INDEX IX_Notifications_User_ReadAt ON Notifications(UserId, ReadAt);
-GO
-CREATE INDEX IX_ClinicalEntries_Record_CreatedAt ON ClinicalEntries(MedicalRecordId, CreatedAt);
-GO
-CREATE INDEX IX_TreatmentPlans_Patient_Status ON TreatmentPlans(PatientUserId, Status);
-GO
-CREATE INDEX IX_TreatmentSessions_Appointment ON TreatmentSessions(AppointmentId);
-GO
-CREATE INDEX IX_PerformedServices_Session ON PerformedServices(TreatmentSessionId);
-GO
-CREATE INDEX IX_DepartmentReferrals_ToDepartment_Status ON DepartmentReferrals(ToDepartmentId, Status);
-GO
-CREATE INDEX IX_FollowUpSchedules_Status_Date ON FollowUpSchedules(Status, RecommendedDate);
-GO
-CREATE INDEX IX_InvoiceItems_Invoice ON InvoiceItems(InvoiceId);
-GO
-CREATE INDEX IX_Payments_Invoice_Status ON Payments(InvoiceId, Status);
-GO
-CREATE INDEX IX_AuditLogs_User_CreatedAt ON AuditLogs(UserId, CreatedAt);
-GO
-
+CREATE TABLE [dbo].[ClinicProfile](
+	[ClinicId] [int] NOT NULL,
+	[Name] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Address] [nvarchar](300) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[PhoneNumber] [varchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Email] [varchar](150) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Description] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[OpeningTime] [time](7) NULL,
+	[ClosingTime] [time](7) NULL,
+	[UpdatedAt] [datetime2](7) NOT NULL,
+ CONSTRAINT [PK_ClinicProfile] PRIMARY KEY CLUSTERED 
+(
+	[ClinicId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
 
 GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[UserAccounts](
+	[UserId] [bigint] IDENTITY(1,1) NOT NULL,
+	[Email] [varchar](150) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[PhoneNumber] [varchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[PasswordHash] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Role] [varchar](40) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[EmailVerifiedAt] [datetime2](7) NULL,
+	[AvatarUrl] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[LastLoginAt] [datetime2](7) NULL,
+	[FailedLoginCount] [int] NOT NULL,
+	[LockoutEnd] [datetime2](7) NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[UserId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
 
--- ============================================================================
--- SCRIPT: Seed_Complete_Demo_Dataset.sql
--- TARGET: DentalClinicManagementDB
--- PURPOSE: Bo du lieu hoan chinh 30 tai khoan & day du kich ban lam sang,
---          phuc vu thuyet trinh & bao ve do an SWP391.
--- MAT KHAU DUNG CHUNG: Password123@
--- ============================================================================
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[PatientProfiles](
+	[UserId] [bigint] NOT NULL,
+	[PatientCode] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[FullName] [nvarchar](150) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[DateOfBirth] [date] NULL,
+	[Gender] [varchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[NationalId] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[HealthInsuranceNumber] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Address] [nvarchar](300) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[EmergencyContact] [nvarchar](150) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+ CONSTRAINT [PK_PatientProfiles] PRIMARY KEY CLUSTERED 
+(
+	[UserId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[PatientCode] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
 
-USE DentalClinicManagementDB;
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[StaffProfiles](
+	[UserId] [bigint] NOT NULL,
+	[EmployeeCode] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[FullName] [nvarchar](150) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[EmploymentStatus] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+ CONSTRAINT [PK_StaffProfiles] PRIMARY KEY CLUSTERED 
+(
+	[UserId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[EmployeeCode] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[DentistProfiles](
+	[UserId] [bigint] NOT NULL,
+	[LicenseNumber] [varchar](80) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Qualification] [nvarchar](300) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[YearsOfExperience] [int] NULL,
+	[Biography] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+ CONSTRAINT [PK_DentistProfiles] PRIMARY KEY CLUSTERED 
+(
+	[UserId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Departments](
+	[DepartmentId] [bigint] IDENTITY(1,1) NOT NULL,
+	[Name] [nvarchar](150) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Description] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[ManagerUserId] [bigint] NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[DepartmentId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[Name] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[DentistDepartments](
+	[DentistDepartmentId] [bigint] IDENTITY(1,1) NOT NULL,
+	[DentistUserId] [bigint] NOT NULL,
+	[DepartmentId] [bigint] NOT NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[AssignedAt] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[DentistDepartmentId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_DentistDepartments] UNIQUE NONCLUSTERED 
+(
+	[DentistUserId] ASC,
+	[DepartmentId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[DepartmentWorkSchedules](
+	[DepartmentScheduleId] [bigint] IDENTITY(1,1) NOT NULL,
+	[DepartmentId] [bigint] NOT NULL,
+	[DayOfWeek] [tinyint] NOT NULL,
+	[StartTime] [time](7) NOT NULL,
+	[EndTime] [time](7) NOT NULL,
+	[IsActive] [bit] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[DepartmentScheduleId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_DepartmentWorkSchedules] UNIQUE NONCLUSTERED 
+(
+	[DepartmentId] ASC,
+	[DayOfWeek] ASC,
+	[StartTime] ASC,
+	[EndTime] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[DentistWorkSchedules](
+	[DentistScheduleId] [bigint] IDENTITY(1,1) NOT NULL,
+	[DentistUserId] [bigint] NOT NULL,
+	[DepartmentId] [bigint] NOT NULL,
+	[WorkDate] [date] NOT NULL,
+	[StartTime] [time](7) NOT NULL,
+	[EndTime] [time](7) NOT NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Note] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[DentistScheduleId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_DentistWorkSchedules] UNIQUE NONCLUSTERED 
+(
+	[DentistUserId] ASC,
+	[DepartmentId] ASC,
+	[WorkDate] ASC,
+	[StartTime] ASC,
+	[EndTime] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[DentistAvailability](
+	[AvailabilityId] [bigint] IDENTITY(1,1) NOT NULL,
+	[DentistUserId] [bigint] NOT NULL,
+	[StartDateTime] [datetime2](7) NOT NULL,
+	[EndDateTime] [datetime2](7) NULL,
+	[AvailabilityStatus] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Reason] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[AvailabilityId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Rooms](
+	[RoomId] [bigint] IDENTITY(1,1) NOT NULL,
+	[RoomCode] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[RoomName] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[DepartmentId] [bigint] NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[RoomId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[RoomCode] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[DentalChairs](
+	[DentalChairId] [bigint] IDENTITY(1,1) NOT NULL,
+	[RoomId] [bigint] NOT NULL,
+	[ChairCode] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[DentalChairId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_DentalChairs] UNIQUE NONCLUSTERED 
+(
+	[RoomId] ASC,
+	[ChairCode] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[DepartmentServices](
+	[DepartmentServiceId] [bigint] IDENTITY(1,1) NOT NULL,
+	[DepartmentId] [bigint] NOT NULL,
+	[ServiceName] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Description] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[DurationMinutes] [int] NULL,
+	[Price] [decimal](18, 2) NOT NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[DepartmentServiceId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_DepartmentServices] UNIQUE NONCLUSTERED 
+(
+	[DepartmentId] ASC,
+	[ServiceName] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Appointments](
+	[AppointmentId] [bigint] IDENTITY(1,1) NOT NULL,
+	[AppointmentCode] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[PatientUserId] [bigint] NOT NULL,
+	[DepartmentId] [bigint] NULL,
+	[RequestedServiceId] [bigint] NULL,
+	[RequestedDentistUserId] [bigint] NULL,
+	[AssignedDentistUserId] [bigint] NULL,
+	[RoomId] [bigint] NULL,
+	[DentalChairId] [bigint] NULL,
+	[ScheduledStart] [datetime2](7) NULL,
+	[ScheduledEnd] [datetime2](7) NULL,
+	[ReasonForVisit] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[BookingSource] [varchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[QueueNumber] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Status] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[CreatedByUserId] [bigint] NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[ConfirmedAt] [datetime2](7) NULL,
+	[CheckedInAt] [datetime2](7) NULL,
+	[CompletedAt] [datetime2](7) NULL,
+	[CancelledAt] [datetime2](7) NULL,
+	[CancellationReason] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[AppointmentId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[AppointmentCode] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[AppointmentChangeProposals](
+	[ProposalId] [bigint] IDENTITY(1,1) NOT NULL,
+	[AppointmentId] [bigint] NOT NULL,
+	[ProposedByUserId] [bigint] NOT NULL,
+	[ProposedDepartmentId] [bigint] NULL,
+	[ProposedDentistUserId] [bigint] NULL,
+	[ProposedStart] [datetime2](7) NULL,
+	[ProposedEnd] [datetime2](7) NULL,
+	[Reason] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[RespondedAt] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ProposalId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[AppointmentStatusHistories](
+	[HistoryId] [bigint] IDENTITY(1,1) NOT NULL,
+	[AppointmentId] [bigint] NOT NULL,
+	[OldStatus] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[NewStatus] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ChangedByUserId] [bigint] NULL,
+	[Note] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[ChangedAt] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[HistoryId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Notifications](
+	[NotificationId] [bigint] IDENTITY(1,1) NOT NULL,
+	[UserId] [bigint] NOT NULL,
+	[AppointmentId] [bigint] NULL,
+	[Type] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Channel] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Subject] [nvarchar](250) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Content] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[DeliveryStatus] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[SentAt] [datetime2](7) NULL,
+	[ReadAt] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[NotificationId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[SupportChatMessages](
+	[MessageId] [bigint] IDENTITY(1,1) NOT NULL,
+	[ConversationId] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[SenderType] [varchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[SenderUserId] [bigint] NULL,
+	[SenderName] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[MessageText] [nvarchar](2000) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[SentAt] [datetime2](7) NOT NULL,
+	[IsRead] [bit] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[MessageId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[DentalMedicalRecords](
+	[MedicalRecordId] [bigint] IDENTITY(1,1) NOT NULL,
+	[PatientUserId] [bigint] NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[MedicalRecordId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[PatientUserId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ClinicalEntries](
+	[ClinicalEntryId] [bigint] IDENTITY(1,1) NOT NULL,
+	[MedicalRecordId] [bigint] NOT NULL,
+	[AppointmentId] [bigint] NULL,
+	[DentistUserId] [bigint] NOT NULL,
+	[Symptoms] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[ClinicalFindings] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Diagnosis] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[DentalConditions] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[ClinicalNotes] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ClinicalEntryId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[OdontogramEntries](
+	[OdontogramEntryId] [bigint] IDENTITY(1,1) NOT NULL,
+	[ClinicalEntryId] [bigint] NOT NULL,
+	[ToothNumber] [varchar](10) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Surface] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Condition] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Note] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[OdontogramEntryId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[ImagingRecords](
+	[ImagingRecordId] [bigint] IDENTITY(1,1) NOT NULL,
+	[ClinicalEntryId] [bigint] NOT NULL,
+	[ImagingType] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[FileUrl] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[ResultSummary] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ImagingRecordId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[TreatmentPlans](
+	[TreatmentPlanId] [bigint] IDENTITY(1,1) NOT NULL,
+	[PatientUserId] [bigint] NOT NULL,
+	[DepartmentId] [bigint] NOT NULL,
+	[CreatedByDentistUserId] [bigint] NOT NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[EstimatedTotal] [decimal](18, 2) NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[TreatmentPlanId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[TreatmentPlanItems](
+	[TreatmentPlanItemId] [bigint] IDENTITY(1,1) NOT NULL,
+	[TreatmentPlanId] [bigint] NOT NULL,
+	[DepartmentServiceId] [bigint] NULL,
+	[AssignedDentistUserId] [bigint] NULL,
+	[ToothNumber] [varchar](10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[SequenceNo] [int] NOT NULL,
+	[ExpectedDate] [date] NULL,
+	[EstimatedCost] [decimal](18, 2) NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Note] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[TreatmentPlanItemId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_TreatmentPlanItems_Sequence] UNIQUE NONCLUSTERED 
+(
+	[TreatmentPlanId] ASC,
+	[SequenceNo] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[TreatmentSessions](
+	[TreatmentSessionId] [bigint] IDENTITY(1,1) NOT NULL,
+	[TreatmentPlanItemId] [bigint] NOT NULL,
+	[AppointmentId] [bigint] NOT NULL,
+	[DentistUserId] [bigint] NOT NULL,
+	[SessionDate] [datetime2](7) NOT NULL,
+	[TreatmentResult] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[ClinicalNote] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[TreatmentSessionId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[PerformedServices](
+	[PerformedServiceId] [bigint] IDENTITY(1,1) NOT NULL,
+	[TreatmentSessionId] [bigint] NOT NULL,
+	[DepartmentServiceId] [bigint] NOT NULL,
+	[Quantity] [int] NOT NULL,
+	[UnitPrice] [decimal](18, 2) NOT NULL,
+	[Amount]  AS ([Quantity]*[UnitPrice]) PERSISTED,
+PRIMARY KEY CLUSTERED 
+(
+	[PerformedServiceId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Prescriptions](
+	[PrescriptionId] [bigint] IDENTITY(1,1) NOT NULL,
+	[TreatmentSessionId] [bigint] NOT NULL,
+	[GeneralInstructions] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[IssuedAt] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[PrescriptionId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[TreatmentSessionId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[PrescriptionItems](
+	[PrescriptionItemId] [bigint] IDENTITY(1,1) NOT NULL,
+	[PrescriptionId] [bigint] NOT NULL,
+	[MedicationName] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Dosage] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Frequency] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Duration] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Instructions] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[PrescriptionItemId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[DepartmentReferrals](
+	[ReferralId] [bigint] IDENTITY(1,1) NOT NULL,
+	[TreatmentSessionId] [bigint] NOT NULL,
+	[FromDepartmentId] [bigint] NOT NULL,
+	[ToDepartmentId] [bigint] NOT NULL,
+	[AssignedDentistUserId] [bigint] NULL,
+	[ReviewedByUserId] [bigint] NULL,
+	[Reason] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[ReviewedAt] [datetime2](7) NULL,
+	[Urgency] [varchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ReferralId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[FollowUpSchedules](
+	[FollowUpId] [bigint] IDENTITY(1,1) NOT NULL,
+	[TreatmentSessionId] [bigint] NOT NULL,
+	[RecommendedDate] [datetime2](7) NOT NULL,
+	[Reason] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[AppointmentId] [bigint] NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[FollowUpId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Invoices](
+	[InvoiceId] [bigint] IDENTITY(1,1) NOT NULL,
+	[InvoiceCode] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[AppointmentId] [bigint] NOT NULL,
+	[GeneratedByUserId] [bigint] NOT NULL,
+	[TotalAmount] [decimal](18, 2) NOT NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[InvoiceId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[InvoiceCode] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[AppointmentId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[InvoiceItems](
+	[InvoiceItemId] [bigint] IDENTITY(1,1) NOT NULL,
+	[InvoiceId] [bigint] NOT NULL,
+	[PerformedServiceId] [bigint] NULL,
+	[Description] [nvarchar](250) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Quantity] [int] NOT NULL,
+	[UnitPrice] [decimal](18, 2) NOT NULL,
+	[Amount]  AS ([Quantity]*[UnitPrice]) PERSISTED,
+PRIMARY KEY CLUSTERED 
+(
+	[InvoiceItemId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Payments](
+	[PaymentId] [bigint] IDENTITY(1,1) NOT NULL,
+	[InvoiceId] [bigint] NOT NULL,
+	[PaidByPatientUserId] [bigint] NOT NULL,
+	[Method] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Amount] [decimal](18, 2) NOT NULL,
+	[TransactionReference] [varchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[PaidAt] [datetime2](7) NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[PaymentId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[VisitFeedback](
+	[FeedbackId] [bigint] IDENTITY(1,1) NOT NULL,
+	[AppointmentId] [bigint] NOT NULL,
+	[DentistRating] [tinyint] NOT NULL,
+	[ClinicRating] [tinyint] NOT NULL,
+	[Comment] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[FeedbackId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[AppointmentId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[AuditLogs](
+	[AuditLogId] [bigint] IDENTITY(1,1) NOT NULL,
+	[UserId] [bigint] NULL,
+	[Action] [varchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[EntityName] [varchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[EntityId] [varchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[OldValues] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[NewValues] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[AuditLogId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[BlogCategories](
+	[CategoryId] [int] IDENTITY(1,1) NOT NULL,
+	[Name] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Slug] [varchar](150) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+ CONSTRAINT [PK_BlogCategories] PRIMARY KEY CLUSTERED 
+(
+	[CategoryId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_BlogCategories_Slug] UNIQUE NONCLUSTERED 
+(
+	[Slug] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[BlogPosts](
+	[BlogPostId] [bigint] IDENTITY(1,1) NOT NULL,
+	[CategoryId] [int] NOT NULL,
+	[AuthorUserId] [bigint] NOT NULL,
+	[Title] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Slug] [varchar](250) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Summary] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Content] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ThumbnailUrl] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[VideoUrl] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[IsFeatured] [bit] NOT NULL,
+	[ViewCount] [int] NOT NULL,
+	[PublishedAt] [datetime2](7) NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+	[EmbedVideoId]  AS (case when [VideoUrl] like '%youtube.com/embed/%' then substring([VideoUrl],charindex('/embed/',[VideoUrl])+(7),case when charindex('?',[VideoUrl],charindex('/embed/',[VideoUrl])+(7))>(0) then charindex('?',[VideoUrl],charindex('/embed/',[VideoUrl])+(7))-(charindex('/embed/',[VideoUrl])+(7)) else len([VideoUrl]) end) when [VideoUrl] like '%youtu.be/%' then substring([VideoUrl],charindex('youtu.be/',[VideoUrl])+(9),case when charindex('?',[VideoUrl],charindex('youtu.be/',[VideoUrl])+(9))>(0) then charindex('?',[VideoUrl],charindex('youtu.be/',[VideoUrl])+(9))-(charindex('youtu.be/',[VideoUrl])+(9)) else len([VideoUrl]) end) when [VideoUrl] like '%youtube.com/watch?v=%' then substring([VideoUrl],charindex('?v=',[VideoUrl])+(3),case when charindex('&',[VideoUrl],charindex('?v=',[VideoUrl])+(3))>(0) then charindex('&',[VideoUrl],charindex('?v=',[VideoUrl])+(3))-(charindex('?v=',[VideoUrl])+(3)) else len([VideoUrl]) end)  end) PERSISTED,
+	[ReadTimeMinutes]  AS (case when [Content] IS NULL OR len([Content])<(250) then (1) else (len([Content])-len(replace([Content],' ','')))/(250)+(1) end) PERSISTED,
+ CONSTRAINT [PK_BlogPosts] PRIMARY KEY CLUSTERED 
+(
+	[BlogPostId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY],
+ CONSTRAINT [UQ_BlogPosts_Slug] UNIQUE NONCLUSTERED 
+(
+	[Slug] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[BlogPostMedia](
+	[MediaId] [bigint] IDENTITY(1,1) NOT NULL,
+	[BlogPostId] [bigint] NULL,
+	[UploadedByUserId] [bigint] NOT NULL,
+	[MediaType] [varchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[FileUrl] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[PublicId] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ThumbnailUrl] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[ContentType] [varchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[SizeBytes] [bigint] NOT NULL,
+	[DurationSeconds] [int] NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+ CONSTRAINT [PK_BlogPostMedia] PRIMARY KEY CLUSTERED 
+(
+	[MediaId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE UNIQUE NONCLUSTERED INDEX [UX_UserAccounts_Email_NotNull] ON [dbo].[UserAccounts]
+(
+	[Email] ASC
+)
+WHERE ([Email] IS NOT NULL)
+WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE UNIQUE NONCLUSTERED INDEX [UX_UserAccounts_Phone_NotNull] ON [dbo].[UserAccounts]
+(
+	[PhoneNumber] ASC
+)
+WHERE ([PhoneNumber] IS NOT NULL)
+WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE UNIQUE NONCLUSTERED INDEX [UX_DentistProfiles_LicenseNumber_NotNull] ON [dbo].[DentistProfiles]
+(
+	[LicenseNumber] ASC
+)
+WHERE ([LicenseNumber] IS NOT NULL)
+WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_DentistDepartments_Department_Status] ON [dbo].[DentistDepartments]
+(
+	[DepartmentId] ASC,
+	[Status] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_DentistWorkSchedules_Dentist_Date] ON [dbo].[DentistWorkSchedules]
+(
+	[DentistUserId] ASC,
+	[WorkDate] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_DentistAvailability_Dentist_Time] ON [dbo].[DentistAvailability]
+(
+	[DentistUserId] ASC,
+	[StartDateTime] ASC,
+	[EndDateTime] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_Appointments_AssignedDentist_Start] ON [dbo].[Appointments]
+(
+	[AssignedDentistUserId] ASC,
+	[ScheduledStart] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_Appointments_Chair_Start] ON [dbo].[Appointments]
+(
+	[DentalChairId] ASC,
+	[ScheduledStart] ASC
+)
+WHERE ([DentalChairId] IS NOT NULL)
+WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_Appointments_Department_Start_Status] ON [dbo].[Appointments]
+(
+	[DepartmentId] ASC,
+	[ScheduledStart] ASC,
+	[Status] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_Appointments_Patient_Status] ON [dbo].[Appointments]
+(
+	[PatientUserId] ASC,
+	[Status] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_Appointments_Room_Start] ON [dbo].[Appointments]
+(
+	[RoomId] ASC,
+	[ScheduledStart] ASC
+)
+WHERE ([RoomId] IS NOT NULL)
+WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_AppointmentChangeProposals_Appointment_Status] ON [dbo].[AppointmentChangeProposals]
+(
+	[AppointmentId] ASC,
+	[Status] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_AppointmentStatusHistories_Appointment_ChangedAt] ON [dbo].[AppointmentStatusHistories]
+(
+	[AppointmentId] ASC,
+	[ChangedAt] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_Notifications_User_ReadAt] ON [dbo].[Notifications]
+(
+	[UserId] ASC,
+	[ReadAt] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_SupportChatMessages_Conv] ON [dbo].[SupportChatMessages]
+(
+	[ConversationId] ASC,
+	[SentAt] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_ClinicalEntries_Record_CreatedAt] ON [dbo].[ClinicalEntries]
+(
+	[MedicalRecordId] ASC,
+	[CreatedAt] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_TreatmentPlans_Patient_Status] ON [dbo].[TreatmentPlans]
+(
+	[PatientUserId] ASC,
+	[Status] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_TreatmentSessions_Appointment] ON [dbo].[TreatmentSessions]
+(
+	[AppointmentId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_PerformedServices_Session] ON [dbo].[PerformedServices]
+(
+	[TreatmentSessionId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_DepartmentReferrals_ToDepartment_Status] ON [dbo].[DepartmentReferrals]
+(
+	[ToDepartmentId] ASC,
+	[Status] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_FollowUpSchedules_Status_Date] ON [dbo].[FollowUpSchedules]
+(
+	[Status] ASC,
+	[RecommendedDate] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_InvoiceItems_Invoice] ON [dbo].[InvoiceItems]
+(
+	[InvoiceId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_Payments_Invoice_Status] ON [dbo].[Payments]
+(
+	[InvoiceId] ASC,
+	[Status] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_AuditLogs_User_CreatedAt] ON [dbo].[AuditLogs]
+(
+	[UserId] ASC,
+	[CreatedAt] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_BlogPosts_AuthorUserId] ON [dbo].[BlogPosts]
+(
+	[AuthorUserId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_BlogPosts_CategoryId] ON [dbo].[BlogPosts]
+(
+	[CategoryId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_BlogPosts_IsFeatured] ON [dbo].[BlogPosts]
+(
+	[IsFeatured] ASC,
+	[Status] ASC,
+	[PublishedAt] DESC
+)
+INCLUDE([Title],[Slug],[ThumbnailUrl],[CategoryId],[AuthorUserId],[ViewCount],[Summary]) 
+WHERE ([IsFeatured]=(1))
+WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_BlogPosts_Status_PublishedAt] ON [dbo].[BlogPosts]
+(
+	[Status] ASC,
+	[PublishedAt] DESC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_BlogPosts_Title_Summary] ON [dbo].[BlogPosts]
+(
+	[Status] ASC,
+	[PublishedAt] DESC
+)
+INCLUDE([Title],[Slug],[ThumbnailUrl],[CategoryId],[AuthorUserId],[ViewCount],[Summary],[IsFeatured]) WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_BlogPosts_ViewCount] ON [dbo].[BlogPosts]
+(
+	[Status] ASC,
+	[ViewCount] DESC
+)
+INCLUDE([Title],[Slug],[ThumbnailUrl],[PublishedAt],[CategoryId]) WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_BlogPostMedia_BlogPostId] ON [dbo].[BlogPostMedia]
+(
+	[BlogPostId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_BlogPostMedia_CreatedAt] ON [dbo].[BlogPostMedia]
+(
+	[CreatedAt] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [IX_BlogPostMedia_UploadedByUserId] ON [dbo].[BlogPostMedia]
+(
+	[UploadedByUserId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[ClinicProfile] ADD  DEFAULT (sysdatetime()) FOR [UpdatedAt]
+GO
+ALTER TABLE [dbo].[UserAccounts] ADD  DEFAULT ('Unverified') FOR [Status]
+GO
+ALTER TABLE [dbo].[UserAccounts] ADD  DEFAULT ((0)) FOR [FailedLoginCount]
+GO
+ALTER TABLE [dbo].[UserAccounts] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[PatientProfiles] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[StaffProfiles] ADD  DEFAULT ('Active') FOR [EmploymentStatus]
+GO
+ALTER TABLE [dbo].[StaffProfiles] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[Departments] ADD  DEFAULT ('Active') FOR [Status]
+GO
+ALTER TABLE [dbo].[Departments] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[DentistDepartments] ADD  DEFAULT ('Active') FOR [Status]
+GO
+ALTER TABLE [dbo].[DentistDepartments] ADD  DEFAULT (sysdatetime()) FOR [AssignedAt]
+GO
+ALTER TABLE [dbo].[DepartmentWorkSchedules] ADD  DEFAULT ((1)) FOR [IsActive]
+GO
+ALTER TABLE [dbo].[DentistWorkSchedules] ADD  DEFAULT ('Scheduled') FOR [Status]
+GO
+ALTER TABLE [dbo].[DentistAvailability] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[Rooms] ADD  DEFAULT ('Active') FOR [Status]
+GO
+ALTER TABLE [dbo].[DentalChairs] ADD  DEFAULT ('Active') FOR [Status]
+GO
+ALTER TABLE [dbo].[DepartmentServices] ADD  DEFAULT ('Active') FOR [Status]
+GO
+ALTER TABLE [dbo].[Appointments] ADD  DEFAULT ('PendingReceptionReview') FOR [Status]
+GO
+ALTER TABLE [dbo].[Appointments] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals] ADD  DEFAULT ('Pending') FOR [Status]
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[AppointmentStatusHistories] ADD  DEFAULT (sysdatetime()) FOR [ChangedAt]
+GO
+ALTER TABLE [dbo].[Notifications] ADD  DEFAULT ('InApp') FOR [Channel]
+GO
+ALTER TABLE [dbo].[Notifications] ADD  DEFAULT ('Pending') FOR [DeliveryStatus]
+GO
+ALTER TABLE [dbo].[SupportChatMessages] ADD  DEFAULT (sysdatetime()) FOR [SentAt]
+GO
+ALTER TABLE [dbo].[SupportChatMessages] ADD  DEFAULT ((0)) FOR [IsRead]
+GO
+ALTER TABLE [dbo].[DentalMedicalRecords] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[ClinicalEntries] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[ImagingRecords] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[TreatmentPlans] ADD  DEFAULT ('Planned') FOR [Status]
+GO
+ALTER TABLE [dbo].[TreatmentPlans] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems] ADD  DEFAULT ('Planned') FOR [Status]
+GO
+ALTER TABLE [dbo].[TreatmentSessions] ADD  DEFAULT (sysdatetime()) FOR [SessionDate]
+GO
+ALTER TABLE [dbo].[PerformedServices] ADD  DEFAULT ((1)) FOR [Quantity]
+GO
+ALTER TABLE [dbo].[Prescriptions] ADD  DEFAULT (sysdatetime()) FOR [IssuedAt]
+GO
+ALTER TABLE [dbo].[DepartmentReferrals] ADD  DEFAULT ('Pending') FOR [Status]
+GO
+ALTER TABLE [dbo].[DepartmentReferrals] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[DepartmentReferrals] ADD  CONSTRAINT [DF_DepartmentReferrals_Urgency]  DEFAULT ('Normal') FOR [Urgency]
+GO
+ALTER TABLE [dbo].[FollowUpSchedules] ADD  DEFAULT ('Pending') FOR [Status]
+GO
+ALTER TABLE [dbo].[Invoices] ADD  DEFAULT ('Unpaid') FOR [Status]
+GO
+ALTER TABLE [dbo].[Invoices] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[InvoiceItems] ADD  DEFAULT ((1)) FOR [Quantity]
+GO
+ALTER TABLE [dbo].[Payments] ADD  DEFAULT ('Pending') FOR [Status]
+GO
+ALTER TABLE [dbo].[Payments] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[VisitFeedback] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[AuditLogs] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[BlogCategories] ADD  CONSTRAINT [DF_BlogCategories_CreatedAt]  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[BlogPosts] ADD  CONSTRAINT [DF_BlogPosts_Status]  DEFAULT ('Draft') FOR [Status]
+GO
+ALTER TABLE [dbo].[BlogPosts] ADD  CONSTRAINT [DF_BlogPosts_IsFeatured]  DEFAULT ((0)) FOR [IsFeatured]
+GO
+ALTER TABLE [dbo].[BlogPosts] ADD  CONSTRAINT [DF_BlogPosts_ViewCount]  DEFAULT ((0)) FOR [ViewCount]
+GO
+ALTER TABLE [dbo].[BlogPosts] ADD  CONSTRAINT [DF_BlogPosts_CreatedAt]  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[BlogPostMedia] ADD  CONSTRAINT [DF_BlogPostMedia_CreatedAt]  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[PatientProfiles]  WITH CHECK ADD  CONSTRAINT [FK_PatientProfiles_UserAccounts] FOREIGN KEY([UserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[PatientProfiles] CHECK CONSTRAINT [FK_PatientProfiles_UserAccounts]
+GO
+ALTER TABLE [dbo].[StaffProfiles]  WITH CHECK ADD  CONSTRAINT [FK_StaffProfiles_UserAccounts] FOREIGN KEY([UserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[StaffProfiles] CHECK CONSTRAINT [FK_StaffProfiles_UserAccounts]
+GO
+ALTER TABLE [dbo].[DentistProfiles]  WITH CHECK ADD  CONSTRAINT [FK_DentistProfiles_StaffProfiles] FOREIGN KEY([UserId])
+REFERENCES [dbo].[StaffProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[DentistProfiles] CHECK CONSTRAINT [FK_DentistProfiles_StaffProfiles]
+GO
+ALTER TABLE [dbo].[Departments]  WITH CHECK ADD  CONSTRAINT [FK_Departments_ManagerUser] FOREIGN KEY([ManagerUserId])
+REFERENCES [dbo].[StaffProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[Departments] CHECK CONSTRAINT [FK_Departments_ManagerUser]
+GO
+ALTER TABLE [dbo].[DentistDepartments]  WITH CHECK ADD  CONSTRAINT [FK_DentistDepartments_Dentist] FOREIGN KEY([DentistUserId])
+REFERENCES [dbo].[DentistProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[DentistDepartments] CHECK CONSTRAINT [FK_DentistDepartments_Dentist]
+GO
+ALTER TABLE [dbo].[DentistDepartments]  WITH CHECK ADD  CONSTRAINT [FK_DentistDepartments_Department] FOREIGN KEY([DepartmentId])
+REFERENCES [dbo].[Departments] ([DepartmentId])
+GO
+ALTER TABLE [dbo].[DentistDepartments] CHECK CONSTRAINT [FK_DentistDepartments_Department]
+GO
+ALTER TABLE [dbo].[DepartmentWorkSchedules]  WITH CHECK ADD  CONSTRAINT [FK_DepartmentWorkSchedules_Department] FOREIGN KEY([DepartmentId])
+REFERENCES [dbo].[Departments] ([DepartmentId])
+GO
+ALTER TABLE [dbo].[DepartmentWorkSchedules] CHECK CONSTRAINT [FK_DepartmentWorkSchedules_Department]
+GO
+ALTER TABLE [dbo].[DentistWorkSchedules]  WITH CHECK ADD  CONSTRAINT [FK_DentistWorkSchedules_Dentist] FOREIGN KEY([DentistUserId])
+REFERENCES [dbo].[DentistProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[DentistWorkSchedules] CHECK CONSTRAINT [FK_DentistWorkSchedules_Dentist]
+GO
+ALTER TABLE [dbo].[DentistWorkSchedules]  WITH CHECK ADD  CONSTRAINT [FK_DentistWorkSchedules_Department] FOREIGN KEY([DepartmentId])
+REFERENCES [dbo].[Departments] ([DepartmentId])
+GO
+ALTER TABLE [dbo].[DentistWorkSchedules] CHECK CONSTRAINT [FK_DentistWorkSchedules_Department]
+GO
+ALTER TABLE [dbo].[DentistAvailability]  WITH CHECK ADD  CONSTRAINT [FK_DentistAvailability_Dentist] FOREIGN KEY([DentistUserId])
+REFERENCES [dbo].[DentistProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[DentistAvailability] CHECK CONSTRAINT [FK_DentistAvailability_Dentist]
+GO
+ALTER TABLE [dbo].[Rooms]  WITH CHECK ADD  CONSTRAINT [FK_Rooms_Department] FOREIGN KEY([DepartmentId])
+REFERENCES [dbo].[Departments] ([DepartmentId])
+GO
+ALTER TABLE [dbo].[Rooms] CHECK CONSTRAINT [FK_Rooms_Department]
+GO
+ALTER TABLE [dbo].[DentalChairs]  WITH CHECK ADD  CONSTRAINT [FK_DentalChairs_Room] FOREIGN KEY([RoomId])
+REFERENCES [dbo].[Rooms] ([RoomId])
+GO
+ALTER TABLE [dbo].[DentalChairs] CHECK CONSTRAINT [FK_DentalChairs_Room]
+GO
+ALTER TABLE [dbo].[DepartmentServices]  WITH CHECK ADD  CONSTRAINT [FK_DepartmentServices_Department] FOREIGN KEY([DepartmentId])
+REFERENCES [dbo].[Departments] ([DepartmentId])
+GO
+ALTER TABLE [dbo].[DepartmentServices] CHECK CONSTRAINT [FK_DepartmentServices_Department]
+GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD  CONSTRAINT [FK_Appointments_AssignedDentist] FOREIGN KEY([AssignedDentistUserId])
+REFERENCES [dbo].[DentistProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [FK_Appointments_AssignedDentist]
+GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD  CONSTRAINT [FK_Appointments_Chair] FOREIGN KEY([DentalChairId])
+REFERENCES [dbo].[DentalChairs] ([DentalChairId])
+GO
+ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [FK_Appointments_Chair]
+GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD  CONSTRAINT [FK_Appointments_CreatedBy] FOREIGN KEY([CreatedByUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [FK_Appointments_CreatedBy]
+GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD  CONSTRAINT [FK_Appointments_Department] FOREIGN KEY([DepartmentId])
+REFERENCES [dbo].[Departments] ([DepartmentId])
+GO
+ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [FK_Appointments_Department]
+GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD  CONSTRAINT [FK_Appointments_Patient] FOREIGN KEY([PatientUserId])
+REFERENCES [dbo].[PatientProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [FK_Appointments_Patient]
+GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD  CONSTRAINT [FK_Appointments_RequestedDentist] FOREIGN KEY([RequestedDentistUserId])
+REFERENCES [dbo].[DentistProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [FK_Appointments_RequestedDentist]
+GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD  CONSTRAINT [FK_Appointments_Room] FOREIGN KEY([RoomId])
+REFERENCES [dbo].[Rooms] ([RoomId])
+GO
+ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [FK_Appointments_Room]
+GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD  CONSTRAINT [FK_Appointments_Service] FOREIGN KEY([RequestedServiceId])
+REFERENCES [dbo].[DepartmentServices] ([DepartmentServiceId])
+GO
+ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [FK_Appointments_Service]
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals]  WITH CHECK ADD  CONSTRAINT [FK_AppointmentChangeProposals_Appointment] FOREIGN KEY([AppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals] CHECK CONSTRAINT [FK_AppointmentChangeProposals_Appointment]
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals]  WITH CHECK ADD  CONSTRAINT [FK_AppointmentChangeProposals_Dentist] FOREIGN KEY([ProposedDentistUserId])
+REFERENCES [dbo].[DentistProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals] CHECK CONSTRAINT [FK_AppointmentChangeProposals_Dentist]
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals]  WITH CHECK ADD  CONSTRAINT [FK_AppointmentChangeProposals_Department] FOREIGN KEY([ProposedDepartmentId])
+REFERENCES [dbo].[Departments] ([DepartmentId])
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals] CHECK CONSTRAINT [FK_AppointmentChangeProposals_Department]
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals]  WITH CHECK ADD  CONSTRAINT [FK_AppointmentChangeProposals_User] FOREIGN KEY([ProposedByUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals] CHECK CONSTRAINT [FK_AppointmentChangeProposals_User]
+GO
+ALTER TABLE [dbo].[AppointmentStatusHistories]  WITH CHECK ADD  CONSTRAINT [FK_AppointmentStatusHistories_Appointment] FOREIGN KEY([AppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+GO
+ALTER TABLE [dbo].[AppointmentStatusHistories] CHECK CONSTRAINT [FK_AppointmentStatusHistories_Appointment]
+GO
+ALTER TABLE [dbo].[AppointmentStatusHistories]  WITH CHECK ADD  CONSTRAINT [FK_AppointmentStatusHistories_User] FOREIGN KEY([ChangedByUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[AppointmentStatusHistories] CHECK CONSTRAINT [FK_AppointmentStatusHistories_User]
+GO
+ALTER TABLE [dbo].[Notifications]  WITH CHECK ADD  CONSTRAINT [FK_Notifications_Appointment] FOREIGN KEY([AppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+GO
+ALTER TABLE [dbo].[Notifications] CHECK CONSTRAINT [FK_Notifications_Appointment]
+GO
+ALTER TABLE [dbo].[Notifications]  WITH CHECK ADD  CONSTRAINT [FK_Notifications_User] FOREIGN KEY([UserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[Notifications] CHECK CONSTRAINT [FK_Notifications_User]
+GO
+ALTER TABLE [dbo].[SupportChatMessages]  WITH CHECK ADD  CONSTRAINT [FK_SupportChatMessages_User] FOREIGN KEY([SenderUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[SupportChatMessages] CHECK CONSTRAINT [FK_SupportChatMessages_User]
+GO
+ALTER TABLE [dbo].[DentalMedicalRecords]  WITH CHECK ADD  CONSTRAINT [FK_DentalMedicalRecords_Patient] FOREIGN KEY([PatientUserId])
+REFERENCES [dbo].[PatientProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[DentalMedicalRecords] CHECK CONSTRAINT [FK_DentalMedicalRecords_Patient]
+GO
+ALTER TABLE [dbo].[ClinicalEntries]  WITH CHECK ADD  CONSTRAINT [FK_ClinicalEntries_Appointment] FOREIGN KEY([AppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+GO
+ALTER TABLE [dbo].[ClinicalEntries] CHECK CONSTRAINT [FK_ClinicalEntries_Appointment]
+GO
+ALTER TABLE [dbo].[ClinicalEntries]  WITH CHECK ADD  CONSTRAINT [FK_ClinicalEntries_Dentist] FOREIGN KEY([DentistUserId])
+REFERENCES [dbo].[DentistProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[ClinicalEntries] CHECK CONSTRAINT [FK_ClinicalEntries_Dentist]
+GO
+ALTER TABLE [dbo].[ClinicalEntries]  WITH CHECK ADD  CONSTRAINT [FK_ClinicalEntries_Record] FOREIGN KEY([MedicalRecordId])
+REFERENCES [dbo].[DentalMedicalRecords] ([MedicalRecordId])
+GO
+ALTER TABLE [dbo].[ClinicalEntries] CHECK CONSTRAINT [FK_ClinicalEntries_Record]
+GO
+ALTER TABLE [dbo].[OdontogramEntries]  WITH CHECK ADD  CONSTRAINT [FK_OdontogramEntries_ClinicalEntry] FOREIGN KEY([ClinicalEntryId])
+REFERENCES [dbo].[ClinicalEntries] ([ClinicalEntryId])
+GO
+ALTER TABLE [dbo].[OdontogramEntries] CHECK CONSTRAINT [FK_OdontogramEntries_ClinicalEntry]
+GO
+ALTER TABLE [dbo].[ImagingRecords]  WITH CHECK ADD  CONSTRAINT [FK_ImagingRecords_ClinicalEntry] FOREIGN KEY([ClinicalEntryId])
+REFERENCES [dbo].[ClinicalEntries] ([ClinicalEntryId])
+GO
+ALTER TABLE [dbo].[ImagingRecords] CHECK CONSTRAINT [FK_ImagingRecords_ClinicalEntry]
+GO
+ALTER TABLE [dbo].[TreatmentPlans]  WITH CHECK ADD  CONSTRAINT [FK_TreatmentPlans_Dentist] FOREIGN KEY([CreatedByDentistUserId])
+REFERENCES [dbo].[DentistProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[TreatmentPlans] CHECK CONSTRAINT [FK_TreatmentPlans_Dentist]
+GO
+ALTER TABLE [dbo].[TreatmentPlans]  WITH CHECK ADD  CONSTRAINT [FK_TreatmentPlans_Department] FOREIGN KEY([DepartmentId])
+REFERENCES [dbo].[Departments] ([DepartmentId])
+GO
+ALTER TABLE [dbo].[TreatmentPlans] CHECK CONSTRAINT [FK_TreatmentPlans_Department]
+GO
+ALTER TABLE [dbo].[TreatmentPlans]  WITH CHECK ADD  CONSTRAINT [FK_TreatmentPlans_Patient] FOREIGN KEY([PatientUserId])
+REFERENCES [dbo].[PatientProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[TreatmentPlans] CHECK CONSTRAINT [FK_TreatmentPlans_Patient]
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems]  WITH CHECK ADD  CONSTRAINT [FK_TreatmentPlanItems_Dentist] FOREIGN KEY([AssignedDentistUserId])
+REFERENCES [dbo].[DentistProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems] CHECK CONSTRAINT [FK_TreatmentPlanItems_Dentist]
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems]  WITH CHECK ADD  CONSTRAINT [FK_TreatmentPlanItems_Plan] FOREIGN KEY([TreatmentPlanId])
+REFERENCES [dbo].[TreatmentPlans] ([TreatmentPlanId])
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems] CHECK CONSTRAINT [FK_TreatmentPlanItems_Plan]
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems]  WITH CHECK ADD  CONSTRAINT [FK_TreatmentPlanItems_Service] FOREIGN KEY([DepartmentServiceId])
+REFERENCES [dbo].[DepartmentServices] ([DepartmentServiceId])
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems] CHECK CONSTRAINT [FK_TreatmentPlanItems_Service]
+GO
+ALTER TABLE [dbo].[TreatmentSessions]  WITH CHECK ADD  CONSTRAINT [FK_TreatmentSessions_Appointment] FOREIGN KEY([AppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+GO
+ALTER TABLE [dbo].[TreatmentSessions] CHECK CONSTRAINT [FK_TreatmentSessions_Appointment]
+GO
+ALTER TABLE [dbo].[TreatmentSessions]  WITH CHECK ADD  CONSTRAINT [FK_TreatmentSessions_Dentist] FOREIGN KEY([DentistUserId])
+REFERENCES [dbo].[DentistProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[TreatmentSessions] CHECK CONSTRAINT [FK_TreatmentSessions_Dentist]
+GO
+ALTER TABLE [dbo].[TreatmentSessions]  WITH CHECK ADD  CONSTRAINT [FK_TreatmentSessions_Item] FOREIGN KEY([TreatmentPlanItemId])
+REFERENCES [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId])
+GO
+ALTER TABLE [dbo].[TreatmentSessions] CHECK CONSTRAINT [FK_TreatmentSessions_Item]
+GO
+ALTER TABLE [dbo].[PerformedServices]  WITH CHECK ADD  CONSTRAINT [FK_PerformedServices_Service] FOREIGN KEY([DepartmentServiceId])
+REFERENCES [dbo].[DepartmentServices] ([DepartmentServiceId])
+GO
+ALTER TABLE [dbo].[PerformedServices] CHECK CONSTRAINT [FK_PerformedServices_Service]
+GO
+ALTER TABLE [dbo].[PerformedServices]  WITH CHECK ADD  CONSTRAINT [FK_PerformedServices_Session] FOREIGN KEY([TreatmentSessionId])
+REFERENCES [dbo].[TreatmentSessions] ([TreatmentSessionId])
+GO
+ALTER TABLE [dbo].[PerformedServices] CHECK CONSTRAINT [FK_PerformedServices_Session]
+GO
+ALTER TABLE [dbo].[Prescriptions]  WITH CHECK ADD  CONSTRAINT [FK_Prescriptions_TreatmentSession] FOREIGN KEY([TreatmentSessionId])
+REFERENCES [dbo].[TreatmentSessions] ([TreatmentSessionId])
+GO
+ALTER TABLE [dbo].[Prescriptions] CHECK CONSTRAINT [FK_Prescriptions_TreatmentSession]
+GO
+ALTER TABLE [dbo].[PrescriptionItems]  WITH CHECK ADD  CONSTRAINT [FK_PrescriptionItems_Prescription] FOREIGN KEY([PrescriptionId])
+REFERENCES [dbo].[Prescriptions] ([PrescriptionId])
+GO
+ALTER TABLE [dbo].[PrescriptionItems] CHECK CONSTRAINT [FK_PrescriptionItems_Prescription]
+GO
+ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [FK_DepartmentReferrals_AssignedDentist] FOREIGN KEY([AssignedDentistUserId])
+REFERENCES [dbo].[DentistProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [FK_DepartmentReferrals_AssignedDentist]
+GO
+ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [FK_DepartmentReferrals_FromDepartment] FOREIGN KEY([FromDepartmentId])
+REFERENCES [dbo].[Departments] ([DepartmentId])
+GO
+ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [FK_DepartmentReferrals_FromDepartment]
+GO
+ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [FK_DepartmentReferrals_ReviewedByUser] FOREIGN KEY([ReviewedByUserId])
+REFERENCES [dbo].[StaffProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [FK_DepartmentReferrals_ReviewedByUser]
+GO
+ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [FK_DepartmentReferrals_ToDepartment] FOREIGN KEY([ToDepartmentId])
+REFERENCES [dbo].[Departments] ([DepartmentId])
+GO
+ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [FK_DepartmentReferrals_ToDepartment]
+GO
+ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [FK_DepartmentReferrals_TreatmentSession] FOREIGN KEY([TreatmentSessionId])
+REFERENCES [dbo].[TreatmentSessions] ([TreatmentSessionId])
+GO
+ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [FK_DepartmentReferrals_TreatmentSession]
+GO
+ALTER TABLE [dbo].[FollowUpSchedules]  WITH CHECK ADD  CONSTRAINT [FK_FollowUpSchedules_Appointment] FOREIGN KEY([AppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+GO
+ALTER TABLE [dbo].[FollowUpSchedules] CHECK CONSTRAINT [FK_FollowUpSchedules_Appointment]
+GO
+ALTER TABLE [dbo].[FollowUpSchedules]  WITH CHECK ADD  CONSTRAINT [FK_FollowUpSchedules_TreatmentSession] FOREIGN KEY([TreatmentSessionId])
+REFERENCES [dbo].[TreatmentSessions] ([TreatmentSessionId])
+GO
+ALTER TABLE [dbo].[FollowUpSchedules] CHECK CONSTRAINT [FK_FollowUpSchedules_TreatmentSession]
+GO
+ALTER TABLE [dbo].[Invoices]  WITH CHECK ADD  CONSTRAINT [FK_Invoices_Appointment] FOREIGN KEY([AppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+GO
+ALTER TABLE [dbo].[Invoices] CHECK CONSTRAINT [FK_Invoices_Appointment]
+GO
+ALTER TABLE [dbo].[Invoices]  WITH CHECK ADD  CONSTRAINT [FK_Invoices_GeneratedByUser] FOREIGN KEY([GeneratedByUserId])
+REFERENCES [dbo].[StaffProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[Invoices] CHECK CONSTRAINT [FK_Invoices_GeneratedByUser]
+GO
+ALTER TABLE [dbo].[InvoiceItems]  WITH CHECK ADD  CONSTRAINT [FK_InvoiceItems_Invoice] FOREIGN KEY([InvoiceId])
+REFERENCES [dbo].[Invoices] ([InvoiceId])
+GO
+ALTER TABLE [dbo].[InvoiceItems] CHECK CONSTRAINT [FK_InvoiceItems_Invoice]
+GO
+ALTER TABLE [dbo].[InvoiceItems]  WITH CHECK ADD  CONSTRAINT [FK_InvoiceItems_PerformedService] FOREIGN KEY([PerformedServiceId])
+REFERENCES [dbo].[PerformedServices] ([PerformedServiceId])
+GO
+ALTER TABLE [dbo].[InvoiceItems] CHECK CONSTRAINT [FK_InvoiceItems_PerformedService]
+GO
+ALTER TABLE [dbo].[Payments]  WITH CHECK ADD  CONSTRAINT [FK_Payments_Invoice] FOREIGN KEY([InvoiceId])
+REFERENCES [dbo].[Invoices] ([InvoiceId])
+GO
+ALTER TABLE [dbo].[Payments] CHECK CONSTRAINT [FK_Payments_Invoice]
+GO
+ALTER TABLE [dbo].[Payments]  WITH CHECK ADD  CONSTRAINT [FK_Payments_Patient] FOREIGN KEY([PaidByPatientUserId])
+REFERENCES [dbo].[PatientProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[Payments] CHECK CONSTRAINT [FK_Payments_Patient]
+GO
+ALTER TABLE [dbo].[VisitFeedback]  WITH CHECK ADD  CONSTRAINT [FK_VisitFeedback_Appointment] FOREIGN KEY([AppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+GO
+ALTER TABLE [dbo].[VisitFeedback] CHECK CONSTRAINT [FK_VisitFeedback_Appointment]
+GO
+ALTER TABLE [dbo].[AuditLogs]  WITH CHECK ADD  CONSTRAINT [FK_AuditLogs_User] FOREIGN KEY([UserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[AuditLogs] CHECK CONSTRAINT [FK_AuditLogs_User]
+GO
+ALTER TABLE [dbo].[BlogPosts]  WITH CHECK ADD  CONSTRAINT [FK_BlogPosts_BlogCategories] FOREIGN KEY([CategoryId])
+REFERENCES [dbo].[BlogCategories] ([CategoryId])
+GO
+ALTER TABLE [dbo].[BlogPosts] CHECK CONSTRAINT [FK_BlogPosts_BlogCategories]
+GO
+ALTER TABLE [dbo].[BlogPosts]  WITH CHECK ADD  CONSTRAINT [FK_BlogPosts_UserAccounts] FOREIGN KEY([AuthorUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[BlogPosts] CHECK CONSTRAINT [FK_BlogPosts_UserAccounts]
+GO
+ALTER TABLE [dbo].[BlogPostMedia]  WITH CHECK ADD  CONSTRAINT [FK_BlogPostMedia_BlogPosts] FOREIGN KEY([BlogPostId])
+REFERENCES [dbo].[BlogPosts] ([BlogPostId])
+ON DELETE SET NULL
+GO
+ALTER TABLE [dbo].[BlogPostMedia] CHECK CONSTRAINT [FK_BlogPostMedia_BlogPosts]
+GO
+ALTER TABLE [dbo].[BlogPostMedia]  WITH CHECK ADD  CONSTRAINT [FK_BlogPostMedia_UserAccounts] FOREIGN KEY([UploadedByUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[BlogPostMedia] CHECK CONSTRAINT [FK_BlogPostMedia_UserAccounts]
+GO
+ALTER TABLE [dbo].[ClinicProfile]  WITH CHECK ADD CHECK  (([ClinicId]=(1)))
+GO
+ALTER TABLE [dbo].[ClinicProfile]  WITH CHECK ADD  CONSTRAINT [CK_ClinicProfile_OpenClose] CHECK  (([ClosingTime] IS NULL OR [OpeningTime] IS NULL OR [ClosingTime]>[OpeningTime]))
+GO
+ALTER TABLE [dbo].[ClinicProfile] CHECK CONSTRAINT [CK_ClinicProfile_OpenClose]
+GO
+ALTER TABLE [dbo].[UserAccounts]  WITH CHECK ADD CHECK  (([FailedLoginCount]>=(0)))
+GO
+ALTER TABLE [dbo].[UserAccounts]  WITH CHECK ADD CHECK  (([Status]='Inactive' OR [Status]='Locked' OR [Status]='Active' OR [Status]='Unverified'))
+GO
+ALTER TABLE [dbo].[UserAccounts]  WITH CHECK ADD CHECK  (([Role]='SystemAdministrator' OR [Role]='DepartmentManager' OR [Role]='Dentist' OR [Role]='Receptionist' OR [Role]='Patient'))
+GO
+ALTER TABLE [dbo].[PatientProfiles]  WITH CHECK ADD CHECK  (([Gender] IS NULL OR ([Gender]='Other' OR [Gender]='Female' OR [Gender]='Male')))
+GO
+ALTER TABLE [dbo].[StaffProfiles]  WITH CHECK ADD CHECK  (([EmploymentStatus]='Inactive' OR [EmploymentStatus]='Active'))
+GO
+ALTER TABLE [dbo].[DentistProfiles]  WITH CHECK ADD CHECK  (([YearsOfExperience] IS NULL OR [YearsOfExperience]>=(0)))
+GO
+ALTER TABLE [dbo].[Departments]  WITH CHECK ADD CHECK  (([Status]='Inactive' OR [Status]='Active'))
+GO
+ALTER TABLE [dbo].[DentistDepartments]  WITH CHECK ADD CHECK  (([Status]='Inactive' OR [Status]='Active'))
+GO
+ALTER TABLE [dbo].[DepartmentWorkSchedules]  WITH CHECK ADD CHECK  (([DayOfWeek]>=(1) AND [DayOfWeek]<=(7)))
+GO
+ALTER TABLE [dbo].[DepartmentWorkSchedules]  WITH CHECK ADD  CONSTRAINT [CK_DepartmentWorkSchedules_Time] CHECK  (([EndTime]>[StartTime]))
+GO
+ALTER TABLE [dbo].[DepartmentWorkSchedules] CHECK CONSTRAINT [CK_DepartmentWorkSchedules_Time]
+GO
+ALTER TABLE [dbo].[DentistWorkSchedules]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Scheduled'))
+GO
+ALTER TABLE [dbo].[DentistWorkSchedules]  WITH CHECK ADD  CONSTRAINT [CK_DentistWorkSchedules_Time] CHECK  (([EndTime]>[StartTime]))
+GO
+ALTER TABLE [dbo].[DentistWorkSchedules] CHECK CONSTRAINT [CK_DentistWorkSchedules_Time]
+GO
+ALTER TABLE [dbo].[DentistAvailability]  WITH CHECK ADD CHECK  (([AvailabilityStatus]='Unavailable' OR [AvailabilityStatus]='OnLeave' OR [AvailabilityStatus]='Busy' OR [AvailabilityStatus]='Available'))
+GO
+ALTER TABLE [dbo].[DentistAvailability]  WITH CHECK ADD  CONSTRAINT [CK_DentistAvailability_Time] CHECK  (([EndDateTime] IS NULL OR [EndDateTime]>[StartDateTime]))
+GO
+ALTER TABLE [dbo].[DentistAvailability] CHECK CONSTRAINT [CK_DentistAvailability_Time]
+GO
+ALTER TABLE [dbo].[Rooms]  WITH CHECK ADD CHECK  (([Status]='Maintenance' OR [Status]='Inactive' OR [Status]='Active'))
+GO
+ALTER TABLE [dbo].[DentalChairs]  WITH CHECK ADD CHECK  (([Status]='Maintenance' OR [Status]='Inactive' OR [Status]='Active'))
+GO
+ALTER TABLE [dbo].[DepartmentServices]  WITH CHECK ADD CHECK  (([Status]='Inactive' OR [Status]='Active'))
+GO
+ALTER TABLE [dbo].[DepartmentServices]  WITH CHECK ADD  CONSTRAINT [CK_DepartmentServices_Duration] CHECK  (([DurationMinutes] IS NULL OR [DurationMinutes]>(0)))
+GO
+ALTER TABLE [dbo].[DepartmentServices] CHECK CONSTRAINT [CK_DepartmentServices_Duration]
+GO
+ALTER TABLE [dbo].[DepartmentServices]  WITH CHECK ADD  CONSTRAINT [CK_DepartmentServices_Price] CHECK  (([Price]>=(0)))
+GO
+ALTER TABLE [dbo].[DepartmentServices] CHECK CONSTRAINT [CK_DepartmentServices_Price]
+GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD CHECK  (([BookingSource]='Receptionist' OR [BookingSource]='Patient'))
+GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD CHECK  (([Status]='NoShow' OR [Status]='Cancelled' OR [Status]='Expired' OR [Status]='Withdrawn' OR [Status]='Rejected' OR [Status]='Completed' OR [Status]='InService' OR [Status]='Called' OR [Status]='Waiting' OR [Status]='CheckedIn' OR [Status]='Confirmed' OR [Status]='AwaitingPatientResponse' OR [Status]='PendingDepartmentReview' OR [Status]='PendingReceptionReview'))
+GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD  CONSTRAINT [CK_Appointments_Schedule] CHECK  (([ScheduledEnd] IS NULL OR [ScheduledStart] IS NULL OR [ScheduledEnd]>[ScheduledStart]))
+GO
+ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [CK_Appointments_Schedule]
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals]  WITH CHECK ADD CHECK  (([Status]='Expired' OR [Status]='Rejected' OR [Status]='Accepted' OR [Status]='Pending'))
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals]  WITH CHECK ADD  CONSTRAINT [CK_AppointmentChangeProposals_Time] CHECK  (([ProposedEnd] IS NULL OR [ProposedStart] IS NULL OR [ProposedEnd]>[ProposedStart]))
+GO
+ALTER TABLE [dbo].[AppointmentChangeProposals] CHECK CONSTRAINT [CK_AppointmentChangeProposals_Time]
+GO
+ALTER TABLE [dbo].[Notifications]  WITH CHECK ADD CHECK  (([Channel]='Email' OR [Channel]='InApp'))
+GO
+ALTER TABLE [dbo].[Notifications]  WITH CHECK ADD CHECK  (([DeliveryStatus]='Failed' OR [DeliveryStatus]='Sent' OR [DeliveryStatus]='Pending'))
+GO
+ALTER TABLE [dbo].[TreatmentPlans]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Completed' OR [Status]='InProgress' OR [Status]='Planned'))
+GO
+ALTER TABLE [dbo].[TreatmentPlans]  WITH CHECK ADD  CONSTRAINT [CK_TreatmentPlans_EstimatedTotal] CHECK  (([EstimatedTotal] IS NULL OR [EstimatedTotal]>=(0)))
+GO
+ALTER TABLE [dbo].[TreatmentPlans] CHECK CONSTRAINT [CK_TreatmentPlans_EstimatedTotal]
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Completed' OR [Status]='InProgress' OR [Status]='Planned'))
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems]  WITH CHECK ADD  CONSTRAINT [CK_TreatmentPlanItems_Cost] CHECK  (([EstimatedCost] IS NULL OR [EstimatedCost]>=(0)))
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems] CHECK CONSTRAINT [CK_TreatmentPlanItems_Cost]
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems]  WITH CHECK ADD  CONSTRAINT [CK_TreatmentPlanItems_Sequence] CHECK  (([SequenceNo]>(0)))
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems] CHECK CONSTRAINT [CK_TreatmentPlanItems_Sequence]
+GO
+ALTER TABLE [dbo].[PerformedServices]  WITH CHECK ADD  CONSTRAINT [CK_PerformedServices_Quantity] CHECK  (([Quantity]>(0)))
+GO
+ALTER TABLE [dbo].[PerformedServices] CHECK CONSTRAINT [CK_PerformedServices_Quantity]
+GO
+ALTER TABLE [dbo].[PerformedServices]  WITH CHECK ADD  CONSTRAINT [CK_PerformedServices_UnitPrice] CHECK  (([UnitPrice]>=(0)))
+GO
+ALTER TABLE [dbo].[PerformedServices] CHECK CONSTRAINT [CK_PerformedServices_UnitPrice]
+GO
+ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD CHECK  (([Status]='Completed' OR [Status]='Assigned' OR [Status]='Rejected' OR [Status]='Accepted' OR [Status]='Pending'))
+GO
+ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [CK_DepartmentReferrals_DifferentDepartment] CHECK  (([FromDepartmentId]<>[ToDepartmentId]))
+GO
+ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [CK_DepartmentReferrals_DifferentDepartment]
+GO
+ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [CK_DepartmentReferrals_Urgency] CHECK  (([Urgency]='Urgent' OR [Urgency]='Normal'))
+GO
+ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [CK_DepartmentReferrals_Urgency]
+GO
+ALTER TABLE [dbo].[FollowUpSchedules]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Completed' OR [Status]='Scheduled' OR [Status]='Pending'))
+GO
+ALTER TABLE [dbo].[Invoices]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Paid' OR [Status]='PartiallyPaid' OR [Status]='Unpaid'))
+GO
+ALTER TABLE [dbo].[Invoices]  WITH CHECK ADD  CONSTRAINT [CK_Invoices_Total] CHECK  (([TotalAmount]>=(0)))
+GO
+ALTER TABLE [dbo].[Invoices] CHECK CONSTRAINT [CK_Invoices_Total]
+GO
+ALTER TABLE [dbo].[InvoiceItems]  WITH CHECK ADD  CONSTRAINT [CK_InvoiceItems_Quantity] CHECK  (([Quantity]>(0)))
+GO
+ALTER TABLE [dbo].[InvoiceItems] CHECK CONSTRAINT [CK_InvoiceItems_Quantity]
+GO
+ALTER TABLE [dbo].[InvoiceItems]  WITH CHECK ADD  CONSTRAINT [CK_InvoiceItems_UnitPrice] CHECK  (([UnitPrice]>=(0)))
+GO
+ALTER TABLE [dbo].[InvoiceItems] CHECK CONSTRAINT [CK_InvoiceItems_UnitPrice]
+GO
+ALTER TABLE [dbo].[Payments]  WITH CHECK ADD CHECK  (([Method]='BankTransfer' OR [Method]='Online'))
+GO
+ALTER TABLE [dbo].[Payments]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Failed' OR [Status]='Successful' OR [Status]='Pending'))
+GO
+ALTER TABLE [dbo].[Payments]  WITH CHECK ADD  CONSTRAINT [CK_Payments_Amount] CHECK  (([Amount]>(0)))
+GO
+ALTER TABLE [dbo].[Payments] CHECK CONSTRAINT [CK_Payments_Amount]
+GO
+ALTER TABLE [dbo].[VisitFeedback]  WITH CHECK ADD CHECK  (([ClinicRating]>=(1) AND [ClinicRating]<=(5)))
+GO
+ALTER TABLE [dbo].[VisitFeedback]  WITH CHECK ADD CHECK  (([DentistRating]>=(1) AND [DentistRating]<=(5)))
+GO
+ALTER TABLE [dbo].[BlogPosts]  WITH CHECK ADD  CONSTRAINT [CK_BlogPosts_Status] CHECK  (([Status]='Archived' OR [Status]='Published' OR [Status]='PendingReview' OR [Status]='Draft'))
+GO
+ALTER TABLE [dbo].[BlogPosts] CHECK CONSTRAINT [CK_BlogPosts_Status]
+GO
+ALTER TABLE [dbo].[BlogPostMedia]  WITH CHECK ADD  CONSTRAINT [CK_BlogPostMedia_Type] CHECK  (([MediaType]='Video' OR [MediaType]='Image'))
+GO
+ALTER TABLE [dbo].[BlogPostMedia] CHECK CONSTRAINT [CK_BlogPostMedia_Type]
 GO
 
-SET NOCOUNT ON;
-SET QUOTED_IDENTIFIER ON;
-SET ANSI_NULLS ON;
+-- =========================================================================================
+-- PART 2: COMPLETE SYSTEM DATASET SEEDING (38 TABLES, UTF-8 ACCENTED VIETNAMESE)
+-- =========================================================================================
 
-BEGIN TRANSACTION;
+-- Disable foreign key checks during data loading
+EXEC sp_msforeachtable 'ALTER TABLE ? NOCHECK CONSTRAINT all';
+GO
 
-BEGIN TRY
-    PRINT N'>>> DANG KHOI TAO BO DU LIEU DEMO 30 TAI KHOAN VA CAC KICH BAN NHA KHOA...';
+-- -----------------------------------------------------------------------------------------
+-- Data for [ClinicProfile] (1 rows)
+-- -----------------------------------------------------------------------------------------
+INSERT [dbo].[ClinicProfile] ([ClinicId], [Name], [Address], [PhoneNumber], [Email], [Description], [OpeningTime], [ClosingTime], [UpdatedAt]) VALUES (1, N'Nha Khoa Chuyên Sâu DentalCare', N'123 Đường Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh', N'1900 1234', N'info@dentalcare.com', N'Hệ thống Nha khoa Kỹ thuật cao Đa chuyên khoa, phục vụ chuyên nghiệp và tận tâm.', CAST(N'08:00:00' AS Time), CAST(N'20:00:00' AS Time), CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2))
+GO
 
-    DECLARE @PasswordHash VARCHAR(255) = 'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==';
-    DECLARE @Now DATETIME2 = SYSDATETIME();
-    DECLARE @Today DATE = '2026-10-15';
+-- -----------------------------------------------------------------------------------------
+-- Data for [UserAccounts] (26 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[UserAccounts] ON;
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (1, N'dentist2@dentalcare.com', N'0900000005', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Dentist', N'Active', CAST(N'2026-10-12T00:32:20.3271275' AS DateTime2), N'/images/doctors/dr-phuong-thao.svg', CAST(N'2026-11-02T03:04:52.3524654' AS DateTime2), 0, NULL, CAST(N'2026-10-12T00:32:20.3271275' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (2, N'admin@dentalcare.com', N'0900000001', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'SystemAdministrator', N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL, CAST(N'2026-11-02T04:26:56.1761415' AS DateTime2), 0, NULL, CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (3, N'receptionist@dentalcare.com', N'0900000002', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Receptionist', N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL, CAST(N'2026-10-15T18:23:53.4341364' AS DateTime2), 0, NULL, CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (4, N'dentist@dentalcare.com', N'0900000003', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Dentist', N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), N'/images/doctors/dr-tran-van-hung.svg', CAST(N'2026-11-02T04:26:56.0177446' AS DateTime2), 0, NULL, CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (5, N'manager@dentalcare.com', N'0900000004', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'DepartmentManager', N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), N'/images/doctors/dr-le-hoang-nam.svg', CAST(N'2026-10-15T18:19:40.9105945' AS DateTime2), 0, NULL, CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (6, N'lehoangminh.test@dentalcare.com', N'0988112233', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL, CAST(N'2026-11-02T03:51:45.2940238' AS DateTime2), 0, NULL, CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (7, N'manhduhnee@gmail.com', N'0973149672', N'AQAAAAIAAYagAAAAEMj1FcReXLUuRT6Sh6bc9SOjW0wmovgIx5518H3/yGJXm2pauR0vTJiFJfvd0eCS+Q==', N'Patient', N'Unverified', NULL, NULL, NULL, 0, NULL, CAST(N'2026-10-12T07:25:23.3048958' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (17, N'manager1@dentalcare.com', N'0901111001', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'DepartmentManager', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL, CAST(N'2026-11-02T03:23:58.2621445' AS DateTime2), 0, NULL, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (18, N'manager2@dentalcare.com', N'0901111002', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'DepartmentManager', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL, CAST(N'2026-11-02T04:26:55.5782756' AS DateTime2), 0, NULL, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (19, N'manager4@dentalcare.com', N'0901111004', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'DepartmentManager', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL, CAST(N'2026-11-02T05:54:43.0702363' AS DateTime2), 0, NULL, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (20, N'dentist3@dentalcare.com', N'0902222003', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Dentist', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL, CAST(N'2026-11-02T05:50:49.2699333' AS DateTime2), 0, NULL, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (21, N'dentist4@dentalcare.com', N'0902222004', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Dentist', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL, CAST(N'2026-11-02T04:26:55.8340181' AS DateTime2), 0, NULL, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (22, N'vovandong1512@gmail.com', N'0933151299', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL, NULL, 0, NULL, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (23, N'hoanglan.patient@dentalcare.com', N'0938112233', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL, CAST(N'2026-11-02T16:32:11.0443592' AS DateTime2), 0, NULL, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (24, N'patient4@dentalcare.com', N'0912345674', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL, NULL, 0, NULL, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (25, N'patient5@dentalcare.com', N'0912345675', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL, NULL, 0, NULL, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (42, N'admin2@dentalcare.com', N'0900000099', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'SystemAdministrator', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, CAST(N'2026-11-02T04:26:56.2553696' AS DateTime2), 0, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (43, N'receptionist2@dentalcare.com', N'0911000002', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Receptionist', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, CAST(N'2026-11-02T04:26:55.9140433' AS DateTime2), 0, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), CAST(N'2026-11-02T03:41:42.2973799' AS DateTime2))
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (44, N'receptionist3@dentalcare.com', N'0911000003', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Receptionist', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, NULL, 0, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (45, N'dentist5@dentalcare.com', N'0901234505', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Dentist', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, CAST(N'2026-11-02T03:04:52.7986667' AS DateTime2), 0, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (46, N'dentist6@dentalcare.com', N'0901234506', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Dentist', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, CAST(N'2026-11-02T03:51:44.7051897' AS DateTime2), 0, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (47, N'patient6@dentalcare.com', N'0912345676', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, NULL, 0, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (48, N'patient7@dentalcare.com', N'0912345677', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, NULL, 0, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (49, N'patient8@dentalcare.com', N'0912345678', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, NULL, 0, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (52, N'patient1@dentalcare.com', N'0903112233', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL, CAST(N'2026-11-02T05:56:08.0908758' AS DateTime2), 0, NULL, CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL)
+INSERT [dbo].[UserAccounts] ([UserId], [Email], [PhoneNumber], [PasswordHash], [Role], [Status], [EmailVerifiedAt], [AvatarUrl], [LastLoginAt], [FailedLoginCount], [LockoutEnd], [CreatedAt], [UpdatedAt]) VALUES (53, N'dinhphong.patient@dentalcare.com', N'0977223344', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL, CAST(N'2026-11-02T04:26:56.0960828' AS DateTime2), 0, NULL, CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL)
+SET IDENTITY_INSERT [dbo].[UserAccounts] OFF;
+GO
 
-    ---------------------------------------------------------------------
-    -- 1. CAP NHAT & BO SUNG TAI KHOAN QUAN TRI & LE TAN
-    ---------------------------------------------------------------------
-    -- 1.1 Quáº£n trá»‹ viÃªn 1
-    DECLARE @Admin1Id BIGINT;
-    SELECT @Admin1Id = UserId FROM UserAccounts WHERE Email = 'admin@dentalcare.com';
-    IF @Admin1Id IS NULL
-    BEGIN
-        INSERT INTO UserAccounts (Email, PhoneNumber, PasswordHash, Role, Status, EmailVerifiedAt, CreatedAt)
-        VALUES ('admin@dentalcare.com', '0900000001', @PasswordHash, 'SystemAdministrator', 'Active', @Now, @Now);
-        SET @Admin1Id = SCOPE_IDENTITY();
-        INSERT INTO StaffProfiles (UserId, EmployeeCode, FullName, EmploymentStatus, CreatedAt)
-        VALUES (@Admin1Id, 'EMP-ADM-001', N'Quáº£n Trá»‹ ViÃªn TrÆ°á»Ÿng', 'Active', @Now);
-    END;
+-- -----------------------------------------------------------------------------------------
+-- Data for [PatientProfiles] (11 rows)
+-- -----------------------------------------------------------------------------------------
+INSERT [dbo].[PatientProfiles] ([UserId], [PatientCode], [FullName], [DateOfBirth], [Gender], [NationalId], [HealthInsuranceNumber], [Address], [EmergencyContact], [CreatedAt], [UpdatedAt]) VALUES (6, N'PAT-202609-0001', N'Lê Hoàng Minh', CAST(N'1998-05-15' AS Date), N'Male', NULL, NULL, N'123 Trần Hưng Đạo, Quận 1, TP.HCM', N'Mẹ: 0912345678', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[PatientProfiles] ([UserId], [PatientCode], [FullName], [DateOfBirth], [Gender], [NationalId], [HealthInsuranceNumber], [Address], [EmergencyContact], [CreatedAt], [UpdatedAt]) VALUES (7, N'PAT-202610-0001', N'mahduh', NULL, N'Male', NULL, NULL, NULL, NULL, CAST(N'2026-10-12T07:25:23.3048958' AS DateTime2), NULL)
+INSERT [dbo].[PatientProfiles] ([UserId], [PatientCode], [FullName], [DateOfBirth], [Gender], [NationalId], [HealthInsuranceNumber], [Address], [EmergencyContact], [CreatedAt], [UpdatedAt]) VALUES (22, N'PAT-001', N'Võ Văn Đồng', CAST(N'1995-12-15' AS Date), N'Male', NULL, NULL, N'15 Hoàng Hoa Thám, Bình Thạnh, TP.HCM', N'Mẹ: 0918999000', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[PatientProfiles] ([UserId], [PatientCode], [FullName], [DateOfBirth], [Gender], [NationalId], [HealthInsuranceNumber], [Address], [EmergencyContact], [CreatedAt], [UpdatedAt]) VALUES (23, N'PAT-202610-0007', N'Nguyễn Thị Hoàng Lan', CAST(N'1996-03-24' AS Date), N'Female', NULL, NULL, N'45 Hai Bà Trưng, Q.1, TP.HCM', N'0938112233', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[PatientProfiles] ([UserId], [PatientCode], [FullName], [DateOfBirth], [Gender], [NationalId], [HealthInsuranceNumber], [Address], [EmergencyContact], [CreatedAt], [UpdatedAt]) VALUES (24, N'PAT-202610-0014', N'Nguyễn Tuấn Kiệt', CAST(N'1990-05-12' AS Date), N'Male', NULL, NULL, N'Quận 7, TP.HCM', N'0912345674', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[PatientProfiles] ([UserId], [PatientCode], [FullName], [DateOfBirth], [Gender], [NationalId], [HealthInsuranceNumber], [Address], [EmergencyContact], [CreatedAt], [UpdatedAt]) VALUES (25, N'PAT-006', N'Bé Vũ Hải Đăng', CAST(N'2019-06-15' AS Date), N'Male', NULL, NULL, N'Bình Thạnh, TP.HCM', N'0912345675', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[PatientProfiles] ([UserId], [PatientCode], [FullName], [DateOfBirth], [Gender], [NationalId], [HealthInsuranceNumber], [Address], [EmergencyContact], [CreatedAt], [UpdatedAt]) VALUES (47, N'PAT-202610-0015', N'Bùi Anh Khoa', CAST(N'1994-01-19' AS Date), N'Male', NULL, NULL, N'55 Nguyễn Thị Minh Khai, Quận 1, TP.HCM', N'Vợ - 0988456789', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[PatientProfiles] ([UserId], [PatientCode], [FullName], [DateOfBirth], [Gender], [NationalId], [HealthInsuranceNumber], [Address], [EmergencyContact], [CreatedAt], [UpdatedAt]) VALUES (48, N'PAT-202610-0016', N'Chu Thị Bích Ngọc', CAST(N'1983-07-25' AS Date), N'Female', NULL, NULL, N'18 Nguyễn Đình Chiểu, Quận 3, TP.HCM', N'Vợ - 0988456789', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[PatientProfiles] ([UserId], [PatientCode], [FullName], [DateOfBirth], [Gender], [NationalId], [HealthInsuranceNumber], [Address], [EmergencyContact], [CreatedAt], [UpdatedAt]) VALUES (49, N'PAT-015', N'Trịnh Gia Bảo (VIP)', CAST(N'1979-11-10' AS Date), N'Male', NULL, NULL, N'18 Nguyễn Đình Chiểu, Quận 3, TP.HCM', N'Chồng - 0988567890', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[PatientProfiles] ([UserId], [PatientCode], [FullName], [DateOfBirth], [Gender], [NationalId], [HealthInsuranceNumber], [Address], [EmergencyContact], [CreatedAt], [UpdatedAt]) VALUES (52, N'PAT-002', N'Trần Mai Chi', CAST(N'2001-04-12' AS Date), N'Female', NULL, NULL, N'123 Cách Mạng Tháng 8, Q.10, TP.HCM', N'Mẹ - 0903112233', CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL)
+INSERT [dbo].[PatientProfiles] ([UserId], [PatientCode], [FullName], [DateOfBirth], [Gender], [NationalId], [HealthInsuranceNumber], [Address], [EmergencyContact], [CreatedAt], [UpdatedAt]) VALUES (53, N'PAT-009', N'Lý Đình Phong', CAST(N'1992-10-14' AS Date), N'Male', NULL, NULL, N'120 Nguyễn Thị Minh Khai, Q.3, TP.HCM', N'Vợ - 0977111222', CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL)
+GO
 
-    -- 1.2 Quáº£n trá»‹ viÃªn 2
-    DECLARE @Admin2Id BIGINT;
-    SELECT @Admin2Id = UserId FROM UserAccounts WHERE Email = 'admin2@dentalcare.com';
-    IF @Admin2Id IS NULL
-    BEGIN
-        INSERT INTO UserAccounts (Email, PhoneNumber, PasswordHash, Role, Status, EmailVerifiedAt, CreatedAt)
-        VALUES ('admin2@dentalcare.com', '0900000099', @PasswordHash, 'SystemAdministrator', 'Active', @Now, @Now);
-        SET @Admin2Id = SCOPE_IDENTITY();
-        INSERT INTO StaffProfiles (UserId, EmployeeCode, FullName, EmploymentStatus, CreatedAt)
-        VALUES (@Admin2Id, 'EMP-ADM-002', N'Quáº£n Trá»‹ ViÃªn Ká»¹ Thuáº­t (Backup)', 'Active', @Now);
-    END;
+-- -----------------------------------------------------------------------------------------
+-- Data for [StaffProfiles] (15 rows)
+-- -----------------------------------------------------------------------------------------
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (1, N'EMP-DEN-002', N'TS. BS. Nguyễn Thị Phương Thảo', N'Active', CAST(N'2026-10-12T00:32:20.3271275' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (2, N'EMP-ADM-001', N'Quản Trị Viên Hệ Thống', N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (3, N'EMP-REC-001', N'Lễ Tân Nguyễn Thị Mai', N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (4, N'EMP-DEN-001', N'ThS. BS. Trần Văn Hùng', N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (5, N'EMP-MGR-001', N'BS. CKI Lê Hoàng Nam', N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (17, N'EMP-MGR-011', N'BS.CKII Nguyễn Văn Bình', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (18, N'EMP-MGR-012', N'ThS.BS Lê Thị Lan Hương', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (19, N'EMP-MGR-014', N'ThS.BS Đỗ Hải Yến', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (20, N'EMP-DEN-003', N'BS. Phạm Quốc Anh', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (21, N'EMP-DEN-004', N'BS. Lê Thị Mai Lan', N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (42, N'EMP-ADM-002', N'Quản Trị Viên Kỹ Thuật (Backup)', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (43, N'EMP-REC-002', N'Lễ Tân Lê Thu Hương (Thu Ngân)', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (44, N'EMP-REC-003', N'Lễ Tân Trần Minh Quân (CSKH)', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (45, N'EMP-DEN-005', N'BS. Hoàng Trọng Nghĩa', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[StaffProfiles] ([UserId], [EmployeeCode], [FullName], [EmploymentStatus], [CreatedAt], [UpdatedAt]) VALUES (46, N'EMP-DEN-006', N'BS. Hoàng Trọng Nghĩa', N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+GO
 
-    -- 1.3 Lá»… tÃ¢n 1 (BÃ n tiáº¿p Ä‘Ã³n chÃ­nh)
-    DECLARE @Rec1Id BIGINT;
-    SELECT @Rec1Id = UserId FROM UserAccounts WHERE Email = 'receptionist@dentalcare.com';
-    IF @Rec1Id IS NULL
-    BEGIN
-        INSERT INTO UserAccounts (Email, PhoneNumber, PasswordHash, Role, Status, EmailVerifiedAt, CreatedAt)
-        VALUES ('receptionist@dentalcare.com', '0900000002', @PasswordHash, 'Receptionist', 'Active', @Now, @Now);
-        SET @Rec1Id = SCOPE_IDENTITY();
-        INSERT INTO StaffProfiles (UserId, EmployeeCode, FullName, EmploymentStatus, CreatedAt)
-        VALUES (@Rec1Id, 'EMP-REC-001', N'Lá»… TÃ¢n Nguyá»…n Thá»‹ Mai', 'Active', @Now);
-    END;
+-- -----------------------------------------------------------------------------------------
+-- Data for [DentistProfiles] (7 rows)
+-- -----------------------------------------------------------------------------------------
+INSERT [dbo].[DentistProfiles] ([UserId], [LicenseNumber], [Qualification], [YearsOfExperience], [Biography]) VALUES (1, N'LIC-VN-2026-002', N'Tiến sĩ Y khoa (PhD) - Chuyên khoa Răng Hàm Mặt', 15, N'Tiến sĩ Y khoa (PhD) chuyên ngành Răng Hàm Mặt - Đại học Y Dược TP.HCM. Từng tu nghiệp chuyên sâu về Nội nha vi phẫu và Phục hình răng sứ tại Đại học Bordeaux (Pháp). Hơn 15 năm kinh nghiệm điều trị và nghiên cứu lâm sàng.')
+INSERT [dbo].[DentistProfiles] ([UserId], [LicenseNumber], [Qualification], [YearsOfExperience], [Biography]) VALUES (4, N'LIC-VN-2026-001', N'Thạc sĩ Y khoa (MSc) - Chuyên khoa Chỉnh nha & Thẩm mỹ', 12, N'Thạc sĩ Răng Hàm Mặt - Đại học Y Dược TP.HCM. Chuyên gia nắn chỉnh răng và niềng răng trong suốt Invisalign Platinum Provider. 12 năm kinh nghiệm tái tạo nụ cười chuẩn thẩm mỹ.')
+INSERT [dbo].[DentistProfiles] ([UserId], [LicenseNumber], [Qualification], [YearsOfExperience], [Biography]) VALUES (5, NULL, N'Bác sĩ Chuyên khoa I (CKI) - Phẫu thuật Hàm mặt & Implant', 10, N'Bác sĩ Chuyên khoa I Phẫu thuật Tạo hình Hàm mặt. Trưởng khoa Phẫu thuật & Implant DentalCare. Đã thực hiện hơn 2.500 ca cấy ghép Implant kỹ thuật số và nhổ răng khôn Piezotome không đau.')
+INSERT [dbo].[DentistProfiles] ([UserId], [LicenseNumber], [Qualification], [YearsOfExperience], [Biography]) VALUES (20, N'LIC-VN-003', N'Chuyên khoa Chỉnh nha', 7, N'Bác sĩ Chỉnh nha chuyên sâu')
+INSERT [dbo].[DentistProfiles] ([UserId], [LicenseNumber], [Qualification], [YearsOfExperience], [Biography]) VALUES (21, N'LIC-VN-004', N'Chuyên khoa Răng Trẻ Em', 6, N'Bác sĩ Nha khoa Trẻ em')
+INSERT [dbo].[DentistProfiles] ([UserId], [LicenseNumber], [Qualification], [YearsOfExperience], [Biography]) VALUES (45, N'LIC-VN-005', N'Chuyên gia Phục hình Thẩm mỹ DSD', 9, N'Thiết kế nụ cười chuẩn tỷ lệ vàng và dán sứ Veneer thẩm mỹ.')
+INSERT [dbo].[DentistProfiles] ([UserId], [LicenseNumber], [Qualification], [YearsOfExperience], [Biography]) VALUES (46, N'LIC-VN-006', N'Chuyên gia Phục hình Thẩm mỹ DSD', 5, N'Thiết kế nụ cười chuẩn tỷ lệ vàng và dán sứ Veneer thẩm mỹ.')
+GO
 
-    -- 1.4 Lá»… tÃ¢n 2 (Quáº§y thu ngÃ¢n & Viá»‡n phÃ­)
-    DECLARE @Rec2Id BIGINT;
-    SELECT @Rec2Id = UserId FROM UserAccounts WHERE Email = 'receptionist2@dentalcare.com';
-    IF @Rec2Id IS NULL
-    BEGIN
-        INSERT INTO UserAccounts (Email, PhoneNumber, PasswordHash, Role, Status, EmailVerifiedAt, CreatedAt)
-        VALUES ('receptionist2@dentalcare.com', '0911000002', @PasswordHash, 'Receptionist', 'Active', @Now, @Now);
-        SET @Rec2Id = SCOPE_IDENTITY();
-        INSERT INTO StaffProfiles (UserId, EmployeeCode, FullName, EmploymentStatus, CreatedAt)
-        VALUES (@Rec2Id, 'EMP-REC-002', N'Lá»… TÃ¢n LÃª Thu HÆ°Æ¡ng (Thu NgÃ¢n)', 'Active', @Now);
-    END;
+-- -----------------------------------------------------------------------------------------
+-- Data for [Departments] (10 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[Departments] ON;
+INSERT [dbo].[Departments] ([DepartmentId], [Name], [Description], [ManagerUserId], [Status], [CreatedAt], [UpdatedAt]) VALUES (1, N'Khoa Răng Tổng Quát & Nội Nha', N'Chuyên khám, chữa tủy và điều trị các bệnh lý răng tổng quát.', 17, N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[Departments] ([DepartmentId], [Name], [Description], [ManagerUserId], [Status], [CreatedAt], [UpdatedAt]) VALUES (2, N'Khoa Chỉnh Nha & Thẩm Mỹ', N'Chuyên niềng răng, bọc răng sứ và thẩm mỹ nụ cười công nghệ cao.', 18, N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[Departments] ([DepartmentId], [Name], [Description], [ManagerUserId], [Status], [CreatedAt], [UpdatedAt]) VALUES (3, N'Khoa Phẫu Thuật Miệng & Cấy Ghép Implant', N'Chuyên tiểu phẫu răng khôn, ghép xương và cấy ghép Implant chuyên sâu.', 5, N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[Departments] ([DepartmentId], [Name], [Description], [ManagerUserId], [Status], [CreatedAt], [UpdatedAt]) VALUES (4, N'Khoa Răng Trẻ Em', N'Chăm sóc sức khỏe răng miệng chuyên biệt và điều trị nha khoa cho trẻ em.', 19, N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2), NULL)
+INSERT [dbo].[Departments] ([DepartmentId], [Name], [Description], [ManagerUserId], [Status], [CreatedAt], [UpdatedAt]) VALUES (5, N'Khoa Chuẩn Đoán Hình Ảnh & Laser', N'Chuyên chụp CT ConeBeam 3D', NULL, N'Active', CAST(N'2026-11-02T03:31:31.4991451' AS DateTime2), NULL)
+INSERT [dbo].[Departments] ([DepartmentId], [Name], [Description], [ManagerUserId], [Status], [CreatedAt], [UpdatedAt]) VALUES (6, N'Khoa Phục Hình Thẩm Mỹ Kỹ Thuật Số Cao Cấp (Updated)', N'Cập nhật trang thiết bị scan iTero Lumina 2026', NULL, N'Inactive', CAST(N'2026-11-02T03:38:06.0226173' AS DateTime2), CAST(N'2026-11-02T03:38:06.2325115' AS DateTime2))
+INSERT [dbo].[Departments] ([DepartmentId], [Name], [Description], [ManagerUserId], [Status], [CreatedAt], [UpdatedAt]) VALUES (7, N'Khoa Phục Hình Kỹ Thuật Số QA', N'Chuyên khoa ứng dụng scan CAD/CAM 3D và phục hình thẩm mỹ cao cấp', NULL, N'Active', CAST(N'2026-11-02T03:38:34.0921908' AS DateTime2), NULL)
+INSERT [dbo].[Departments] ([DepartmentId], [Name], [Description], [ManagerUserId], [Status], [CreatedAt], [UpdatedAt]) VALUES (8, N'Khoa Phục Hình KTS Thẩm Mỹ VIP 831', N'Cập nhật công nghệ scan iTero Lumina 2026', NULL, N'Inactive', CAST(N'2026-11-02T03:40:31.2742403' AS DateTime2), CAST(N'2026-11-02T03:40:31.3820605' AS DateTime2))
+INSERT [dbo].[Departments] ([DepartmentId], [Name], [Description], [ManagerUserId], [Status], [CreatedAt], [UpdatedAt]) VALUES (9, N'Khoa Phục Hình KTS Thẩm Mỹ VIP 852', N'Cập nhật công nghệ scan iTero Lumina 2026', NULL, N'Inactive', CAST(N'2026-11-02T03:40:52.2688375' AS DateTime2), CAST(N'2026-11-02T03:40:52.3540046' AS DateTime2))
+INSERT [dbo].[Departments] ([DepartmentId], [Name], [Description], [ManagerUserId], [Status], [CreatedAt], [UpdatedAt]) VALUES (10, N'Khoa Phục Hình KTS Thẩm Mỹ VIP 901', N'Cập nhật công nghệ scan iTero Lumina 2026', NULL, N'Inactive', CAST(N'2026-11-02T03:41:41.7678619' AS DateTime2), CAST(N'2026-11-02T03:41:41.8704537' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[Departments] OFF;
+GO
 
-    -- 1.5 Lá»… tÃ¢n 3 (Ca chiá»u & CSKH)
-    DECLARE @Rec3Id BIGINT;
-    SELECT @Rec3Id = UserId FROM UserAccounts WHERE Email = 'receptionist3@dentalcare.com';
-    IF @Rec3Id IS NULL
-    BEGIN
-        INSERT INTO UserAccounts (Email, PhoneNumber, PasswordHash, Role, Status, EmailVerifiedAt, CreatedAt)
-        VALUES ('receptionist3@dentalcare.com', '0911000003', @PasswordHash, 'Receptionist', 'Active', @Now, @Now);
-        SET @Rec3Id = SCOPE_IDENTITY();
-        INSERT INTO StaffProfiles (UserId, EmployeeCode, FullName, EmploymentStatus, CreatedAt)
-        VALUES (@Rec3Id, 'EMP-REC-003', N'Lá»… TÃ¢n Tráº§n Minh QuÃ¢n (CSKH)', 'Active', @Now);
-    END;
+-- -----------------------------------------------------------------------------------------
+-- Data for [DentistDepartments] (14 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[DentistDepartments] ON;
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (1, 4, 3, N'Active', CAST(N'2026-10-12T00:32:20.4363565' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (2, 4, 1, N'Active', CAST(N'2026-10-12T00:40:27.1106284' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (3, 1, 1, N'Active', CAST(N'2026-10-12T00:40:27.1106284' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (4, 1, 3, N'Active', CAST(N'2026-10-12T00:40:27.1106284' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (5, 1, 2, N'Active', CAST(N'2026-10-15T18:11:57.5666667' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (6, 4, 2, N'Active', CAST(N'2026-10-15T18:11:57.5666667' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (7, 1, 4, N'Active', CAST(N'2026-10-15T18:11:57.5700000' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (8, 4, 4, N'Active', CAST(N'2026-10-15T18:11:57.5700000' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (12, 20, 2, N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (13, 21, 4, N'Active', CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (20, 45, 2, N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (21, 45, 1, N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (22, 46, 1, N'Active', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[DentistDepartments] ([DentistDepartmentId], [DentistUserId], [DepartmentId], [Status], [AssignedAt]) VALUES (23, 1, 10, N'Active', CAST(N'2026-11-02T03:41:42.4344244' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[DentistDepartments] OFF;
+GO
 
-    ---------------------------------------------------------------------
-    -- 2. TRÆ¯á»žNG KHOA (4 KHOA)
-    ---------------------------------------------------------------------
-    DECLARE @Mgr1Id BIGINT, @Mgr2Id BIGINT, @Mgr3Id BIGINT, @Mgr4Id BIGINT;
-    SELECT @Mgr1Id = UserId FROM UserAccounts WHERE Email = 'manager1@dentalcare.com';
-    SELECT @Mgr2Id = UserId FROM UserAccounts WHERE Email = 'manager2@dentalcare.com';
-    SELECT @Mgr3Id = UserId FROM UserAccounts WHERE Email = 'manager@dentalcare.com';
-    SELECT @Mgr4Id = UserId FROM UserAccounts WHERE Email = 'manager4@dentalcare.com';
+-- -----------------------------------------------------------------------------------------
+-- Data for [DepartmentWorkSchedules] (28 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[DepartmentWorkSchedules] ON;
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (1, 1, 1, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (2, 1, 2, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (3, 1, 3, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (4, 1, 4, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (5, 1, 5, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (6, 1, 6, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (7, 1, 7, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (8, 2, 1, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (9, 2, 2, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (10, 2, 3, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (11, 2, 4, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (12, 2, 5, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (13, 2, 6, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (14, 2, 7, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (15, 3, 1, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (16, 3, 2, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (17, 3, 3, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (18, 3, 4, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (19, 3, 5, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (20, 3, 6, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (21, 3, 7, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (22, 4, 1, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (23, 4, 2, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (24, 4, 3, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (25, 4, 4, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (26, 4, 5, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (27, 4, 6, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+INSERT [dbo].[DepartmentWorkSchedules] ([DepartmentScheduleId], [DepartmentId], [DayOfWeek], [StartTime], [EndTime], [IsActive]) VALUES (28, 4, 7, CAST(N'08:00:00' AS Time), CAST(N'17:30:00' AS Time), 1)
+SET IDENTITY_INSERT [dbo].[DepartmentWorkSchedules] OFF;
+GO
 
-    UPDATE Departments SET ManagerUserId = @Mgr1Id WHERE DepartmentId = 1;
-    UPDATE Departments SET ManagerUserId = @Mgr2Id WHERE DepartmentId = 2;
-    UPDATE Departments SET ManagerUserId = @Mgr3Id WHERE DepartmentId = 3;
-    UPDATE Departments SET ManagerUserId = @Mgr4Id WHERE DepartmentId = 4;
+-- -----------------------------------------------------------------------------------------
+-- Data for [DentistWorkSchedules] (203 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[DentistWorkSchedules] ON;
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (1, 4, 3, CAST(N'2026-10-12' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (2, 1, 3, CAST(N'2026-10-12' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (3, 1, 1, CAST(N'2026-10-12' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (4, 4, 3, CAST(N'2026-10-13' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (5, 1, 3, CAST(N'2026-10-13' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (6, 1, 1, CAST(N'2026-10-13' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (7, 4, 3, CAST(N'2026-10-14' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (8, 1, 3, CAST(N'2026-10-14' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (9, 1, 1, CAST(N'2026-10-14' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (10, 4, 3, CAST(N'2026-10-15' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (11, 1, 3, CAST(N'2026-10-15' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (12, 1, 1, CAST(N'2026-10-15' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (13, 4, 3, CAST(N'2026-10-16' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (14, 1, 3, CAST(N'2026-10-16' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (15, 1, 1, CAST(N'2026-10-16' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (16, 4, 3, CAST(N'2026-10-17' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (17, 1, 3, CAST(N'2026-10-17' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (18, 1, 1, CAST(N'2026-10-17' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (19, 4, 3, CAST(N'2026-10-18' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (20, 1, 3, CAST(N'2026-10-18' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (21, 1, 1, CAST(N'2026-10-18' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (22, 4, 3, CAST(N'2026-10-19' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (23, 1, 3, CAST(N'2026-10-19' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (24, 1, 1, CAST(N'2026-10-19' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (25, 4, 3, CAST(N'2026-10-20' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (26, 1, 3, CAST(N'2026-10-20' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (27, 1, 1, CAST(N'2026-10-20' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (28, 4, 3, CAST(N'2026-10-21' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (29, 1, 3, CAST(N'2026-10-21' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (30, 1, 1, CAST(N'2026-10-21' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (31, 4, 3, CAST(N'2026-10-22' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (32, 1, 3, CAST(N'2026-10-22' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (33, 1, 1, CAST(N'2026-10-22' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (34, 4, 3, CAST(N'2026-10-23' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (35, 1, 3, CAST(N'2026-10-23' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (36, 1, 1, CAST(N'2026-10-23' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (37, 4, 3, CAST(N'2026-10-24' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (38, 1, 3, CAST(N'2026-10-24' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (39, 1, 1, CAST(N'2026-10-24' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (40, 4, 3, CAST(N'2026-10-25' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (41, 1, 3, CAST(N'2026-10-25' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (42, 1, 1, CAST(N'2026-10-25' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (43, 4, 3, CAST(N'2026-10-26' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (44, 1, 3, CAST(N'2026-10-26' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (45, 1, 1, CAST(N'2026-10-26' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (46, 4, 3, CAST(N'2026-10-27' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (47, 1, 3, CAST(N'2026-10-27' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (48, 1, 1, CAST(N'2026-10-27' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (49, 4, 3, CAST(N'2026-10-28' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (50, 1, 3, CAST(N'2026-10-28' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (51, 1, 1, CAST(N'2026-10-28' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (52, 4, 3, CAST(N'2026-10-29' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (53, 1, 3, CAST(N'2026-10-29' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (54, 1, 1, CAST(N'2026-10-29' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (55, 4, 3, CAST(N'2026-10-30' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (56, 1, 3, CAST(N'2026-10-30' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (57, 1, 1, CAST(N'2026-10-30' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (58, 4, 3, CAST(N'2026-10-31' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (59, 1, 3, CAST(N'2026-10-31' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (60, 1, 1, CAST(N'2026-10-31' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (61, 4, 3, CAST(N'2026-11-01' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (62, 1, 3, CAST(N'2026-11-01' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (63, 1, 1, CAST(N'2026-11-01' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (64, 4, 3, CAST(N'2026-11-02' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (65, 1, 3, CAST(N'2026-11-02' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (66, 1, 1, CAST(N'2026-11-02' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (67, 4, 3, CAST(N'2026-11-03' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (68, 1, 3, CAST(N'2026-11-03' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (69, 1, 1, CAST(N'2026-11-03' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (70, 4, 3, CAST(N'2026-11-04' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (71, 1, 3, CAST(N'2026-11-04' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (72, 1, 1, CAST(N'2026-11-04' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (73, 4, 3, CAST(N'2026-11-05' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (74, 1, 3, CAST(N'2026-11-05' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (75, 1, 1, CAST(N'2026-11-05' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (76, 4, 3, CAST(N'2026-11-06' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (77, 1, 3, CAST(N'2026-11-06' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (78, 1, 1, CAST(N'2026-11-06' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (79, 4, 3, CAST(N'2026-11-07' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (80, 1, 3, CAST(N'2026-11-07' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (81, 1, 1, CAST(N'2026-11-07' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (82, 4, 3, CAST(N'2026-11-08' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (83, 1, 3, CAST(N'2026-11-08' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (84, 1, 1, CAST(N'2026-11-08' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (85, 4, 3, CAST(N'2026-11-09' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (86, 1, 3, CAST(N'2026-11-09' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (87, 1, 1, CAST(N'2026-11-09' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (88, 4, 3, CAST(N'2026-11-10' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (89, 1, 3, CAST(N'2026-11-10' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (90, 1, 1, CAST(N'2026-11-10' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (91, 4, 3, CAST(N'2026-11-11' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (92, 1, 3, CAST(N'2026-11-11' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (93, 1, 1, CAST(N'2026-11-11' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (94, 4, 3, CAST(N'2026-11-12' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (95, 1, 3, CAST(N'2026-11-12' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (96, 1, 1, CAST(N'2026-11-12' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (97, 4, 3, CAST(N'2026-11-13' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (98, 1, 3, CAST(N'2026-11-13' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (99, 1, 1, CAST(N'2026-11-13' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (100, 4, 3, CAST(N'2026-11-14' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (101, 1, 3, CAST(N'2026-11-14' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (102, 1, 1, CAST(N'2026-11-14' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (103, 4, 3, CAST(N'2026-11-15' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (104, 1, 3, CAST(N'2026-11-15' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (105, 1, 1, CAST(N'2026-11-15' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (106, 4, 3, CAST(N'2026-11-16' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (107, 1, 3, CAST(N'2026-11-16' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (108, 1, 1, CAST(N'2026-11-16' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (109, 4, 3, CAST(N'2026-11-17' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (110, 1, 3, CAST(N'2026-11-17' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (111, 1, 1, CAST(N'2026-11-17' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (112, 4, 3, CAST(N'2026-11-18' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (113, 1, 3, CAST(N'2026-11-18' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (114, 1, 1, CAST(N'2026-11-18' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (115, 4, 3, CAST(N'2026-11-19' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (116, 1, 3, CAST(N'2026-11-19' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (117, 1, 1, CAST(N'2026-11-19' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (118, 4, 3, CAST(N'2026-11-20' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (119, 1, 3, CAST(N'2026-11-20' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (120, 1, 1, CAST(N'2026-11-20' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (121, 4, 3, CAST(N'2026-11-21' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (122, 1, 3, CAST(N'2026-11-21' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (123, 1, 1, CAST(N'2026-11-21' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (124, 4, 3, CAST(N'2026-11-22' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (125, 1, 3, CAST(N'2026-11-22' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (126, 1, 1, CAST(N'2026-11-22' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (127, 4, 3, CAST(N'2026-11-23' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (128, 1, 3, CAST(N'2026-11-23' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (129, 1, 1, CAST(N'2026-11-23' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (130, 4, 3, CAST(N'2026-11-24' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (131, 1, 3, CAST(N'2026-11-24' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (132, 1, 1, CAST(N'2026-11-24' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (133, 4, 3, CAST(N'2026-11-25' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (134, 1, 3, CAST(N'2026-11-25' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (135, 1, 1, CAST(N'2026-11-25' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (136, 4, 3, CAST(N'2026-11-26' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (137, 1, 3, CAST(N'2026-11-26' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (138, 1, 1, CAST(N'2026-11-26' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (139, 4, 3, CAST(N'2026-11-27' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (140, 1, 3, CAST(N'2026-11-27' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (141, 1, 1, CAST(N'2026-11-27' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (142, 4, 3, CAST(N'2026-11-28' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (143, 1, 3, CAST(N'2026-11-28' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (144, 1, 1, CAST(N'2026-11-28' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (145, 4, 3, CAST(N'2026-11-29' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (146, 1, 3, CAST(N'2026-11-29' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (147, 1, 1, CAST(N'2026-11-29' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (148, 4, 3, CAST(N'2026-11-30' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (149, 1, 3, CAST(N'2026-11-30' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (150, 1, 1, CAST(N'2026-11-30' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (151, 4, 3, CAST(N'2026-12-01' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (152, 1, 3, CAST(N'2026-12-01' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (153, 1, 1, CAST(N'2026-12-01' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (154, 4, 3, CAST(N'2026-12-02' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (155, 1, 3, CAST(N'2026-12-02' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (156, 1, 1, CAST(N'2026-12-02' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (157, 4, 3, CAST(N'2026-12-03' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (158, 1, 3, CAST(N'2026-12-03' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (159, 1, 1, CAST(N'2026-12-03' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (160, 4, 3, CAST(N'2026-12-04' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (161, 1, 3, CAST(N'2026-12-04' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (162, 1, 1, CAST(N'2026-12-04' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (163, 4, 3, CAST(N'2026-12-05' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (164, 1, 3, CAST(N'2026-12-05' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (165, 1, 1, CAST(N'2026-12-05' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (166, 4, 3, CAST(N'2026-12-06' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (167, 1, 3, CAST(N'2026-12-06' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (168, 1, 1, CAST(N'2026-12-06' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (169, 4, 3, CAST(N'2026-12-07' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (170, 1, 3, CAST(N'2026-12-07' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (171, 1, 1, CAST(N'2026-12-07' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (172, 4, 3, CAST(N'2026-12-08' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (173, 1, 3, CAST(N'2026-12-08' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (174, 1, 1, CAST(N'2026-12-08' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (175, 4, 3, CAST(N'2026-12-09' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (176, 1, 3, CAST(N'2026-12-09' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (177, 1, 1, CAST(N'2026-12-09' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (178, 4, 3, CAST(N'2026-12-10' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (179, 1, 3, CAST(N'2026-12-10' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (180, 1, 1, CAST(N'2026-12-10' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (181, 4, 3, CAST(N'2026-12-11' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (182, 1, 3, CAST(N'2026-12-11' AS Date), CAST(N'08:30:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Ca làm việc tiêu chuẩn')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (183, 1, 1, CAST(N'2026-12-11' AS Date), CAST(N'08:00:00' AS Time), CAST(N'12:00:00' AS Time), N'Scheduled', N'Ca buổi sáng khám tổng quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (232, 45, 2, CAST(N'2026-10-15' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Chỉnh Nha')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (233, 46, 1, CAST(N'2026-10-15' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Tổng Quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (234, 45, 2, CAST(N'2026-10-16' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Chỉnh Nha')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (235, 46, 1, CAST(N'2026-10-16' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Tổng Quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (236, 45, 2, CAST(N'2026-10-17' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Chỉnh Nha')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (237, 46, 1, CAST(N'2026-10-17' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Tổng Quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (238, 45, 2, CAST(N'2026-10-18' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Chỉnh Nha')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (239, 46, 1, CAST(N'2026-10-18' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Tổng Quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (240, 45, 2, CAST(N'2026-10-19' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Chỉnh Nha')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (241, 46, 1, CAST(N'2026-10-19' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Tổng Quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (242, 45, 2, CAST(N'2026-10-20' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Chỉnh Nha')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (243, 46, 1, CAST(N'2026-10-20' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Tổng Quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (244, 45, 2, CAST(N'2026-10-21' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Chỉnh Nha')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (245, 46, 1, CAST(N'2026-10-21' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Tổng Quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (246, 45, 2, CAST(N'2026-10-22' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Chỉnh Nha')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (247, 46, 1, CAST(N'2026-10-22' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Lịch khám chuyên khoa Tổng Quát')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (248, 20, 2, CAST(N'2026-11-02' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Trực Tẩy Trắng & Thẩm Mỹ')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (249, 21, 4, CAST(N'2026-11-02' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Trực Khám Nha Khoa Trẻ Em')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (250, 45, 3, CAST(N'2026-11-02' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Trực Phẫu Thuật & Cấy Ghép Implant')
+INSERT [dbo].[DentistWorkSchedules] ([DentistScheduleId], [DentistUserId], [DepartmentId], [WorkDate], [StartTime], [EndTime], [Status], [Note]) VALUES (251, 46, 1, CAST(N'2026-11-02' AS Date), CAST(N'08:00:00' AS Time), CAST(N'17:00:00' AS Time), N'Scheduled', N'Trực Điều Trị Nha Chu & Lấy Cao Răng')
+SET IDENTITY_INSERT [dbo].[DentistWorkSchedules] OFF;
+GO
 
-    ---------------------------------------------------------------------
-    -- 3. BÃC SÄ¨ ÄIá»€U TRá»Š (DENTISTS - 6 BÃC SÄ¨)
-    ---------------------------------------------------------------------
-    DECLARE @Den1Id BIGINT, @Den2Id BIGINT, @Den3Id BIGINT, @Den4Id BIGINT, @Den5Id BIGINT, @Den6Id BIGINT;
-    SELECT @Den1Id = UserId FROM UserAccounts WHERE Email = 'dentist@dentalcare.com';
-    SELECT @Den2Id = UserId FROM UserAccounts WHERE Email = 'dentist2@dentalcare.com';
-    SELECT @Den3Id = UserId FROM UserAccounts WHERE Email = 'dentist3@dentalcare.com';
-    SELECT @Den4Id = UserId FROM UserAccounts WHERE Email = 'dentist4@dentalcare.com';
+-- -----------------------------------------------------------------------------------------
+-- Data for [Rooms] (8 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[Rooms] ON;
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (1, N'ROOM-101', N'Phòng Khám Răng Tổng Quát 101', N'Active', 1)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (2, N'ROOM-201', N'Phòng Phẫu Thuật & Implant 201', N'Active', 3)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (3, N'ROOM-301', N'Phòng Chỉnh Nha & Thẩm Mỹ 301', N'Active', 2)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (4, N'ROOM-401', N'Phòng Khám Răng Trẻ Em 401', N'Active', 4)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (5, N'ROOM-QA-88', N'Phòng Điều Trị Kỹ Thuật Cao VIP QA', N'Active', 6)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (6, N'RM-QA831', N'Phòng Điều Trị Kỹ Thuật Cao VIP 831', N'Active', 8)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (7, N'RM-QA852', N'Phòng Điều Trị Kỹ Thuật Cao VIP 852', N'Active', 9)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (8, N'RM-QA901', N'Phòng Điều Trị Kỹ Thuật Cao VIP 901', N'Active', 10)
+SET IDENTITY_INSERT [dbo].[Rooms] OFF;
+GO
 
-    -- 3.5 BÃ¡c sÄ© 5: BS. HoÃ ng Trá»ng NghÄ©a (Phá»¥c hÃ¬nh rÄƒng sá»© & Veneer)
-    SELECT @Den5Id = UserId FROM UserAccounts WHERE Email = 'dentist5@dentalcare.com';
-    IF @Den5Id IS NULL
-    BEGIN
-        INSERT INTO UserAccounts (Email, PhoneNumber, PasswordHash, Role, Status, EmailVerifiedAt, CreatedAt)
-        VALUES ('dentist5@dentalcare.com', '0901234505', @PasswordHash, 'Dentist', 'Active', @Now, @Now);
-        SET @Den5Id = SCOPE_IDENTITY();
-        INSERT INTO StaffProfiles (UserId, EmployeeCode, FullName, EmploymentStatus, CreatedAt)
-        VALUES (@Den5Id, 'EMP-DEN-005', N'BS. HoÃ ng Trá»ng NghÄ©a', 'Active', @Now);
-        INSERT INTO DentistProfiles (UserId, LicenseNumber, Qualification, YearsOfExperience, Biography)
-        VALUES (@Den5Id, 'LIC-VN-005', N'ChuyÃªn gia Phá»¥c hÃ¬nh Tháº©m má»¹ DSD', 9, N'Thiáº¿t káº¿ ná»¥ cÆ°á»i chuáº©n tá»· lá»‡ vÃ ng vÃ  dÃ¡n sá»© Veneer tháº©m má»¹.');
-    END;
+-- -----------------------------------------------------------------------------------------
+-- Data for [DentalChairs] (10 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[DentalChairs] ON;
+INSERT [dbo].[DentalChairs] ([DentalChairId], [RoomId], [ChairCode], [Status]) VALUES (1, 1, N'CHAIR-101-A', N'Active')
+INSERT [dbo].[DentalChairs] ([DentalChairId], [RoomId], [ChairCode], [Status]) VALUES (2, 1, N'CHAIR-101-B', N'Active')
+INSERT [dbo].[DentalChairs] ([DentalChairId], [RoomId], [ChairCode], [Status]) VALUES (3, 2, N'CHAIR-201-A', N'Active')
+INSERT [dbo].[DentalChairs] ([DentalChairId], [RoomId], [ChairCode], [Status]) VALUES (4, 2, N'CHAIR-201-B', N'Active')
+INSERT [dbo].[DentalChairs] ([DentalChairId], [RoomId], [ChairCode], [Status]) VALUES (5, 3, N'CHAIR-301-A', N'Active')
+INSERT [dbo].[DentalChairs] ([DentalChairId], [RoomId], [ChairCode], [Status]) VALUES (6, 4, N'CHAIR-401-A', N'Active')
+INSERT [dbo].[DentalChairs] ([DentalChairId], [RoomId], [ChairCode], [Status]) VALUES (7, 5, N'GHE-QA-88A', N'Maintenance')
+INSERT [dbo].[DentalChairs] ([DentalChairId], [RoomId], [ChairCode], [Status]) VALUES (8, 6, N'GH-QA831A', N'Maintenance')
+INSERT [dbo].[DentalChairs] ([DentalChairId], [RoomId], [ChairCode], [Status]) VALUES (9, 7, N'GH-QA852A', N'Maintenance')
+INSERT [dbo].[DentalChairs] ([DentalChairId], [RoomId], [ChairCode], [Status]) VALUES (10, 8, N'GH-QA901A', N'Maintenance')
+SET IDENTITY_INSERT [dbo].[DentalChairs] OFF;
+GO
 
-    -- 3.6 BÃ¡c sÄ© 6: BS. VÅ© Minh Tuáº¥n (Nha chu & Äiá»u trá»‹ báº£o tá»“n)
-    SELECT @Den6Id = UserId FROM UserAccounts WHERE Email = 'dentist6@dentalcare.com';
-    IF @Den6Id IS NULL
-    BEGIN
-        INSERT INTO UserAccounts (Email, PhoneNumber, PasswordHash, Role, Status, EmailVerifiedAt, CreatedAt)
-        VALUES ('dentist6@dentalcare.com', '0901234506', @PasswordHash, 'Dentist', 'Active', @Now, @Now);
-        SET @Den6Id = SCOPE_IDENTITY();
-        INSERT INTO StaffProfiles (UserId, EmployeeCode, FullName, EmploymentStatus, CreatedAt)
-        VALUES (@Den6Id, 'EMP-DEN-006', N'BS. VÅ© Minh Tuáº¥n', 'Active', @Now);
-        INSERT INTO DentistProfiles (UserId, LicenseNumber, Qualification, YearsOfExperience, Biography)
-        VALUES (@Den6Id, 'LIC-VN-006', N'BÃ¡c sÄ© Nha khoa Báº£o tá»“n', 5, N'Táº­n tá»¥y, chuyÃªn sÃ¢u láº¥y cao rÄƒng siÃªu Ã¢m vÃ  Ä‘iá»u trá»‹ báº£o tá»“n.');
-    END;
+-- -----------------------------------------------------------------------------------------
+-- Data for [DepartmentServices] (16 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[DepartmentServices] ON;
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (1, 1, N'Khám tổng quát & Tư vấn', N'Kiểm tra sức khỏe răng miệng toàn diện và lập kế hoạch chăm sóc.', 30, CAST(100000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (2, 1, N'Lấy cao răng & Đánh bóng', N'Làm sạch mảng bám, vôi răng bằng sóng siêu âm không ê buốt.', 45, CAST(250000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (3, 1, N'Trám răng thẩm mỹ Composite', N'Phục hồi răng sâu hoặc mẻ bằng vật liệu composite thẩm mỹ cao.', 45, CAST(400000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (4, 1, N'Điều trị tủy răng công nghệ cao', N'Làm sạch và trám bít ống tủy chuyên sâu bảo tồn răng thật.', 60, CAST(1200000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (5, 2, N'Khám & Tư vấn Chỉnh nha', N'Đo đạc khớp cắn, chụp hình phân tích thẩm mỹ nụ cười.', 45, CAST(300000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (6, 2, N'Tẩy trắng răng Laser Whitening', N'Tẩy trắng răng an toàn bằng công nghệ ánh sáng Laser hiện đại.', 60, CAST(2000000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (7, 3, N'Khám chuyên sâu & Tư vấn cấy ghép Implant', N'Khám lâm sàng và đánh giá mật độ xương hàm trước cấy ghép.', 45, CAST(500000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (8, 3, N'Tiểu phẫu nhổ răng khôn mọc lệch', N'Nhổ răng khôn mọc ngầm, mọc lệch bằng máy rung siêu âm Piezotome.', 60, CAST(1800000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (9, 3, N'Cấy ghép trụ Implant chính hãng', N'Đặt trụ Implant sinh học công nghệ Thụy Sĩ/Hàn Quốc.', 90, CAST(15000000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (10, 4, N'Khám nha khoa trẻ em & Bôi Flour ngừa sâu', N'Chăm sóc răng miệng định kỳ và ngừa sâu răng cho trẻ.', 30, CAST(150000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (11, 1, N'Cấy Ghép Implant Straumann QA 831', N'Thủ thuật phục hình răng cấy trụ Straumann Thụy Sĩ bảo hành trọn đời', 90, CAST(28500000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (12, 1, N'Cấy Ghép Implant Straumann QA VIP 852', N'Nâng cấp gói phủ màng sinh học PRF và giảm đau không xâm lấn', 120, CAST(32000000.00 AS Decimal(18, 2)), N'Inactive')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (13, 1, N'Cấy Ghép Implant Straumann QA VIP 901', N'Nâng cấp gói phủ màng sinh học PRF và giảm đau không xâm lấn', 120, CAST(32000000.00 AS Decimal(18, 2)), N'Inactive')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (17, 4, N'Trám răng sữa thẩm mỹ GIC', N'Trám xoang sâu răng sữa bằng vật liệu phóng thích Flour GIC', 30, CAST(250000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (18, 2, N'Niềng răng mắc cài kim loại', N'Chỉnh nha toàn diện 2 hàm bằng hệ thống mắc cài kim loại tự buộc', 60, CAST(30000000.00 AS Decimal(18, 2)), N'Active')
+INSERT [dbo].[DepartmentServices] ([DepartmentServiceId], [DepartmentId], [ServiceName], [Description], [DurationMinutes], [Price], [Status]) VALUES (19, 2, N'Thay dây cung & Siết niềng định kỳ', N'Tái khám siết lực dây cung và thay thun chuỗi', 30, CAST(500000.00 AS Decimal(18, 2)), N'Active')
+SET IDENTITY_INSERT [dbo].[DepartmentServices] OFF;
+GO
 
-    -- PhÃ¢n bá»• BÃ¡c sÄ© vÃ o cÃ¡c khoa
-    IF NOT EXISTS (SELECT 1 FROM DentistDepartments WHERE DentistUserId = @Den5Id AND DepartmentId = 2)
-        INSERT INTO DentistDepartments (DentistUserId, DepartmentId, Status, AssignedAt) VALUES (@Den5Id, 2, 'Active', @Now);
-    IF NOT EXISTS (SELECT 1 FROM DentistDepartments WHERE DentistUserId = @Den5Id AND DepartmentId = 1)
-        INSERT INTO DentistDepartments (DentistUserId, DepartmentId, Status, AssignedAt) VALUES (@Den5Id, 1, 'Active', @Now);
+-- -----------------------------------------------------------------------------------------
+-- Data for [Appointments] (40 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[Appointments] ON;
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (1, N'APP-20261014-001', 6, 1, 3, 4, 4, 1, 1, CAST(N'2026-10-13T22:12:25.1266667' AS DateTime2), CAST(N'2026-10-13T23:12:25.1266667' AS DateTime2), N'Đau nhức răng hàm, trám răng sâu thẩm mỹ', N'Patient', N'Q-001', N'Completed', 6, CAST(N'2026-10-13T00:12:25.1266667' AS DateTime2), CAST(N'2026-10-13T00:12:25.1266667' AS DateTime2), CAST(N'2026-10-13T22:12:25.1266667' AS DateTime2), CAST(N'2026-10-13T23:12:25.1266667' AS DateTime2), NULL, NULL, CAST(N'2026-10-14T00:12:25.1266667' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (2, N'APP-20261014-002', 6, 1, 2, 4, 4, 1, 2, CAST(N'2026-10-13T23:12:25.1333333' AS DateTime2), CAST(N'2026-10-14T00:12:25.1333333' AS DateTime2), N'Lấy cao răng định kỳ 6 tháng & đánh bóng', N'Patient', N'Q-002', N'CheckedIn', 6, CAST(N'2026-10-13T00:12:25.1333333' AS DateTime2), CAST(N'2026-10-13T00:12:25.1333333' AS DateTime2), CAST(N'2026-10-13T23:12:25.1333333' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-10-14T00:12:25.1333333' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (3, N'APP-20261015-93E250', 6, 1, 1, NULL, NULL, NULL, NULL, CAST(N'2026-10-16T08:30:00.0000000' AS DateTime2), CAST(N'2026-10-16T09:00:00.0000000' AS DateTime2), N'đau răng dưới', N'Patient', NULL, N'PendingReceptionReview', 6, CAST(N'2026-10-15T16:09:46.9568999' AS DateTime2), NULL, NULL, NULL, NULL, NULL, NULL)
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (4, N'APP-20261015-B8C1AA', 6, 3, 7, NULL, NULL, NULL, NULL, CAST(N'2026-10-17T09:00:00.0000000' AS DateTime2), CAST(N'2026-10-17T09:45:00.0000000' AS DateTime2), N'đau răng dưới', N'Patient', NULL, N'PendingReceptionReview', 6, CAST(N'2026-10-15T16:10:17.8555513' AS DateTime2), NULL, NULL, NULL, NULL, NULL, NULL)
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (5, N'APP-20261015-331C48', 6, 1, 2, NULL, NULL, NULL, NULL, CAST(N'2026-10-17T11:00:00.0000000' AS DateTime2), CAST(N'2026-10-17T11:45:00.0000000' AS DateTime2), N'đau răng dưới', N'Patient', NULL, N'PendingReceptionReview', 6, CAST(N'2026-10-15T16:11:18.7300132' AS DateTime2), NULL, NULL, NULL, NULL, NULL, NULL)
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (6, N'APP-20261015-51C0A4', 6, 3, 7, 4, NULL, NULL, NULL, CAST(N'2026-10-17T10:30:00.0000000' AS DateTime2), CAST(N'2026-10-17T11:15:00.0000000' AS DateTime2), N'nhức răng', N'Patient', NULL, N'PendingReceptionReview', 6, CAST(N'2026-10-15T16:14:26.0721809' AS DateTime2), NULL, NULL, NULL, NULL, NULL, NULL)
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (7, N'APP-20261015-63E926', 6, 1, 1, NULL, NULL, NULL, NULL, CAST(N'2026-10-17T08:00:00.0000000' AS DateTime2), CAST(N'2026-10-17T08:30:00.0000000' AS DateTime2), N'Kiem tra rang ham duoi bi e buot', N'Patient', NULL, N'PendingDepartmentReview', 6, CAST(N'2026-10-15T16:37:21.7850448' AS DateTime2), NULL, NULL, NULL, NULL, NULL, CAST(N'2026-10-15T17:46:47.3202446' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (8, N'APP-20261015-F3993A', 6, 1, 1, 1, NULL, NULL, NULL, CAST(N'2026-10-20T11:30:00.0000000' AS DateTime2), CAST(N'2026-10-20T12:00:00.0000000' AS DateTime2), N'đau răng phải', N'Patient', NULL, N'PendingDepartmentReview', 6, CAST(N'2026-10-15T17:42:53.0581097' AS DateTime2), NULL, NULL, NULL, NULL, NULL, CAST(N'2026-10-15T17:43:51.9552418' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (9, N'APP-20261015-2E44B2', 6, 2, 5, NULL, NULL, NULL, NULL, CAST(N'2026-10-17T09:00:00.0000000' AS DateTime2), CAST(N'2026-10-17T09:45:00.0000000' AS DateTime2), N'Kiem tra rang va cao voi rang', N'Patient', NULL, N'PendingDepartmentReview', 6, CAST(N'2026-10-15T18:09:14.0703138' AS DateTime2), NULL, NULL, NULL, NULL, NULL, CAST(N'2026-10-15T18:09:14.1480705' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (10, N'APP-20261015-0F8CFC', 6, 2, 5, NULL, NULL, NULL, NULL, CAST(N'2026-10-17T09:00:00.0000000' AS DateTime2), CAST(N'2026-10-17T09:45:00.0000000' AS DateTime2), N'Kiem tra rang va cao voi rang', N'Patient', NULL, N'PendingDepartmentReview', 6, CAST(N'2026-10-15T18:12:16.9083143' AS DateTime2), NULL, NULL, NULL, NULL, NULL, CAST(N'2026-10-15T18:12:16.9708533' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (11, N'APP-20261015-C26B43', 6, 2, 5, NULL, 1, 3, NULL, CAST(N'2026-10-17T09:00:00.0000000' AS DateTime2), CAST(N'2026-10-17T09:45:00.0000000' AS DateTime2), N'Kiem tra rang va cao voi rang', N'Patient', N'Q001', N'Completed', 6, CAST(N'2026-10-15T18:17:10.4297694' AS DateTime2), CAST(N'2026-10-15T18:17:10.7307785' AS DateTime2), CAST(N'2026-10-15T18:17:14.1990060' AS DateTime2), CAST(N'2026-10-15T18:17:14.3852751' AS DateTime2), NULL, NULL, CAST(N'2026-10-15T18:17:14.3853244' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (12, N'APP-20261015-393E6B', 6, 2, 5, NULL, 1, 3, NULL, CAST(N'2026-10-17T09:00:00.0000000' AS DateTime2), CAST(N'2026-10-17T09:45:00.0000000' AS DateTime2), N'Kiem tra rang va cao voi rang', N'Patient', N'Q002', N'Completed', 6, CAST(N'2026-10-15T18:17:58.0120847' AS DateTime2), CAST(N'2026-10-15T18:17:58.2403157' AS DateTime2), CAST(N'2026-10-15T18:18:01.5368697' AS DateTime2), CAST(N'2026-10-15T18:18:01.7283552' AS DateTime2), NULL, NULL, CAST(N'2026-10-15T18:18:01.7283554' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (13, N'APP-20261015-106400', 6, 2, 5, NULL, 1, 3, NULL, CAST(N'2026-10-17T09:00:00.0000000' AS DateTime2), CAST(N'2026-10-17T09:45:00.0000000' AS DateTime2), N'Kiem tra rang va cao voi rang', N'Patient', N'Q003', N'Completed', 6, CAST(N'2026-10-15T18:18:38.6107877' AS DateTime2), CAST(N'2026-10-15T18:18:38.8624221' AS DateTime2), CAST(N'2026-10-15T18:18:41.7923099' AS DateTime2), CAST(N'2026-10-15T18:18:41.8764481' AS DateTime2), NULL, NULL, CAST(N'2026-10-15T18:18:41.8764483' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (14, N'APP-20261015-69D82C', 6, 2, 5, NULL, 1, 3, NULL, CAST(N'2026-10-17T09:00:00.0000000' AS DateTime2), CAST(N'2026-10-17T09:45:00.0000000' AS DateTime2), N'Kiem tra rang va cao voi rang', N'Patient', N'Q004', N'Completed', 6, CAST(N'2026-10-15T18:19:41.0183982' AS DateTime2), CAST(N'2026-10-15T18:19:41.2413864' AS DateTime2), CAST(N'2026-10-15T18:19:44.9175882' AS DateTime2), CAST(N'2026-10-15T18:19:45.0080046' AS DateTime2), NULL, NULL, CAST(N'2026-10-15T18:19:45.0080047' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (15, N'APP-20261015-68DBD1', 6, 1, 1, NULL, NULL, NULL, NULL, CAST(N'2026-10-18T09:00:00.0000000' AS DateTime2), CAST(N'2026-10-18T09:30:00.0000000' AS DateTime2), N'Đau buốt răng cửa hàm trên', N'Patient', NULL, N'Cancelled', 6, CAST(N'2026-10-15T18:55:45.8164186' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-10-15T18:55:46.0687137' AS DateTime2), N'[Dời lịch] Hủy để dời sang lịch khám mới APP-20261015-A80C3A. Lý do: Bận việc đột xuất không thể đi vào ngày cũ, xin dời sang chiều ngày khác', CAST(N'2026-10-15T18:55:46.0687137' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (16, N'APP-20261015-A80C3A', 6, 1, 1, NULL, NULL, NULL, NULL, CAST(N'2026-10-20T14:00:00.0000000' AS DateTime2), CAST(N'2026-10-20T14:30:00.0000000' AS DateTime2), N'Đau buốt răng cửa hàm trên (D?i t? l?ch APP-20261015-68DBD1)', N'Patient', NULL, N'PendingReceptionReview', 6, CAST(N'2026-10-15T18:55:46.0687137' AS DateTime2), NULL, NULL, NULL, NULL, NULL, NULL)
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (17, N'APP-20261015-C61A88', 6, 3, 7, 1, NULL, NULL, NULL, CAST(N'2026-10-17T11:30:00.0000000' AS DateTime2), CAST(N'2026-10-17T12:15:00.0000000' AS DateTime2), N'đau răng', N'Patient', NULL, N'Withdrawn', 6, CAST(N'2026-10-15T19:04:42.5883229' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-10-15T19:06:35.9294734' AS DateTime2), N'Đặt nhầm ngày hoặc khung giờ', CAST(N'2026-10-15T19:06:35.9294781' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (18, N'APP-20261102-D258E6', 6, 1, 1, 4, NULL, NULL, NULL, CAST(N'2026-11-03T11:00:00.0000000' AS DateTime2), CAST(N'2026-11-03T11:30:00.0000000' AS DateTime2), N'đau răng', N'Patient', NULL, N'PendingReceptionReview', 6, CAST(N'2026-11-02T02:40:26.4753536' AS DateTime2), NULL, NULL, NULL, NULL, NULL, NULL)
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (33, N'APP-20261015-Q001', 6, 1, 1, 4, 4, 1, NULL, CAST(N'2026-11-02T08:00:00.0000000' AS DateTime2), CAST(N'2026-11-02T08:30:00.0000000' AS DateTime2), N'Bệnh nhân đau ê buốt răng số 16 khi ăn nhai, nướu sưng nhẹ', N'Patient', N'Q-001', N'CheckedIn', NULL, CAST(N'2026-10-31T09:49:04.5144162' AS DateTime2), CAST(N'2026-11-01T09:49:04.5144162' AS DateTime2), CAST(N'2026-10-15T13:15:00.0000000' AS DateTime2), CAST(N'2026-11-02T03:06:19.0092848' AS DateTime2), NULL, NULL, CAST(N'2026-11-02T03:06:19.0093533' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (34, N'APP-20261015-INS01', 23, 1, 3, 4, 4, 1, 1, CAST(N'2026-10-15T13:00:00.0000000' AS DateTime2), CAST(N'2026-10-15T14:00:00.0000000' AS DateTime2), N'Khám và điều trị tủy răng số 26, răng có lỗ sâu to', N'Receptionist', N'Q-002', N'InService', NULL, CAST(N'2026-11-01T09:49:04.5144162' AS DateTime2), CAST(N'2026-11-01T09:49:04.5144162' AS DateTime2), CAST(N'2026-10-15T12:55:00.0000000' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (35, N'APP-20261015-DONE1', 24, 3, 8, 4, 4, 3, 5, CAST(N'2026-10-15T09:30:00.0000000' AS DateTime2), CAST(N'2026-10-15T10:45:00.0000000' AS DateTime2), N'Tiểu phẫu nhổ răng khôn', N'Patient', N'Q-003', N'Completed', NULL, CAST(N'2026-10-30T09:49:04.5144162' AS DateTime2), CAST(N'2026-10-31T09:49:04.5144162' AS DateTime2), CAST(N'2026-10-15T09:15:00.0000000' AS DateTime2), CAST(N'2026-10-15T10:45:00.0000000' AS DateTime2), NULL, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (36, N'APP-20261015-CONF1', 22, 1, 1, 4, 4, 1, NULL, CAST(N'2026-11-02T14:00:00.0000000' AS DateTime2), CAST(N'2026-11-02T15:00:00.0000000' AS DateTime2), N'Khám răng định kỳ 6 tháng và cạo vôi răng siêu âm', N'Patient', NULL, N'Confirmed', NULL, CAST(N'2026-11-01T09:49:04.5144162' AS DateTime2), CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, NULL, NULL, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (37, N'APP-20261015-PEND1', 47, 2, 5, 20, NULL, NULL, NULL, CAST(N'2026-10-16T09:00:00.0000000' AS DateTime2), CAST(N'2026-10-16T10:00:00.0000000' AS DateTime2), N'Tư vấn niềng răng mắc cài kim loại tự buộc cho răng thưa và khấp khểnh', N'Patient', NULL, N'PendingDepartmentReview', NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, NULL, NULL, NULL, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (38, N'APP-20261015-PREC1', 48, 1, 2, NULL, NULL, NULL, NULL, CAST(N'2026-10-16T14:00:00.0000000' AS DateTime2), CAST(N'2026-10-16T14:45:00.0000000' AS DateTime2), N'Răng hàm R46 sâu vỡ lớn đau buốt về đêm, cần chữa tủy khẩn cấp', N'Patient', NULL, N'PendingReceptionReview', NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, NULL, NULL, NULL, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (39, N'APP-20261015-PK1', 49, 1, 1, 1, NULL, NULL, NULL, CAST(N'2026-10-16T10:30:00.0000000' AS DateTime2), CAST(N'2026-10-16T11:15:00.0000000' AS DateTime2), N'Khám răng tổng quát và hàn răng thẩm mỹ Composite răng cửa', N'Patient', NULL, N'PendingDepartmentReview', NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, NULL, NULL, NULL, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (40, N'APP-20261015-PK4', 25, 4, 10, 21, NULL, NULL, NULL, CAST(N'2026-10-16T15:00:00.0000000' AS DateTime2), CAST(N'2026-10-16T15:45:00.0000000' AS DateTime2), N'Khám răng sữa cho bé, bôi vecni Flour chống sâu răng toàn hàm', N'Patient', NULL, N'PendingDepartmentReview', NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, NULL, NULL, NULL, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (41, N'APP-20261015-UNPAID', 22, 1, 1, 1, 1, 1, 2, CAST(N'2026-10-15T11:00:00.0000000' AS DateTime2), CAST(N'2026-10-15T11:45:00.0000000' AS DateTime2), N'Hàn trám răng thẩm mỹ 2 răng sâu mặt nhai R15, R16', N'Patient', N'Q-005', N'Completed', NULL, CAST(N'2026-10-31T09:49:04.5144162' AS DateTime2), CAST(N'2026-11-01T09:49:04.5144162' AS DateTime2), CAST(N'2026-10-15T10:50:00.0000000' AS DateTime2), CAST(N'2026-10-15T11:45:00.0000000' AS DateTime2), NULL, NULL, CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (42, N'APP-SVC-02-LCR', 6, 1, 2, 46, 46, 1, 2, CAST(N'2026-11-02T08:30:00.0000000' AS DateTime2), CAST(N'2026-11-02T09:00:00.0000000' AS DateTime2), N'Lấy cao răng siêu âm định kỳ', N'Patient', N'Q-002', N'Completed', NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T03:48:41.8385007' AS DateTime2), NULL, NULL, CAST(N'2026-11-02T03:46:56.6509425' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (43, N'APP-SVC-03-TRC', 6, 1, 3, 4, 4, 1, NULL, CAST(N'2026-11-02T09:00:00.0000000' AS DateTime2), CAST(N'2026-11-02T09:45:00.0000000' AS DateTime2), N'Trám thẩm mỹ răng số 15, 16 mặt nhai bằng hạt độn nano Composite', N'Patient', N'Q-003', N'CheckedIn', NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (44, N'APP-SVC-04-DTY', 6, 1, 4, 4, 4, 1, NULL, CAST(N'2026-11-02T09:45:00.0000000' AS DateTime2), CAST(N'2026-11-02T10:45:00.0000000' AS DateTime2), N'Chữa tủy răng công nghệ cao', N'Patient', N'Q-004', N'CheckedIn', NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (45, N'APP-SVC-05-CN', 6, 2, 5, 1, 1, 3, NULL, CAST(N'2026-11-02T10:00:00.0000000' AS DateTime2), CAST(N'2026-11-02T11:00:00.0000000' AS DateTime2), N'Tư vấn niềng răng mắc cài tự buộc và thiết kế nụ cười', N'Patient', N'Q-005', N'CheckedIn', NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (46, N'APP-SVC-06-TT', 6, 2, 6, 20, 20, 3, NULL, CAST(N'2026-11-02T11:00:00.0000000' AS DateTime2), CAST(N'2026-11-02T12:00:00.0000000' AS DateTime2), N'Tẩy trắng răng Laser Whitening', N'Patient', N'Q-006', N'CheckedIn', NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (47, N'APP-SVC-07-IMP', 6, 3, 7, 45, 45, 2, NULL, CAST(N'2026-11-02T13:00:00.0000000' AS DateTime2), CAST(N'2026-11-02T13:45:00.0000000' AS DateTime2), N'Khám tư vấn cấy ghép Implant răng cấm bị mất', N'Patient', N'Q-007', N'CheckedIn', NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (48, N'APP-SVC-08-RK', 6, 3, 8, 4, 4, 2, NULL, CAST(N'2026-11-02T13:45:00.0000000' AS DateTime2), CAST(N'2026-11-02T14:45:00.0000000' AS DateTime2), N'Tiểu phẫu nhổ răng khôn', N'Patient', N'Q-008', N'CheckedIn', NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (49, N'APP-SVC-09-IMP', 6, 3, 9, 4, 4, 2, NULL, CAST(N'2026-11-02T14:45:00.0000000' AS DateTime2), CAST(N'2026-11-02T16:00:00.0000000' AS DateTime2), N'Cấy ghép trụ Implant Thụy Sĩ Straumann SLActive', N'Patient', N'Q-009', N'CheckedIn', NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (50, N'APP-SVC-10-KTE', 6, 4, 10, 21, 21, 4, NULL, CAST(N'2026-11-02T16:00:00.0000000' AS DateTime2), CAST(N'2026-11-02T16:45:00.0000000' AS DateTime2), N'Khám nha khoa tổng quát và bôi vecni Flour ngừa sâu răng', N'Patient', N'Q-010', N'CheckedIn', NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-11-02T10:04:29.9235093' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (51, N'APP-CHI-NIENG-01', 52, 2, 18, 20, 20, 3, 5, CAST(N'2026-10-18T11:24:47.1995757' AS DateTime2), CAST(N'2026-10-18T12:24:47.1995757' AS DateTime2), N'Giai đoạn 1: Gắn mắc cài kim loại 2 hàm', N'Patient', N'Q-CH1', N'Completed', NULL, CAST(N'2026-10-17T11:24:47.1995757' AS DateTime2), CAST(N'2026-10-17T11:24:47.1995757' AS DateTime2), CAST(N'2026-10-18T11:24:47.1995757' AS DateTime2), CAST(N'2026-10-18T11:24:47.1995757' AS DateTime2), NULL, NULL, CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (52, N'APP-2026-PHONG-K1', 53, 1, 1, 4, 4, 1, 1, CAST(N'2026-11-02T14:00:00.0000000' AS DateTime2), CAST(N'2026-11-02T15:00:00.0000000' AS DateTime2), N'Bệnh nhân muốn phục hình răng sứ nhưng phát hiện lệch lạc khớp cắn nặng, cắn chéo răng sau.', N'Patient', N'Q-009', N'InService', NULL, CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (53, N'APP-WAITING-PICKCHAIR', 6, 1, 1, 4, 4, 1, NULL, CAST(N'2026-11-02T16:30:00.0000000' AS DateTime2), CAST(N'2026-11-02T17:15:00.0000000' AS DateTime2), N'Bệnh nhân mới check-in tại quầy, đang ở sảnh chờ, chưa vào ghế điều trị', N'Patient', N'Q-099', N'CheckedIn', NULL, CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL, NULL, NULL, CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2))
+INSERT [dbo].[Appointments] ([AppointmentId], [AppointmentCode], [PatientUserId], [DepartmentId], [RequestedServiceId], [RequestedDentistUserId], [AssignedDentistUserId], [RoomId], [DentalChairId], [ScheduledStart], [ScheduledEnd], [ReasonForVisit], [BookingSource], [QueueNumber], [Status], [CreatedByUserId], [CreatedAt], [ConfirmedAt], [CheckedInAt], [CompletedAt], [CancelledAt], [CancellationReason], [UpdatedAt]) VALUES (54, N'APP-20261102-54E23C', 23, 3, 8, NULL, NULL, NULL, NULL, CAST(N'2026-11-03T13:00:00.0000000' AS DateTime2), CAST(N'2026-11-03T14:00:00.0000000' AS DateTime2), N'mọc răng khôn', N'Patient', NULL, N'PendingReceptionReview', 23, CAST(N'2026-11-02T04:32:44.0503159' AS DateTime2), NULL, NULL, NULL, NULL, NULL, NULL)
+SET IDENTITY_INSERT [dbo].[Appointments] OFF;
+GO
 
-    IF NOT EXISTS (SELECT 1 FROM DentistDepartments WHERE DentistUserId = @Den6Id AND DepartmentId = 1)
-        INSERT INTO DentistDepartments (DentistUserId, DepartmentId, Status, AssignedAt) VALUES (@Den6Id, 1, 'Active', @Now);
+-- -----------------------------------------------------------------------------------------
+-- Data for [AppointmentStatusHistories] (50 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[AppointmentStatusHistories] ON;
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (1, 3, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T16:09:46.9568999' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (2, 4, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T16:10:17.8555513' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (3, 5, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T16:11:18.7300132' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (4, 6, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T16:14:26.0721809' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (5, 7, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T16:37:21.7850448' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (6, 8, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T17:42:53.0581097' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (7, 8, N'PendingReceptionReview', N'PendingDepartmentReview', 3, N'con vợ này ảo', CAST(N'2026-10-15T17:43:51.9554002' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (8, 7, N'PendingReceptionReview', N'PendingDepartmentReview', 3, N'Lễ tân tiếp nhận và chuyển tiếp sang Trưởng khoa xem xét.', CAST(N'2026-10-15T17:46:47.3202454' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (9, 9, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T18:09:14.0703138' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (10, 9, N'PendingReceptionReview', N'PendingDepartmentReview', 3, N'Yeu cau hop le, chuyen truong khoa xep phong va bac si', CAST(N'2026-10-15T18:09:14.1480719' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (11, 10, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T18:12:16.9083143' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (12, 10, N'PendingReceptionReview', N'PendingDepartmentReview', 3, N'Yeu cau hop le, chuyen truong khoa xep phong va bac si', CAST(N'2026-10-15T18:12:16.9708560' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (13, 11, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T18:17:10.4297694' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (14, 11, N'PendingReceptionReview', N'PendingDepartmentReview', 3, N'Yeu cau hop le, chuyen truong khoa xep phong va bac si', CAST(N'2026-10-15T18:17:10.4871364' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (15, 11, N'PendingDepartmentReview', N'Confirmed', 5, N'Trưởng khoa xác nhận lịch hẹn. Số thứ tự khám: Q001.', CAST(N'2026-10-15T18:17:10.7308976' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (16, 11, N'Confirmed', N'CheckedIn', 3, N'Benh nhan da co mat dung gio tai quay', CAST(N'2026-10-15T18:17:14.1990672' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (17, 11, N'CheckedIn', N'InService', 1, N'Bác sĩ tiếp nhận bệnh nhân vào ghế điều trị.', CAST(N'2026-10-15T18:17:14.3645427' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (18, 11, N'InService', N'Completed', 1, N'Da lam sach voi rang va danh bong sieu am.', CAST(N'2026-10-15T18:17:14.3853265' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (19, 12, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T18:17:58.0120847' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (20, 12, N'PendingReceptionReview', N'PendingDepartmentReview', 3, N'Yeu cau hop le, chuyen truong khoa xep phong va bac si', CAST(N'2026-10-15T18:17:58.0704132' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (21, 12, N'PendingDepartmentReview', N'Confirmed', 5, N'Trưởng khoa xác nhận lịch hẹn. Số thứ tự khám: Q002.', CAST(N'2026-10-15T18:17:58.2403171' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (22, 12, N'Confirmed', N'CheckedIn', 3, N'Benh nhan da co mat dung gio tai quay', CAST(N'2026-10-15T18:18:01.5368721' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (23, 12, N'CheckedIn', N'InService', 1, N'Bác sĩ tiếp nhận bệnh nhân vào ghế điều trị.', CAST(N'2026-10-15T18:18:01.7181930' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (24, 12, N'InService', N'Completed', 1, N'Da lam sach voi rang va danh bong sieu am.', CAST(N'2026-10-15T18:18:01.7283573' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (25, 13, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T18:18:38.6107877' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (26, 13, N'PendingReceptionReview', N'PendingDepartmentReview', 3, N'Yeu cau hop le, chuyen truong khoa xep phong va bac si', CAST(N'2026-10-15T18:18:38.6640992' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (27, 13, N'PendingDepartmentReview', N'Confirmed', 5, N'Trưởng khoa xác nhận lịch hẹn. Số thứ tự khám: Q003.', CAST(N'2026-10-15T18:18:38.8624235' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (28, 13, N'Confirmed', N'CheckedIn', 3, N'Benh nhan da co mat dung gio tai quay', CAST(N'2026-10-15T18:18:41.7923110' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (29, 13, N'CheckedIn', N'InService', 1, N'Bác sĩ tiếp nhận bệnh nhân vào ghế điều trị.', CAST(N'2026-10-15T18:18:41.8683595' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (30, 13, N'InService', N'Completed', 1, N'Da lam sach voi rang va danh bong sieu am.', CAST(N'2026-10-15T18:18:41.8764494' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (31, 14, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T18:19:41.0183982' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (32, 14, N'PendingReceptionReview', N'PendingDepartmentReview', 3, N'Yeu cau hop le, chuyen truong khoa xep phong va bac si', CAST(N'2026-10-15T18:19:41.0646405' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (33, 14, N'PendingDepartmentReview', N'Confirmed', 5, N'Trưởng khoa xác nhận lịch hẹn. Số thứ tự khám: Q004.', CAST(N'2026-10-15T18:19:41.2413877' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (34, 14, N'Confirmed', N'CheckedIn', 3, N'Benh nhan da co mat dung gio tai quay', CAST(N'2026-10-15T18:19:44.9175892' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (35, 14, N'CheckedIn', N'InService', 1, N'Bác sĩ tiếp nhận bệnh nhân vào ghế điều trị.', CAST(N'2026-10-15T18:19:45.0010108' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (36, 14, N'InService', N'Completed', 1, N'Da lam sach voi rang va danh bong sieu am.', CAST(N'2026-10-15T18:19:45.0080061' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (37, 15, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T18:55:45.8164186' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (38, 15, N'PendingReceptionReview', N'Cancelled', 6, N'Bệnh nhân hủy hẹn để dời sang lịch mới: APP-20261015-A80C3A. Lý do: Bận việc đột xuất không thể đi vào ngày cũ, xin dời sang chiều ngày khác', CAST(N'2026-10-15T18:55:46.0687137' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (39, 16, NULL, N'PendingReceptionReview', 6, N'Đặt lịch mới chuyển từ lịch đã hủy APP-20261015-68DBD1. Lý do: Bận việc đột xuất không thể đi vào ngày cũ, xin dời sang chiều ngày khác', CAST(N'2026-10-15T18:55:46.0687137' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (40, 17, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-10-15T19:04:42.5883229' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (41, 17, N'PendingReceptionReview', N'Withdrawn', 6, N'Đặt nhầm ngày hoặc khung giờ', CAST(N'2026-10-15T19:06:35.9294792' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (42, 18, NULL, N'PendingReceptionReview', 6, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-11-02T02:40:26.4753536' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (43, 33, N'CheckedIn', N'InService', 4, N'Bác sĩ chọn ghế điều trị CHAIR-101-A và chuyển ca sang trạng thái đang điều trị (InService).', CAST(N'2026-11-02T03:05:37.9683675' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (44, 33, N'InService', N'Completed', 4, N'Bac si hoan tat ca kham', CAST(N'2026-11-02T03:06:19.0093567' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (45, 42, N'CheckedIn', N'InService', 46, N'Bác sĩ chọn ghế điều trị CHAIR-101-B và chuyển ca sang trạng thái đang điều trị (InService).', CAST(N'2026-11-02T03:46:56.6510904' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (46, 42, N'InService', N'InService', 46, N'Bác sĩ ghi nhận chẩn đoán lâm sàng & sơ đồ răng bệnh án.', CAST(N'2026-11-02T03:48:40.5571224' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (47, 42, N'InService', N'Completed', 46, N'Bác sĩ hoàn tất khám và lưu chẩn đoán bệnh án.', CAST(N'2026-11-02T03:48:41.8386014' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (48, 42, N'Completed', N'Completed', 46, N'Bác sĩ ghi nhận chẩn đoán lâm sàng & sơ đồ răng bệnh án.', CAST(N'2026-11-02T03:50:42.5823082' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (49, 42, N'Completed', N'Completed', 46, N'Bác sĩ ghi nhận chẩn đoán lâm sàng & sơ đồ răng bệnh án.', CAST(N'2026-11-02T03:51:44.7688544' AS DateTime2))
+INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (50, 54, NULL, N'PendingReceptionReview', 23, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-11-02T04:32:44.0503159' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[AppointmentStatusHistories] OFF;
+GO
 
-    -- Lá»‹ch trá»±c cho BS 5 & 6 (HÃ´m nay vÃ  7 ngÃ y tá»›i: 08:00 - 17:00)
-    DECLARE @offset INT = 0;
-    WHILE @offset <= 7
-    BEGIN
-        DECLARE @targetDate DATE = DATEADD(DAY, @offset, @Today);
-        IF NOT EXISTS (SELECT 1 FROM DentistWorkSchedules WHERE DentistUserId = @Den5Id AND WorkDate = @targetDate)
-            INSERT INTO DentistWorkSchedules (DentistUserId, DepartmentId, WorkDate, StartTime, EndTime, Status, Note)
-            VALUES (@Den5Id, 2, @targetDate, '08:00:00', '17:00:00', 'Scheduled', N'Lá»‹ch khÃ¡m chuyÃªn khoa Chá»‰nh Nha');
+-- -----------------------------------------------------------------------------------------
+-- Data for [Notifications] (41 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[Notifications] ON;
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (1, 6, 3, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-93E250 đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T16:09:51.1128198' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (2, 6, 4, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-B8C1AA đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T16:10:17.8710137' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (3, 6, 5, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-331C48 đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T16:11:18.7537041' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (4, 6, 6, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-51C0A4 đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T16:14:26.0963916' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (5, 6, 7, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-63E926 đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T16:37:21.8625348' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (6, 6, 8, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-F3993A đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T17:42:53.2633754' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (7, 6, 9, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-2E44B2 đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T18:09:14.0870350' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (8, 6, 10, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-0F8CFC đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T18:12:16.9284916' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (9, 6, 11, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-C26B43 đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T18:17:10.4460362' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (10, 6, 11, N'AppointmentConfirmed', N'InApp', N'Lịch khám đã được xác nhận!', N'Lịch khám mã APP-20261015-C26B43 đã được Trưởng khoa xác nhận thành công. Số thứ tự tiếp đón của bạn là Q001.', N'Sent', CAST(N'2026-10-15T18:17:10.7534837' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (11, 6, 11, N'AppointmentInService', N'InApp', N'Đang điều trị tại ghế', N'Bác sĩ đã bắt đầu thực hiện ca khám/thủ thuật cho lịch hẹn APP-20261015-C26B43.', N'Sent', CAST(N'2026-10-15T18:17:14.3725493' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (12, 6, 11, N'AppointmentCompleted', N'InApp', N'Ca khám đã hoàn tất', N'Ca khám mã APP-20261015-C26B43 đã hoàn thành. Quý khách vui lòng để lại đánh giá dịch vụ để chúng tôi phục vụ tốt hơn!', N'Sent', CAST(N'2026-10-15T18:17:14.3937671' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (13, 6, 12, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-393E6B đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T18:17:58.0300316' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (14, 6, 12, N'AppointmentConfirmed', N'InApp', N'Lịch khám đã được xác nhận!', N'Lịch khám mã APP-20261015-393E6B đã được Trưởng khoa xác nhận thành công. Số thứ tự tiếp đón của bạn là Q002.', N'Sent', CAST(N'2026-10-15T18:17:58.2500193' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (15, 6, 12, N'AppointmentInService', N'InApp', N'Nhắc lịch hẹn tái khám cắt chỉ', N'Bạn có lịch hẹn tái khám kiểm tra vết mổ và cắt chỉ vào ngày 22/10/2026 tại Khoa Phẫu Thuật Miệng.', N'Sent', CAST(N'2026-10-15T18:18:01.7210041' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (16, 6, 12, N'AppointmentCompleted', N'InApp', N'Ca chuyển khoa mới cần duyệt', N'Bác sĩ Khoa Răng Tổng Quát vừa chuyển 1 ca bệnh nhân sang chuyên khoa của bạn để cấy ghép Implant.', N'Sent', CAST(N'2026-10-15T18:18:01.7396071' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (17, 6, 13, N'AppointmentSubmitted', N'InApp', N'Nhắc lịch hẹn tái khám cắt chỉ', N'Bạn có lịch hẹn tái khám kiểm tra vết mổ và cắt chỉ vào ngày 22/10/2026 tại Khoa Phẫu Thuật Miệng.', N'Sent', CAST(N'2026-10-15T18:18:38.6309419' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (18, 6, 13, N'AppointmentConfirmed', N'InApp', N'Ca chuyển khoa mới cần duyệt', N'Bác sĩ Khoa Răng Tổng Quát vừa chuyển 1 ca bệnh nhân sang chuyên khoa của bạn để cấy ghép Implant.', N'Sent', CAST(N'2026-10-15T18:18:38.8754761' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (19, 6, 13, N'AppointmentInService', N'InApp', N'Đang điều trị tại ghế', N'Bác sĩ đã bắt đầu thực hiện ca khám/thủ thuật cho lịch hẹn APP-20261015-106400.', N'Sent', CAST(N'2026-10-15T18:18:41.8714873' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (20, 6, 13, N'AppointmentCompleted', N'InApp', N'Ca khám đã hoàn tất', N'Ca khám mã APP-20261015-106400 đã hoàn thành. Quý khách vui lòng để lại đánh giá dịch vụ để chúng tôi phục vụ tốt hơn!', N'Sent', CAST(N'2026-10-15T18:18:41.8889604' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (21, 6, 13, N'Billing', N'InApp', N'Hóa đơn viện phí mới', N'Hóa đơn #INV-20261015-0001 với tổng tiền 702.000 đ đã được tạo cho ca khám của bạn.', N'Sent', CAST(N'2026-10-15T18:18:42.0781386' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (22, 6, 13, N'Payment', N'InApp', N'Xác nhận thanh toán thành công', N'Bạn đã thanh toán 702.000 đ cho hóa đơn #INV-20261015-0001 bằng hình thức Chuyển khoản ngân hàng. Trạng thái hóa đơn: Đã thanh toán đủ.', N'Sent', CAST(N'2026-10-15T18:18:42.2618635' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (23, 6, 14, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-69D82C đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T18:19:41.0357426' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (24, 6, 14, N'AppointmentConfirmed', N'InApp', N'Lịch khám đã được xác nhận!', N'Lịch khám mã APP-20261015-69D82C đã được Trưởng khoa xác nhận thành công. Số thứ tự tiếp đón của bạn là Q004.', N'Sent', CAST(N'2026-10-15T18:19:41.2542169' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (25, 6, 14, N'AppointmentInService', N'InApp', N'Đang điều trị tại ghế', N'Bác sĩ đã bắt đầu thực hiện ca khám/thủ thuật cho lịch hẹn APP-20261015-69D82C.', N'Sent', CAST(N'2026-10-15T18:19:45.0037314' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (26, 6, 14, N'AppointmentCompleted', N'InApp', N'Ca khám đã hoàn tất', N'Ca khám mã APP-20261015-69D82C đã hoàn thành. Quý khách vui lòng để lại đánh giá dịch vụ để chúng tôi phục vụ tốt hơn!', N'Sent', CAST(N'2026-10-15T18:19:45.0188393' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (27, 6, 14, N'Billing', N'InApp', N'Hóa đơn viện phí mới', N'Hóa đơn #INV-20261015-0002 với tổng tiền 702.000 đ đã được tạo cho ca khám của bạn.', N'Sent', CAST(N'2026-10-15T18:19:45.1226054' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (28, 6, 14, N'Payment', N'InApp', N'Xác nhận thanh toán thành công', N'Bạn đã thanh toán 702.000 đ cho hóa đơn #INV-20261015-0002 bằng hình thức Chuyển khoản ngân hàng. Trạng thái hóa đơn: Đã thanh toán đủ.', N'Sent', CAST(N'2026-10-15T18:19:45.2605379' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (29, 6, 15, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-68DBD1 đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T18:55:45.9059681' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (30, 6, 16, N'AppointmentRescheduled', N'InApp', N'Dời lịch khám thành công', N'Lịch hẹn APP-20261015-68DBD1 đã được hủy và chuyển sang lịch hẹn mới APP-20261015-A80C3A vào lúc 20/10/2026 14:00. Vui lòng chờ Lễ tân tiếp nhận.', N'Sent', CAST(N'2026-10-15T18:55:46.1216484' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (31, 6, 17, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261015-C61A88 đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-10-15T19:04:42.6128149' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (32, 6, 18, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261102-D258E6 đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-11-02T02:40:26.6763892' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (33, 24, 35, N'FollowUpReminder', N'InApp', N'Nhắc lịch hẹn tái khám cắt chỉ', N'Bạn có lịch hẹn tái khám kiểm tra vết mổ và cắt chỉ vào ngày 22/10/2026 tại Khoa Phẫu Thuật Miệng.', N'Sent', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (34, 5, 35, N'ReferralRequest', N'InApp', N'Ca chuyển khoa mới cần duyệt', N'Bác sĩ Khoa Răng Tổng Quát vừa chuyển 1 ca bệnh nhân sang chuyên khoa của bạn để cấy ghép Implant.', N'Sent', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (35, 6, 33, N'AppointmentCompleted', N'InApp', N'Ca khám đã hoàn tất', N'Ca khám mã APP-20261015-Q001 đã hoàn thành. Quý khách vui lòng để lại đánh giá dịch vụ để chúng tôi phục vụ tốt hơn!', N'Sent', CAST(N'2026-11-02T03:06:19.0207262' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (36, 6, 48, N'FollowUpReminder', N'InApp', N'Lịch hẹn tái khám cắt chỉ phẫu thuật', N'Bác sĩ Trần Văn Hùng đã lên lịch hẹn tái khám kiểm tra vết mổ và cắt chỉ răng 48 sau 7 ngày nữa tại Khoa Phẫu Thuật.', N'Sent', CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (37, 6, 44, N'FollowUpReminder', N'InApp', N'Lịch hẹn tái khám điều trị tủy răng', N'Bạn có lịch hẹn tái khám điều trị tủy răng 26 sau 3 ngày nữa. Vui lòng đến đúng giờ để tiến hành hàn bít ống tủy vĩnh viễn.', N'Sent', CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (38, 24, 35, N'FollowUpScheduled', N'InApp', N'Lịch hẹn tái khám mới', N'Bác sĩ ThS. BS. Trần Văn Hùng (Khoa Phẫu Thuật Miệng & Cấy Ghép Implant) đã hẹn bạn tái khám vào ngày 16/11/2026. Nội dung: Tái khám đánh giá độ săn chắc mô mềm, kiểm tra co hồi viền nướu, đo lại chỉ số BOP và túi nha chu sau lấy cao răng siêu âm & SRP..', N'Sent', CAST(N'2026-11-02T03:48:41.4132988' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (39, 6, 42, N'FollowUpScheduled', N'InApp', N'Lịch hẹn tái khám mới', N'Bác sĩ BS. Vũ Minh Tuấn (Khoa Răng Tổng Quát & Nội Nha) đã hẹn bạn tái khám vào ngày 16/11/2026. Nội dung: Tái khám đánh giá độ săn chắc mô mềm, kiểm tra co hồi viền nướu, đo lại chỉ số BOP và túi nha chu sau lấy cao răng siêu âm & SRP..', N'Sent', CAST(N'2026-11-02T03:50:43.6959130' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (40, 6, 42, N'FollowUpScheduled', N'InApp', N'Lịch hẹn tái khám mới', N'Bác sĩ BS. Vũ Minh Tuấn (Khoa Răng Tổng Quát & Nội Nha) đã hẹn bạn tái khám vào ngày 16/11/2026. Nội dung: Tái khám đánh giá độ săn chắc mô mềm, kiểm tra co hồi viền nướu, đo lại chỉ số BOP và túi nha chu sau lấy cao răng siêu âm & SRP..', N'Sent', CAST(N'2026-11-02T03:51:45.2213619' AS DateTime2), NULL)
+INSERT [dbo].[Notifications] ([NotificationId], [UserId], [AppointmentId], [Type], [Channel], [Subject], [Content], [DeliveryStatus], [SentAt], [ReadAt]) VALUES (41, 23, 54, N'AppointmentSubmitted', N'InApp', N'Yêu cầu đặt lịch đã được gửi', N'Yêu cầu đặt lịch mã APP-20261102-54E23C đã được gửi thành công. Phòng khám sẽ xem xét và phản hồi sớm nhất.', N'Sent', CAST(N'2026-11-02T04:32:44.2472863' AS DateTime2), NULL)
+SET IDENTITY_INSERT [dbo].[Notifications] OFF;
+GO
 
-        IF NOT EXISTS (SELECT 1 FROM DentistWorkSchedules WHERE DentistUserId = @Den6Id AND WorkDate = @targetDate)
-            INSERT INTO DentistWorkSchedules (DentistUserId, DepartmentId, WorkDate, StartTime, EndTime, Status, Note)
-            VALUES (@Den6Id, 1, @targetDate, '08:00:00', '17:00:00', 'Scheduled', N'Lá»‹ch khÃ¡m chuyÃªn khoa Tá»•ng QuÃ¡t');
+-- -----------------------------------------------------------------------------------------
+-- Data for [SupportChatMessages] (94 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[SupportChatMessages] ON;
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (1, N'test_flow_01', N'Guest', NULL, N'Nguyen Van A', N'Xin chao phong kham, gia cao voi rang bao nhieu?', CAST(N'2026-10-15T17:10:54.2193128' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (2, N'test_flow_01', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'Kính chào Quý khách! Cảm ơn Quý khách đã gửi tin nhắn đến Nha Khoa DentalCare. Nhân viên Lễ tân trực tổng đài (7h30 - 23h30) đã tiếp nhận và sẽ phản hồi Quý khách trong ít phút.', CAST(N'2026-10-15T17:10:55.2193128' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (3, N'test_flow_01', N'Receptionist', 3, N'Le tan Mai', N'Da chao ban, chi phi cao voi rang la 250.000d a.', CAST(N'2026-10-15T17:12:52.0354166' AS DateTime2), 1)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (4, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T17:15:07.8381124' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (5, N'guest_1792084427433_o1apy259', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'Kính chào Quý khách! Cảm ơn Quý khách đã gửi tin nhắn đến Nha Khoa DentalCare. Nhân viên Lễ tân trực tổng đài (7h30 - 23h30) đã tiếp nhận và sẽ phản hồi Quý khách trong ít phút.', CAST(N'2026-10-15T17:15:08.8381124' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (6, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T17:15:08.9734762' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (7, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T17:15:10.1299179' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (8, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T17:15:11.1983415' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (9, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Chi phí niềng răng trong suốt Invisalign khoảng bao nhiêu?', CAST(N'2026-10-15T17:15:16.0516640' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (10, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Tôi bị đau răng khôn, phòng khám có khám hôm nay không?', CAST(N'2026-10-15T17:15:16.7190522' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (11, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T17:15:17.2401990' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (12, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T17:15:17.7869564' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (13, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Tôi bị đau răng khôn, phòng khám có khám hôm nay không?', CAST(N'2026-10-15T17:15:18.3460100' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (14, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Chi phí niềng răng trong suốt Invisalign khoảng bao nhiêu?', CAST(N'2026-10-15T17:15:18.6984171' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (15, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Chi phí niềng răng trong suốt Invisalign khoảng bao nhiêu?', CAST(N'2026-10-15T17:15:51.6674142' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (16, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Chi phí niềng răng trong suốt Invisalign khoảng bao nhiêu?', CAST(N'2026-10-15T17:16:58.9784989' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (17, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T17:17:01.7188271' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (18, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Chi phí niềng răng trong suốt Invisalign khoảng bao nhiêu?', CAST(N'2026-10-15T17:17:07.5936628' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (19, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T17:35:14.2413130' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (20, N'guest_1792084427433_o1apy259', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-        SET @offset = @offset + 1;
-    END;
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T17:35:15.2413130' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (21, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T17:35:22.1862602' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (22, N'guest_1792084427433_o1apy259', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-    ---------------------------------------------------------------------
-    -- 4. Bá»” SUNG CÃC Bá»†NH NHÃ‚N Má»šI (PATIENT 6, 7, 8) Äá»‚ Äáº T 30 TÃ€I KHOáº¢N
-    ---------------------------------------------------------------------
-    -- 4.1 Bá»‡nh nhÃ¢n 6 (BÃ¹i Anh Khoa - KhÃ¡m chá»‰nh nha)
-    DECLARE @Pat6Id BIGINT;
-    SELECT @Pat6Id = UserId FROM UserAccounts WHERE Email = 'patient6@dentalcare.com';
-    IF @Pat6Id IS NULL
-    BEGIN
-        INSERT INTO UserAccounts (Email, PhoneNumber, PasswordHash, Role, Status, EmailVerifiedAt, CreatedAt)
-        VALUES ('patient6@dentalcare.com', '0912345676', @PasswordHash, 'Patient', 'Active', @Now, @Now);
-        SET @Pat6Id = SCOPE_IDENTITY();
-        INSERT INTO PatientProfiles (UserId, PatientCode, FullName, DateOfBirth, Gender, Address, EmergencyContact, CreatedAt)
-        VALUES (@Pat6Id, 'PAT-202610-0015', N'BÃ¹i Anh Khoa', '1994-01-19', 'Male', N'55 Nguyá»…n Thá»‹ Minh Khai, Quáº­n 1, TP.HCM', N'Vá»£ - 0988456789', @Now);
-    END;
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T17:35:23.1862602' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (23, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Chi phí niềng răng trong suốt Invisalign khoảng bao nhiêu?', CAST(N'2026-10-15T17:35:24.5718762' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (24, N'guest_1792084427433_o1apy259', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-    -- 4.2 Bá»‡nh nhÃ¢n 7 (Chu Thá»‹ BÃ­ch Ngá»c - Chá»¯a tá»§y & phá»¥c hÃ¬nh sá»©)
-    DECLARE @Pat7Id BIGINT;
-    SELECT @Pat7Id = UserId FROM UserAccounts WHERE Email = 'patient7@dentalcare.com';
-    IF @Pat7Id IS NULL
-    BEGIN
-        INSERT INTO UserAccounts (Email, PhoneNumber, PasswordHash, Role, Status, EmailVerifiedAt, CreatedAt)
-        VALUES ('patient7@dentalcare.com', '0912345677', @PasswordHash, 'Patient', 'Active', @Now, @Now);
-        SET @Pat7Id = SCOPE_IDENTITY();
-        INSERT INTO PatientProfiles (UserId, PatientCode, FullName, DateOfBirth, Gender, Address, EmergencyContact, CreatedAt)
-        VALUES (@Pat7Id, 'PAT-202610-0016', N'Chu Thá»‹ BÃ­ch Ngá»c', '1983-07-25', 'Female', N'18 Nguyá»…n ÄÃ¬nh Chiá»ƒu, Quáº­n 3, TP.HCM', N'Chá»“ng - 0988567890', @Now);
-    END;
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T17:35:25.5718762' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (25, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Tôi bị đau răng khôn, phòng khám có khám hôm nay không?', CAST(N'2026-10-15T17:35:25.9424775' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (26, N'guest_1792084427433_o1apy259', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-    -- 4.3 Bá»‡nh nhÃ¢n 8 (Trá»‹nh Gia Báº£o - KhÃ¡ch hÃ ng VIP)
-    DECLARE @Pat8Id BIGINT;
-    SELECT @Pat8Id = UserId FROM UserAccounts WHERE Email = 'patient8@dentalcare.com';
-    IF @Pat8Id IS NULL
-    BEGIN
-        INSERT INTO UserAccounts (Email, PhoneNumber, PasswordHash, Role, Status, EmailVerifiedAt, CreatedAt)
-        VALUES ('patient8@dentalcare.com', '0912345678', @PasswordHash, 'Patient', 'Active', @Now, @Now);
-        SET @Pat8Id = SCOPE_IDENTITY();
-        INSERT INTO PatientProfiles (UserId, PatientCode, FullName, DateOfBirth, Gender, Address, EmergencyContact, CreatedAt)
-        VALUES (@Pat8Id, 'PAT-202610-0017', N'Trá»‹nh Gia Báº£o (VIP)', '1979-11-10', 'Male', N'Villa 08 Tháº£o Äiá»n, TP. Thá»§ Äá»©c, TP.HCM', N'ThÆ° kÃ½ - 0988678901', @Now);
-    END;
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T17:35:26.9424775' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (27, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'hi', CAST(N'2026-10-15T17:36:47.1677595' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (28, N'guest_1792084427433_o1apy259', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'Dạ Nha Khoa DentalCare xin kính chào Quý khách! (Tổng đài 1900 1234, trực 8h30 - 19h00).
 
-    -- Äáº£m báº£o táº¥t cáº£ bá»‡nh nhÃ¢n Ä‘á»u cÃ³ DentalMedicalRecords
-    INSERT INTO DentalMedicalRecords (PatientUserId, CreatedAt, UpdatedAt)
-    SELECT u.UserId, DATEADD(DAY, -15, @Now), @Now
-    FROM UserAccounts u
-    WHERE u.Role = 'Patient'
-      AND NOT EXISTS (SELECT 1 FROM DentalMedicalRecords dmr WHERE dmr.PatientUserId = u.UserId);
+Bot tự động có thể hỗ trợ giải đáp tức thì khi bạn hỏi về:
+🔹 ''Bảng giá dịch vụ'' (cạo vôi, trám răng, nhổ răng khôn, niềng răng...)
+🔹 ''Đặt lịch khám'' (quy trình và link tạo lịch hẹn trực tuyến)
+🔹 ''Giờ làm việc'' & ''Địa chỉ'' phòng khám
 
-    ---------------------------------------------------------------------
-    -- 5. CÃC CA KHÃM CHO NGÃ€Y HÃ”M NAY (2026-10-15) Äá»‚ DEMO TOÃ€N DIá»†N
-    ---------------------------------------------------------------------
-    DECLARE @Pat_DongId BIGINT, @Pat_MinhId BIGINT, @Pat_LanId BIGINT, @Pat_TuanId BIGINT;
-    SELECT @Pat_DongId = UserId FROM UserAccounts WHERE Email = 'vovandong1512@gmail.com';
-    SELECT @Pat_MinhId = UserId FROM UserAccounts WHERE Email = 'lehoangminh.test@dentalcare.com';
-    SELECT @Pat_LanId = UserId FROM UserAccounts WHERE Email = 'hoanglan.patient@dentalcare.com';
-    SELECT @Pat_TuanId = UserId FROM UserAccounts WHERE Email = 'patient4@dentalcare.com';
+Lễ tân trực ca cũng đang sẵn sàng hỗ trợ thêm cho bạn!', CAST(N'2026-10-15T17:36:48.1677595' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (29, N'guest_1792084427433_o1apy259', N'Guest', NULL, N'Khách vãng lai', N'Chi phí niềng răng trong suốt Invisalign khoảng bao nhiêu?', CAST(N'2026-10-15T17:37:21.6584302' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (30, N'guest_1792084427433_o1apy259', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-    -- CA 1: CheckedIn (Äang á»Ÿ sáº£nh chá», sá»‘ thá»© tá»± Q-001) -> BÃ¡c sÄ© báº¥m "Chá»n gháº¿ khÃ¡m"
-    IF NOT EXISTS (SELECT 1 FROM Appointments WHERE AppointmentCode = 'APP-20261015-Q001')
-    BEGIN
-        INSERT INTO Appointments (
-            AppointmentCode, PatientUserId, DepartmentId, RequestedServiceId,
-            RequestedDentistUserId, AssignedDentistUserId, RoomId, DentalChairId,
-            ScheduledStart, ScheduledEnd, ReasonForVisit, BookingSource, QueueNumber,
-            Status, CreatedAt, ConfirmedAt, CheckedInAt, UpdatedAt
-        )
-        VALUES (
-            'APP-20261015-Q001', @Pat_MinhId, 1, 1,
-            @Den1Id, @Den1Id, 1, NULL,
-            '2026-10-15 13:30:00', '2026-10-15 14:15:00',
-            N'Bá»‡nh nhÃ¢n Ä‘au Ãª buá»‘t rÄƒng sá»‘ 16 khi Äƒn nhai, nÆ°á»›u sÆ°ng nháº¹', 'Patient', 'Q-001',
-            'CheckedIn', DATEADD(DAY, -2, @Now), DATEADD(DAY, -1, @Now), '2026-10-15 13:15:00', @Now
-        );
-    END;
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T17:37:22.6584302' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (31, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T17:41:53.0810669' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (32, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-    -- CA 2: InService (Äang ngá»“i trÃªn gháº¿ G-01) -> BÃ¡c sÄ© lÆ°u cháº©n Ä‘oÃ¡n, kÃª Ä‘Æ¡n thuá»‘c, hoÃ n táº¥t ca
-    DECLARE @Appt_InServiceId BIGINT;
-    IF NOT EXISTS (SELECT 1 FROM Appointments WHERE AppointmentCode = 'APP-20261015-INS01')
-    BEGIN
-        INSERT INTO Appointments (
-            AppointmentCode, PatientUserId, DepartmentId, RequestedServiceId,
-            RequestedDentistUserId, AssignedDentistUserId, RoomId, DentalChairId,
-            ScheduledStart, ScheduledEnd, ReasonForVisit, BookingSource, QueueNumber,
-            Status, CreatedAt, ConfirmedAt, CheckedInAt, UpdatedAt
-        )
-        VALUES (
-            'APP-20261015-INS01', @Pat_LanId, 1, 3,
-            @Den1Id, @Den1Id, 1, 1,
-            '2026-10-15 13:00:00', '2026-10-15 14:00:00',
-            N'KhÃ¡m vÃ  Ä‘iá»u trá»‹ tá»§y rÄƒng sá»‘ 26, rÄƒng cÃ³ lá»— sÃ¢u to', 'Receptionist', 'Q-002',
-            'InService', DATEADD(DAY, -1, @Now), DATEADD(DAY, -1, @Now), '2026-10-15 12:55:00', @Now
-        );
-        SET @Appt_InServiceId = SCOPE_IDENTITY();
-    END
-    ELSE SELECT @Appt_InServiceId = AppointmentId FROM Appointments WHERE AppointmentCode = 'APP-20261015-INS01';
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T17:41:54.0810669' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (33, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T17:41:54.2117403' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (34, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-    -- CA 3: Completed (ÄÃ£ nhá»• rÄƒng khÃ´n xong sÃ¡ng nay) -> Lá»… tÃ¢n Ã¡p mÃ£ giáº£m giÃ¡ & check-out
-    DECLARE @Appt_CompletedId BIGINT;
-    IF NOT EXISTS (SELECT 1 FROM Appointments WHERE AppointmentCode = 'APP-20261015-DONE1')
-    BEGIN
-        INSERT INTO Appointments (
-            AppointmentCode, PatientUserId, DepartmentId, RequestedServiceId,
-            RequestedDentistUserId, AssignedDentistUserId, RoomId, DentalChairId,
-            ScheduledStart, ScheduledEnd, ReasonForVisit, BookingSource, QueueNumber,
-            Status, CreatedAt, ConfirmedAt, CheckedInAt, CompletedAt, UpdatedAt
-        )
-        VALUES (
-            'APP-20261015-DONE1', @Pat_TuanId, 3, 11,
-            @Den1Id, @Den1Id, 3, 5,
-            '2026-10-15 09:30:00', '2026-10-15 10:45:00',
-            N'Tiá»ƒu pháº«u nhá»• rÄƒng khÃ´n R38 má»c lá»‡ch ngáº§m trong xÆ°Æ¡ng hÃ m', 'Patient', 'Q-003',
-            'Completed', DATEADD(DAY, -3, @Now), DATEADD(DAY, -2, @Now), '2026-10-15 09:15:00', '2026-10-15 10:45:00', @Now
-        );
-        SET @Appt_CompletedId = SCOPE_IDENTITY();
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T17:41:55.2117403' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (35, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:07:12.7757478' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (36, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-        -- Bá»‡nh Ã¡n & SÆ¡ Ä‘á»“ rÄƒng
-        DECLARE @MedRecTuan BIGINT;
-        SELECT @MedRecTuan = MedicalRecordId FROM DentalMedicalRecords WHERE PatientUserId = @Pat_TuanId;
-        IF @MedRecTuan IS NOT NULL
-        BEGIN
-            DECLARE @ClinTuanId BIGINT;
-            INSERT INTO ClinicalEntries (MedicalRecordId, AppointmentId, DentistUserId, Symptoms, ClinicalFindings, Diagnosis, DentalConditions, ClinicalNotes, CreatedAt)
-            VALUES (@MedRecTuan, @Appt_CompletedId, @Den1Id, 
-                    N'SÆ°ng Ä‘au vÃ¹ng gÃ³c hÃ m trÃ¡i, hÃ¡ miá»‡ng háº¡n cháº¿, Äƒn nhai cáº¥n mÃ¡.', 
-                    N'RÄƒng 38 má»c lá»‡ch 90 Ä‘á»™, lá»£i trÃ¹m viÃªm Ä‘á» cÃ³ má»§ nháº¹, dáº¯t thá»©c Äƒn káº½ R37-R38.', 
-                    N'RÄƒng khÃ´n 38 má»c lá»‡ch ngáº§m káº¹t xÆ°Æ¡ng (K01.1), viÃªm lá»£i trÃ¹m cáº¥p.', 
-                    N'Vá»‡ sinh rÄƒng miá»‡ng trung bÃ¬nh.', 
-                    N'GÃ¢y tÃª táº¡i chá»— Lidocain 2%, ráº¡ch váº¡t niÃªm máº¡c mÃ ng xÆ°Æ¡ng, chia cáº¯t thÃ¢n vÃ  chÃ¢n rÄƒng báº±ng tay khoan siÃªu Ã¢m, nhá»• rÄƒng trá»n váº¹n, khÃ¢u Ä‘Ã³ng 2 mÅ©i Vicryl 4.0.', @Now);
-            SET @ClinTuanId = SCOPE_IDENTITY();
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:07:13.7757478' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (37, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:07:15.8756549' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (38, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-            INSERT INTO ImagingRecords (ClinicalEntryId, ImagingType, FileUrl, ResultSummary, CreatedAt)
-            VALUES (@ClinTuanId, 'Panoramic', 'https://res.cloudinary.com/dky5fqcsj/image/upload/v1728900000/xray_r38_pano.jpg', 
-                    N'Phim Panorama cho tháº¥y rÄƒng 38 má»c lá»‡ch ngang 90 Ä‘á»™, chÃ¢n rÄƒng gáº§n sÃ¡t á»‘ng tháº§n kinh rÄƒng dÆ°á»›i.', @Now);
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:07:16.8756549' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (39, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:07:16.4312114' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (40, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-            INSERT INTO OdontogramEntries (ClinicalEntryId, ToothNumber, Surface, Condition, Note)
-            VALUES (@ClinTuanId, '38', 'All', N'RÄƒng khÃ´n ngáº§m', N'ÄÃ£ tiá»ƒu pháº«u nhá»• bá» an toÃ n');
-        END;
-    END
-    ELSE SELECT @Appt_CompletedId = AppointmentId FROM Appointments WHERE AppointmentCode = 'APP-20261015-DONE1';
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:07:17.4312114' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (41, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:07:16.6123806' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (42, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-    -- CA 4: Confirmed (Háº¹n chiá»u nay lÃºc 15:30) -> Lá»… tÃ¢n báº¥m "Check-in"
-    IF NOT EXISTS (SELECT 1 FROM Appointments WHERE AppointmentCode = 'APP-20261015-CONF1')
-    BEGIN
-        INSERT INTO Appointments (
-            AppointmentCode, PatientUserId, DepartmentId, RequestedServiceId,
-            RequestedDentistUserId, AssignedDentistUserId, RoomId, DentalChairId,
-            ScheduledStart, ScheduledEnd, ReasonForVisit, BookingSource,
-            Status, CreatedAt, ConfirmedAt, UpdatedAt
-        )
-        VALUES (
-            'APP-20261015-CONF1', @Pat_DongId, 1, 1,
-            @Den1Id, @Den1Id, 1, NULL,
-            '2026-10-15 15:30:00', '2026-10-15 16:15:00',
-            N'KhÃ¡m rÄƒng Ä‘á»‹nh ká»³ 6 thÃ¡ng vÃ  cáº¡o vÃ´i rÄƒng siÃªu Ã¢m', 'Patient',
-            'Confirmed', DATEADD(DAY, -1, @Now), @Now, @Now
-        );
-    END;
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:07:17.6123806' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (43, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T19:07:17.3166771' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (44, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-    -- CA 5: PendingDepartmentReview cho Khoa 2 -> TrÆ°á»Ÿng khoa 2 duyá»‡t phÃ¢n bá»• bÃ¡c sÄ©
-    IF NOT EXISTS (SELECT 1 FROM Appointments WHERE AppointmentCode = 'APP-20261015-PEND1')
-    BEGIN
-        INSERT INTO Appointments (
-            AppointmentCode, PatientUserId, DepartmentId, RequestedServiceId,
-            RequestedDentistUserId, AssignedDentistUserId, RoomId, DentalChairId,
-            ScheduledStart, ScheduledEnd, ReasonForVisit, BookingSource,
-            Status, CreatedAt, UpdatedAt
-        )
-        VALUES (
-            'APP-20261015-PEND1', @Pat6Id, 2, 7,
-            @Den3Id, NULL, NULL, NULL,
-            '2026-10-16 09:00:00', '2026-10-16 10:00:00',
-            N'TÆ° váº¥n niá»ng rÄƒng máº¯c cÃ i kim loáº¡i tá»± buá»™c cho rÄƒng thÆ°a vÃ  kháº¥p khá»ƒnh', 'Patient',
-            'PendingDepartmentReview', @Now, @Now
-        );
-    END;
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T19:07:18.3166771' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (45, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T19:07:18.0603846' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (46, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-    -- CA 6: PendingReceptionReview -> Lá»… tÃ¢n tiáº¿p nháº­n & chuyá»ƒn tiáº¿p chuyÃªn khoa
-    IF NOT EXISTS (SELECT 1 FROM Appointments WHERE AppointmentCode = 'APP-20261015-PREC1')
-    BEGIN
-        INSERT INTO Appointments (
-            AppointmentCode, PatientUserId, DepartmentId, RequestedServiceId,
-            RequestedDentistUserId, AssignedDentistUserId, RoomId, DentalChairId,
-            ScheduledStart, ScheduledEnd, ReasonForVisit, BookingSource,
-            Status, CreatedAt, UpdatedAt
-        )
-        VALUES (
-            'APP-20261015-PREC1', @Pat7Id, 1, 2,
-            NULL, NULL, NULL, NULL,
-            '2026-10-16 14:00:00', '2026-10-16 14:45:00',
-            N'RÄƒng hÃ m R46 sÃ¢u vá»¡ lá»›n Ä‘au buá»‘t vá» Ä‘Ãªm, cáº§n chá»¯a tá»§y kháº©n cáº¥p', 'Patient',
-            'PendingReceptionReview', @Now, @Now
-        );
-    END;
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T19:07:19.0603846' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (47, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T19:07:18.2305573' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (48, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-    -- CA 7: PendingDepartmentReview cho Khoa 1 -> TrÆ°á»Ÿng khoa 1 duyá»‡t ca khÃ¡m
-    IF NOT EXISTS (SELECT 1 FROM Appointments WHERE AppointmentCode = 'APP-20261015-PK1')
-    BEGIN
-        INSERT INTO Appointments (
-            AppointmentCode, PatientUserId, DepartmentId, RequestedServiceId,
-            RequestedDentistUserId, AssignedDentistUserId, RoomId, DentalChairId,
-            ScheduledStart, ScheduledEnd, ReasonForVisit, BookingSource,
-            Status, CreatedAt, UpdatedAt
-        )
-        VALUES (
-            'APP-20261015-PK1', @Pat8Id, 1, 1,
-            @Den2Id, NULL, NULL, NULL,
-            '2026-10-16 10:30:00', '2026-10-16 11:15:00',
-            N'KhÃ¡m rÄƒng tá»•ng quÃ¡t vÃ  hÃ n rÄƒng tháº©m má»¹ Composite rÄƒng cá»­a', 'Patient',
-            'PendingDepartmentReview', @Now, @Now
-        );
-    END;
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T19:07:19.2305573' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (49, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'hi', CAST(N'2026-10-15T19:07:22.3876297' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (50, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'Dạ Nha Khoa DentalCare xin kính chào Quý khách! (Tổng đài 1900 1234, trực 8h30 - 19h00).
 
-    -- CA 8: PendingDepartmentReview cho Khoa 4 (RÄƒng tráº» em) -> TrÆ°á»Ÿng khoa 4 duyá»‡t ca khÃ¡m
-    DECLARE @Pat5Id BIGINT;
-    SELECT @Pat5Id = UserId FROM UserAccounts WHERE Email = 'patient5@dentalcare.com';
-    IF NOT EXISTS (SELECT 1 FROM Appointments WHERE AppointmentCode = 'APP-20261015-PK4')
-    BEGIN
-        INSERT INTO Appointments (
-            AppointmentCode, PatientUserId, DepartmentId, RequestedServiceId,
-            RequestedDentistUserId, AssignedDentistUserId, RoomId, DentalChairId,
-            ScheduledStart, ScheduledEnd, ReasonForVisit, BookingSource,
-            Status, CreatedAt, UpdatedAt
-        )
-        VALUES (
-            'APP-20261015-PK4', @Pat5Id, 4, 18,
-            @Den4Id, NULL, NULL, NULL,
-            '2026-10-16 15:00:00', '2026-10-16 15:45:00',
-            N'KhÃ¡m rÄƒng sá»¯a cho bÃ©, bÃ´i vecni Flour chá»‘ng sÃ¢u rÄƒng toÃ n hÃ m', 'Patient',
-            'PendingDepartmentReview', @Now, @Now
-        );
-    END;
+Bot tự động có thể hỗ trợ giải đáp tức thì khi bạn hỏi về:
+🔹 ''Bảng giá dịch vụ'' (cạo vôi, trám răng, nhổ răng khôn, niềng răng...)
+🔹 ''Đặt lịch khám'' (quy trình và link tạo lịch hẹn trực tuyến)
+🔹 ''Giờ làm việc'' & ''Địa chỉ'' phòng khám
 
-    -- CA 9: HoÃ n táº¥t hÃ´m nay cÃ³ hÃ³a Ä‘Æ¡n CHÆ¯A THANH TOÃN (Unpaid) -> Lá»… tÃ¢n báº¥m Thu tiá»n & Ãp voucher
-    DECLARE @Pat_DongUserId BIGINT;
-    SELECT @Pat_DongUserId = UserId FROM UserAccounts WHERE Email = 'vovandong1512@gmail.com';
-    DECLARE @Appt_UnpaidId BIGINT;
-    IF NOT EXISTS (SELECT 1 FROM Appointments WHERE AppointmentCode = 'APP-20261015-UNPAID')
-    BEGIN
-        INSERT INTO Appointments (
-            AppointmentCode, PatientUserId, DepartmentId, RequestedServiceId,
-            RequestedDentistUserId, AssignedDentistUserId, RoomId, DentalChairId,
-            ScheduledStart, ScheduledEnd, ReasonForVisit, BookingSource, QueueNumber,
-            Status, CreatedAt, ConfirmedAt, CheckedInAt, CompletedAt, UpdatedAt
-        )
-        VALUES (
-            'APP-20261015-UNPAID', @Pat_DongUserId, 1, 1,
-            @Den2Id, @Den2Id, 1, 2,
-            '2026-10-15 11:00:00', '2026-10-15 11:45:00',
-            N'HÃ n trÃ¡m rÄƒng tháº©m má»¹ 2 rÄƒng sÃ¢u máº·t nhai R15, R16', 'Patient', 'Q-005',
-            'Completed', DATEADD(DAY, -2, @Now), DATEADD(DAY, -1, @Now), '2026-10-15 10:50:00', '2026-10-15 11:45:00', @Now
-        );
-        SET @Appt_UnpaidId = SCOPE_IDENTITY();
+Lễ tân trực ca cũng đang sẵn sàng hỗ trợ thêm cho bạn!', CAST(N'2026-10-15T19:07:23.3876297' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (51, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T19:09:49.6962907' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (52, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-        -- HÃ³a Ä‘Æ¡n ChÆ°a thanh toÃ¡n (Unpaid)
-        DECLARE @UnpaidInvId BIGINT;
-        INSERT INTO Invoices (InvoiceCode, AppointmentId, GeneratedByUserId, TotalAmount, Status, CreatedAt)
-        VALUES ('INV-20261015-002', @Appt_UnpaidId, @Rec1Id, 900000, 'Unpaid', @Now);
-        SET @UnpaidInvId = SCOPE_IDENTITY();
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T19:09:50.6962907' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (53, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T19:09:50.6908397' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (54, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-        INSERT INTO InvoiceItems (InvoiceId, Description, Quantity, UnitPrice)
-        VALUES 
-        (@UnpaidInvId, N'HÃ n trÃ¡m rÄƒng tháº©m má»¹ Composite xoang I (2 rÄƒng)', 2, 400000),
-        (@UnpaidInvId, N'Láº¥y cao rÄƒng vÃ  Ä‘Ã¡nh bÃ³ng 2 hÃ m', 1, 100000);
-    END;
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T19:09:51.6908397' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (55, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T19:09:50.8776034' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (56, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-    ---------------------------------------------------------------------
-    -- 6. PHÃC Äá»’ ÄIá»€U TRá»Š, ÄÆ N THUá»C, CHUYá»‚N KHOA & Háº¸N TÃI KHÃM
-    ---------------------------------------------------------------------
-    DECLARE @PlanId BIGINT;
-    IF NOT EXISTS (SELECT 1 FROM TreatmentPlans WHERE PatientUserId = @Pat_TuanId)
-    BEGIN
-        INSERT INTO TreatmentPlans (PatientUserId, DepartmentId, CreatedByDentistUserId, Status, EstimatedTotal, CreatedAt, UpdatedAt)
-        VALUES (@Pat_TuanId, 3, @Den1Id, 'InProgress', 5500000, DATEADD(DAY, -3, @Now), @Now);
-        SET @PlanId = SCOPE_IDENTITY();
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T19:09:51.8776034' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (57, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T19:09:51.0346417' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (58, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-        DECLARE @ItemId1 BIGINT;
-        INSERT INTO TreatmentPlanItems (TreatmentPlanId, DepartmentServiceId, AssignedDentistUserId, ToothNumber, SequenceNo, ExpectedDate, EstimatedCost, Status, Note)
-        VALUES (@PlanId, 11, @Den1Id, '38', 1, @Today, 2500000, 'Completed', N'Tiá»ƒu pháº«u nhá»• rÄƒng khÃ´n lá»‡ch');
-        SET @ItemId1 = SCOPE_IDENTITY();
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T19:09:52.0346417' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (59, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T19:09:51.6996873' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (60, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-        INSERT INTO TreatmentPlanItems (TreatmentPlanId, DepartmentServiceId, AssignedDentistUserId, ToothNumber, SequenceNo, ExpectedDate, EstimatedCost, Status, Note)
-        VALUES (@PlanId, 1, @Den1Id, '38', 2, DATEADD(DAY, 7, @Today), 0, 'Planned', N'Cáº¯t chá»‰ vÃ  kiá»ƒm tra liá»n thÆ°Æ¡ng');
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T19:09:52.6996873' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (61, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Chi phí niềng răng trong suốt Invisalign khoảng bao nhiêu?', CAST(N'2026-10-15T19:09:59.7095643' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (62, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
 
-        DECLARE @SessId BIGINT;
-        INSERT INTO TreatmentSessions (TreatmentPlanItemId, AppointmentId, DentistUserId, SessionDate, TreatmentResult, ClinicalNote)
-        VALUES (@ItemId1, @Appt_CompletedId, @Den1Id, '2026-10-15 10:45:00', 
-                N'Nhá»• rÄƒng thÃ nh cÃ´ng khÃ´ng gÃ£y chÃ¢n rÄƒng, cáº§m mÃ¡u tá»‘t.', 
-                N'ÄÃ£ nhá»• trá»n váº¹n rÄƒng 38, bá»‡nh nhÃ¢n tá»‰nh tÃ¡o, á»•n Ä‘á»‹nh.');
-        SET @SessId = SCOPE_IDENTITY();
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T19:10:00.7095643' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (63, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:00.6631077' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (64, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-        INSERT INTO PerformedServices (TreatmentSessionId, DepartmentServiceId, Quantity, UnitPrice)
-        VALUES (@SessId, 11, 1, 2500000);
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:01.6631077' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (65, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:01.1315547' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (66, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-        -- ÄÆ¡n thuá»‘c
-        DECLARE @PrescId BIGINT;
-        INSERT INTO Prescriptions (TreatmentSessionId, GeneralInstructions, IssuedAt)
-        VALUES (@SessId, N'Uá»‘ng thuá»‘c Ä‘Ãºng giá» sau Äƒn no. Cáº¯n gáº¡c cháº·t trong 60 phÃºt. KhÃ´ng sÃºc miá»‡ng nÆ°á»›c muá»‘i máº¡nh hay kháº¡c nhá»• trong 24h Ä‘áº§u. ChÆ°á»m láº¡nh mÃ¡ ngÃ y Ä‘áº§u, chÆ°á»m áº¥m ngÃ y thá»© 2.', @Now);
-        SET @PrescId = SCOPE_IDENTITY();
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:02.1315547' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (67, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:01.3085374' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (68, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-        INSERT INTO PrescriptionItems (PrescriptionId, MedicationName, Dosage, Frequency, Duration, Instructions)
-        VALUES 
-        (@PrescId, N'Augmentin 1g (Amoxicillin/Clavulanate)', N'1 viÃªn', N'2 láº§n/ngÃ y', N'5 ngÃ y', N'Uá»‘ng sÃ¡ng 1v, tá»‘i 1v sau khi Äƒn no'),
-        (@PrescId, N'Ibuprofen 400mg', N'1 viÃªn', N'3 láº§n/ngÃ y', N'3 ngÃ y', N'Uá»‘ng khi Ä‘au nhiá»u, cÃ¡ch nhau Ã­t nháº¥t 6 tiáº¿ng'),
-        (@PrescId, N'Alphachymotrypsin 4.2mg', N'2 viÃªn', N'3 láº§n/ngÃ y', N'5 ngÃ y', N'Ngáº­m dÆ°á»›i lÆ°á»¡i giáº£m phÃ¹ ná», sÆ°ng mÃ¡'),
-        (@PrescId, N'NÆ°á»›c sÃºc miá»‡ng Kin Gingival 0.12%', N'15ml', N'2 láº§n/ngÃ y', N'7 ngÃ y', N'Báº¯t Ä‘áº§u sÃºc nháº¹ tá»« ngÃ y thá»© 2 trá»Ÿ Ä‘i sau Äƒn');
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:02.3085374' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (69, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:01.4754914' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (70, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-        -- Háº¹n tÃ¡i khÃ¡m (Follow-up)
-        INSERT INTO FollowUpSchedules (TreatmentSessionId, RecommendedDate, Reason, Status, AppointmentId)
-        VALUES (@SessId, DATEADD(DAY, 7, @Today), N'TÃ¡i khÃ¡m kiá»ƒm tra váº¿t thÆ°Æ¡ng vÃ  cáº¯t chá»‰ vicryl vÃ¹ng nhá»• rÄƒng 38', 'Pending', @Appt_CompletedId);
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:02.4754914' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (71, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:01.6344189' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (72, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-        -- ThÃªm lá»‹ch háº¹n tÃ¡i khÃ¡m Ä‘a dáº¡ng thá»i gian
-        INSERT INTO FollowUpSchedules (TreatmentSessionId, RecommendedDate, Reason, Status, AppointmentId)
-        VALUES (@SessId, DATEADD(DAY, 14, @Today), N'TÃ¡i khÃ¡m kiá»ƒm tra khá»›p cáº¯n vÃ  Ä‘á»™ khÃ­t sÃ¡t bá» phá»¥c há»“i sau trÃ¡m rÄƒng', 'Pending', @Appt_CompletedId);
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:02.6344189' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (73, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:01.8024096' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (74, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-        INSERT INTO FollowUpSchedules (TreatmentSessionId, RecommendedDate, Reason, Status, AppointmentId)
-        VALUES (@SessId, DATEADD(DAY, 30, @Today), N'TÃ¡i khÃ¡m Ä‘á»‹nh ká»³ siáº¿t dÃ¢y cung vÃ  thay thun chá»‰nh nha thÃ¡ng thá»© 2', 'Pending', @Appt_CompletedId);
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:02.8024096' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (75, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:01.9478306' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (76, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-        -- Chuyá»ƒn khoa (Referral) - ÄÃ£ tiáº¿p nháº­n
-        INSERT INTO DepartmentReferrals (TreatmentSessionId, FromDepartmentId, ToDepartmentId, AssignedDentistUserId, ReviewedByUserId, Reason, Status, CreatedAt, ReviewedAt)
-        VALUES (@SessId, 3, 2, @Den3Id, @Mgr2Id, 
-                N'Bá»‡nh nhÃ¢n sau khi nhá»• rÄƒng khÃ´n cÃ³ nhu cáº§u niá»ng rÄƒng do rÄƒng chen chÃºc hÃ m dÆ°á»›i. ÄÃ£ chuyá»ƒn há»“ sÆ¡ sang Khoa Chá»‰nh Nha.', 
-                'Assigned', @Now, @Now);
-    END;
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:02.9478306' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (77, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:02.1096313' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (78, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-    -- Ca chuyá»ƒn khoa thá»© 2: Chá» tiáº¿p nháº­n (Pending)
-    IF NOT EXISTS (SELECT 1 FROM DepartmentReferrals WHERE Status = 'Pending')
-    BEGIN
-        DECLARE @FirstSessId BIGINT;
-        SELECT TOP 1 @FirstSessId = TreatmentSessionId FROM TreatmentSessions ORDER BY TreatmentSessionId DESC;
-        IF @FirstSessId IS NOT NULL
-        BEGIN
-            INSERT INTO DepartmentReferrals (TreatmentSessionId, FromDepartmentId, ToDepartmentId, AssignedDentistUserId, ReviewedByUserId, Reason, Status, CreatedAt)
-            VALUES (@FirstSessId, 1, 3, NULL, NULL, 
-                    N'Bá»‡nh nhÃ¢n cÃ³ rÄƒng sá»‘ 46 vá»¡ lá»›n sÃ¡t cuá»‘ng khÃ´ng thá»ƒ báº£o tá»“n tá»§y. Äá» nghá»‹ chuyá»ƒn Khoa Pháº«u Thuáº­t Ä‘á»ƒ nhá»• rÄƒng vÃ  cáº¥y ghÃ©p Implant tá»©c thÃ¬.', 
-                    'Pending', @Now);
-        END
-    END;
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:03.1096313' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (79, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:02.2474760' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (80, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-    ---------------------------------------------------------------------
-    -- 7. HÃ“A ÄÆ N & THANH TOÃN (INVOICES & PAYMENTS)
-    ---------------------------------------------------------------------
-    IF NOT EXISTS (SELECT 1 FROM Invoices WHERE AppointmentId = @Appt_CompletedId)
-    BEGIN
-        DECLARE @InvId BIGINT;
-        INSERT INTO Invoices (InvoiceCode, AppointmentId, GeneratedByUserId, TotalAmount, Status, CreatedAt)
-        VALUES ('INV-20261015-001', @Appt_CompletedId, @Rec1Id, 2500000, 'Paid', @Now);
-        SET @InvId = SCOPE_IDENTITY();
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:03.2474760' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (81, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:02.4243153' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (82, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-        INSERT INTO InvoiceItems (InvoiceId, Description, Quantity, UnitPrice)
-        VALUES 
-        (@InvId, N'Tiá»ƒu pháº«u nhá»• rÄƒng khÃ´n má»c ngáº§m káº¹t xÆ°Æ¡ng R38', 1, 2000000),
-        (@InvId, N'Chá»¥p phim X-quang Panorama toÃ n cáº£nh KTS', 1, 300000),
-        (@InvId, N'ÄÆ¡n thuá»‘c Ä‘iá»u trá»‹ sau pháº«u thuáº­t (KhÃ¡ng sinh, giáº£m Ä‘au)', 1, 200000);
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:03.4243153' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (83, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:02.6209850' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (84, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-        INSERT INTO Payments (InvoiceId, PaidByPatientUserId, Method, Amount, TransactionReference, Status, PaidAt, CreatedAt)
-        VALUES (@InvId, @Pat_TuanId, 'BankTransfer', 2500000, 'VIETQR_VCB_992834812', 'Successful', @Now, @Now);
-    END;
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:03.6209850' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (85, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:02.7729511' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (86, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-    ---------------------------------------------------------------------
-    -- 8. ÄÃNH GIÃ Cá»¦A Bá»†NH NHÃ‚N (VISIT FEEDBACK - 5 SAO)
-    ---------------------------------------------------------------------
-    IF NOT EXISTS (SELECT 1 FROM VisitFeedback WHERE AppointmentId = @Appt_CompletedId)
-    BEGIN
-        INSERT INTO VisitFeedback (AppointmentId, DentistRating, ClinicRating, Comment, CreatedAt)
-        VALUES (@Appt_CompletedId, 5, 5, 
-                N'BÃ¡c sÄ© HÃ¹ng nhá»• rÄƒng khÃ´n cá»±c ká»³ Ãªm Ã¡i, chá»‰ máº¥t 15 phÃºt lÃ  xong. PhÃ²ng khÃ¡m sáº¡ch sáº½, hiá»‡n Ä‘áº¡i, lá»… tÃ¢n nhiá»‡t tÃ¬nh!', @Now);
-    END;
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:03.7729511' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (87, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:02.9462510' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (88, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-    ---------------------------------------------------------------------
-    -- 9. THÃ”NG BÃO Há»† THá»NG (NOTIFICATIONS)
-    ---------------------------------------------------------------------
-    INSERT INTO Notifications (UserId, AppointmentId, Type, Channel, Subject, Content, DeliveryStatus, SentAt)
-    VALUES 
-    (@Pat_TuanId, @Appt_CompletedId, 'FollowUpReminder', 'InApp', 
-     N'Nháº¯c lá»‹ch háº¹n tÃ¡i khÃ¡m cáº¯t chá»‰', 
-     N'Báº¡n cÃ³ lá»‹ch háº¹n tÃ¡i khÃ¡m kiá»ƒm tra váº¿t má»• vÃ  cáº¯t chá»‰ vÃ o ngÃ y 22/10/2026 táº¡i Khoa Pháº«u Thuáº­t Miá»‡ng.', 'Sent', @Now),
-    (@Mgr3Id, @Appt_CompletedId, 'ReferralRequest', 'InApp', 
-     N'Ca chuyá»ƒn khoa má»›i cáº§n duyá»‡t', 
-     N'BÃ¡c sÄ© Khoa RÄƒng Tá»•ng QuÃ¡t vá»«a chuyá»ƒn 1 ca bá»‡nh nhÃ¢n sang chuyÃªn khoa cá»§a báº¡n Ä‘á»ƒ cáº¥y ghÃ©p Implant.', 'Sent', @Now);
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:03.9462510' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (89, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:03.1117790' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (90, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-    COMMIT TRANSACTION;
-    PRINT N'>>> DA KHOI TAO THANH CONG BO DU LIEU 30 TAI KHOAN VA CAC KICH BAN DEMO 100%!';
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:04.1117790' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (91, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Tôi muốn tư vấn đặt lịch khám răng tổng quát', CAST(N'2026-10-15T19:10:03.4456400' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (92, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'📅 HƯỚNG DẪN ĐẶT LỊCH KHÁM NHANH TRỰC TUYẾN:
+Bạn có thể chủ động đặt lịch khám 24/7 chỉ trong 1 phút:
+1️⃣ Nhấp vào menu ''Đặt Lịch Hẹn Nhanh'' hoặc truy cập /Patient/Appointment/Book
+2️⃣ Chọn Chuyên khoa điều trị phù hợp
+3️⃣ Chọn Dịch vụ nha khoa mong muốn
+4️⃣ Chọn Ngày khám & Bác sĩ chuyên khoa phụ trách
+5️⃣ Chọn Khung giờ còn trống và bấm Xác nhận đặt lịch.
 
-END TRY
-BEGIN CATCH
-    ROLLBACK TRANSACTION;
-    PRINT N'>>> LOI KHI KHOI TAO DU LIEU: ' + ERROR_MESSAGE();
-    THROW;
-END CATCH;
+Hệ thống sẽ tự động cấp số thứ tự và mã hẹn ngay tức thì. Hoặc bạn có thể gọi hotline 1900 1234 để Lễ tân hỗ trợ đặt giữ chỗ ngay!', CAST(N'2026-10-15T19:10:04.4456400' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (93, N'patient_6', N'Patient', 6, N'Lê Hoàng Minh', N'Cho tôi hỏi bảng giá cạo vôi răng và trám răng?', CAST(N'2026-10-15T19:10:09.7752998' AS DateTime2), 0)
+INSERT [dbo].[SupportChatMessages] ([MessageId], [ConversationId], [SenderType], [SenderUserId], [SenderName], [MessageText], [SentAt], [IsRead]) VALUES (94, N'patient_6', N'Bot', NULL, N'Trợ lý ảo DentalCare', N'💰 BẢNG GIÁ DỊCH VỤ NIÊM YẾT TẠI NHA KHOA DENTALCARE:
+• Cạo vôi răng & Đánh bóng siêu âm: 250.000 đ
+• Khám tổng quát & Lập hồ sơ răng: 100.000 đ
+• Trám răng thẩm mỹ Composite: 400.000 đ / răng
+• Điều trị tủy WaveOne công nghệ cao: 1.200.000 - 1.800.000 đ
+• Tẩy trắng răng Laser Whitening: 2.000.000 đ
+• Tiểu phẫu nhổ răng khôn mọc lệch (máy rung Piezotome): 1.500.000 - 2.500.000 đ
+• Niềng răng mắc cài kim loại: từ 25.000.000 đ
+• Niềng răng trong suốt Invisalign: từ 65.000.000 đ
+
+👉 Bảng giá niêm yết công khai, không phát sinh chi phí phụ. Bạn có thể bấm vào ''Đặt Lịch Hẹn'' để chọn khung giờ và bác sĩ mong muốn nhé!', CAST(N'2026-10-15T19:10:10.7752998' AS DateTime2), 0)
+SET IDENTITY_INSERT [dbo].[SupportChatMessages] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [DentalMedicalRecords] (11 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[DentalMedicalRecords] ON;
+INSERT [dbo].[DentalMedicalRecords] ([MedicalRecordId], [PatientUserId], [CreatedAt], [UpdatedAt]) VALUES (1, 7, CAST(N'2026-10-13T15:21:41.5553218' AS DateTime2), NULL)
+INSERT [dbo].[DentalMedicalRecords] ([MedicalRecordId], [PatientUserId], [CreatedAt], [UpdatedAt]) VALUES (2, 6, CAST(N'2026-10-14T08:34:46.7906764' AS DateTime2), CAST(N'2026-11-02T03:51:45.3751543' AS DateTime2))
+INSERT [dbo].[DentalMedicalRecords] ([MedicalRecordId], [PatientUserId], [CreatedAt], [UpdatedAt]) VALUES (6, 22, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[DentalMedicalRecords] ([MedicalRecordId], [PatientUserId], [CreatedAt], [UpdatedAt]) VALUES (7, 23, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[DentalMedicalRecords] ([MedicalRecordId], [PatientUserId], [CreatedAt], [UpdatedAt]) VALUES (8, 24, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[DentalMedicalRecords] ([MedicalRecordId], [PatientUserId], [CreatedAt], [UpdatedAt]) VALUES (9, 25, CAST(N'2026-11-02T09:47:26.7435933' AS DateTime2), NULL)
+INSERT [dbo].[DentalMedicalRecords] ([MedicalRecordId], [PatientUserId], [CreatedAt], [UpdatedAt]) VALUES (16, 47, CAST(N'2026-10-18T09:49:04.5144162' AS DateTime2), CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[DentalMedicalRecords] ([MedicalRecordId], [PatientUserId], [CreatedAt], [UpdatedAt]) VALUES (17, 48, CAST(N'2026-10-18T09:49:04.5144162' AS DateTime2), CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[DentalMedicalRecords] ([MedicalRecordId], [PatientUserId], [CreatedAt], [UpdatedAt]) VALUES (18, 49, CAST(N'2026-10-18T09:49:04.5144162' AS DateTime2), CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[DentalMedicalRecords] ([MedicalRecordId], [PatientUserId], [CreatedAt], [UpdatedAt]) VALUES (21, 52, CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL)
+INSERT [dbo].[DentalMedicalRecords] ([MedicalRecordId], [PatientUserId], [CreatedAt], [UpdatedAt]) VALUES (22, 53, CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL)
+SET IDENTITY_INSERT [dbo].[DentalMedicalRecords] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [ClinicalEntries] (8 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[ClinicalEntries] ON;
+INSERT [dbo].[ClinicalEntries] ([ClinicalEntryId], [MedicalRecordId], [AppointmentId], [DentistUserId], [Symptoms], [ClinicalFindings], [Diagnosis], [DentalConditions], [ClinicalNotes], [CreatedAt], [UpdatedAt]) VALUES (2, 8, 35, 4, N'Sưng đau vùng góc hàm trái, há miệng hạn chế, ăn nhai cấn má.', N'Răng 38 mọc lệch 90 độ, lợi trùm viêm đỏ có mủ nhẹ, dắt thức ăn kẽ R37-R38.', N'Răng khôn 38 mọc lệch ngầm kẹt xương (K01.1), viêm lợi trùm cấp.', N'Vệ sinh răng miệng trung bình.', N'Gây tê tại chỗ Lidocain 2%, rạch vạt niêm mạc màng xương, chia cắt thân và chân răng bằng tay khoan siêu âm, nhổ răng trọn vẹn, khâu đóng 2 mũi Vicryl 4.0.', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL)
+INSERT [dbo].[ClinicalEntries] ([ClinicalEntryId], [MedicalRecordId], [AppointmentId], [DentistUserId], [Symptoms], [ClinicalFindings], [Diagnosis], [DentalConditions], [ClinicalNotes], [CreatedAt], [UpdatedAt]) VALUES (3, 2, 42, 46, N'Bệnh nhân chảy máu chân răng khi chải răng và ăn nhai, hơi thở có mùi, cảm giác ê buốt vùng răng hàm dưới bên phải.', N'Nướu sưng đỏ, phù nề viền nướu. Thăm dò Perio Probe phát hiện túi nha chu sâu 5-6mm tại R46, R47; túi 4mm tại R31, R41. Chỉ số mất bám dính lâm sàng CAL từ 5-8mm. Cao răng dưới nướu độ 3.', N'Viêm nha chu mãn tính giai đoạn III, mức độ tiến triển B (Stage III, Grade B Generalized Periodontitis).', N'Túi nha chu sâu R46 (PPD 6mm), R47 (PPD 5mm), R31, R41 (PPD 4mm). R46 lung lay Độ II, R47 lung lay Độ I.', N'Chỉ định: Cạo vôi răng bằng sóng siêu âm toàn hàm + Xử lý mặt gốc răng (SRP) phân cung 4. Hướng dẫn vệ sinh răng miệng OHI.', CAST(N'2026-11-02T03:48:40.4119423' AS DateTime2), NULL)
+INSERT [dbo].[ClinicalEntries] ([ClinicalEntryId], [MedicalRecordId], [AppointmentId], [DentistUserId], [Symptoms], [ClinicalFindings], [Diagnosis], [DentalConditions], [ClinicalNotes], [CreatedAt], [UpdatedAt]) VALUES (4, 2, 42, 46, N'Bệnh nhân không còn đau nhức, không còn chảy máu khi chải răng, hơi thở thơm tho, hết ê buốt.', N'Mô mềm viền nướu hồng nhạt, săn chắc ôm sát cổ răng, có hiện tượng lấm tấm da cam (Stippling). Chỉ số PPD giảm rõ rệt (giảm 2-3mm so với trước can thiệp), BOP âm tính toàn bộ. Độ lung lay răng 46 giảm từ Độ II xuống Độ I.', N'Mô mềm nha chu đáp ứng lành thương tốt sau cạo vôi siêu âm và xử lý mặt gốc răng (Resolved Periodontal Health on a Reduced Periodontium).', N'Độ sâu túi PPD toàn bộ các răng <= 3mm. Không còn túi bệnh lý hoạt động.', N'Tiếp tục duy trì vệ sinh răng miệng bằng chỉ nha khoa và máy tăm nước. Hẹn duy trì nha chu (SPT Recall) sau 3 tháng.', CAST(N'2026-11-02T03:48:41.8196884' AS DateTime2), NULL)
+INSERT [dbo].[ClinicalEntries] ([ClinicalEntryId], [MedicalRecordId], [AppointmentId], [DentistUserId], [Symptoms], [ClinicalFindings], [Diagnosis], [DentalConditions], [ClinicalNotes], [CreatedAt], [UpdatedAt]) VALUES (5, 2, 42, 46, N'Răng ê buốt nhẹ khi uống nước lạnh', N'Rãnh sâu ngà nông mặt nhai R35', N'Sâu ngà nông răng 35', N'Túi nha chu sâu R46 (PPD 6mm), R47 (PPD 5mm), R31, R41 (PPD 4mm). R46 lung lay Độ II, R47 lung lay Độ I.', N'Chỉ định trám thẩm mỹ Composite', CAST(N'2026-11-02T03:50:42.4715267' AS DateTime2), NULL)
+INSERT [dbo].[ClinicalEntries] ([ClinicalEntryId], [MedicalRecordId], [AppointmentId], [DentistUserId], [Symptoms], [ClinicalFindings], [Diagnosis], [DentalConditions], [ClinicalNotes], [CreatedAt], [UpdatedAt]) VALUES (6, 2, 42, 46, N'Đau nhức răng hàm khi nhai đồ cứng', N'Vỡ mẻ múi ngoài răng 46', N'Nứt vỡ thân răng 46', N'Độ sâu túi PPD toàn bộ các răng <= 3mm. Không còn túi bệnh lý hoạt động.', N'Chỉ định điều trị tủy và bọc sứ bảo tồn', CAST(N'2026-11-02T03:50:43.9148793' AS DateTime2), NULL)
+INSERT [dbo].[ClinicalEntries] ([ClinicalEntryId], [MedicalRecordId], [AppointmentId], [DentistUserId], [Symptoms], [ClinicalFindings], [Diagnosis], [DentalConditions], [ClinicalNotes], [CreatedAt], [UpdatedAt]) VALUES (7, 2, 42, 46, N'Sâu răng hàm gây dắt thức ăn', N'Lỗ sâu kẽ R16-R17 sâu ngà trung bình', N'Sâu kẽ răng 16, 17', N'Túi nha chu sâu R46 (PPD 6mm), R47 (PPD 5mm), R31, R41 (PPD 4mm). R46 lung lay Độ II, R47 lung lay Độ I.', N'Nạo sạch ngà mủn, hàn trám xoang II Composite', CAST(N'2026-11-02T03:51:44.7482647' AS DateTime2), NULL)
+INSERT [dbo].[ClinicalEntries] ([ClinicalEntryId], [MedicalRecordId], [AppointmentId], [DentistUserId], [Symptoms], [ClinicalFindings], [Diagnosis], [DentalConditions], [ClinicalNotes], [CreatedAt], [UpdatedAt]) VALUES (8, 2, 42, 46, N'Bệnh nhân không còn đau nhức, không còn chảy máu khi chải răng, hơi thở thơm tho, hết ê buốt.', N'Mô mềm viền nướu hồng nhạt, săn chắc ôm sát cổ răng, có hiện tượng lấm tấm da cam (Stippling). Chỉ số PPD giảm rõ rệt (giảm 2-3mm so với trước can thiệp), BOP âm tính toàn bộ. Độ lung lay răng 46 giảm từ Độ II xuống Độ I.', N'Mô mềm nha chu đáp ứng lành thương tốt sau cạo vôi siêu âm và xử lý mặt gốc răng (Resolved Periodontal Health on a Reduced Periodontium).', N'Độ sâu túi PPD toàn bộ các răng <= 3mm. Không còn túi bệnh lý hoạt động.', N'Tiếp tục duy trì vệ sinh răng miệng bằng chỉ nha khoa và máy tăm nước. Hẹn duy trì nha chu (SPT Recall) sau 3 tháng.', CAST(N'2026-11-02T03:51:45.3624394' AS DateTime2), NULL)
+INSERT [dbo].[ClinicalEntries] ([ClinicalEntryId], [MedicalRecordId], [AppointmentId], [DentistUserId], [Symptoms], [ClinicalFindings], [Diagnosis], [DentalConditions], [ClinicalNotes], [CreatedAt], [UpdatedAt]) VALUES (9, 22, 52, 4, N'Sưng đau vùng góc hàm trái, há miệng hạn chế, ăn nhai cấn má.', N'Răng 38 mọc lệch 90 độ, lợi trùm viêm đỏ có mủ nhẹ, dắt thức ăn kẽ R37-R38.', N'Răng khôn 38 mọc lệch ngầm kẹt xương (K01.1), viêm lợi trùm cấp.', N'Vệ sinh răng miệng trung bình.', N'Gây tê tại chỗ Lidocain 2%, rạch vạt niêm mạc màng xương, chia cắt thân và chân răng bằng tay khoan siêu âm, nhổ răng trọn vẹn, khâu đóng 2 mũi Vicryl 4.0.', CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL)
+SET IDENTITY_INSERT [dbo].[ClinicalEntries] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [OdontogramEntries] (31 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[OdontogramEntries] ON;
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (2, 2, N'38', N'All', N'Răng khôn ngầm', N'Đã tiểu phẫu nhổ bỏ an toàn')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (3, 3, N'46', N'MB', N'Periodontitis_Pocket_5mm', N'PPD: 5mm, REC: 2mm, CAL: 7mm, Sưng nề rãnh nướu')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (4, 3, N'46', N'DB', N'Periodontitis_Pocket_6mm', N'PPD: 6mm, REC: 2mm, CAL: 8mm, Có mủ nhẹ dưới nướu')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (5, 3, N'47', N'MB', N'Periodontitis_Pocket_5mm', N'PPD: 5mm, REC: 1mm, CAL: 6mm, Cao răng dưới nướu dày')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (6, 3, N'47', N'DB', N'Periodontitis_Pocket_5mm', N'PPD: 5mm, REC: 1mm, CAL: 6mm, Gai nướu phì đại')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (7, 3, N'31', N'Lingual', N'Calculus_Grade_3', N'PPD: 4mm, REC: 1mm, CAL: 5mm, Mảng bám vôi răng mặt trong')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (8, 3, N'41', N'Lingual', N'Calculus_Grade_3', N'PPD: 4mm, REC: 1mm, CAL: 5mm, Cao răng độ 3 dính chắc')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (9, 4, N'46', N'MB', N'Healthy_Gingiva_Resolved', N'PPD giảm từ 5mm xuống 3mm, BOP (-), nướu săn chắc, hồng nhạt, hết rỉ mủ')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (10, 4, N'46', N'DB', N'Healthy_Gingiva_Resolved', N'PPD giảm từ 6mm xuống 3.5mm, BOP (-), nhú nướu phục hồi')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (11, 4, N'47', N'MB', N'Healthy_Gingiva_Resolved', N'PPD giảm từ 5mm xuống 2.5mm, nướu bám dính tốt')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (12, 4, N'31', N'Lingual', N'Clean_No_Calculus', N'PPD 2mm, sạch mảng bám, nướu viền co hồi tốt')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (13, 5, N'46', N'MB', N'Periodontitis_Pocket_5mm', N'PPD: 5mm, REC: 2mm, CAL: 7mm, Sưng nề rãnh nướu')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (14, 5, N'46', N'DB', N'Periodontitis_Pocket_6mm', N'PPD: 6mm, REC: 2mm, CAL: 8mm, Có mủ nhẹ dưới nướu')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (15, 5, N'47', N'MB', N'Periodontitis_Pocket_5mm', N'PPD: 5mm, REC: 1mm, CAL: 6mm, Cao răng dưới nướu dày')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (16, 5, N'47', N'DB', N'Periodontitis_Pocket_5mm', N'PPD: 5mm, REC: 1mm, CAL: 6mm, Gai nướu phì đại')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (17, 5, N'31', N'Lingual', N'Calculus_Grade_3', N'PPD: 4mm, REC: 1mm, CAL: 5mm, Mảng bám vôi răng mặt trong')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (18, 5, N'41', N'Lingual', N'Calculus_Grade_3', N'PPD: 4mm, REC: 1mm, CAL: 5mm, Cao răng độ 3 dính chắc')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (19, 6, N'46', N'MB', N'Healthy_Gingiva_Resolved', N'PPD giảm từ 5mm xuống 3mm, BOP (-), nướu săn chắc, hồng nhạt, hết rỉ mủ')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (20, 6, N'46', N'DB', N'Healthy_Gingiva_Resolved', N'PPD giảm từ 6mm xuống 3.5mm, BOP (-), nhú nướu phục hồi')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (21, 6, N'47', N'MB', N'Healthy_Gingiva_Resolved', N'PPD giảm từ 5mm xuống 2.5mm, nướu bám dính tốt')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (22, 6, N'31', N'Lingual', N'Răng khôn ngầm', N'Đã tiểu phẫu nhổ bỏ an toàn')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (23, 7, N'46', N'MB', N'Periodontitis_Pocket_5mm', N'PPD: 5mm, REC: 2mm, CAL: 7mm, Sưng nề rãnh nướu')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (24, 7, N'46', N'DB', N'Periodontitis_Pocket_6mm', N'PPD: 6mm, REC: 2mm, CAL: 8mm, Có mủ nhẹ dưới nướu')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (25, 7, N'47', N'MB', N'Periodontitis_Pocket_5mm', N'PPD: 5mm, REC: 1mm, CAL: 6mm, Cao răng dưới nướu dày')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (26, 7, N'47', N'DB', N'Periodontitis_Pocket_5mm', N'PPD: 5mm, REC: 1mm, CAL: 6mm, Gai nướu phì đại')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (27, 7, N'31', N'Lingual', N'Calculus_Grade_3', N'PPD: 4mm, REC: 1mm, CAL: 5mm, Mảng bám vôi răng mặt trong')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (28, 7, N'41', N'Lingual', N'Calculus_Grade_3', N'PPD: 4mm, REC: 1mm, CAL: 5mm, Cao răng độ 3 dính chắc')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (29, 8, N'46', N'MB', N'Healthy_Gingiva_Resolved', N'PPD giảm từ 5mm xuống 3mm, BOP (-), nướu săn chắc, hồng nhạt, hết rỉ mủ')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (30, 8, N'46', N'DB', N'Healthy_Gingiva_Resolved', N'PPD giảm từ 6mm xuống 3.5mm, BOP (-), nhú nướu phục hồi')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (31, 8, N'47', N'MB', N'Healthy_Gingiva_Resolved', N'PPD giảm từ 5mm xuống 2.5mm, nướu bám dính tốt')
+INSERT [dbo].[OdontogramEntries] ([OdontogramEntryId], [ClinicalEntryId], [ToothNumber], [Surface], [Condition], [Note]) VALUES (32, 8, N'31', N'Lingual', N'Clean_No_Calculus', N'PPD 2mm, sạch mảng bám, nướu viền co hồi tốt')
+SET IDENTITY_INSERT [dbo].[OdontogramEntries] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [ImagingRecords] (1 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[ImagingRecords] ON;
+INSERT [dbo].[ImagingRecords] ([ImagingRecordId], [ClinicalEntryId], [ImagingType], [FileUrl], [ResultSummary], [CreatedAt]) VALUES (2, 2, N'Panoramic', N'https://res.cloudinary.com/dky5fqcsj/image/upload/v1728900000/xray_r38_pano.jpg', N'Phim Panorama cho thấy răng 38 mọc lệch ngang 90 độ, chân răng gần sát ống thần kinh răng dưới.', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[ImagingRecords] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [TreatmentPlans] (10 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[TreatmentPlans] ON;
+INSERT [dbo].[TreatmentPlans] ([TreatmentPlanId], [PatientUserId], [DepartmentId], [CreatedByDentistUserId], [Status], [EstimatedTotal], [CreatedAt], [UpdatedAt]) VALUES (2, 24, 3, 4, N'InProgress', CAST(5500000.00 AS Decimal(18, 2)), CAST(N'2026-10-30T09:49:04.5144162' AS DateTime2), CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[TreatmentPlans] ([TreatmentPlanId], [PatientUserId], [DepartmentId], [CreatedByDentistUserId], [Status], [EstimatedTotal], [CreatedAt], [UpdatedAt]) VALUES (3, 6, 1, 4, N'InProgress', CAST(3000000.00 AS Decimal(18, 2)), CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2))
+INSERT [dbo].[TreatmentPlans] ([TreatmentPlanId], [PatientUserId], [DepartmentId], [CreatedByDentistUserId], [Status], [EstimatedTotal], [CreatedAt], [UpdatedAt]) VALUES (4, 6, 2, 1, N'InProgress', CAST(25000000.00 AS Decimal(18, 2)), CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2))
+INSERT [dbo].[TreatmentPlans] ([TreatmentPlanId], [PatientUserId], [DepartmentId], [CreatedByDentistUserId], [Status], [EstimatedTotal], [CreatedAt], [UpdatedAt]) VALUES (5, 6, 3, 4, N'InProgress', CAST(20000000.00 AS Decimal(18, 2)), CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2))
+INSERT [dbo].[TreatmentPlans] ([TreatmentPlanId], [PatientUserId], [DepartmentId], [CreatedByDentistUserId], [Status], [EstimatedTotal], [CreatedAt], [UpdatedAt]) VALUES (6, 6, 4, 21, N'InProgress', CAST(500000.00 AS Decimal(18, 2)), CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2))
+INSERT [dbo].[TreatmentPlans] ([TreatmentPlanId], [PatientUserId], [DepartmentId], [CreatedByDentistUserId], [Status], [EstimatedTotal], [CreatedAt], [UpdatedAt]) VALUES (9, 6, 1, 46, N'Planned', CAST(0.00 AS Decimal(18, 2)), CAST(N'2026-11-02T03:49:08.5329820' AS DateTime2), CAST(N'2026-11-02T03:49:08.5329822' AS DateTime2))
+INSERT [dbo].[TreatmentPlans] ([TreatmentPlanId], [PatientUserId], [DepartmentId], [CreatedByDentistUserId], [Status], [EstimatedTotal], [CreatedAt], [UpdatedAt]) VALUES (10, 6, 1, 46, N'Completed', CAST(250000.00 AS Decimal(18, 2)), CAST(N'2026-11-02T03:50:42.8946520' AS DateTime2), CAST(N'2026-11-02T03:50:43.5047295' AS DateTime2))
+INSERT [dbo].[TreatmentPlans] ([TreatmentPlanId], [PatientUserId], [DepartmentId], [CreatedByDentistUserId], [Status], [EstimatedTotal], [CreatedAt], [UpdatedAt]) VALUES (11, 6, 1, 46, N'Planned', CAST(600000.00 AS Decimal(18, 2)), CAST(N'2026-11-02T03:51:44.8922579' AS DateTime2), CAST(N'2026-11-02T03:51:45.1476065' AS DateTime2))
+INSERT [dbo].[TreatmentPlans] ([TreatmentPlanId], [PatientUserId], [DepartmentId], [CreatedByDentistUserId], [Status], [EstimatedTotal], [CreatedAt], [UpdatedAt]) VALUES (13, 52, 2, 20, N'Completed', CAST(35000000.00 AS Decimal(18, 2)), CAST(N'2026-10-18T11:24:47.1995757' AS DateTime2), CAST(N'2026-11-02T05:53:49.8288207' AS DateTime2))
+INSERT [dbo].[TreatmentPlans] ([TreatmentPlanId], [PatientUserId], [DepartmentId], [CreatedByDentistUserId], [Status], [EstimatedTotal], [CreatedAt], [UpdatedAt]) VALUES (14, 53, 1, 4, N'InProgress', CAST(500000.00 AS Decimal(18, 2)), CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL)
+SET IDENTITY_INSERT [dbo].[TreatmentPlans] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [TreatmentPlanItems] (19 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[TreatmentPlanItems] ON;
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (2, 2, 8, 4, N'38', 1, CAST(N'2026-10-15' AS Date), CAST(2500000.00 AS Decimal(18, 2)), N'Completed', N'Tiểu phẫu nhổ răng khôn lệch')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (3, 2, 1, 4, N'38', 2, CAST(N'2026-10-22' AS Date), CAST(0.00 AS Decimal(18, 2)), N'Planned', N'Cắt chỉ và kiểm tra liền thương')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (4, 3, 3, 4, N'16', 1, CAST(N'2026-11-02' AS Date), CAST(400000.00 AS Decimal(18, 2)), N'Completed', N'Trám composite mặt nhai R16')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (5, 3, 4, 4, N'26', 2, CAST(N'2026-11-02' AS Date), CAST(1200000.00 AS Decimal(18, 2)), N'Completed', N'Điều trị tủy công nghệ WaveOne R26')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (6, 5, 8, 4, N'48', 1, CAST(N'2026-11-02' AS Date), CAST(1800000.00 AS Decimal(18, 2)), N'Completed', N'Tiểu phẫu nhổ răng khôn R48')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (7, 5, 9, 4, N'36', 2, CAST(N'2026-11-02' AS Date), CAST(15000000.00 AS Decimal(18, 2)), N'Completed', N'Cấy trụ Straumann Thụy Sĩ vị trí R36')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (8, 4, 5, 1, N'All', 1, CAST(N'2026-11-02' AS Date), CAST(300000.00 AS Decimal(18, 2)), N'Completed', N'Lập phác đồ niềng răng mắc cài tự buộc')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (9, 4, 6, 20, N'All', 2, CAST(N'2026-11-02' AS Date), CAST(2000000.00 AS Decimal(18, 2)), N'Completed', N'Tẩy trắng Laser Whitening')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (10, 3, 2, 46, N'All', 3, CAST(N'2026-11-02' AS Date), CAST(250000.00 AS Decimal(18, 2)), N'Completed', N'Tiểu phẫu nhổ răng khôn lệch')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (12, 10, 2, 46, N'Toàn hàm', 1, NULL, CAST(250000.00 AS Decimal(18, 2)), N'Completed', NULL)
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (15, 11, 2, 46, N'Toàn hàm', 1, NULL, CAST(250000.00 AS Decimal(18, 2)), N'Completed', NULL)
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (16, 11, 2, 46, N'Q4', 2, NULL, CAST(350000.00 AS Decimal(18, 2)), N'Planned', N'Xử lý mặt gốc răng (SRP) phân cung 4 (R44-R47)')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (23, 13, 18, 20, N'All', 1, CAST(N'2026-10-18' AS Date), CAST(15000000.00 AS Decimal(18, 2)), N'Completed', N'Giai đoạn 1: Lấy dấu răng & Gắn mắc cài kim loại 2 hàm')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (24, 13, 19, 20, N'All', 2, CAST(N'2026-12-02' AS Date), CAST(500000.00 AS Decimal(18, 2)), N'Completed', N'Giai đoạn 2: Thay dây cung & Siết niềng lần 1')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (25, 13, 19, 20, N'All', 3, CAST(N'2027-01-01' AS Date), CAST(500000.00 AS Decimal(18, 2)), N'Completed', N'Giai đoạn 3: Tinh chỉnh khớp cắn & Đóng khoảng')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (26, 13, 19, 20, N'All', 4, CAST(N'2027-01-31' AS Date), CAST(500000.00 AS Decimal(18, 2)), N'Completed', N'Giai đoạn 4: Siết niềng & Cố định dây cung hoàn thiện')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (27, 13, 19, 20, N'All', 5, CAST(N'2027-03-02' AS Date), CAST(1000000.00 AS Decimal(18, 2)), N'Completed', N'Giai đoạn 5: Tháo mắc cài & Đánh bóng mặt răng')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (28, 13, 19, 20, N'All', 6, CAST(N'2027-04-01' AS Date), CAST(2500000.00 AS Decimal(18, 2)), N'Completed', N'Giai đoạn 6: Gắn hàm duy trì Hawley cố định kết quả')
+INSERT [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId], [TreatmentPlanId], [DepartmentServiceId], [AssignedDentistUserId], [ToothNumber], [SequenceNo], [ExpectedDate], [EstimatedCost], [Status], [Note]) VALUES (29, 14, 1, 4, N'All', 1, CAST(N'2026-11-02' AS Date), CAST(500000.00 AS Decimal(18, 2)), N'InProgress', N'Khám và lập kế hoạch hội chẩn')
+SET IDENTITY_INSERT [dbo].[TreatmentPlanItems] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [TreatmentSessions] (13 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[TreatmentSessions] ON;
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (1, 2, 35, 4, CAST(N'2026-10-15T10:45:00.0000000' AS DateTime2), N'Nhổ răng thành công không gãy chân răng, cầm máu tốt.', N'Đã nhổ trọn vẹn răng 38, bệnh nhân tỉnh táo, ổn định.')
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (2, 4, 43, 4, CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), N'Trám composite hạt độn nano màu A2 thẩm mỹ tự nhiên.', N'Bệnh nhân ăn nhai thử cắn giấy than chuẩn khớp.')
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (3, 5, 44, 4, CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), N'Làm sạch và tạo hình 3 ống tủy, đặt thuốc sát khuẩn Ca(OH)2.', N'Hẹn tái khám thay thuốc tủy và hàn bít ống tủy vĩnh viễn.')
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (4, 6, 48, 4, CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), N'Nhổ răng thành công không gãy chân răng, cầm máu tốt.', N'Đã nhổ trọn vẹn răng 38, bệnh nhân tỉnh táo, ổn định.')
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (5, 7, 49, 4, CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), N'Đặt trụ Implant Straumann đường kính 4.1mm dài 10mm độ ổn định ban đầu 35 Ncm.', N'Khâu đóng vạt niêm mạc, kiểm tra X-quang tại ghế đạt chuẩn.')
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (6, 8, 45, 1, CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), N'Lấy dấu mẫu hàm 3D, phân tích Cephalometric và tư vấn lộ trình 18 tháng.', N'Bệnh nhân đồng ý phương án gắn mắc cài 2 hàm.')
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (7, 9, 46, 20, CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), N'Tẩy trắng 3 chu kỳ chiếu đèn Laser Zoom II, nâng từ màu A3 lên A1.', N'Cách ly nướu hoàn hảo, không ê buốt sau tẩy.')
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (8, 10, 42, 46, CAST(N'2026-11-02T10:13:56.4913041' AS DateTime2), N'Lấy sạch cao răng trên và dưới nướu bằng sóng siêu âm Cavitron, đánh bóng toàn hàm.', N'Nướu hồng hào, hướng dẫn dùng chỉ nha khoa.')
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (9, 12, 42, 46, CAST(N'2026-11-02T03:50:43.4109620' AS DateTime2), N'Đã loại bỏ sạch toàn bộ cao răng trên nướu và dưới nướu bằng đầu sóng siêu âm Piezo. Đánh bóng mặt răng bằng chổi cước và bột mịn. Bơm rửa Betadine 1% rãnh nướu.', N'Mô nướu có rỉ máu nhẹ tại R46, R47 do viêm mạn tính, đã cầm máu tại ghế. Bệnh nhân hợp tác tốt.')
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (10, 15, 42, 46, CAST(N'2026-11-02T03:51:45.1123270' AS DateTime2), N'Đã loại bỏ sạch toàn bộ cao răng trên nướu và dưới nướu bằng đầu sóng siêu âm Piezo. Đánh bóng mặt răng bằng chổi cước và bột mịn. Bơm rửa Betadine 1% rãnh nướu.', N'Mô nướu có rỉ máu nhẹ tại R46, R47 do viêm mạn tính, đã cầm máu tại ghế. Bệnh nhân hợp tác tốt.')
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (12, 23, 51, 20, CAST(N'2026-10-18T11:24:47.1995757' AS DateTime2), N'Gắn mắc cài 2 hàm thành công', N'Giai đoạn 1: Đã gắn mắc cài kim loại tự buộc 2 hàm, hướng dẫn bệnh nhân vệ sinh chỉ nha khoa.')
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (13, 29, 52, 4, CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), N'Đã khám lâm sàng', N'Phát hiện lệch lạc khớp cắn nặng. Cần chuyển Khoa 2 để hội chẩn chỉnh nha.')
+INSERT [dbo].[TreatmentSessions] ([TreatmentSessionId], [TreatmentPlanItemId], [AppointmentId], [DentistUserId], [SessionDate], [TreatmentResult], [ClinicalNote]) VALUES (14, 28, 51, 20, CAST(N'2026-11-02T12:52:00.0000000' AS DateTime2), N'Đã trám / xử lý tạm', N'gây tê ')
+SET IDENTITY_INSERT [dbo].[TreatmentSessions] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [PerformedServices] (3 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[PerformedServices] ON;
+INSERT [dbo].[PerformedServices] ([PerformedServiceId], [TreatmentSessionId], [DepartmentServiceId], [Quantity], [UnitPrice]) VALUES (1, 1, 8, 1, CAST(2500000.00 AS Decimal(18, 2)))
+INSERT [dbo].[PerformedServices] ([PerformedServiceId], [TreatmentSessionId], [DepartmentServiceId], [Quantity], [UnitPrice]) VALUES (2, 9, 2, 1, CAST(0.00 AS Decimal(18, 2)))
+INSERT [dbo].[PerformedServices] ([PerformedServiceId], [TreatmentSessionId], [DepartmentServiceId], [Quantity], [UnitPrice]) VALUES (3, 10, 2, 1, CAST(0.00 AS Decimal(18, 2)))
+SET IDENTITY_INSERT [dbo].[PerformedServices] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [Prescriptions] (2 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[Prescriptions] ON;
+INSERT [dbo].[Prescriptions] ([PrescriptionId], [TreatmentSessionId], [GeneralInstructions], [IssuedAt]) VALUES (1, 1, N'Uống thuốc đúng giờ sau ăn no. Cắn gạc chặt trong 60 phút. Không súc miệng nước muối mạnh hay khạc nhổ trong 24h đầu. Chườm lạnh má ngày đầu, chườm ấm ngày thứ 2.', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[Prescriptions] ([PrescriptionId], [TreatmentSessionId], [GeneralInstructions], [IssuedAt]) VALUES (2, 8, N'Súc miệng kỹ 2 lần/ngày sau khi chải răng. Bôi gel nha chu lên rãnh nướu trước khi ngủ.', CAST(N'2026-11-02T03:51:45.0778020' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[Prescriptions] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [PrescriptionItems] (6 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[PrescriptionItems] ON;
+INSERT [dbo].[PrescriptionItems] ([PrescriptionItemId], [PrescriptionId], [MedicationName], [Dosage], [Frequency], [Duration], [Instructions]) VALUES (1, 1, N'Amoxicillin 500mg', N'1 viên', N'2 lần/ngày (Sáng - Tối)', N'5 ngày', N'Kháng sinh chống nhiễm khuẩn sau can thiệp')
+INSERT [dbo].[PrescriptionItems] ([PrescriptionItemId], [PrescriptionId], [MedicationName], [Dosage], [Frequency], [Duration], [Instructions]) VALUES (2, 1, N'Ibuprofen 400mg', N'1 viên', N'3 lần/ngày', N'3 ngày', N'Uống khi đau nhiều, cách nhau ít nhất 6 tiếng')
+INSERT [dbo].[PrescriptionItems] ([PrescriptionItemId], [PrescriptionId], [MedicationName], [Dosage], [Frequency], [Duration], [Instructions]) VALUES (3, 1, N'Alphachymotrypsin 4.2mg', N'2 viên', N'3 lần/ngày', N'5 ngày', N'Ngậm dưới lưỡi giảm phù nề, sưng má')
+INSERT [dbo].[PrescriptionItems] ([PrescriptionItemId], [PrescriptionId], [MedicationName], [Dosage], [Frequency], [Duration], [Instructions]) VALUES (4, 1, N'Nước súc miệng Kin Gingival 0.12%', N'15ml', N'2 lần/ngày', N'7 ngày', N'Bắt đầu súc nhẹ từ ngày thứ 2 trở đi sau ăn')
+INSERT [dbo].[PrescriptionItems] ([PrescriptionItemId], [PrescriptionId], [MedicationName], [Dosage], [Frequency], [Duration], [Instructions]) VALUES (9, 2, N'Ibuprofen 400mg', N'1 viên', N'3 lần/ngày', N'3 ngày', N'Uống khi đau nhiều, cách nhau ít nhất 6 tiếng')
+INSERT [dbo].[PrescriptionItems] ([PrescriptionItemId], [PrescriptionId], [MedicationName], [Dosage], [Frequency], [Duration], [Instructions]) VALUES (10, 2, N'Alphachymotrypsin 4.2mg', N'2 viên', N'3 lần/ngày', N'5 ngày', N'Ngậm dưới lưỡi giảm phù nề, sưng má')
+SET IDENTITY_INSERT [dbo].[PrescriptionItems] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [DepartmentReferrals] (3 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[DepartmentReferrals] ON;
+INSERT [dbo].[DepartmentReferrals] ([ReferralId], [TreatmentSessionId], [FromDepartmentId], [ToDepartmentId], [AssignedDentistUserId], [ReviewedByUserId], [Reason], [Status], [CreatedAt], [ReviewedAt], [Urgency]) VALUES (1, 1, 3, 2, 20, 18, N'Bệnh nhân có nhu cầu chỉnh nha niềng răng trong suốt Invisalign', N'Assigned', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), N'Normal')
+INSERT [dbo].[DepartmentReferrals] ([ReferralId], [TreatmentSessionId], [FromDepartmentId], [ToDepartmentId], [AssignedDentistUserId], [ReviewedByUserId], [Reason], [Status], [CreatedAt], [ReviewedAt], [Urgency]) VALUES (2, 1, 1, 3, NULL, NULL, N'Bệnh nhân có răng số 46 vỡ lớn sát cuống không thể bảo tồn tủy. Đề nghị chuyển Khoa Phẫu Thuật để nhổ răng và cấy ghép Implant tức thì.', N'Pending', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), NULL, N'Normal')
+INSERT [dbo].[DepartmentReferrals] ([ReferralId], [TreatmentSessionId], [FromDepartmentId], [ToDepartmentId], [AssignedDentistUserId], [ReviewedByUserId], [Reason], [Status], [CreatedAt], [ReviewedAt], [Urgency]) VALUES (3, 13, 1, 2, NULL, NULL, N'Đề nghị hội chẩn chỉnh nha trước phục hình', N'Pending', CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2), NULL, N'Normal')
+SET IDENTITY_INSERT [dbo].[DepartmentReferrals] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [FollowUpSchedules] (14 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[FollowUpSchedules] ON;
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (1, 1, CAST(N'2026-11-09T09:51:17.9633333' AS DateTime2), N'Tái khám kiểm tra vết thương và cắt chỉ vicryl vùng nhổ răng 38', N'Pending', 35)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (2, 1, CAST(N'2026-11-16T09:51:17.9633333' AS DateTime2), N'Tái khám kiểm tra tình trạng sâu răng và phục hồi mô răng', N'Pending', 35)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (3, 1, CAST(N'2026-11-14T00:00:00.0000000' AS DateTime2), N'Tái khám định kỳ siết dây cung và thay thun chỉnh nha tháng thứ 2', N'Pending', 35)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (4, 2, CAST(N'2026-11-09T10:13:56.4913041' AS DateTime2), N'Tái khám kiểm tra khớp cắn, độ khít sát và đánh bóng lại bờ viền xoang trám Composite R16', N'Pending', 43)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (5, 3, CAST(N'2026-11-05T10:13:56.4913041' AS DateTime2), N'Tái khám thay thuốc tủy và đo chiều dài làm việc hàn bít ống tủy vĩnh viễn R26', N'Pending', 44)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (6, 4, CAST(N'2026-11-09T10:13:56.4913041' AS DateTime2), N'Tái khám kiểm tra liền thương huyệt ổ răng và cắt chỉ vicryl sau nhổ răng 48', N'Pending', 48)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (7, 5, CAST(N'2026-11-12T10:13:56.4913041' AS DateTime2), N'Tái khám cắt chỉ vạt màng xương và chụp phim kiểm tra vị trí trụ Implant R36', N'Pending', 49)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (8, 6, CAST(N'2026-12-02T10:13:56.4913041' AS DateTime2), N'Tái khám gắn mắc cài kim loại tự buộc 2 hàm và kích hoạt dây cung chỉnh nha đợt 1', N'Pending', 45)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (9, 7, CAST(N'2026-11-16T10:13:56.4913041' AS DateTime2), N'Tái khám so màu răng sau 2 tuần và bôi kem chống tái bám màu bảo vệ men răng', N'Pending', 46)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (10, 8, CAST(N'2027-05-01T10:13:56.4913041' AS DateTime2), N'Tái khám định kỳ 6 tháng lấy cao răng và kiểm tra tổng quát sức khỏe nha chu', N'Pending', 42)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (11, 1, CAST(N'2026-11-16T03:48:41.2300910' AS DateTime2), N'Tái khám đánh giá độ săn chắc mô mềm, kiểm tra co hồi viền nướu, đo lại chỉ số BOP và túi nha chu sau lấy cao răng siêu âm & SRP.', N'Pending', 35)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (12, 9, CAST(N'2026-11-16T03:50:43.5812300' AS DateTime2), N'Tái khám đánh giá độ săn chắc mô mềm, kiểm tra co hồi viền nướu, đo lại chỉ số BOP và túi nha chu sau lấy cao răng siêu âm & SRP.', N'Pending', 42)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (13, 10, CAST(N'2026-11-16T03:51:45.1797950' AS DateTime2), N'Tái khám đánh giá độ săn chắc mô mềm, kiểm tra co hồi viền nướu, đo lại chỉ số BOP và túi nha chu sau lấy cao răng siêu âm & SRP.', N'Pending', 42)
+INSERT [dbo].[FollowUpSchedules] ([FollowUpId], [TreatmentSessionId], [RecommendedDate], [Reason], [Status], [AppointmentId]) VALUES (14, 12, CAST(N'2026-12-02T00:00:00.0000000' AS DateTime2), N'Tái khám định kỳ siết dây cung và thay thun chỉnh nha tháng thứ 2', N'Pending', 51)
+SET IDENTITY_INSERT [dbo].[FollowUpSchedules] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [Invoices] (5 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[Invoices] ON;
+INSERT [dbo].[Invoices] ([InvoiceId], [InvoiceCode], [AppointmentId], [GeneratedByUserId], [TotalAmount], [Status], [CreatedAt]) VALUES (1, N'INV-20261015-0001', 13, 3, CAST(702000.00 AS Decimal(18, 2)), N'Paid', CAST(N'2026-10-15T18:18:41.9990636' AS DateTime2))
+INSERT [dbo].[Invoices] ([InvoiceId], [InvoiceCode], [AppointmentId], [GeneratedByUserId], [TotalAmount], [Status], [CreatedAt]) VALUES (2, N'INV-20261015-0002', 14, 3, CAST(702000.00 AS Decimal(18, 2)), N'Paid', CAST(N'2026-10-15T18:19:45.1033230' AS DateTime2))
+INSERT [dbo].[Invoices] ([InvoiceId], [InvoiceCode], [AppointmentId], [GeneratedByUserId], [TotalAmount], [Status], [CreatedAt]) VALUES (4, N'INV-20261015-002', 41, 3, CAST(900000.00 AS Decimal(18, 2)), N'Unpaid', CAST(N'2026-11-02T09:50:17.7066667' AS DateTime2))
+INSERT [dbo].[Invoices] ([InvoiceId], [InvoiceCode], [AppointmentId], [GeneratedByUserId], [TotalAmount], [Status], [CreatedAt]) VALUES (5, N'INV-20261015-001', 35, 3, CAST(2500000.00 AS Decimal(18, 2)), N'Paid', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+INSERT [dbo].[Invoices] ([InvoiceId], [InvoiceCode], [AppointmentId], [GeneratedByUserId], [TotalAmount], [Status], [CreatedAt]) VALUES (6, N'INV-GIABAO-VIP', 39, 43, CAST(2000000.00 AS Decimal(18, 2)), N'Unpaid', CAST(N'2026-11-02T11:24:47.1995757' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[Invoices] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [InvoiceItems] (12 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[InvoiceItems] ON;
+INSERT [dbo].[InvoiceItems] ([InvoiceItemId], [InvoiceId], [PerformedServiceId], [Description], [Quantity], [UnitPrice]) VALUES (1, 1, NULL, N'Tiểu phẫu nhổ răng khôn mọc ngầm kẹt xương R38', 1, CAST(300000.00 AS Decimal(18, 2)))
+INSERT [dbo].[InvoiceItems] ([InvoiceItemId], [InvoiceId], [PerformedServiceId], [Description], [Quantity], [UnitPrice]) VALUES (2, 1, NULL, N'Chụp phim X-quang Panorama toàn cảnh KTS', 1, CAST(400000.00 AS Decimal(18, 2)))
+INSERT [dbo].[InvoiceItems] ([InvoiceItemId], [InvoiceId], [PerformedServiceId], [Description], [Quantity], [UnitPrice]) VALUES (3, 1, NULL, N'Đơn thuốc điều trị sau phẫu thuật (Kháng sinh, giảm đau)', 1, CAST(52000.00 AS Decimal(18, 2)))
+INSERT [dbo].[InvoiceItems] ([InvoiceItemId], [InvoiceId], [PerformedServiceId], [Description], [Quantity], [UnitPrice]) VALUES (4, 2, NULL, N'Hàn trám răng thẩm mỹ Composite xoang I (2 răng)', 1, CAST(300000.00 AS Decimal(18, 2)))
+INSERT [dbo].[InvoiceItems] ([InvoiceItemId], [InvoiceId], [PerformedServiceId], [Description], [Quantity], [UnitPrice]) VALUES (5, 2, NULL, N'Lấy cao răng và đánh bóng 2 hàm', 1, CAST(400000.00 AS Decimal(18, 2)))
+INSERT [dbo].[InvoiceItems] ([InvoiceItemId], [InvoiceId], [PerformedServiceId], [Description], [Quantity], [UnitPrice]) VALUES (6, 2, NULL, N'Thuế giá trị gia tăng (VAT 8%)', 1, CAST(52000.00 AS Decimal(18, 2)))
+INSERT [dbo].[InvoiceItems] ([InvoiceItemId], [InvoiceId], [PerformedServiceId], [Description], [Quantity], [UnitPrice]) VALUES (9, 4, NULL, N'Hàn trám răng thẩm mỹ Composite xoang I (2 răng)', 2, CAST(400000.00 AS Decimal(18, 2)))
+INSERT [dbo].[InvoiceItems] ([InvoiceItemId], [InvoiceId], [PerformedServiceId], [Description], [Quantity], [UnitPrice]) VALUES (10, 4, NULL, N'Lấy cao răng và đánh bóng 2 hàm', 1, CAST(100000.00 AS Decimal(18, 2)))
+INSERT [dbo].[InvoiceItems] ([InvoiceItemId], [InvoiceId], [PerformedServiceId], [Description], [Quantity], [UnitPrice]) VALUES (11, 5, NULL, N'Tiểu phẫu nhổ răng khôn mọc ngầm kẹt xương R38', 1, CAST(2000000.00 AS Decimal(18, 2)))
+INSERT [dbo].[InvoiceItems] ([InvoiceItemId], [InvoiceId], [PerformedServiceId], [Description], [Quantity], [UnitPrice]) VALUES (12, 5, NULL, N'Chụp phim X-quang Panorama toàn cảnh KTS', 1, CAST(300000.00 AS Decimal(18, 2)))
+INSERT [dbo].[InvoiceItems] ([InvoiceItemId], [InvoiceId], [PerformedServiceId], [Description], [Quantity], [UnitPrice]) VALUES (13, 5, NULL, N'Đơn thuốc điều trị sau phẫu thuật (Kháng sinh, giảm đau)', 1, CAST(200000.00 AS Decimal(18, 2)))
+INSERT [dbo].[InvoiceItems] ([InvoiceItemId], [InvoiceId], [PerformedServiceId], [Description], [Quantity], [UnitPrice]) VALUES (14, 6, NULL, N'Tẩy trắng răng Laser Whitening VIP', 1, CAST(2000000.00 AS Decimal(18, 2)))
+SET IDENTITY_INSERT [dbo].[InvoiceItems] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [Payments] (3 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[Payments] ON;
+INSERT [dbo].[Payments] ([PaymentId], [InvoiceId], [PaidByPatientUserId], [Method], [Amount], [TransactionReference], [Status], [PaidAt], [CreatedAt]) VALUES (1, 1, 6, N'BankTransfer', CAST(702000.00 AS Decimal(18, 2)), N'MBB-20261016011842', N'Successful', CAST(N'2026-10-15T18:18:42.2405945' AS DateTime2), CAST(N'2026-10-15T18:18:42.2406055' AS DateTime2))
+INSERT [dbo].[Payments] ([PaymentId], [InvoiceId], [PaidByPatientUserId], [Method], [Amount], [TransactionReference], [Status], [PaidAt], [CreatedAt]) VALUES (2, 2, 6, N'BankTransfer', CAST(702000.00 AS Decimal(18, 2)), N'MBB-20261016011945', N'Successful', CAST(N'2026-10-15T18:19:45.2337896' AS DateTime2), CAST(N'2026-10-15T18:19:45.2337897' AS DateTime2))
+INSERT [dbo].[Payments] ([PaymentId], [InvoiceId], [PaidByPatientUserId], [Method], [Amount], [TransactionReference], [Status], [PaidAt], [CreatedAt]) VALUES (3, 5, 24, N'BankTransfer', CAST(2500000.00 AS Decimal(18, 2)), N'VIETQR_VCB_992834812', N'Successful', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2), CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[Payments] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [VisitFeedback] (1 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[VisitFeedback] ON;
+INSERT [dbo].[VisitFeedback] ([FeedbackId], [AppointmentId], [DentistRating], [ClinicRating], [Comment], [CreatedAt]) VALUES (1, 35, 5, 5, N'Bác sĩ Hùng nhổ răng khôn cực kỳ êm ái, chỉ mất 15 phút là xong. Phòng khám sạch sẽ, hiện đại, lễ tân nhiệt tình!', CAST(N'2026-11-02T09:49:04.5144162' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[VisitFeedback] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [AuditLogs] (205 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[AuditLogs] ON;
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (1, 7, N'REGISTER', N'UserAccount', N'7', NULL, NULL, CAST(N'2026-10-12T07:25:32.0301528' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (2, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-13T15:18:23.1354132' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (3, 3, N'LOGOUT', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-13T15:20:54.4892792' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (4, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-10-13T15:21:20.1058909' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (5, 4, N'LOGOUT', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-10-13T15:27:05.2370045' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (6, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-10-13T15:27:43.2088156' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (7, 2, N'LOGOUT', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-10-13T15:29:05.2531029' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (8, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-13T17:12:40.2120036' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (9, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-13T17:12:48.6739606' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (10, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-13T17:12:56.8063083' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (11, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-14T08:30:59.9901846' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (12, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-14T08:30:59.9891913' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (13, 3, N'LOGOUT', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-14T08:31:38.1288206' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (14, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-14T08:31:49.9559877' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (15, 6, N'LOGOUT', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-14T08:50:38.6207534' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (16, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T15:05:18.1004805' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (17, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-10-15T15:46:51.9586319' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (18, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T15:47:00.2554110' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (19, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T15:48:54.8707543' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (20, 3, N'LOGOUT', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T16:03:01.9042301' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (21, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T16:08:41.9336339' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (22, 6, N'LOGOUT', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T16:11:28.8811047' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (23, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T16:11:47.7386063' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (24, 3, N'LOGOUT', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T16:13:19.6379432' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (25, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T16:13:32.2314769' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (26, 6, N'LOGOUT', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T16:20:30.9466241' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (27, 5, N'LOGIN', N'UserAccount', N'5', NULL, NULL, CAST(N'2026-10-15T16:21:00.9400437' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (28, 5, N'LOGOUT', N'UserAccount', N'5', NULL, NULL, CAST(N'2026-10-15T16:22:55.0110783' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (29, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T16:32:56.5656314' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (30, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T16:35:39.1389678' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (31, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T16:37:21.7124387' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (32, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T16:37:58.1268077' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (33, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T17:41:46.7068279' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (34, 6, N'LOGOUT', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T17:43:04.6749839' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (35, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T17:43:20.6437329' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (36, 3, N'LOGOUT', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T17:44:12.4253960' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (37, 5, N'LOGIN', N'UserAccount', N'5', NULL, NULL, CAST(N'2026-10-15T17:44:29.3048931' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (38, 5, N'LOGOUT', N'UserAccount', N'5', NULL, NULL, CAST(N'2026-10-15T17:45:46.1893621' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (39, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T17:46:25.3873120' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (40, 3, N'LOGOUT', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T17:47:08.1114015' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (41, 5, N'LOGIN', N'UserAccount', N'5', NULL, NULL, CAST(N'2026-10-15T17:47:30.6400333' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (42, 5, N'LOGOUT', N'UserAccount', N'5', NULL, NULL, CAST(N'2026-10-15T17:48:21.4618572' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (43, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-10-15T17:48:49.0950023' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (44, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T18:02:04.3090184' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (45, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T18:02:04.3622447' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (46, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T18:06:56.7134948' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (47, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T18:06:56.8507792' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (48, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T18:09:13.7993984' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (49, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T18:09:13.9029761' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (50, 5, N'LOGIN', N'UserAccount', N'5', NULL, NULL, CAST(N'2026-10-15T18:09:13.9549266' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (51, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-10-15T18:09:14.0066804' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (52, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T18:12:16.6705240' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (53, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T18:12:16.7333478' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (54, 5, N'LOGIN', N'UserAccount', N'5', NULL, NULL, CAST(N'2026-10-15T18:12:16.7970977' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (55, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-10-15T18:12:16.8486172' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (56, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T18:17:10.1959004' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (57, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T18:17:10.2600880' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (58, 5, N'LOGIN', N'UserAccount', N'5', NULL, NULL, CAST(N'2026-10-15T18:17:10.3113064' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (59, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-10-15T18:17:10.3744751' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (60, 1, N'LOGIN', N'UserAccount', N'1', NULL, NULL, CAST(N'2026-10-15T18:17:14.3514878' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (61, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T18:17:57.7866339' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (62, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T18:17:57.8474811' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (63, 5, N'LOGIN', N'UserAccount', N'5', NULL, NULL, CAST(N'2026-10-15T18:17:57.9034809' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (64, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-10-15T18:17:57.9584182' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (65, 1, N'LOGIN', N'UserAccount', N'1', NULL, NULL, CAST(N'2026-10-15T18:18:01.7122142' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (66, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T18:18:38.3763115' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (67, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T18:18:38.4388691' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (68, 5, N'LOGIN', N'UserAccount', N'5', NULL, NULL, CAST(N'2026-10-15T18:18:38.4978372' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (69, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-10-15T18:18:38.5487405' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (70, 1, N'LOGIN', N'UserAccount', N'1', NULL, NULL, CAST(N'2026-10-15T18:18:41.8642091' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (71, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T18:19:40.8030629' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (72, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T18:19:40.8617830' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (73, 5, N'LOGIN', N'UserAccount', N'5', NULL, NULL, CAST(N'2026-10-15T18:19:40.9120834' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (74, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-10-15T18:19:40.9624353' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (75, 1, N'LOGIN', N'UserAccount', N'1', NULL, NULL, CAST(N'2026-10-15T18:19:44.9979263' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (76, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T18:21:52.8507541' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (77, 3, N'LOGIN', N'UserAccount', N'3', NULL, NULL, CAST(N'2026-10-15T18:23:53.4432571' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (78, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T18:55:45.6585098' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (79, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T18:56:08.8385270' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (80, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-10-15T19:04:18.3750003' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (81, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-11-02T02:39:31.9245954' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (82, 6, N'LOGOUT', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-11-02T02:40:39.0850124' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (83, 43, N'LOGIN', N'UserAccount', N'43', NULL, NULL, CAST(N'2026-11-02T02:51:35.0751690' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (84, 43, N'LOGIN', N'UserAccount', N'43', NULL, NULL, CAST(N'2026-11-02T02:51:55.9277156' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (85, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T03:04:36.7146477' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (86, 1, N'LOGIN', N'UserAccount', N'1', NULL, NULL, CAST(N'2026-11-02T03:04:36.9833914' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (87, 20, N'LOGIN', N'UserAccount', N'20', NULL, NULL, CAST(N'2026-11-02T03:04:37.0446184' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (88, 21, N'LOGIN', N'UserAccount', N'21', NULL, NULL, CAST(N'2026-11-02T03:04:37.1039268' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (89, 45, N'LOGIN', N'UserAccount', N'45', NULL, NULL, CAST(N'2026-11-02T03:04:37.1632640' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (90, 46, N'LOGIN', N'UserAccount', N'46', NULL, NULL, CAST(N'2026-11-02T03:04:37.2219749' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (91, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T03:04:43.6196039' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (92, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T03:04:52.1157907' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (93, 1, N'LOGIN', N'UserAccount', N'1', NULL, NULL, CAST(N'2026-11-02T03:04:52.3690487' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (94, 20, N'LOGIN', N'UserAccount', N'20', NULL, NULL, CAST(N'2026-11-02T03:04:52.5087698' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (95, 21, N'LOGIN', N'UserAccount', N'21', NULL, NULL, CAST(N'2026-11-02T03:04:52.6852175' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (96, 45, N'LOGIN', N'UserAccount', N'45', NULL, NULL, CAST(N'2026-11-02T03:04:52.8029102' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (97, 46, N'LOGIN', N'UserAccount', N'46', NULL, NULL, CAST(N'2026-11-02T03:04:53.0136558' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (98, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T03:05:19.7835400' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (99, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T03:05:37.8943676' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (100, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T03:05:54.0915317' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (101, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T03:06:12.3307781' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (102, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T03:06:18.9952906' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (103, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-11-02T03:14:05.5627630' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (104, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-11-02T03:23:00.4129257' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (105, 43, N'LOGIN', N'UserAccount', N'43', NULL, NULL, CAST(N'2026-11-02T03:23:00.6769508' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (106, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T03:23:00.8198079' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (107, 17, N'LOGIN', N'UserAccount', N'17', NULL, NULL, CAST(N'2026-11-02T03:23:00.9619029' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (108, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T03:23:01.0231283' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (109, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-11-02T03:23:18.1547763' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (110, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T03:23:35.6169336' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (111, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-11-02T03:23:57.6536960' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (112, 43, N'LOGIN', N'UserAccount', N'43', NULL, NULL, CAST(N'2026-11-02T03:23:57.8727828' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (113, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T03:23:58.0825658' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (114, 17, N'LOGIN', N'UserAccount', N'17', NULL, NULL, CAST(N'2026-11-02T03:23:58.2641011' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (115, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T03:23:58.5556185' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (116, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T03:25:48.1485999' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (117, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T03:30:38.4461708' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (118, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T03:31:31.4268295' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (119, 2, N'CREATE', N'Department', N'5', NULL, N'{"Name":"Khoa Chan Doan Hinh Anh \u0026 Laser","ManagerUserId":null,"Status":"Active"}', CAST(N'2026-11-02T03:31:31.5314265' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (120, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T03:37:46.7212969' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (121, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T03:38:05.8983194' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (122, 2, N'CREATE', N'Department', N'6', NULL, N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh K\u1EF9 Thu\u1EADt S\u1ED1 QA","ManagerUserId":null,"Status":"Active"}', CAST(N'2026-11-02T03:38:06.0601627' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (123, 2, N'UPDATE', N'Department', N'6', N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh K\u1EF9 Thu\u1EADt S\u1ED1 QA","ManagerUserId":null,"Status":"Active"}', N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh Th\u1EA9m M\u1EF9 K\u1EF9 Thu\u1EADt S\u1ED1 Cao C\u1EA5p (Updated)","ManagerUserId":null,"Status":"Active"}', CAST(N'2026-11-02T03:38:06.2043393' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (124, 2, N'TOGGLE_STATUS', N'Department', N'6', N'{"Status":"Active"}', N'{"Status":"Inactive"}', CAST(N'2026-11-02T03:38:06.2383820' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (125, 2, N'CREATE', N'Room', N'5', NULL, N'{"RoomCode":"ROOM-QA-88","RoomName":"Ph\u00F2ng \u0110i\u1EC1u Tr\u1ECB K\u1EF9 Thu\u1EADt Cao VIP QA","DepartmentId":6,"Status":"Active"}', CAST(N'2026-11-02T03:38:06.3314374' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (126, 2, N'CREATE', N'DentalChair', N'7', NULL, N'{"RoomId":5,"ChairCode":"GHE-QA-88A","Status":"Active"}', CAST(N'2026-11-02T03:38:06.4268082' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (127, 2, N'CHANGE_STATUS', N'DentalChair', N'7', N'{"Status":"Active"}', N'{"Status":"Maintenance"}', CAST(N'2026-11-02T03:38:06.5064510' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (128, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T03:38:34.0646489' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (129, 2, N'CREATE', N'Department', N'7', NULL, N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh K\u1EF9 Thu\u1EADt S\u1ED1 QA","ManagerUserId":null,"Status":"Active"}', CAST(N'2026-11-02T03:38:34.0946791' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (130, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T03:40:31.2437422' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (131, 2, N'CREATE', N'Department', N'8', NULL, N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh KTS QA 831","ManagerUserId":null,"Status":"Active"}', CAST(N'2026-11-02T03:40:31.2786765' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (132, 2, N'UPDATE', N'Department', N'8', N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh KTS QA 831","ManagerUserId":null,"Status":"Active"}', N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh KTS Th\u1EA9m M\u1EF9 VIP 831","ManagerUserId":null,"Status":"Active"}', CAST(N'2026-11-02T03:40:31.3583960' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (133, 2, N'TOGGLE_STATUS', N'Department', N'8', N'{"Status":"Active"}', N'{"Status":"Inactive"}', CAST(N'2026-11-02T03:40:31.3859498' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (134, 2, N'CREATE', N'Room', N'6', NULL, N'{"RoomCode":"RM-QA831","RoomName":"Ph\u00F2ng \u0110i\u1EC1u Tr\u1ECB K\u1EF9 Thu\u1EADt Cao VIP 831","DepartmentId":8,"Status":"Active"}', CAST(N'2026-11-02T03:40:31.4337884' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (135, 2, N'CREATE', N'DentalChair', N'8', NULL, N'{"RoomId":6,"ChairCode":"GH-QA831A","Status":"Active"}', CAST(N'2026-11-02T03:40:31.4929794' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (136, 2, N'CHANGE_STATUS', N'DentalChair', N'8', N'{"Status":"Active"}', N'{"Status":"Maintenance"}', CAST(N'2026-11-02T03:40:31.5518467' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (137, 2, N'CREATE', N'DepartmentService', N'11', NULL, N'{"ServiceName":"C\u1EA5y Gh\u00E9p Implant Straumann QA 831","DepartmentId":1,"Price":28500000.0,"Status":"Active"}', CAST(N'2026-11-02T03:40:31.6689649' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (138, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T03:40:52.2482502' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (139, 2, N'CREATE', N'Department', N'9', NULL, N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh KTS QA 852","ManagerUserId":null,"Status":"Active"}', CAST(N'2026-11-02T03:40:52.2706454' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (140, 2, N'UPDATE', N'Department', N'9', N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh KTS QA 852","ManagerUserId":null,"Status":"Active"}', N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh KTS Th\u1EA9m M\u1EF9 VIP 852","ManagerUserId":null,"Status":"Active"}', CAST(N'2026-11-02T03:40:52.3332968' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (141, 2, N'TOGGLE_STATUS', N'Department', N'9', N'{"Status":"Active"}', N'{"Status":"Inactive"}', CAST(N'2026-11-02T03:40:52.3548723' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (142, 2, N'CREATE', N'Room', N'7', NULL, N'{"RoomCode":"RM-QA852","RoomName":"Ph\u00F2ng \u0110i\u1EC1u Tr\u1ECB K\u1EF9 Thu\u1EADt Cao VIP 852","DepartmentId":9,"Status":"Active"}', CAST(N'2026-11-02T03:40:52.3959001' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (143, 2, N'CREATE', N'DentalChair', N'9', NULL, N'{"RoomId":7,"ChairCode":"GH-QA852A","Status":"Active"}', CAST(N'2026-11-02T03:40:52.4381939' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (144, 2, N'CHANGE_STATUS', N'DentalChair', N'9', N'{"Status":"Active"}', N'{"Status":"Maintenance"}', CAST(N'2026-11-02T03:40:52.4800666' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (145, 2, N'CREATE', N'DepartmentService', N'12', NULL, N'{"ServiceName":"C\u1EA5y Gh\u00E9p Implant Straumann QA 852","DepartmentId":1,"Price":28500000.0,"Status":"Active"}', CAST(N'2026-11-02T03:40:52.5427170' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (146, 2, N'UPDATE', N'DepartmentService', N'12', N'{"ServiceName":"C\u1EA5y Gh\u00E9p Implant Straumann QA 852","DepartmentId":1,"Price":28500000.00,"Status":"Active"}', N'{"ServiceName":"C\u1EA5y Gh\u00E9p Implant Straumann QA VIP 852","DepartmentId":1,"Price":32000000.0,"Status":"Active"}', CAST(N'2026-11-02T03:40:52.6070958' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (147, 2, N'TOGGLE_STATUS', N'DepartmentService', N'12', N'{"Status":"Active"}', N'{"Status":"Inactive"}', CAST(N'2026-11-02T03:40:52.6353034' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (148, 2, N'LOCK_USER', N'UserAccount', N'43', N'{"Status":"Active"}', N'{"Status":"Locked","Reason":"T\u00E0i kho\u1EA3n nh\u00E2n s\u1EF1 QA t\u1EA1m ng\u01B0ng c\u00F4ng t\u00E1c"}', CAST(N'2026-11-02T03:40:52.7500901' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (149, 2, N'UNLOCK_USER', N'UserAccount', N'43', N'{"Status":"Locked"}', N'{"Status":"Active","Reason":"Nh\u00E2n s\u1EF1 ti\u1EBFp t\u1EE5c l\u00E0m vi\u1EC7c"}', CAST(N'2026-11-02T03:40:52.7922816' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (150, 43, N'LOGIN', N'UserAccount', N'43', NULL, NULL, CAST(N'2026-11-02T03:40:52.8628724' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (151, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T03:41:41.7388891' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (152, 2, N'CREATE', N'Department', N'10', NULL, N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh KTS QA 901","ManagerUserId":null,"Status":"Active"}', CAST(N'2026-11-02T03:41:41.7719710' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (153, 2, N'UPDATE', N'Department', N'10', N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh KTS QA 901","ManagerUserId":null,"Status":"Active"}', N'{"Name":"Khoa Ph\u1EE5c H\u00ECnh KTS Th\u1EA9m M\u1EF9 VIP 901","ManagerUserId":null,"Status":"Active"}', CAST(N'2026-11-02T03:41:41.8498786' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (154, 2, N'TOGGLE_STATUS', N'Department', N'10', N'{"Status":"Active"}', N'{"Status":"Inactive"}', CAST(N'2026-11-02T03:41:41.8732830' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (155, 2, N'CREATE', N'Room', N'8', NULL, N'{"RoomCode":"RM-QA901","RoomName":"Ph\u00F2ng \u0110i\u1EC1u Tr\u1ECB K\u1EF9 Thu\u1EADt Cao VIP 901","DepartmentId":10,"Status":"Active"}', CAST(N'2026-11-02T03:41:41.9223761' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (156, 2, N'CREATE', N'DentalChair', N'10', NULL, N'{"RoomId":8,"ChairCode":"GH-QA901A","Status":"Active"}', CAST(N'2026-11-02T03:41:41.9783538' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (157, 2, N'CHANGE_STATUS', N'DentalChair', N'10', N'{"Status":"Active"}', N'{"Status":"Maintenance"}', CAST(N'2026-11-02T03:41:42.0326388' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (158, 2, N'CREATE', N'DepartmentService', N'13', NULL, N'{"ServiceName":"C\u1EA5y Gh\u00E9p Implant Straumann QA 901","DepartmentId":1,"Price":28500000.0,"Status":"Active"}', CAST(N'2026-11-02T03:41:42.0982578' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (159, 2, N'UPDATE', N'DepartmentService', N'13', N'{"ServiceName":"C\u1EA5y Gh\u00E9p Implant Straumann QA 901","DepartmentId":1,"Price":28500000.00,"Status":"Active"}', N'{"ServiceName":"C\u1EA5y Gh\u00E9p Implant Straumann QA VIP 901","DepartmentId":1,"Price":32000000.0,"Status":"Active"}', CAST(N'2026-11-02T03:41:42.1488272' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (160, 2, N'TOGGLE_STATUS', N'DepartmentService', N'13', N'{"Status":"Active"}', N'{"Status":"Inactive"}', CAST(N'2026-11-02T03:41:42.1722672' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (161, 2, N'LOCK_USER', N'UserAccount', N'43', N'{"Status":"Active"}', N'{"Status":"Locked","Reason":"T\u00E0i kho\u1EA3n nh\u00E2n s\u1EF1 QA t\u1EA1m ng\u01B0ng c\u00F4ng t\u00E1c"}', CAST(N'2026-11-02T03:41:42.2586911' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (162, 2, N'UNLOCK_USER', N'UserAccount', N'43', N'{"Status":"Locked"}', N'{"Status":"Active","Reason":"Nh\u00E2n s\u1EF1 ti\u1EBFp t\u1EE5c l\u00E0m vi\u1EC7c"}', CAST(N'2026-11-02T03:41:42.2983022' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (163, 43, N'LOGIN', N'UserAccount', N'43', NULL, NULL, CAST(N'2026-11-02T03:41:42.3673318' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (164, 2, N'ASSIGN_DENTIST_DEPT', N'DentistDepartment', N'23', NULL, N'{"DentistUserId":1,"DepartmentId":10,"Status":"Active"}', CAST(N'2026-11-02T03:41:42.4524784' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (165, 46, N'LOGIN', N'UserAccount', N'46', NULL, NULL, CAST(N'2026-11-02T03:46:56.5479845' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (166, 46, N'LOGIN', N'UserAccount', N'46', NULL, NULL, CAST(N'2026-11-02T03:48:40.2904277' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (167, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-11-02T03:48:41.6603706' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (168, 46, N'LOGIN', N'UserAccount', N'46', NULL, NULL, CAST(N'2026-11-02T03:48:54.0653975' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (169, 46, N'LOGIN', N'UserAccount', N'46', NULL, NULL, CAST(N'2026-11-02T03:49:08.4956835' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (170, 46, N'LOGIN', N'UserAccount', N'46', NULL, NULL, CAST(N'2026-11-02T03:50:42.2715399' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (171, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-11-02T03:50:43.8055751' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (172, 46, N'LOGIN', N'UserAccount', N'46', NULL, NULL, CAST(N'2026-11-02T03:50:55.9597108' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (173, 46, N'LOGIN', N'UserAccount', N'46', NULL, NULL, CAST(N'2026-11-02T03:51:01.7976202' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (174, 46, N'LOGIN', N'UserAccount', N'46', NULL, NULL, CAST(N'2026-11-02T03:51:22.2864305' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (175, 46, N'LOGIN', N'UserAccount', N'46', NULL, NULL, CAST(N'2026-11-02T03:51:44.7159472' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (176, 6, N'LOGIN', N'UserAccount', N'6', NULL, NULL, CAST(N'2026-11-02T03:51:45.2966355' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (177, 23, N'LOGIN', N'UserAccount', N'23', NULL, NULL, CAST(N'2026-11-02T04:20:02.6157505' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (178, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T04:26:23.8171467' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (179, 20, N'LOGIN', N'UserAccount', N'20', NULL, NULL, CAST(N'2026-11-02T04:26:30.2577174' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (180, 18, N'LOGIN', N'UserAccount', N'18', NULL, NULL, CAST(N'2026-11-02T04:26:30.3701814' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (181, 52, N'LOGIN', N'UserAccount', N'52', NULL, NULL, CAST(N'2026-11-02T04:26:30.4662048' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (182, 19, N'LOGIN', N'UserAccount', N'19', NULL, NULL, CAST(N'2026-11-02T04:26:30.5500896' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (183, 21, N'LOGIN', N'UserAccount', N'21', NULL, NULL, CAST(N'2026-11-02T04:26:30.6466460' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (184, 43, N'LOGIN', N'UserAccount', N'43', NULL, NULL, CAST(N'2026-11-02T04:26:30.7368175' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (185, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T04:26:30.8244847' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (186, 53, N'LOGIN', N'UserAccount', N'53', NULL, NULL, CAST(N'2026-11-02T04:26:30.9168012' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (187, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T04:26:31.0094668' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (188, 42, N'LOGIN', N'UserAccount', N'42', NULL, NULL, CAST(N'2026-11-02T04:26:31.0900714' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (189, 20, N'LOGIN', N'UserAccount', N'20', NULL, NULL, CAST(N'2026-11-02T04:26:55.4250262' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (190, 18, N'LOGIN', N'UserAccount', N'18', NULL, NULL, CAST(N'2026-11-02T04:26:55.5895449' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (191, 52, N'LOGIN', N'UserAccount', N'52', NULL, NULL, CAST(N'2026-11-02T04:26:55.6745937' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (192, 19, N'LOGIN', N'UserAccount', N'19', NULL, NULL, CAST(N'2026-11-02T04:26:55.7551012' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (193, 21, N'LOGIN', N'UserAccount', N'21', NULL, NULL, CAST(N'2026-11-02T04:26:55.8370532' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (194, 43, N'LOGIN', N'UserAccount', N'43', NULL, NULL, CAST(N'2026-11-02T04:26:55.9172395' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (195, 4, N'LOGIN', N'UserAccount', N'4', NULL, NULL, CAST(N'2026-11-02T04:26:56.0206339' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (196, 53, N'LOGIN', N'UserAccount', N'53', NULL, NULL, CAST(N'2026-11-02T04:26:56.0989606' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (197, 2, N'LOGIN', N'UserAccount', N'2', NULL, NULL, CAST(N'2026-11-02T04:26:56.1788791' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (198, 42, N'LOGIN', N'UserAccount', N'42', NULL, NULL, CAST(N'2026-11-02T04:26:56.2582805' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (199, 20, N'LOGIN', N'UserAccount', N'20', NULL, NULL, CAST(N'2026-11-02T05:50:49.2949536' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (200, 20, N'LOGOUT', N'UserAccount', N'20', NULL, NULL, CAST(N'2026-11-02T05:54:05.6410923' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (201, 19, N'LOGIN', N'UserAccount', N'19', NULL, NULL, CAST(N'2026-11-02T05:54:43.0881956' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (202, 19, N'LOGOUT', N'UserAccount', N'19', NULL, NULL, CAST(N'2026-11-02T05:55:45.2397627' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (203, 52, N'LOGIN', N'UserAccount', N'52', NULL, NULL, CAST(N'2026-11-02T05:56:08.1166943' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (204, 23, N'LOGIN', N'UserAccount', N'23', NULL, NULL, CAST(N'2026-11-02T05:58:21.4418169' AS DateTime2))
+INSERT [dbo].[AuditLogs] ([AuditLogId], [UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt]) VALUES (205, 23, N'LOGIN', N'UserAccount', N'23', NULL, NULL, CAST(N'2026-11-02T16:32:11.2459825' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[AuditLogs] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [BlogCategories] (8 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[BlogCategories] ON;
+INSERT [dbo].[BlogCategories] ([CategoryId], [Name], [Slug], [CreatedAt]) VALUES (1, N'Niềng răng - Chỉnh nha', N'nieng-rang-chinh-nha', CAST(N'2026-10-26T23:58:34.6502332' AS DateTime2))
+INSERT [dbo].[BlogCategories] ([CategoryId], [Name], [Slug], [CreatedAt]) VALUES (2, N'Cấy ghép Implant', N'cay-ghep-implant', CAST(N'2026-10-26T23:58:34.6502332' AS DateTime2))
+INSERT [dbo].[BlogCategories] ([CategoryId], [Name], [Slug], [CreatedAt]) VALUES (3, N'Nha khoa thẩm mỹ', N'nha-khoa-tham-my', CAST(N'2026-10-26T23:58:34.6502332' AS DateTime2))
+INSERT [dbo].[BlogCategories] ([CategoryId], [Name], [Slug], [CreatedAt]) VALUES (4, N'Nha khoa trẻ em', N'nha-khoa-tre-em', CAST(N'2026-10-26T23:58:34.6502332' AS DateTime2))
+INSERT [dbo].[BlogCategories] ([CategoryId], [Name], [Slug], [CreatedAt]) VALUES (5, N'Chăm sóc răng miệng', N'cham-soc-rang-mieng', CAST(N'2026-10-26T23:58:34.6502332' AS DateTime2))
+INSERT [dbo].[BlogCategories] ([CategoryId], [Name], [Slug], [CreatedAt]) VALUES (6, N'Bệnh lý răng miệng', N'benh-ly-rang-mieng', CAST(N'2026-10-26T23:58:34.6502332' AS DateTime2))
+INSERT [dbo].[BlogCategories] ([CategoryId], [Name], [Slug], [CreatedAt]) VALUES (7, N'Tin tức & Sự kiện', N'tin-tuc-su-kien', CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2))
+INSERT [dbo].[BlogCategories] ([CategoryId], [Name], [Slug], [CreatedAt]) VALUES (8, N'Thông báo phòng khám', N'thong-bao-phong-kham', CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[BlogCategories] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [BlogPosts] (7 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[BlogPosts] ON;
+INSERT [dbo].[BlogPosts] ([BlogPostId], [CategoryId], [AuthorUserId], [Title], [Slug], [Summary], [Content], [ThumbnailUrl], [VideoUrl], [Status], [IsFeatured], [ViewCount], [PublishedAt], [CreatedAt], [UpdatedAt]) VALUES (6, 6, 1, N'Điều trị viêm tủy răng như thế nào? Dấu hiệu và quy trình chuẩn y khoa', N'dieu-tri-viem-tuy-rang-nhu-the-nao', N'Tủy răng được ví như "trái tim" nuôi dưỡng sự sống của chiếc răng. Khi bị viêm tủy, người bệnh thường chịu đựng những cơn đau nhức dữ dội từng cơn, đặc biệt về ban đêm. Cùng tìm hiểu nguyên nhân, dấu hiệu nhận biết và quy trình điều trị viêm tủy răng chuẩn y khoa, an toàn, không đau tại phòng khám.', N'<p class="lead"><strong>Tủy răng</strong> được ví như "trái tim" nuôi dưỡng sự sống của một chiếc răng, chứa hệ thống mạch máu và dây thần kinh cảm giác. Khi tủy răng bị tổn thương hoặc viêm nhiễm do vi khuẩn tấn công, người bệnh sẽ phải đối mặt với những cơn đau buốt buốt óc, ảnh hưởng nghiêm trọng đến ăn nhai và giấc ngủ. Cùng đội ngũ bác sĩ chuyên khoa tìm hiểu chi tiết về dấu hiệu nhận biết và phác đồ điều trị chuẩn y khoa qua bài viết dưới đây.</p>
+
+<div class="my-4 text-center">
+    <img src="/images/blog/viem-tuy-rang-banner.svg" alt="Sơ đồ cấu trúc giải phẫu răng và viêm tủy cấp" class="img-fluid rounded-4 shadow-sm border blog-zoomable-img" style="max-height: 420px; width: 100%; object-fit: cover;" />
+    <p class="text-muted small mt-2 fst-italic"><i class="bi bi-camera me-1"></i>Hình 1: Mặt cắt giải phẫu răng cối - Vi khuẩn sâu răng ăn mòn men, ngà và gây viêm nhiễm buồng tủy cấp tính.</p>
+</div>
+
+<h2>1. Viêm tủy răng là gì?</h2>
+<p>Viêm tủy răng là phản ứng viêm của các mô liên kết mạch máu và thần kinh nằm trong buồng tủy và ống tủy. Khác với các mô mềm khác trên cơ thể, tủy răng nằm trong một buồng kín có thành cứng (men và ngà răng). Khi bị viêm, mạch máu giãn nở gây tăng áp lực bên trong buồng tủy nhưng không thể giải phóng ra ngoài, dẫn đến chèn ép các đầu tận cùng thần kinh và gây ra những cơn đau nhức dữ dội.</p>
+
+<div class="my-4 text-center">
+    <img src="/images/blog/periopixel-dental-arch.png" alt="Mô phỏng 3D cung răng và nướu răng Periopixel" class="img-fluid rounded-4 shadow-sm border blog-zoomable-img" style="max-height: 380px; width: 100%; object-fit: cover;" />
+    <p class="text-muted small mt-2 fst-italic"><i class="bi bi-camera me-1"></i>Hình 2: Mô phỏng 3D cung răng và mô nướu trong điều trị nội nha (Nguồn cảm hứng: 3D Dental Patient Education - Periopixel).</p>
+</div>
+
+<h2>2. Nguyên nhân hàng đầu dẫn đến viêm tủy răng</h2>
+<p>Viêm tủy răng thường bắt nguồn từ những tổn thương kéo dài không được can thiệp đúng lúc:</p>
+<ul>
+    <li><strong>Sâu răng ăn sâu không chữa trị:</strong> Vi khuẩn sâu răng phá hủy ngà răng và trực tiếp xâm nhập vào buồng tủy (chiếm hơn 80% các ca viêm tủy).</li>
+    <li><strong>Chấn thương cơ học:</strong> Răng bị sứt mẻ, nứt vỡ lớn làm lộ buồng tủy.</li>
+    <li><strong>Viêm nha chu ngược dòng:</strong> Vi khuẩn từ túi nha chu quanh chân răng lây lan ngược qua chóp chân răng đi vào tủy.</li>
+    <li><strong>Thói quen mòn cổ răng, nghiến răng:</strong> Men răng bị bào mòn quá mức khiến ngà răng mỏng dần, kích thích buồng tủy.</li>
+</ul>
+
+<h2>3. Quy trình điều trị viêm tủy răng chuẩn y khoa 5 bước</h2>
+<p>Tại nha khoa DentalCare, quy trình điều trị tủy vi phẫu được thực hiện nghiêm ngặt theo tiêu chuẩn quốc tế:</p>
+<ol>
+    <li><strong>Thăm khám và chụp phim CT / X-quang:</strong> Khảo sát chiều dài ống tủy, vị trí nhiễm trùng và giải phẫu chân răng.</li>
+    <li><strong>Gây tê không đau &amp; đặt đê cao su cách ly (Rubber Dam):</strong> Đảm bảo vô trùng tuyệt đối, ngăn nước bọt và bảo vệ đường thở.</li>
+    <li><strong>Mở tủy và làm sạch bằng máy đo chóp định vị:</strong> Sử dụng hệ thống trâm xoay thông minh NiTi dẻo dai làm sạch triệt để mô tủy viêm.</li>
+    <li><strong>Bơm rửa khử trùng chuyên sâu:</strong> Sử dụng dung dịch sát khuẩn y khoa loại trừ 99.9% vi khuẩn yếm khí.</li>
+    <li><strong>Trám bít ống tủy 3D &amp; phục hình mão sứ:</strong> Trám kín hệ thống ống tủy bằng Gutta-percha sinh học và bọc sứ bảo vệ thân răng.</li>
+</ol>
+
+<blockquote class="p-3 bg-light rounded-3 border-start border-4 border-primary">
+    <strong>Lời khuyên từ TS. BS. Nguyễn Thị Phương Thảo:</strong> Răng sau điều trị tủy sẽ mất nguồn nuôi dưỡng nên dần trở nên giòn. Việc bọc mão sứ bảo vệ là vô cùng cần thiết để khôi phục khả năng ăn nhai vững chắc và giữ răng thật bền lâu trọn đời.
+</blockquote>', N'/images/blog/viem-tuy-rang-banner.svg', N'https://www.youtube.com/embed/VR8IQ9QFdWw', N'Published', 1, 351, CAST(N'2026-10-24T23:59:42.8833337' AS DateTime2), CAST(N'2026-10-24T23:59:42.8833337' AS DateTime2), NULL)
+INSERT [dbo].[BlogPosts] ([BlogPostId], [CategoryId], [AuthorUserId], [Title], [Slug], [Summary], [Content], [ThumbnailUrl], [VideoUrl], [Status], [IsFeatured], [ViewCount], [PublishedAt], [CreatedAt], [UpdatedAt]) VALUES (7, 6, 1, N'Nhổ răng khôn mọc lệch khi nào? Quy trình nhổ răng không đau bằng công nghệ Piezotome', N'nho-rang-khon-moc-lech-khi-nao-quy-trinh-nho-rang-khong-dau', N'Răng khôn (răng số 8) mọc lệch, mọc ngầm thường gây sưng đau, sốt, viêm lợi trùm và phá hủy răng số 7 kề bên. Cùng tìm hiểu thời điểm vàng nên nhổ răng khôn và công nghệ nhổ răng siêu âm Piezotome giúp giảm chấn thương, hạn chế chảy máu và nhanh hồi phục.', N'<p class="lead">Răng khôn (răng số 8) mọc ngầm, mọc lệch là nỗi ám ảnh của nhiều người bởi những cơn đau nhức ê ẩm, sưng má và viêm lợi trùm. Nhờ ứng dụng công nghệ sóng siêu âm Piezotome tiên tiến, việc nhổ răng khôn hiện nay diễn ra nhẹ nhàng, êm ái, hạn chế tối đa xâm lấn và nhanh hồi phục.</p>
+
+<div class="my-4 text-center">
+    <img src="/images/blog/nho-rang-khon-banner.svg" alt="Răng khôn mọc lệch 90 độ và công nghệ sóng siêu âm Piezotome" class="img-fluid rounded-4 shadow-sm border blog-zoomable-img" style="max-height: 420px; width: 100%; object-fit: cover;" />
+    <p class="text-muted small mt-2 fst-italic"><i class="bi bi-camera me-1"></i>Hình 1: Mô phỏng răng khôn số 8 nằm ngang đâm vào chân răng số 7 - Bóc tách êm ái bằng sóng siêu âm Piezotome.</p>
+</div>
+
+<h2>1. Biến chứng nguy hiểm nếu không nhổ răng khôn mọc lệch</h2>
+<ul>
+    <li><strong>Hỏng răng ăn nhai số 7:</strong> Răng khôn đẩy vào thân hoặc chân răng bên cạnh gây tiêu chân răng và sâu kẽ răng số 7.</li>
+    <li><strong>Viêm lợi trùm và sốt cao:</strong> Nắp lợi che phủ răng khôn bị ứ đọng thức ăn gây sưng mủ, cứng hàm, khó há miệng.</li>
+    <li><strong>Xô lệch toàn bộ hàm răng:</strong> Áp lực mọc răng số 8 có thể đẩy chen chúc các răng cửa phía trước.</li>
+    <li><strong>U nang xương hàm:</strong> Tiêu hủy xương hàm âm thầm xung quanh thân răng ngầm.</li>
+</ul>
+
+<div class="my-4 text-center">
+    <img src="/images/blog/periopixel-dental-arch.png" alt="Mô hình giải phẫu cung răng trước phẫu thuật" class="img-fluid rounded-4 shadow-sm border blog-zoomable-img" style="max-height: 380px; width: 100%; object-fit: cover;" />
+    <p class="text-muted small mt-2 fst-italic"><i class="bi bi-camera me-1"></i>Hình 2: Định vị góc nghiêng và giải phẫu chân răng trên mô hình 3D (Periopixel 3D Dental Education).</p>
+</div>
+
+<h2>2. Vì sao nên chọn nhổ răng khôn bằng sóng siêu âm Piezotome?</h2>
+<p>Công nghệ Piezotome sử dụng các bước sóng siêu âm cao tần chọn lọc chỉ tác động lên mô cứng của răng và làm đứt nhẹ nhàng hệ thống dây chằng nha chu xung quanh, hoàn toàn không làm tổn thương mô mềm, mạch máu hay nẹp xương ổ răng.</p>
+<ul>
+    <li>Thời gian nhổ nhanh chóng chỉ từ 10 - 15 phút.</li>
+    <li>Giảm đến 85% tình trạng sưng bầm và chảy máu sau tiểu phẫu.</li>
+    <li>Khả năng lành thương nhanh gấp 2 lần so với kỹ thuật đục gõ kìm bẩy truyền thống.</li>
+</ul>', N'/images/blog/nho-rang-khon-banner.svg', N'https://www.youtube.com/embed/9KtA83_tUFQ', N'Published', 1, 262, CAST(N'2026-10-23T00:00:43.9244583' AS DateTime2), CAST(N'2026-10-23T00:00:43.9244583' AS DateTime2), NULL)
+INSERT [dbo].[BlogPosts] ([BlogPostId], [CategoryId], [AuthorUserId], [Title], [Slug], [Summary], [Content], [ThumbnailUrl], [VideoUrl], [Status], [IsFeatured], [ViewCount], [PublishedAt], [CreatedAt], [UpdatedAt]) VALUES (8, 2, 1, N'Cấy ghép Implant nha khoa: Giải pháp phục hồi răng đã mất hoàn hảo nhất hiện nay', N'cay-ghep-implant-nha-khoa-giai-phap-phuc-hoi-rang-da-mat', N'Mất răng không chỉ ảnh hưởng đến thẩm mỹ và chức năng ăn nhai mà còn dẫn đến tiêu xương hàm, lão hóa cơ mặt. Cấy ghép Implant là kỹ thuật hiện đại duy nhất phục hồi trọn vẹn cả chân răng và thân răng, mang lại cảm giác ăn nhai vững chắc như răng thật.', N'<p class="lead">Mất răng là nguyên nhân trực tiếp dẫn đến tiêu xương hàm, hóp má và suy giảm khả năng ăn nhai. Cấy ghép Implant là bước đột phá vĩ đại trong nha khoa hiện đại, giúp tái tạo một chiếc răng mới hoàn hảo từ chân răng đến thân răng sứ với độ bền trọn đời.</p>
+
+<div class="my-4 text-center">
+    <img src="/images/blog/implant-banner.svg" alt="Sơ đồ 3 phần cấu tạo của trụ Implant nha khoa" class="img-fluid rounded-4 shadow-sm border blog-zoomable-img" style="max-height: 420px; width: 100%; object-fit: cover;" />
+    <p class="text-muted small mt-2 fst-italic"><i class="bi bi-camera me-1"></i>Hình 1: Cấu trúc 3 thành phần của răng Implant sinh học: Trụ Titanium tích hợp xương, khớp nối Abutment và Mão toàn sứ cao cấp.</p>
+</div>
+
+<h2>1. Cấu tạo ưu việt của răng Implant sinh học</h2>
+<ul>
+    <li><strong>Trụ Titanium nguyên chất:</strong> Vật liệu sinh học tương thích tuyệt đối với cơ thể người, kích thích tế bào xương hàm bám chặt và tích hợp vững chắc.</li>
+    <li><strong>Khớp nối Abutment:</strong> Chốt liên kết chịu lực đóng vai trò nâng đỡ mão răng.</li>
+    <li><strong>Mão răng toàn sứ CAD/CAM:</strong> Được chế tác bằng công nghệ kỹ thuật số sắc nét từng vân răng, mang lại vẻ đẹp tự nhiên và lực ăn nhai 100% như răng thật.</li>
+</ul>
+
+<div class="my-4 text-center">
+    <img src="/images/blog/periopixel-dental-arch.png" alt="Vị trí phục hồi răng đã mất trên cung hàm 3D" class="img-fluid rounded-4 shadow-sm border blog-zoomable-img" style="max-height: 380px; width: 100%; object-fit: cover;" />
+    <p class="text-muted small mt-2 fst-italic"><i class="bi bi-camera me-1"></i>Hình 2: Mô phỏng vị trí cấy ghép Implant trên cung hàm 3D (3D Dental Patient Education - Periopixel).</p>
+</div>
+
+<h2>2. Ưu thế vượt trội so với cầu răng sứ truyền thống</h2>
+<table class="table table-bordered table-striped mt-3">
+    <thead class="table-primary">
+        <tr>
+            <th>Tiêu chí</th>
+            <th>Cấy ghép Implant</th>
+            <th>Cầu răng sứ truyền thống</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Bảo tồn răng thật</strong></td>
+            <td>Không mài bất kỳ răng thật nào</td>
+            <td>Phải mài nhỏ 2 răng thật bên cạnh</td>
+        </tr>
+        <tr>
+            <td><strong>Ngăn tiêu xương hàm</strong></td>
+            <td>Kích thích xương hàm, ngăn hóp má triệt để</td>
+            <td>Xương bên dưới cầu răng vẫn tiêu dần</td>
+        </tr>
+        <tr>
+            <td><strong>Tuổi thọ sử dụng</strong></td>
+            <td>Trên 25 năm hoặc trọn đời nếu chăm sóc tốt</td>
+            <td>Trung bình từ 7 - 10 năm</td>
+        </tr>
+    </tbody>
+</table>', N'/images/blog/implant-banner.svg', N'https://www.youtube.com/embed/B-sNEYkqoCk', N'Published', 1, 512, CAST(N'2026-10-21T00:00:43.9284782' AS DateTime2), CAST(N'2026-10-21T00:00:43.9284782' AS DateTime2), NULL)
+INSERT [dbo].[BlogPosts] ([BlogPostId], [CategoryId], [AuthorUserId], [Title], [Slug], [Summary], [Content], [ThumbnailUrl], [VideoUrl], [Status], [IsFeatured], [ViewCount], [PublishedAt], [CreatedAt], [UpdatedAt]) VALUES (9, 1, 1, N'Niềng răng mắc cài hay máng trong suốt Invisalign: Nên chọn phương pháp nào?', N'nieng-rang-mac-cai-hay-invisalign-nen-chon-phuong-phap-nao', N'Bạn đang phân vân giữa niềng răng mắc cài truyền thống và niềng răng khay trong suốt Invisalign? Bài viết phân tích chi tiết ưu nhược điểm, chi phí và hiệu quả của từng phương pháp giúp bạn dễ dàng đưa ra quyết định phù hợp nhất.', N'<p class="lead">Bạn đang băn khoăn giữa niềng răng mắc cài cổ điển và máng niềng trong suốt Invisalign? Sự phát triển của ngành chỉnh nha hiện đại mang đến cho bạn nhiều lựa chọn tối ưu, phù hợp với từng nhu cầu thẩm mỹ và ngân sách.</p>
+
+<div class="my-4 text-center">
+    <img src="/images/blog/nieng-rang-banner.svg" alt="Khay niềng trong suốt Invisalign ôm sát hàm răng 3D" class="img-fluid rounded-4 shadow-sm border blog-zoomable-img" style="max-height: 420px; width: 100%; object-fit: cover;" />
+    <p class="text-muted small mt-2 fst-italic"><i class="bi bi-camera me-1"></i>Hình 1: Khay chỉnh nha trong suốt Invisalign - Thẩm mỹ vô hình và dịch chuyển răng chuẩn xác theo phác đồ 3D ClinCheck.</p>
+</div>
+
+<h2>1. So sánh chi tiết hai phương pháp chỉnh nha</h2>
+<ul>
+    <li><strong>Niềng răng mắc cài:</strong> Lực kéo mạnh mẽ, hiệu quả cao cho mọi tình trạng răng hô, móm, khấp khểnh nặng; mức chi phí đa dạng, phù hợp với nhiều đối tượng.</li>
+    <li><strong>Niềng răng máng trong suốt Invisalign:</strong> Độ trong suốt đạt 99%, tháo lắp linh hoạt khi ăn uống và vệ sinh, không cọ sát gây nhiệt miệng, biết trước kết quả dịch chuyển qua video mô phỏng 3D ClinCheck.</li>
+</ul>
+
+<blockquote class="p-3 bg-light rounded-3 border-start border-4 border-primary">
+    <strong>Lời khuyên:</strong> Hãy đến gặp bác sĩ chuyên khoa chỉnh nha để được quét mẫu hàm 3D iTero và tư vấn phác đồ phù hợp nhất với cấu trúc xương hàm của bạn.
+</blockquote>', N'/images/blog/nieng-rang-banner.svg', N'https://www.youtube.com/embed/so1FkkahF4U', N'Published', 0, 190, CAST(N'2026-10-19T00:00:43.9304775' AS DateTime2), CAST(N'2026-10-19T00:00:43.9304775' AS DateTime2), NULL)
+INSERT [dbo].[BlogPosts] ([BlogPostId], [CategoryId], [AuthorUserId], [Title], [Slug], [Summary], [Content], [ThumbnailUrl], [VideoUrl], [Status], [IsFeatured], [ViewCount], [PublishedAt], [CreatedAt], [UpdatedAt]) VALUES (10, 5, 1, N'Hướng dẫn chăm sóc răng miệng đúng cách: 6 thói quen bảo vệ nụ cười khỏe đẹp', N'huong-dan-cham-soc-rang-mieng-dung-cach-6-thoi-quen', N'Đánh răng 2 lần mỗi ngày đã thực sự đủ để bảo vệ hàm răng của bạn khỏi sâu răng và viêm nướu? Khám phá 6 thói quen chăm sóc răng miệng chuẩn nha khoa từ việc chải răng đúng kỹ thuật Bass đến sử dụng chỉ nha khoa và máy tăm nước.', N'<p class="lead">Nụ cười khỏe đẹp bắt đầu từ những thói quen vệ sinh răng miệng đúng chuẩn mỗi ngày. Chải răng 2 lần/ngày đã đủ chưa? Khám phá 6 thói quen vàng chuẩn nha khoa quốc tế để ngăn ngừa 100% sâu răng và viêm nướu.</p>
+
+<div class="my-4 text-center">
+    <img src="/images/blog/cham-soc-rang-mieng-3d.png" alt="Mô phỏng 3D kỹ thuật chải răng đúng cách Periopixel" class="img-fluid rounded-4 shadow-sm border blog-zoomable-img" style="max-height: 400px; width: 100%; object-fit: cover;" />
+    <p class="text-muted small mt-2 fst-italic"><i class="bi bi-camera me-1"></i>Hình 1: Mô phỏng 3D kỹ thuật chải răng góc nghiêng 45 độ theo phương pháp Bass (Nguồn: 3D Dental Patient Education - Periopixel).</p>
+</div>
+
+<h2>1. Chải răng đúng kỹ thuật Bass cải tiến</h2>
+<p>Nghiêng đầu bàn chải 45 độ so với trục răng và viền nướu. Rung nhẹ theo chiều dọc hoặc xoay tròn để lông bàn chải len vào rãnh nướu làm sạch mảng bám vi khuẩn mà không làm mòn cổ men răng.</p>
+
+<div class="my-4 text-center">
+    <img src="/images/blog/cham-soc-rang-banner.svg" alt="Bộ dụng cụ chăm sóc răng miệng khoa học" class="img-fluid rounded-4 shadow-sm border blog-zoomable-img" style="max-height: 420px; width: 100%; object-fit: cover;" />
+    <p class="text-muted small mt-2 fst-italic"><i class="bi bi-camera me-1"></i>Hình 2: Thói quen chăm sóc răng miệng toàn diện với kem Fluoride, chỉ nha khoa và máy tăm nước.</p>
+</div>
+
+<h2>2. Sử dụng chỉ nha khoa và máy tăm nước mỗi ngày</h2>
+<p>Bàn chải chỉ làm sạch 60% mặt răng. 40% mảng bám còn lại nằm ở các kẽ hở giữa hai răng – nơi chỉ có chỉ nha khoa hoặc tia nước áp lực từ máy tăm nước mới tiếp cận và rửa trôi được.</p>
+
+<h2>3. Vệ sinh mặt lưỡi và súc miệng nước muối sinh lý</h2>
+<p>Lưỡi chứa hàng triệu vi khuẩn gây mùi hôi. Sử dụng cây cạo lưỡi chuyên dụng mỗi sáng kết hợp súc miệng giúp khoang miệng luôn thơm tho và sạch khuẩn.</p>
+
+<h2>4. Thăm khám và cạo vôi răng định kỳ 6 tháng/lần</h2>
+<p>Vôi răng (cao răng) đã bị khoáng hóa cứng không thể chải sạch bằng bàn chải thông thường. Cạo vôi răng bằng sóng siêu âm định kỳ giúp nướu răng luôn săn chắc, hồng hào và ngăn chặn viêm nha chu.</p>', N'/images/blog/cham-soc-rang-banner.svg', N'https://www.youtube.com/embed/VdjmGxq-X7M', N'Published', 0, 145, CAST(N'2026-10-17T00:00:43.9315924' AS DateTime2), CAST(N'2026-10-17T00:00:43.9315924' AS DateTime2), NULL)
+INSERT [dbo].[BlogPosts] ([BlogPostId], [CategoryId], [AuthorUserId], [Title], [Slug], [Summary], [Content], [ThumbnailUrl], [VideoUrl], [Status], [IsFeatured], [ViewCount], [PublishedAt], [CreatedAt], [UpdatedAt]) VALUES (11, 7, 2, N'Nha Khoa DentalCare chính thức khai trương Trung Tâm Chuẩn Đoán Hình Ảnh & Laser 3D', N'khai-truong-trung-tam-chuan-doan-hinh-anh-conebeam-3d', N'Hệ thống máy chụp CT ConeBeam 3D thế hệ mới nhất cùng công nghệ Laser hiện đại đã chính thức đi vào hoạt động nhằm nâng cao chất lượng chẩn đoán và điều trị.', N'<p>Nhằm không ngừng nâng cao chất lượng khám chữa bệnh, <strong>Hệ thống Nha khoa DentalCare</strong> vừa chính thức đưa vào vận hành <strong>Trung Tâm Chuẩn Đoán Hình Ảnh & Laser</strong> với trang thiết bị nhập khẩu chính hãng từ Đức và Thụy Sĩ.</p><p>Hệ thống CT ConeBeam 3D cho phép chụp cắt lớp vi tính cấu trúc xương hàm với độ chính xác micromet, liều tia X cực thấp, an toàn tối đa cho bệnh nhân ở mọi lứa tuổi.</p>', N'/images/blog/laser-whitening.svg', NULL, N'Published', 1, 150, CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2), CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2), CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2))
+INSERT [dbo].[BlogPosts] ([BlogPostId], [CategoryId], [AuthorUserId], [Title], [Slug], [Summary], [Content], [ThumbnailUrl], [VideoUrl], [Status], [IsFeatured], [ViewCount], [PublishedAt], [CreatedAt], [UpdatedAt]) VALUES (12, 8, 2, N'Thông báo lịch làm việc chuyên khoa và chương trình chăm sóc định kỳ quý 4/2026', N'thong-bao-lich-kham-va-cham-soc-khach-hang-2026', N'DentalCare thông báo lịch làm việc liên tục các ngày trong tuần từ 08:00 đến 20:00 và chương trình thăm khám răng định kỳ miễn phí cho cư dân.', N'<p>Nhằm phục vụ tốt nhất nhu cầu khám chữa bệnh răng miệng, <strong>Nha Khoa DentalCare</strong> thông báo lịch làm việc mở rộng tất cả các ngày trong tuần (kể cả Thứ 7 và Chủ Nhật).</p><p>Quý khách vui lòng đặt lịch hẹn trực tuyến qua website hoặc ứng dụng để được tiếp đón chu đáo và không phải chờ đợi lâu.</p>', N'/images/blog/cham-soc-rang-banner.svg', NULL, N'Published', 0, 85, CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2), CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2), CAST(N'2026-11-02T23:16:07.8800754' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[BlogPosts] OFF;
+GO
+
+-- Re-enable and verify all foreign key constraints
+EXEC sp_msforeachtable 'ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all';
+GO
+
+PRINT N'>>> DENTAL CLINIC DATABASE & DATA SUCCESSFULLY INITIALIZED 100%!';
 GO
