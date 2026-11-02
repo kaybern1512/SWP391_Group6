@@ -20,7 +20,7 @@ namespace DentalClinic.Tests.EndToEnd;
 
 public class RealDatabaseEndToEndSmokeTests
 {
-    private const string ConnectionString = "Server=DESKTOP-1TUBGEU\\SQLEXPRESS;Database=DentalClinic_Disposable_PreDeployClone;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+    private const string ConnectionString = "Server=.\\MSSQLSERVER01;Database=DentalClinic_Disposable_PreDeployClone;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private DentalClinicDbContext CreateDbContext()
     {
