@@ -224,4 +224,38 @@ public class PostCareWebControllerTests
 
         result.Should().BeOfType<OkObjectResult>();
     }
+
+    [Fact]
+    public async Task DentistReferralController_ResolveProposal_Approve_Success()
+    {
+        var req = new ResolveProposalRequest { ProposalId = 101, IsApproved = true };
+        _postCareApiMock.Setup(x => x.ResolveProposalAsync(req))
+            .ReturnsAsync(ApiResult<FollowUpProposalDto>.Success(new FollowUpProposalDto { ProposalId = 101, Status = "Approved" }, "Đã duyệt"));
+
+        var controller = new DentistReferralController(_postCareApiMock.Object, _apptApiMock.Object, _treatmentApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(20, "Dentist", "BS Lê Hoàng"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.ResolveProposal(req);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task DentistReferralController_ResolveProposal_RejectWithoutReason_BadRequest()
+    {
+        var req = new ResolveProposalRequest { ProposalId = 101, IsApproved = false, RejectionReason = "" };
+
+        var controller = new DentistReferralController(_postCareApiMock.Object, _apptApiMock.Object, _treatmentApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(20, "Dentist", "BS Lê Hoàng"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.ResolveProposal(req);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
 }
