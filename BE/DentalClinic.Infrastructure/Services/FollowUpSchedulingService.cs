@@ -513,13 +513,16 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
 
             try
             {
-                await _notificationService.CreateNotificationAsync(
-                    request.PatientUserId,
-                    appointment.AppointmentId,
-                    "FollowUpAppointmentBooked",
-                    "Lịch hẹn tái khám mới đã được xác nhận",
-                    $"Bác sĩ {doctor.User.FullName} ({deptName}) đã đặt lịch tái khám cho bạn vào lúc {request.ScheduledStart:HH:mm} ngày {request.ScheduledStart:dd/MM/yyyy}. Nội dung: {reasonText}.",
-                    ct);
+                if (_notificationService != null)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        request.PatientUserId,
+                        appointment.AppointmentId,
+                        "FollowUpAppointmentBooked",
+                        "Lịch hẹn tái khám mới đã được xác nhận",
+                        $"Bác sĩ {doctor.User.FullName} ({deptName}) đã đặt lịch tái khám cho bạn vào lúc {request.ScheduledStart:HH:mm} ngày {request.ScheduledStart:dd/MM/yyyy}. Nội dung: {reasonText}.",
+                        ct);
+                }
             }
             catch (Exception ex)
             {
@@ -667,15 +670,18 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         {
             try
             {
-                var patientName = appointment.PatientUser?.FullName ?? "Bệnh nhân";
-                var actionName = request.IsRebook ? "đặt lại lịch" : "đổi lịch";
-                await _notificationService.CreateNotificationAsync(
-                    doctorId.Value,
-                    appointment.AppointmentId,
-                    "FollowUpChangeProposalSubmitted",
-                    $"Yêu cầu {actionName} tái khám mới",
-                    $"{patientName} đã gửi yêu cầu {actionName} cho cuộc hẹn {appointment.AppointmentCode} vào lúc {request.ProposedStart:HH:mm} ngày {request.ProposedStart:dd/MM/yyyy}. Lý do: {request.Reason.Trim()}.",
-                    ct);
+                if (_notificationService != null)
+                {
+                    var patientName = appointment.PatientUser?.FullName ?? "Bệnh nhân";
+                    var actionName = request.IsRebook ? "đặt lại lịch" : "đổi lịch";
+                    await _notificationService.CreateNotificationAsync(
+                        doctorId.Value,
+                        appointment.AppointmentId,
+                        "FollowUpChangeProposalSubmitted",
+                        $"Yêu cầu {actionName} tái khám mới",
+                        $"{patientName} đã gửi yêu cầu {actionName} cho cuộc hẹn {appointment.AppointmentCode} vào lúc {request.ProposedStart:HH:mm} ngày {request.ProposedStart:dd/MM/yyyy}. Lý do: {request.Reason.Trim()}.",
+                        ct);
+                }
             }
             catch (Exception ex)
             {
@@ -874,13 +880,16 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             // Notify patient
             try
             {
-                await _notificationService.CreateNotificationAsync(
-                    proposal.Appointment.PatientUserId,
-                    proposal.AppointmentId,
-                    "ProposalRejected",
-                    "Yêu cầu thay đổi lịch tái khám bị từ chối",
-                    $"Bác sĩ đã từ chối yêu cầu thay đổi lịch hẹn {proposal.Appointment.AppointmentCode}. Lý do: {request.RejectionReason?.Trim() ?? "Không phù hợp lịch điều trị"}.",
-                    ct);
+                if (_notificationService != null)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        proposal.Appointment.PatientUserId,
+                        proposal.AppointmentId,
+                        "ProposalRejected",
+                        "Yêu cầu thay đổi lịch tái khám bị từ chối",
+                        $"Bác sĩ đã từ chối yêu cầu thay đổi lịch hẹn {proposal.Appointment.AppointmentCode}. Lý do: {request.RejectionReason?.Trim() ?? "Không phù hợp lịch điều trị"}.",
+                        ct);
+                }
             }
             catch (Exception ex)
             {
@@ -1000,14 +1009,17 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             // Notify patient
             try
             {
-                var actionText = isRebook ? "đặt lại lịch" : "đổi lịch";
-                await _notificationService.CreateNotificationAsync(
-                    finalAppointment.PatientUserId,
-                    finalAppointment.AppointmentId,
-                    "ProposalAccepted",
-                    $"Yêu cầu {actionText} tái khám đã được chấp thuận",
-                    $"Bác sĩ đã chấp thuận yêu cầu {actionText} của bạn cho cuộc hẹn {finalAppointment.AppointmentCode} vào lúc {proposedStart:HH:mm} ngày {proposedStart:dd/MM/yyyy}.",
-                    ct);
+                if (_notificationService != null)
+                {
+                    var actionText = isRebook ? "đặt lại lịch" : "đổi lịch";
+                    await _notificationService.CreateNotificationAsync(
+                        finalAppointment.PatientUserId,
+                        finalAppointment.AppointmentId,
+                        "ProposalAccepted",
+                        $"Yêu cầu {actionText} tái khám đã được chấp thuận",
+                        $"Bác sĩ đã chấp thuận yêu cầu {actionText} của bạn cho cuộc hẹn {finalAppointment.AppointmentCode} vào lúc {proposedStart:HH:mm} ngày {proposedStart:dd/MM/yyyy}.",
+                        ct);
+                }
             }
             catch (Exception ex)
             {
