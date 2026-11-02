@@ -168,106 +168,129 @@ public class BillingService : IBillingService
         if (request.Amount <= 0)
             return ApiResponse<InvoiceDto>.Fail("Số tiền thanh toán phải lớn hơn 0.");
 
-        var invoice = await _dbContext.Invoices
-            .Include(i => i.Payments)
-            .Include(i => i.Appointment)
-                .ThenInclude(a => a.PatientUser)
-            .FirstOrDefaultAsync(i => i.InvoiceId == request.InvoiceId, ct);
-
-        if (invoice == null)
-            return ApiResponse<InvoiceDto>.Fail("Không tìm thấy hóa đơn cần thanh toán.");
-
-        if (invoice.Status == "Paid")
-            return ApiResponse<InvoiceDto>.Fail("Hóa đơn này đã được thanh toán toàn bộ trước đó.");
-
-        if (invoice.Status == "Cancelled")
-            return ApiResponse<InvoiceDto>.Fail("Hóa đơn này đã bị hủy, không thể thu tiền.");
-
-        var alreadyPaid = invoice.Payments
-            .Where(p => p.Status == "Successful")
-            .Sum(p => p.Amount);
-
-        var remaining = Math.Max(0, invoice.TotalAmount - alreadyPaid);
-
-        if (request.Amount > remaining)
-        {
-            return ApiResponse<InvoiceDto>.Fail(
-                $"Số tiền thanh toán ({request.Amount:N0} đ) vượt quá số tiền còn lại phải thu ({remaining:N0} đ).");
-        }
-
-        var normalizedMethod = NormalizeMethod(request.Method);
-
-        var txnRef = string.IsNullOrWhiteSpace(request.TransactionReference)
-            ? $"TXN-{DateTime.UtcNow:yyyyMMddHHmmss}-{invoice.InvoiceId}"
-            : request.TransactionReference.Trim();
-
-        var payment = new Payment
-        {
-            InvoiceId = invoice.InvoiceId,
-            PaidByPatientUserId = invoice.Appointment.PatientUserId,
-            Method = normalizedMethod,
-            Amount = request.Amount,
-            TransactionReference = txnRef,
-            Status = "Successful",
-            PaidAt = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _dbContext.Payments.Add(payment);
-
-        var totalPaidAfterThis = alreadyPaid + request.Amount;
-        if (totalPaidAfterThis >= invoice.TotalAmount)
-        {
-            invoice.Status = "Paid";
-        }
-        else
-        {
-            invoice.Status = "PartiallyPaid";
-        }
-
-        // Khi thanh toán đủ -> Cuộc hẹn tự chuyển sang Completed
-        if (invoice.Status == "Paid" && invoice.Appointment != null && invoice.Appointment.Status != AppointmentStatus.Completed)
-        {
-            var oldStatus = invoice.Appointment.Status;
-            invoice.Appointment.Status = AppointmentStatus.Completed;
-            invoice.Appointment.CompletedAt = DateTime.UtcNow;
-            invoice.Appointment.UpdatedAt = DateTime.UtcNow;
-
-            var history = new AppointmentStatusHistory
-            {
-                AppointmentId = invoice.Appointment.AppointmentId,
-                OldStatus = oldStatus,
-                NewStatus = AppointmentStatus.Completed,
-                ChangedByUserId = staffUserId,
-                Note = $"Thanh toán đủ hóa đơn {invoice.InvoiceCode}. Hoàn thành toàn bộ quy trình ca khám.",
-                ChangedAt = DateTime.UtcNow
-            };
-            _dbContext.AppointmentStatusHistories.Add(history);
-        }
-
-        await _dbContext.SaveChangesAsync(ct);
-
+        using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
         try
         {
-            var methodLabel = GetMethodDisplayName(normalizedMethod);
-            var patientUserId = invoice.Appointment?.PatientUserId ?? invoice.Payments.FirstOrDefault()?.PaidByPatientUserId ?? 0;
-            if (patientUserId > 0)
+            if (_dbContext.Database.IsSqlServer())
             {
-                await _notificationService.CreateNotificationAsync(
-                    patientUserId,
-                    invoice.AppointmentId,
-                    "Payment",
-                    "Xác nhận thanh toán thành công",
-                    $"Bạn đã thanh toán {request.Amount:N0} đ cho hóa đơn #{invoice.InvoiceCode} bằng hình thức {methodLabel}. Trạng thái hóa đơn: {(invoice.Status == "Paid" ? "Đã thanh toán đủ" : "Đã đặt cọc một phần")}.",
-                    ct);
+                var lockKey = $"Lock_Invoice_{request.InvoiceId}";
+                var applockSql = @"
+                    DECLARE @res int;
+                    EXEC @res = sp_getapplock @Resource = {0}, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000;
+                    IF @res < 0
+                    BEGIN
+                        DECLARE @msg nvarchar(250) = FORMATMESSAGE('Không thể lấy application lock cho hóa đơn %s. Mã trạng thái: %d', {0}, @res);
+                        THROW 51000, @msg, 1;
+                    END";
+                await _dbContext.Database.ExecuteSqlRawAsync(applockSql, new object[] { lockKey }, ct);
             }
+
+            var invoice = await _dbContext.Invoices
+                .Include(i => i.Payments)
+                .Include(i => i.Appointment)
+                    .ThenInclude(a => a.PatientUser)
+                .FirstOrDefaultAsync(i => i.InvoiceId == request.InvoiceId, ct);
+
+            if (invoice == null)
+                return ApiResponse<InvoiceDto>.Fail("Không tìm thấy hóa đơn cần thanh toán.");
+
+            if (invoice.Status == "Paid")
+                return ApiResponse<InvoiceDto>.Fail("Hóa đơn này đã được thanh toán toàn bộ trước đó.");
+
+            if (invoice.Status == "Cancelled")
+                return ApiResponse<InvoiceDto>.Fail("Hóa đơn này đã bị hủy, không thể thu tiền.");
+
+            // Check duplicate transaction reference on this invoice
+            if (!string.IsNullOrWhiteSpace(request.TransactionReference))
+            {
+                var trimmedRef = request.TransactionReference.Trim();
+                var isDuplicateTxn = invoice.Payments.Any(p =>
+                    p.Status == "Successful" &&
+                    p.TransactionReference != null &&
+                    p.TransactionReference.Equals(trimmedRef, StringComparison.OrdinalIgnoreCase));
+
+                if (isDuplicateTxn)
+                {
+                    return ApiResponse<InvoiceDto>.Fail($"Mã giao dịch '{trimmedRef}' đã được ghi nhận trước đó trên hóa đơn này.");
+                }
+            }
+
+            var alreadyPaid = invoice.Payments
+                .Where(p => p.Status == "Successful")
+                .Sum(p => p.Amount);
+
+            var remaining = Math.Max(0, invoice.TotalAmount - alreadyPaid);
+
+            if (request.Amount > remaining)
+            {
+                return ApiResponse<InvoiceDto>.Fail(
+                    $"Số tiền thanh toán ({request.Amount:N0} đ) vượt quá số tiền còn lại phải thu ({remaining:N0} đ).");
+            }
+
+            var normalizedMethod = NormalizeMethod(request.Method);
+
+            var txnRef = string.IsNullOrWhiteSpace(request.TransactionReference)
+                ? $"TXN-{DateTime.UtcNow:yyyyMMddHHmmss}-{invoice.InvoiceId}"
+                : request.TransactionReference.Trim();
+
+            var payment = new Payment
+            {
+                InvoiceId = invoice.InvoiceId,
+                PaidByPatientUserId = invoice.Appointment.PatientUserId,
+                Method = normalizedMethod,
+                Amount = request.Amount,
+                TransactionReference = txnRef,
+                Status = "Successful",
+                PaidAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.Payments.Add(payment);
+
+            var totalPaidAfterThis = alreadyPaid + request.Amount;
+            if (totalPaidAfterThis >= invoice.TotalAmount)
+            {
+                invoice.Status = "Paid";
+            }
+            else
+            {
+                invoice.Status = "PartiallyPaid";
+            }
+
+            // CRITICAL BUSINESS INTEGRITY (P0-01):
+            // Only authorized clinical workflow (DentistCompleteAppointmentAsync) may mark an appointment Completed.
+            // Payment processing updates Invoice.Status, but must NOT silently override the clinical state of the appointment.
+
+            await _dbContext.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            try
+            {
+                var methodLabel = GetMethodDisplayName(normalizedMethod);
+                var patientUserId = invoice.Appointment?.PatientUserId ?? invoice.Payments.FirstOrDefault()?.PaidByPatientUserId ?? 0;
+                if (patientUserId > 0)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        patientUserId,
+                        invoice.AppointmentId,
+                        "Payment",
+                        "Xác nhận thanh toán thành công",
+                        $"Bạn đã thanh toán {request.Amount:N0} đ cho hóa đơn #{invoice.InvoiceCode} bằng hình thức {methodLabel}. Trạng thái hóa đơn: {(invoice.Status == "Paid" ? "Đã thanh toán đủ" : "Đã đặt cọc một phần")}.",
+                        ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lỗi khi gửi thông báo thanh toán cho hóa đơn {InvoiceCode}", invoice.InvoiceCode);
+            }
+
+            return await GetInvoiceByIdAsync(invoice.InvoiceId, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Lỗi khi gửi thông báo thanh toán cho hóa đơn {InvoiceCode}", invoice.InvoiceCode);
+            _logger.LogError(ex, "Lỗi trong quá trình xử lý thanh toán cho hóa đơn #{InvoiceId}", request.InvoiceId);
+            throw;
         }
-
-        return await GetInvoiceByIdAsync(invoice.InvoiceId, ct);
     }
 
     public async Task<ApiResponse<InvoiceDto>> GetInvoiceByIdAsync(long invoiceId, CancellationToken ct = default)

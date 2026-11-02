@@ -1461,4 +1461,135 @@ public class AppointmentFlowTests
         // Even though active count was 1, monotonic queue number should be Q003!
         Assert.Equal("Q003", confirmResult.Data!.QueueNumber);
     }
+
+    [Fact]
+    public async Task Test_AttemptCancellation_AfterCheckIn_ShouldFail()
+    {
+        using var db = CreateDbContext(nameof(Test_AttemptCancellation_AfterCheckIn_ShouldFail));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = "APP-CHK-01",
+            PatientUserId = 101,
+            DepartmentId = 1,
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            Status = AppointmentStatus.CheckedIn,
+            ReasonForVisit = "Đã check in",
+            BookingSource = "Patient",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        // 1. Patient attempt to cancel after check-in
+        var patientCancelRes = await service.PatientCancelAsync(appt.AppointmentId, 101, "Muốn hủy sau khi check in");
+        Assert.False(patientCancelRes.Success);
+        Assert.Contains("Chỉ có thể hủy lịch hẹn đang chờ duyệt hoặc đã được xác nhận", patientCancelRes.Message);
+
+        // 2. Staff attempt to cancel after check-in
+        var staffCancelRes = await service.StaffCancelAppointmentAsync(appt.AppointmentId, 201, "Lễ tân muốn hủy");
+        Assert.False(staffCancelRes.Success);
+        Assert.Contains("Không thể hủy lịch hẹn ở trạng thái hiện tại (CheckedIn)", staffCancelRes.Message);
+
+        var apptDb = await db.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(AppointmentStatus.CheckedIn, apptDb!.Status);
+    }
+
+    [Fact]
+    public async Task Test_AttemptCancellation_AfterCompletion_ShouldFail()
+    {
+        using var db = CreateDbContext(nameof(Test_AttemptCancellation_AfterCompletion_ShouldFail));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = "APP-COMP-01",
+            PatientUserId = 101,
+            DepartmentId = 1,
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            Status = AppointmentStatus.Completed,
+            CompletedAt = DateTime.UtcNow,
+            ReasonForVisit = "Đã hoàn thành",
+            BookingSource = "Patient",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var patientCancelRes = await service.PatientCancelAsync(appt.AppointmentId, 101, "Hủy lịch đã khám");
+        Assert.False(patientCancelRes.Success);
+        Assert.Contains("Không thể hủy lịch hẹn đã hoàn thành", patientCancelRes.Message);
+
+        var staffCancelRes = await service.StaffCancelAppointmentAsync(appt.AppointmentId, 201, "Hủy lịch đã khám");
+        Assert.False(staffCancelRes.Success);
+        Assert.Contains("Không thể hủy lịch hẹn đã hoàn thành khám", staffCancelRes.Message);
+
+        var apptDb = await db.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(AppointmentStatus.Completed, apptDb!.Status);
+    }
+
+    [Fact]
+    public async Task Test_PatientReschedule_ConfirmedAppointment_CancelsOldAndCreatesReplacementWithTraceableHistory()
+    {
+        using var db = CreateDbContext(nameof(Test_PatientReschedule_ConfirmedAppointment_CancelsOldAndCreatesReplacementWithTraceableHistory));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var oldSlot = DateTime.Today.AddDays(2).AddHours(9);
+        var appt = new Appointment
+        {
+            AppointmentCode = "APP-ORIG-01",
+            PatientUserId = 101,
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = oldSlot,
+            ScheduledEnd = oldSlot.AddMinutes(30),
+            QueueNumber = "Q005",
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Khám răng định kỳ",
+            BookingSource = "Patient",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var newSlot = DateTime.Today.AddDays(4).AddHours(10);
+        var rescheduleRes = await service.PatientRescheduleAsync(appt.AppointmentId, 101, new PatientRescheduleRequest
+        {
+            NewScheduledStart = newSlot,
+            Reason = "Trùng lịch công tác đột xuất"
+        });
+
+        Assert.True(rescheduleRes.Success);
+        var newAppt = rescheduleRes.Data!;
+        Assert.NotEqual(appt.AppointmentCode, newAppt.AppointmentCode);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, newAppt.Status);
+        Assert.Equal(newSlot, newAppt.ScheduledStart);
+        Assert.Contains("APP-ORIG-01", newAppt.ReasonForVisit);
+
+        // Verify old appointment was cleanly cancelled and slots freed
+        var oldApptDb = await db.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(AppointmentStatus.Cancelled, oldApptDb!.Status);
+        Assert.Null(oldApptDb.RoomId);
+        Assert.Null(oldApptDb.DentalChairId);
+        Assert.Null(oldApptDb.AssignedDentistUserId);
+        Assert.Equal("Q005", oldApptDb.QueueNumber); // Preserves QueueNumber history!
+        Assert.Contains(newAppt.AppointmentCode, oldApptDb.CancellationReason);
+
+        // Verify status histories
+        var histories = await db.AppointmentStatusHistories
+            .Where(h => h.AppointmentId == appt.AppointmentId || h.Appointment.AppointmentCode == newAppt.AppointmentCode)
+            .ToListAsync();
+        Assert.True(histories.Count >= 2);
+    }
 }

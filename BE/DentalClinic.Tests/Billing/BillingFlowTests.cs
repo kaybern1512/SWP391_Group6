@@ -194,7 +194,7 @@ public class BillingFlowTests
     }
 
     [Fact]
-    public async Task ProcessPayment_FullPayment_ShouldChangeAppointmentToCompleted()
+    public async Task ProcessPayment_FullPayment_ShouldPreserveClinicalStatus_AndMarkInvoicePaid()
     {
         var db = CreateDbContext(Guid.NewGuid().ToString());
         await SeedDataAsync(db);
@@ -220,7 +220,7 @@ public class BillingFlowTests
             InvoiceId = invoiceId,
             Amount = 500000m,
             Method = "BankTransfer",
-            TransactionReference = "VNPAY-998877"
+            TransactionReference = "BANK-998877"
         };
         var payResult = await service.ProcessPaymentAsync(201, payReq);
 
@@ -228,15 +228,211 @@ public class BillingFlowTests
         Assert.Equal("Paid", payResult.Data!.Status);
         Assert.Equal(0m, payResult.Data.RemainingAmount);
 
-        // Appointment MUST be Completed
+        // P0-01 RULE: Payment processing must NOT silently override the clinical status!
+        // Appointment was InService, and it MUST remain InService until Dentist completes it.
         var appt = await db.Appointments.FindAsync(501L);
-        Assert.Equal(AppointmentStatus.Completed, appt!.Status);
-        Assert.NotNull(appt.CompletedAt);
+        Assert.Equal(AppointmentStatus.InService, appt!.Status);
+    }
 
-        // AppointmentStatusHistory should record this transition
-        var history = await db.AppointmentStatusHistories.FirstOrDefaultAsync(h => h.AppointmentId == 501L);
-        Assert.NotNull(history);
-        Assert.Equal(AppointmentStatus.Completed, history.NewStatus);
+    [Fact]
+    public async Task Payment_CheckedInAppointment_FullyPaid_ShouldRemainCheckedIn_And_InvoicePaid()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+        var appt = await db.Appointments.FindAsync(501L);
+        appt!.Status = AppointmentStatus.CheckedIn;
+        await db.SaveChangesAsync();
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+        var createResult = await service.CreateInvoiceAsync(201, new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Khám lâm sàng", Quantity = 1, UnitPrice = 200000m }
+            }
+        });
+
+        var payResult = await service.ProcessPaymentAsync(201, new ProcessPaymentRequest
+        {
+            InvoiceId = createResult.Data!.InvoiceId,
+            Amount = 200000m,
+            Method = "Cash"
+        });
+
+        Assert.True(payResult.Success);
+        Assert.Equal("Paid", payResult.Data!.Status);
+
+        var updatedAppt = await db.Appointments.FindAsync(501L);
+        Assert.Equal(AppointmentStatus.CheckedIn, updatedAppt!.Status);
+    }
+
+    [Fact]
+    public async Task Payment_InServiceAppointment_FullyPaid_ShouldRemainInService_And_InvoicePaid()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+        var appt = await db.Appointments.FindAsync(501L);
+        appt!.Status = AppointmentStatus.InService;
+        await db.SaveChangesAsync();
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+        var createResult = await service.CreateInvoiceAsync(201, new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Điều trị tủy", Quantity = 1, UnitPrice = 1200000m }
+            }
+        });
+
+        var payResult = await service.ProcessPaymentAsync(201, new ProcessPaymentRequest
+        {
+            InvoiceId = createResult.Data!.InvoiceId,
+            Amount = 1200000m,
+            Method = "CreditCard"
+        });
+
+        Assert.True(payResult.Success);
+        Assert.Equal("Paid", payResult.Data!.Status);
+
+        var updatedAppt = await db.Appointments.FindAsync(501L);
+        Assert.Equal(AppointmentStatus.InService, updatedAppt!.Status);
+    }
+
+    [Fact]
+    public async Task Billing_CompletedAppointment_UnpaidInvoice_ShouldRemainCompleted_And_InvoiceUnpaid()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+        var appt = await db.Appointments.FindAsync(501L);
+        appt!.Status = AppointmentStatus.Completed;
+        appt.CompletedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+        var createResult = await service.CreateInvoiceAsync(201, new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Nhổ răng số 8", Quantity = 1, UnitPrice = 1500000m }
+            }
+        });
+
+        Assert.True(createResult.Success);
+        Assert.Equal("Unpaid", createResult.Data!.Status);
+
+        var updatedAppt = await db.Appointments.FindAsync(501L);
+        Assert.Equal(AppointmentStatus.Completed, updatedAppt!.Status);
+    }
+
+    [Fact]
+    public async Task Billing_CompletedAppointment_PartiallyPaidInvoice_ShouldRemainCompleted_And_InvoicePartiallyPaid()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+        var appt = await db.Appointments.FindAsync(501L);
+        appt!.Status = AppointmentStatus.Completed;
+        appt.CompletedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+        var createResult = await service.CreateInvoiceAsync(201, new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Gắn mắc cài", Quantity = 1, UnitPrice = 5000000m }
+            }
+        });
+
+        var payResult = await service.ProcessPaymentAsync(201, new ProcessPaymentRequest
+        {
+            InvoiceId = createResult.Data!.InvoiceId,
+            Amount = 2000000m,
+            Method = "BankTransfer"
+        });
+
+        Assert.True(payResult.Success);
+        Assert.Equal("PartiallyPaid", payResult.Data!.Status);
+        Assert.Equal(3000000m, payResult.Data.RemainingAmount);
+
+        var updatedAppt = await db.Appointments.FindAsync(501L);
+        Assert.Equal(AppointmentStatus.Completed, updatedAppt!.Status);
+    }
+
+    [Fact]
+    public async Task Billing_CompletedAppointment_FullyPaidInvoice_ShouldRemainCompleted_And_InvoicePaid()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+        var appt = await db.Appointments.FindAsync(501L);
+        appt!.Status = AppointmentStatus.Completed;
+        appt.CompletedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+        var createResult = await service.CreateInvoiceAsync(201, new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Tẩy trắng răng", Quantity = 1, UnitPrice = 1800000m }
+            }
+        });
+
+        var payResult = await service.ProcessPaymentAsync(201, new ProcessPaymentRequest
+        {
+            InvoiceId = createResult.Data!.InvoiceId,
+            Amount = 1800000m,
+            Method = "Cash"
+        });
+
+        Assert.True(payResult.Success);
+        Assert.Equal("Paid", payResult.Data!.Status);
+        Assert.Equal(0m, payResult.Data.RemainingAmount);
+
+        var updatedAppt = await db.Appointments.FindAsync(501L);
+        Assert.Equal(AppointmentStatus.Completed, updatedAppt!.Status);
+    }
+
+    [Fact]
+    public async Task ProcessPayment_DuplicateTransactionReference_ShouldFail()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+        var createResult = await service.CreateInvoiceAsync(201, new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Cạo vôi", Quantity = 1, UnitPrice = 1000000m }
+            }
+        });
+
+        var pay1 = await service.ProcessPaymentAsync(201, new ProcessPaymentRequest
+        {
+            InvoiceId = createResult.Data!.InvoiceId,
+            Amount = 500000m,
+            Method = "BankTransfer",
+            TransactionReference = "REF-DUPLICATE-001"
+        });
+        Assert.True(pay1.Success);
+
+        // Try submitting same transaction reference on second payment
+        var pay2 = await service.ProcessPaymentAsync(201, new ProcessPaymentRequest
+        {
+            InvoiceId = createResult.Data!.InvoiceId,
+            Amount = 500000m,
+            Method = "BankTransfer",
+            TransactionReference = "REF-DUPLICATE-001"
+        });
+
+        Assert.False(pay2.Success);
+        Assert.Contains("đã được ghi nhận trước đó", pay2.Message);
     }
 
     [Fact]
