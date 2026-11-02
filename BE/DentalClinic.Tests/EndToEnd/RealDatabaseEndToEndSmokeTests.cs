@@ -20,7 +20,7 @@ namespace DentalClinic.Tests.EndToEnd;
 
 public class RealDatabaseEndToEndSmokeTests
 {
-    private const string ConnectionString = "Server=.\\MSSQLSERVER01;Database=DentalClinic_Disposable_PreDeployClone;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+    private const string ConnectionString = "Server=DESKTOP-1TUBGEU\\SQLEXPRESS;Database=DentalClinic_Disposable_PreDeployClone;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private DentalClinicDbContext CreateDbContext()
     {
@@ -390,7 +390,7 @@ public class RealDatabaseEndToEndSmokeTests
     [Fact]
     public async Task ScenarioD_Concurrency_LockProtectionAndUniqueQueueNumbers_Enforced()
     {
-        var slotStart = DateTime.Today.AddDays(600 + Random.Shared.Next(1, 50)).AddHours(8);
+        var slotStart = DateTime.Today.AddDays(Random.Shared.Next(1000, 30000)).AddHours(8);
         var slotEnd = slotStart.AddMinutes(30);
 
         // PART 1: Parallel Confirmations for the SAME Dentist
@@ -462,7 +462,7 @@ public class RealDatabaseEndToEndSmokeTests
         }
 
         // PART 2: Concurrent QueueNumber Allocation produces strictly unique queue numbers
-        var testQueueDate = DateTime.Today.AddDays(700 + Random.Shared.Next(1, 50)).AddHours(9);
+        var testQueueDate = DateTime.Today.AddDays(Random.Shared.Next(30001, 60000)).AddHours(9);
         var qAppts = new List<Appointment>();
         using (var setupDb = CreateDbContext())
         {
