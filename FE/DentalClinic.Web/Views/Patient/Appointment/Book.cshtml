@@ -651,6 +651,8 @@
             }
         }
 
+        let initialDentistId = parseInt('@Model.RequestedDentistUserId') || null;
+
         async function loadDentists(departmentId) {
             const list = document.getElementById('dentistDynamicList');
             const loading = document.getElementById('dentistLoading');
@@ -667,7 +669,7 @@
                     const row = document.createElement('div');
                     row.className = 'mt-2';
                     row.innerHTML = `
-                        <div class="card selection-card p-3" data-dentist-id="${dId}" onclick="selectDentist(${dId}, '${d.fullName}')">
+                        <div class="card selection-card p-3 ${initialDentistId && initialDentistId === dId ? 'active' : ''}" data-dentist-id="${dId}" onclick="selectDentist(${dId}, '${d.fullName}')">
                             <div class="d-flex align-items-center gap-3">
                                 <div class="selection-icon bg-light text-primary">
                                     <i class="bi bi-person-badge fs-4"></i>
@@ -680,6 +682,11 @@
                         </div>
                     `;
                     list.appendChild(row);
+
+                    if (initialDentistId && initialDentistId === dId) {
+                        selectDentist(dId, d.fullName);
+                        initialDentistId = null;
+                    }
                 });
             } catch (err) {
                 if (loading) loading.classList.add('d-none');
@@ -795,14 +802,22 @@
             document.getElementById('summaryReason').innerText = document.getElementById('inputReasonForVisit').value.trim() || '--';
         }
 
-        // Tự động chọn dịch vụ ban đầu nếu có pre-selected serviceId
+        // Tự động chọn dịch vụ ban đầu nếu có pre-selected serviceId hoặc departmentId
         document.addEventListener('DOMContentLoaded', function () {
-            const preSelectedServiceId = parseInt('@Model.RequestedServiceId');
+            const preSelectedServiceId = parseInt('@Model.RequestedServiceId') || 0;
+            const preSelectedDeptId = parseInt('@Model.DepartmentId') || 0;
+
             if (preSelectedServiceId > 0) {
                 const targetCard = document.querySelector(`.service-item[data-service-id="${preSelectedServiceId}"]`);
                 if (targetCard) {
                     const cardInner = targetCard.querySelector('.selection-card');
                     if (cardInner) cardInner.click();
+                }
+            } else if (preSelectedDeptId > 0) {
+                const deptSelect = document.getElementById('deptFilterSelect');
+                if (deptSelect) {
+                    deptSelect.value = preSelectedDeptId;
+                    filterServices();
                 }
             }
         });

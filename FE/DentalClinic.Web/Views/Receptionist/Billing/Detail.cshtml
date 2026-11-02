@@ -104,7 +104,15 @@
                                 <tr>
                                     <td class="ps-3 text-muted">@(idx++)</td>
                                     <td>
-                                        <div class="fw-semibold text-dark">@item.Description</div>
+                                        @if (item.Description.StartsWith("[Thuốc]"))
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle me-1"><i class="bi bi-capsule me-1"></i>Dược phẩm</span>
+                                            <span class="fw-semibold text-dark">@item.Description.Replace("[Thuốc] ", "").Replace("[Thuốc]", "")</span>
+                                        }
+                                        else
+                                        {
+                                            <div class="fw-semibold text-dark">@item.Description</div>
+                                        }
                                     </td>
                                     <td class="text-center font-monospace">@item.Quantity</td>
                                     <td class="text-end">@item.UnitPrice.ToString("N0") đ</td>

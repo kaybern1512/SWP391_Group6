@@ -66,7 +66,7 @@
                 <div class="h3 fw-bold mb-1 @(Model.Summary.LowStockMedicinesCount > 0 ? "text-warning" : "text-dark")">
                     @Model.Summary.LowStockMedicinesCount
                 </div>
-                <span class="text-muted small">Thuốc có tồn $\le$ định mức cảnh báo</span>
+                <span class="text-muted small">Thuốc có tồn &le; định mức cảnh báo</span>
             </div>
         </div>
 
@@ -81,7 +81,7 @@
                 <div class="h3 fw-bold mb-1 @(Model.Summary.NearExpiryBatchesCount > 0 ? "text-danger" : "text-dark")">
                     @Model.Summary.NearExpiryBatchesCount
                 </div>
-                <span class="text-muted small">Hạn dùng $\le$ 60 ngày (Cần luân chuyển)</span>
+                <span class="text-muted small">Hạn dùng &le; 60 ngày (Cần luân chuyển)</span>
             </div>
         </div>
     </div>
@@ -295,7 +295,7 @@
                         <div class="col-12 col-md-6">
                             <label class="form-label fw-semibold">Ngưỡng Cảnh Báo Tồn Tối Thiểu</label>
                             <input type="number" name="MinimumStockAlert" class="form-control" min="0" value="20" />
-                            <div class="form-text">Hệ thống sẽ báo động vàng khi tồn khả dụng $\le$ ngưỡng này.</div>
+                            <div class="form-text">Hệ thống sẽ báo động vàng khi tồn khả dụng &le; ngưỡng này.</div>
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label fw-semibold">Chỉ Định & Hướng Dẫn Dùng</label>

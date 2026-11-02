@@ -140,6 +140,10 @@
                                         <tr class="item-row" data-performed-id="@item.PerformedServiceId">
                                             <td>
                                                 <input type="text" class="form-control form-control-sm item-desc" value="@item.Description" required />
+                                                @if (item.Description.StartsWith("[Thuốc]"))
+                                                {
+                                                    <div class="small text-success mt-1 fw-semibold"><i class="bi bi-capsule me-1"></i>Thuốc xuất từ kho dược phòng khám (WF-16)</div>
+                                                }
                                             </td>
                                             <td>
                                                 <input type="number" class="form-control form-control-sm text-center item-qty" value="@item.Quantity" min="1" required />
