@@ -101,4 +101,20 @@ public interface IFollowUpSchedulingService
         long doctorUserId,
         ResolveProposalRequest request,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Lễ tân lấy danh sách lịch tái khám cần nhắc với các bộ lọc ngày và trạng thái gọi.
+    /// </summary>
+    Task<ApiResponse<List<FollowUpReminderDto>>> GetReceptionistRemindersAsync(
+        string? dateFilter = null,
+        string? callStatus = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Lễ tân cập nhật trạng thái gọi nhắc (NotCalled, Called, Unreachable) và ghi nhận nhật ký cuộc gọi.
+    /// </summary>
+    Task<ApiResponse<FollowUpReminderDto>> UpdateReminderCallStatusAsync(
+        long receptionistUserId,
+        UpdateReminderCallStatusRequest request,
+        CancellationToken ct = default);
 }

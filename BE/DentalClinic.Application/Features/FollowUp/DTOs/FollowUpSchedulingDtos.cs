@@ -116,3 +116,34 @@ public class ResolveProposalRequest
     public bool IsApproved { get; set; }
     public string? RejectionReason { get; set; }
 }
+
+public class FollowUpReminderDto
+{
+    public long FollowUpId { get; set; }
+    public long? AppointmentId { get; set; }
+    public string? AppointmentCode { get; set; }
+    public long PatientUserId { get; set; }
+    public string PatientName { get; set; } = string.Empty;
+    public string? PatientCode { get; set; }
+    public string? PatientPhoneNumber { get; set; }
+    public long DentistUserId { get; set; }
+    public string DentistName { get; set; } = string.Empty;
+    public string DepartmentName { get; set; } = string.Empty;
+    public DateTime FollowUpDate { get; set; }
+    public DateTime? ScheduledStart { get; set; }
+    public DateTime? ScheduledEnd { get; set; }
+    public string AppointmentStatus { get; set; } = string.Empty;
+    public string CallStatus { get; set; } = "NotCalled"; // "NotCalled", "Called", "Unreachable"
+    public DateTime? LastCalledAt { get; set; }
+    public string? LastCallerName { get; set; }
+    public string? CallNote { get; set; }
+    public string? Reason { get; set; }
+}
+
+public class UpdateReminderCallStatusRequest
+{
+    public long FollowUpId { get; set; }
+    public string CallStatus { get; set; } = "Called"; // "Called", "Unreachable", "NotCalled"
+    public string? Note { get; set; }
+}
+

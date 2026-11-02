@@ -1058,4 +1058,274 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             if (tx != null) await tx.DisposeAsync();
         }
     }
+
+    public async Task<ApiResponse<List<FollowUpReminderDto>>> GetReceptionistRemindersAsync(
+        string? dateFilter = null,
+        string? callStatus = null,
+        CancellationToken ct = default)
+    {
+        var query = _dbContext.FollowUpSchedules
+            .AsNoTracking()
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a!.Department)
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a!.AssignedDentistUser)
+                    .ThenInclude(d => d!.User)
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a!.PatientUser)
+            .AsQueryable();
+
+        // Exclude cancelled and completed appointments
+        query = query.Where(f => (f.Appointment == null || (f.Appointment.Status != AppointmentStatus.Cancelled && f.Appointment.Status != AppointmentStatus.Completed)) && f.Status != "Cancelled");
+
+        var followUps = await query.ToListAsync(ct);
+
+        var unlinkedSessionIds = followUps
+            .Where(f => f.Appointment == null && f.TreatmentSessionId > 0)
+            .Select(f => f.TreatmentSessionId)
+            .Distinct()
+            .ToList();
+
+        var sessionLookup = new Dictionary<long, TreatmentSession>();
+        if (unlinkedSessionIds.Count > 0)
+        {
+            var sessions = await _dbContext.TreatmentSessions
+                .AsNoTracking()
+                .Include(s => s.DentistUser)
+                    .ThenInclude(d => d.User)
+                .Include(s => s.TreatmentPlanItem)
+                    .ThenInclude(i => i.TreatmentPlan)
+                        .ThenInclude(p => p.PatientUser)
+                .Where(s => unlinkedSessionIds.Contains(s.TreatmentSessionId))
+                .ToListAsync(ct);
+            sessionLookup = sessions.ToDictionary(s => s.TreatmentSessionId);
+        }
+
+        var today = DateTime.Today;
+        var tomorrow = today.AddDays(1);
+
+        if (!string.IsNullOrWhiteSpace(dateFilter))
+        {
+            var df = dateFilter.Trim().ToLowerInvariant();
+            if (df == "today")
+            {
+                followUps = followUps.Where(f => (f.Appointment?.ScheduledStart?.Date ?? f.RecommendedDate.Date) == today).ToList();
+            }
+            else if (df == "tomorrow")
+            {
+                followUps = followUps.Where(f => (f.Appointment?.ScheduledStart?.Date ?? f.RecommendedDate.Date) == tomorrow).ToList();
+            }
+        }
+
+        var followUpIds = followUps.Select(f => f.FollowUpId.ToString()).ToHashSet();
+        var auditLogs = await _dbContext.AuditLogs
+            .AsNoTracking()
+            .Where(a => a.Action == "FollowUpReminderCall" && a.EntityName == "FollowUpSchedule" && followUpIds.Contains(a.EntityId!))
+            .OrderByDescending(a => a.CreatedAt)
+            .ToListAsync(ct);
+
+        var auditLookup = auditLogs
+            .GroupBy(a => a.EntityId!)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var resultList = new List<FollowUpReminderDto>();
+        foreach (var f in followUps)
+        {
+            TreatmentSession? session = null;
+            if (f.Appointment == null && f.TreatmentSessionId > 0)
+            {
+                sessionLookup.TryGetValue(f.TreatmentSessionId, out session);
+            }
+
+            var patientUser = f.Appointment?.PatientUser ?? session?.TreatmentPlanItem?.TreatmentPlan?.PatientUser;
+            var dentistName = f.Appointment?.AssignedDentistUser?.User?.FullName ?? session?.DentistUser?.User?.FullName ?? "Bác sĩ phụ trách";
+            var departmentName = f.Appointment?.Department?.Name ?? "Nha khoa tổng quát";
+            var followUpDate = f.Appointment?.ScheduledStart ?? f.RecommendedDate;
+
+            string currentCallStatus = "NotCalled";
+            if (f.Status == "Called") currentCallStatus = "Called";
+            else if (f.Status == "Unreachable") currentCallStatus = "Unreachable";
+
+            DateTime? lastCalledAt = null;
+            string? lastCallerName = null;
+            string? callNote = null;
+
+            if (auditLookup.TryGetValue(f.FollowUpId.ToString(), out var audit))
+            {
+                lastCalledAt = audit.CreatedAt;
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(audit.NewValues))
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(audit.NewValues);
+                        if (doc.RootElement.TryGetProperty("CallerStaffName", out var cName))
+                            lastCallerName = cName.GetString();
+                        if (doc.RootElement.TryGetProperty("Note", out var cNote))
+                            callNote = cNote.GetString();
+                        if (doc.RootElement.TryGetProperty("CallStatus", out var cStatus))
+                        {
+                            var parsedStatus = cStatus.GetString();
+                            if (!string.IsNullOrWhiteSpace(parsedStatus))
+                                currentCallStatus = parsedStatus;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Fallback to default
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(callStatus) && !callStatus.Equals("all", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.Equals(currentCallStatus, callStatus.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+            }
+
+            resultList.Add(new FollowUpReminderDto
+            {
+                FollowUpId = f.FollowUpId,
+                AppointmentId = f.AppointmentId,
+                AppointmentCode = f.Appointment?.AppointmentCode,
+                PatientUserId = patientUser?.UserId ?? 0,
+                PatientName = patientUser?.FullName ?? "Bệnh nhân",
+                PatientCode = patientUser?.PatientCode,
+                PatientPhoneNumber = patientUser?.EmergencyContact,
+                DentistUserId = f.Appointment?.AssignedDentistUserId ?? f.TreatmentSession?.DentistUserId ?? 0,
+                DentistName = dentistName,
+                DepartmentName = departmentName,
+                FollowUpDate = followUpDate,
+                ScheduledStart = f.Appointment?.ScheduledStart,
+                ScheduledEnd = f.Appointment?.ScheduledEnd,
+                AppointmentStatus = f.Appointment?.Status ?? "Scheduled",
+                CallStatus = currentCallStatus,
+                LastCalledAt = lastCalledAt,
+                LastCallerName = lastCallerName,
+                CallNote = callNote,
+                Reason = f.Reason
+            });
+        }
+
+        resultList = resultList.OrderBy(x => x.FollowUpDate).ToList();
+        return ApiResponse<List<FollowUpReminderDto>>.Ok(resultList);
+    }
+
+    public async Task<ApiResponse<FollowUpReminderDto>> UpdateReminderCallStatusAsync(
+        long receptionistUserId,
+        UpdateReminderCallStatusRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null || request.FollowUpId <= 0)
+        {
+            return ApiResponse<FollowUpReminderDto>.Fail("Dữ liệu cập nhật không hợp lệ.");
+        }
+
+        var validStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "NotCalled", "Called", "Unreachable" };
+        if (!validStatuses.Contains(request.CallStatus?.Trim() ?? string.Empty))
+        {
+            return ApiResponse<FollowUpReminderDto>.Fail("Trạng thái cuộc gọi không hợp lệ. Chỉ chấp nhận: Chưa gọi (NotCalled), Đã gọi (Called), Không liên lạc được (Unreachable).");
+        }
+
+        var normalizedCallStatus = request.CallStatus!.Trim();
+        if (normalizedCallStatus.Equals("NotCalled", StringComparison.OrdinalIgnoreCase))
+            normalizedCallStatus = "NotCalled";
+        else if (normalizedCallStatus.Equals("Called", StringComparison.OrdinalIgnoreCase))
+            normalizedCallStatus = "Called";
+        else if (normalizedCallStatus.Equals("Unreachable", StringComparison.OrdinalIgnoreCase))
+            normalizedCallStatus = "Unreachable";
+
+        var followUp = await _dbContext.FollowUpSchedules
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a!.Department)
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a!.AssignedDentistUser)
+                    .ThenInclude(d => d!.User)
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a!.PatientUser)
+            .FirstOrDefaultAsync(f => f.FollowUpId == request.FollowUpId, ct);
+
+        if (followUp == null)
+        {
+            return ApiResponse<FollowUpReminderDto>.Fail("Không tìm thấy thông tin lịch tái khám cần nhắc.");
+        }
+
+        if (followUp.Appointment != null && followUp.Appointment.Status == AppointmentStatus.Cancelled)
+        {
+            return ApiResponse<FollowUpReminderDto>.Fail("Lịch hẹn này đã bị hủy, không thể cập nhật nhắc lịch.");
+        }
+
+        var receptionistUser = await _dbContext.UserAccounts
+            .Include(u => u.StaffProfile)
+            .FirstOrDefaultAsync(u => u.UserId == receptionistUserId, ct);
+
+        var receptionistName = receptionistUser?.StaffProfile?.FullName ?? receptionistUser?.Email ?? "Lễ tân";
+
+        var oldStatus = followUp.Status;
+        if (normalizedCallStatus == "Called")
+        {
+            followUp.Status = "Called";
+        }
+        else if (normalizedCallStatus == "Unreachable")
+        {
+            followUp.Status = "Unreachable";
+        }
+        else
+        {
+            followUp.Status = followUp.AppointmentId.HasValue ? "Scheduled" : "Pending";
+        }
+
+        var audit = new AuditLog
+        {
+            UserId = receptionistUserId,
+            Action = "FollowUpReminderCall",
+            EntityName = "FollowUpSchedule",
+            EntityId = followUp.FollowUpId.ToString(),
+            OldValues = oldStatus,
+            NewValues = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                CallStatus = normalizedCallStatus,
+                Note = request.Note?.Trim(),
+                CalledAt = DateTime.UtcNow,
+                CallerStaffName = receptionistName
+            }, new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _dbContext.AuditLogs.Add(audit);
+        await _dbContext.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Receptionist {ReceptionistId} ({ReceptionistName}) updated follow-up {FollowUpId} reminder status to {Status}",
+            receptionistUserId, receptionistName, followUp.FollowUpId, normalizedCallStatus);
+
+        var patientUser = followUp.Appointment?.PatientUser ?? followUp.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.PatientUser;
+        var dentistName = followUp.Appointment?.AssignedDentistUser?.User?.FullName ?? followUp.TreatmentSession?.DentistUser?.User?.FullName ?? "Bác sĩ phụ trách";
+        var departmentName = followUp.Appointment?.Department?.Name ?? "Nha khoa tổng quát";
+
+        var dto = new FollowUpReminderDto
+        {
+            FollowUpId = followUp.FollowUpId,
+            AppointmentId = followUp.AppointmentId,
+            AppointmentCode = followUp.Appointment?.AppointmentCode,
+            PatientUserId = patientUser?.UserId ?? 0,
+            PatientName = patientUser?.FullName ?? "Bệnh nhân",
+            PatientCode = patientUser?.PatientCode,
+            PatientPhoneNumber = patientUser?.EmergencyContact,
+            DentistUserId = followUp.Appointment?.AssignedDentistUserId ?? followUp.TreatmentSession?.DentistUserId ?? 0,
+            DentistName = dentistName,
+            DepartmentName = departmentName,
+            FollowUpDate = followUp.Appointment?.ScheduledStart ?? followUp.RecommendedDate,
+            ScheduledStart = followUp.Appointment?.ScheduledStart,
+            ScheduledEnd = followUp.Appointment?.ScheduledEnd,
+            AppointmentStatus = followUp.Appointment?.Status ?? "Scheduled",
+            CallStatus = normalizedCallStatus,
+            LastCalledAt = audit.CreatedAt,
+            LastCallerName = receptionistName,
+            CallNote = request.Note?.Trim(),
+            Reason = followUp.Reason
+        };
+
+        return ApiResponse<FollowUpReminderDto>.Ok(dto, $"Đã cập nhật trạng thái nhắc lịch thành công ({normalizedCallStatus}).");
+    }
 }

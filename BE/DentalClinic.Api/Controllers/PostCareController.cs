@@ -228,4 +228,30 @@ public class PostCareController : ControllerBase
         if (!result.Success) return BadRequest(result);
         return Ok(result);
     }
+
+    [HttpGet("follow-ups/receptionist-reminders")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<List<FollowUpReminderDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetReceptionistReminders(
+        [FromQuery] string? dateFilter = null,
+        [FromQuery] string? callStatus = null,
+        CancellationToken ct = default)
+    {
+        var result = await _schedulingService.GetReceptionistRemindersAsync(dateFilter, callStatus, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("follow-ups/receptionist-reminders/call-status")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpReminderDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpReminderDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateReminderCallStatus(
+        [FromBody] UpdateReminderCallStatusRequest request,
+        CancellationToken ct = default)
+    {
+        var receptionistUserId = GetCurrentUserId();
+        var result = await _schedulingService.UpdateReminderCallStatusAsync(receptionistUserId, request, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
 }
