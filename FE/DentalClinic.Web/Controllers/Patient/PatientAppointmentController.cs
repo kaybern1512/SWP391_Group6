@@ -45,7 +45,11 @@ public class PatientAppointmentController : Controller
     }
 
     [HttpGet("Book")]
-    public async Task<IActionResult> Book()
+    public async Task<IActionResult> Book(
+        [FromQuery] long? departmentId = null,
+        [FromQuery] long? dentistId = null,
+        [FromQuery] string? date = null,
+        [FromQuery] string? reason = null)
     {
         var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
         var eligibility = eligibilityResult?.Data ?? new BookingEligibilityDto();
@@ -54,7 +58,11 @@ public class PatientAppointmentController : Controller
         var vm = new PatientBookViewModel
         {
             Departments = deptResult.Data ?? new(),
-            Eligibility = eligibility
+            Eligibility = eligibility,
+            DepartmentId = departmentId ?? 0,
+            RequestedDentistUserId = dentistId,
+            AppointmentDate = !string.IsNullOrWhiteSpace(date) ? date : DateTime.Today.AddDays(1).ToString("yyyy-MM-dd"),
+            ReasonForVisit = reason ?? string.Empty
         };
         return View("~/Views/Patient/Appointment/Book.cshtml", vm);
     }

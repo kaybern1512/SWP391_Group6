@@ -728,5 +728,36 @@
             document.getElementById('summaryDentist').innerText = selectedDentist.name;
             document.getElementById('summaryReason').innerText = document.getElementById('inputReasonForVisit').value.trim();
         }
+        // Auto-select when pre-populated (e.g. from Follow-Up 1-Click Booking)
+        document.addEventListener('DOMContentLoaded', function () {
+            const preDeptId = @Model.DepartmentId;
+            const preDentistId = @(Model.RequestedDentistUserId.HasValue ? Model.RequestedDentistUserId.Value : 0);
+            const preReason = @Html.Raw(Model.ReasonForVisit);
+            const preDate = "@Model.AppointmentDate";
+
+            if (preDeptId > 0) {
+                const deptCard = document.querySelector(#departmentGrid .selection-card[data-id=""]);
+                if (deptCard) {
+                    const deptName = deptCard.getAttribute('data-name') || '';
+                    selectDepartment(preDeptId, deptName);
+                    
+                    if (preReason) {
+                        const reasonInput = document.getElementById('inputReasonForVisit');
+                        if (reasonInput) {
+                            reasonInput.value = preReason;
+                            document.getElementById('btnNext5').disabled = false;
+                        }
+                    }
+
+                    if (preDate) {
+                        const dateInput = document.getElementById('inputAppointmentDate');
+                        if (dateInput) dateInput.value = preDate;
+                    }
+
+                    // Smoothly advance directly to Step 2
+                    goToStep(2);
+                }
+            }
+        });
     </script>
 }
