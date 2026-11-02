@@ -9,6 +9,7 @@ public class DentistReferralIndexViewModel
     public List<FollowUpScheduleDto> FollowUps { get; set; } = new();
     public List<DepartmentDto> Departments { get; set; } = new();
     public List<TreatmentSessionDto> RecentSessions { get; set; } = new();
+    public List<FollowUpProposalDto> PendingProposals { get; set; } = new();
     public string? ActiveTab { get; set; } = "referrals";
     public long? SelectedSessionId { get; set; }
 }
