@@ -194,4 +194,32 @@ public class DentistTreatmentPlanController : Controller
 
         return RedirectToAction(nameof(Sessions));
     }
+
+
+    [HttpPost("CreateFollowUpAppointment/{id:long}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateFollowUpAppointment(long id, CreatePlanFollowUpAppointmentRequest request)
+    {
+        if (request.ScheduledStart <= DateTime.UtcNow)
+        {
+            TempData["ErrorMessage"] = "Thời gian tái khám phải là thời điểm trong tương lai.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            TempData["ErrorMessage"] = "Vui lòng nhập lý do chỉ định tái khám.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var result = await _treatmentApiService.CreatePlanFollowUpAppointmentAsync(id, request);
+        if (!result.IsSuccess)
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể lập lịch hẹn tái khám.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        TempData["SuccessMessage"] = $"Lập lịch tái khám phác đồ thành công (Mã: {result.Data?.AppointmentCode})! Yêu cầu đã chuyển thẳng tới Trưởng khoa để phê duyệt phòng/ghế.";
+        return RedirectToAction(nameof(Detail), new { id });
+    }
 }

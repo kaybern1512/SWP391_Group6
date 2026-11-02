@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.Treatments.DTOs;
+using DentalClinic.Application.Features.Appointments.DTOs;
 
 namespace DentalClinic.Application.Common.Interfaces;
 
@@ -27,4 +28,5 @@ public interface ITreatmentService
     Task<ApiResponse<List<TreatmentServiceOptionDto>>> GetTreatmentServiceOptionsAsync(long? departmentId, CancellationToken ct = default);
     Task<ApiResponse<List<TreatmentDentistOptionDto>>> GetTreatmentDentistOptionsAsync(long? departmentId, CancellationToken ct = default);
     Task<ApiResponse<List<TreatmentEligiblePhaseDto>>> GetEligiblePhasesForSessionAsync(long dentistUserId, CancellationToken ct = default);
+    Task<ApiResponse<AppointmentDto>> CreatePlanFollowUpAppointmentAsync(long dentistUserId, long planId, CreatePlanFollowUpAppointmentRequest request, CancellationToken ct = default);
 }

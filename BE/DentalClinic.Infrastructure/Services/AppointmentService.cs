@@ -22,13 +22,14 @@ public class AppointmentService : IAppointmentService
     private readonly DentalClinicDbContext _dbContext;
     private readonly INotificationService _notificationService;
     private readonly IEmailService? _emailService;
+    private readonly IAppointmentReminderService? _reminderService;
     private readonly ILogger<AppointmentService> _logger;
 
     public AppointmentService(
         DentalClinicDbContext dbContext,
         INotificationService notificationService,
         ILogger<AppointmentService> logger)
-        : this(dbContext, notificationService, null, logger)
+        : this(dbContext, notificationService, null, null, logger)
     {
     }
 
@@ -37,10 +38,21 @@ public class AppointmentService : IAppointmentService
         INotificationService notificationService,
         IEmailService? emailService,
         ILogger<AppointmentService> logger)
+        : this(dbContext, notificationService, emailService, null, logger)
+    {
+    }
+
+    public AppointmentService(
+        DentalClinicDbContext dbContext,
+        INotificationService notificationService,
+        IEmailService? emailService,
+        IAppointmentReminderService? reminderService,
+        ILogger<AppointmentService> logger)
     {
         _dbContext = dbContext;
         _notificationService = notificationService;
         _emailService = emailService;
+        _reminderService = reminderService;
         _logger = logger;
     }
 
@@ -738,6 +750,18 @@ public class AppointmentService : IAppointmentService
                 ct);
         }
 
+        if (_reminderService != null)
+        {
+            try
+            {
+                await _reminderService.CancelRemindersForAppointmentAsync(appointmentId, ct);
+            }
+            catch (Exception remEx)
+            {
+                _logger.LogWarning(remEx, "Failed to cancel automated reminders for appointment {AppointmentId}", appointmentId);
+            }
+        }
+
         var successMessage = isLate
             ? $"Hủy lịch khám thành công. Lưu ý: Do hủy trong vòng 12h trước giờ hẹn, bạn đã bị tính 1 lần vi phạm ({strikeCount}/3 lần trong 30 ngày)."
             : "Hủy lịch khám thành công.";
@@ -847,6 +871,18 @@ public class AppointmentService : IAppointmentService
             ChangedAt = now
         };
         _dbContext.AppointmentStatusHistories.Add(oldHistory);
+
+        if (_reminderService != null)
+        {
+            try
+            {
+                await _reminderService.CancelRemindersForAppointmentAsync(appointment.AppointmentId, ct);
+            }
+            catch (Exception remEx)
+            {
+                _logger.LogWarning(remEx, "Failed to cancel reminders for rescheduled appointment {AppointmentId}", appointment.AppointmentId);
+            }
+        }
 
         // 2. Create new appointment
         var newAppointment = new Appointment
@@ -2079,6 +2115,18 @@ public class AppointmentService : IAppointmentService
                 catch (Exception emailEx)
                 {
                     _logger.LogWarning(emailEx, "Failed to send confirmation email for appointment {AppointmentId} to patient {PatientUserId}", appointmentId, appointment.PatientUserId);
+                }
+            }
+
+            if (_reminderService != null)
+            {
+                try
+                {
+                    await _reminderService.ScheduleRemindersForAppointmentAsync(appointmentId, ct);
+                }
+                catch (Exception remEx)
+                {
+                    _logger.LogWarning(remEx, "Failed to schedule automated reminders for appointment {AppointmentId}", appointmentId);
                 }
             }
 

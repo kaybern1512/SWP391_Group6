@@ -22,6 +22,9 @@
             <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#changePlanStatusModal">
                 <i class="bi bi-arrow-repeat me-1"></i>Đổi Trạng Thái
             </button>
+            <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#scheduleFollowUpModal">
+                <i class="bi bi-calendar2-plus me-1"></i>Lập Lịch Tái Khám Phác Đồ
+            </button>
         </div>
     </div>
 
@@ -460,6 +463,99 @@
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
                     <button type="submit" class="btn btn-primary">Cập nhật ngay</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+<!-- MODAL: LẬP LỊCH TÁI KHÁM THEO PHÁC ĐỒ (WF-11) -->
+<div class="modal fade" id="scheduleFollowUpModal" tabindex="-1" aria-labelledby="scheduleFollowUpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post" asp-action="CreateFollowUpAppointment" asp-route-id="@Model.Plan.TreatmentPlanId">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold" id="scheduleFollowUpModalLabel">
+                        <i class="bi bi-calendar2-check me-2"></i>Lập Lịch Tái Khám Theo Phác Đồ
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-primary d-flex align-items-center gap-2 py-2 mb-3">
+                        <i class="bi bi-info-circle-fill fs-5"></i>
+                        <div class="small">
+                            Lịch tái khám tạo từ phác đồ sẽ đi thẳng tới <strong>Trưởng khoa (PendingDepartmentReview)</strong> để phân bổ phòng/ghế khám, không yêu cầu Lễ tân nhập lại.
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-bold">Bệnh Nhân</label>
+                            <input type="text" class="form-control bg-light" value="@Model.Plan.PatientName (@Model.Plan.PatientCode)" readonly />
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-bold">Khoa Chuyên Môn</label>
+                            <input type="text" class="form-control bg-light" value="@Model.Plan.DepartmentName" readonly />
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-bold">Giai Đoạn Kế Hoạch (Tùy chọn)</label>
+                            <select name="PlanItemId" class="form-select">
+                                <option value="">-- Tái khám toàn phác đồ chung --</option>
+                                @foreach (var item in Model.Plan.Items)
+                                {
+                                    <option value="@item.TreatmentPlanItemId">
+                                        Giai đoạn @item.SequenceNo: @item.ServiceName @(string.IsNullOrEmpty(item.ToothNumber) ? "" : $" (Răng {item.ToothNumber})") - [@item.Status]
+                                    </option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-bold">Thời Lượng Dự Kiến</label>
+                            <select name="DurationMinutes" class="form-select">
+                                <option value="30" selected>30 phút (Khám &amp; Kiểm tra định kỳ)</option>
+                                <option value="45">45 phút (Thủ thuật nhẹ / Thay thun / Cắt chỉ)</option>
+                                <option value="60">60 phút (Thủ thuật trung bình)</option>
+                                <option value="90">90 phút (Thủ thuật chuyên sâu)</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-bold">Ngày &amp; Giờ Đề Xuất Tái Khám <span class="text-danger">*</span></label>
+                            <input type="datetime-local" name="ScheduledStart" class="form-control" 
+                                   value="@DateTime.Now.AddDays(7).ToString("yyyy-MM-ddT09:00")"
+                                   min="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" required />
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-bold">Bác Sĩ Mong Muốn Phụ Trách</label>
+                            <select name="RequestedDentistUserId" class="form-select">
+                                <option value="" selected>Mặc định (Bác sĩ hiện tại)</option>
+                                @if (Model.Dentists != null)
+                                {
+                                    foreach (var d in Model.Dentists)
+                                    {
+                                        <option value="@d.DentistUserId">@d.FullName @(string.IsNullOrEmpty(d.Specialization) ? "" : $"({d.Specialization})")</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-bold">Lý Do / Chỉ Định Lâm Sàng Tái Khám <span class="text-danger">*</span></label>
+                            <textarea name="Reason" class="form-control" rows="3" 
+                                      placeholder="Ví dụ: Tái khám kiểm tra tủy răng sau trám tạm, kiểm tra độ ổn định khớp cắn sau 1 tuần..." required>Tái khám theo dõi phác đồ điều trị</textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-success fw-bold">
+                        <i class="bi bi-send-check me-1"></i>Xác Nhận &amp; Gửi Lên Trưởng Khoa
+                    </button>
                 </div>
             </form>
         </div>

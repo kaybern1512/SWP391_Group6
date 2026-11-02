@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.Treatments.DTOs;
+using DentalClinic.Application.Features.Appointments.DTOs;
+using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -745,5 +747,168 @@ public class TreatmentService : ITreatmentService
                 Amount = ps.Quantity * ps.UnitPrice
             }).ToList()
         };
+    }
+
+    public async Task<ApiResponse<AppointmentDto>> CreatePlanFollowUpAppointmentAsync(
+        long dentistUserId,
+        long planId,
+        CreatePlanFollowUpAppointmentRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null)
+            return ApiResponse<AppointmentDto>.Fail("Dữ liệu yêu cầu tái khám không hợp lệ.");
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            return ApiResponse<AppointmentDto>.Fail("Vui lòng nhập lý do / chỉ định tái khám.");
+
+        if (request.ScheduledStart <= DateTime.UtcNow)
+            return ApiResponse<AppointmentDto>.Fail("Thời gian tái khám phải là thời điểm trong tương lai.");
+
+        var plan = await _dbContext.TreatmentPlans
+            .Include(tp => tp.PatientUser)
+                .ThenInclude(p => p.User)
+            .Include(tp => tp.Department)
+            .Include(tp => tp.TreatmentPlanItems)
+            .FirstOrDefaultAsync(tp => tp.TreatmentPlanId == planId, ct);
+
+        if (plan == null)
+            return ApiResponse<AppointmentDto>.Fail("Không tìm thấy phác đồ điều trị chỉ định.");
+
+        // Chống trùng lặp (WF-11 ngoại lệ: chống 2 lịch cho cùng nguồn yêu cầu nếu bấm lặp)
+        var proposedEnd = request.ScheduledStart.AddMinutes(request.DurationMinutes ?? 30);
+        var windowStart = request.ScheduledStart.AddHours(-1);
+        var windowEnd = request.ScheduledStart.AddHours(1);
+        var hasDuplicate = await _dbContext.Appointments.AnyAsync(a =>
+            a.PatientUserId == plan.PatientUserId &&
+            a.DepartmentId == plan.DepartmentId &&
+            (a.Status == AppointmentStatus.PendingDepartmentReview || a.Status == AppointmentStatus.Confirmed) &&
+            a.ScheduledStart.HasValue &&
+            a.ScheduledStart.Value >= windowStart &&
+            a.ScheduledStart.Value <= windowEnd, ct);
+
+        if (hasDuplicate)
+            return ApiResponse<AppointmentDto>.Fail("Đã có lịch hẹn tái khám đang chờ duyệt hoặc đã xác nhận trong khung giờ gần thời điểm này.");
+
+        // Lấy thông tin giai đoạn nếu có
+        long? serviceId = null;
+        if (request.PlanItemId.HasValue)
+        {
+            var item = plan.TreatmentPlanItems.FirstOrDefault(i => i.TreatmentPlanItemId == request.PlanItemId.Value);
+            if (item != null)
+            {
+                serviceId = item.DepartmentServiceId;
+            }
+        }
+
+        var apptCode = "APP-" + DateTime.UtcNow.ToString("yyyyMMdd") + "-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+        var targetDentistId = request.RequestedDentistUserId ?? dentistUserId;
+
+        var appt = new Appointment
+        {
+            AppointmentCode = apptCode,
+            PatientUserId = plan.PatientUserId,
+            DepartmentId = plan.DepartmentId,
+            RequestedServiceId = serviceId,
+            RequestedDentistUserId = targetDentistId,
+            AssignedDentistUserId = targetDentistId,
+            ScheduledStart = request.ScheduledStart,
+            ScheduledEnd = proposedEnd,
+            ReasonForVisit = $"[Tái khám phác đồ #{plan.TreatmentPlanId}] {request.Reason.Trim()}",
+            BookingSource = BookingSource.FollowUp,
+            Status = AppointmentStatus.PendingDepartmentReview, // Đi thẳng PendingDepartmentReview (WF-11 điều 04)
+            CreatedByUserId = dentistUserId,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _dbContext.Appointments.Add(appt);
+        await _dbContext.SaveChangesAsync(ct);
+
+        // Thêm lịch sử trạng thái
+        var history = new AppointmentStatusHistory
+        {
+            AppointmentId = appt.AppointmentId,
+            OldStatus = null,
+            NewStatus = AppointmentStatus.PendingDepartmentReview,
+            ChangedByUserId = dentistUserId,
+            Note = $"Bác sĩ chỉ định tái khám từ phác đồ #{plan.TreatmentPlanId}",
+            ChangedAt = DateTime.UtcNow
+        };
+        _dbContext.AppointmentStatusHistories.Add(history);
+
+        // Tạo bản ghi FollowUpSchedule liên kết Appointment (WF-11 điều 03)
+        var latestSession = await _dbContext.TreatmentSessions
+            .Where(s => s.TreatmentPlanItem.TreatmentPlanId == planId)
+            .OrderByDescending(s => s.SessionDate)
+            .FirstOrDefaultAsync(ct);
+
+        if (latestSession != null)
+        {
+            var followUp = new FollowUpSchedule
+            {
+                TreatmentSessionId = latestSession.TreatmentSessionId,
+                RecommendedDate = request.ScheduledStart,
+                Reason = request.Reason.Trim(),
+                Status = "Scheduled",
+                AppointmentId = appt.AppointmentId
+            };
+            _dbContext.FollowUpSchedules.Add(followUp);
+        }
+
+        // Tạo thông báo cho Trưởng khoa
+        var mgrUser = await _dbContext.Departments
+            .Where(d => d.DepartmentId == plan.DepartmentId && d.ManagerUserId.HasValue)
+            .Select(d => d.ManagerUserId!.Value)
+            .FirstOrDefaultAsync(ct);
+
+        if (mgrUser > 0)
+        {
+            _dbContext.Notifications.Add(new Notification
+            {
+                UserId = mgrUser,
+                AppointmentId = appt.AppointmentId,
+                Type = "FollowUpReviewRequired",
+                Channel = "InApp",
+                Subject = "Lịch tái khám mới cần duyệt phân bổ phòng/ghế",
+                Content = $"Bác sĩ vừa lập lịch tái khám mã {appt.AppointmentCode} cho bệnh nhân {plan.PatientUser?.FullName}. Vui lòng kiểm tra và duyệt lịch.",
+                DeliveryStatus = "Sent",
+                SentAt = DateTime.UtcNow
+            });
+        }
+
+        // Tạo thông báo cho Bệnh nhân
+        _dbContext.Notifications.Add(new Notification
+        {
+            UserId = plan.PatientUserId,
+            AppointmentId = appt.AppointmentId,
+            Type = "FollowUpScheduled",
+            Channel = "InApp",
+            Subject = "Đã đề xuất lịch tái khám theo phác đồ",
+            Content = $"Bác sĩ đã lên lịch tái khám cho bạn vào {request.ScheduledStart:dd/MM/yyyy HH:mm} (Mã: {appt.AppointmentCode}). Lịch đang được chuyển Trưởng khoa xác nhận phòng/ghế.",
+            DeliveryStatus = "Sent",
+            SentAt = DateTime.UtcNow
+        });
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        var dto = new AppointmentDto
+        {
+            AppointmentId = appt.AppointmentId,
+            AppointmentCode = appt.AppointmentCode,
+            PatientUserId = appt.PatientUserId,
+            PatientName = plan.PatientUser?.FullName ?? string.Empty,
+            DepartmentId = appt.DepartmentId,
+            DepartmentName = plan.Department?.Name,
+            RequestedServiceId = appt.RequestedServiceId,
+            RequestedDentistUserId = appt.RequestedDentistUserId,
+            AssignedDentistUserId = appt.AssignedDentistUserId,
+            ScheduledStart = appt.ScheduledStart,
+            ScheduledEnd = appt.ScheduledEnd,
+            ReasonForVisit = appt.ReasonForVisit,
+            BookingSource = appt.BookingSource,
+            Status = appt.Status,
+            CreatedAt = appt.CreatedAt
+        };
+
+        return ApiResponse<AppointmentDto>.Ok(dto, "Lập lịch hẹn tái khám từ phác đồ thành công. Lịch đã được chuyển thẳng tới Trưởng khoa để phê duyệt phòng/ghế.");
     }
 }

@@ -13,6 +13,7 @@ public partial class DentalClinicDbContext : DbContext
     }
 
     public virtual DbSet<Appointment> Appointments { get; set; }
+    public virtual DbSet<AppointmentReminderJob> AppointmentReminderJobs { get; set; }
 
     public virtual DbSet<AppointmentChangeProposal> AppointmentChangeProposals { get; set; }
 
@@ -90,6 +91,27 @@ public partial class DentalClinicDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<AppointmentReminderJob>(entity =>
+        {
+            entity.HasKey(e => e.ReminderJobId);
+            entity.ToTable("AppointmentReminderJobs");
+
+            entity.Property(e => e.ReminderType).HasMaxLength(20).IsUnicode(false);
+            entity.Property(e => e.RecipientEmail).HasMaxLength(150).IsUnicode(false);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Scheduled");
+            entity.Property(e => e.ErrorMessage).HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
+
+            entity.HasIndex(e => new { e.Status, e.ScheduledSendTime }, "IX_AppointmentReminderJobs_Status_ScheduledTime");
+            entity.HasIndex(e => new { e.AppointmentId, e.ReminderType, e.ScheduledSendTime }, "UQ_AppointmentReminderJobs_Appt_Type_Time").IsUnique();
+
+            entity.HasOne(d => d.Appointment)
+                .WithMany(p => p.ReminderJobs)
+                .HasForeignKey(d => d.AppointmentId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_AppointmentReminderJobs_Appointments");
+        });
+
         modelBuilder.Entity<Appointment>(entity =>
         {
             entity.HasKey(e => e.AppointmentId).HasName("PK__Appointm__8ECDFCC2D0A60E8D");

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.Treatments.DTOs;
+using DentalClinic.Application.Features.Appointments.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -222,6 +223,22 @@ public class TreatmentController : ControllerBase
     public async Task<IActionResult> GetDentistOptions([FromQuery] long? departmentId, CancellationToken ct)
     {
         var result = await _treatmentService.GetTreatmentDentistOptionsAsync(departmentId, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// WF-11: Bác sĩ lập lịch hẹn tái khám trực tiếp từ Phác đồ điều trị.
+    /// Lịch hẹn đi thẳng trạng thái PendingDepartmentReview để Trưởng khoa phân bổ phòng/ghế.
+    /// </summary>
+    [HttpPost("plans/{id:long}/follow-up-appointment")]
+    [Authorize(Roles = "Dentist,SystemAdministrator")]
+    [ProducesResponseType(typeof(ApiResponse<AppointmentDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<AppointmentDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CreatePlanFollowUpAppointment(long id, [FromBody] CreatePlanFollowUpAppointmentRequest request, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _treatmentService.CreatePlanFollowUpAppointmentAsync(dentistUserId, id, request, ct);
+        if (!result.Success) return BadRequest(result);
         return Ok(result);
     }
 }

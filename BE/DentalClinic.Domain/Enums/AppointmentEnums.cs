@@ -15,8 +15,10 @@ public static class BookingSource
 {
     public const string Patient = "Patient";
     public const string Receptionist = "Receptionist";
+    public const string Dentist = "Dentist";
+    public const string FollowUp = "FollowUp";
 
-    public static readonly string[] All = { Patient, Receptionist };
+    public static readonly string[] All = { Patient, Receptionist, Dentist, FollowUp };
     public static bool IsValid(string source) => All.Contains(source);
 }
 

@@ -3,7 +3,7 @@
 # Purpose: Exports clean schema and complete seed dataset directly from the
 #          live, verified DentalClinicManagementDB instance using SMO.
 # Output:
-#   1. DB\Dental_Clinic_Final_Database_Clean.sql (Schema Only: 38 tables, constraints, indexes)
+#   1. DB\Dental_Clinic_Final_Database_Clean.sql (Schema Only: 39 tables, constraints, indexes)
 #   2. DB\DentalClinic_Full_Database_And_Data.sql (Full DB: Schema + Complete UTF-8 Data)
 #   3. DB\DentalClinicManagementDB.bak (Standard SQL Server compressed backup)
 # ==============================================================================
@@ -30,12 +30,12 @@ if ($null -eq $db) {
 
 Write-Host ">>> Connected to $ServerInstance - Database: $DatabaseName" -ForegroundColor Green
 
-# 38 tables in topological dependency order
+# 39 tables in topological dependency order
 $orderedTableNames = @(
     'ClinicProfile', 'UserAccounts', 'PatientProfiles', 'StaffProfiles', 'DentistProfiles',
     'Departments', 'DentistDepartments', 'DepartmentWorkSchedules', 'DentistWorkSchedules',
     'DentistAvailability', 'Rooms', 'DentalChairs', 'DepartmentServices', 'Appointments',
-    'AppointmentChangeProposals', 'AppointmentStatusHistories', 'Notifications', 'SupportChatMessages',
+    'AppointmentChangeProposals', 'AppointmentStatusHistories', 'AppointmentReminderJobs', 'Notifications', 'SupportChatMessages',
     'DentalMedicalRecords', 'ClinicalEntries', 'OdontogramEntries', 'ImagingRecords',
     'TreatmentPlans', 'TreatmentPlanItems', 'TreatmentSessions', 'PerformedServices',
     'Prescriptions', 'PrescriptionItems', 'DepartmentReferrals', 'FollowUpSchedules',
@@ -120,7 +120,7 @@ $dataScripter.Options.SchemaQualify = $true
 $fullBuilder = New-Object System.Text.StringBuilder
 [void]$fullBuilder.AppendLine("-- =========================================================================================")
 [void]$fullBuilder.AppendLine("-- DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)")
-[void]$fullBuilder.AppendLine("-- FULL DATABASE SCHEMA & COMPLETE VERIFIED SEED DATASET (38 TABLES)")
+[void]$fullBuilder.AppendLine("-- FULL DATABASE SCHEMA & COMPLETE VERIFIED SEED DATASET (39 TABLES)")
 [void]$fullBuilder.AppendLine("-- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS")
 [void]$fullBuilder.AppendLine("-- Database Name: DentalClinicManagementDB")
 [void]$fullBuilder.AppendLine("-- Shared Demo Password for ALL Accounts: Password123@")

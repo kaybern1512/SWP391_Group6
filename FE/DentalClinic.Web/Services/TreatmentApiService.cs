@@ -116,6 +116,11 @@ public class TreatmentApiService : ITreatmentApiService
         return await SendGetAsync<List<TreatmentDentistOptionDto>>(url);
     }
 
+    public async Task<ApiResult<AppointmentDto>> CreatePlanFollowUpAppointmentAsync(long planId, CreatePlanFollowUpAppointmentRequest request)
+    {
+        return await SendPostAsync<CreatePlanFollowUpAppointmentRequest, AppointmentDto>($"/api/treatments/plans/{planId}/follow-up-appointment", request);
+    }
+
     // ==========================================
     // HTTP HELPERS
     // ==========================================

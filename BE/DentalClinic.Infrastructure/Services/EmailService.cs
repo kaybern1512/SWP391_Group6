@@ -223,6 +223,100 @@ public class EmailService : IEmailService
         await SendEmailAsync(toEmail, patientName, subject, htmlBody, devLogSummary, isOtp: false, ct);
     }
 
+    public async Task SendAppointmentReminderEmailAsync(
+        string toEmail,
+        string patientName,
+        string appointmentCode,
+        string reminderType,
+        string queueNumber,
+        string serviceName,
+        string departmentName,
+        string dentistName,
+        string roomName,
+        DateTime scheduledStart,
+        DateTime scheduledEnd,
+        CancellationToken ct = default)
+    {
+        var timeLabel = reminderType == "T8" ? "8 giờ" : "24 giờ";
+        var subject = $"[Nhắc Lịch Hẹn - Trước {timeLabel}] Lịch khám {appointmentCode} tại Nha Khoa DentalCare";
+        var frontendUrl = _configuration["Frontend:BaseUrl"] ?? "https://localhost:7129";
+        var appointmentUrl = $"{frontendUrl.TrimEnd('/')}/Patient/Appointment";
+        var formattedTime = $"{scheduledStart:HH:mm} - {scheduledEnd:HH:mm}, ngày {scheduledStart:dd/MM/yyyy}";
+
+        var htmlBody = $@"
+<div style=""font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;"">
+    <div style=""text-align: center; margin-bottom: 24px;"">
+        <h2 style=""color: #0d9488; margin: 0; font-size: 22px;"">🦷 Nha Khoa Đa Chuyên Khoa DentalCare</h2>
+        <p style=""color: #64748b; font-size: 13px; margin: 4px 0 0;"">Chăm sóc nụ cười toàn diện - Tiêu chuẩn quốc tế</p>
+    </div>
+
+    <div style=""background: linear-gradient(135deg, #0d9488 0%, #0284c7 100%); color: #ffffff; border-radius: 8px; padding: 18px 24px; margin-bottom: 24px;"">
+        <h3 style=""margin: 0 0 6px; font-size: 17px;"">⏰ Nhắc Hẹn Tự Động Trước {timeLabel}</h3>
+        <p style=""margin: 0; font-size: 13px; opacity: 0.95;"">
+            Xin chào <strong>{WebUtility.HtmlEncode(patientName)}</strong>, bạn có lịch hẹn khám/tái khám sắp diễn ra.
+        </p>
+    </div>
+
+    <div style=""background-color: #f8fafc; border-radius: 8px; padding: 20px; margin-bottom: 20px;"">
+        <h4 style=""margin: 0 0 14px; color: #1e293b; font-size: 15px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px;"">
+            📋 Thông Tin Chi Tiết Lịch Hẹn
+        </h4>
+        <table style=""width: 100%; font-size: 14px; border-collapse: collapse;"">
+            <tr>
+                <td style=""padding: 7px 0; color: #64748b; width: 40%;"">Mã lịch hẹn:</td>
+                <td style=""padding: 7px 0; font-weight: 700; color: #0d9488;"">{WebUtility.HtmlEncode(appointmentCode)}</td>
+            </tr>
+            <tr>
+                <td style=""padding: 7px 0; color: #64748b;"">Số thứ tự khám:</td>
+                <td style=""padding: 7px 0; font-weight: 700; color: #dc2626; font-size: 16px;"">{WebUtility.HtmlEncode(queueNumber)}</td>
+            </tr>
+            <tr>
+                <td style=""padding: 7px 0; color: #64748b;"">Thời gian hẹn:</td>
+                <td style=""padding: 7px 0; font-weight: 600; color: #0284c7;"">{formattedTime}</td>
+            </tr>
+            <tr>
+                <td style=""padding: 7px 0; color: #64748b;"">Chuyên khoa:</td>
+                <td style=""padding: 7px 0; font-weight: 600; color: #0f172a;"">{WebUtility.HtmlEncode(departmentName)}</td>
+            </tr>
+            <tr>
+                <td style=""padding: 7px 0; color: #64748b;"">Dịch vụ:</td>
+                <td style=""padding: 7px 0; font-weight: 600; color: #0f172a;"">{WebUtility.HtmlEncode(serviceName)}</td>
+            </tr>
+            <tr>
+                <td style=""padding: 7px 0; color: #64748b;"">Bác sĩ phụ trách:</td>
+                <td style=""padding: 7px 0; font-weight: 600; color: #0f172a;"">{WebUtility.HtmlEncode(dentistName)}</td>
+            </tr>
+            <tr>
+                <td style=""padding: 7px 0; color: #64748b;"">Phòng khám / Ghế:</td>
+                <td style=""padding: 7px 0; font-weight: 600; color: #0f172a;"">{WebUtility.HtmlEncode(roomName)}</td>
+            </tr>
+        </table>
+    </div>
+
+    <div style=""background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 14px 18px; margin-bottom: 24px;"">
+        <h5 style=""margin: 0 0 8px; color: #065f46; font-size: 13px;"">💡 Lưu ý quan trọng:</h5>
+        <ul style=""margin: 0; padding-left: 18px; font-size: 12.5px; color: #047857; line-height: 1.6;"">
+            <li>Quý khách vui lòng đến trước 10 phút để được đón tiếp chu đáo nhất.</li>
+            <li>Nếu cần thay đổi giờ hẹn, vui lòng liên hệ hotline <strong>1900 6868</strong> sớm nhất có thể.</li>
+        </ul>
+    </div>
+
+    <div style=""text-align: center; margin: 24px 0;"">
+        <a href=""{appointmentUrl}"" style=""display: inline-block; background-color: #0d9488; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600; font-size: 13.5px;"">
+            Tra Cứu Lịch Hẹn Trực Tuyến
+        </a>
+    </div>
+
+    <div style=""border-top: 1px solid #e2e8f0; margin-top: 24px; padding-top: 16px; font-size: 11.5px; color: #94a3b8; text-align: center; line-height: 1.5;"">
+        <p style=""margin: 0 0 4px;""><strong>Nha Khoa DentalCare</strong> | Hotline CSKH: 1900 6868 | Email: cskh@dentalcare.com</p>
+        <p style=""margin: 0;"">&copy; {DateTime.UtcNow.Year} DentalCare Clinic. All rights reserved.</p>
+    </div>
+</div>";
+
+        var devLogSummary = $"APPOINTMENT REMINDER ({reminderType}): Code={appointmentCode}, Queue={queueNumber}, Time={formattedTime}, Dept={departmentName}, Dentist={dentistName}";
+        await SendEmailAsync(toEmail, patientName, subject, htmlBody, devLogSummary, isOtp: false, ct);
+    }
+
     private async Task SendEmailAsync(string toEmail, string fullName, string subject, string htmlBody, string payloadInfo, bool isOtp, CancellationToken ct)
     {
         var smtpServer = _configuration["EmailSettings:SmtpServer"];

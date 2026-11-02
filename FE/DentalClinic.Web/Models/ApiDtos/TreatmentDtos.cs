@@ -172,3 +172,13 @@ public class TreatmentEligiblePhaseDto
     public long? AssociatedAppointmentId { get; set; }
     public string? AssociatedAppointmentCode { get; set; }
 }
+
+
+public class CreatePlanFollowUpAppointmentRequest
+{
+    public long? PlanItemId { get; set; }
+    public long? RequestedDentistUserId { get; set; }
+    public DateTime ScheduledStart { get; set; }
+    public string Reason { get; set; } = null!;
+    public int? DurationMinutes { get; set; } = 30;
+}

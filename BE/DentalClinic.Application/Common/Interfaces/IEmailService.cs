@@ -20,4 +20,18 @@ public interface IEmailService
         System.DateTime scheduledStart,
         System.DateTime scheduledEnd,
         CancellationToken ct = default);
+
+    Task SendAppointmentReminderEmailAsync(
+        string toEmail,
+        string patientName,
+        string appointmentCode,
+        string reminderType,
+        string queueNumber,
+        string serviceName,
+        string departmentName,
+        string dentistName,
+        string roomName,
+        System.DateTime scheduledStart,
+        System.DateTime scheduledEnd,
+        CancellationToken ct = default);
 }

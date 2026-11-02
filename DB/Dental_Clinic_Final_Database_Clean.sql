@@ -3,7 +3,7 @@
 -- MASTER CLEAN DATABASE SCHEMA (SCHEMA ONLY - 38 TABLES)
 -- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
 -- Database Name: DentalClinicManagementDB
--- Generated: 2026-11-02 23:40:37
+-- Generated: 2026-11-03 00:22:40
 -- =========================================================================================
 
 IF DB_ID(N'DentalClinicManagementDB') IS NULL
@@ -449,6 +449,33 @@ CREATE TABLE [dbo].[AppointmentStatusHistories](
 PRIMARY KEY CLUSTERED 
 (
 	[HistoryId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[AppointmentReminderJobs](
+	[ReminderJobId] [bigint] IDENTITY(1,1) NOT NULL,
+	[AppointmentId] [bigint] NOT NULL,
+	[ReminderType] [varchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ScheduledSendTime] [datetime2](7) NOT NULL,
+	[RecipientEmail] [varchar](150) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[SentAt] [datetime2](7) NULL,
+	[ErrorMessage] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[RetryCount] [int] NOT NULL,
+	[CreatedAt] [datetime2](7) NOT NULL,
+	[UpdatedAt] [datetime2](7) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ReminderJobId] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
@@ -1097,6 +1124,26 @@ CREATE NONCLUSTERED INDEX [IX_AppointmentStatusHistories_Appointment_ChangedAt] 
 	[ChangedAt] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_AppointmentReminderJobs_Status_ScheduledTime] ON [dbo].[AppointmentReminderJobs]
+(
+	[Status] ASC,
+	[ScheduledSendTime] ASC
+)
+INCLUDE([AppointmentId],[ReminderType],[RecipientEmail],[RetryCount]) WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE UNIQUE NONCLUSTERED INDEX [UQ_AppointmentReminderJobs_Appt_Type_Time] ON [dbo].[AppointmentReminderJobs]
+(
+	[AppointmentId] ASC,
+	[ReminderType] ASC,
+	[ScheduledSendTime] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
 CREATE NONCLUSTERED INDEX [IX_Notifications_User_ReadAt] ON [dbo].[Notifications]
 (
 	[UserId] ASC,
@@ -1285,6 +1332,12 @@ GO
 ALTER TABLE [dbo].[AppointmentChangeProposals] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
 GO
 ALTER TABLE [dbo].[AppointmentStatusHistories] ADD  DEFAULT (sysdatetime()) FOR [ChangedAt]
+GO
+ALTER TABLE [dbo].[AppointmentReminderJobs] ADD  DEFAULT ('Scheduled') FOR [Status]
+GO
+ALTER TABLE [dbo].[AppointmentReminderJobs] ADD  DEFAULT ((0)) FOR [RetryCount]
+GO
+ALTER TABLE [dbo].[AppointmentReminderJobs] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
 GO
 ALTER TABLE [dbo].[Notifications] ADD  DEFAULT ('InApp') FOR [Channel]
 GO
@@ -1480,6 +1533,12 @@ ALTER TABLE [dbo].[AppointmentStatusHistories]  WITH CHECK ADD  CONSTRAINT [FK_A
 REFERENCES [dbo].[UserAccounts] ([UserId])
 GO
 ALTER TABLE [dbo].[AppointmentStatusHistories] CHECK CONSTRAINT [FK_AppointmentStatusHistories_User]
+GO
+ALTER TABLE [dbo].[AppointmentReminderJobs]  WITH CHECK ADD  CONSTRAINT [FK_AppointmentReminderJobs_Appointments] FOREIGN KEY([AppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[AppointmentReminderJobs] CHECK CONSTRAINT [FK_AppointmentReminderJobs_Appointments]
 GO
 ALTER TABLE [dbo].[Notifications]  WITH CHECK ADD  CONSTRAINT [FK_Notifications_Appointment] FOREIGN KEY([AppointmentId])
 REFERENCES [dbo].[Appointments] ([AppointmentId])

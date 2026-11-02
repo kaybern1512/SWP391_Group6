@@ -2,6 +2,7 @@ using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Validation;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Services;
+using DentalClinic.Infrastructure.BackgroundServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -68,6 +69,8 @@ public static class DependencyInjection
         services.AddScoped<IPostCareService, PostCareService>();
         services.AddScoped<ISupportService, SupportService>();
         services.AddScoped<IBlogService, BlogService>();
+        services.AddScoped<IAppointmentReminderService, AppointmentReminderService>();
+        services.AddHostedService<AppointmentReminderBackgroundWorker>();
 
         return services;
     }

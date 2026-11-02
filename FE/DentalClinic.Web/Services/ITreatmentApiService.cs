@@ -26,4 +26,5 @@ public interface ITreatmentApiService
     Task<ApiResult<List<TreatmentPatientOptionDto>>> GetPatientOptionsAsync();
     Task<ApiResult<List<TreatmentServiceOptionDto>>> GetServiceOptionsAsync(long? departmentId = null);
     Task<ApiResult<List<TreatmentDentistOptionDto>>> GetDentistOptionsAsync(long? departmentId = null);
+    Task<ApiResult<AppointmentDto>> CreatePlanFollowUpAppointmentAsync(long planId, CreatePlanFollowUpAppointmentRequest request);
 }
