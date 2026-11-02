@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -41,19 +41,11 @@ public class BillingService : IBillingService
         if (request.AppointmentId <= 0)
             return ApiResponse<InvoiceDto>.Fail("Mã ca khám không hợp lệ.");
 
-        var appointment = await _dbContext.Appointments
-            .Include(a => a.PatientUser)
-            .Include(a => a.Invoice)
-            .Include(a => a.AssignedDentistUser)
-                .ThenInclude(d => d!.User)
-            .Include(a => a.Department)
-            .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId, ct);
+        if (request.DiscountAmount < 0)
+            return ApiResponse<InvoiceDto>.Fail("Số tiền giảm giá không thể âm.");
 
-        if (appointment == null)
-            return ApiResponse<InvoiceDto>.Fail("Không tìm thấy ca khám chỉ định.");
-
-        if (appointment.Invoice != null)
-            return ApiResponse<InvoiceDto>.Fail($"Ca khám này đã được lập hóa đơn mã {appointment.Invoice.InvoiceCode}.");
+        if (request.TaxPercent < 0 || request.TaxPercent > 100)
+            return ApiResponse<InvoiceDto>.Fail("Thuế suất VAT phải nằm trong khoảng từ 0% đến 100%.");
 
         if (request.Items == null || !request.Items.Any())
             return ApiResponse<InvoiceDto>.Fail("Vui lòng nhập ít nhất một dịch vụ hoặc mục viện phí.");
@@ -70,88 +62,143 @@ public class BillingService : IBillingService
                 return ApiResponse<InvoiceDto>.Fail($"Đơn giá của '{item.Description}' không thể âm.");
         }
 
-        // Validate staff user ID or pick available staff profile
-        var validStaffUserId = staffUserId;
-        var staffExists = await _dbContext.StaffProfiles.AnyAsync(s => s.UserId == staffUserId, ct);
-        if (!staffExists)
-        {
-            var defaultStaff = await _dbContext.StaffProfiles.OrderBy(s => s.UserId).FirstOrDefaultAsync(ct);
-            if (defaultStaff != null)
-            {
-                validStaffUserId = defaultStaff.UserId;
-            }
-            else
-            {
-                return ApiResponse<InvoiceDto>.Fail("Không tìm thấy thông tin nhân viên tiếp nhận hợp lệ trong hệ thống.");
-            }
-        }
-
-        var subTotal = request.Items.Sum(i => i.Quantity * i.UnitPrice);
-        var discount = Math.Max(0, request.DiscountAmount);
-        if (discount > subTotal)
-        {
-            discount = subTotal;
-        }
-
-        var discountedSubTotal = subTotal - discount;
-        var taxPercent = Math.Max(0, request.TaxPercent);
-        var taxAmount = Math.Round(discountedSubTotal * (taxPercent / 100m), 2);
-        var totalAmount = Math.Round(discountedSubTotal + taxAmount, 2);
-
-        var invoiceCode = await GenerateInvoiceCodeAsync(ct);
-
-        var invoice = new Invoice
-        {
-            InvoiceCode = invoiceCode,
-            AppointmentId = appointment.AppointmentId,
-            GeneratedByUserId = validStaffUserId,
-            TotalAmount = totalAmount,
-            Status = "Unpaid",
-            CreatedAt = DateTime.UtcNow
-        };
-
-        foreach (var item in request.Items)
-        {
-            invoice.InvoiceItems.Add(new InvoiceItem
-            {
-                PerformedServiceId = item.PerformedServiceId,
-                Description = item.Description.Trim(),
-                Quantity = item.Quantity,
-                UnitPrice = item.UnitPrice
-            });
-        }
-
-        // If VAT was specified, record it as a transparent item if requested
-        if (taxPercent > 0 && taxAmount > 0)
-        {
-            invoice.InvoiceItems.Add(new InvoiceItem
-            {
-                PerformedServiceId = null,
-                Description = $"Thuế giá trị gia tăng (VAT {taxPercent:G29}%)",
-                Quantity = 1,
-                UnitPrice = taxAmount
-            });
-        }
-
-        _dbContext.Invoices.Add(invoice);
-        await _dbContext.SaveChangesAsync(ct);
-
+        using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
         try
         {
-            await _notificationService.CreateNotificationAsync(
-                appointment.PatientUserId,
-                appointment.AppointmentId,
-                "Billing",
-                "Hóa đơn viện phí mới",
-                $"Hóa đơn #{invoice.InvoiceCode} với tổng tiền {totalAmount:N0} đ đã được tạo cho ca khám của bạn.",
-                ct);
+            if (_dbContext.Database.IsSqlServer())
+            {
+                var lockKey = $"Lock_Appointment_Invoice_{request.AppointmentId}";
+                var applockSql = @"
+                    DECLARE @res int;
+                    EXEC @res = sp_getapplock @Resource = {0}, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000;
+                    IF @res < 0
+                    BEGIN
+                        DECLARE @msg nvarchar(250) = FORMATMESSAGE('Không thể lấy application lock cho ca khám %s. Mã trạng thái: %d', {0}, @res);
+                        THROW 51000, @msg, 1;
+                    END";
+                await _dbContext.Database.ExecuteSqlRawAsync(applockSql, new object[] { lockKey }, ct);
+            }
+
+            var appointment = await _dbContext.Appointments
+                .Include(a => a.PatientUser)
+                .Include(a => a.Invoice)
+                .Include(a => a.AssignedDentistUser)
+                    .ThenInclude(d => d!.User)
+                .Include(a => a.Department)
+                .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId, ct);
+
+            if (appointment == null)
+                return ApiResponse<InvoiceDto>.Fail("Không tìm thấy ca khám chỉ định.");
+
+            var nonBillableStatuses = new[]
+            {
+                AppointmentStatus.Cancelled,
+                AppointmentStatus.NoShow,
+                AppointmentStatus.Rejected,
+                AppointmentStatus.Withdrawn,
+                AppointmentStatus.Expired,
+                AppointmentStatus.PendingReceptionReview,
+                AppointmentStatus.PendingDepartmentReview,
+                AppointmentStatus.AwaitingPatientResponse
+            };
+
+            if (nonBillableStatuses.Contains(appointment.Status))
+            {
+                return ApiResponse<InvoiceDto>.Fail($"Không thể lập hóa đơn cho ca khám ở trạng thái '{appointment.Status}'.");
+            }
+
+            if (appointment.Invoice != null)
+                return ApiResponse<InvoiceDto>.Fail($"Ca khám này đã được lập hóa đơn mã {appointment.Invoice.InvoiceCode}.");
+
+            // Validate staff user ID or pick available staff profile
+            var validStaffUserId = staffUserId;
+            var staffExists = await _dbContext.StaffProfiles.AnyAsync(s => s.UserId == staffUserId, ct);
+            if (!staffExists)
+            {
+                var defaultStaff = await _dbContext.StaffProfiles.OrderBy(s => s.UserId).FirstOrDefaultAsync(ct);
+                if (defaultStaff != null)
+                {
+                    validStaffUserId = defaultStaff.UserId;
+                }
+                else
+                {
+                    return ApiResponse<InvoiceDto>.Fail("Không tìm thấy thông tin nhân viên tiếp nhận hợp lệ trong hệ thống.");
+                }
+            }
+
+            var subTotal = request.Items.Sum(i => i.Quantity * i.UnitPrice);
+            var discount = Math.Max(0, request.DiscountAmount);
+            if (discount > subTotal)
+            {
+                discount = subTotal;
+            }
+
+            var discountedSubTotal = subTotal - discount;
+            var taxPercent = Math.Max(0, request.TaxPercent);
+            var taxAmount = Math.Round(discountedSubTotal * (taxPercent / 100m), 2);
+            var totalAmount = Math.Round(discountedSubTotal + taxAmount, 2);
+
+            var invoiceCode = await GenerateInvoiceCodeAsync(ct);
+
+            var invoice = new Invoice
+            {
+                InvoiceCode = invoiceCode,
+                AppointmentId = appointment.AppointmentId,
+                GeneratedByUserId = validStaffUserId,
+                TotalAmount = totalAmount,
+                Status = "Unpaid",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            foreach (var item in request.Items)
+            {
+                invoice.InvoiceItems.Add(new InvoiceItem
+                {
+                    PerformedServiceId = item.PerformedServiceId,
+                    Description = item.Description.Trim(),
+                    Quantity = item.Quantity,
+                    UnitPrice = item.UnitPrice
+                });
+            }
+
+            // If VAT was specified, record it as a transparent item if requested
+            if (taxPercent > 0 && taxAmount > 0)
+            {
+                invoice.InvoiceItems.Add(new InvoiceItem
+                {
+                    PerformedServiceId = null,
+                    Description = $"Thuế giá trị gia tăng (VAT {taxPercent:G29}%)",
+                    Quantity = 1,
+                    UnitPrice = taxAmount
+                });
+            }
+
+            _dbContext.Invoices.Add(invoice);
+            await _dbContext.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            try
+            {
+                await _notificationService.CreateNotificationAsync(
+                    appointment.PatientUserId,
+                    appointment.AppointmentId,
+                    "Billing",
+                    "Hóa đơn viện phí mới",
+                    $"Hóa đơn #{invoice.InvoiceCode} với tổng tiền {totalAmount:N0} đ đã được tạo cho ca khám của bạn.",
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Không thể gửi thông báo cho bệnh nhân khi tạo hóa đơn {InvoiceCode}", invoice.InvoiceCode);
+            }
+
+            return await GetInvoiceByIdAsync(invoice.InvoiceId, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Không thể gửi thông báo cho bệnh nhân khi tạo hóa đơn {InvoiceCode}", invoice.InvoiceCode);
+            _logger.LogError(ex, "Lỗi khi tạo hóa đơn cho ca khám #{AppointmentId}", request.AppointmentId);
+            throw;
         }
-
-        return await GetInvoiceByIdAsync(invoice.InvoiceId, ct);
     }
 
     public async Task<ApiResponse<InvoiceDto>> ProcessPaymentAsync(

@@ -313,4 +313,60 @@ public class SqlServerPaymentConcurrencyIntegrationTests
         Assert.Equal(AppointmentStatus.InService, apptDb!.Status);
         Assert.Null(apptDb.CompletedAt); // Must not have CompletedAt populated by billing!
     }
+
+    [Fact]
+    public async Task SqlServer_ConcurrentInvoiceCreation_OnlyOneSucceeds_SecondFailsGracefully()
+    {
+        if (!await IsLocalDbAvailableAsync()) return;
+
+        using var db = CreateSqlServerDbContext();
+        var seed = await SeedPaymentTestDataAsync(db);
+
+        var mockNotif = new Mock<INotificationService>();
+        var mockLogger = new Mock<ILogger<BillingService>>();
+
+        var task1 = Task.Run(async () =>
+        {
+            using var db1 = CreateSqlServerDbContext();
+            var service1 = new BillingService(db1, mockNotif.Object, mockLogger.Object);
+            return await service1.CreateInvoiceAsync(seed.StaffUserId, new CreateInvoiceRequest
+            {
+                AppointmentId = seed.AppointmentId,
+                DiscountAmount = 0,
+                TaxPercent = 0,
+                Items = new List<CreateInvoiceItemRequest>
+                {
+                    new() { Description = "Khám tổng quát 1", Quantity = 1, UnitPrice = 300000m }
+                }
+            });
+        });
+
+        var task2 = Task.Run(async () =>
+        {
+            using var db2 = CreateSqlServerDbContext();
+            var service2 = new BillingService(db2, mockNotif.Object, mockLogger.Object);
+            return await service2.CreateInvoiceAsync(seed.StaffUserId, new CreateInvoiceRequest
+            {
+                AppointmentId = seed.AppointmentId,
+                DiscountAmount = 50000m,
+                TaxPercent = 0,
+                Items = new List<CreateInvoiceItemRequest>
+                {
+                    new() { Description = "Khám tổng quát 2", Quantity = 1, UnitPrice = 300000m }
+                }
+            });
+        });
+
+        var results = await Task.WhenAll(task1, task2);
+
+        Assert.Equal(1, results.Count(r => r.Success));
+        Assert.Equal(1, results.Count(r => !r.Success));
+
+        var failed = results.First(r => !r.Success);
+        Assert.Contains("đã được lập hóa đơn", failed.Message);
+
+        using var verifyDb = CreateSqlServerDbContext();
+        var invoices = await verifyDb.Invoices.Where(i => i.AppointmentId == seed.AppointmentId).ToListAsync();
+        Assert.Single(invoices);
+    }
 }

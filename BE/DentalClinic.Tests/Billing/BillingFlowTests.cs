@@ -468,4 +468,335 @@ public class BillingFlowTests
         Assert.False(payResult.Success);
         Assert.Contains("vượt quá", payResult.Message);
     }
+
+    [Fact]
+    public async Task CalculateTotal_DiscountWithoutTax_ShouldCalculateCorrectly()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var request = new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            DiscountAmount = 100000m,
+            TaxPercent = 0m,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Gói tổng quát", Quantity = 1, UnitPrice = 1000000m }
+            }
+        };
+
+        var result = await service.CreateInvoiceAsync(201, request);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.Equal(1000000m, result.Data.SubTotal);
+        Assert.Equal(100000m, result.Data.DiscountAmount);
+        Assert.Equal(0m, result.Data.TaxPercent);
+        Assert.Equal(0m, result.Data.TaxAmount);
+        Assert.Equal(900000m, result.Data.TotalAmount);
+        Assert.Equal(900000m, result.Data.RemainingAmount);
+    }
+
+    [Fact]
+    public async Task CalculateTotal_DiscountWith10PercentTax_ShouldCalculateTaxOnDiscountedSubtotal()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var request = new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            DiscountAmount = 100000m,
+            TaxPercent = 10m,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Gói tổng quát", Quantity = 1, UnitPrice = 1000000m }
+            }
+        };
+
+        var result = await service.CreateInvoiceAsync(201, request);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.Equal(1000000m, result.Data.SubTotal);
+        Assert.Equal(100000m, result.Data.DiscountAmount);
+        Assert.Equal(10m, result.Data.TaxPercent);
+        // Tax is 10% of (1,000,000 - 100,000) = 90,000
+        Assert.Equal(90000m, result.Data.TaxAmount);
+        // Total = 900,000 + 90,000 = 990,000
+        Assert.Equal(990000m, result.Data.TotalAmount);
+        Assert.Equal(990000m, result.Data.RemainingAmount);
+    }
+
+    [Fact]
+    public async Task CalculateTotal_DiscountExceedingSubtotal_ShouldClampDiscountAndResultInZeroTotal()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var request = new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            DiscountAmount = 600000m, // Exceeds 500,000
+            TaxPercent = 10m,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Khám tổng quát", Quantity = 1, UnitPrice = 500000m }
+            }
+        };
+
+        var result = await service.CreateInvoiceAsync(201, request);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.Equal(500000m, result.Data.SubTotal);
+        // Discount clamped to SubTotal
+        Assert.Equal(500000m, result.Data.DiscountAmount);
+        Assert.Equal(0m, result.Data.TaxAmount);
+        Assert.Equal(0m, result.Data.TotalAmount);
+        Assert.Equal(0m, result.Data.RemainingAmount);
+    }
+
+    [Fact]
+    public async Task CreateInvoice_NegativeDiscount_ShouldFailValidation()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var request = new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            DiscountAmount = -50000m,
+            TaxPercent = 10m,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Dịch vụ", Quantity = 1, UnitPrice = 500000m }
+            }
+        };
+
+        var result = await service.CreateInvoiceAsync(201, request);
+
+        Assert.False(result.Success);
+        Assert.Contains("không thể âm", result.Message);
+    }
+
+    [Fact]
+    public async Task CreateInvoice_InvalidTaxPercent_ShouldFailValidation()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var requestNegativeTax = new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            DiscountAmount = 0m,
+            TaxPercent = -5m,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Dịch vụ", Quantity = 1, UnitPrice = 500000m }
+            }
+        };
+
+        var resultNeg = await service.CreateInvoiceAsync(201, requestNegativeTax);
+        Assert.False(resultNeg.Success);
+        Assert.Contains("từ 0% đến 100%", resultNeg.Message);
+
+        var requestExcessiveTax = new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            DiscountAmount = 0m,
+            TaxPercent = 105m,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Dịch vụ", Quantity = 1, UnitPrice = 500000m }
+            }
+        };
+
+        var resultExcess = await service.CreateInvoiceAsync(201, requestExcessiveTax);
+        Assert.False(resultExcess.Success);
+        Assert.Contains("từ 0% đến 100%", resultExcess.Message);
+    }
+
+    [Theory]
+    [InlineData(AppointmentStatus.Cancelled)]
+    [InlineData(AppointmentStatus.NoShow)]
+    [InlineData(AppointmentStatus.PendingReceptionReview)]
+    [InlineData(AppointmentStatus.PendingDepartmentReview)]
+    [InlineData(AppointmentStatus.AwaitingPatientResponse)]
+    [InlineData(AppointmentStatus.Rejected)]
+    [InlineData(AppointmentStatus.Withdrawn)]
+    [InlineData(AppointmentStatus.Expired)]
+    public async Task CreateInvoice_NonBillableAppointmentStatus_ShouldFailValidation(string status)
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+        var appt = await db.Appointments.FindAsync(501L);
+        appt!.Status = status;
+        await db.SaveChangesAsync();
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var request = new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            DiscountAmount = 0m,
+            TaxPercent = 0m,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Dịch vụ", Quantity = 1, UnitPrice = 500000m }
+            }
+        };
+
+        var result = await service.CreateInvoiceAsync(201, request);
+
+        Assert.False(result.Success);
+        Assert.Contains("Không thể lập hóa đơn cho ca khám ở trạng thái", result.Message);
+    }
+
+    [Fact]
+    public async Task ProcessPayment_TwoStagePartialToFullPayment_ShouldTransitionCorrectly()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var createReq = new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            DiscountAmount = 0,
+            TaxPercent = 0,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Trám răng thẩm mỹ", Quantity = 3, UnitPrice = 500000m }
+            }
+        };
+        var createResult = await service.CreateInvoiceAsync(201, createReq);
+        Assert.True(createResult.Success);
+        var invoiceId = createResult.Data!.InvoiceId;
+        Assert.Equal(1500000m, createResult.Data.TotalAmount);
+        Assert.Equal("Unpaid", createResult.Data.Status);
+
+        // Stage 1: Pay 500,000 deposit
+        var pay1 = await service.ProcessPaymentAsync(201, new ProcessPaymentRequest
+        {
+            InvoiceId = invoiceId,
+            Amount = 500000m,
+            Method = "Cash",
+            TransactionReference = "DEP-001"
+        });
+        Assert.True(pay1.Success);
+        Assert.Equal("PartiallyPaid", pay1.Data!.Status);
+        Assert.Equal(500000m, pay1.Data.PaidAmount);
+        Assert.Equal(1000000m, pay1.Data.RemainingAmount);
+
+        // Stage 2: Settle remaining 1,000,000
+        var pay2 = await service.ProcessPaymentAsync(201, new ProcessPaymentRequest
+        {
+            InvoiceId = invoiceId,
+            Amount = 1000000m,
+            Method = "BankTransfer",
+            TransactionReference = "SETTLE-002"
+        });
+        Assert.True(pay2.Success);
+        Assert.Equal("Paid", pay2.Data!.Status);
+        Assert.Equal(1500000m, pay2.Data.PaidAmount);
+        Assert.Equal(0m, pay2.Data.RemainingAmount);
+
+        // Clinical status of appointment should not be modified
+        var appt = await db.Appointments.FindAsync(501L);
+        Assert.Equal(AppointmentStatus.InService, appt!.Status);
+    }
+
+    [Fact]
+    public async Task GetPatientInvoices_ShouldIsolateInvoicesByPatient()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+
+        // Seed second patient & appointment
+        var patient2User = new UserAccount
+        {
+            UserId = 102,
+            Email = "patient2@clinic.com",
+            Role = UserRole.Patient,
+            Status = AccountStatus.Active
+        };
+        var patient2Profile = new PatientProfile
+        {
+            UserId = 102,
+            PatientCode = "PAT-002",
+            FullName = "Trần Thị B",
+            EmergencyContact = "0911223344",
+            CreatedAt = DateTime.UtcNow
+        };
+        var appt2 = new Appointment
+        {
+            AppointmentId = 502,
+            AppointmentCode = "APT-20261013-002",
+            PatientUserId = 102,
+            DepartmentId = 1,
+            RequestedServiceId = 1,
+            ReasonForVisit = "Khám răng định kỳ",
+            BookingSource = "Online",
+            Status = AppointmentStatus.InService,
+            ScheduledStart = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.UserAccounts.Add(patient2User);
+        db.PatientProfiles.Add(patient2Profile);
+        db.Appointments.Add(appt2);
+        await db.SaveChangesAsync();
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+
+        // Invoice for Patient 101
+        await service.CreateInvoiceAsync(201, new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            DiscountAmount = 0,
+            TaxPercent = 0,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Dịch vụ bệnh nhân 1", Quantity = 1, UnitPrice = 400000m }
+            }
+        });
+
+        // Invoice for Patient 102
+        await service.CreateInvoiceAsync(201, new CreateInvoiceRequest
+        {
+            AppointmentId = 502,
+            DiscountAmount = 0,
+            TaxPercent = 0,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Dịch vụ bệnh nhân 2", Quantity = 1, UnitPrice = 750000m }
+            }
+        });
+
+        // Query patient 101
+        var invoices101 = await service.GetPatientInvoicesAsync(101);
+        Assert.True(invoices101.Success);
+        Assert.Single(invoices101.Data!);
+        Assert.Equal(501L, invoices101.Data![0].AppointmentId);
+        Assert.Equal(101L, invoices101.Data![0].PatientUserId);
+
+        // Query patient 102
+        var invoices102 = await service.GetPatientInvoicesAsync(102);
+        Assert.True(invoices102.Success);
+        Assert.Single(invoices102.Data!);
+        Assert.Equal(502L, invoices102.Data![0].AppointmentId);
+        Assert.Equal(102L, invoices102.Data![0].PatientUserId);
+    }
 }

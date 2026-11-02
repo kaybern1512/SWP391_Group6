@@ -441,7 +441,7 @@
                         </div>
                         <input type="number" name="Amount" id="payAmountInput" class="form-control form-control-lg fw-bold text-success" value="@Model.RemainingAmount" max="@Model.RemainingAmount" min="1000" step="1000" required />
                         <div class="form-text small text-muted">
-                            <i class="bi bi-info-circle me-1"></i>Nếu thu đủ @Model.RemainingAmount.ToString("N0") đ, hệ thống sẽ tự động cập nhật trạng thái ca khám thành <strong>Completed (Hoàn thành)</strong>.
+                            <i class="bi bi-info-circle me-1"></i>Khi thu đủ @Model.RemainingAmount.ToString("N0") đ, hóa đơn sẽ chuyển sang trạng thái <strong>Đã thanh toán (Paid)</strong>. Trạng thái ca khám lâm sàng do Bác sĩ phụ trách hoàn tất.
                         </div>
                     </div>
 
