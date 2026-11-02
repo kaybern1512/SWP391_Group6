@@ -1,65 +1,229 @@
 @model DentalClinic.Web.ViewModels.PostCare.PatientFollowUpIndexViewModel
 @{
-    ViewData["Title"] = "Theo Dõi Tái Khám";
+    ViewData["Title"] = "Quản Lý & Theo Dõi Tái Khám";
+    var activeTab = (string?)ViewBag.ActiveTab ?? "due";
+    var today = DateTime.Today;
+
+    var overdueList = Model.FollowUps.Where(f => f.RecommendedDate.Date < today && f.Status == "Pending").ToList();
+    var dueThisWeekList = Model.FollowUps.Where(f => f.RecommendedDate.Date >= today && f.RecommendedDate.Date <= today.AddDays(7) && (f.Status == "Pending" || f.Status == "Confirmed")).ToList();
+    var upcomingList = Model.FollowUps.Where(f => f.RecommendedDate.Date > today.AddDays(7) && f.Status == "Pending").ToList();
+    var completedList = Model.FollowUps.Where(f => f.Status == "Completed" || f.Status == "Cancelled").ToList();
+
+    List<DentalClinic.Web.Models.ApiDtos.FollowUpScheduleDto> displayList;
+    if (activeTab == "overdue") displayList = overdueList;
+    else if (activeTab == "upcoming") displayList = upcomingList;
+    else if (activeTab == "completed") displayList = completedList;
+    else if (activeTab == "all") displayList = Model.FollowUps;
+    else displayList = dueThisWeekList;
 }
 
 <div class="container-fluid px-0">
-    <div class="mb-4">
-        <h1 class="h3 fw-bold text-dark mb-1">
-            <i class="bi bi-telephone-forward me-2 text-primary"></i>Danh Sách Theo Dõi Tái Khám
-        </h1>
-        <p class="text-muted mb-0">Liên hệ bệnh nhân để nhắc lịch tái khám theo chỉ định của bác sĩ.</p>
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-telephone-forward me-2 text-primary"></i>Quản Lý & CSKH Tái Khám
+            </h1>
+            <p class="text-muted mb-0">Theo dõi, liên hệ nhắc lịch và cập nhật phản hồi tái khám của bệnh nhân sau điều trị.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <span class="badge bg-danger-subtle text-danger border border-danger-subtle fs-6 px-3 py-2">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i> Quá hạn: @overdueList.Count
+            </span>
+            <span class="badge bg-warning-subtle text-dark border border-warning-subtle fs-6 px-3 py-2">
+                <i class="bi bi-clock-history me-1"></i> Tuần này: @dueThisWeekList.Count
+            </span>
+        </div>
     </div>
 
-    <div class="card border-0 shadow-sm">
+    <partial name="_AlertMessage" />
+
+    <!-- Filter Tabs -->
+    <ul class="nav nav-pills mb-4 gap-2 bg-light p-2 rounded-3 border">
+        <li class="nav-item">
+            <a class="nav-link fw-semibold @(activeTab == "due" ? "active" : "")" asp-action="Index" asp-route-tab="due">
+                <i class="bi bi-bell-fill me-1 text-warning"></i> Đến Hạn Tuần Này
+                <span class="badge bg-white text-dark ms-1">@dueThisWeekList.Count</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link fw-semibold @(activeTab == "overdue" ? "active btn-danger" : "text-danger")" asp-action="Index" asp-route-tab="overdue">
+                <i class="bi bi-exclamation-circle-fill me-1"></i> Quá Hạn Cần Gọi Gấp
+                <span class="badge @(activeTab == "overdue" ? "bg-white text-danger" : "bg-danger text-white") ms-1">@overdueList.Count</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link fw-semibold @(activeTab == "upcoming" ? "active" : "")" asp-action="Index" asp-route-tab="upcoming">
+                <i class="bi bi-calendar-week me-1"></i> Sắp Tới (>7 ngày)
+                <span class="badge bg-white text-dark ms-1">@upcomingList.Count</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link fw-semibold @(activeTab == "completed" ? "active" : "")" asp-action="Index" asp-route-tab="completed">
+                <i class="bi bi-check2-all me-1"></i> Đã Tái Khám / Hoàn Tất
+                <span class="badge bg-white text-dark ms-1">@completedList.Count</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link fw-semibold @(activeTab == "all" ? "active" : "")" asp-action="Index" asp-route-tab="all">
+                Tất Cả (@Model.FollowUps.Count)
+            </a>
+        </li>
+    </ul>
+
+    <!-- Table -->
+    <div class="card border-0 shadow-sm rounded-3">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-4">Ngày tái khám</th>
-                        <th>Bệnh nhân</th>
-                        <th>Điện thoại</th>
-                        <th>Chuyên khoa / Bác sĩ</th>
-                        <th>Nội dung</th>
-                        <th>Trạng thái</th>
+                        <th class="ps-4">Hạn Tái Khám</th>
+                        <th>Bệnh Nhân</th>
+                        <th>Điện Thoại / Liên Hệ</th>
+                        <th>Khoa & Bác Sĩ</th>
+                        <th>Chỉ Định / Ghi Chú</th>
+                        <th>Trạng Thái</th>
+                        <th class="pe-4 text-end" style="min-width: 220px;">Thao Tác CSKH</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @if (Model.FollowUps.Count == 0)
+                    @if (displayList.Count == 0)
                     {
                         <tr>
-                            <td colspan="6" class="text-center text-muted py-5">Chưa có lịch tái khám cần theo dõi.</td>
+                            <td colspan="7" class="text-center text-muted py-5">
+                                <i class="bi bi-clipboard2-check fs-2 d-block mb-2 text-secondary"></i>
+                                Không có lịch tái khám nào trong danh mục này.
+                            </td>
                         </tr>
                     }
                     else
                     {
-                        @foreach (var followUp in Model.FollowUps)
+                        @foreach (var f in displayList)
                         {
-                            <tr>
-                                <td class="ps-4 fw-semibold">@followUp.RecommendedDate.ToString("dd/MM/yyyy")</td>
-                                <td>
-                                    <div class="fw-semibold">@followUp.PatientName</div>
-                                    <div class="small text-muted">@followUp.PatientCode</div>
+                            var daysDiff = (f.RecommendedDate.Date - today).Days;
+                            var isOverdue = daysDiff < 0 && f.Status == "Pending";
+                            <tr class="@(isOverdue ? "table-danger-subtle" : "")">
+                                <td class="ps-4">
+                                    <div class="fw-bold @(isOverdue ? "text-danger" : "text-dark")">
+                                        <i class="bi bi-calendar-event me-1"></i>@f.RecommendedDate.ToString("dd/MM/yyyy")
+                                    </div>
+                                    @if (f.Status == "Pending" || f.Status == "Confirmed")
+                                    {
+                                        if (daysDiff < 0)
+                                        {
+                                            <span class="badge bg-danger text-white">Quá hạn @Math.Abs(daysDiff) ngày</span>
+                                        }
+                                        else if (daysDiff == 0)
+                                        {
+                                            <span class="badge bg-warning text-dark fw-bold">Hôm nay</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-info-subtle text-info border">Còn @daysDiff ngày</span>
+                                        }
+                                    }
                                 </td>
                                 <td>
-                                    @if (!string.IsNullOrWhiteSpace(followUp.PatientPhoneNumber))
+                                    <div class="fw-bold text-dark">@f.PatientName</div>
+                                    <div class="small text-muted font-monospace">@f.PatientCode</div>
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(f.PatientPhoneNumber))
                                     {
-                                        <a href="tel:@followUp.PatientPhoneNumber">@followUp.PatientPhoneNumber</a>
+                                        <a href="tel:@f.PatientPhoneNumber" class="btn btn-sm btn-outline-success fw-bold py-1 px-2">
+                                            <i class="bi bi-telephone-fill me-1"></i>@f.PatientPhoneNumber
+                                        </a>
                                     }
                                     else
                                     {
-                                        <span class="text-muted">Chưa có số điện thoại</span>
+                                        <span class="text-muted small">Chưa có SĐT</span>
                                     }
                                 </td>
                                 <td>
-                                    <div>@followUp.DepartmentName</div>
-                                    <div class="small text-muted">BS. @followUp.DentistName</div>
+                                    <div class="fw-semibold text-dark">@f.DepartmentName</div>
+                                    <div class="small text-muted">BS: @f.DentistName</div>
                                 </td>
-                                <td>@followUp.Reason</td>
                                 <td>
-                                    <span class="badge @(followUp.Status == "Completed" ? "bg-success" : followUp.Status == "Cancelled" ? "bg-secondary" : "bg-warning text-dark")">
-                                        @followUp.Status
-                                    </span>
+                                    <div class="small text-dark" style="max-width: 260px;">@f.Reason</div>
+                                </td>
+                                <td>
+                                    @if (f.Status == "Confirmed")
+                                    {
+                                        <span class="badge bg-primary text-white"><i class="bi bi-check-circle me-1"></i>Đã gọi xác nhận</span>
+                                    }
+                                    else if (f.Status == "Completed")
+                                    {
+                                        <span class="badge bg-success"><i class="bi bi-check2-circle me-1"></i>Đã tái khám</span>
+                                    }
+                                    else if (isOverdue)
+                                    {
+                                        <span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>Quá hạn</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Chờ tái khám</span>
+                                    }
+                                </td>
+                                <td class="pe-4 text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        @if (f.Status == "Pending")
+                                        {
+                                            <form asp-action="Confirm" asp-route-id="@f.FollowUpId" asp-route-tab="@activeTab" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-outline-primary" title="Xác nhận đã gọi điện nhắc lịch">
+                                                    <i class="bi bi-telephone-check me-1"></i>Đã Gọi
+                                                </button>
+                                            </form>
+                                        }
+
+                                        @if (f.Status != "Completed")
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#rescheduleModal_@f.FollowUpId" title="Dời lịch hẹn theo yêu cầu của bệnh nhân">
+                                                <i class="bi bi-calendar-range me-1"></i>Dời Lịch
+                                            </button>
+
+                                            <form asp-action="Complete" asp-route-id="@f.FollowUpId" asp-route-tab="@activeTab" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-outline-success" title="Đánh dấu đã hoàn thành đợt tái khám" onclick="return confirm('Xác nhận bệnh nhân đã tái khám hoàn tất?');">
+                                                    <i class="bi bi-check-lg me-1"></i>Xong
+                                                </button>
+                                            </form>
+                                        }
+                                    </div>
+
+                                    <!-- Modal Dời Lịch -->
+                                    <div class="modal fade text-start" id="rescheduleModal_@f.FollowUpId" tabindex="-1" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered">
+                                            <div class="modal-content">
+                                                <form asp-action="Reschedule" asp-route-id="@f.FollowUpId" asp-route-tab="@activeTab" method="post">
+                                                    @Html.AntiForgeryToken()
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title fw-bold">
+                                                            <i class="bi bi-calendar-range me-2 text-primary"></i>Dời Ngày Tái Khám
+                                                        </h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <p class="mb-2"><strong>Bệnh nhân:</strong> @f.PatientName (@f.PatientCode)</p>
+                                                        <p class="text-muted small mb-3"><strong>Bác sĩ phụ trách:</strong> BS. @f.DentistName (@f.DepartmentName)</p>
+                                                        
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-semibold">Chọn ngày hẹn tái khám mới <span class="text-danger">*</span></label>
+                                                            <input type="date" name="newDate" class="form-control" min="@today.AddDays(1).ToString("yyyy-MM-dd")" value="@(f.RecommendedDate > today ? f.RecommendedDate.ToString("yyyy-MM-dd") : today.AddDays(3).ToString("yyyy-MM-dd"))" required />
+                                                        </div>
+
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-semibold">Ghi chú cuộc gọi / Lý do dời ngày</label>
+                                                            <textarea name="note" class="form-control" rows="2" placeholder="Ví dụ: Bệnh nhân bận công tác, xin dời sang tuần sau..."></textarea>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                                                        <button type="submit" class="btn btn-primary fw-semibold">Lưu Ngày Mới</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                         }

@@ -68,6 +68,34 @@ public class PostCareApiService : IPostCareApiService
         return await SendGetAsync<List<FollowUpScheduleDto>>("/api/post-care/follow-ups/receptionist");
     }
 
+    public async Task<ApiResult<FollowUpScheduleDto>> UpdateFollowUpStatusAsync(long followUpId, UpdateFollowUpStatusRequest request)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(request, _jsonOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var requestMsg = new HttpRequestMessage(HttpMethod.Patch, $"/api/post-care/follow-ups/{followUpId}/status")
+            {
+                Content = content
+            };
+            var response = await _httpClient.SendAsync(requestMsg);
+            var body = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+            {
+                var apiResponse = TryDeserialize<ApiResponse<FollowUpScheduleDto>>(body);
+                if (apiResponse != null && apiResponse.Success)
+                {
+                    return ApiResult<FollowUpScheduleDto>.Success(apiResponse.Data, apiResponse.Message, (int)response.StatusCode);
+                }
+            }
+            return ApiResult<FollowUpScheduleDto>.Failure("Không thể cập nhật trạng thái lịch tái khám.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi gọi API cập nhật lịch tái khám {FollowUpId}", followUpId);
+            return ApiResult<FollowUpScheduleDto>.Failure("Lỗi kết nối khi cập nhật lịch tái khám.");
+        }
+    }
     // ==========================================
     // HTTP HELPERS
     // ==========================================
