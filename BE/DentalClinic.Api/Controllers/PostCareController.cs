@@ -122,4 +122,15 @@ public class PostCareController : ControllerBase
         var result = await _postCareService.GetReceptionistFollowUpsAsync(ct);
         return Ok(result);
     }
+    [HttpPatch("follow-ups/{id:long}/status")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.Patient}")]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpScheduleDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpScheduleDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateFollowUpStatus(long id, [FromBody] UpdateFollowUpStatusRequest request, CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        var result = await _postCareService.UpdateFollowUpStatusAsync(currentUserId, id, request, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
 }
