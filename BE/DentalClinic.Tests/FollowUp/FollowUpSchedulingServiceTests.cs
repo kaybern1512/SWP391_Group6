@@ -1312,4 +1312,326 @@ public class FollowUpSchedulingServiceTests
         Assert.False(response.Success);
         Assert.True(response.Message.Contains("trùng lịch") || response.Message.Contains("đã có cuộc hẹn") || response.Message.Contains("không còn khả dụng"));
     }
+
+    [Fact]
+    public async Task GetReceptionistReminders_ReturnsExpectedList_ExcludesCancelled()
+    {
+        using var db = CreateDbContext("Reminders_Test1");
+        var today = DateTime.Today;
+
+        var apptValid = new Appointment
+        {
+            AppointmentId = 801,
+            AppointmentCode = "APT-REM-01",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = today.AddHours(9),
+            ScheduledEnd = today.AddHours(9).AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Tái khám kiểm tra tủy răng",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(apptValid);
+
+        var followUpValid = new FollowUpSchedule
+        {
+            FollowUpId = 901,
+            AppointmentId = 801,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Scheduled",
+            Reason = "Tái khám tủy",
+            Appointment = apptValid
+        };
+        db.FollowUpSchedules.Add(followUpValid);
+
+        var apptCancelled = new Appointment
+        {
+            AppointmentId = 802,
+            AppointmentCode = "APT-REM-02",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = today.AddHours(11),
+            ScheduledEnd = today.AddHours(11).AddMinutes(30),
+            Status = AppointmentStatus.Cancelled,
+            ReasonForVisit = "Lịch đã hủy",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(apptCancelled);
+
+        var followUpCancelled = new FollowUpSchedule
+        {
+            FollowUpId = 902,
+            AppointmentId = 802,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Scheduled",
+            Reason = "Lịch hủy",
+            Appointment = apptCancelled
+        };
+        db.FollowUpSchedules.Add(followUpCancelled);
+
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+        var response = await service.GetReceptionistRemindersAsync();
+
+        Assert.True(response.Success);
+        Assert.NotNull(response.Data);
+        Assert.Contains(response.Data, r => r.FollowUpId == 901);
+        Assert.DoesNotContain(response.Data, r => r.FollowUpId == 902);
+    }
+
+    [Fact]
+    public async Task GetReceptionistReminders_DateFilters_TodayAndTomorrow()
+    {
+        using var db = CreateDbContext("Reminders_Test2");
+        var today = DateTime.Today;
+        var tomorrow = today.AddDays(1);
+
+        var apptToday = new Appointment
+        {
+            AppointmentId = 811,
+            AppointmentCode = "APT-TODAY",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = today.AddHours(14),
+            ScheduledEnd = today.AddHours(14).AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Tái khám hôm nay",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(apptToday);
+        db.FollowUpSchedules.Add(new FollowUpSchedule
+        {
+            FollowUpId = 911,
+            AppointmentId = 811,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Scheduled",
+            Appointment = apptToday
+        });
+
+        var apptTomorrow = new Appointment
+        {
+            AppointmentId = 812,
+            AppointmentCode = "APT-TOMORROW",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = tomorrow.AddHours(10),
+            ScheduledEnd = tomorrow.AddHours(10).AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Tái khám ngày mai",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(apptTomorrow);
+        db.FollowUpSchedules.Add(new FollowUpSchedule
+        {
+            FollowUpId = 912,
+            AppointmentId = 812,
+            TreatmentSessionId = 1,
+            RecommendedDate = tomorrow,
+            Status = "Scheduled",
+            Appointment = apptTomorrow
+        });
+
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var todayRes = await service.GetReceptionistRemindersAsync("today");
+        Assert.True(todayRes.Success);
+        Assert.Contains(todayRes.Data!, r => r.FollowUpId == 911);
+        Assert.DoesNotContain(todayRes.Data!, r => r.FollowUpId == 912);
+
+        var tomorrowRes = await service.GetReceptionistRemindersAsync("tomorrow");
+        Assert.True(tomorrowRes.Success);
+        Assert.Contains(tomorrowRes.Data!, r => r.FollowUpId == 912);
+        Assert.DoesNotContain(tomorrowRes.Data!, r => r.FollowUpId == 911);
+    }
+
+    [Fact]
+    public async Task UpdateReminderCallStatus_ValidCall_UpdatesStatusAndAuditLog()
+    {
+        using var db = CreateDbContext("Reminders_Test3");
+        var today = DateTime.Today;
+
+        var recUser = new UserAccount
+        {
+            UserId = 50,
+            Email = "receptionist@dentalcare.com",
+            Role = UserRole.Receptionist,
+            Status = "Active"
+        };
+        var recStaff = new StaffProfile
+        {
+            UserId = 50,
+            EmployeeCode = "REC01",
+            FullName = "Lễ Tân Mai Hoa",
+            EmploymentStatus = "Active"
+        };
+        db.UserAccounts.Add(recUser);
+        db.StaffProfiles.Add(recStaff);
+
+        var appt = new Appointment
+        {
+            AppointmentId = 821,
+            AppointmentCode = "APT-CALL-01",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = today.AddHours(15),
+            ScheduledEnd = today.AddHours(15).AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Tái khám chỉnh nha",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(appt);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 921,
+            AppointmentId = 821,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Scheduled",
+            Appointment = appt
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var request = new UpdateReminderCallStatusRequest
+        {
+            FollowUpId = 921,
+            CallStatus = "Called",
+            Note = "Bệnh nhân xác nhận sẽ có mặt đúng 15h"
+        };
+
+        var response = await service.UpdateReminderCallStatusAsync(50, request);
+
+        Assert.True(response.Success);
+        Assert.Equal("Called", response.Data?.CallStatus);
+        Assert.Equal("Lễ Tân Mai Hoa", response.Data?.LastCallerName);
+        Assert.Equal("Bệnh nhân xác nhận sẽ có mặt đúng 15h", response.Data?.CallNote);
+
+        var updatedFollowUp = await db.FollowUpSchedules.FindAsync(921L);
+        Assert.NotNull(updatedFollowUp);
+        Assert.Equal("Called", updatedFollowUp.Status);
+
+        var audit = await db.AuditLogs.FirstOrDefaultAsync(a => a.EntityId == "921" && a.Action == "FollowUpReminderCall");
+        Assert.NotNull(audit);
+        Assert.Equal(50, audit.UserId);
+        Assert.Contains("Called", audit.NewValues);
+        Assert.Contains("Lễ Tân Mai Hoa", audit.NewValues);
+    }
+
+    [Fact]
+    public async Task UpdateReminderCallStatus_Unreachable_UpdatesStatus()
+    {
+        using var db = CreateDbContext("Reminders_Test4");
+        var today = DateTime.Today;
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 922,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Scheduled"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var request = new UpdateReminderCallStatusRequest
+        {
+            FollowUpId = 922,
+            CallStatus = "Unreachable",
+            Note = "Máy bận, đã gọi 2 lần không nghe"
+        };
+
+        var response = await service.UpdateReminderCallStatusAsync(50, request);
+
+        Assert.True(response.Success);
+        Assert.Equal("Unreachable", response.Data?.CallStatus);
+
+        var updated = await db.FollowUpSchedules.FindAsync(922L);
+        Assert.Equal("Unreachable", updated?.Status);
+    }
+
+    [Fact]
+    public async Task UpdateReminderCallStatus_CancelledAppointment_Fails()
+    {
+        using var db = CreateDbContext("Reminders_Test5");
+        var today = DateTime.Today;
+
+        var appt = new Appointment
+        {
+            AppointmentId = 823,
+            AppointmentCode = "APT-CANCELLED",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = today.AddHours(16),
+            ScheduledEnd = today.AddHours(16).AddMinutes(30),
+            Status = AppointmentStatus.Cancelled,
+            ReasonForVisit = "Đã hủy",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(appt);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 923,
+            AppointmentId = 823,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Scheduled",
+            Appointment = appt
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var request = new UpdateReminderCallStatusRequest
+        {
+            FollowUpId = 923,
+            CallStatus = "Called"
+        };
+
+        var response = await service.UpdateReminderCallStatusAsync(50, request);
+
+        Assert.False(response.Success);
+        Assert.Contains("hủy", response.Message);
+    }
+
+    [Fact]
+    public async Task UpdateReminderCallStatus_InvalidStatus_Fails()
+    {
+        using var db = CreateDbContext("Reminders_Test6");
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 924,
+            TreatmentSessionId = 1,
+            RecommendedDate = DateTime.Today,
+            Status = "Scheduled"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var request = new UpdateReminderCallStatusRequest
+        {
+            FollowUpId = 924,
+            CallStatus = "UnknownHackStatus"
+        };
+
+        var response = await service.UpdateReminderCallStatusAsync(50, request);
+
+        Assert.False(response.Success);
+        Assert.Contains("không hợp lệ", response.Message);
+    }
 }

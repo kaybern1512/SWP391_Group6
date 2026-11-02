@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using DentalClinic.Web.Controllers.Dentist;
 using DentalClinic.Web.Controllers.Department;
 using DentalClinic.Web.Controllers.Patient;
+using DentalClinic.Web.Controllers.Receptionist;
 using DentalClinic.Web.Models.Api;
 using DentalClinic.Web.Models.ApiDtos;
 using DentalClinic.Web.Services;
@@ -255,6 +256,82 @@ public class PostCareWebControllerTests
         };
 
         var result = await controller.ResolveProposal(req);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task ReceptionistFollowUpController_Index_ReturnsViewWithStatsAndReminders()
+    {
+        var today = DateTime.Today;
+        var reminders = new List<FollowUpReminderDto>
+        {
+            new() { FollowUpId = 1, PatientName = "Bệnh nhân A", FollowUpDate = today, CallStatus = "NotCalled" },
+            new() { FollowUpId = 2, PatientName = "Bệnh nhân B", FollowUpDate = today.AddDays(1), CallStatus = "Called" }
+        };
+
+        _postCareApiMock.Setup(x => x.GetReceptionistRemindersAsync(null, null))
+            .ReturnsAsync(ApiResult<List<FollowUpReminderDto>>.Success(reminders));
+        _postCareApiMock.Setup(x => x.GetReceptionistRemindersAsync("today", "NotCalled"))
+            .ReturnsAsync(ApiResult<List<FollowUpReminderDto>>.Success(new List<FollowUpReminderDto> { reminders[0] }));
+
+        var controller = new ReceptionistFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(50, "Receptionist", "Lễ Tân Hoa"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.Index("today", "NotCalled");
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var model = viewResult.Model.Should().BeOfType<ReceptionistFollowUpIndexViewModel>().Subject;
+        model.Reminders.Should().HaveCount(1);
+        model.TodayCount.Should().Be(1);
+        model.TomorrowCount.Should().Be(1);
+        model.NotCalledCount.Should().Be(1);
+        model.CalledCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ReceptionistFollowUpController_UpdateCallStatus_Success_ReturnsOk()
+    {
+        var req = new UpdateReminderCallStatusRequest
+        {
+            FollowUpId = 1,
+            CallStatus = "Called",
+            Note = "Đã gọi xác nhận"
+        };
+
+        _postCareApiMock.Setup(x => x.UpdateReminderCallStatusAsync(req))
+            .ReturnsAsync(ApiResult<FollowUpReminderDto>.Success(new FollowUpReminderDto { FollowUpId = 1, CallStatus = "Called" }, "Cập nhật thành công"));
+
+        var controller = new ReceptionistFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(50, "Receptionist", "Lễ Tân Hoa"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.UpdateCallStatus(req);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task ReceptionistFollowUpController_UpdateCallStatus_Invalid_ReturnsBadRequest()
+    {
+        var req = new UpdateReminderCallStatusRequest
+        {
+            FollowUpId = 0,
+            CallStatus = ""
+        };
+
+        var controller = new ReceptionistFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(50, "Receptionist", "Lễ Tân Hoa"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.UpdateCallStatus(req);
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
