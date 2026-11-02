@@ -4,6 +4,7 @@
 }
 
 <div class="container-fluid px-0">
+    @Html.AntiForgeryToken()
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <div class="d-flex align-items-center gap-2 mb-1">
@@ -105,7 +106,7 @@
                                     <option value="">-- Chọn dịch vụ nha khoa --</option>
                                     @foreach (var s in Model.AvailableServices)
                                     {
-                                        <option value="@s.ServiceId" data-name="@s.ServiceName" data-price="@s.Price">
+                                        <option value="@s.ServiceId" data-name="@s.ServiceName" data-price="@Convert.ToInt64(s.Price)">
                                             @s.ServiceName - @s.Price.ToString("N0") đ (@s.DepartmentName)
                                         </option>
                                     }
@@ -144,7 +145,7 @@
                                                 <input type="number" class="form-control form-control-sm text-center item-qty" value="@item.Quantity" min="1" required />
                                             </td>
                                             <td>
-                                                <input type="number" class="form-control form-control-sm text-end item-price" value="@item.UnitPrice" min="0" step="1000" required />
+                                                <input type="number" class="form-control form-control-sm text-end item-price" value="@Convert.ToInt64(item.UnitPrice)" min="0" step="1000" required />
                                             </td>
                                             <td class="text-end fw-semibold item-subtotal">
                                                 @((item.Quantity * item.UnitPrice).ToString("N0")) đ
@@ -283,7 +284,7 @@
 
                 rows.forEach(row => {
                     const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
-                    const price = parseFloat(row.querySelector('.item-price').value) || 0;
+                    let priceVal = row.querySelector('.item-price').value; if (typeof priceVal === 'string') priceVal = priceVal.replace(',', '.'); const price = parseFloat(priceVal) || 0;
                     const lineTotal = qty * price;
                     row.querySelector('.item-subtotal').textContent = formatMoney(lineTotal);
                     subTotal += lineTotal;
@@ -327,7 +328,7 @@
                 let subTotal = 0;
                 itemsBody.querySelectorAll('.item-row').forEach(row => {
                     const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
-                    const price = parseFloat(row.querySelector('.item-price').value) || 0;
+                    let priceVal = row.querySelector('.item-price').value; if (typeof priceVal === 'string') priceVal = priceVal.replace(',', '.'); const price = parseFloat(priceVal) || 0;
                     subTotal += qty * price;
                 });
 
@@ -450,7 +451,7 @@
                     const descInput = row.querySelector('.item-desc');
                     const desc = descInput.value.trim();
                     const qty = parseInt(row.querySelector('.item-qty').value) || 0;
-                    const price = parseFloat(row.querySelector('.item-price').value) || 0;
+                    let priceVal = row.querySelector('.item-price').value; if (typeof priceVal === 'string') priceVal = priceVal.replace(',', '.'); const price = parseFloat(priceVal) || 0;
                     const perfId = row.getAttribute('data-performed-id');
 
                     if (!desc) {
@@ -500,11 +501,18 @@
                         })
                     });
 
-                    const res = await response.json();
-                    if (res.success) {
+                    let res = null;
+                    try {
+                        res = await response.json();
+                    } catch (e) {
+                        console.error('Non-JSON response:', e);
+                    }
+
+                    if (response.ok && res && res.success) {
                         window.location.href = res.redirectUrl;
                     } else {
-                        alert(res.message || 'Lỗi khi tạo hóa đơn.');
+                        const errMsg = (res && res.message) ? res.message : ('Lỗi khi tạo hóa đơn (HTTP ' + response.status + ').');
+                        alert(errMsg);
                         btnSubmitInvoice.disabled = false;
                         btnSubmitInvoice.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Khởi Tạo Hóa Đơn & Chuyển Sang Thu Tiền';
                     }
