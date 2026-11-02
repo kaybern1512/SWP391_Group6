@@ -17,7 +17,7 @@
 | **Day 03** | Doctor Creates Follow-up Appointment | **COMPLETED** | `41a7140` | BE 369/370 (3 new tests passed), FE 259/259 | Doctor booking modal, safeguards, notification |
 | **Day 04** | Patient Requests Reschedule or Rebook | **COMPLETED** | `33ff069` | BE 376/377 (7 new tests passed), FE 261/261 (2 new tests passed) | Patient reschedule & rebook proposals, live slots UI, withdrawal |
 | **Day 05** | Doctor Approves or Rejects Requests | **COMPLETED** | `dc4b7c3` | BE 382/383 (6 new tests passed), FE 263/263 (2 new tests passed) | Doctor proposal resolution dashboard, modals, conflict rollback |
-| **Day 06** | Receptionist Reminder Workflow | PENDING | — | — | Receptionist recall dashboard & call tracking |
+| **Day 06** | Receptionist Reminder Workflow | **COMPLETED** | `0f581a9` | BE 388/389 (6 new tests passed), FE 266/266 (3 new tests passed) | Receptionist recall dashboard, filters & durable AuditLog tracking |
 | **Day 07** | Full Integration, Regression & Final Hardening | PENDING | — | — | E2E verification, hardening & report |
 
 ---
@@ -75,4 +75,15 @@
   - Added 6 BE unit tests covering approval, rejection, conflict rollback, and authorization.
   - Added 2 FE unit tests covering controller actions.
   - Detailed report written to `docs/followup-appointments/DAY05_DOCTOR_APPROVAL_REPORT.md`.
+
+## Day 06 Summary
+- **Tasks completed:**
+  - Implemented `GetReceptionistRemindersAsync` in `FollowUpSchedulingService` with date filters (`today`, `tomorrow`, `all`), call status filters (`NotCalled`, `Called`, `Unreachable`, `all`), and cancellation exclusion.
+  - Implemented `UpdateReminderCallStatusAsync` with validation, cancellation guard, and durable SQL audit logging in `AuditLogs` (`Action = "FollowUpReminderCall"`).
+  - Exposed receptionist endpoints in `PostCareController` secured by `[Authorize(Roles = "Receptionist,SystemAdministrator")]`.
+  - Upgraded Receptionist dashboard in `Receptionist/FollowUps/Index.cshtml` with summary statistics cards, filter button groups, clickable phone dialing links, and operational guidance banner.
+  - Built interactive modal `#modalCallStatus` with status choices, note textarea, loading indicator, and double-submit prevention.
+  - Added 6 BE unit tests and 3 FE controller tests covering reminder queries, filtering, status updates, and audit logging.
+  - Detailed report written to `docs/followup-appointments/DAY06_RECEPTIONIST_WORKFLOW_REPORT.md`.
+
 
