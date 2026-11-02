@@ -15,8 +15,8 @@
 | **Day 01** | Branch Setup & Architecture Research | **COMPLETED** | `f8bb8a5` | BE 354/355, FE 259/259 | Completed baseline survey and docs |
 | **Day 02** | Backend Availability & Scheduling Validation | **COMPLETED** | `58b21c7` | BE 366/367 (12 new tests passed) | Schedule, slot availability & conflict protection |
 | **Day 03** | Doctor Creates Follow-up Appointment | **COMPLETED** | `41a7140` | BE 369/370 (3 new tests passed), FE 259/259 | Doctor booking modal, safeguards, notification |
-| **Day 04** | Patient Requests Reschedule or Rebook | **IN PROGRESS** | — | — | Patient change proposal workflows |
-| **Day 05** | Doctor Approves or Rejects Requests | PENDING | — | — | Doctor approval dashboard & resolution |
+| **Day 04** | Patient Requests Reschedule or Rebook | **COMPLETED** | `33ff069` | BE 376/377 (7 new tests passed), FE 261/261 (2 new tests passed) | Patient reschedule & rebook proposals, live slots UI, withdrawal |
+| **Day 05** | Doctor Approves or Rejects Requests | **IN PROGRESS** | — | — | Doctor approval dashboard & resolution |
 | **Day 06** | Receptionist Reminder Workflow | PENDING | — | — | Receptionist recall dashboard & call tracking |
 | **Day 07** | Full Integration, Regression & Final Hardening | PENDING | — | — | E2E verification, hardening & report |
 
@@ -49,4 +49,14 @@
   - Added "Đặt Lịch Tái Khám" button directly next to "Ghi Nhận Chẩn Đoán Mới" on Doctor Medical Records / Odontogram view.
   - Built interactive booking modal `#modalCreateFollowUpAppointment` with real-time slot loading, validation, and double-submit protection.
   - Added unit test suite for doctor booking workflow (valid booking, conflicting slot rejection, past time rejection). All 15 tests passed.
+
+## Day 04 Summary
+- **Tasks completed:**
+  - Implemented `SubmitPatientChangeProposalAsync`, `WithdrawPatientProposalAsync`, and `GetPatientProposalsAsync` in backend.
+  - Reused physical table `AppointmentChangeProposals` with zero schema disruption.
+  - Differentiated between `Reschedule` (on active confirmed follow-up) and `Rebook` (on cancelled/no-show appointment).
+  - Enforced business restrictions: ownership validation (IDOR prevention), duplicate pending proposal prevention, minimum 30-minute advance scheduling, and doctor slot validation.
+  - Built Patient Change Proposals UI in `Patient/FollowUps/Index.cshtml` with status badges, proposal tracking, and withdrawal action.
+  - Built interactive modal `#modalPatientProposal` with live slot querying from doctor schedule, reason requirement, and anti-double-submission.
+  - Added 7 unit tests in `FollowUpSchedulingServiceTests` and 2 web controller tests in `PostCareWebControllerTests`. All passed.
 
