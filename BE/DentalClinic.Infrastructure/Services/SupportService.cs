@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -23,7 +23,7 @@ public class SupportService : ISupportService
 
     public async Task<ApiResponse<SupportConfigDto>> GetSupportConfigAsync(CancellationToken ct = default)
     {
-        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().FirstOrDefaultAsync(ct);
+        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().OrderBy(c => c.ClinicId).FirstOrDefaultAsync(ct);
 
         var config = new SupportConfigDto
         {

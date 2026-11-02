@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -58,6 +58,16 @@ public class AvailableSlotDto
     public long? RecommendedDentistUserId { get; set; }
     public string? RecommendedDentistName { get; set; }
     public bool IsAvailable { get; set; }
+}
+
+public class CreateReceptionistAppointmentRequest
+{
+    public long PatientUserId { get; set; }
+    public long DepartmentId { get; set; }
+    public long RequestedServiceId { get; set; }
+    public long? RequestedDentistUserId { get; set; }
+    public DateTime ScheduledStart { get; set; }
+    public string? ReasonForVisit { get; set; }
 }
 
 public class CreateAppointmentRequest
@@ -250,4 +260,24 @@ public class CompleteAppointmentRequest
 public class StaffCancelAppointmentRequest
 {
     public string Reason { get; set; } = string.Empty;
+}
+
+public class RegisterWalkInPatientRequest
+{
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string PhoneNumber { get; set; } = string.Empty;
+    public DateTime? DateOfBirth { get; set; }
+    public string? Gender { get; set; }
+}
+
+public class RegisterWalkInPatientResponse
+{
+    public long PatientUserId { get; set; }
+    public string PatientCode { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string PhoneNumber { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
 }

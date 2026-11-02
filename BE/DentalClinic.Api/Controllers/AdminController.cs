@@ -142,6 +142,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("services")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<AdminDepartmentServiceDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<AdminDepartmentServiceDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateService([FromBody] CreateDepartmentServiceRequest request, CancellationToken ct)
@@ -153,6 +154,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPut("services/{id:long}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<AdminDepartmentServiceDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<AdminDepartmentServiceDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdateService(long id, [FromBody] UpdateDepartmentServiceRequest request, CancellationToken ct)
@@ -164,6 +166,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("services/{id:long}/toggle-status")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ToggleServiceStatus(long id, CancellationToken ct)
@@ -308,7 +311,7 @@ public class AdminController : ControllerBase
     // ==========================================
 
     [HttpGet("users")]
-    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.Receptionist},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<System.Collections.Generic.List<AdminUserDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetUsers([FromQuery] string? role, [FromQuery] string? search, CancellationToken ct)
     {
@@ -341,6 +344,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("dentist-allocations")]
+    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<DentistDepartmentAllocationDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<DentistDepartmentAllocationDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> AssignDentistToDepartment([FromBody] AssignDentistDepartmentRequest request, CancellationToken ct)
@@ -352,6 +356,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("dentist-allocations/{id:long}/toggle-status")]
+    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ToggleDentistAllocationStatus(long id, CancellationToken ct)

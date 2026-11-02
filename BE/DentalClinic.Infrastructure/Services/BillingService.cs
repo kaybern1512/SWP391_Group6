@@ -41,19 +41,11 @@ public class BillingService : IBillingService
         if (request.AppointmentId <= 0)
             return ApiResponse<InvoiceDto>.Fail("Mã ca khám không hợp lệ.");
 
-        var appointment = await _dbContext.Appointments
-            .Include(a => a.PatientUser)
-            .Include(a => a.Invoice)
-            .Include(a => a.AssignedDentistUser)
-                .ThenInclude(d => d!.User)
-            .Include(a => a.Department)
-            .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId, ct);
+        if (request.DiscountAmount < 0)
+            return ApiResponse<InvoiceDto>.Fail("Số tiền giảm giá không thể âm.");
 
-        if (appointment == null)
-            return ApiResponse<InvoiceDto>.Fail("Không tìm thấy ca khám chỉ định.");
-
-        if (appointment.Invoice != null)
-            return ApiResponse<InvoiceDto>.Fail($"Ca khám này đã được lập hóa đơn mã {appointment.Invoice.InvoiceCode}.");
+        if (request.TaxPercent < 0 || request.TaxPercent > 100)
+            return ApiResponse<InvoiceDto>.Fail("Thuế suất VAT phải nằm trong khoảng từ 0% đến 100%.");
 
         if (request.Items == null || !request.Items.Any())
             return ApiResponse<InvoiceDto>.Fail("Vui lòng nhập ít nhất một dịch vụ hoặc mục viện phí.");
@@ -70,88 +62,148 @@ public class BillingService : IBillingService
                 return ApiResponse<InvoiceDto>.Fail($"Đơn giá của '{item.Description}' không thể âm.");
         }
 
-        // Validate staff user ID or pick available staff profile
-        var validStaffUserId = staffUserId;
-        var staffExists = await _dbContext.StaffProfiles.AnyAsync(s => s.UserId == staffUserId, ct);
-        if (!staffExists)
-        {
-            var defaultStaff = await _dbContext.StaffProfiles.FirstOrDefaultAsync(ct);
-            if (defaultStaff != null)
-            {
-                validStaffUserId = defaultStaff.UserId;
-            }
-            else
-            {
-                return ApiResponse<InvoiceDto>.Fail("Không tìm thấy thông tin nhân viên tiếp nhận hợp lệ trong hệ thống.");
-            }
-        }
-
-        var subTotal = request.Items.Sum(i => i.Quantity * i.UnitPrice);
-        var discount = Math.Max(0, request.DiscountAmount);
-        if (discount > subTotal)
-        {
-            discount = subTotal;
-        }
-
-        var discountedSubTotal = subTotal - discount;
-        var taxPercent = Math.Max(0, request.TaxPercent);
-        var taxAmount = Math.Round(discountedSubTotal * (taxPercent / 100m), 2);
-        var totalAmount = Math.Round(discountedSubTotal + taxAmount, 2);
-
-        var invoiceCode = await GenerateInvoiceCodeAsync(ct);
-
-        var invoice = new Invoice
-        {
-            InvoiceCode = invoiceCode,
-            AppointmentId = appointment.AppointmentId,
-            GeneratedByUserId = validStaffUserId,
-            TotalAmount = totalAmount,
-            Status = "Unpaid",
-            CreatedAt = DateTime.UtcNow
-        };
-
-        foreach (var item in request.Items)
-        {
-            invoice.InvoiceItems.Add(new InvoiceItem
-            {
-                PerformedServiceId = item.PerformedServiceId,
-                Description = item.Description.Trim(),
-                Quantity = item.Quantity,
-                UnitPrice = item.UnitPrice
-            });
-        }
-
-        // If VAT was specified, record it as a transparent item if requested
-        if (taxPercent > 0 && taxAmount > 0)
-        {
-            invoice.InvoiceItems.Add(new InvoiceItem
-            {
-                PerformedServiceId = null,
-                Description = $"Thuế giá trị gia tăng (VAT {taxPercent:G29}%)",
-                Quantity = 1,
-                UnitPrice = taxAmount
-            });
-        }
-
-        _dbContext.Invoices.Add(invoice);
-        await _dbContext.SaveChangesAsync(ct);
-
+        using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
         try
         {
-            await _notificationService.CreateNotificationAsync(
-                appointment.PatientUserId,
-                appointment.AppointmentId,
-                "Billing",
-                "Hóa đơn viện phí mới",
-                $"Hóa đơn #{invoice.InvoiceCode} với tổng tiền {totalAmount:N0} đ đã được tạo cho ca khám của bạn.",
-                ct);
+            if (_dbContext.Database.IsSqlServer())
+            {
+                var lockKey = $"Lock_Appointment_Invoice_{request.AppointmentId}";
+                var applockSql = @"
+                    DECLARE @res int;
+                    EXEC @res = sp_getapplock @Resource = {0}, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000;
+                    IF @res < 0
+                    BEGIN
+                        DECLARE @msg nvarchar(250) = FORMATMESSAGE('Không thể lấy application lock cho ca khám %s. Mã trạng thái: %d', {0}, @res);
+                        THROW 51000, @msg, 1;
+                    END";
+                await _dbContext.Database.ExecuteSqlRawAsync(applockSql, new object[] { lockKey }, ct);
+            }
+
+            var appointment = await _dbContext.Appointments
+                .Include(a => a.PatientUser)
+                .Include(a => a.Invoice)
+                .Include(a => a.AssignedDentistUser)
+                    .ThenInclude(d => d!.User)
+                .Include(a => a.Department)
+                .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId, ct);
+
+            if (appointment == null)
+                return ApiResponse<InvoiceDto>.Fail("Không tìm thấy ca khám chỉ định.");
+
+            var nonBillableStatuses = new[]
+            {
+                AppointmentStatus.Cancelled,
+                AppointmentStatus.NoShow,
+                AppointmentStatus.Rejected,
+                AppointmentStatus.Withdrawn,
+                AppointmentStatus.Expired,
+                AppointmentStatus.PendingReceptionReview,
+                AppointmentStatus.PendingDepartmentReview,
+                AppointmentStatus.AwaitingPatientResponse
+            };
+
+            if (nonBillableStatuses.Contains(appointment.Status))
+            {
+                return ApiResponse<InvoiceDto>.Fail($"Không thể lập hóa đơn cho ca khám ở trạng thái '{appointment.Status}'.");
+            }
+
+            if (appointment.Invoice != null)
+                return ApiResponse<InvoiceDto>.Fail($"Ca khám này đã được lập hóa đơn mã {appointment.Invoice.InvoiceCode}.");
+
+            // Validate staff user ID or pick available staff profile
+            var validStaffUserId = staffUserId;
+            var staffExists = await _dbContext.StaffProfiles.AnyAsync(s => s.UserId == staffUserId, ct);
+            if (!staffExists)
+            {
+                var defaultStaff = await _dbContext.StaffProfiles.OrderBy(s => s.UserId).FirstOrDefaultAsync(ct);
+                if (defaultStaff != null)
+                {
+                    validStaffUserId = defaultStaff.UserId;
+                }
+                else
+                {
+                    return ApiResponse<InvoiceDto>.Fail("Không tìm thấy thông tin nhân viên tiếp nhận hợp lệ trong hệ thống.");
+                }
+            }
+
+            var subTotal = request.Items.Sum(i => i.Quantity * i.UnitPrice);
+            var discount = Math.Max(0, request.DiscountAmount);
+            if (discount > subTotal)
+            {
+                discount = subTotal;
+            }
+
+            var discountedSubTotal = subTotal - discount;
+            var taxPercent = Math.Max(0, request.TaxPercent);
+            var taxAmount = Math.Round(discountedSubTotal * (taxPercent / 100m), 2);
+            var totalAmount = Math.Round(discountedSubTotal + taxAmount, 2);
+
+            var invoiceCode = await GenerateInvoiceCodeAsync(ct);
+
+            var invoice = new Invoice
+            {
+                InvoiceCode = invoiceCode,
+                AppointmentId = appointment.AppointmentId,
+                GeneratedByUserId = validStaffUserId,
+                TotalAmount = totalAmount,
+                Status = totalAmount == 0 ? "Paid" : "Unpaid",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            foreach (var item in request.Items)
+            {
+                invoice.InvoiceItems.Add(new InvoiceItem
+                {
+                    PerformedServiceId = item.PerformedServiceId,
+                    Description = item.Description.Trim(),
+                    Quantity = item.Quantity,
+                    UnitPrice = item.UnitPrice
+                });
+            }
+
+            // If VAT was specified, record it as a transparent item if requested
+            if (taxPercent > 0 && taxAmount > 0)
+            {
+                invoice.InvoiceItems.Add(new InvoiceItem
+                {
+                    PerformedServiceId = null,
+                    Description = $"Thuế giá trị gia tăng (VAT {taxPercent:G29}%)",
+                    Quantity = 1,
+                    UnitPrice = taxAmount
+                });
+            }
+
+            _dbContext.Invoices.Add(invoice);
+            await _dbContext.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            try
+            {
+                var notifTitle = totalAmount == 0 ? "Hóa đơn viện phí (Miễn phí 100%)" : "Hóa đơn viện phí mới";
+                var notifMessage = totalAmount == 0
+                    ? $"Hóa đơn #{invoice.InvoiceCode} với tổng tiền 0 đ (đã áp dụng chiết khấu 100% số tiền {discount:N0} đ) đã được ghi nhận hoàn tất."
+                    : $"Hóa đơn #{invoice.InvoiceCode} với tổng tiền {totalAmount:N0} đ đã được tạo cho ca khám của bạn.";
+
+                await _notificationService.CreateNotificationAsync(
+                    appointment.PatientUserId,
+                    appointment.AppointmentId,
+                    "Billing",
+                    notifTitle,
+                    notifMessage,
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Không thể gửi thông báo cho bệnh nhân khi tạo hóa đơn {InvoiceCode}", invoice.InvoiceCode);
+            }
+
+            return await GetInvoiceByIdAsync(invoice.InvoiceId, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Không thể gửi thông báo cho bệnh nhân khi tạo hóa đơn {InvoiceCode}", invoice.InvoiceCode);
+            _logger.LogError(ex, "Lỗi khi tạo hóa đơn cho ca khám #{AppointmentId}", request.AppointmentId);
+            throw;
         }
-
-        return await GetInvoiceByIdAsync(invoice.InvoiceId, ct);
     }
 
     public async Task<ApiResponse<InvoiceDto>> ProcessPaymentAsync(
@@ -168,112 +220,136 @@ public class BillingService : IBillingService
         if (request.Amount <= 0)
             return ApiResponse<InvoiceDto>.Fail("Số tiền thanh toán phải lớn hơn 0.");
 
-        var invoice = await _dbContext.Invoices
-            .Include(i => i.Payments)
-            .Include(i => i.Appointment)
-                .ThenInclude(a => a.PatientUser)
-            .FirstOrDefaultAsync(i => i.InvoiceId == request.InvoiceId, ct);
-
-        if (invoice == null)
-            return ApiResponse<InvoiceDto>.Fail("Không tìm thấy hóa đơn cần thanh toán.");
-
-        if (invoice.Status == "Paid")
-            return ApiResponse<InvoiceDto>.Fail("Hóa đơn này đã được thanh toán toàn bộ trước đó.");
-
-        if (invoice.Status == "Cancelled")
-            return ApiResponse<InvoiceDto>.Fail("Hóa đơn này đã bị hủy, không thể thu tiền.");
-
-        var alreadyPaid = invoice.Payments
-            .Where(p => p.Status == "Successful")
-            .Sum(p => p.Amount);
-
-        var remaining = Math.Max(0, invoice.TotalAmount - alreadyPaid);
-
-        if (request.Amount > remaining)
-        {
-            return ApiResponse<InvoiceDto>.Fail(
-                $"Số tiền thanh toán ({request.Amount:N0} đ) vượt quá số tiền còn lại phải thu ({remaining:N0} đ).");
-        }
-
-        var normalizedMethod = NormalizeMethod(request.Method);
-
-        var txnRef = string.IsNullOrWhiteSpace(request.TransactionReference)
-            ? $"TXN-{DateTime.UtcNow:yyyyMMddHHmmss}-{invoice.InvoiceId}"
-            : request.TransactionReference.Trim();
-
-        var payment = new Payment
-        {
-            InvoiceId = invoice.InvoiceId,
-            PaidByPatientUserId = invoice.Appointment.PatientUserId,
-            Method = normalizedMethod,
-            Amount = request.Amount,
-            TransactionReference = txnRef,
-            Status = "Successful",
-            PaidAt = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _dbContext.Payments.Add(payment);
-
-        var totalPaidAfterThis = alreadyPaid + request.Amount;
-        if (totalPaidAfterThis >= invoice.TotalAmount)
-        {
-            invoice.Status = "Paid";
-        }
-        else
-        {
-            invoice.Status = "PartiallyPaid";
-        }
-
-        // Khi thanh toán đủ -> Cuộc hẹn tự chuyển sang Completed
-        if (invoice.Status == "Paid" && invoice.Appointment != null && invoice.Appointment.Status != AppointmentStatus.Completed)
-        {
-            var oldStatus = invoice.Appointment.Status;
-            invoice.Appointment.Status = AppointmentStatus.Completed;
-            invoice.Appointment.CompletedAt = DateTime.UtcNow;
-            invoice.Appointment.UpdatedAt = DateTime.UtcNow;
-
-            var history = new AppointmentStatusHistory
-            {
-                AppointmentId = invoice.Appointment.AppointmentId,
-                OldStatus = oldStatus,
-                NewStatus = AppointmentStatus.Completed,
-                ChangedByUserId = staffUserId,
-                Note = $"Thanh toán đủ hóa đơn {invoice.InvoiceCode}. Hoàn thành toàn bộ quy trình ca khám.",
-                ChangedAt = DateTime.UtcNow
-            };
-            _dbContext.AppointmentStatusHistories.Add(history);
-        }
-
-        await _dbContext.SaveChangesAsync(ct);
-
+        using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
         try
         {
-            var methodLabel = GetMethodDisplayName(normalizedMethod);
-            var patientUserId = invoice.Appointment?.PatientUserId ?? invoice.Payments.FirstOrDefault()?.PaidByPatientUserId ?? 0;
-            if (patientUserId > 0)
+            if (_dbContext.Database.IsSqlServer())
             {
-                await _notificationService.CreateNotificationAsync(
-                    patientUserId,
-                    invoice.AppointmentId,
-                    "Payment",
-                    "Xác nhận thanh toán thành công",
-                    $"Bạn đã thanh toán {request.Amount:N0} đ cho hóa đơn #{invoice.InvoiceCode} bằng hình thức {methodLabel}. Trạng thái hóa đơn: {(invoice.Status == "Paid" ? "Đã thanh toán đủ" : "Đã đặt cọc một phần")}.",
-                    ct);
+                var lockKey = $"Lock_Invoice_{request.InvoiceId}";
+                var applockSql = @"
+                    DECLARE @res int;
+                    EXEC @res = sp_getapplock @Resource = {0}, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000;
+                    IF @res < 0
+                    BEGIN
+                        DECLARE @msg nvarchar(250) = FORMATMESSAGE('Không thể lấy application lock cho hóa đơn %s. Mã trạng thái: %d', {0}, @res);
+                        THROW 51000, @msg, 1;
+                    END";
+                await _dbContext.Database.ExecuteSqlRawAsync(applockSql, new object[] { lockKey }, ct);
             }
+
+            var invoice = await _dbContext.Invoices
+                .Include(i => i.Payments)
+                .Include(i => i.Appointment)
+                    .ThenInclude(a => a.PatientUser)
+                .FirstOrDefaultAsync(i => i.InvoiceId == request.InvoiceId, ct);
+
+            if (invoice == null)
+                return ApiResponse<InvoiceDto>.Fail("Không tìm thấy hóa đơn cần thanh toán.");
+
+            if (invoice.Status == "Paid")
+                return ApiResponse<InvoiceDto>.Fail("Hóa đơn này đã được thanh toán toàn bộ trước đó.");
+
+            if (invoice.Status == "Cancelled")
+                return ApiResponse<InvoiceDto>.Fail("Hóa đơn này đã bị hủy, không thể thu tiền.");
+
+            // Check duplicate transaction reference on this invoice
+            if (!string.IsNullOrWhiteSpace(request.TransactionReference))
+            {
+                var trimmedRef = request.TransactionReference.Trim();
+                var isDuplicateTxn = invoice.Payments.Any(p =>
+                    p.Status == "Successful" &&
+                    p.TransactionReference != null &&
+                    p.TransactionReference.Equals(trimmedRef, StringComparison.OrdinalIgnoreCase));
+
+                if (isDuplicateTxn)
+                {
+                    return ApiResponse<InvoiceDto>.Fail($"Mã giao dịch '{trimmedRef}' đã được ghi nhận trước đó trên hóa đơn này.");
+                }
+            }
+
+            var alreadyPaid = invoice.Payments
+                .Where(p => p.Status == "Successful")
+                .Sum(p => p.Amount);
+
+            var remaining = Math.Max(0, invoice.TotalAmount - alreadyPaid);
+
+            if (request.Amount > remaining)
+            {
+                return ApiResponse<InvoiceDto>.Fail(
+                    $"Số tiền thanh toán ({request.Amount:N0} đ) vượt quá số tiền còn lại phải thu ({remaining:N0} đ).");
+            }
+
+            var normalizedMethod = NormalizeMethod(request.Method);
+
+            var txnRef = string.IsNullOrWhiteSpace(request.TransactionReference)
+                ? $"TXN-{DateTime.UtcNow:yyyyMMddHHmmss}-{invoice.InvoiceId}"
+                : request.TransactionReference.Trim();
+
+            var payment = new Payment
+            {
+                InvoiceId = invoice.InvoiceId,
+                PaidByPatientUserId = invoice.Appointment.PatientUserId,
+                Method = normalizedMethod,
+                Amount = request.Amount,
+                TransactionReference = txnRef,
+                Status = "Successful",
+                PaidAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.Payments.Add(payment);
+
+            var totalPaidAfterThis = alreadyPaid + request.Amount;
+            if (totalPaidAfterThis >= invoice.TotalAmount)
+            {
+                invoice.Status = "Paid";
+            }
+            else
+            {
+                invoice.Status = "PartiallyPaid";
+            }
+
+            // CRITICAL BUSINESS INTEGRITY (P0-01):
+            // Only authorized clinical workflow (DentistCompleteAppointmentAsync) may mark an appointment Completed.
+            // Payment processing updates Invoice.Status, but must NOT silently override the clinical state of the appointment.
+
+            await _dbContext.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            try
+            {
+                var methodLabel = GetMethodDisplayName(normalizedMethod);
+                var patientUserId = invoice.Appointment?.PatientUserId ?? invoice.Payments.FirstOrDefault()?.PaidByPatientUserId ?? 0;
+                if (patientUserId > 0)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        patientUserId,
+                        invoice.AppointmentId,
+                        "Payment",
+                        "Xác nhận thanh toán thành công",
+                        $"Bạn đã thanh toán {request.Amount:N0} đ cho hóa đơn #{invoice.InvoiceCode} bằng hình thức {methodLabel}. Trạng thái hóa đơn: {(invoice.Status == "Paid" ? "Đã thanh toán đủ" : "Đã đặt cọc một phần")}.",
+                        ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lỗi khi gửi thông báo thanh toán cho hóa đơn {InvoiceCode}", invoice.InvoiceCode);
+            }
+
+            return await GetInvoiceByIdAsync(invoice.InvoiceId, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Lỗi khi gửi thông báo thanh toán cho hóa đơn {InvoiceCode}", invoice.InvoiceCode);
+            _logger.LogError(ex, "Lỗi trong quá trình xử lý thanh toán cho hóa đơn #{InvoiceId}", request.InvoiceId);
+            throw;
         }
-
-        return await GetInvoiceByIdAsync(invoice.InvoiceId, ct);
     }
 
     public async Task<ApiResponse<InvoiceDto>> GetInvoiceByIdAsync(long invoiceId, CancellationToken ct = default)
     {
         var invoice = await _dbContext.Invoices
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
@@ -289,7 +365,7 @@ public class BillingService : IBillingService
         if (invoice == null)
             return ApiResponse<InvoiceDto>.Fail("Không tìm thấy thông tin hóa đơn.");
 
-        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().FirstOrDefaultAsync(ct);
+        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().OrderBy(c => c.ClinicId).FirstOrDefaultAsync(ct);
         var dto = MapToInvoiceDto(invoice, clinic);
         return ApiResponse<InvoiceDto>.Ok(dto);
     }
@@ -298,6 +374,7 @@ public class BillingService : IBillingService
     {
         var invoice = await _dbContext.Invoices
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
@@ -313,7 +390,7 @@ public class BillingService : IBillingService
         if (invoice == null)
             return ApiResponse<InvoiceDto>.Fail("Ca khám chưa có hóa đơn.");
 
-        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().FirstOrDefaultAsync(ct);
+        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().OrderBy(c => c.ClinicId).FirstOrDefaultAsync(ct);
         var dto = MapToInvoiceDto(invoice, clinic);
         return ApiResponse<InvoiceDto>.Ok(dto);
     }
@@ -327,6 +404,7 @@ public class BillingService : IBillingService
     {
         var query = _dbContext.Invoices
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
@@ -369,9 +447,10 @@ public class BillingService : IBillingService
 
         var list = await query
             .OrderByDescending(i => i.CreatedAt)
+            .ThenBy(i => i.InvoiceId)
             .ToListAsync(ct);
 
-        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().FirstOrDefaultAsync(ct);
+        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().OrderBy(c => c.ClinicId).FirstOrDefaultAsync(ct);
         var dtos = list.Select(i => MapToInvoiceDto(i, clinic)).ToList();
         return ApiResponse<List<InvoiceDto>>.Ok(dtos);
     }
@@ -380,6 +459,7 @@ public class BillingService : IBillingService
     {
         var list = await _dbContext.Invoices
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
@@ -392,9 +472,10 @@ public class BillingService : IBillingService
                 .ThenInclude(a => a.Department)
             .Where(i => i.Appointment.PatientUserId == patientUserId)
             .OrderByDescending(i => i.CreatedAt)
+            .ThenBy(i => i.InvoiceId)
             .ToListAsync(ct);
 
-        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().FirstOrDefaultAsync(ct);
+        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().OrderBy(c => c.ClinicId).FirstOrDefaultAsync(ct);
         var dtos = list.Select(i => MapToInvoiceDto(i, clinic)).ToList();
         return ApiResponse<List<InvoiceDto>>.Ok(dtos);
     }

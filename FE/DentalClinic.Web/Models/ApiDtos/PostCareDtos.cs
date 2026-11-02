@@ -51,6 +51,7 @@ public class FollowUpScheduleDto
     public string? PatientPhoneNumber { get; set; }
     public long DentistUserId { get; set; }
     public string DentistName { get; set; } = string.Empty;
+    public long? DepartmentId { get; set; }
     public string DepartmentName { get; set; } = string.Empty;
     public DateTime RecommendedDate { get; set; }
     public string? Reason { get; set; }
@@ -64,4 +65,11 @@ public class CreateFollowUpRequest
     public long TreatmentSessionId { get; set; }
     public DateTime RecommendedDate { get; set; }
     public string? Reason { get; set; }
+}
+
+public class UpdateFollowUpStatusRequest
+{
+    public string Status { get; set; } = "Confirmed";
+    public DateTime? NewRecommendedDate { get; set; }
+    public string? Note { get; set; }
 }

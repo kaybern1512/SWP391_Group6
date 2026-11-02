@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Features.Admin.DTOs;
 using DentalClinic.Application.Features.Appointments.DTOs;
 using DentalClinic.Application.Features.Booking.DTOs;
 using DentalClinic.Domain.Enums;
@@ -165,6 +166,309 @@ public class AppointmentService : IAppointmentService
 
         var dto = await MapToDtoAsync(appointment.AppointmentId, ct);
         return ApiResponse<AppointmentDto>.Ok(dto!, "Yêu cầu đặt lịch khám đã được gửi thành công. Vui lòng chờ phòng khám xem xét.");
+    }
+
+    public async Task<ApiResponse<List<AdminUserDto>>> GetPatientsAsync(string? search = null, CancellationToken ct = default)
+    {
+        var query = _dbContext.UserAccounts
+            .AsNoTracking()
+            .Include(u => u.PatientProfile)
+            .Where(u => u.Role == UserRole.Patient)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.Trim().ToLower();
+            query = query.Where(u =>
+                (u.Email != null && u.Email.ToLower().Contains(q)) ||
+                (u.PhoneNumber != null && u.PhoneNumber.Contains(q)) ||
+                (u.PatientProfile != null && u.PatientProfile.FullName.ToLower().Contains(q)) ||
+                (u.PatientProfile != null && u.PatientProfile.PatientCode.ToLower().Contains(q)));
+        }
+
+        var users = await query
+            .OrderByDescending(u => u.CreatedAt)
+            .Select(u => new AdminUserDto
+            {
+                UserId = u.UserId,
+                Email = u.Email,
+                PhoneNumber = u.PhoneNumber,
+                Role = u.Role,
+                Status = u.Status,
+                FullName = u.PatientProfile != null ? u.PatientProfile.FullName : "N/A",
+                Code = u.PatientProfile != null ? u.PatientProfile.PatientCode : null,
+                CreatedAt = u.CreatedAt
+            })
+            .ToListAsync(ct);
+
+        return ApiResponse<List<AdminUserDto>>.Ok(users);
+    }
+
+    public async Task<ApiResponse<RegisterWalkInPatientResponse>> RegisterWalkInPatientAsync(
+        long receptionistUserId,
+        RegisterWalkInPatientRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null)
+        {
+            return ApiResponse<RegisterWalkInPatientResponse>.Fail("Thông tin đăng ký không hợp lệ.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.FullName))
+        {
+            return ApiResponse<RegisterWalkInPatientResponse>.Fail("Vui lòng nhập họ và tên bệnh nhân.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.PhoneNumber))
+        {
+            return ApiResponse<RegisterWalkInPatientResponse>.Fail("Vui lòng nhập số điện thoại bệnh nhân.");
+        }
+
+        var email = request.Email?.Trim().ToLowerInvariant();
+        var phone = request.PhoneNumber.Trim();
+
+        // 1. Prevent duplicate email if provided
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            var existingEmailUser = await _dbContext.UserAccounts
+                .Include(u => u.PatientProfile)
+                .FirstOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email, ct);
+
+            if (existingEmailUser != null)
+            {
+                return ApiResponse<RegisterWalkInPatientResponse>.Fail("Email này đã tồn tại trong hệ thống. Vui lòng tìm kiếm hồ sơ bệnh nhân để đặt lịch.");
+            }
+        }
+
+        // 2. Prevent duplicate phone number
+        var existingPhoneUser = await _dbContext.UserAccounts
+            .Include(u => u.PatientProfile)
+            .FirstOrDefaultAsync(u => u.PhoneNumber == phone, ct);
+
+        if (existingPhoneUser != null)
+        {
+            return ApiResponse<RegisterWalkInPatientResponse>.Fail("Số điện thoại này đã được đăng ký với một hồ sơ khác.");
+        }
+
+        // 3. Generate monotonic PatientCode
+        var now = DateTime.UtcNow;
+        var yearMonth = now.ToString("yyyyMM");
+        var prefix = $"PAT-{yearMonth}-";
+
+        var lastCode = await _dbContext.PatientProfiles
+            .Where(p => p.PatientCode.StartsWith(prefix))
+            .OrderByDescending(p => p.PatientCode)
+            .Select(p => p.PatientCode)
+            .FirstOrDefaultAsync(ct);
+
+        int nextSeq = 1;
+        if (!string.IsNullOrEmpty(lastCode) && lastCode.Length >= prefix.Length + 4)
+        {
+            var seqStr = lastCode.Substring(prefix.Length);
+            if (int.TryParse(seqStr, out var currentSeq))
+            {
+                nextSeq = currentSeq + 1;
+            }
+        }
+        var patientCode = $"{prefix}{nextSeq:D4}";
+
+        // 4. Create UserAccount and PatientProfile (Secure administrative profile without hardcoded password)
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? tx = null;
+        if (_dbContext.Database.IsRelational())
+        {
+            tx = await _dbContext.Database.BeginTransactionAsync(ct);
+        }
+        try
+        {
+            var userAccount = new UserAccount
+            {
+                Email = string.IsNullOrWhiteSpace(email) ? null : email,
+                PhoneNumber = phone,
+                PasswordHash = null, // No hard-coded password! Patient must activate / set password securely.
+                Role = UserRole.Patient,
+                Status = AccountStatus.Unverified, // Administrative profile awaiting online activation
+                CreatedAt = now,
+                FailedLoginCount = 0
+            };
+
+            _dbContext.UserAccounts.Add(userAccount);
+            await _dbContext.SaveChangesAsync(ct);
+
+            var normalizedGender = (request.Gender?.Trim().ToLowerInvariant()) switch
+            {
+                "nam" or "male" => "Male",
+                "nữ" or "nu" or "female" => "Female",
+                _ => "Other"
+            };
+
+            var patientProfile = new PatientProfile
+            {
+                UserId = userAccount.UserId,
+                PatientCode = patientCode,
+                FullName = request.FullName.Trim(),
+                DateOfBirth = request.DateOfBirth.HasValue ? DateOnly.FromDateTime(request.DateOfBirth.Value) : null,
+                Gender = normalizedGender,
+                CreatedAt = now
+            };
+
+            _dbContext.PatientProfiles.Add(patientProfile);
+            await _dbContext.SaveChangesAsync(ct);
+
+            if (tx != null)
+            {
+                await tx.CommitAsync(ct);
+            }
+
+            var response = new RegisterWalkInPatientResponse
+            {
+                PatientUserId = userAccount.UserId,
+                PatientCode = patientCode,
+                FullName = patientProfile.FullName,
+                Email = userAccount.Email ?? string.Empty,
+                PhoneNumber = userAccount.PhoneNumber ?? string.Empty,
+                Status = userAccount.Status,
+                Message = "Tiếp nhận hồ sơ bệnh nhân thành công. Tài khoản trực tuyến ở trạng thái chờ kích hoạt."
+            };
+
+            return ApiResponse<RegisterWalkInPatientResponse>.Ok(response, "Tiếp nhận hồ sơ bệnh nhân thành công.");
+        }
+        catch (Exception ex)
+        {
+            if (tx != null)
+            {
+                await tx.RollbackAsync(ct);
+            }
+            _logger.LogError(ex, "Lỗi khi tiếp nhận hồ sơ bệnh nhân vãng lai");
+            return ApiResponse<RegisterWalkInPatientResponse>.Fail("Đã xảy ra lỗi trong quá trình tiếp nhận hồ sơ bệnh nhân.");
+        }
+        finally
+        {
+            if (tx != null)
+            {
+                await tx.DisposeAsync();
+            }
+        }
+    }
+
+    public async Task<ApiResponse<AppointmentDto>> CreateReceptionistAppointmentAsync(
+        long receptionistUserId,
+        CreateReceptionistAppointmentRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Dữ liệu đặt lịch không hợp lệ.");
+        }
+
+        if (request.PatientUserId <= 0)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Vui lòng chọn bệnh nhân.");
+        }
+
+        // 1. Validate Patient (Active online account or Unverified walk-in administrative record)
+        var patient = await _dbContext.PatientProfiles
+            .Include(p => p.User)
+            .FirstOrDefaultAsync(p => p.UserId == request.PatientUserId, ct);
+
+        if (patient == null || patient.User.Status == AccountStatus.Locked || patient.User.Status == AccountStatus.Inactive)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Hồ sơ bệnh nhân không hợp lệ hoặc đã bị khóa.");
+        }
+
+        // 2. Validate Department
+        var department = await _dbContext.Departments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.DepartmentId == request.DepartmentId && d.Status == "Active", ct);
+
+        if (department == null)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Chuyên khoa không tồn tại hoặc đã ngừng hoạt động.");
+        }
+
+        // 3. Validate Service
+        var service = await _dbContext.DepartmentServices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.DepartmentServiceId == request.RequestedServiceId &&
+                                      s.DepartmentId == request.DepartmentId &&
+                                      s.Status == "Active", ct);
+
+        if (service == null)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Dịch vụ không tồn tại hoặc không thuộc chuyên khoa này.");
+        }
+
+        // 4. Validate Datetime
+        if (request.ScheduledStart < DateTime.Now.AddMinutes(-10))
+        {
+            return ApiResponse<AppointmentDto>.Fail("Thời gian khám không được nằm trong quá khứ.");
+        }
+
+        // 5. Validate Requested Dentist if specified
+        if (request.RequestedDentistUserId.HasValue && request.RequestedDentistUserId.Value > 0)
+        {
+            var isDentistInDept = await _dbContext.DentistDepartments
+                .AsNoTracking()
+                .AnyAsync(dd => dd.DentistUserId == request.RequestedDentistUserId.Value &&
+                                dd.DepartmentId == request.DepartmentId &&
+                                dd.Status == "Active", ct);
+
+            if (!isDentistInDept)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Bác sĩ được yêu cầu không thuộc chuyên khoa đã chọn.");
+            }
+        }
+        else
+        {
+            request.RequestedDentistUserId = null;
+        }
+
+        // Calculate end time
+        var duration = service.DurationMinutes.HasValue && service.DurationMinutes.Value > 0
+            ? service.DurationMinutes.Value
+            : 30;
+        var scheduledEnd = request.ScheduledStart.AddMinutes(duration);
+
+        // Generate Unique AppointmentCode (APP-yyyyMMdd-XXXXXX)
+        var code = await GenerateUniqueAppointmentCodeAsync(ct);
+
+        var now = DateTime.UtcNow;
+        var appointment = new Appointment
+        {
+            AppointmentCode = code,
+            PatientUserId = request.PatientUserId,
+            DepartmentId = request.DepartmentId,
+            RequestedServiceId = request.RequestedServiceId,
+            RequestedDentistUserId = request.RequestedDentistUserId,
+            AssignedDentistUserId = null,
+            RoomId = null,
+            DentalChairId = null,
+            ScheduledStart = request.ScheduledStart,
+            ScheduledEnd = scheduledEnd,
+            ReasonForVisit = string.IsNullOrWhiteSpace(request.ReasonForVisit) ? "Khám bệnh tại quầy" : request.ReasonForVisit.Trim(),
+            BookingSource = BookingSource.Receptionist,
+            QueueNumber = null,
+            Status = AppointmentStatus.PendingDepartmentReview,
+            CreatedByUserId = receptionistUserId,
+            CreatedAt = now
+        };
+
+        _dbContext.Appointments.Add(appointment);
+
+        var history = new AppointmentStatusHistory
+        {
+            Appointment = appointment,
+            OldStatus = null,
+            NewStatus = AppointmentStatus.PendingDepartmentReview,
+            ChangedByUserId = receptionistUserId,
+            Note = "Lễ tân tiếp nhận và tạo lịch hẹn trực tiếp tại quầy.",
+            ChangedAt = now
+        };
+        _dbContext.AppointmentStatusHistories.Add(history);
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        var dto = await MapToDtoAsync(appointment.AppointmentId, ct);
+        return ApiResponse<AppointmentDto>.Ok(dto!, "Tiếp nhận và tạo lịch hẹn tại quầy thành công.");
     }
 
     public async Task<ApiResponse<List<AppointmentDto>>> GetPatientAppointmentsAsync(
@@ -1288,6 +1592,7 @@ public class AppointmentService : IAppointmentService
         var scheduledDentistIds = await _dbContext.DentistWorkSchedules
             .AsNoTracking()
             .Where(ws => candidateIds.Contains(ws.DentistUserId) &&
+                         ws.DepartmentId == deptId &&
                          ws.WorkDate == targetDateOnly &&
                          ws.Status == "Scheduled" &&
                          ws.StartTime <= startTimeOnly &&
@@ -1387,32 +1692,43 @@ public class AppointmentService : IAppointmentService
             .Select(a => a.DentalChairId!.Value)
             .ToHashSet();
 
-        var roomsQuery = _dbContext.Rooms
+        var allRooms = await _dbContext.Rooms
             .AsNoTracking()
-            .Where(r => r.Status == "Active" && !occupiedRoomIds.Contains(r.RoomId));
-
-        if (departmentId > 0)
-        {
-            roomsQuery = roomsQuery.Where(r => r.DepartmentId == departmentId);
-        }
-
-        var rooms = await roomsQuery
+            .Include(r => r.DentalChairs)
+            .Where(r => r.Status == "Active" && (departmentId <= 0 || r.DepartmentId == departmentId))
             .OrderBy(r => r.RoomCode)
+            .ToListAsync(ct);
+
+        // A room is available if:
+        // 1. For exclusive rooms: no appointment is occupying the room during the slot
+        // 2. For shared (multi-chair) rooms: at least one active chair is free in that room
+        var availableRooms = allRooms
+            .Where(r =>
+            {
+                if (r.IsExclusive)
+                {
+                    return !occupiedRoomIds.Contains(r.RoomId);
+                }
+                var activeChairs = r.DentalChairs.Where(c => c.Status == "Active").ToList();
+                if (activeChairs.Count == 0) return !occupiedRoomIds.Contains(r.RoomId);
+                return activeChairs.Any(c => !occupiedChairIds.Contains(c.DentalChairId));
+            })
             .Select(r => new RoomOptionDto
             {
                 RoomId = r.RoomId,
                 RoomCode = r.RoomCode,
                 RoomName = r.RoomName,
                 DepartmentId = r.DepartmentId,
-                Status = r.Status
+                Status = r.Status,
+                IsExclusive = r.IsExclusive
             })
-            .ToListAsync(ct);
+            .ToList();
 
-        var roomIds = rooms.Select(r => r.RoomId).ToHashSet();
+        var availableRoomIds = availableRooms.Select(r => r.RoomId).ToHashSet();
 
         var chairs = await _dbContext.DentalChairs
             .AsNoTracking()
-            .Where(c => c.Status == "Active" && roomIds.Contains(c.RoomId) && !occupiedChairIds.Contains(c.DentalChairId))
+            .Where(c => c.Status == "Active" && availableRoomIds.Contains(c.RoomId) && !occupiedChairIds.Contains(c.DentalChairId))
             .OrderBy(c => c.ChairCode)
             .Select(c => new ChairOptionDto
             {
@@ -1440,7 +1756,7 @@ public class AppointmentService : IAppointmentService
 
         var result = new AvailableResourcesDto
         {
-            Rooms = rooms,
+            Rooms = availableRooms,
             Chairs = chairs,
             Dentists = dentistsInDept
         };
@@ -1483,6 +1799,27 @@ public class AppointmentService : IAppointmentService
                 return ApiResponse<AppointmentDto>.Fail("Bệnh nhân đã yêu cầu một Bác sĩ cụ thể. Để thay đổi Bác sĩ, bạn phải tạo Đề xuất thay đổi (Proposal) để Bệnh nhân đồng ý.");
             }
 
+            // CRITICAL CLINICAL RULE: Validate Assigned Dentist belongs to this Department
+            var isDentistInDept = await _dbContext.DentistDepartments
+                .AsNoTracking()
+                .AnyAsync(dd => dd.DentistUserId == request.AssignedDentistUserId && dd.DepartmentId == appointment.DepartmentId && dd.Status == "Active", ct);
+            if (!isDentistInDept)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Bác sĩ được chỉ định không thuộc chuyên khoa này hoặc không hoạt động.");
+            }
+
+            // CRITICAL CLINICAL RULE: Validate Requested Service belongs to this Department
+            if (appointment.RequestedServiceId.HasValue)
+            {
+                var validService = await _dbContext.DepartmentServices
+                    .AsNoTracking()
+                    .AnyAsync(s => s.DepartmentServiceId == appointment.RequestedServiceId.Value && s.DepartmentId == appointment.DepartmentId && s.Status == "Active", ct);
+                if (!validService)
+                {
+                    return ApiResponse<AppointmentDto>.Fail("Dịch vụ yêu cầu không thuộc chuyên khoa này.");
+                }
+            }
+
             var finalStart = request.ScheduledStart ?? appointment.ScheduledStart;
             var finalEnd = request.ScheduledEnd ?? appointment.ScheduledEnd;
 
@@ -1491,29 +1828,9 @@ public class AppointmentService : IAppointmentService
                 return ApiResponse<AppointmentDto>.Fail("Thời gian khám không hợp lệ.");
             }
 
-            var occupiedStatuses = new[]
-            {
-                AppointmentStatus.Confirmed,
-                AppointmentStatus.CheckedIn,
-                AppointmentStatus.Waiting,
-                AppointmentStatus.Called,
-                AppointmentStatus.InService
-            };
+            var targetDate = finalStart.Value.Date;
 
-            // 1. REVALIDATE DENTIST CONFLICT
-            bool dentistConflict = await _dbContext.Appointments
-                .AnyAsync(a => a.AppointmentId != appointmentId &&
-                               a.AssignedDentistUserId == request.AssignedDentistUserId &&
-                               occupiedStatuses.Contains(a.Status) &&
-                               a.ScheduledStart < finalEnd.Value &&
-                               a.ScheduledEnd > finalStart.Value, ct);
-
-            if (dentistConflict)
-            {
-                return ApiResponse<AppointmentDto>.Fail("Bác sĩ đã có lịch hẹn khác trong khung giờ này.");
-            }
-
-            // 2. REVALIDATE ROOM CONFLICT
+            // 1. Validate Room
             var room = await _dbContext.Rooms
                 .AsNoTracking()
                 .FirstOrDefaultAsync(r => r.RoomId == request.RoomId && r.Status == "Active", ct);
@@ -1528,33 +1845,108 @@ public class AppointmentService : IAppointmentService
                 return ApiResponse<AppointmentDto>.Fail("Phòng khám không thuộc chuyên khoa của lịch hẹn này.");
             }
 
-            bool roomConflict = await _dbContext.Appointments
+            // 2. Validate Chair (Mandatory allocation by Department Manager)
+            if (!request.DentalChairId.HasValue || request.DentalChairId.Value <= 0)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Vui lòng chọn ghế nha khoa điều trị cho ca khám.");
+            }
+
+            var chair = await _dbContext.DentalChairs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.DentalChairId == request.DentalChairId.Value &&
+                                          c.RoomId == request.RoomId &&
+                                          c.Status == "Active", ct);
+
+            if (chair == null)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Ghế nha khoa không thuộc phòng khám đã chọn hoặc không hoạt động.");
+            }
+
+            // Phase 2: Multi-Resource Concurrency Lock in Canonical Order (Deadlock-Free, Cross-Department Safe)
+            if (_dbContext.Database.IsSqlServer())
+            {
+                var lockKeys = new List<string>
+                {
+                    $"Lock_Appt_{appointmentId}",
+                    $"Lock_Dentist_{request.AssignedDentistUserId}_{targetDate:yyyyMMdd}",
+                    $"Lock_DeptQueue_{appointment.DepartmentId}_{targetDate:yyyyMMdd}"
+                };
+
+                if (request.DentalChairId.HasValue && request.DentalChairId.Value > 0)
+                {
+                    lockKeys.Add($"Lock_Chair_{request.DentalChairId.Value}_{targetDate:yyyyMMdd}");
+                }
+
+                if (room.IsExclusive)
+                {
+                    lockKeys.Add($"Lock_Room_{request.RoomId}_{targetDate:yyyyMMdd}");
+                }
+
+                var sortedKeys = lockKeys.Distinct().OrderBy(k => k, StringComparer.Ordinal).ToList();
+
+                var applockSql = @"
+                    DECLARE @res int;
+                    EXEC @res = sp_getapplock @Resource = {0}, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000;
+                    IF @res < 0
+                    BEGIN
+                        DECLARE @msg nvarchar(250) = FORMATMESSAGE('Không thể lấy application lock cho tài nguyên %s. Mã trạng thái: %d', {0}, @res);
+                        THROW 51000, @msg, 1;
+                    END";
+
+                foreach (var key in sortedKeys)
+                {
+                    await _dbContext.Database.ExecuteSqlRawAsync(applockSql, new object[] { key }, ct);
+                }
+            }
+
+            // Revalidate appointment state within the lock
+            var freshAppt = await _dbContext.Appointments.AsNoTracking().FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+            if (freshAppt == null || freshAppt.Status != AppointmentStatus.PendingDepartmentReview)
+            {
+                return ApiResponse<AppointmentDto>.Fail($"Không thể xác nhận lịch hẹn ở trạng thái {freshAppt?.Status ?? "Không xác định"}.");
+            }
+
+            var occupiedStatuses = new[]
+            {
+                AppointmentStatus.Confirmed,
+                AppointmentStatus.CheckedIn,
+                AppointmentStatus.Waiting,
+                AppointmentStatus.Called,
+                AppointmentStatus.InService
+            };
+
+            // 1. REVALIDATE DENTIST CONFLICT (Across all departments)
+            bool dentistConflict = await _dbContext.Appointments
                 .AnyAsync(a => a.AppointmentId != appointmentId &&
-                               a.RoomId == request.RoomId &&
+                               a.AssignedDentistUserId == request.AssignedDentistUserId &&
                                occupiedStatuses.Contains(a.Status) &&
                                a.ScheduledStart < finalEnd.Value &&
                                a.ScheduledEnd > finalStart.Value, ct);
 
-            if (roomConflict)
+            if (dentistConflict)
             {
-                return ApiResponse<AppointmentDto>.Fail("Phòng khám đã bị trùng lịch với ca khám khác trong khung giờ này.");
+                return ApiResponse<AppointmentDto>.Fail("Bác sĩ đã có lịch hẹn khác trong khung giờ này.");
             }
 
-            // 3. REVALIDATE CHAIR CONFLICT (OPTIONAL: Dentist can pick chair inside the clinic room)
-            DentalChair? chair = null;
+            // 2. REVALIDATE ROOM CONFLICT (Only if room is designated as exclusive!)
+            if (room.IsExclusive)
+            {
+                bool roomConflict = await _dbContext.Appointments
+                    .AnyAsync(a => a.AppointmentId != appointmentId &&
+                                   a.RoomId == request.RoomId &&
+                                   occupiedStatuses.Contains(a.Status) &&
+                                   a.ScheduledStart < finalEnd.Value &&
+                                   a.ScheduledEnd > finalStart.Value, ct);
+
+                if (roomConflict)
+                {
+                    return ApiResponse<AppointmentDto>.Fail("Phòng khám đã bị trùng lịch với ca khám khác trong khung giờ này.");
+                }
+            }
+
+            // 3. REVALIDATE CHAIR CONFLICT
             if (request.DentalChairId.HasValue && request.DentalChairId.Value > 0)
             {
-                chair = await _dbContext.DentalChairs
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(c => c.DentalChairId == request.DentalChairId.Value &&
-                                              c.RoomId == request.RoomId &&
-                                              c.Status == "Active", ct);
-
-                if (chair == null)
-                {
-                    return ApiResponse<AppointmentDto>.Fail("Ghế nha khoa không thuộc phòng khám đã chọn hoặc không hoạt động.");
-                }
-
                 bool chairConflict = await _dbContext.Appointments
                     .AnyAsync(a => a.AppointmentId != appointmentId &&
                                    a.DentalChairId == request.DentalChairId.Value &&
@@ -1568,16 +1960,26 @@ public class AppointmentService : IAppointmentService
                 }
             }
 
-            // 4. GENERATE QUEUE NUMBER in Transaction (e.g. Q001, Q002 per department and target date)
-            var targetDate = finalStart.Value.Date;
-            var confirmedCount = await _dbContext.Appointments
+            // 4. GENERATE MONOTONIC QUEUE NUMBER (max sequence + 1 per department and target date)
+            var existingQueueNumbers = await _dbContext.Appointments
                 .Where(a => a.DepartmentId == appointment.DepartmentId &&
                             a.ScheduledStart != null &&
                             a.ScheduledStart.Value.Date == targetDate &&
-                            a.QueueNumber != null)
-                .CountAsync(ct);
+                            a.QueueNumber != null &&
+                            a.QueueNumber != "")
+                .Select(a => a.QueueNumber!)
+                .ToListAsync(ct);
 
-            var queueNumber = $"Q{(confirmedCount + 1):D3}";
+            int maxSeq = 0;
+            foreach (var qn in existingQueueNumbers)
+            {
+                if (!string.IsNullOrEmpty(qn) && qn.StartsWith("Q") && int.TryParse(qn.Substring(1), out int num))
+                {
+                    if (num > maxSeq) maxSeq = num;
+                }
+            }
+
+            var queueNumber = $"Q{(maxSeq + 1):D3}";
 
             var oldStatus = appointment.Status;
             appointment.AssignedDentistUserId = request.AssignedDentistUserId;
@@ -1864,9 +2266,14 @@ public class AppointmentService : IAppointmentService
             return ApiResponse.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
         }
 
-        if (appointment.Status != AppointmentStatus.CheckedIn && appointment.Status != AppointmentStatus.Confirmed)
+        if (appointment.Status != AppointmentStatus.CheckedIn)
         {
             return ApiResponse.Fail($"Không thể bắt đầu ca khám ở trạng thái '{appointment.Status}'. Bệnh nhân cần làm thủ tục check-in trước.");
+        }
+
+        if (!appointment.DentalChairId.HasValue || appointment.DentalChairId.Value <= 0)
+        {
+            return ApiResponse.Fail("Ca khám chưa được phân bổ ghế điều trị hợp lệ. Vui lòng liên hệ Trưởng khoa hoặc gán ghế trước khi tiếp nhận.");
         }
 
         var oldStatus = appointment.Status;
@@ -2154,6 +2561,11 @@ public class AppointmentService : IAppointmentService
         if (appt == null)
         {
             return ApiResponse.Fail("Không tìm thấy thông tin lịch hẹn.");
+        }
+
+        if (appt.Status == AppointmentStatus.Completed || appt.Status == AppointmentStatus.Cancelled)
+        {
+            return ApiResponse.Fail("Ca khám đã hoàn tất hoặc đã hủy, vị trí ghế điều trị đã được khóa và không thể thay đổi.");
         }
 
         if (appt.AssignedDentistUserId != dentistUserId)

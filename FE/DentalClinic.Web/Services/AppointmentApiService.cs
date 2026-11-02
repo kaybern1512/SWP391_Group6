@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
@@ -121,6 +121,26 @@ public class AppointmentApiService : IAppointmentApiService
     // ==========================================
     // RECEPTIONIST
     // ==========================================
+
+    public async Task<ApiResult<List<AdminUserDto>>> GetPatientsAsync(string? search = null)
+    {
+        var url = "/api/receptionist/patients";
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            url += $"?search={Uri.EscapeDataString(search)}";
+        }
+        return await SendGetAsync<List<AdminUserDto>>(url);
+    }
+
+    public async Task<ApiResult<RegisterWalkInPatientResponse>> RegisterWalkInPatientAsync(RegisterWalkInPatientRequest request)
+    {
+        return await SendPostAsync<RegisterWalkInPatientRequest, RegisterWalkInPatientResponse>("/api/receptionist/patients", request);
+    }
+
+    public async Task<ApiResult<AppointmentDto>> CreateReceptionistAppointmentAsync(CreateReceptionistAppointmentRequest request)
+    {
+        return await SendPostAsync<CreateReceptionistAppointmentRequest, AppointmentDto>("/api/receptionist/appointments", request);
+    }
 
     public async Task<ApiResult<List<AppointmentDto>>> GetReceptionistRequestsAsync()
     {

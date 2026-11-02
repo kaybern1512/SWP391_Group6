@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -44,6 +44,7 @@ public class AdminService : IAdminService
             .Include(d => d.DepartmentServices)
             .Include(d => d.DentistDepartments)
             .OrderBy(d => d.DepartmentId)
+            .AsSplitQuery()
             .ToListAsync(ct);
 
         var dtos = departments.Select(d => new AdminDepartmentDto
@@ -71,6 +72,7 @@ public class AdminService : IAdminService
             .Include(d => d.ManagerUser)
             .Include(d => d.DepartmentServices)
             .Include(d => d.DentistDepartments)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(d => d.DepartmentId == departmentId, ct);
 
         if (d == null)

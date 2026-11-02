@@ -357,6 +357,7 @@ public class PostCareService : IPostCareService
             PatientPhoneNumber = session.TreatmentPlanItem.TreatmentPlan.PatientUser.EmergencyContact,
             DentistUserId = session.DentistUserId,
             DentistName = session.DentistUser.User.FullName,
+            DepartmentId = session.Appointment.DepartmentId,
             DepartmentName = session.Appointment.Department?.Name ?? "Nha khoa tổng quát",
             RecommendedDate = followUp.RecommendedDate,
             Reason = followUp.Reason,
@@ -398,6 +399,7 @@ public class PostCareService : IPostCareService
             PatientPhoneNumber = f.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.EmergencyContact,
             DentistUserId = f.TreatmentSession.DentistUserId,
             DentistName = f.TreatmentSession.DentistUser.User.FullName,
+            DepartmentId = f.Appointment != null ? f.Appointment.DepartmentId : f.TreatmentSession.TreatmentPlanItem.TreatmentPlan.DepartmentId,
             DepartmentName = f.Appointment?.Department?.Name ?? "Nha khoa tổng quát",
             RecommendedDate = f.RecommendedDate,
             Reason = f.Reason,
@@ -438,6 +440,7 @@ public class PostCareService : IPostCareService
             PatientPhoneNumber = f.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.EmergencyContact,
             DentistUserId = f.TreatmentSession.DentistUserId,
             DentistName = f.TreatmentSession.DentistUser.User.FullName,
+            DepartmentId = f.Appointment != null ? f.Appointment.DepartmentId : f.TreatmentSession.TreatmentPlanItem.TreatmentPlan.DepartmentId,
             DepartmentName = f.Appointment?.Department?.Name ?? "Nha khoa tổng quát",
             RecommendedDate = f.RecommendedDate,
             Reason = f.Reason,
@@ -476,6 +479,7 @@ public class PostCareService : IPostCareService
             PatientPhoneNumber = f.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.EmergencyContact,
             DentistUserId = f.TreatmentSession.DentistUserId,
             DentistName = f.TreatmentSession.DentistUser.User.FullName,
+            DepartmentId = f.Appointment != null ? f.Appointment.DepartmentId : f.TreatmentSession.TreatmentPlanItem.TreatmentPlan.DepartmentId,
             DepartmentName = f.Appointment?.Department?.Name ?? "Nha khoa tổng quát",
             RecommendedDate = f.RecommendedDate,
             Reason = f.Reason,
@@ -487,6 +491,71 @@ public class PostCareService : IPostCareService
         return ApiResponse<List<FollowUpScheduleDto>>.Ok(list);
     }
 
+    public async Task<ApiResponse<FollowUpScheduleDto>> UpdateFollowUpStatusAsync(
+        long staffOrPatientUserId,
+        long followUpId,
+        UpdateFollowUpStatusRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null)
+            return ApiResponse<FollowUpScheduleDto>.Fail("Dữ liệu cập nhật không hợp lệ.");
+
+        var followUp = await _dbContext.FollowUpSchedules
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a!.Department)
+            .Include(f => f.TreatmentSession)
+                .ThenInclude(s => s.DentistUser)
+                    .ThenInclude(d => d.User)
+            .Include(f => f.TreatmentSession)
+                .ThenInclude(s => s.TreatmentPlanItem)
+                    .ThenInclude(i => i.TreatmentPlan)
+                        .ThenInclude(p => p.PatientUser)
+            .FirstOrDefaultAsync(f => f.FollowUpId == followUpId, ct);
+
+        if (followUp == null)
+            return ApiResponse<FollowUpScheduleDto>.Fail("Không tìm thấy lịch hẹn tái khám.");
+
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            followUp.Status = request.Status.Trim();
+        }
+
+        if (request.NewRecommendedDate.HasValue && request.NewRecommendedDate.Value > DateTime.UtcNow)
+        {
+            followUp.RecommendedDate = request.NewRecommendedDate.Value;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Note))
+        {
+            followUp.Reason = string.IsNullOrWhiteSpace(followUp.Reason)
+                ? request.Note.Trim()
+                : $"{followUp.Reason} | [CSKH: {request.Note.Trim()}]";
+        }
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        var deptId = followUp.Appointment?.DepartmentId ?? followUp.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.DepartmentId;
+        var dto = new FollowUpScheduleDto
+        {
+            FollowUpId = followUp.FollowUpId,
+            TreatmentSessionId = followUp.TreatmentSessionId,
+            PatientUserId = followUp.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUserId,
+            PatientName = followUp.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.FullName,
+            PatientCode = followUp.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.PatientCode,
+            PatientPhoneNumber = followUp.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.EmergencyContact,
+            DentistUserId = followUp.TreatmentSession.DentistUserId,
+            DentistName = followUp.TreatmentSession.DentistUser.User.FullName,
+            DepartmentId = deptId,
+            DepartmentName = followUp.Appointment?.Department?.Name ?? "Nha khoa tổng quát",
+            RecommendedDate = followUp.RecommendedDate,
+            Reason = followUp.Reason,
+            Status = followUp.Status,
+            AppointmentId = followUp.AppointmentId,
+            AppointmentCode = followUp.Appointment?.AppointmentCode
+        };
+
+        return ApiResponse<FollowUpScheduleDto>.Ok(dto, "Đã cập nhật trạng thái lịch tái khám thành công.");
+    }
     private async Task<DepartmentReferralDto?> MapReferralToDtoAsync(long referralId, CancellationToken ct)
     {
         var r = await _dbContext.DepartmentReferrals

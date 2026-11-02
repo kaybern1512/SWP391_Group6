@@ -12,6 +12,14 @@ public class DentistMedicalRecordIndexViewModel
     public List<PatientLookupDto> Patients { get; set; } = new();
     public string? Search { get; set; }
     public CreateClinicalEntryFormModel NewEntryForm { get; set; } = new();
+
+    // Active Clinical Examination Context
+    public long? ActiveAppointmentId { get; set; }
+    public AppointmentDto? ActiveAppointment { get; set; }
+    public bool IsExamining { get; set; }
+    public List<DepartmentServiceDto> DepartmentServices { get; set; } = new();
+    public List<DentistOptionDto> DepartmentDentists { get; set; } = new();
+    public List<DentalChairOptionDto> AvailableChairs { get; set; } = new();
 }
 
 public class CreateClinicalEntryFormModel

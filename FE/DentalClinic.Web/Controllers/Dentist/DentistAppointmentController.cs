@@ -45,10 +45,21 @@ public class DentistAppointmentController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Start(long id, [FromForm] string? date = null)
     {
+        var apptDetail = await _appointmentApiService.GetAppointmentDetailAsync(id);
         var result = await _appointmentApiService.DentistStartAppointmentAsync(id);
         if (result.IsSuccess)
         {
-            TempData["SuccessMessage"] = result.Message ?? "Đã bắt đầu buổi khám và điều trị cho bệnh nhân.";
+            TempData["SuccessMessage"] = result.Message ?? "Đã tiếp nhận bệnh nhân vào ghế điều trị và bắt đầu ca khám.";
+            var patientId = apptDetail?.Data?.PatientUserId;
+            if (patientId.HasValue && patientId.Value > 0)
+            {
+                return RedirectToAction("Index", "DentistMedicalRecord", new
+                {
+                    patientId = patientId.Value,
+                    appointmentId = id,
+                    isExamining = true
+                });
+            }
         }
         else
         {
@@ -82,12 +93,28 @@ public class DentistAppointmentController : Controller
 
     [HttpPost("{id:long}/AssignChair")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> AssignChair(long id, [FromForm] long dentalChairId, [FromForm] string? date = null)
+    public async Task<IActionResult> AssignChair(long id, [FromForm] long dentalChairId, [FromForm] string? date = null, [FromForm] string? returnUrl = null)
     {
+        IActionResult RedirectTarget()
+        {
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+            return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
+        }
+
         if (dentalChairId <= 0)
         {
             TempData["ErrorMessage"] = "Vui lòng chọn ghế nha khoa hợp lệ.";
-            return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
+            return RedirectTarget();
+        }
+
+        var apptDetail = await _appointmentApiService.GetAppointmentDetailAsync(id);
+        if (apptDetail?.Data != null && (apptDetail.Data.Status == "Completed" || apptDetail.Data.Status == "Cancelled"))
+        {
+            TempData["ErrorMessage"] = "Ca khám đã hoàn tất hoặc đã hủy, vị trí ghế điều trị đã được khóa và không thể thay đổi.";
+            return RedirectTarget();
         }
 
         var result = await _appointmentApiService.DentistAssignChairAsync(id, dentalChairId);
@@ -99,7 +126,6 @@ public class DentistAppointmentController : Controller
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể chọn ghế điều trị này.";
         }
-        return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
+        return RedirectTarget();
     }
 }
-

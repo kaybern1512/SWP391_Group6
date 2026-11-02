@@ -15,4 +15,5 @@ public interface IPostCareApiService
     Task<ApiResult<List<FollowUpScheduleDto>>> GetPatientFollowUpsAsync();
     Task<ApiResult<List<FollowUpScheduleDto>>> GetDentistFollowUpsAsync();
     Task<ApiResult<List<FollowUpScheduleDto>>> GetReceptionistFollowUpsAsync();
+    Task<ApiResult<FollowUpScheduleDto>> UpdateFollowUpStatusAsync(long followUpId, UpdateFollowUpStatusRequest request);
 }

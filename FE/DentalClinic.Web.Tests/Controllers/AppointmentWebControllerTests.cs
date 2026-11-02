@@ -533,5 +533,56 @@ public class AppointmentWebControllerTests
         redirect.RouteValues.Should().ContainKey("id").WhoseValue.Should().Be(25L);
         controller.TempData["SuccessMessage"].Should().Be("Dời lịch khám thành công");
     }
-}
+    [Fact]
+    public async Task Receptionist_Create_Get_ReturnsViewWithDepartments()
+    {
+        _apiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(new List<DepartmentDto>
+            {
+                new() { DepartmentId = 1, Name = "Khoa RÄƒng Tá»•ng QuÃ¡t" }
+            }));
 
+        var controller = new ReceptionistAppointmentController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(201, "Receptionist")
+        };
+
+        var result = await controller.Create((long?)null);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<ReceptionistBookAppointmentViewModel>().Subject;
+        vm.Departments.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Receptionist_Create_Post_Success_RedirectsToRequests()
+    {
+        _apiMock.Setup(x => x.CreateReceptionistAppointmentAsync(It.IsAny<CreateReceptionistAppointmentRequest>()))
+            .ReturnsAsync(ApiResult<AppointmentDto>.Success(new AppointmentDto
+            {
+                AppointmentId = 50,
+                AppointmentCode = "APP-20261031-123456"
+            }));
+
+        var controller = new ReceptionistAppointmentController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(201, "Receptionist"),
+            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
+        };
+
+        var model = new ReceptionistBookAppointmentViewModel
+        {
+            PatientUserId = 101,
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(1).AddHours(9),
+            ReasonForVisit = "Äau nhá»©c rÄƒng hÃ m"
+        };
+
+        var result = await controller.Create(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Requests");
+        controller.TempData["SuccessMessage"].Should().NotBeNull();
+    }
+}

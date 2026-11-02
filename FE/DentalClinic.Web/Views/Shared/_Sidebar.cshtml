@@ -100,6 +100,10 @@
                 <i class="bi bi-person-check"></i>
                 <span>Check-in Tiếp Nhận Bệnh Nhân</span>
             </a>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistAppointment" && currentAction == "Create" ? "active" : "")" asp-controller="ReceptionistAppointment" asp-action="Create">
+                <i class="bi bi-calendar-plus"></i>
+                <span>Đặt Lịch Hẹn Tại Quầy</span>
+            </a>
             <a class="sidebar-link @(currentCtrl == "ReceptionistAppointment" && currentAction == "Requests" ? "active" : "")" asp-controller="ReceptionistAppointment" asp-action="Requests">
                 <i class="bi bi-calendar-check"></i>
                 <span>Yêu Cầu Đặt Lịch Hẹn</span>

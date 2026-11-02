@@ -1,4 +1,4 @@
--- =====================================================================
+﻿-- =====================================================================
 -- SEED DEMO APPOINTMENTS & HISTORICAL VISITS
 -- Target: DentalClinicManagementDB
 -- Password for all accounts: Password123@

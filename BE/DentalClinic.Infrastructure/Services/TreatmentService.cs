@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -70,6 +70,7 @@ public class TreatmentService : ITreatmentService
     {
         var plan = await _dbContext.TreatmentPlans
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(tp => tp.PatientUser)
                 .ThenInclude(p => p.User)
             .Include(tp => tp.Department)
@@ -126,6 +127,7 @@ public class TreatmentService : ITreatmentService
         {
             var firstDept = await _dbContext.DentistDepartments
                 .Where(dd => dd.DentistUserId == dentistUserId)
+                .OrderBy(dd => dd.DepartmentId)
                 .Select(dd => dd.DepartmentId)
                 .FirstOrDefaultAsync(ct);
             deptId = firstDept > 0 ? firstDept : 1;
@@ -505,6 +507,7 @@ public class TreatmentService : ITreatmentService
     {
         var plans = await _dbContext.TreatmentPlans
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(tp => tp.PatientUser)
                 .ThenInclude(p => p.User)
             .Include(tp => tp.Department)
@@ -525,6 +528,7 @@ public class TreatmentService : ITreatmentService
                         .ThenInclude(ps => ps.DepartmentService)
             .Where(tp => tp.PatientUserId == patientUserId)
             .OrderByDescending(tp => tp.CreatedAt)
+            .ThenBy(tp => tp.TreatmentPlanId)
             .ToListAsync(ct);
 
         return ApiResponse<List<TreatmentPlanDto>>.Ok(plans.Select(MapToDto).ToList());

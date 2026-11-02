@@ -9,6 +9,17 @@
     ViewData["Title"] = displayTitle;
 }
 
+<style>
+    @@keyframes pulse-subtle {
+        0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4); }
+        70% { box-shadow: 0 0 0 8px rgba(22, 163, 74, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+    }
+    .pulse-btn {
+        animation: pulse-subtle 2s infinite;
+    }
+</style>
+
 <div class="container-fluid px-0">
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
         <div>
@@ -130,18 +141,32 @@
                                     {
                                         <div class="text-success small fw-semibold d-flex align-items-center gap-1 mt-1">
                                             <i class="bi bi-check-circle"></i> Ghế: @appt.DentalChairName
-                                            <button type="button" class="btn btn-link p-0 text-muted ms-1" style="font-size: 0.75rem;" title="Đổi ghế khác" onclick="openPickChairModal(@appt.AppointmentId, '@appt.PatientName', '@(appt.RoomName ?? "")', @appt.DentalChairId.Value)">
-                                                <i class="bi bi-arrow-repeat"></i>
-                                            </button>
+                                            @if (appt.Status != "Completed" && appt.Status != "Cancelled")
+                                            {
+                                                <button type="button" class="btn btn-link p-0 text-muted ms-1" style="font-size: 0.75rem;" title="Đổi ghế khác" onclick="openPickChairModal(@appt.AppointmentId, '@appt.PatientName', '@(appt.RoomName ?? "")', @appt.DentalChairId.Value)">
+                                                    <i class="bi bi-arrow-repeat"></i>
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted ms-1 small" title="Ca khám đã hoàn tất, vị trí ghế đã được khóa"><i class="bi bi-lock-fill"></i></span>
+                                            }
                                         </div>
                                     }
                                     else
                                     {
-                                        <div class="mt-1">
-                                            <button type="button" class="btn btn-sm btn-outline-warning text-dark py-0 px-2 d-inline-flex align-items-center gap-1 shadow-sm" style="font-size: 0.78rem;" onclick="openPickChairModal(@appt.AppointmentId, '@appt.PatientName', '@(appt.RoomName ?? "")', 0)">
-                                                <i class="bi bi-pin-map text-warning"></i> <strong>Pick Ghế</strong>
-                                            </button>
-                                        </div>
+                                        @if (appt.Status != "Completed" && appt.Status != "Cancelled")
+                                        {
+                                            <div class="mt-1">
+                                                <button type="button" class="btn btn-sm btn-outline-warning text-dark py-0 px-2 d-inline-flex align-items-center gap-1 shadow-sm" style="font-size: 0.78rem;" onclick="openPickChairModal(@appt.AppointmentId, '@appt.PatientName', '@(appt.RoomName ?? "")', 0)">
+                                                    <i class="bi bi-pin-map text-warning"></i> <strong>Pick Ghế</strong>
+                                                </button>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="text-muted small mt-1"><em>(Chưa gán ghế)</em></div>
+                                        }
                                     }
                                 </td>
                                 <td style="max-width: 220px;">
@@ -164,7 +189,7 @@
                                             break;
                                         case "InService":
                                             <span class="badge bg-primary px-3 py-2">
-                                                <i class="bi bi-activity me-1"></i>Đang điều trị
+                                                <i class="bi bi-heart-pulse-fill me-1"></i>Đang điều trị
                                             </span>
                                             break;
                                         case "Completed":
@@ -190,29 +215,36 @@
                                     }
                                 </td>
                                 <td class="text-end pe-3">
-                                    <div class="d-flex align-items-center justify-content-end gap-1">
-                                        @if (appt.Status == "CheckedIn" || appt.Status == "Confirmed")
+                                    <div class="d-flex align-items-center justify-content-end gap-1 flex-wrap">
+                                        @if (appt.Status == "CheckedIn")
                                         {
                                             <form asp-controller="DentistAppointment" asp-action="Start" asp-route-id="@appt.AppointmentId" method="post" class="d-inline">
                                                 @Html.AntiForgeryToken()
                                                 <input type="hidden" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
-                                                <button type="submit" class="btn btn-sm btn-success fw-semibold shadow-sm" title="Tiếp nhận bệnh nhân vào ghế điều trị">
-                                                    <i class="bi bi-play-circle me-1"></i>Vào Khám
+                                                <button type="submit" class="btn btn-sm btn-primary fw-semibold shadow-sm text-nowrap" title="Tiếp nhận bệnh nhân vào ghế và bắt đầu khám bệnh">
+                                                    <i class="bi bi-box-arrow-in-right me-1"></i>Vào Khám
                                                 </button>
                                             </form>
+                                        }
+                                        else if (appt.Status == "Confirmed")
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary border px-2 py-1 small" title="Chờ bệnh nhân làm thủ tục check-in tại quầy tiếp đón">
+                                                <i class="bi bi-hourglass me-1"></i>Chờ Check-in
+                                            </span>
                                         }
                                         else if (appt.Status == "InService")
                                         {
-                                            <form asp-controller="DentistAppointment" asp-action="Complete" asp-route-id="@appt.AppointmentId" method="post" class="d-inline">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
-                                                <button type="submit" class="btn btn-sm btn-primary fw-semibold shadow-sm" title="Hoàn tất buổi khám và điều trị">
-                                                    <i class="bi bi-check-circle me-1"></i>Hoàn Thành
-                                                </button>
-                                            </form>
+                                            <a asp-controller="DentistMedicalRecord" asp-action="Index" 
+                                               asp-route-patientId="@appt.PatientUserId" 
+                                               asp-route-appointmentId="@appt.AppointmentId" 
+                                               asp-route-isExamining="true" 
+                                               class="btn btn-sm btn-success fw-semibold shadow-sm text-nowrap pulse-btn" 
+                                               title="Mở hồ sơ bệnh án và tiếp tục buổi khám & điều trị">
+                                                <i class="bi bi-heart-pulse-fill me-1"></i>Tiếp Tục Khám
+                                            </a>
                                         }
 
-                                        <a asp-controller="DentistMedicalRecord" asp-action="Index" asp-route-patientId="@appt.PatientUserId" asp-route-appointmentId="@appt.AppointmentId" class="btn btn-sm btn-outline-primary" title="Mở hồ sơ bệnh án & Sơ đồ răng">
+                                        <a asp-controller="DentistMedicalRecord" asp-action="Index" asp-route-patientId="@appt.PatientUserId" asp-route-appointmentId="@appt.AppointmentId" class="btn btn-sm btn-outline-primary" title="Xem trước hồ sơ bệnh án & Sơ đồ răng">
                                             <i class="bi bi-journal-medical me-1"></i> Bệnh Án
                                         </a>
                                         <a asp-controller="DentistTreatmentPlan" asp-action="Create" asp-route-patientId="@appt.PatientUserId" class="btn btn-sm btn-outline-info" title="Lập phác đồ & kế hoạch điều trị cho bệnh nhân">
