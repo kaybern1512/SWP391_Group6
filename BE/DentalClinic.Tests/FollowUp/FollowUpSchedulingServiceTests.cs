@@ -74,6 +74,33 @@ public class FollowUpSchedulingServiceTests
         await db.SaveChangesAsync();
     }
 
+    private static async Task<DateTime> SeedDoctorScheduleAsync(DentalClinicDbContext db, long doctorId = 20, int daysFromToday = 2)
+    {
+        var targetDate = DateTime.Today.AddDays(daysFromToday);
+        db.DentistWorkSchedules.AddRange(
+            new DentistWorkSchedule
+            {
+                DentistUserId = doctorId,
+                DepartmentId = 1,
+                WorkDate = DateOnly.FromDateTime(targetDate),
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(12, 0),
+                Status = "Scheduled"
+            },
+            new DentistWorkSchedule
+            {
+                DentistUserId = doctorId,
+                DepartmentId = 1,
+                WorkDate = DateOnly.FromDateTime(targetDate),
+                StartTime = new TimeOnly(13, 0),
+                EndTime = new TimeOnly(17, 0),
+                Status = "Scheduled"
+            }
+        );
+        await db.SaveChangesAsync();
+        return targetDate;
+    }
+
     [Fact]
     public async Task ValidateFollowUpSlot_PastTime_ReturnsFailPastTime()
     {
@@ -624,5 +651,311 @@ public class FollowUpSchedulingServiceTests
 
         Assert.False(response.Success);
         Assert.Contains("quá khứ", response.Message);
+    }
+
+    // ==========================================
+    // DAY 04: PATIENT CHANGE PROPOSALS TESTS
+    // ==========================================
+
+    [Fact]
+    public async Task SubmitPatientChangeProposal_ValidReschedule_Success()
+    {
+        var db = CreateDbContext(nameof(SubmitPatientChangeProposal_ValidReschedule_Success));
+        await SeedDoctorAndPatientAsync(db, doctorId: 20, patientId: 10);
+        var targetDate = await SeedDoctorScheduleAsync(db, doctorId: 20, daysFromToday: 5);
+
+        // Active confirmed appointment
+        var appt = new Appointment
+        {
+            AppointmentId = 101,
+            AppointmentCode = "APT-101",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = targetDate.AddHours(9),
+            ScheduledEnd = targetDate.AddHours(9).AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Tái khám kiểm tra vết thương",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var req = new PatientFollowUpChangeRequest
+        {
+            AppointmentId = 101,
+            ProposedStart = targetDate.AddHours(10),
+            ProposedEnd = targetDate.AddHours(10).AddMinutes(30),
+            Reason = "Bận việc đột xuất sáng 9h, xin dời sang 10h",
+            IsRebook = false
+        };
+
+        var response = await service.SubmitPatientChangeProposalAsync(10, req);
+
+        Assert.True(response.Success);
+        Assert.NotNull(response.Data);
+        Assert.Equal(ProposalStatus.Pending, response.Data.Status);
+        Assert.Equal(101, response.Data.AppointmentId);
+        Assert.False(response.Data.IsRebook);
+    }
+
+    [Fact]
+    public async Task SubmitPatientChangeProposal_UnauthorizedPatient_Fails()
+    {
+        var db = CreateDbContext(nameof(SubmitPatientChangeProposal_UnauthorizedPatient_Fails));
+        await SeedDoctorAndPatientAsync(db, doctorId: 20, patientId: 10);
+        var targetDate = await SeedDoctorScheduleAsync(db, doctorId: 20, daysFromToday: 5);
+
+        var appt = new Appointment
+        {
+            AppointmentId = 102,
+            AppointmentCode = "APT-102",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = targetDate.AddHours(9),
+            ScheduledEnd = targetDate.AddHours(9).AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Tái khám",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        // Attacker patientId = 999 tries to propose on appointment belonging to patientId = 10
+        var req = new PatientFollowUpChangeRequest
+        {
+            AppointmentId = 102,
+            ProposedStart = targetDate.AddHours(10),
+            ProposedEnd = targetDate.AddHours(10).AddMinutes(30),
+            Reason = "IDOR attack attempt",
+            IsRebook = false
+        };
+
+        var response = await service.SubmitPatientChangeProposalAsync(999, req);
+
+        Assert.False(response.Success);
+        Assert.Contains("không có quyền", response.Message);
+    }
+
+    [Fact]
+    public async Task SubmitPatientChangeProposal_DuplicatePending_Fails()
+    {
+        var db = CreateDbContext(nameof(SubmitPatientChangeProposal_DuplicatePending_Fails));
+        await SeedDoctorAndPatientAsync(db, doctorId: 20, patientId: 10);
+        var targetDate = await SeedDoctorScheduleAsync(db, doctorId: 20, daysFromToday: 5);
+
+        var appt = new Appointment
+        {
+            AppointmentId = 103,
+            AppointmentCode = "APT-103",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = targetDate.AddHours(9),
+            ScheduledEnd = targetDate.AddHours(9).AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Tái khám",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(appt);
+
+        // Existing pending proposal
+        db.AppointmentChangeProposals.Add(new AppointmentChangeProposal
+        {
+            AppointmentId = 103,
+            ProposedByUserId = 10,
+            ProposedStart = targetDate.AddHours(14),
+            ProposedEnd = targetDate.AddHours(14).AddMinutes(30),
+            Reason = "Đã gửi yêu cầu trước đó",
+            Status = ProposalStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var req = new PatientFollowUpChangeRequest
+        {
+            AppointmentId = 103,
+            ProposedStart = targetDate.AddHours(15),
+            ProposedEnd = targetDate.AddHours(15).AddMinutes(30),
+            Reason = "Gửi thêm yêu cầu thứ 2 khi cái 1 chưa duyệt",
+            IsRebook = false
+        };
+
+        var response = await service.SubmitPatientChangeProposalAsync(10, req);
+
+        Assert.False(response.Success);
+        Assert.Contains("đang có một yêu cầu thay đổi đang chờ", response.Message);
+    }
+
+    [Fact]
+    public async Task SubmitPatientChangeProposal_PastTime_Fails()
+    {
+        var db = CreateDbContext(nameof(SubmitPatientChangeProposal_PastTime_Fails));
+        await SeedDoctorAndPatientAsync(db, doctorId: 20, patientId: 10);
+
+        var appt = new Appointment
+        {
+            AppointmentId = 104,
+            AppointmentCode = "APT-104",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = DateTime.Today.AddDays(3).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(3).AddHours(9).AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Tái khám",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var req = new PatientFollowUpChangeRequest
+        {
+            AppointmentId = 104,
+            ProposedStart = DateTime.Today.AddDays(-1).AddHours(10),
+            ProposedEnd = DateTime.Today.AddDays(-1).AddHours(10).AddMinutes(30),
+            Reason = "Đề xuất thời gian quá khứ",
+            IsRebook = false
+        };
+
+        var response = await service.SubmitPatientChangeProposalAsync(10, req);
+
+        Assert.False(response.Success);
+        Assert.Contains("ít nhất 30 phút", response.Message);
+    }
+
+    [Fact]
+    public async Task SubmitPatientChangeProposal_ValidRebook_Success()
+    {
+        var db = CreateDbContext(nameof(SubmitPatientChangeProposal_ValidRebook_Success));
+        await SeedDoctorAndPatientAsync(db, doctorId: 20, patientId: 10);
+        var targetDate = await SeedDoctorScheduleAsync(db, doctorId: 20, daysFromToday: 6);
+
+        // Cancelled appointment
+        var appt = new Appointment
+        {
+            AppointmentId = 105,
+            AppointmentCode = "APT-105",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = targetDate.AddDays(-2).AddHours(9),
+            ScheduledEnd = targetDate.AddDays(-2).AddHours(9).AddMinutes(30),
+            Status = AppointmentStatus.Cancelled,
+            ReasonForVisit = "Tái khám đã bị hủy",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var req = new PatientFollowUpChangeRequest
+        {
+            AppointmentId = 105,
+            ProposedStart = targetDate.AddHours(9),
+            ProposedEnd = targetDate.AddHours(9).AddMinutes(30),
+            Reason = "Lần trước bận thi cử phải hủy, nay xin đặt lại lịch tái khám",
+            IsRebook = true
+        };
+
+        var response = await service.SubmitPatientChangeProposalAsync(10, req);
+
+        Assert.True(response.Success);
+        Assert.NotNull(response.Data);
+        Assert.True(response.Data.IsRebook);
+        Assert.Equal(ProposalStatus.Pending, response.Data.Status);
+    }
+
+    [Fact]
+    public async Task WithdrawPatientProposal_Pending_Success()
+    {
+        var db = CreateDbContext(nameof(WithdrawPatientProposal_Pending_Success));
+        await SeedDoctorAndPatientAsync(db, doctorId: 20, patientId: 10);
+
+        var appt = new Appointment
+        {
+            AppointmentId = 106,
+            AppointmentCode = "APT-106",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = DateTime.Today.AddDays(4).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(4).AddHours(9).AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Tái khám",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(appt);
+
+        var proposal = new AppointmentChangeProposal
+        {
+            ProposalId = 501,
+            AppointmentId = 106,
+            ProposedByUserId = 10,
+            ProposedStart = DateTime.Today.AddDays(4).AddHours(14),
+            ProposedEnd = DateTime.Today.AddDays(4).AddHours(14).AddMinutes(30),
+            Reason = "Đổi lịch chiều",
+            Status = ProposalStatus.Pending,
+            CreatedAt = DateTime.UtcNow,
+            Appointment = appt
+        };
+        db.AppointmentChangeProposals.Add(proposal);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var response = await service.WithdrawPatientProposalAsync(10, 501);
+
+        Assert.True(response.Success);
+        var updated = await db.AppointmentChangeProposals.FindAsync((long)501);
+        Assert.NotNull(updated);
+        Assert.Equal(ProposalStatus.Expired, updated.Status);
+    }
+
+    [Fact]
+    public async Task WithdrawPatientProposal_AlreadyResolved_Fails()
+    {
+        var db = CreateDbContext(nameof(WithdrawPatientProposal_AlreadyResolved_Fails));
+        await SeedDoctorAndPatientAsync(db, doctorId: 20, patientId: 10);
+
+        var appt = new Appointment
+        {
+            AppointmentId = 107,
+            AppointmentCode = "APT-107",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = DateTime.Today.AddDays(4).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(4).AddHours(9).AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Tái khám",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(appt);
+
+        var proposal = new AppointmentChangeProposal
+        {
+            ProposalId = 502,
+            AppointmentId = 107,
+            ProposedByUserId = 10,
+            ProposedStart = DateTime.Today.AddDays(4).AddHours(14),
+            ProposedEnd = DateTime.Today.AddDays(4).AddHours(14).AddMinutes(30),
+            Reason = "Đã được duyệt",
+            Status = ProposalStatus.Accepted,
+            CreatedAt = DateTime.UtcNow,
+            Appointment = appt
+        };
+        db.AppointmentChangeProposals.Add(proposal);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var response = await service.WithdrawPatientProposalAsync(10, 502);
+
+        Assert.False(response.Success);
+        Assert.Contains("Chỉ có thể rút yêu cầu đang ở trạng thái 'Chờ duyệt'", response.Message);
     }
 }

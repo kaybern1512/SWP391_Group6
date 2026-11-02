@@ -167,6 +167,7 @@ public class PostCareWebControllerTests
         var followUps = new List<FollowUpScheduleDto> { new() { FollowUpId = 5, Reason = "Kiểm tra sau trám" } };
 
         _postCareApiMock.Setup(x => x.GetPatientFollowUpsAsync()).ReturnsAsync(ApiResult<List<FollowUpScheduleDto>>.Success(followUps));
+        _postCareApiMock.Setup(x => x.GetPatientProposalsAsync()).ReturnsAsync(ApiResult<List<FollowUpProposalDto>>.Success(new List<FollowUpProposalDto>()));
 
         var controller = new PatientFollowUpController(_postCareApiMock.Object)
         {
@@ -179,5 +180,48 @@ public class PostCareWebControllerTests
         var viewResult = result.Should().BeOfType<ViewResult>().Subject;
         var model = viewResult.Model.Should().BeOfType<PatientFollowUpIndexViewModel>().Subject;
         model.FollowUps.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task PatientFollowUpController_SubmitProposal_Success_ReturnsOk()
+    {
+        var req = new PatientFollowUpChangeRequest
+        {
+            AppointmentId = 55,
+            ProposedStart = DateTime.Today.AddDays(2).AddHours(9),
+            ProposedEnd = DateTime.Today.AddDays(2).AddHours(9).AddMinutes(30),
+            Reason = "Đổi lịch sang sáng"
+        };
+        var proposalDto = new FollowUpProposalDto { ProposalId = 88, Status = "Pending" };
+
+        _postCareApiMock.Setup(x => x.SubmitPatientProposalAsync(req))
+            .ReturnsAsync(ApiResult<FollowUpProposalDto>.Success(proposalDto, "Gửi yêu cầu thành công"));
+
+        var controller = new PatientFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(10, "Patient", "Nguyễn Văn A"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.SubmitProposal(req);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task PatientFollowUpController_WithdrawProposal_Success_ReturnsOk()
+    {
+        _postCareApiMock.Setup(x => x.WithdrawPatientProposalAsync(88))
+            .ReturnsAsync(ApiResult<bool>.Success(true, "Rút thành công"));
+
+        var controller = new PatientFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(10, "Patient", "Nguyễn Văn A"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.WithdrawProposal(88);
+
+        result.Should().BeOfType<OkObjectResult>();
     }
 }
