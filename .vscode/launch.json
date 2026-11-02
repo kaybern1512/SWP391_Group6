@@ -1,0 +1,56 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend API (https://localhost:7350)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-be",
+      "program": "${workspaceFolder}/BE/DentalClinic.Api/bin/Debug/net8.0/DentalClinic.Api.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/BE/DentalClinic.Api",
+      "stopAtEntry": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+        "uriFormat": "%s/swagger"
+      },
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "sourceFileMap": {
+        "/Views": "${workspaceFolder}/BE/DentalClinic.Api/Views"
+      }
+    },
+    {
+      "name": "Frontend Web (https://localhost:7129)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-fe",
+      "program": "${workspaceFolder}/FE/DentalClinic.Web/bin/Debug/net8.0/DentalClinic.Web.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/FE/DentalClinic.Web",
+      "stopAtEntry": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      },
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "sourceFileMap": {
+        "/Views": "${workspaceFolder}/FE/DentalClinic.Web/Views"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Chạy Cả Dự Án (Backend + Frontend)",
+      "configurations": [
+        "Backend API (https://localhost:7350)",
+        "Frontend Web (https://localhost:7129)"
+      ],
+      "stopAll": true
+    }
+  ]
+}
