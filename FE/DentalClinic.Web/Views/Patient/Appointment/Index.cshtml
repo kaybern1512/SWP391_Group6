@@ -47,7 +47,7 @@
         <div class="card-body p-2">
             <div class="d-flex flex-wrap gap-2">
                 <a asp-action="Index" class="btn btn-sm @(string.IsNullOrEmpty(Model.SelectedStatus) ? "btn-dark" : "btn-light")">
-                    Tất cả (@Model.Appointments.Count)
+                    Tất cả (@(Model.HasError ? "--" : Model.Appointments.Count.ToString()))
                 </a>
                 <a asp-action="Index" asp-route-status="PendingReceptionReview" class="btn btn-sm @(Model.SelectedStatus == "PendingReceptionReview" ? "btn-warning text-dark" : "btn-light")">
                     Chờ Lễ Tân

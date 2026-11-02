@@ -516,17 +516,34 @@ public class AppointmentService : IAppointmentService
             .Select(a => a.AppointmentId)
             .ToListAsync(ct);
 
-        var list = new List<AppointmentDto>();
+        if (appointmentIds.Count == 0)
+        {
+            return ApiResponse<List<AppointmentDto>>.Ok(new List<AppointmentDto>());
+        }
+
+        var list = new List<AppointmentDto>(appointmentIds.Count);
         foreach (var id in appointmentIds)
         {
+            ct.ThrowIfCancellationRequested();
+
             try
             {
                 var dto = await MapToDtoAsync(id, ct);
-                if (dto != null) list.Add(dto);
+                if (dto == null)
+                {
+                    _logger.LogError("Không tìm thấy thông tin chi tiết lịch hẹn ID {AppointmentId} cho bệnh nhân {PatientUserId}", id, patientUserId);
+                    throw new InvalidOperationException($"Không thể nạp dữ liệu chi tiết cho lịch hẹn ID {id}.");
+                }
+                list.Add(dto);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi khi nạp dữ liệu chi tiết lịch hẹn ID {AppointmentId} cho bệnh nhân {PatientUserId}", id, patientUserId);
+                throw;
             }
         }
 
@@ -2377,7 +2394,7 @@ public class AppointmentService : IAppointmentService
         return $"{datePrefix}{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
     }
 
-    private async Task<AppointmentDto?> MapToDtoAsync(long appointmentId, CancellationToken ct)
+    protected virtual async Task<AppointmentDto?> MapToDtoAsync(long appointmentId, CancellationToken ct)
     {
         var a = await _dbContext.Appointments
             .AsNoTracking()

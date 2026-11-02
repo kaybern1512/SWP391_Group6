@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading;
@@ -73,12 +73,17 @@ public class AppointmentsController : ControllerBase
     [HttpGet("api/patient/appointments")]
     [Authorize(Roles = UserRole.Patient)]
     [ProducesResponseType(typeof(ApiResponse<List<AppointmentDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<List<AppointmentDto>>), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetPatientAppointments([FromQuery] string? status, CancellationToken ct)
     {
         var userId = GetCurrentUserId();
         if (userId <= 0) return Unauthorized(ApiResponse.Fail("Không thể xác định danh tính người dùng."));
 
         var result = await _appointmentService.GetPatientAppointmentsAsync(userId, status, ct);
+        if (!result.Success)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, result);
+        }
         return Ok(result);
     }
 
