@@ -1,15 +1,26 @@
 ﻿-- =========================================================================================
 -- DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)
--- FULL DATABASE SCHEMA & COMPLETE VERIFIED SEED DATASET (39 TABLES)
+-- FULL MASTER DATABASE SCRIPT: SCHEMA + COMPLETE SEED DATASET (44 TABLES)
 -- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
 -- Database Name: DentalClinicManagementDB
 -- Shared Demo Password for ALL Accounts: Password123@
--- Generated: 2026-11-03 00:45:48
+-- Key Demo Accounts:
+--   Admin:                 admin@dentalcare.com
+--   Department Manager:    manager.tongquat@dentalcare.com / manager@dentalcare.com
+--   Dentist:               dentist.hung@dentalcare.com / dentist@dentalcare.com
+--   Receptionist:          receptionist@dentalcare.com
+--   Patient:               patient.tuan@gmail.com / patient1@dentalcare.com
+-- Generated: 2026-11-03 01:10:07
 -- =========================================================================================
 
+-- =========================================================================================
+-- IDEMPOTENT INITIALIZATION & SAFE CLEANUP
+-- Drops foreign keys, views, stored procedures, and tables if they already exist,
+-- ensuring safe, conflict-free re-runs on any machine or existing database.
+-- =========================================================================================
 IF DB_ID(N'DentalClinicManagementDB') IS NULL
 BEGIN
-    CREATE DATABASE DentalClinicManagementDB;
+    CREATE DATABASE DentalClinicManagementDB COLLATE SQL_Latin1_General_CP1_CI_AS;
 END;
 GO
 
@@ -18,10 +29,44 @@ GO
 
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
+SET NOCOUNT ON;
+GO
+
+-- 1. Drop all Foreign Key Constraints
+DECLARE @dropFkSql NVARCHAR(MAX) = N'';
+SELECT @dropFkSql += N'ALTER TABLE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name) + N' DROP CONSTRAINT ' + QUOTENAME(fk.name) + N';' + CHAR(13)
+FROM sys.foreign_keys fk
+JOIN sys.tables t ON fk.parent_object_id = t.object_id
+JOIN sys.schemas s ON t.schema_id = s.schema_id;
+IF LEN(@dropFkSql) > 0 EXEC sp_executesql @dropFkSql;
+
+-- 2. Drop all Views
+DECLARE @dropViewSql NVARCHAR(MAX) = N'';
+SELECT @dropViewSql += N'DROP VIEW ' + QUOTENAME(s.name) + N'.' + QUOTENAME(v.name) + N';' + CHAR(13)
+FROM sys.views v
+JOIN sys.schemas s ON v.schema_id = s.schema_id
+WHERE v.is_ms_shipped = 0;
+IF LEN(@dropViewSql) > 0 EXEC sp_executesql @dropViewSql;
+
+-- 3. Drop all Stored Procedures
+DECLARE @dropSpSql NVARCHAR(MAX) = N'';
+SELECT @dropSpSql += N'DROP PROCEDURE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(p.name) + N';' + CHAR(13)
+FROM sys.procedures p
+JOIN sys.schemas s ON p.schema_id = s.schema_id
+WHERE p.is_ms_shipped = 0;
+IF LEN(@dropSpSql) > 0 EXEC sp_executesql @dropSpSql;
+
+-- 4. Drop all Tables
+DECLARE @dropTableSql NVARCHAR(MAX) = N'';
+SELECT @dropTableSql += N'DROP TABLE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name) + N';' + CHAR(13)
+FROM sys.tables t
+JOIN sys.schemas s ON t.schema_id = s.schema_id
+WHERE t.name <> N'__EFMigrationsHistory';
+IF LEN(@dropTableSql) > 0 EXEC sp_executesql @dropTableSql;
 GO
 
 -- =========================================================================================
--- PART 1: DDL TABLE SCHEMAS, CONSTRAINTS & INDEXES
+-- PART 1: 44 DDL TABLE SCHEMAS, CONSTRAINTS & INDEXES
 -- =========================================================================================
 
 SET ANSI_NULLS ON
@@ -2155,7 +2200,88 @@ ALTER TABLE [dbo].[MedicineDispensationItems] CHECK CONSTRAINT [CHK_MedicineDisp
 GO
 
 -- =========================================================================================
--- PART 2: COMPLETE SYSTEM DATASET SEEDING (44 TABLES, UTF-8 ACCENTED VIETNAMESE)
+-- PART 2: DATABASE VIEWS
+-- =========================================================================================
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE VIEW dbo.vw_PublishedBlogPosts AS
+SELECT
+    bp.BlogPostId,
+    bp.Title,
+    bp.Slug,
+    bp.Summary,
+    bp.ThumbnailUrl,
+    bp.VideoUrl,
+    bp.EmbedVideoId,
+    bp.ReadTimeMinutes,
+    bp.IsFeatured,
+    bp.ViewCount,
+    bp.PublishedAt,
+    bp.CreatedAt,
+    bp.UpdatedAt,
+    bc.CategoryId,
+    bc.Name      AS CategoryName,
+    bc.Slug      AS CategorySlug,
+    ua.UserId    AS AuthorUserId,
+    COALESCE(sp.FullName, ua.Email) AS AuthorName,
+    ua.AvatarUrl AS AuthorAvatarUrl,
+    dp.Qualification,
+    dp.YearsOfExperience
+FROM dbo.BlogPosts bp
+INNER JOIN dbo.BlogCategories bc ON bc.CategoryId = bp.CategoryId
+INNER JOIN dbo.UserAccounts   ua ON ua.UserId     = bp.AuthorUserId
+LEFT  JOIN dbo.StaffProfiles  sp ON sp.UserId     = bp.AuthorUserId
+LEFT  JOIN dbo.DentistProfiles dp ON dp.UserId    = bp.AuthorUserId
+WHERE bp.Status = 'Published';
+
+
+GO
+
+-- =========================================================================================
+-- PART 3: STORED PROCEDURES
+-- =========================================================================================
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE dbo.sp_CleanupOrphanBlogPostMedia
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DELETE FROM dbo.BlogPostMedia
+    WHERE BlogPostId IS NULL
+      AND CreatedAt < DATEADD(HOUR, -24, SYSDATETIME());
+END;
+
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE dbo.sp_IncrementBlogPostView
+    @Slug NVARCHAR(250)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.BlogPosts
+    SET    ViewCount = ViewCount + 1
+    WHERE  Slug = @Slug
+      AND  Status = 'Published';
+END;
+
+
+GO
+
+-- =========================================================================================
+-- PART 4: COMPLETE SYSTEM DATASET SEEDING (44 TABLES, UTF-8 ACCENTED VIETNAMESE)
 -- =========================================================================================
 
 -- Disable foreign key checks during data loading
@@ -2689,6 +2815,17 @@ INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldSta
 INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (49, 42, N'Completed', N'Completed', 46, N'Bác sĩ ghi nhận chẩn đoán lâm sàng & sơ đồ răng bệnh án.', CAST(N'2026-11-02T03:51:44.7688544' AS DateTime2))
 INSERT [dbo].[AppointmentStatusHistories] ([HistoryId], [AppointmentId], [OldStatus], [NewStatus], [ChangedByUserId], [Note], [ChangedAt]) VALUES (50, 54, NULL, N'PendingReceptionReview', 23, N'Bệnh nhân gửi yêu cầu đặt lịch khám.', CAST(N'2026-11-02T04:32:44.0503159' AS DateTime2))
 SET IDENTITY_INSERT [dbo].[AppointmentStatusHistories] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [AppointmentReminderJobs] (4 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[AppointmentReminderJobs] ON;
+INSERT [dbo].[AppointmentReminderJobs] ([ReminderJobId], [AppointmentId], [ReminderType], [ScheduledSendTime], [RecipientEmail], [Status], [SentAt], [ErrorMessage], [RetryCount], [CreatedAt], [UpdatedAt]) VALUES (1, 53, N'T24H', CAST(N'2026-11-01T18:07:06.8812998' AS DateTime2), N'patient.tuan@gmail.com', N'Sent', CAST(N'2026-11-01T18:07:06.8812998' AS DateTime2), NULL, 0, CAST(N'2026-10-31T18:07:06.8812998' AS DateTime2), NULL)
+INSERT [dbo].[AppointmentReminderJobs] ([ReminderJobId], [AppointmentId], [ReminderType], [ScheduledSendTime], [RecipientEmail], [Status], [SentAt], [ErrorMessage], [RetryCount], [CreatedAt], [UpdatedAt]) VALUES (2, 53, N'T8H', CAST(N'2026-11-02T10:07:06.8812998' AS DateTime2), N'patient.tuan@gmail.com', N'Sent', CAST(N'2026-11-02T10:07:06.8812998' AS DateTime2), NULL, 0, CAST(N'2026-10-31T18:07:06.8812998' AS DateTime2), NULL)
+INSERT [dbo].[AppointmentReminderJobs] ([ReminderJobId], [AppointmentId], [ReminderType], [ScheduledSendTime], [RecipientEmail], [Status], [SentAt], [ErrorMessage], [RetryCount], [CreatedAt], [UpdatedAt]) VALUES (3, 2, N'T24H', CAST(N'2026-11-02T20:07:06.8822975' AS DateTime2), N'patient.tuan@gmail.com', N'Pending', NULL, NULL, 0, CAST(N'2026-11-02T18:07:06.8822975' AS DateTime2), NULL)
+INSERT [dbo].[AppointmentReminderJobs] ([ReminderJobId], [AppointmentId], [ReminderType], [ScheduledSendTime], [RecipientEmail], [Status], [SentAt], [ErrorMessage], [RetryCount], [CreatedAt], [UpdatedAt]) VALUES (4, 2, N'T8H', CAST(N'2026-11-03T12:07:06.8822975' AS DateTime2), N'patient.tuan@gmail.com', N'Pending', NULL, NULL, 0, CAST(N'2026-11-02T18:07:06.8822975' AS DateTime2), NULL)
+SET IDENTITY_INSERT [dbo].[AppointmentReminderJobs] OFF;
 GO
 
 -- -----------------------------------------------------------------------------------------
@@ -3813,14 +3950,14 @@ GO
 -- Data for [Medicines] (8 rows)
 -- -----------------------------------------------------------------------------------------
 SET IDENTITY_INSERT [dbo].[Medicines] ON;
-INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (1, N'MED-AMOX-500', N'Amoxicillin 500mg', N'Amoxicillin trihydrate', N'500mg', N'ViĂªn nang', N'ViĂªn', CAST(5000.00 AS Decimal(18, 2)), 50, N'Uá»‘ng sau Äƒn. NgÆ°á»i lá»›n 1 viĂªn x 3 láº§n/ngĂ y, cĂ¡ch 8 giá».', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
-INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (2, N'MED-AUGM-625', N'Augmentin 625mg', N'Amoxicillin + Acid Clavulanic', N'625mg', N'ViĂªn nĂ©n bao phim', N'ViĂªn', CAST(18000.00 AS Decimal(18, 2)), 30, N'Uá»‘ng ngay Ä‘áº§u bá»¯a Äƒn Ä‘á»ƒ giáº£m khĂ³ chá»‹u dáº¡ dĂ y. 1 viĂªn x 2 láº§n/ngĂ y.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
-INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (3, N'MED-PARA-500', N'Paracetamol 500mg', N'Paracetamol', N'500mg', N'ViĂªn nĂ©n', N'ViĂªn', CAST(2000.00 AS Decimal(18, 2)), 100, N'Uá»‘ng khi Ä‘au nhá»©c hoáº·c sá»‘t > 38.5Â°C. Má»—i láº§n 1-2 viĂªn, cĂ¡ch nhau tá»‘i thiá»ƒu 4-6 giá».', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
-INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (4, N'MED-EFFE-500', N'Efferalgan Codeine', N'Paracetamol 500mg + Codein 30mg', N'500mg/30mg', N'ViĂªn sá»§i', N'ViĂªn', CAST(12000.00 AS Decimal(18, 2)), 25, N'HĂ²a tan 1 viĂªn vĂ o 200ml nÆ°á»›c áº¥m khi Ä‘au dá»¯ dá»™i sau tiá»ƒu pháº«u. Tá»‘i Ä‘a 4 viĂªn/ngĂ y.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
-INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (5, N'MED-IBUP-400', N'Ibuprofen 400mg', N'Ibuprofen', N'400mg', N'ViĂªn nĂ©n', N'ViĂªn', CAST(4000.00 AS Decimal(18, 2)), 40, N'KhĂ¡ng viĂªm giáº£m Ä‘au sau nhá»• rÄƒng hoáº·c Ä‘iá»u trá»‹ tá»§y. Uá»‘ng sau Äƒn no.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
-INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (6, N'MED-RODO-CL', N'Rodogyl', N'Spiramycin 750.000 IU + Metronidazol 125mg', N'Spiramycin + Metronidazol', N'ViĂªn nĂ©n bao phim', N'ViĂªn', CAST(8000.00 AS Decimal(18, 2)), 40, N'Äáº·c trá»‹ nhiá»…m trĂ¹ng rÄƒng miá»‡ng, viĂªm nha chu, Ă¡p xe nÆ°á»›u. Uá»‘ng trong bá»¯a Äƒn.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
-INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (7, N'MED-ALPH-42', N'Alpha Choay', N'Chymotrypsine 4200 UI', N'4.2mg (4200 UI)', N'ViĂªn ngáº­m', N'ViĂªn', CAST(5000.00 AS Decimal(18, 2)), 50, N'Ngáº­m dÆ°á»›i lÆ°á»¡i 2 viĂªn x 2-3 láº§n/ngĂ y Ä‘á»ƒ chá»‘ng phĂ¹ ná» sau pháº«u thuáº­t hĂ m máº·t.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
-INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (8, N'MED-CHLO-012', N'NÆ°á»›c sĂºc miá»‡ng Chlorhexidine 0.12%', N'Chlorhexidine Digluconate 0.12%', N'0.12%', N'Dung dá»‹ch sĂºc miá»‡ng', N'Chai', CAST(85000.00 AS Decimal(18, 2)), 15, N'SĂºc miá»‡ng 15ml trong 30 giĂ¢y sau khi cháº£i rÄƒng, 2 láº§n/ngĂ y. KhĂ´ng Ä‘Æ°á»£c nuá»‘t.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (1, N'MED-AMOX-500', N'Amoxicillin 500mg', N'Amoxicillin trihydrate', N'500mg', N'Viên nang', N'Viên', CAST(5000.00 AS Decimal(18, 2)), 50, N'Uống sau ăn. Người lớn 1 viên x 3 lần/ngày, cách 8 giờ.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (2, N'MED-AUGM-625', N'Augmentin 625mg', N'Amoxicillin + Acid Clavulanic', N'625mg', N'Viên nén bao phim', N'Viên', CAST(18000.00 AS Decimal(18, 2)), 30, N'Uống ngay đầu bữa ăn để giảm khó chịu dạ dày. 1 viên x 2 lần/ngày.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (3, N'MED-PARA-500', N'Paracetamol 500mg', N'Paracetamol', N'500mg', N'Viên nén', N'Viên', CAST(2000.00 AS Decimal(18, 2)), 100, N'Uống khi đau nhức hoặc sốt > 38.5°C. Mỗi lần 1-2 viên, cách nhau tối thiểu 4-6 giờ.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (4, N'MED-EFFE-500', N'Efferalgan Codeine', N'Paracetamol 500mg + Codein 30mg', N'500mg/30mg', N'Viên sủi', N'Viên', CAST(12000.00 AS Decimal(18, 2)), 25, N'Hòa tan 1 viên vào 200ml nước ấm khi đau dữ dội sau tiểu phẫu. Tối đa 4 viên/ngày.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (5, N'MED-IBUP-400', N'Ibuprofen 400mg', N'Ibuprofen', N'400mg', N'Viên nén', N'Viên', CAST(4000.00 AS Decimal(18, 2)), 40, N'Kháng viêm giảm đau sau nhổ răng hoặc điều trị tủy. Uống sau ăn no.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (6, N'MED-RODO-CL', N'Rodogyl', N'Spiramycin 750.000 IU + Metronidazol 125mg', N'Spiramycin + Metronidazol', N'Viên nén bao phim', N'Viên', CAST(8000.00 AS Decimal(18, 2)), 40, N'Đặc trị nhiễm trùng răng miệng, viêm nha chu, áp xe nướu. Uống trong bữa ăn.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (7, N'MED-ALPH-42', N'Alpha Choay', N'Chymotrypsine 4200 UI', N'4.2mg (4200 UI)', N'Viên ngậm', N'Viên', CAST(5000.00 AS Decimal(18, 2)), 50, N'Ngậm dưới lưỡi 2 viên x 2-3 lần/ngày để chống phù nề sau phẫu thuật hàm mặt.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
+INSERT [dbo].[Medicines] ([MedicineId], [MedicineCode], [MedicineName], [ActiveIngredient], [Concentration], [DosageForm], [Unit], [UnitPrice], [MinimumStockAlert], [UsageInstructions], [Status], [CreatedAt], [UpdatedAt]) VALUES (8, N'MED-CHLO-012', N'Nước súc miệng Chlorhexidine 0.12%', N'Chlorhexidine Digluconate 0.12%', N'0.12%', N'Dung dịch súc miệng', N'Chai', CAST(85000.00 AS Decimal(18, 2)), 15, N'Súc miệng 15ml trong 30 giây sau khi chải răng, 2 lần/ngày. Không được nuốt.', N'Active', CAST(N'2026-11-02T17:33:42.5391885' AS DateTime2), NULL)
 SET IDENTITY_INSERT [dbo].[Medicines] OFF;
 GO
 
@@ -3828,37 +3965,60 @@ GO
 -- Data for [MedicineBatches] (9 rows)
 -- -----------------------------------------------------------------------------------------
 SET IDENTITY_INSERT [dbo].[MedicineBatches] ON;
-INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (1, 1, N'AMX-2026-01', CAST(N'2028-05-03' AS Date), 300, 300, CAST(3200.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5907485' AS DateTime2), CAST(N'2026-11-02T17:33:42.5907485' AS DateTime2), NULL)
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (1, 1, N'AMX-2026-01', CAST(N'2028-05-03' AS Date), 300, 290, CAST(3200.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5907485' AS DateTime2), CAST(N'2026-11-02T17:33:42.5907485' AS DateTime2), NULL)
 INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (2, 1, N'AMX-2025-NEAR', CAST(N'2026-12-13' AS Date), 20, 15, CAST(3000.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5918742' AS DateTime2), CAST(N'2026-11-02T17:33:42.5918742' AS DateTime2), NULL)
 INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (3, 2, N'AUG-2026-01', CAST(N'2028-01-03' AS Date), 150, 150, CAST(14500.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5938644' AS DateTime2), CAST(N'2026-11-02T17:33:42.5938644' AS DateTime2), NULL)
 INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (4, 3, N'PAR-2026-01', CAST(N'2028-11-03' AS Date), 500, 500, CAST(1100.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5947610' AS DateTime2), CAST(N'2026-11-02T17:33:42.5947610' AS DateTime2), NULL)
 INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (5, 4, N'EFF-2026-LOW', CAST(N'2027-11-03' AS Date), 50, 12, CAST(9500.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5957623' AS DateTime2), CAST(N'2026-11-02T17:33:42.5957623' AS DateTime2), NULL)
-INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (6, 5, N'IBU-2026-01', CAST(N'2028-03-03' AS Date), 200, 200, CAST(2600.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5968772' AS DateTime2), CAST(N'2026-11-02T17:33:42.5968772' AS DateTime2), NULL)
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (6, 5, N'IBU-2026-01', CAST(N'2028-03-03' AS Date), 200, 190, CAST(2600.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5968772' AS DateTime2), CAST(N'2026-11-02T17:33:42.5968772' AS DateTime2), NULL)
 INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (7, 6, N'ROD-2026-01', CAST(N'2028-07-03' AS Date), 180, 180, CAST(5800.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5981540' AS DateTime2), CAST(N'2026-11-02T17:33:42.5981540' AS DateTime2), NULL)
-INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (8, 7, N'ALP-2026-01', CAST(N'2028-02-03' AS Date), 250, 250, CAST(3600.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2), CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2), NULL)
-INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (9, 8, N'CHL-2026-01', CAST(N'2028-05-03' AS Date), 60, 60, CAST(58000.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2), CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2), NULL)
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (8, 7, N'ALP-2026-01', CAST(N'2028-02-03' AS Date), 250, 240, CAST(3600.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2), CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2), NULL)
+INSERT [dbo].[MedicineBatches] ([MedicineBatchId], [MedicineId], [BatchNumber], [ExpiryDate], [QuantityReceived], [QuantityAvailable], [CostPrice], [Status], [ReceivedDate], [CreatedAt], [UpdatedAt]) VALUES (9, 8, N'CHL-2026-01', CAST(N'2028-05-03' AS Date), 60, 59, CAST(58000.00 AS Decimal(18, 2)), N'Available', CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2), CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2), NULL)
 SET IDENTITY_INSERT [dbo].[MedicineBatches] OFF;
 GO
 
 -- -----------------------------------------------------------------------------------------
--- Data for [MedicineStockTransactions] (9 rows)
+-- Data for [MedicineStockTransactions] (13 rows)
 -- -----------------------------------------------------------------------------------------
 SET IDENTITY_INSERT [dbo].[MedicineStockTransactions] ON;
-INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (1, 1, N'Import', 300, 0, 300, N'Nháº­p kho ban Ä‘áº§u tá»« NhĂ  cung cáº¥p DÆ°á»£c Háº­u Giang', 2, N'PO-2026-001', CAST(N'2026-11-02T17:33:42.5907485' AS DateTime2))
-INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (2, 2, N'Import', 20, 0, 15, N'LĂ´ tá»“n kho trÆ°á»›c Ä‘Ă³ luĂ¢n chuyá»ƒn', 2, N'PO-2025-089', CAST(N'2026-11-02T17:33:42.5928760' AS DateTime2))
-INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (3, 3, N'Import', 150, 0, 150, N'Nháº­p kho GSK Viá»‡t Nam', 2, N'PO-2026-002', CAST(N'2026-11-02T17:33:42.5947610' AS DateTime2))
-INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (4, 4, N'Import', 500, 0, 500, N'Nháº­p kho Traphaco', 2, N'PO-2026-003', CAST(N'2026-11-02T17:33:42.5957623' AS DateTime2))
-INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (5, 5, N'Import', 50, 0, 12, N'Nháº­p kho UPSA PhĂ¡p', 2, N'PO-2026-004', CAST(N'2026-11-02T17:33:42.5968772' AS DateTime2))
-INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (6, 6, N'Import', 200, 0, 200, N'Nháº­p kho Sanofi', 2, N'PO-2026-005', CAST(N'2026-11-02T17:33:42.5981540' AS DateTime2))
-INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (7, 7, N'Import', 180, 0, 180, N'Nháº­p kho Sanofi Aventis', 2, N'PO-2026-006', CAST(N'2026-11-02T17:33:42.5981540' AS DateTime2))
-INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (8, 8, N'Import', 250, 0, 250, N'Nháº­p kho Sanofi Winthrop', 2, N'PO-2026-007', CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2))
-INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (9, 9, N'Import', 60, 0, 60, N'Nháº­p kho Kin Dental Care', 2, N'PO-2026-008', CAST(N'2026-11-02T17:33:42.6001720' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (1, 1, N'Import', 300, 0, 300, N'Nhập kho ban đầu từ Nhà cung cấp Dược Hậu Giang', 2, N'PO-2026-001', CAST(N'2026-11-02T17:33:42.5907485' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (2, 2, N'Import', 20, 0, 15, N'Lô tồn kho trước đó luân chuyển', 2, N'PO-2025-089', CAST(N'2026-11-02T17:33:42.5928760' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (3, 3, N'Import', 150, 0, 150, N'Nhập kho GSK Việt Nam', 2, N'PO-2026-002', CAST(N'2026-11-02T17:33:42.5947610' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (4, 4, N'Import', 500, 0, 500, N'Nhập kho Traphaco', 2, N'PO-2026-003', CAST(N'2026-11-02T17:33:42.5957623' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (5, 5, N'Import', 50, 0, 12, N'Nhập kho UPSA Pháp', 2, N'PO-2026-004', CAST(N'2026-11-02T17:33:42.5968772' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (6, 6, N'Import', 200, 0, 200, N'Nhập kho Sanofi', 2, N'PO-2026-005', CAST(N'2026-11-02T17:33:42.5981540' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (7, 7, N'Import', 180, 0, 180, N'Nhập kho Sanofi Aventis', 2, N'PO-2026-006', CAST(N'2026-11-02T17:33:42.5981540' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (8, 8, N'Import', 250, 0, 250, N'Nhập kho Sanofi Winthrop', 2, N'PO-2026-007', CAST(N'2026-11-02T17:33:42.5991686' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (9, 9, N'Import', 60, 0, 60, N'Nhập kho Kin Dental Care', 2, N'PO-2026-008', CAST(N'2026-11-02T17:33:42.6001720' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (10, 1, N'Export_Dispense', 10, 300, 290, N'Xuất kho cấp phát theo đơn thuốc #1', 4, N'DISP-1', CAST(N'2026-11-02T18:07:06.8432627' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (11, 6, N'Export_Dispense', 10, 200, 190, N'Xuất kho cấp phát theo đơn thuốc #1', 4, N'DISP-1', CAST(N'2026-11-02T18:07:06.8475306' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (12, 8, N'Export_Dispense', 10, 250, 240, N'Xuất kho cấp phát theo đơn thuốc #1', 4, N'DISP-1', CAST(N'2026-11-02T18:07:06.8494283' AS DateTime2))
+INSERT [dbo].[MedicineStockTransactions] ([TransactionId], [MedicineBatchId], [TransactionType], [Quantity], [QuantityBefore], [QuantityAfter], [Reason], [PerformedByUserId], [ReferenceCode], [CreatedAt]) VALUES (13, 9, N'Export_Dispense', 1, 60, 59, N'Xuất kho cấp phát theo đơn thuốc #1', 4, N'DISP-1', CAST(N'2026-11-02T18:07:06.8508976' AS DateTime2))
 SET IDENTITY_INSERT [dbo].[MedicineStockTransactions] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [MedicineDispensations] (1 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[MedicineDispensations] ON;
+INSERT [dbo].[MedicineDispensations] ([DispensationId], [PrescriptionId], [AppointmentId], [PatientUserId], [DentistUserId], [DispensedAt], [Notes], [Status], [CreatedAt]) VALUES (1, 1, 35, 24, 4, CAST(N'2026-11-02T16:07:06.8371799' AS DateTime2), N'Bác sĩ cấp phát trực tiếp tại phòng khám sau nhổ răng khôn.', N'Dispensed', CAST(N'2026-11-02T16:07:06.8371799' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[MedicineDispensations] OFF;
+GO
+
+-- -----------------------------------------------------------------------------------------
+-- Data for [MedicineDispensationItems] (4 rows)
+-- -----------------------------------------------------------------------------------------
+SET IDENTITY_INSERT [dbo].[MedicineDispensationItems] ON;
+INSERT [dbo].[MedicineDispensationItems] ([DispensationItemId], [DispensationId], [PrescriptionItemId], [MedicineId], [MedicineBatchId], [QuantityDispensed], [UnitPriceSnapshot], [TotalPrice], [CreatedAt]) VALUES (1, 1, 1, 1, 1, 10, CAST(5000.00 AS Decimal(18, 2)), CAST(50000.00 AS Decimal(18, 2)), CAST(N'2026-11-02T18:07:06.8413674' AS DateTime2))
+INSERT [dbo].[MedicineDispensationItems] ([DispensationItemId], [DispensationId], [PrescriptionItemId], [MedicineId], [MedicineBatchId], [QuantityDispensed], [UnitPriceSnapshot], [TotalPrice], [CreatedAt]) VALUES (2, 1, 2, 5, 6, 10, CAST(4000.00 AS Decimal(18, 2)), CAST(40000.00 AS Decimal(18, 2)), CAST(N'2026-11-02T18:07:06.8444146' AS DateTime2))
+INSERT [dbo].[MedicineDispensationItems] ([DispensationItemId], [DispensationId], [PrescriptionItemId], [MedicineId], [MedicineBatchId], [QuantityDispensed], [UnitPriceSnapshot], [TotalPrice], [CreatedAt]) VALUES (3, 1, 3, 7, 8, 10, CAST(5000.00 AS Decimal(18, 2)), CAST(50000.00 AS Decimal(18, 2)), CAST(N'2026-11-02T18:07:06.8475306' AS DateTime2))
+INSERT [dbo].[MedicineDispensationItems] ([DispensationItemId], [DispensationId], [PrescriptionItemId], [MedicineId], [MedicineBatchId], [QuantityDispensed], [UnitPriceSnapshot], [TotalPrice], [CreatedAt]) VALUES (4, 1, 4, 8, 9, 1, CAST(85000.00 AS Decimal(18, 2)), CAST(85000.00 AS Decimal(18, 2)), CAST(N'2026-11-02T18:07:06.8494283' AS DateTime2))
+SET IDENTITY_INSERT [dbo].[MedicineDispensationItems] OFF;
 GO
 
 -- Re-enable and verify all foreign key constraints
 EXEC sp_msforeachtable 'ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all';
 GO
 
-PRINT N'>>> DENTAL CLINIC DATABASE & DATA SUCCESSFULLY INITIALIZED 100%!';
+PRINT N'>>> DENTAL CLINIC DATABASE & DATA SUCCESSFULLY INITIALIZED 100% (44 TABLES)!';
 GO

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -20,7 +20,21 @@ namespace DentalClinic.Tests.EndToEnd;
 
 public class RealDatabaseEndToEndSmokeTests
 {
-    private const string ConnectionString = "Server=DESKTOP-1TUBGEU\\SQLEXPRESS;Database=DentalClinic_Disposable_PreDeployClone;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+    private static string ConnectionString =>
+        Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
+        ?? "Server=DESKTOP-1TUBGEU\\SQLEXPRESS;Database=DentalClinic_Disposable_PreDeployClone;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+
+    private static async Task<bool> IsDatabaseAvailableAsync(DentalClinicDbContext db)
+    {
+        try
+        {
+            return await db.Database.CanConnectAsync();
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     private DentalClinicDbContext CreateDbContext()
     {
@@ -34,6 +48,7 @@ public class RealDatabaseEndToEndSmokeTests
     public async Task ScenarioA_PatientBooking_EndToEndLifecycle_Succeeds()
     {
         using var db = CreateDbContext();
+        if (!await IsDatabaseAvailableAsync(db)) return;
         var mockNotification = new Mock<INotificationService>();
         var mockApptLogger = new Mock<ILogger<AppointmentService>>();
         var mockBillingLogger = new Mock<ILogger<BillingService>>();
@@ -172,6 +187,7 @@ public class RealDatabaseEndToEndSmokeTests
     public async Task ScenarioB_ReceptionistWalkInBooking_EndToEndLifecycle_Succeeds()
     {
         using var db = CreateDbContext();
+        if (!await IsDatabaseAvailableAsync(db)) return;
         var mockNotification = new Mock<INotificationService>();
         var mockApptLogger = new Mock<ILogger<AppointmentService>>();
 
@@ -243,6 +259,7 @@ public class RealDatabaseEndToEndSmokeTests
     public async Task ScenarioC_RoomChairAllocation_SharedVsExclusive_EnforcesCorrectRules()
     {
         using var db = CreateDbContext();
+        if (!await IsDatabaseAvailableAsync(db)) return;
         var mockNotification = new Mock<INotificationService>();
         var mockApptLogger = new Mock<ILogger<AppointmentService>>();
         var apptService = new AppointmentService(db, mockNotification.Object, mockApptLogger.Object);
@@ -396,6 +413,7 @@ public class RealDatabaseEndToEndSmokeTests
         // PART 1: Parallel Confirmations for the SAME Dentist
         using (var setupDb = CreateDbContext())
         {
+            if (!await IsDatabaseAvailableAsync(setupDb)) return;
             var a1 = new Appointment
             {
                 AppointmentCode = "SD-CONC-" + Guid.NewGuid().ToString("N")[..8],
@@ -466,6 +484,7 @@ public class RealDatabaseEndToEndSmokeTests
         var qAppts = new List<Appointment>();
         using (var setupDb = CreateDbContext())
         {
+            if (!await IsDatabaseAvailableAsync(setupDb)) return;
             for (int i = 0; i < 4; i++)
             {
                 var q = new Appointment
@@ -514,6 +533,7 @@ public class RealDatabaseEndToEndSmokeTests
     public async Task ScenarioE_PrescriptionIntegrity_EnforcesValidationAndTransactions()
     {
         using var db = CreateDbContext();
+        if (!await IsDatabaseAvailableAsync(db)) return;
         var mockLogger = new Mock<ILogger<PrescriptionService>>();
         var prescService = new PrescriptionService(db, mockLogger.Object);
 
@@ -553,6 +573,7 @@ public class RealDatabaseEndToEndSmokeTests
     public async Task ScenarioE_RootCanal_CompleteLifecycle_WithChairAllocation_Discount_AndPaymentSecurity()
     {
         using var db = CreateDbContext();
+        if (!await IsDatabaseAvailableAsync(db)) return;
         var mockNotification = new Mock<INotificationService>();
         var mockApptLogger = new Mock<ILogger<AppointmentService>>();
         var mockBillingLogger = new Mock<ILogger<BillingService>>();

@@ -1,14 +1,19 @@
 ﻿-- =========================================================================================
 -- DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)
--- MASTER CLEAN DATABASE SCHEMA (SCHEMA ONLY - 44 TABLES)
+-- MASTER CLEAN DATABASE SCHEMA (44 TABLES, VIEWS, STORED PROCEDURES)
 -- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
 -- Database Name: DentalClinicManagementDB
--- Generated: 2026-11-03 00:45:42
+-- Generated: 2026-11-03 01:09:58
 -- =========================================================================================
 
+-- =========================================================================================
+-- IDEMPOTENT INITIALIZATION & SAFE CLEANUP
+-- Drops foreign keys, views, stored procedures, and tables if they already exist,
+-- ensuring safe, conflict-free re-runs on any machine or existing database.
+-- =========================================================================================
 IF DB_ID(N'DentalClinicManagementDB') IS NULL
 BEGIN
-    CREATE DATABASE DentalClinicManagementDB;
+    CREATE DATABASE DentalClinicManagementDB COLLATE SQL_Latin1_General_CP1_CI_AS;
 END;
 GO
 
@@ -17,7 +22,45 @@ GO
 
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
+SET NOCOUNT ON;
 GO
+
+-- 1. Drop all Foreign Key Constraints
+DECLARE @dropFkSql NVARCHAR(MAX) = N'';
+SELECT @dropFkSql += N'ALTER TABLE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name) + N' DROP CONSTRAINT ' + QUOTENAME(fk.name) + N';' + CHAR(13)
+FROM sys.foreign_keys fk
+JOIN sys.tables t ON fk.parent_object_id = t.object_id
+JOIN sys.schemas s ON t.schema_id = s.schema_id;
+IF LEN(@dropFkSql) > 0 EXEC sp_executesql @dropFkSql;
+
+-- 2. Drop all Views
+DECLARE @dropViewSql NVARCHAR(MAX) = N'';
+SELECT @dropViewSql += N'DROP VIEW ' + QUOTENAME(s.name) + N'.' + QUOTENAME(v.name) + N';' + CHAR(13)
+FROM sys.views v
+JOIN sys.schemas s ON v.schema_id = s.schema_id
+WHERE v.is_ms_shipped = 0;
+IF LEN(@dropViewSql) > 0 EXEC sp_executesql @dropViewSql;
+
+-- 3. Drop all Stored Procedures
+DECLARE @dropSpSql NVARCHAR(MAX) = N'';
+SELECT @dropSpSql += N'DROP PROCEDURE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(p.name) + N';' + CHAR(13)
+FROM sys.procedures p
+JOIN sys.schemas s ON p.schema_id = s.schema_id
+WHERE p.is_ms_shipped = 0;
+IF LEN(@dropSpSql) > 0 EXEC sp_executesql @dropSpSql;
+
+-- 4. Drop all Tables
+DECLARE @dropTableSql NVARCHAR(MAX) = N'';
+SELECT @dropTableSql += N'DROP TABLE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name) + N';' + CHAR(13)
+FROM sys.tables t
+JOIN sys.schemas s ON t.schema_id = s.schema_id
+WHERE t.name <> N'__EFMigrationsHistory';
+IF LEN(@dropTableSql) > 0 EXEC sp_executesql @dropTableSql;
+GO
+
+-- =========================================================================================
+-- PART 1: 44 DDL TABLE SCHEMAS, CONSTRAINTS & INDEXES
+-- =========================================================================================
 
 SET ANSI_NULLS ON
 GO
@@ -2147,4 +2190,88 @@ GO
 ALTER TABLE [dbo].[MedicineDispensationItems]  WITH CHECK ADD  CONSTRAINT [CHK_MedicineDispensationItems_Qty] CHECK  (([QuantityDispensed]>(0)))
 GO
 ALTER TABLE [dbo].[MedicineDispensationItems] CHECK CONSTRAINT [CHK_MedicineDispensationItems_Qty]
+GO
+
+-- =========================================================================================
+-- PART 2: DATABASE VIEWS
+-- =========================================================================================
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE VIEW dbo.vw_PublishedBlogPosts AS
+SELECT
+    bp.BlogPostId,
+    bp.Title,
+    bp.Slug,
+    bp.Summary,
+    bp.ThumbnailUrl,
+    bp.VideoUrl,
+    bp.EmbedVideoId,
+    bp.ReadTimeMinutes,
+    bp.IsFeatured,
+    bp.ViewCount,
+    bp.PublishedAt,
+    bp.CreatedAt,
+    bp.UpdatedAt,
+    bc.CategoryId,
+    bc.Name      AS CategoryName,
+    bc.Slug      AS CategorySlug,
+    ua.UserId    AS AuthorUserId,
+    COALESCE(sp.FullName, ua.Email) AS AuthorName,
+    ua.AvatarUrl AS AuthorAvatarUrl,
+    dp.Qualification,
+    dp.YearsOfExperience
+FROM dbo.BlogPosts bp
+INNER JOIN dbo.BlogCategories bc ON bc.CategoryId = bp.CategoryId
+INNER JOIN dbo.UserAccounts   ua ON ua.UserId     = bp.AuthorUserId
+LEFT  JOIN dbo.StaffProfiles  sp ON sp.UserId     = bp.AuthorUserId
+LEFT  JOIN dbo.DentistProfiles dp ON dp.UserId    = bp.AuthorUserId
+WHERE bp.Status = 'Published';
+
+
+GO
+
+-- =========================================================================================
+-- PART 3: STORED PROCEDURES
+-- =========================================================================================
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE dbo.sp_CleanupOrphanBlogPostMedia
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DELETE FROM dbo.BlogPostMedia
+    WHERE BlogPostId IS NULL
+      AND CreatedAt < DATEADD(HOUR, -24, SYSDATETIME());
+END;
+
+
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE dbo.sp_IncrementBlogPostView
+    @Slug NVARCHAR(250)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.BlogPosts
+    SET    ViewCount = ViewCount + 1
+    WHERE  Slug = @Slug
+      AND  Status = 'Published';
+END;
+
+
+GO
+
+PRINT N'>>> DENTAL CLINIC CLEAN SCHEMA INITIALIZED SUCCESSFULLY (44 TABLES, VIEWS & PROCEDURES)!';
 GO

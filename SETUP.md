@@ -60,7 +60,7 @@ Authentication:Google:ClientId = 482754989911-krfsu4jokuuqcttqbtmuh6bdal15a107.a
 
 ## 🗄️ IV. THIẾT LẬP CƠ SỞ DỮ LIỆU ĐẦY ĐỦ (DATABASE & DỮ LIỆU DEMO)
 
-Hệ thống đã chuẩn bị sẵn cơ sở dữ liệu hoàn chỉnh (gồm cấu trúc bảng + 33 tài khoản + toàn bộ dữ liệu lâm sàng). Bạn có thể chọn 1 trong 2 cách sau:
+Hệ thống đã chuẩn bị sẵn cơ sở dữ liệu hoàn chỉnh (**44 bảng, Views, Stored Procedures + tài khoản demo 5 vai trò + toàn bộ dữ liệu lâm sàng, kho thuốc & cấp phát dược phẩm, nhắc hẹn tự động**). Chi tiết xem tại [DB/README.md](DB/README.md). Bạn có thể chọn 1 trong 2 cách sau:
 
 ### Cách 1: Nạp 1 bước duy nhất bằng File SQL Script (Khuyên dùng)
 Mở PowerShell tại thư mục gốc dự án và chạy:

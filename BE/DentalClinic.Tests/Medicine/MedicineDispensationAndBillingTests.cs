@@ -11,6 +11,7 @@ using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using DentalClinic.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
@@ -23,6 +24,7 @@ public class MedicineDispensationAndBillingTests
     {
         var options = new DbContextOptionsBuilder<DentalClinicDbContext>()
             .UseInMemoryDatabase(databaseName: dbName)
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         return new DentalClinicDbContext(options);
     }
