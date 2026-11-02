@@ -79,6 +79,31 @@ public class PostCareApiService : IPostCareApiService
         return await SendGetAsync<List<FollowUpSlotDto>>(url);
     }
 
+    public async Task<ApiResult<FollowUpProposalDto>> SubmitPatientProposalAsync(PatientFollowUpChangeRequest request)
+    {
+        return await SendPostAsync<PatientFollowUpChangeRequest, FollowUpProposalDto>("/api/post-care/follow-ups/proposals", request);
+    }
+
+    public async Task<ApiResult<bool>> WithdrawPatientProposalAsync(long proposalId)
+    {
+        return await SendPostAsync<object, bool>($"/api/post-care/follow-ups/proposals/{proposalId}/withdraw", new { });
+    }
+
+    public async Task<ApiResult<List<FollowUpProposalDto>>> GetPatientProposalsAsync()
+    {
+        return await SendGetAsync<List<FollowUpProposalDto>>("/api/post-care/follow-ups/proposals/patient");
+    }
+
+    public async Task<ApiResult<List<FollowUpProposalDto>>> GetDoctorPendingProposalsAsync()
+    {
+        return await SendGetAsync<List<FollowUpProposalDto>>("/api/post-care/follow-ups/proposals/doctor");
+    }
+
+    public async Task<ApiResult<FollowUpProposalDto>> ResolveProposalAsync(ResolveProposalRequest request)
+    {
+        return await SendPostAsync<ResolveProposalRequest, FollowUpProposalDto>("/api/post-care/follow-ups/proposals/resolve", request);
+    }
+
     // ==========================================
     // HTTP HELPERS
     // ==========================================

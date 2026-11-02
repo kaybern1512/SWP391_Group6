@@ -25,4 +25,5 @@ public class DepartmentReferralIndexViewModel
 public class PatientFollowUpIndexViewModel
 {
     public List<FollowUpScheduleDto> FollowUps { get; set; } = new();
+    public List<FollowUpProposalDto> Proposals { get; set; } = new();
 }
