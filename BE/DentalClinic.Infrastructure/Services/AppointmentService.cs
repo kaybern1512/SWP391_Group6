@@ -519,8 +519,15 @@ public class AppointmentService : IAppointmentService
         var list = new List<AppointmentDto>();
         foreach (var id in appointmentIds)
         {
-            var dto = await MapToDtoAsync(id, ct);
-            if (dto != null) list.Add(dto);
+            try
+            {
+                var dto = await MapToDtoAsync(id, ct);
+                if (dto != null) list.Add(dto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi nạp dữ liệu chi tiết lịch hẹn ID {AppointmentId} cho bệnh nhân {PatientUserId}", id, patientUserId);
+            }
         }
 
         return ApiResponse<List<AppointmentDto>>.Ok(list);
@@ -2444,9 +2451,9 @@ public class AppointmentService : IAppointmentService
             AppointmentId = a.AppointmentId,
             AppointmentCode = a.AppointmentCode,
             PatientUserId = a.PatientUserId,
-            PatientName = a.PatientUser.FullName,
-            PatientCode = a.PatientUser.PatientCode,
-            PatientPhone = a.PatientUser.User.PhoneNumber,
+            PatientName = a.PatientUser?.FullName ?? "N/A",
+            PatientCode = a.PatientUser?.PatientCode ?? string.Empty,
+            PatientPhone = a.PatientUser?.User?.PhoneNumber,
             DepartmentId = a.DepartmentId,
             DepartmentName = a.Department?.Name,
             RequestedServiceId = a.RequestedServiceId,
@@ -2454,9 +2461,9 @@ public class AppointmentService : IAppointmentService
             ServiceDuration = a.RequestedService?.DurationMinutes,
             ServicePrice = a.RequestedService?.Price,
             RequestedDentistUserId = a.RequestedDentistUserId,
-            RequestedDentistName = a.RequestedDentistUser?.User.FullName,
+            RequestedDentistName = a.RequestedDentistUser?.User?.FullName,
             AssignedDentistUserId = a.AssignedDentistUserId,
-            AssignedDentistName = a.AssignedDentistUser?.User.FullName,
+            AssignedDentistName = a.AssignedDentistUser?.User?.FullName,
             RoomId = a.RoomId,
             RoomName = a.Room?.RoomName ?? a.Room?.RoomCode,
             DentalChairId = a.DentalChairId,

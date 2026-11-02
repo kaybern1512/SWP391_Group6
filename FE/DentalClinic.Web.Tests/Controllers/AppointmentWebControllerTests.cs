@@ -585,4 +585,122 @@ public class AppointmentWebControllerTests
         redirect.ActionName.Should().Be("Requests");
         controller.TempData["SuccessMessage"].Should().NotBeNull();
     }
+
+    [Fact]
+    public async Task Patient_Index_WhenApiSucceedsWithAppointments_PopulatesViewModelAndNoError()
+    {
+        _apiMock.Setup(x => x.GetPatientAppointmentsAsync(null))
+            .ReturnsAsync(ApiResult<List<AppointmentDto>>.Success(new List<AppointmentDto>
+            {
+                new() { AppointmentId = 1, AppointmentCode = "APP-001", Status = "Confirmed" }
+            }));
+        _apiMock.Setup(x => x.GetBookingEligibilityAsync())
+            .ReturnsAsync(ApiResult<BookingEligibilityDto>.Success(new BookingEligibilityDto { IsEligible = true }));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Index(null);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<AppointmentListViewModel>().Subject;
+        vm.HasError.Should().BeFalse();
+        vm.Appointments.Should().HaveCount(1);
+        vm.IsServerError.Should().BeFalse();
+        vm.IsConnectionError.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Patient_Index_WhenApiSucceedsWithZeroAppointments_DistinguishesLegitimateEmptyState()
+    {
+        _apiMock.Setup(x => x.GetPatientAppointmentsAsync(null))
+            .ReturnsAsync(ApiResult<List<AppointmentDto>>.Success(new List<AppointmentDto>()));
+        _apiMock.Setup(x => x.GetBookingEligibilityAsync())
+            .ReturnsAsync(ApiResult<BookingEligibilityDto>.Success(new BookingEligibilityDto { IsEligible = true }));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Index(null);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<AppointmentListViewModel>().Subject;
+        vm.HasError.Should().BeFalse();
+        vm.Appointments.Should().BeEmpty();
+        vm.IsServerError.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Patient_Index_WhenApiReturns500ServerError_SetsHasErrorAndIsServerErrorTrue()
+    {
+        _apiMock.Setup(x => x.GetPatientAppointmentsAsync(null))
+            .ReturnsAsync(ApiResult<List<AppointmentDto>>.Failure("Đã xảy ra lỗi hệ thống trong quá trình xử lý.", statusCode: 500));
+        _apiMock.Setup(x => x.GetBookingEligibilityAsync())
+            .ReturnsAsync(ApiResult<BookingEligibilityDto>.Success(new BookingEligibilityDto { IsEligible = true }));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Index(null);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<AppointmentListViewModel>().Subject;
+        vm.HasError.Should().BeTrue();
+        vm.IsServerError.Should().BeTrue();
+        vm.IsConnectionError.Should().BeFalse();
+        vm.StatusCode.Should().Be(500);
+        vm.ErrorMessage.Should().Contain("lỗi hệ thống");
+    }
+
+    [Fact]
+    public async Task Patient_Index_WhenApiReturns503ConnectionError_SetsIsConnectionErrorTrue()
+    {
+        _apiMock.Setup(x => x.GetPatientAppointmentsAsync(null))
+            .ReturnsAsync(ApiResult<List<AppointmentDto>>.Failure("Không thể kết nối đến máy chủ API.", statusCode: 503));
+        _apiMock.Setup(x => x.GetBookingEligibilityAsync())
+            .ReturnsAsync(ApiResult<BookingEligibilityDto>.Failure("Không thể kết nối đến máy chủ API.", statusCode: 503));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Index(null);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<AppointmentListViewModel>().Subject;
+        vm.HasError.Should().BeTrue();
+        vm.IsConnectionError.Should().BeTrue();
+        vm.IsServerError.Should().BeFalse();
+        vm.StatusCode.Should().Be(503);
+    }
+
+    [Fact]
+    public async Task Patient_Index_WhenApiReturns401Unauthorized_SetsIsUnauthorizedTrue()
+    {
+        _apiMock.Setup(x => x.GetPatientAppointmentsAsync(null))
+            .ReturnsAsync(ApiResult<List<AppointmentDto>>.Failure("Bạn cần đăng nhập để thực hiện thao tác này.", statusCode: 401));
+        _apiMock.Setup(x => x.GetBookingEligibilityAsync())
+            .ReturnsAsync(ApiResult<BookingEligibilityDto>.Failure("Bạn cần đăng nhập để thực hiện thao tác này.", statusCode: 401));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Index(null);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<AppointmentListViewModel>().Subject;
+        vm.HasError.Should().BeTrue();
+        vm.IsUnauthorized.Should().BeTrue();
+        vm.IsServerError.Should().BeFalse();
+        vm.StatusCode.Should().Be(401);
+    }
 }

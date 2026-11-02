@@ -9,6 +9,13 @@ public class AppointmentListViewModel
     public string? SelectedStatus { get; set; }
     public string Role { get; set; } = string.Empty;
     public BookingEligibilityDto? Eligibility { get; set; }
+
+    public bool HasError { get; set; }
+    public string? ErrorMessage { get; set; }
+    public int StatusCode { get; set; } = 200;
+    public bool IsConnectionError => StatusCode == 503;
+    public bool IsUnauthorized => StatusCode == 401 || StatusCode == 403;
+    public bool IsServerError => StatusCode >= 500 && StatusCode != 503;
 }
 
 public class AppointmentDetailViewModel

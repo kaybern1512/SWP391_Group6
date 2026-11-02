@@ -39,7 +39,10 @@ public class PatientAppointmentController : Controller
             Appointments = result.Data ?? new(),
             SelectedStatus = status,
             Role = "Patient",
-            Eligibility = eligibilityResult?.Data
+            Eligibility = eligibilityResult?.Data,
+            HasError = !result.IsSuccess,
+            ErrorMessage = !result.IsSuccess ? (result.Message ?? "Không thể tải danh sách lịch khám từ máy chủ.") : null,
+            StatusCode = result.StatusCode
         };
         return View("~/Views/Patient/Appointment/Index.cshtml", vm);
     }

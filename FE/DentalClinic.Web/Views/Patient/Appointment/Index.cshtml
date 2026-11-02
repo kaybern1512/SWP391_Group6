@@ -74,7 +74,42 @@
         </div>
     </div>
 
-    @if (Model.Appointments.Count == 0)
+    @if (Model.HasError)
+    {
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-5 text-center">
+                @if (Model.IsConnectionError)
+                {
+                    <div class="rounded-circle bg-warning-subtle text-warning d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
+                        <i class="bi bi-wifi-off fs-2"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark">Không thể kết nối đến máy chủ</h5>
+                    <p class="text-muted mb-4">Hệ thống máy chủ dịch vụ tạm thời không phản hồi. Vui lòng kiểm tra lại kết nối hoặc thử lại sau.</p>
+                }
+                else if (Model.IsUnauthorized)
+                {
+                    <div class="rounded-circle bg-danger-subtle text-danger d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
+                        <i class="bi bi-shield-lock fs-2"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark">Phiên làm việc đã hết hạn hoặc không đủ quyền</h5>
+                    <p class="text-muted mb-4">Bạn cần đăng nhập lại tài khoản bệnh nhân để tiếp tục theo dõi lịch hẹn.</p>
+                    <a href="/Auth/Login" class="btn btn-outline-danger px-4 me-2">Đăng nhập lại</a>
+                }
+                else
+                {
+                    <div class="rounded-circle bg-danger-subtle text-danger d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
+                        <i class="bi bi-exclamation-octagon fs-2"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark">Đã xảy ra lỗi khi tải danh sách lịch hẹn</h5>
+                    <p class="text-muted mb-4">@(Model.ErrorMessage ?? "Lỗi hệ thống nội bộ máy chủ (HTTP 500). Vui lòng thử lại sau ít phút.")</p>
+                }
+                <a asp-action="Index" class="btn btn-primary px-4">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Thử lại
+                </a>
+            </div>
+        </div>
+    }
+    else if (Model.Appointments.Count == 0)
     {
         <div class="card border-0 shadow-sm text-center py-5">
             <div class="card-body">
