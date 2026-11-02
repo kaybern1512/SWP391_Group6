@@ -562,6 +562,40 @@ public class BillingFlowTests
         Assert.Equal(0m, result.Data.TaxAmount);
         Assert.Equal(0m, result.Data.TotalAmount);
         Assert.Equal(0m, result.Data.RemainingAmount);
+        Assert.Equal("Paid", result.Data.Status);
+        Assert.Empty(result.Data.Payments);
+    }
+
+    [Fact]
+    public async Task CreateInvoice_FullDiscount_TotalZero_ShouldBePaid_WithoutFakePayment()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var request = new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            DiscountAmount = 500000m, // Full 100% discount
+            TaxPercent = 0m,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new() { Description = "Khám và tư vấn miễn phí", Quantity = 1, UnitPrice = 500000m }
+            }
+        };
+
+        var result = await service.CreateInvoiceAsync(201, request);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.Equal(500000m, result.Data.SubTotal);
+        Assert.Equal(500000m, result.Data.DiscountAmount);
+        Assert.Equal(0m, result.Data.TotalAmount);
+        Assert.Equal(0m, result.Data.RemainingAmount);
+        Assert.Equal(0m, result.Data.PaidAmount);
+        Assert.Equal("Paid", result.Data.Status);
+        Assert.Empty(result.Data.Payments); // Zero fake positive payments!
     }
 
     [Fact]
@@ -798,5 +832,111 @@ public class BillingFlowTests
         Assert.Single(invoices102.Data!);
         Assert.Equal(502L, invoices102.Data![0].AppointmentId);
         Assert.Equal(102L, invoices102.Data![0].PatientUserId);
+    }
+
+    [Fact]
+    public async Task ReturningPatient_AcrossThreeVisits_PreservesLongitudinalHistory_AndSeparatesInvoices()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedDataAsync(db);
+
+        // Seed 2 additional appointments for the SAME patient (UserId = 101)
+        var appt2 = new Appointment
+        {
+            AppointmentId = 502,
+            AppointmentCode = "APT-20261013-002",
+            PatientUserId = 101, // SAME PATIENT
+            DepartmentId = 1,
+            RequestedServiceId = 1,
+            ReasonForVisit = "Tái khám lần 2 - Hàn răng",
+            BookingSource = "Receptionist",
+            Status = AppointmentStatus.Completed,
+            ScheduledStart = DateTime.UtcNow.AddDays(7),
+            CreatedAt = DateTime.UtcNow.AddDays(7)
+        };
+
+        var appt3 = new Appointment
+        {
+            AppointmentId = 503,
+            AppointmentCode = "APT-20261013-003",
+            PatientUserId = 101, // SAME PATIENT
+            DepartmentId = 1,
+            RequestedServiceId = 1,
+            ReasonForVisit = "Tái khám lần 3 - Kiểm tra định kỳ",
+            BookingSource = "Patient",
+            Status = AppointmentStatus.Completed,
+            ScheduledStart = DateTime.UtcNow.AddDays(14),
+            CreatedAt = DateTime.UtcNow.AddDays(14)
+        };
+
+        db.Appointments.AddRange(appt2, appt3);
+
+        // Treatment plan linking items to sessions across visits
+        var plan = new TreatmentPlan
+        {
+            TreatmentPlanId = 1,
+            PatientUserId = 101,
+            DepartmentId = 1,
+            Status = "Active",
+            CreatedAt = DateTime.UtcNow
+        };
+        var planItem1 = new TreatmentPlanItem { TreatmentPlanItemId = 1, TreatmentPlanId = 1, ToothNumber = "36", SequenceNo = 1, Status = "Completed" };
+        var planItem2 = new TreatmentPlanItem { TreatmentPlanItemId = 2, TreatmentPlanId = 1, ToothNumber = "36", SequenceNo = 2, Status = "Completed" };
+        var planItem3 = new TreatmentPlanItem { TreatmentPlanItemId = 3, TreatmentPlanId = 1, ToothNumber = "36", SequenceNo = 3, Status = "Completed" };
+        db.TreatmentPlans.Add(plan);
+        db.TreatmentPlanItems.AddRange(planItem1, planItem2, planItem3);
+
+        var session1 = new TreatmentSession { TreatmentSessionId = 1, TreatmentPlanItemId = 1, AppointmentId = 501, SessionDate = DateTime.UtcNow, TreatmentResult = "Mở tủy" };
+        var session2 = new TreatmentSession { TreatmentSessionId = 2, TreatmentPlanItemId = 2, AppointmentId = 502, SessionDate = DateTime.UtcNow.AddDays(7), TreatmentResult = "Trám tủy" };
+        var session3 = new TreatmentSession { TreatmentSessionId = 3, TreatmentPlanItemId = 3, AppointmentId = 503, SessionDate = DateTime.UtcNow.AddDays(14), TreatmentResult = "Bọc sứ" };
+        db.TreatmentSessions.AddRange(session1, session2, session3);
+        await db.SaveChangesAsync();
+
+        var service = new BillingService(db, _mockNotification.Object, _mockLogger.Object);
+
+        // Visit 1: Invoice & Payment
+        var inv1 = await service.CreateInvoiceAsync(201, new CreateInvoiceRequest
+        {
+            AppointmentId = 501,
+            Items = new List<CreateInvoiceItemRequest> { new() { Description = "Buổi 1: Mở tủy", Quantity = 1, UnitPrice = 800000m } }
+        });
+        await service.ProcessPaymentAsync(201, new ProcessPaymentRequest { InvoiceId = inv1.Data!.InvoiceId, Amount = 800000m, Method = "Cash" });
+
+        // Visit 2: Invoice & Payment
+        var inv2 = await service.CreateInvoiceAsync(201, new CreateInvoiceRequest
+        {
+            AppointmentId = 502,
+            Items = new List<CreateInvoiceItemRequest> { new() { Description = "Buổi 2: Trám bít ống tủy", Quantity = 1, UnitPrice = 700000m } }
+        });
+        await service.ProcessPaymentAsync(201, new ProcessPaymentRequest { InvoiceId = inv2.Data!.InvoiceId, Amount = 700000m, Method = "BankTransfer" });
+
+        // Visit 3: Invoice & Payment
+        var inv3 = await service.CreateInvoiceAsync(201, new CreateInvoiceRequest
+        {
+            AppointmentId = 503,
+            Items = new List<CreateInvoiceItemRequest> { new() { Description = "Buổi 3: Lắp mão răng sứ", Quantity = 1, UnitPrice = 2500000m } }
+        });
+        await service.ProcessPaymentAsync(201, new ProcessPaymentRequest { InvoiceId = inv3.Data!.InvoiceId, Amount = 2500000m, Method = "CreditCard" });
+
+        // Verify longitudinal preservation
+        var patientInvoices = await service.GetPatientInvoicesAsync(101);
+        Assert.True(patientInvoices.Success);
+        Assert.Equal(3, patientInvoices.Data!.Count);
+
+        // Invoices are separated and distinct
+        var invoiceIds = patientInvoices.Data.Select(i => i.InvoiceId).Distinct().ToList();
+        Assert.Equal(3, invoiceIds.Count);
+
+        // All 3 invoices are Paid
+        Assert.All(patientInvoices.Data, i => Assert.Equal("Paid", i.Status));
+
+        // Amounts are preserved independently
+        Assert.Contains(patientInvoices.Data, i => i.AppointmentId == 501 && i.TotalAmount == 800000m);
+        Assert.Contains(patientInvoices.Data, i => i.AppointmentId == 502 && i.TotalAmount == 700000m);
+        Assert.Contains(patientInvoices.Data, i => i.AppointmentId == 503 && i.TotalAmount == 2500000m);
+
+        // Single patient profile
+        var profileCount = await db.PatientProfiles.CountAsync(p => p.UserId == 101);
+        Assert.Equal(1, profileCount);
     }
 }

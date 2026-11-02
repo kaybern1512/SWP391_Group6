@@ -146,7 +146,7 @@ public class BillingService : IBillingService
                 AppointmentId = appointment.AppointmentId,
                 GeneratedByUserId = validStaffUserId,
                 TotalAmount = totalAmount,
-                Status = "Unpaid",
+                Status = totalAmount == 0 ? "Paid" : "Unpaid",
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -179,12 +179,17 @@ public class BillingService : IBillingService
 
             try
             {
+                var notifTitle = totalAmount == 0 ? "Hóa đơn viện phí (Miễn phí 100%)" : "Hóa đơn viện phí mới";
+                var notifMessage = totalAmount == 0
+                    ? $"Hóa đơn #{invoice.InvoiceCode} với tổng tiền 0 đ (đã áp dụng chiết khấu 100% số tiền {discount:N0} đ) đã được ghi nhận hoàn tất."
+                    : $"Hóa đơn #{invoice.InvoiceCode} với tổng tiền {totalAmount:N0} đ đã được tạo cho ca khám của bạn.";
+
                 await _notificationService.CreateNotificationAsync(
                     appointment.PatientUserId,
                     appointment.AppointmentId,
                     "Billing",
-                    "Hóa đơn viện phí mới",
-                    $"Hóa đơn #{invoice.InvoiceCode} với tổng tiền {totalAmount:N0} đ đã được tạo cho ca khám của bạn.",
+                    notifTitle,
+                    notifMessage,
                     ct);
             }
             catch (Exception ex)

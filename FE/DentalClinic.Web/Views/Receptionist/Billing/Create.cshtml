@@ -106,7 +106,7 @@
                                     <option value="">-- Chọn dịch vụ nha khoa --</option>
                                     @foreach (var s in Model.AvailableServices)
                                     {
-                                        <option value="@s.ServiceId" data-name="@s.ServiceName" data-price="@Convert.ToInt64(s.Price)">
+                                        <option value="@s.ServiceId" data-name="@s.ServiceName" data-price="@s.Price.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)">
                                             @s.ServiceName - @s.Price.ToString("N0") đ (@s.DepartmentName)
                                         </option>
                                     }
@@ -145,7 +145,7 @@
                                                 <input type="number" class="form-control form-control-sm text-center item-qty" value="@item.Quantity" min="1" required />
                                             </td>
                                             <td>
-                                                <input type="number" class="form-control form-control-sm text-end item-price" value="@Convert.ToInt64(item.UnitPrice)" min="0" step="1000" required />
+                                                <input type="number" class="form-control form-control-sm text-end item-price" value="@item.UnitPrice.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)" min="0" step="any" required />
                                             </td>
                                             <td class="text-end fw-semibold item-subtotal">
                                                 @((item.Quantity * item.UnitPrice).ToString("N0")) đ
@@ -168,7 +168,7 @@
                                             <input type="number" class="form-control form-control-sm text-center item-qty" value="1" min="1" required />
                                         </td>
                                         <td>
-                                            <input type="number" class="form-control form-control-sm text-end item-price" value="0" min="0" step="1000" required />
+                                            <input type="number" class="form-control form-control-sm text-end item-price" value="0" min="0" step="any" required />
                                         </td>
                                         <td class="text-end fw-semibold item-subtotal">0 đ</td>
                                         <td class="text-center">
@@ -392,7 +392,7 @@
                         <input type="number" class="form-control form-control-sm text-center item-qty" value="1" min="1" required />
                     </td>
                     <td>
-                        <input type="number" class="form-control form-control-sm text-end item-price" value="0" min="0" step="1000" required />
+                        <input type="number" class="form-control form-control-sm text-end item-price" value="0" min="0" step="any" required />
                     </td>
                     <td class="text-end fw-semibold item-subtotal">0 đ</td>
                     <td class="text-center">
@@ -425,7 +425,7 @@
                         <input type="number" class="form-control form-control-sm text-center item-qty" value="1" min="1" required />
                     </td>
                     <td>
-                        <input type="number" class="form-control form-control-sm text-end item-price" value="${price}" min="0" step="1000" required />
+                        <input type="number" class="form-control form-control-sm text-end item-price" value="${price}" min="0" step="any" required />
                     </td>
                     <td class="text-end fw-semibold item-subtotal">${formatMoney(price)}</td>
                     <td class="text-center">
