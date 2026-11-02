@@ -63,4 +63,42 @@ public interface IFollowUpSchedulingService
         long doctorUserId,
         CreateFollowUpAppointmentRequest request,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Bệnh nhân gửi yêu cầu đổi lịch (Reschedule) hoặc đặt lại lịch (Rebook) cho cuộc hẹn tái khám.
+    /// </summary>
+    Task<ApiResponse<FollowUpProposalDto>> SubmitPatientChangeProposalAsync(
+        long patientUserId,
+        PatientFollowUpChangeRequest request,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Bệnh nhân rút yêu cầu thay đổi lịch đang chờ duyệt.
+    /// </summary>
+    Task<ApiResponse<bool>> WithdrawPatientProposalAsync(
+        long patientUserId,
+        long proposalId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Lấy danh sách các yêu cầu thay đổi lịch của bệnh nhân.
+    /// </summary>
+    Task<ApiResponse<List<FollowUpProposalDto>>> GetPatientProposalsAsync(
+        long patientUserId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Bác sĩ lấy danh sách các yêu cầu thay đổi lịch của bệnh nhân cần phê duyệt.
+    /// </summary>
+    Task<ApiResponse<List<FollowUpProposalDto>>> GetDoctorPendingProposalsAsync(
+        long doctorUserId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Bác sĩ phê duyệt hoặc từ chối yêu cầu đổi lịch / đặt lại lịch trong transaction an toàn.
+    /// </summary>
+    Task<ApiResponse<FollowUpProposalDto>> ResolveProposalAsync(
+        long doctorUserId,
+        ResolveProposalRequest request,
+        CancellationToken ct = default);
 }

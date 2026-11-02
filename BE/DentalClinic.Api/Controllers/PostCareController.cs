@@ -162,4 +162,70 @@ public class PostCareController : ControllerBase
         if (!result.Success) return BadRequest(result);
         return Ok(result);
     }
+
+    // ==========================================
+    // FOLLOW-UP CHANGE PROPOSALS (ĐỔI / ĐẶT LẠI LỊCH)
+    // ==========================================
+
+    [HttpPost("follow-ups/proposals")]
+    [Authorize(Roles = UserRole.Patient)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpProposalDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpProposalDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SubmitPatientProposal(
+        [FromBody] PatientFollowUpChangeRequest request,
+        CancellationToken ct = default)
+    {
+        var patientUserId = GetCurrentUserId();
+        var result = await _schedulingService.SubmitPatientChangeProposalAsync(patientUserId, request, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpPost("follow-ups/proposals/{proposalId}/withdraw")]
+    [Authorize(Roles = UserRole.Patient)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> WithdrawPatientProposal(
+        [FromRoute] long proposalId,
+        CancellationToken ct = default)
+    {
+        var patientUserId = GetCurrentUserId();
+        var result = await _schedulingService.WithdrawPatientProposalAsync(patientUserId, proposalId, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpGet("follow-ups/proposals/patient")]
+    [Authorize(Roles = UserRole.Patient)]
+    [ProducesResponseType(typeof(ApiResponse<List<FollowUpProposalDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPatientProposals(CancellationToken ct = default)
+    {
+        var patientUserId = GetCurrentUserId();
+        var result = await _schedulingService.GetPatientProposalsAsync(patientUserId, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("follow-ups/proposals/doctor")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<List<FollowUpProposalDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDoctorPendingProposals(CancellationToken ct = default)
+    {
+        var doctorUserId = GetCurrentUserId();
+        var result = await _schedulingService.GetDoctorPendingProposalsAsync(doctorUserId, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("follow-ups/proposals/resolve")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpProposalDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpProposalDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResolveProposal(
+        [FromBody] ResolveProposalRequest request,
+        CancellationToken ct = default)
+    {
+        var doctorUserId = GetCurrentUserId();
+        var result = await _schedulingService.ResolveProposalAsync(doctorUserId, request, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
 }
