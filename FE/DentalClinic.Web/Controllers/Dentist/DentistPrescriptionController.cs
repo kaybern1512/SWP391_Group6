@@ -36,7 +36,7 @@ public class DentistPrescriptionController : Controller
         foreach (var p in prescriptions)
         {
             var stRes = await _medicineApi.GetPrescriptionDispensationStatusAsync(p.PrescriptionId);
-            if (stRes.IsSuccess && stRes.Data != null)
+            if (stRes != null && stRes.IsSuccess && stRes.Data != null)
             {
                 statusMap[p.PrescriptionId] = stRes.Data;
             }

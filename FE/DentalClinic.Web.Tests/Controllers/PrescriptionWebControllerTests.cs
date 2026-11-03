@@ -19,10 +19,14 @@ namespace DentalClinic.Web.Tests.Controllers;
 public class PrescriptionWebControllerTests
 {
     private readonly Mock<IPrescriptionApiService> _apiMock;
+    private readonly Mock<IMedicineApiService> _medicineApiMock;
 
     public PrescriptionWebControllerTests()
     {
         _apiMock = new Mock<IPrescriptionApiService>();
+        _medicineApiMock = new Mock<IMedicineApiService>();
+        _medicineApiMock.Setup(m => m.GetAvailableForPrescriptionAsync(It.IsAny<string?>())).ReturnsAsync(ApiResult<List<MedicineDto>>.Success(new List<MedicineDto>()));
+        _medicineApiMock.Setup(m => m.GetPrescriptionDispensationStatusAsync(It.IsAny<long>())).ReturnsAsync(ApiResult<PrescriptionDispensationStatusDto>.Success(new PrescriptionDispensationStatusDto()));
     }
 
     private static ControllerContext CreateContextWithUser(long userId, string role, string name = "Dentist")
@@ -62,7 +66,7 @@ public class PrescriptionWebControllerTests
         _apiMock.Setup(x => x.GetEligibleAppointmentsAsync())
             .ReturnsAsync(ApiResult<List<PrescriptionEligibleAppointmentDto>>.Success(eligibleAppts));
 
-        var controller = new DentistPrescriptionController(_apiMock.Object)
+        var controller = new DentistPrescriptionController(_apiMock.Object, _medicineApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(1, "Dentist")
         };
@@ -81,7 +85,7 @@ public class PrescriptionWebControllerTests
         _apiMock.Setup(x => x.CreatePrescriptionAsync(It.IsAny<CreatePrescriptionRequest>()))
             .ReturnsAsync(ApiResult<PrescriptionDto>.Success(new PrescriptionDto { PrescriptionId = 5 }));
 
-        var controller = new DentistPrescriptionController(_apiMock.Object)
+        var controller = new DentistPrescriptionController(_apiMock.Object, _medicineApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(1, "Dentist"),
             TempData = CreateTempData()
