@@ -14,13 +14,13 @@
                 </div>
 
                 <h2 class="fw-bold text-dark mb-2">Gửi Yêu Cầu Đặt Lịch Thành Công!</h2>
-                <p class="text-muted mb-4">Yêu cầu đặt lịch khám của bạn đã được ghi nhận vào hệ thống phòng khám DentalCare.</p>
+                <p class="text-muted mb-4">Yêu cầu đặt lịch khám của bạn đã được chuyển vào hàng đợi tiếp nhận của bộ phận Lễ tân phòng khám DentalCare.</p>
 
-                <div class="bg-light-subtle border rounded-3 p-4 text-start mb-4">
+                <div class="bg-light-subtle border rounded-3 p-4 text-start mb-4 shadow-sm">
                     <div class="row g-3">
                         <div class="col-sm-6">
                             <span class="text-muted small">Mã lịch hẹn:</span>
-                            <div class="fw-bold fs-5 text-primary">@Model.AppointmentCode</div>
+                            <div class="fw-bold fs-5 text-primary font-monospace">@Model.AppointmentCode</div>
                         </div>
                         <div class="col-sm-6">
                             <span class="text-muted small">Trạng thái hiện tại:</span>
@@ -31,23 +31,23 @@
                             </div>
                         </div>
                         <div class="col-sm-6">
-                            <span class="text-muted small">Chuyên khoa:</span>
-                            <div class="fw-semibold">@Model.DepartmentName</div>
-                        </div>
-                        <div class="col-sm-6">
                             <span class="text-muted small">Dịch vụ yêu cầu:</span>
-                            <div class="fw-semibold">@Model.ServiceName</div>
+                            <div class="fw-semibold text-primary fs-6">@Model.ServiceName</div>
                         </div>
                         <div class="col-sm-6">
-                            <span class="text-muted small">Thời gian khám:</span>
-                            <div class="fw-bold text-success">
-                                @(Model.ScheduledStart?.ToString("dd/MM/yyyy HH:mm") ?? "--")
+                            <span class="text-muted small">Nhóm chuyên môn:</span>
+                            <div class="fw-semibold text-dark">@Model.DepartmentName</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <span class="text-muted small">Thời gian hẹn khám:</span>
+                            <div class="fw-bold text-success fs-6">
+                                <i class="bi bi-calendar-event me-1"></i>@(Model.ScheduledStart?.ToString("dd/MM/yyyy HH:mm") ?? "--")
                             </div>
                         </div>
                         <div class="col-sm-6">
                             <span class="text-muted small">Bác sĩ phụ trách:</span>
                             <div class="fw-semibold">
-                                @(string.IsNullOrWhiteSpace(Model.RequestedDentistName) ? "Bất kỳ bác sĩ khả dụng" : Model.RequestedDentistName)
+                                <i class="bi bi-person-badge me-1 text-primary"></i>@(string.IsNullOrWhiteSpace(Model.RequestedDentistName) ? "Bất kỳ bác sĩ khả dụng" : Model.RequestedDentistName)
                             </div>
                         </div>
                     </div>
@@ -56,7 +56,7 @@
                 <div class="alert alert-info border-0 text-start mb-4">
                     <h6 class="fw-bold mb-2"><i class="bi bi-info-circle-fill me-2"></i>Quy trình xử lý tiếp theo:</h6>
                     <ol class="mb-0 ps-3 small text-secondary">
-                        <li class="mb-1"><strong>Lễ tân rà soát:</strong> Tiếp nhận thông tin bệnh nhân và chuyển tiếp chuyên khoa.</li>
+                        <li class="mb-1"><strong>Lễ tân rà soát:</strong> Tiếp nhận thông tin bệnh nhân và chuyển tiếp nhóm chuyên môn phụ trách.</li>
                         <li class="mb-1"><strong>Trưởng khoa phân bổ:</strong> Xem xét lịch làm việc, chỉ định Bác sĩ, Phòng khám và Ghế điều trị phù hợp nhất.</li>
                         <li><strong>Cấp số thứ tự khám (Queue Number):</strong> Khi lịch hẹn được xác nhận, hệ thống sẽ cấp mã số thứ tự để bạn tiện theo dõi khi đến phòng khám.</li>
                     </ol>

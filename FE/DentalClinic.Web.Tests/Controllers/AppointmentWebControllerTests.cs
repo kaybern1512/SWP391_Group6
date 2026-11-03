@@ -253,10 +253,15 @@ public class AppointmentWebControllerTests
     [Fact]
     public async Task Patient_GetServices_ReturnsJsonResult()
     {
+        _apiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(new List<DepartmentDto>
+            {
+                new() { DepartmentId = 1, Name = "Răng Tổng Quát" }
+            }));
         _apiMock.Setup(x => x.GetServicesAsync(1))
             .ReturnsAsync(ApiResult<List<DepartmentServiceDto>>.Success(new List<DepartmentServiceDto>
             {
-                new() { DepartmentServiceId = 10, ServiceName = "Khám Răng" }
+                new() { DepartmentServiceId = 10, DepartmentId = 1, ServiceName = "Khám Răng" }
             }));
 
         var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)

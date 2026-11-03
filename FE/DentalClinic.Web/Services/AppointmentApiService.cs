@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
@@ -35,7 +35,10 @@ public class AppointmentApiService : IAppointmentApiService
 
     public async Task<ApiResult<List<DepartmentServiceDto>>> GetServicesAsync(long departmentId)
     {
-        return await SendGetAsync<List<DepartmentServiceDto>>($"/api/booking/departments/{departmentId}/services");
+        var endpoint = departmentId > 0
+            ? $"/api/booking/departments/{departmentId}/services"
+            : "/api/booking/services";
+        return await SendGetAsync<List<DepartmentServiceDto>>(endpoint);
     }
 
     public async Task<ApiResult<List<DentistOptionDto>>> GetDentistsAsync(long departmentId)

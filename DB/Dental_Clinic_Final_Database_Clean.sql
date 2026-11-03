@@ -3,7 +3,7 @@
 -- MASTER CLEAN DATABASE SCHEMA (44 TABLES, VIEWS, STORED PROCEDURES)
 -- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
 -- Database Name: DentalClinicManagementDB
--- Generated: 2026-11-03 01:09:58
+-- Generated: 2026-11-03 02:08:47
 -- =========================================================================================
 
 -- =========================================================================================
@@ -339,6 +339,7 @@ CREATE TABLE [dbo].[Rooms](
 	[RoomName] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[DepartmentId] [bigint] NULL,
+	[IsExclusive] [bit] NOT NULL,
 PRIMARY KEY CLUSTERED 
 (
 	[RoomId] ASC
@@ -435,6 +436,7 @@ CREATE TABLE [dbo].[Appointments](
 	[CancelledAt] [datetime2](7) NULL,
 	[CancellationReason] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[UpdatedAt] [datetime2](7) NULL,
+	[ScheduledDate]  AS (CONVERT([date],[ScheduledStart])) PERSISTED,
 PRIMARY KEY CLUSTERED 
 (
 	[AppointmentId] ASC
@@ -1273,6 +1275,24 @@ CREATE NONCLUSTERED INDEX [IX_Appointments_Room_Start] ON [dbo].[Appointments]
 WHERE ([RoomId] IS NOT NULL)
 WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
+SET ARITHABORT ON
+SET CONCAT_NULL_YIELDS_NULL ON
+SET QUOTED_IDENTIFIER ON
+SET ANSI_NULLS ON
+SET ANSI_PADDING ON
+SET ANSI_WARNINGS ON
+SET NUMERIC_ROUNDABORT OFF
+
+GO
+CREATE UNIQUE NONCLUSTERED INDEX [UQ_Appointments_Department_Date_QueueNumber] ON [dbo].[Appointments]
+(
+	[DepartmentId] ASC,
+	[ScheduledDate] ASC,
+	[QueueNumber] ASC
+)
+WHERE ([DepartmentId] IS NOT NULL AND [ScheduledStart] IS NOT NULL AND [QueueNumber] IS NOT NULL AND [QueueNumber]<>'')
+WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
 SET ANSI_PADDING ON
 
 GO
@@ -1514,6 +1534,8 @@ GO
 ALTER TABLE [dbo].[DentistAvailability] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
 GO
 ALTER TABLE [dbo].[Rooms] ADD  DEFAULT ('Active') FOR [Status]
+GO
+ALTER TABLE [dbo].[Rooms] ADD  CONSTRAINT [DF_Rooms_IsExclusive]  DEFAULT ((0)) FOR [IsExclusive]
 GO
 ALTER TABLE [dbo].[DentalChairs] ADD  DEFAULT ('Active') FOR [Status]
 GO
@@ -2232,6 +2254,7 @@ LEFT  JOIN dbo.DentistProfiles dp ON dp.UserId    = bp.AuthorUserId
 WHERE bp.Status = 'Published';
 
 
+
 GO
 
 -- =========================================================================================
@@ -2253,6 +2276,7 @@ BEGIN
 END;
 
 
+
 GO
 SET ANSI_NULLS ON
 GO
@@ -2269,6 +2293,7 @@ BEGIN
     WHERE  Slug = @Slug
       AND  Status = 'Published';
 END;
+
 
 
 GO

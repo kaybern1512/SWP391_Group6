@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -44,6 +44,28 @@ public class PatientAppointmentController : Controller
         return View("~/Views/Patient/Appointment/Index.cshtml", vm);
     }
 
+    private static readonly string[] ExcludedDepartmentKeywords = new[] { "hình ảnh", "chuẩn đoán", "chẩn đoán", "phục hình" };
+
+    private static bool IsAllowedBookingDepartment(DepartmentDto d)
+    {
+        if (d == null || string.IsNullOrWhiteSpace(d.Name)) return false;
+        return !ExcludedDepartmentKeywords.Any(k => d.Name.Contains(k, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task<(List<DepartmentDto> Departments, List<DepartmentServiceDto> Services)> GetAllowedBookingCatalogAsync()
+    {
+        var deptResult = await _appointmentApiService.GetDepartmentsAsync();
+        var allDepts = deptResult?.Data ?? new();
+        var filteredDepts = allDepts.Where(IsAllowedBookingDepartment).ToList();
+        var allowedDeptIds = filteredDepts.Select(d => d.DepartmentId).ToHashSet();
+
+        var servicesResult = await _appointmentApiService.GetServicesAsync(0);
+        var allServices = servicesResult?.Data ?? new();
+        var filteredServices = allServices.Where(s => allowedDeptIds.Contains(s.DepartmentId)).ToList();
+
+        return (filteredDepts, filteredServices);
+    }
+
     [HttpGet("Book")]
     public async Task<IActionResult> Book(
         [FromQuery] long? departmentId = null,
@@ -54,10 +76,11 @@ public class PatientAppointmentController : Controller
         var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
         var eligibility = eligibilityResult?.Data ?? new BookingEligibilityDto();
 
-        var deptResult = await _appointmentApiService.GetDepartmentsAsync();
+        var (filteredDepts, filteredServices) = await GetAllowedBookingCatalogAsync();
         var vm = new PatientBookViewModel
         {
-            Departments = deptResult.Data ?? new(),
+            Departments = filteredDepts,
+            Services = filteredServices,
             Eligibility = eligibility,
             DepartmentId = departmentId ?? 0,
             RequestedDentistUserId = dentistId,
@@ -71,7 +94,19 @@ public class PatientAppointmentController : Controller
     public async Task<IActionResult> GetServices(long departmentId)
     {
         var result = await _appointmentApiService.GetServicesAsync(departmentId);
-        return Json(result.Data ?? new());
+        var services = result?.Data ?? new();
+        var deptResult = await _appointmentApiService.GetDepartmentsAsync();
+        if (deptResult?.Data != null && deptResult.Data.Any())
+        {
+            var allowedDeptIds = deptResult.Data
+                .Where(IsAllowedBookingDepartment)
+                .Select(d => d.DepartmentId)
+                .ToHashSet();
+
+            var filtered = services.Where(s => allowedDeptIds.Contains(s.DepartmentId)).ToList();
+            return Json(filtered);
+        }
+        return Json(services);
     }
 
     [HttpGet("GetDentists")]
@@ -104,16 +139,18 @@ public class PatientAppointmentController : Controller
         {
             TempData["ErrorMessage"] = eligibility.BlockReason ?? "Tài khoản của bạn hiện đang bị tạm khóa quyền đặt lịch trực tuyến.";
             model.Eligibility = eligibility;
-            var deptRes = await _appointmentApiService.GetDepartmentsAsync();
-            model.Departments = deptRes.Data ?? new();
+            var catalog = await GetAllowedBookingCatalogAsync();
+            model.Departments = catalog.Departments;
+            model.Services = catalog.Services;
             return View("~/Views/Patient/Appointment/Book.cshtml", model);
         }
 
         if (!ModelState.IsValid)
         {
             model.Eligibility = eligibility;
-            var deptResult = await _appointmentApiService.GetDepartmentsAsync();
-            model.Departments = deptResult.Data ?? new();
+            var catalog = await GetAllowedBookingCatalogAsync();
+            model.Departments = catalog.Departments;
+            model.Services = catalog.Services;
             return View("~/Views/Patient/Appointment/Book.cshtml", model);
         }
 
@@ -131,8 +168,9 @@ public class PatientAppointmentController : Controller
         {
             ModelState.AddModelError(string.Empty, result.Message ?? "Không thể đặt lịch khám.");
             model.Eligibility = eligibility;
-            var deptResult = await _appointmentApiService.GetDepartmentsAsync();
-            model.Departments = deptResult.Data ?? new();
+            var catalog = await GetAllowedBookingCatalogAsync();
+            model.Departments = catalog.Departments;
+            model.Services = catalog.Services;
             return View("~/Views/Patient/Appointment/Book.cshtml", model);
         }
 

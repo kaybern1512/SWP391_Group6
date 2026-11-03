@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Application.Features.Booking.DTOs;
@@ -44,6 +44,7 @@ public class AvailableSlotDto
     public DateTime EndTime { get; set; }
     public long? DentistUserId { get; set; }
     public string? DentistName { get; set; }
+    public string TimeDisplay => $"{StartTime:HH:mm} - {EndTime:HH:mm}";
 }
 
 public class AvailableSlotsQuery

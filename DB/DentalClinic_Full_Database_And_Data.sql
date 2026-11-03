@@ -10,7 +10,7 @@
 --   Dentist:               dentist.hung@dentalcare.com / dentist@dentalcare.com
 --   Receptionist:          receptionist@dentalcare.com
 --   Patient:               patient.tuan@gmail.com / patient1@dentalcare.com
--- Generated: 2026-11-03 01:10:07
+-- Generated: 2026-11-03 02:08:56
 -- =========================================================================================
 
 -- =========================================================================================
@@ -346,6 +346,7 @@ CREATE TABLE [dbo].[Rooms](
 	[RoomName] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[DepartmentId] [bigint] NULL,
+	[IsExclusive] [bit] NOT NULL,
 PRIMARY KEY CLUSTERED 
 (
 	[RoomId] ASC
@@ -442,6 +443,7 @@ CREATE TABLE [dbo].[Appointments](
 	[CancelledAt] [datetime2](7) NULL,
 	[CancellationReason] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[UpdatedAt] [datetime2](7) NULL,
+	[ScheduledDate]  AS (CONVERT([date],[ScheduledStart])) PERSISTED,
 PRIMARY KEY CLUSTERED 
 (
 	[AppointmentId] ASC
@@ -1280,6 +1282,24 @@ CREATE NONCLUSTERED INDEX [IX_Appointments_Room_Start] ON [dbo].[Appointments]
 WHERE ([RoomId] IS NOT NULL)
 WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
+SET ARITHABORT ON
+SET CONCAT_NULL_YIELDS_NULL ON
+SET QUOTED_IDENTIFIER ON
+SET ANSI_NULLS ON
+SET ANSI_PADDING ON
+SET ANSI_WARNINGS ON
+SET NUMERIC_ROUNDABORT OFF
+
+GO
+CREATE UNIQUE NONCLUSTERED INDEX [UQ_Appointments_Department_Date_QueueNumber] ON [dbo].[Appointments]
+(
+	[DepartmentId] ASC,
+	[ScheduledDate] ASC,
+	[QueueNumber] ASC
+)
+WHERE ([DepartmentId] IS NOT NULL AND [ScheduledStart] IS NOT NULL AND [QueueNumber] IS NOT NULL AND [QueueNumber]<>'')
+WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
 SET ANSI_PADDING ON
 
 GO
@@ -1521,6 +1541,8 @@ GO
 ALTER TABLE [dbo].[DentistAvailability] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
 GO
 ALTER TABLE [dbo].[Rooms] ADD  DEFAULT ('Active') FOR [Status]
+GO
+ALTER TABLE [dbo].[Rooms] ADD  CONSTRAINT [DF_Rooms_IsExclusive]  DEFAULT ((0)) FOR [IsExclusive]
 GO
 ALTER TABLE [dbo].[DentalChairs] ADD  DEFAULT ('Active') FOR [Status]
 GO
@@ -2239,6 +2261,7 @@ LEFT  JOIN dbo.DentistProfiles dp ON dp.UserId    = bp.AuthorUserId
 WHERE bp.Status = 'Published';
 
 
+
 GO
 
 -- =========================================================================================
@@ -2260,6 +2283,7 @@ BEGIN
 END;
 
 
+
 GO
 SET ANSI_NULLS ON
 GO
@@ -2276,6 +2300,7 @@ BEGIN
     WHERE  Slug = @Slug
       AND  Status = 'Published';
 END;
+
 
 
 GO
@@ -2662,14 +2687,14 @@ GO
 -- Data for [Rooms] (8 rows)
 -- -----------------------------------------------------------------------------------------
 SET IDENTITY_INSERT [dbo].[Rooms] ON;
-INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (1, N'ROOM-101', N'Phòng Khám Răng Tổng Quát 101', N'Active', 1)
-INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (2, N'ROOM-201', N'Phòng Phẫu Thuật & Implant 201', N'Active', 3)
-INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (3, N'ROOM-301', N'Phòng Chỉnh Nha & Thẩm Mỹ 301', N'Active', 2)
-INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (4, N'ROOM-401', N'Phòng Khám Răng Trẻ Em 401', N'Active', 4)
-INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (5, N'ROOM-QA-88', N'Phòng Điều Trị Kỹ Thuật Cao VIP QA', N'Active', 6)
-INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (6, N'RM-QA831', N'Phòng Điều Trị Kỹ Thuật Cao VIP 831', N'Active', 8)
-INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (7, N'RM-QA852', N'Phòng Điều Trị Kỹ Thuật Cao VIP 852', N'Active', 9)
-INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId]) VALUES (8, N'RM-QA901', N'Phòng Điều Trị Kỹ Thuật Cao VIP 901', N'Active', 10)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId], [IsExclusive]) VALUES (1, N'ROOM-101', N'Phòng Khám Răng Tổng Quát 101', N'Active', 1, 0)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId], [IsExclusive]) VALUES (2, N'ROOM-201', N'Phòng Phẫu Thuật & Implant 201', N'Active', 3, 1)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId], [IsExclusive]) VALUES (3, N'ROOM-301', N'Phòng Chỉnh Nha & Thẩm Mỹ 301', N'Active', 2, 0)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId], [IsExclusive]) VALUES (4, N'ROOM-401', N'Phòng Khám Răng Trẻ Em 401', N'Active', 4, 0)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId], [IsExclusive]) VALUES (5, N'ROOM-QA-88', N'Phòng Điều Trị Kỹ Thuật Cao VIP QA', N'Active', 6, 0)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId], [IsExclusive]) VALUES (6, N'RM-QA831', N'Phòng Điều Trị Kỹ Thuật Cao VIP 831', N'Active', 8, 0)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId], [IsExclusive]) VALUES (7, N'RM-QA852', N'Phòng Điều Trị Kỹ Thuật Cao VIP 852', N'Active', 9, 0)
+INSERT [dbo].[Rooms] ([RoomId], [RoomCode], [RoomName], [Status], [DepartmentId], [IsExclusive]) VALUES (8, N'RM-QA901', N'Phòng Điều Trị Kỹ Thuật Cao VIP 901', N'Active', 10, 0)
 SET IDENTITY_INSERT [dbo].[Rooms] OFF;
 GO
 
