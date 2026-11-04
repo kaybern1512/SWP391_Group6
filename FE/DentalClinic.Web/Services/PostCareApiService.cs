@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
@@ -96,10 +96,58 @@ public class PostCareApiService : IPostCareApiService
             return ApiResult<FollowUpScheduleDto>.Failure("Lỗi kết nối khi cập nhật lịch tái khám.");
         }
     }
-    // ==========================================
-    // HTTP HELPERS
-    // ==========================================
+    public async Task<ApiResult<FollowUpAppointmentDto>> DoctorBookFollowUpAsync(CreateFollowUpAppointmentRequest request)
+    {
+        return await SendPostAsync<CreateFollowUpAppointmentRequest, FollowUpAppointmentDto>("/api/post-care/follow-ups/doctor-book", request);
+    }
 
+    public async Task<ApiResult<List<FollowUpSlotDto>>> GetFollowUpAvailableSlotsAsync(long dentistUserId, DateTime date, int durationMinutes = 30)
+    {
+        var url = $"/api/post-care/follow-ups/available-slots?dentistUserId={dentistUserId}&date={date:yyyy-MM-dd}&durationMinutes={durationMinutes}";
+        return await SendGetAsync<List<FollowUpSlotDto>>(url);
+    }
+
+    public async Task<ApiResult<FollowUpProposalDto>> SubmitPatientProposalAsync(PatientFollowUpChangeRequest request)
+    {
+        return await SendPostAsync<PatientFollowUpChangeRequest, FollowUpProposalDto>("/api/post-care/follow-ups/proposals", request);
+    }
+
+    public async Task<ApiResult<bool>> WithdrawPatientProposalAsync(long proposalId)
+    {
+        return await SendPostAsync<object, bool>($"/api/post-care/follow-ups/proposals/{proposalId}/withdraw", new { });
+    }
+
+    public async Task<ApiResult<List<FollowUpProposalDto>>> GetPatientProposalsAsync()
+    {
+        return await SendGetAsync<List<FollowUpProposalDto>>("/api/post-care/follow-ups/proposals/patient");
+    }
+
+    public async Task<ApiResult<List<FollowUpProposalDto>>> GetDoctorPendingProposalsAsync()
+    {
+        return await SendGetAsync<List<FollowUpProposalDto>>("/api/post-care/follow-ups/proposals/doctor");
+    }
+
+    public async Task<ApiResult<FollowUpProposalDto>> ResolveProposalAsync(ResolveProposalRequest request)
+    {
+        return await SendPostAsync<ResolveProposalRequest, FollowUpProposalDto>("/api/post-care/follow-ups/proposals/resolve", request);
+    }
+
+    public async Task<ApiResult<List<FollowUpReminderDto>>> GetReceptionistRemindersAsync(string? dateFilter = null, string? callStatus = null)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(dateFilter)) query.Add($"dateFilter={Uri.EscapeDataString(dateFilter)}");
+        if (!string.IsNullOrWhiteSpace(callStatus)) query.Add($"callStatus={Uri.EscapeDataString(callStatus)}");
+        var queryString = query.Count > 0 ? "?" + string.Join("&", query) : "";
+        return await SendGetAsync<List<FollowUpReminderDto>>($"/api/post-care/follow-ups/receptionist-reminders{queryString}");
+    }
+
+    public async Task<ApiResult<FollowUpReminderDto>> UpdateReminderCallStatusAsync(UpdateReminderCallStatusRequest request)
+    {
+        return await SendPostAsync<UpdateReminderCallStatusRequest, FollowUpReminderDto>("/api/post-care/follow-ups/receptionist-reminders/call-status", request);
+    }
+
+    // ===================================    // HTTP HELPERS
+    // ===================================
     private async Task<ApiResult<T>> SendGetAsync<T>(string endpoint)
     {
         try

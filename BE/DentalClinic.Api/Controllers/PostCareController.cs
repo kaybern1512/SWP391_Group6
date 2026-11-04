@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
+using DentalClinic.Application.Features.FollowUp.DTOs;
+
 namespace DentalClinic.Api.Controllers;
 
 [ApiController]
@@ -18,10 +20,14 @@ namespace DentalClinic.Api.Controllers;
 public class PostCareController : ControllerBase
 {
     private readonly IPostCareService _postCareService;
+    private readonly IFollowUpSchedulingService _schedulingService;
 
-    public PostCareController(IPostCareService postCareService)
+    public PostCareController(
+        IPostCareService postCareService,
+        IFollowUpSchedulingService schedulingService)
     {
         _postCareService = postCareService;
+        _schedulingService = schedulingService;
     }
 
     private long GetCurrentUserId()
@@ -122,6 +128,7 @@ public class PostCareController : ControllerBase
         var result = await _postCareService.GetReceptionistFollowUpsAsync(ct);
         return Ok(result);
     }
+
     [HttpPatch("follow-ups/{id:long}/status")]
     [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.Patient}")]
     [ProducesResponseType(typeof(ApiResponse<FollowUpScheduleDto>), StatusCodes.Status200OK)]
@@ -130,6 +137,132 @@ public class PostCareController : ControllerBase
     {
         var currentUserId = GetCurrentUserId();
         var result = await _postCareService.UpdateFollowUpStatusAsync(currentUserId, id, request, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpGet("follow-ups/available-slots")]
+    [Authorize]
+    [ProducesResponseType(typeof(ApiResponse<List<FollowUpSlotDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<List<FollowUpSlotDto>>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetAvailableFollowUpSlots(
+        [FromQuery] long dentistUserId,
+        [FromQuery] DateTime date,
+        [FromQuery] int durationMinutes = 30,
+        CancellationToken ct = default)
+    {
+        if (dentistUserId <= 0)
+        {
+            return BadRequest(ApiResponse<List<FollowUpSlotDto>>.Fail("Vui lòng chọn bác sĩ điều trị."));
+        }
+
+        var result = await _schedulingService.GetDoctorAvailableSlotsAsync(dentistUserId, date, durationMinutes, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpPost("follow-ups/doctor-book")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpAppointmentDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpAppointmentDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DoctorBookFollowUp(
+        [FromBody] CreateFollowUpAppointmentRequest request,
+        CancellationToken ct = default)
+    {
+        var doctorUserId = GetCurrentUserId();
+        var result = await _schedulingService.CreateDoctorFollowUpAppointmentAsync(doctorUserId, request, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    // ==========================================
+    // FOLLOW-UP CHANGE PROPOSALS (ĐỔI / ĐẶT LẠI LỊCH)
+    // ==========================================
+
+    [HttpPost("follow-ups/proposals")]
+    [Authorize(Roles = UserRole.Patient)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpProposalDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpProposalDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SubmitPatientProposal(
+        [FromBody] PatientFollowUpChangeRequest request,
+        CancellationToken ct = default)
+    {
+        var patientUserId = GetCurrentUserId();
+        var result = await _schedulingService.SubmitPatientChangeProposalAsync(patientUserId, request, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpPost("follow-ups/proposals/{proposalId}/withdraw")]
+    [Authorize(Roles = UserRole.Patient)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> WithdrawPatientProposal(
+        [FromRoute] long proposalId,
+        CancellationToken ct = default)
+    {
+        var patientUserId = GetCurrentUserId();
+        var result = await _schedulingService.WithdrawPatientProposalAsync(patientUserId, proposalId, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpGet("follow-ups/proposals/patient")]
+    [Authorize(Roles = UserRole.Patient)]
+    [ProducesResponseType(typeof(ApiResponse<List<FollowUpProposalDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPatientProposals(CancellationToken ct = default)
+    {
+        var patientUserId = GetCurrentUserId();
+        var result = await _schedulingService.GetPatientProposalsAsync(patientUserId, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("follow-ups/proposals/doctor")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<List<FollowUpProposalDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDoctorPendingProposals(CancellationToken ct = default)
+    {
+        var doctorUserId = GetCurrentUserId();
+        var result = await _schedulingService.GetDoctorPendingProposalsAsync(doctorUserId, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("follow-ups/proposals/resolve")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpProposalDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpProposalDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResolveProposal(
+        [FromBody] ResolveProposalRequest request,
+        CancellationToken ct = default)
+    {
+        var doctorUserId = GetCurrentUserId();
+        var result = await _schedulingService.ResolveProposalAsync(doctorUserId, request, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpGet("follow-ups/receptionist-reminders")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<List<FollowUpReminderDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetReceptionistReminders(
+        [FromQuery] string? dateFilter = null,
+        [FromQuery] string? callStatus = null,
+        CancellationToken ct = default)
+    {
+        var result = await _schedulingService.GetReceptionistRemindersAsync(dateFilter, callStatus, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("follow-ups/receptionist-reminders/call-status")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpReminderDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<FollowUpReminderDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateReminderCallStatus(
+        [FromBody] UpdateReminderCallStatusRequest request,
+        CancellationToken ct = default)
+    {
+        var receptionistUserId = GetCurrentUserId();
+        var result = await _schedulingService.UpdateReminderCallStatusAsync(receptionistUserId, request, ct);
         if (!result.Success) return BadRequest(result);
         return Ok(result);
     }

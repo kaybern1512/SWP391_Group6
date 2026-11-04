@@ -1,229 +1,292 @@
-@model DentalClinic.Web.ViewModels.PostCare.PatientFollowUpIndexViewModel
+@model DentalClinic.Web.ViewModels.PostCare.ReceptionistFollowUpIndexViewModel
 @{
-    ViewData["Title"] = "Quản Lý & Theo Dõi Tái Khám";
-    var activeTab = (string?)ViewBag.ActiveTab ?? "due";
-    var today = DateTime.Today;
-
-    var overdueList = Model.FollowUps.Where(f => f.RecommendedDate.Date < today && f.Status == "Pending").ToList();
-    var dueThisWeekList = Model.FollowUps.Where(f => f.RecommendedDate.Date >= today && f.RecommendedDate.Date <= today.AddDays(7) && (f.Status == "Pending" || f.Status == "Confirmed")).ToList();
-    var upcomingList = Model.FollowUps.Where(f => f.RecommendedDate.Date > today.AddDays(7) && f.Status == "Pending").ToList();
-    var completedList = Model.FollowUps.Where(f => f.Status == "Completed" || f.Status == "Cancelled").ToList();
-
-    List<DentalClinic.Web.Models.ApiDtos.FollowUpScheduleDto> displayList;
-    if (activeTab == "overdue") displayList = overdueList;
-    else if (activeTab == "upcoming") displayList = upcomingList;
-    else if (activeTab == "completed") displayList = completedList;
-    else if (activeTab == "all") displayList = Model.FollowUps;
-    else displayList = dueThisWeekList;
+    ViewData["Title"] = "Nhắc Lịch Tái Khám - Bàn Lễ Tân";
+    var curDate = Model.DateFilter ?? "all";
+    var curStatus = Model.CallStatusFilter ?? "all";
 }
 
+@Html.AntiForgeryToken()
+
 <div class="container-fluid px-0">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+    <!-- Header -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
         <div>
             <h1 class="h3 fw-bold text-dark mb-1">
-                <i class="bi bi-telephone-forward me-2 text-primary"></i>Quản Lý & CSKH Tái Khám
+                <i class="bi bi-telephone-outbound me-2 text-primary"></i>Danh Sách Nhắc Lịch Tái Khám
             </h1>
-            <p class="text-muted mb-0">Theo dõi, liên hệ nhắc lịch và cập nhật phản hồi tái khám của bệnh nhân sau điều trị.</p>
+            <p class="text-muted mb-0">Theo dõi và gọi điện nhắc bệnh nhân về các lịch tái khám sắp tới theo chỉ định của bác sĩ.</p>
         </div>
-        <div class="d-flex gap-2">
-            <span class="badge bg-danger-subtle text-danger border border-danger-subtle fs-6 px-3 py-2">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i> Quá hạn: @overdueList.Count
-            </span>
-            <span class="badge bg-warning-subtle text-dark border border-warning-subtle fs-6 px-3 py-2">
-                <i class="bi bi-clock-history me-1"></i> Tuần này: @dueThisWeekList.Count
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill fs-6">
+                <i class="bi bi-calendar-check me-1"></i>Hôm nay: @DateTime.Today.ToString("dd/MM/yyyy")
             </span>
         </div>
     </div>
 
-    <partial name="_AlertMessage" />
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
 
-    <!-- Filter Tabs -->
-    <ul class="nav nav-pills mb-4 gap-2 bg-light p-2 rounded-3 border">
-        <li class="nav-item">
-            <a class="nav-link fw-semibold @(activeTab == "due" ? "active" : "")" asp-action="Index" asp-route-tab="due">
-                <i class="bi bi-bell-fill me-1 text-warning"></i> Đến Hạn Tuần Này
-                <span class="badge bg-white text-dark ms-1">@dueThisWeekList.Count</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link fw-semibold @(activeTab == "overdue" ? "active btn-danger" : "text-danger")" asp-action="Index" asp-route-tab="overdue">
-                <i class="bi bi-exclamation-circle-fill me-1"></i> Quá Hạn Cần Gọi Gấp
-                <span class="badge @(activeTab == "overdue" ? "bg-white text-danger" : "bg-danger text-white") ms-1">@overdueList.Count</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link fw-semibold @(activeTab == "upcoming" ? "active" : "")" asp-action="Index" asp-route-tab="upcoming">
-                <i class="bi bi-calendar-week me-1"></i> Sắp Tới (>7 ngày)
-                <span class="badge bg-white text-dark ms-1">@upcomingList.Count</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link fw-semibold @(activeTab == "completed" ? "active" : "")" asp-action="Index" asp-route-tab="completed">
-                <i class="bi bi-check2-all me-1"></i> Đã Tái Khám / Hoàn Tất
-                <span class="badge bg-white text-dark ms-1">@completedList.Count</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link fw-semibold @(activeTab == "all" ? "active" : "")" asp-action="Index" asp-route-tab="all">
-                Tất Cả (@Model.FollowUps.Count)
-            </a>
-        </li>
-    </ul>
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
 
-    <!-- Table -->
-    <div class="card border-0 shadow-sm rounded-3">
+    <!-- Stat Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100 border-start border-4 border-primary">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small fw-medium">Hôm nay cần nhắc</div>
+                            <div class="h4 fw-bold mb-0 text-primary">@Model.TodayCount</div>
+                        </div>
+                        <div class="rounded-circle bg-primary bg-opacity-10 p-2 text-primary">
+                            <i class="bi bi-calendar-day fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100 border-start border-4 border-warning">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small fw-medium">Chưa gọi điện</div>
+                            <div class="h4 fw-bold mb-0 text-warning">@Model.NotCalledCount</div>
+                        </div>
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-2 text-warning">
+                            <i class="bi bi-telephone-x fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100 border-start border-4 border-success">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small fw-medium">Đã gọi xác nhận</div>
+                            <div class="h4 fw-bold mb-0 text-success">@Model.CalledCount</div>
+                        </div>
+                        <div class="rounded-circle bg-success bg-opacity-10 p-2 text-success">
+                            <i class="bi bi-telephone-check fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100 border-start border-4 border-danger">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small fw-medium">Không liên lạc được</div>
+                            <div class="h4 fw-bold mb-0 text-danger">@Model.UnreachableCount</div>
+                        </div>
+                        <div class="rounded-circle bg-danger bg-opacity-10 p-2 text-danger">
+                            <i class="bi bi-telephone-minus fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <!-- Date Filters -->
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="text-muted small fw-semibold me-1"><i class="bi bi-funnel me-1"></i>Thời gian:</span>
+                    <a asp-action="Index" asp-route-dateFilter="all" asp-route-callStatus="@curStatus"
+                       class="btn btn-sm @(curDate == "all" ? "btn-primary" : "btn-outline-secondary")">
+                        Tất cả
+                    </a>
+                    <a asp-action="Index" asp-route-dateFilter="today" asp-route-callStatus="@curStatus"
+                       class="btn btn-sm @(curDate == "today" ? "btn-primary" : "btn-outline-secondary")">
+                        <i class="bi bi-clock me-1"></i>Hôm nay (@Model.TodayCount)
+                    </a>
+                    <a asp-action="Index" asp-route-dateFilter="tomorrow" asp-route-callStatus="@curStatus"
+                       class="btn btn-sm @(curDate == "tomorrow" ? "btn-primary" : "btn-outline-secondary")">
+                        <i class="bi bi-calendar2-day me-1"></i>Ngày mai (@Model.TomorrowCount)
+                    </a>
+                </div>
+
+                <!-- Call Status Filters -->
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="text-muted small fw-semibold me-1">Trạng thái gọi:</span>
+                    <a asp-action="Index" asp-route-dateFilter="@curDate" asp-route-callStatus="all"
+                       class="btn btn-sm @(curStatus == "all" ? "btn-secondary" : "btn-outline-secondary")">
+                        Tất cả
+                    </a>
+                    <a asp-action="Index" asp-route-dateFilter="@curDate" asp-route-callStatus="NotCalled"
+                       class="btn btn-sm @(curStatus == "NotCalled" ? "btn-warning text-dark" : "btn-outline-secondary")">
+                        Chưa gọi
+                    </a>
+                    <a asp-action="Index" asp-route-dateFilter="@curDate" asp-route-callStatus="Called"
+                       class="btn btn-sm @(curStatus == "Called" ? "btn-success" : "btn-outline-secondary")">
+                        Đã gọi
+                    </a>
+                    <a asp-action="Index" asp-route-dateFilter="@curDate" asp-route-callStatus="Unreachable"
+                       class="btn btn-sm @(curStatus == "Unreachable" ? "btn-danger" : "btn-outline-secondary")">
+                        Không liên lạc được
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Operational Guideline Alert -->
+    <div class="alert alert-info border-0 shadow-sm py-2 px-3 mb-4 d-flex align-items-center gap-2 small">
+        <i class="bi bi-info-circle-fill fs-5 text-primary"></i>
+        <div>
+            <strong>Quy định nghiệp vụ lễ tân:</strong> Lễ tân chỉ thực hiện gọi điện nhắc lịch và ghi nhận trạng thái liên hệ.
+            Nếu bệnh nhân có nhu cầu thay đổi ngày/giờ, vui lòng hướng dẫn bệnh nhân đăng nhập tài khoản tại mục <em>"Theo Dõi Tái Khám"</em> để gửi yêu cầu đổi lịch trực tiếp cho Bác sĩ phụ trách.
+        </div>
+    </div>
+
+    <!-- Reminders Table -->
+    <div class="card border-0 shadow-sm">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-4">Hạn Tái Khám</th>
-                        <th>Bệnh Nhân</th>
-                        <th>Điện Thoại / Liên Hệ</th>
-                        <th>Khoa & Bác Sĩ</th>
-                        <th>Chỉ Định / Ghi Chú</th>
-                        <th>Trạng Thái</th>
-                        <th class="pe-4 text-end" style="min-width: 220px;">Thao Tác CSKH</th>
+                        <th class="ps-4">Ngày giờ tái khám</th>
+                        <th>Bệnh nhân</th>
+                        <th>Số điện thoại</th>
+                        <th>Bác sĩ phụ trách</th>
+                        <th>Lịch hẹn</th>
+                        <th>Trạng thái nhắc</th>
+                        <th>Nhật ký cuộc gọi</th>
+                        <th class="text-end pe-4">Thao tác</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @if (displayList.Count == 0)
+                    @if (Model.Reminders.Count == 0)
                     {
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-5">
-                                <i class="bi bi-clipboard2-check fs-2 d-block mb-2 text-secondary"></i>
-                                Không có lịch tái khám nào trong danh mục này.
+                            <td colspan="8" class="text-center text-muted py-5">
+                                <i class="bi bi-telephone-x fs-1 text-secondary opacity-50 d-block mb-2"></i>
+                                Không có lịch tái khám nào phù hợp với bộ lọc hiện tại.
                             </td>
                         </tr>
                     }
                     else
                     {
-                        @foreach (var f in displayList)
+                        @foreach (var item in Model.Reminders)
                         {
-                            var daysDiff = (f.RecommendedDate.Date - today).Days;
-                            var isOverdue = daysDiff < 0 && f.Status == "Pending";
-                            <tr class="@(isOverdue ? "table-danger-subtle" : "")">
+                            var rowClass = item.CallStatus == "Called" ? "table-light" : item.CallStatus == "Unreachable" ? "table-danger table-opacity-10" : "";
+                            <tr class="@rowClass" id="reminder-row-@item.FollowUpId">
                                 <td class="ps-4">
-                                    <div class="fw-bold @(isOverdue ? "text-danger" : "text-dark")">
-                                        <i class="bi bi-calendar-event me-1"></i>@f.RecommendedDate.ToString("dd/MM/yyyy")
-                                    </div>
-                                    @if (f.Status == "Pending" || f.Status == "Confirmed")
-                                    {
-                                        if (daysDiff < 0)
+                                    <div class="fw-bold text-dark">
+                                        @if (item.ScheduledStart.HasValue)
                                         {
-                                            <span class="badge bg-danger text-white">Quá hạn @Math.Abs(daysDiff) ngày</span>
-                                        }
-                                        else if (daysDiff == 0)
-                                        {
-                                            <span class="badge bg-warning text-dark fw-bold">Hôm nay</span>
+                                            @item.ScheduledStart.Value.ToString("dd/MM/yyyy HH:mm")
                                         }
                                         else
                                         {
-                                            <span class="badge bg-info-subtle text-info border">Còn @daysDiff ngày</span>
+                                            @item.FollowUpDate.ToString("dd/MM/yyyy")
                                         }
+                                    </div>
+                                    @if (item.ScheduledStart.HasValue)
+                                    {
+                                        <div class="small text-muted">@item.ScheduledStart.Value.ToString("HH:mm") - @item.ScheduledEnd?.ToString("HH:mm")</div>
                                     }
                                 </td>
                                 <td>
-                                    <div class="fw-bold text-dark">@f.PatientName</div>
-                                    <div class="small text-muted font-monospace">@f.PatientCode</div>
+                                    <div class="fw-semibold text-dark">@item.PatientName</div>
+                                    @if (!string.IsNullOrWhiteSpace(item.PatientCode))
+                                    {
+                                        <div class="small text-muted font-monospace">@item.PatientCode</div>
+                                    }
                                 </td>
                                 <td>
-                                    @if (!string.IsNullOrWhiteSpace(f.PatientPhoneNumber))
+                                    @if (!string.IsNullOrWhiteSpace(item.PatientPhoneNumber))
                                     {
-                                        <a href="tel:@f.PatientPhoneNumber" class="btn btn-sm btn-outline-success fw-bold py-1 px-2">
-                                            <i class="bi bi-telephone-fill me-1"></i>@f.PatientPhoneNumber
+                                        <a href="tel:@item.PatientPhoneNumber" class="btn btn-sm btn-outline-success fw-bold text-decoration-none">
+                                            <i class="bi bi-telephone-fill me-1"></i>@item.PatientPhoneNumber
                                         </a>
                                     }
                                     else
                                     {
-                                        <span class="text-muted small">Chưa có SĐT</span>
+                                        <span class="text-muted small fst-italic">Chưa có SĐT</span>
                                     }
                                 </td>
                                 <td>
-                                    <div class="fw-semibold text-dark">@f.DepartmentName</div>
-                                    <div class="small text-muted">BS: @f.DentistName</div>
+                                    <div class="fw-semibold">BS. @item.DentistName</div>
+                                    <div class="small text-muted">@item.DepartmentName</div>
                                 </td>
                                 <td>
-                                    <div class="small text-dark" style="max-width: 260px;">@f.Reason</div>
-                                </td>
-                                <td>
-                                    @if (f.Status == "Confirmed")
+                                    @if (item.AppointmentId.HasValue)
                                     {
-                                        <span class="badge bg-primary text-white"><i class="bi bi-check-circle me-1"></i>Đã gọi xác nhận</span>
-                                    }
-                                    else if (f.Status == "Completed")
-                                    {
-                                        <span class="badge bg-success"><i class="bi bi-check2-circle me-1"></i>Đã tái khám</span>
-                                    }
-                                    else if (isOverdue)
-                                    {
-                                        <span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>Quá hạn</span>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                            <i class="bi bi-calendar2-check me-1"></i>Đã lên lịch (@(item.AppointmentCode ?? "APT"))
+                                        </span>
                                     }
                                     else
                                     {
-                                        <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Chờ tái khám</span>
+                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                            Chờ xếp lịch
+                                        </span>
                                     }
                                 </td>
-                                <td class="pe-4 text-end">
-                                    <div class="btn-group btn-group-sm">
-                                        @if (f.Status == "Pending")
-                                        {
-                                            <form asp-action="Confirm" asp-route-id="@f.FollowUpId" asp-route-tab="@activeTab" method="post" class="d-inline">
-                                                @Html.AntiForgeryToken()
-                                                <button type="submit" class="btn btn-sm btn-outline-primary" title="Xác nhận đã gọi điện nhắc lịch">
-                                                    <i class="bi bi-telephone-check me-1"></i>Đã Gọi
-                                                </button>
-                                            </form>
-                                        }
-
-                                        @if (f.Status != "Completed")
-                                        {
-                                            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#rescheduleModal_@f.FollowUpId" title="Dời lịch hẹn theo yêu cầu của bệnh nhân">
-                                                <i class="bi bi-calendar-range me-1"></i>Dời Lịch
-                                            </button>
-
-                                            <form asp-action="Complete" asp-route-id="@f.FollowUpId" asp-route-tab="@activeTab" method="post" class="d-inline">
-                                                @Html.AntiForgeryToken()
-                                                <button type="submit" class="btn btn-sm btn-outline-success" title="Đánh dấu đã hoàn thành đợt tái khám" onclick="return confirm('Xác nhận bệnh nhân đã tái khám hoàn tất?');">
-                                                    <i class="bi bi-check-lg me-1"></i>Xong
-                                                </button>
-                                            </form>
-                                        }
-                                    </div>
-
-                                    <!-- Modal Dời Lịch -->
-                                    <div class="modal fade text-start" id="rescheduleModal_@f.FollowUpId" tabindex="-1" aria-hidden="true">
-                                        <div class="modal-dialog modal-dialog-centered">
-                                            <div class="modal-content">
-                                                <form asp-action="Reschedule" asp-route-id="@f.FollowUpId" asp-route-tab="@activeTab" method="post">
-                                                    @Html.AntiForgeryToken()
-                                                    <div class="modal-header">
-                                                        <h5 class="modal-title fw-bold">
-                                                            <i class="bi bi-calendar-range me-2 text-primary"></i>Dời Ngày Tái Khám
-                                                        </h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                    </div>
-                                                    <div class="modal-body">
-                                                        <p class="mb-2"><strong>Bệnh nhân:</strong> @f.PatientName (@f.PatientCode)</p>
-                                                        <p class="text-muted small mb-3"><strong>Bác sĩ phụ trách:</strong> BS. @f.DentistName (@f.DepartmentName)</p>
-                                                        
-                                                        <div class="mb-3">
-                                                            <label class="form-label fw-semibold">Chọn ngày hẹn tái khám mới <span class="text-danger">*</span></label>
-                                                            <input type="date" name="newDate" class="form-control" min="@today.AddDays(1).ToString("yyyy-MM-dd")" value="@(f.RecommendedDate > today ? f.RecommendedDate.ToString("yyyy-MM-dd") : today.AddDays(3).ToString("yyyy-MM-dd"))" required />
-                                                        </div>
-
-                                                        <div class="mb-3">
-                                                            <label class="form-label fw-semibold">Ghi chú cuộc gọi / Lý do dời ngày</label>
-                                                            <textarea name="note" class="form-control" rows="2" placeholder="Ví dụ: Bệnh nhân bận công tác, xin dời sang tuần sau..."></textarea>
-                                                        </div>
-                                                    </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
-                                                        <button type="submit" class="btn btn-primary fw-semibold">Lưu Ngày Mới</button>
-                                                    </div>
-                                                </form>
-                                            </div>
+                                <td>
+                                    @if (item.CallStatus == "Called")
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                            <i class="bi bi-check-circle-fill me-1"></i>Đã gọi
+                                        </span>
+                                    }
+                                    else if (item.CallStatus == "Unreachable")
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
+                                            <i class="bi bi-x-circle-fill me-1"></i>Không liên lạc được
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1">
+                                            <i class="bi bi-hourglass-split me-1"></i>Chưa gọi
+                                        </span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (item.LastCalledAt.HasValue)
+                                    {
+                                        <div class="small text-dark fw-medium">
+                                            @item.LastCalledAt.Value.ToLocalTime().ToString("dd/MM HH:mm")
+                                            <span class="text-muted">bởi @(item.LastCallerName ?? "Lễ tân")</span>
                                         </div>
-                                    </div>
+                                        @if (!string.IsNullOrWhiteSpace(item.CallNote))
+                                        {
+                                            <div class="small text-muted text-truncate" style="max-width: 200px;" title="@item.CallNote">
+                                                <i class="bi bi-chat-left-text me-1"></i>@item.CallNote
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="small text-muted fst-italic">Chưa có ghi nhận</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    <button type="button"
+                                            class="btn btn-sm btn-primary"
+                                            onclick="openCallModal(@item.FollowUpId, '@item.PatientName', '@(item.PatientPhoneNumber ?? "")', '@(item.ScheduledStart.HasValue ? item.ScheduledStart.Value.ToString("dd/MM/yyyy HH:mm") : item.FollowUpDate.ToString("dd/MM/yyyy"))', '@item.CallStatus', '@(item.CallNote ?? "")')">
+                                        <i class="bi bi-telephone-plus me-1"></i>Ghi nhận
+                                    </button>
                                 </td>
                             </tr>
                         }
@@ -233,3 +296,178 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Ghi Nhận Cuộc Gọi -->
+<div class="modal fade" id="modalCallStatus" tabindex="-1" aria-labelledby="modalCallStatusLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold" id="modalCallStatusLabel">
+                    <i class="bi bi-telephone-outbound text-primary me-2"></i>Ghi Nhận Cuộc Gọi Nhắc Lịch
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="callStatusForm" onsubmit="handleCallStatusSubmit(event)">
+                <div class="modal-body p-4">
+                    <input type="hidden" id="callFollowUpId" name="FollowUpId" />
+
+                    <!-- Patient Summary Card -->
+                    <div class="card bg-light border-0 mb-3">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="fw-bold text-dark" id="modalPatientName">—</span>
+                                <span class="badge bg-primary-subtle text-primary" id="modalFollowUpTime">—</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-telephone text-muted"></i>
+                                <a id="modalPhoneLink" href="#" class="fw-semibold text-primary text-decoration-none"></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Call Result Selection -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Kết Quả Cuộc Gọi <span class="text-danger">*</span></label>
+                        <div class="d-flex flex-column gap-2">
+                            <div class="form-check p-3 border rounded-3 bg-white">
+                                <input class="form-check-input" type="radio" name="callStatusRadio" id="statusCalled" value="Called" checked>
+                                <label class="form-check-label fw-semibold text-success d-flex align-items-center gap-2" for="statusCalled">
+                                    <i class="bi bi-check-circle-fill"></i> Đã gọi thành công (Bệnh nhân xác nhận sẽ đến)
+                                </label>
+                            </div>
+                            <div class="form-check p-3 border rounded-3 bg-white">
+                                <input class="form-check-input" type="radio" name="callStatusRadio" id="statusUnreachable" value="Unreachable">
+                                <label class="form-check-label fw-semibold text-danger d-flex align-items-center gap-2" for="statusUnreachable">
+                                    <i class="bi bi-x-circle-fill"></i> Không liên lạc được (Thuê bao / Không nghe máy)
+                                </label>
+                            </div>
+                            <div class="form-check p-3 border rounded-3 bg-white">
+                                <input class="form-check-input" type="radio" name="callStatusRadio" id="statusNotCalled" value="NotCalled">
+                                <label class="form-check-label fw-semibold text-warning-emphasis d-flex align-items-center gap-2" for="statusNotCalled">
+                                    <i class="bi bi-hourglass-split"></i> Chưa gọi (Đặt lại trạng thái cần nhắc)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Call Note -->
+                    <div class="mb-3">
+                        <label for="callNote" class="form-label fw-semibold">Ghi Chú Cuộc Gọi (Tùy chọn)</label>
+                        <textarea class="form-control" id="callNote" rows="3" maxlength="500" placeholder="Ví dụ: Bệnh nhân hẹn 10h sáng, hoặc bệnh nhân nhờ dời lịch vào cuối tuần..."></textarea>
+                    </div>
+
+                    <div class="alert alert-warning py-2 px-3 small mb-0">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        Lưu ý: Nếu bệnh nhân muốn đổi ngày hoặc giờ khác, hướng dẫn bệnh nhân đăng nhập tài khoản gửi đề xuất để Bác sĩ duyệt.
+                    </div>
+
+                    <div id="callModalError" class="alert alert-danger py-2 px-3 small mt-3 d-none"></div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" id="btnSaveCallStatus" class="btn btn-primary">
+                        <span id="btnSaveSpinner" class="spinner-border spinner-border-sm me-1 d-none" role="status"></span>
+                        <i class="bi bi-check2-circle me-1" id="btnSaveIcon"></i>Lưu Kết Quả
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    let currentModalInstance = null;
+
+    function openCallModal(followUpId, patientName, phoneNumber, timeStr, currentStatus, currentNote) {
+        document.getElementById('callFollowUpId').value = followUpId;
+        document.getElementById('modalPatientName').textContent = patientName;
+        document.getElementById('modalFollowUpTime').textContent = timeStr;
+
+        const phoneLink = document.getElementById('modalPhoneLink');
+        if (phoneNumber) {
+            phoneLink.href = 'tel:' + phoneNumber;
+            phoneLink.textContent = phoneNumber;
+            phoneLink.classList.remove('d-none');
+        } else {
+            phoneLink.textContent = 'Chưa có SĐT';
+            phoneLink.removeAttribute('href');
+        }
+
+        // Set radio
+        if (currentStatus === 'Called') {
+            document.getElementById('statusCalled').checked = true;
+        } else if (currentStatus === 'Unreachable') {
+            document.getElementById('statusUnreachable').checked = true;
+        } else {
+            document.getElementById('statusNotCalled').checked = true;
+        }
+
+        document.getElementById('callNote').value = currentNote || '';
+        document.getElementById('callModalError').classList.add('d-none');
+
+        const modalEl = document.getElementById('modalCallStatus');
+        currentModalInstance = new bootstrap.Modal(modalEl);
+        currentModalInstance.show();
+    }
+
+    async function handleCallStatusSubmit(e) {
+        e.preventDefault();
+
+        const followUpId = parseInt(document.getElementById('callFollowUpId').value);
+        const selectedRadio = document.querySelector('input[name="callStatusRadio"]:checked');
+        const callStatus = selectedRadio ? selectedRadio.value : 'Called';
+        const note = document.getElementById('callNote').value.trim();
+
+        const btnSave = document.getElementById('btnSaveCallStatus');
+        const spinner = document.getElementById('btnSaveSpinner');
+        const icon = document.getElementById('btnSaveIcon');
+        const errDiv = document.getElementById('callModalError');
+
+        btnSave.disabled = true;
+        spinner.classList.remove('d-none');
+        icon.classList.add('d-none');
+        errDiv.classList.add('d-none');
+
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+        try {
+            const res = await fetch('/Receptionist/FollowUps/UpdateCallStatus', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': token || ''
+                },
+                body: JSON.stringify({
+                    followUpId: followUpId,
+                    callStatus: callStatus,
+                    note: note
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                errDiv.textContent = data.message || 'Không thể lưu trạng thái cuộc gọi. Vui lòng thử lại.';
+                errDiv.classList.remove('d-none');
+                btnSave.disabled = false;
+                spinner.classList.add('d-none');
+                icon.classList.remove('d-none');
+                return;
+            }
+
+            // Close modal and reload page to refresh stats and table
+            if (currentModalInstance) {
+                currentModalInstance.hide();
+            }
+            window.location.reload();
+        } catch (err) {
+            console.error('Call status error:', err);
+            errDiv.textContent = 'Đã xảy ra lỗi kết nối. Vui lòng thử lại sau.';
+            errDiv.classList.remove('d-none');
+            btnSave.disabled = false;
+            spinner.classList.add('d-none');
+            icon.classList.remove('d-none');
+        }
+    }
+</script>
+}
