@@ -9,6 +9,7 @@ public class DentistReferralIndexViewModel
     public List<FollowUpScheduleDto> FollowUps { get; set; } = new();
     public List<DepartmentDto> Departments { get; set; } = new();
     public List<TreatmentSessionDto> RecentSessions { get; set; } = new();
+    public List<FollowUpProposalDto> PendingProposals { get; set; } = new();
     public string? ActiveTab { get; set; } = "referrals";
     public long? SelectedSessionId { get; set; }
 }
@@ -25,4 +26,19 @@ public class DepartmentReferralIndexViewModel
 public class PatientFollowUpIndexViewModel
 {
     public List<FollowUpScheduleDto> FollowUps { get; set; } = new();
+    public List<FollowUpProposalDto> Proposals { get; set; } = new();
 }
+
+public class ReceptionistFollowUpIndexViewModel
+{
+    public List<FollowUpReminderDto> Reminders { get; set; } = new();
+    public string? DateFilter { get; set; } = "all";
+    public string? CallStatusFilter { get; set; } = "all";
+    public int TotalCount => Reminders.Count;
+    public int TodayCount { get; set; }
+    public int TomorrowCount { get; set; }
+    public int NotCalledCount { get; set; }
+    public int CalledCount { get; set; }
+    public int UnreachableCount { get; set; }
+}
+

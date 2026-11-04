@@ -69,7 +69,111 @@ public class CreateFollowUpRequest
 
 public class UpdateFollowUpStatusRequest
 {
-    public string Status { get; set; } = "Confirmed";
+    public string? Status { get; set; }
     public DateTime? NewRecommendedDate { get; set; }
     public string? Note { get; set; }
 }
+public class FollowUpSlotDto
+{
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+    public long DentistUserId { get; set; }
+    public string DentistName { get; set; } = string.Empty;
+}
+
+public class CreateFollowUpAppointmentRequest
+{
+    public long PatientUserId { get; set; }
+    public DateTime ScheduledStart { get; set; }
+    public DateTime ScheduledEnd { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string? Notes { get; set; }
+    public long? TreatmentSessionId { get; set; }
+    public long? DepartmentId { get; set; }
+}
+
+public class FollowUpAppointmentDto
+{
+    public long AppointmentId { get; set; }
+    public string AppointmentCode { get; set; } = string.Empty;
+    public long PatientUserId { get; set; }
+    public string PatientName { get; set; } = string.Empty;
+    public long DentistUserId { get; set; }
+    public string DentistName { get; set; } = string.Empty;
+    public long? DepartmentId { get; set; }
+    public string DepartmentName { get; set; } = string.Empty;
+    public DateTime ScheduledStart { get; set; }
+    public DateTime ScheduledEnd { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public long? FollowUpScheduleId { get; set; }
+}
+
+public class PatientFollowUpChangeRequest
+{
+    public long AppointmentId { get; set; }
+    public DateTime ProposedStart { get; set; }
+    public DateTime ProposedEnd { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public bool IsRebook { get; set; }
+}
+
+public class FollowUpProposalDto
+{
+    public long ProposalId { get; set; }
+    public long AppointmentId { get; set; }
+    public string AppointmentCode { get; set; } = string.Empty;
+    public long PatientUserId { get; set; }
+    public string PatientName { get; set; } = string.Empty;
+    public long? DentistUserId { get; set; }
+    public string DentistName { get; set; } = string.Empty;
+    public long? DepartmentId { get; set; }
+    public string DepartmentName { get; set; } = string.Empty;
+    public DateTime? CurrentStart { get; set; }
+    public DateTime? CurrentEnd { get; set; }
+    public DateTime? ProposedStart { get; set; }
+    public DateTime? ProposedEnd { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public bool IsRebook { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? RespondedAt { get; set; }
+}
+
+public class ResolveProposalRequest
+{
+    public long ProposalId { get; set; }
+    public bool IsApproved { get; set; }
+    public string? RejectionReason { get; set; }
+}
+
+public class FollowUpReminderDto
+{
+    public long FollowUpId { get; set; }
+    public long? AppointmentId { get; set; }
+    public string? AppointmentCode { get; set; }
+    public long PatientUserId { get; set; }
+    public string PatientName { get; set; } = string.Empty;
+    public string? PatientCode { get; set; }
+    public string? PatientPhoneNumber { get; set; }
+    public long DentistUserId { get; set; }
+    public string DentistName { get; set; } = string.Empty;
+    public string DepartmentName { get; set; } = string.Empty;
+    public DateTime FollowUpDate { get; set; }
+    public DateTime? ScheduledStart { get; set; }
+    public DateTime? ScheduledEnd { get; set; }
+    public string AppointmentStatus { get; set; } = string.Empty;
+    public string CallStatus { get; set; } = "NotCalled"; // "NotCalled", "Called", "Unreachable"
+    public DateTime? LastCalledAt { get; set; }
+    public string? LastCallerName { get; set; }
+    public string? CallNote { get; set; }
+    public string? Reason { get; set; }
+}
+
+public class UpdateReminderCallStatusRequest
+{
+    public long FollowUpId { get; set; }
+    public string CallStatus { get; set; } = "Called"; // "Called", "Unreachable", "NotCalled"
+    public string? Note { get; set; }
+}
+
