@@ -50,7 +50,8 @@ public class PostCareController : ControllerBase
         var result = await _postCareService.CreateReferralAsync(dentistUserId, request, ct);
         if (!result.Success)
         {
-            if (result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
+            if (string.Equals(result.ErrorCode, "FORBIDDEN", StringComparison.OrdinalIgnoreCase) ||
+                result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, result);
             }
@@ -89,7 +90,8 @@ public class PostCareController : ControllerBase
         var result = await _postCareService.ReviewReferralAsync(managerUserId, id, request, ct);
         if (!result.Success)
         {
-            if (result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
+            if (string.Equals(result.ErrorCode, "FORBIDDEN", StringComparison.OrdinalIgnoreCase) ||
+                result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, result);
             }
@@ -113,7 +115,8 @@ public class PostCareController : ControllerBase
         var result = await _postCareService.CreateFollowUpAsync(dentistUserId, request, ct);
         if (!result.Success)
         {
-            if (result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
+            if (string.Equals(result.ErrorCode, "FORBIDDEN", StringComparison.OrdinalIgnoreCase) ||
+                result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, result);
             }
@@ -163,7 +166,8 @@ public class PostCareController : ControllerBase
         var result = await _postCareService.UpdateFollowUpStatusAsync(currentUserId, id, request, ct);
         if (!result.Success)
         {
-            if (result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
+            if (string.Equals(result.ErrorCode, "FORBIDDEN", StringComparison.OrdinalIgnoreCase) ||
+                result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, result);
             }
@@ -190,7 +194,8 @@ public class PostCareController : ControllerBase
         var result = await _schedulingService.GetDoctorAvailableSlotsAsync(dentistUserId, date, durationMinutes, ct);
         if (!result.Success)
         {
-            if (result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
+            if (string.Equals(result.ErrorCode, "FORBIDDEN", StringComparison.OrdinalIgnoreCase) ||
+                result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, result);
             }
@@ -211,7 +216,8 @@ public class PostCareController : ControllerBase
         var result = await _schedulingService.CreateDoctorFollowUpAppointmentAsync(doctorUserId, request, ct);
         if (!result.Success)
         {
-            if (result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
+            if (string.Equals(result.ErrorCode, "FORBIDDEN", StringComparison.OrdinalIgnoreCase) ||
+                result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, result);
             }
@@ -236,7 +242,8 @@ public class PostCareController : ControllerBase
         var result = await _schedulingService.SubmitPatientChangeProposalAsync(patientUserId, request, ct);
         if (!result.Success)
         {
-            if (result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
+            if (string.Equals(result.ErrorCode, "FORBIDDEN", StringComparison.OrdinalIgnoreCase) ||
+                result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, result);
             }
@@ -257,7 +264,8 @@ public class PostCareController : ControllerBase
         var result = await _schedulingService.WithdrawPatientProposalAsync(patientUserId, proposalId, ct);
         if (!result.Success)
         {
-            if (result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
+            if (string.Equals(result.ErrorCode, "FORBIDDEN", StringComparison.OrdinalIgnoreCase) ||
+                result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, result);
             }
@@ -298,7 +306,8 @@ public class PostCareController : ControllerBase
         var result = await _schedulingService.ResolveProposalAsync(doctorUserId, request, ct);
         if (!result.Success)
         {
-            if (result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
+            if (string.Equals(result.ErrorCode, "FORBIDDEN", StringComparison.OrdinalIgnoreCase) ||
+                result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, result);
             }
@@ -331,7 +340,8 @@ public class PostCareController : ControllerBase
         var result = await _schedulingService.UpdateReminderCallStatusAsync(receptionistUserId, request, ct);
         if (!result.Success)
         {
-            if (result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
+            if (string.Equals(result.ErrorCode, "FORBIDDEN", StringComparison.OrdinalIgnoreCase) ||
+                result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, result);
             }

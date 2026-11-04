@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace DentalClinic.Web.Models.ApiDtos;
 
@@ -69,7 +69,7 @@ public class CreateFollowUpRequest
 
 public class UpdateFollowUpStatusRequest
 {
-    public string Status { get; set; } = "Confirmed";
+    public string? Status { get; set; }
     public DateTime? NewRecommendedDate { get; set; }
     public string? Note { get; set; }
 }

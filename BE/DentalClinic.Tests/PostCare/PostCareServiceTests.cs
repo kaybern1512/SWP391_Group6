@@ -824,4 +824,308 @@ public class PostCareServiceTests
         Assert.False(res.Success);
         Assert.Contains("Người dùng không tồn tại", res.Message);
     }
+
+    // ==========================================
+    // ROUND 4 TESTS: CANCELLATION CONSISTENCY & IMPLICIT STATUS FIX
+    // ==========================================
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_ActiveAppointmentLinked_Cancel_FailsAndDoesNotMutate()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var activeApt = new Appointment
+        {
+            AppointmentId = 520,
+            AppointmentCode = "APT-520",
+            PatientUserId = 10,
+            DepartmentId = 1,
+            AssignedDentistUserId = 20,
+            ReasonForVisit = "Follow-up",
+            BookingSource = "Web",
+            Status = AppointmentStatus.Confirmed,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(activeApt);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 920,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Reason = "Follow-up initial reason",
+            Status = "Scheduled",
+            AppointmentId = 520
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Patient 10 attempts to cancel follow-up that has an active appointment
+        var res = await service.UpdateFollowUpStatusAsync(10, 920, new UpdateFollowUpStatusRequest
+        {
+            Status = "Cancelled",
+            Note = "Attempt partial cancel"
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("APT-520", res.Message);
+        Assert.Contains("quy trình Hủy cuộc hẹn hợp lệ", res.Message);
+
+        // Verify NO partial mutation occurred
+        var checkFollowUp = await db.FollowUpSchedules.FindAsync(920L);
+        Assert.NotNull(checkFollowUp);
+        Assert.Equal("Scheduled", checkFollowUp.Status);
+        Assert.Equal("Follow-up initial reason", checkFollowUp.Reason);
+
+        var checkApt = await db.Appointments.FindAsync(520L);
+        Assert.NotNull(checkApt);
+        Assert.Equal(AppointmentStatus.Confirmed, checkApt.Status);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_CheckedInAppointmentLinked_Cancel_Fails()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var checkedInApt = new Appointment
+        {
+            AppointmentId = 521,
+            AppointmentCode = "APT-521",
+            PatientUserId = 10,
+            DepartmentId = 1,
+            AssignedDentistUserId = 20,
+            ReasonForVisit = "Follow-up",
+            BookingSource = "Web",
+            Status = AppointmentStatus.CheckedIn,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(checkedInApt);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 921,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(1),
+            Status = "Scheduled",
+            AppointmentId = 521
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        var res = await service.UpdateFollowUpStatusAsync(50, 921, new UpdateFollowUpStatusRequest
+        {
+            Status = "Cancelled"
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("APT-521", res.Message);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_CompletedAppointmentLinked_Cancel_Fails()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 922,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Scheduled",
+            AppointmentId = 501 // Appointment 501 is Completed in SeedData
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        var res = await service.UpdateFollowUpStatusAsync(50, 922, new UpdateFollowUpStatusRequest
+        {
+            Status = "Cancelled"
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("APT-501", res.Message);
+        Assert.Contains("đã hoàn tất điều trị", res.Message);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_CancelledAppointmentLinked_Cancel_Succeeds()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var cancelledApt = new Appointment
+        {
+            AppointmentId = 523,
+            AppointmentCode = "APT-523",
+            PatientUserId = 10,
+            DepartmentId = 1,
+            AssignedDentistUserId = 20,
+            ReasonForVisit = "Follow-up",
+            BookingSource = "Web",
+            Status = AppointmentStatus.Cancelled,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(cancelledApt);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 923,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending",
+            AppointmentId = 523
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        var res = await service.UpdateFollowUpStatusAsync(10, 923, new UpdateFollowUpStatusRequest
+        {
+            Status = "Cancelled",
+            Note = "Bệnh nhân xác nhận hủy lịch sau khi cuộc hẹn đã hủy"
+        });
+
+        Assert.True(res.Success);
+        Assert.Equal("Cancelled", res.Data!.Status);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_UnlinkedFollowUp_Cancel_Succeeds()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 924,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending",
+            AppointmentId = null
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        var res = await service.UpdateFollowUpStatusAsync(10, 924, new UpdateFollowUpStatusRequest
+        {
+            Status = "Cancelled",
+            Note = "Bệnh nhân không có nhu cầu tái khám tiếp"
+        });
+
+        Assert.True(res.Success);
+        Assert.Equal("Cancelled", res.Data!.Status);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_NoteOnlyRequest_DoesNotChangeStatus()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 925,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Reason = "Khám ban đầu",
+            Status = "Pending",
+            AppointmentId = null
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Receptionist 50 logs a call note without specifying status
+        var res = await service.UpdateFollowUpStatusAsync(50, 925, new UpdateFollowUpStatusRequest
+        {
+            Status = null, // Note-only request!
+            Note = "Đã gọi nhưng máy bận, hẹn gọi lại"
+        });
+
+        Assert.True(res.Success);
+        Assert.Equal("Pending", res.Data!.Status); // Status must NOT implicitly flip to Confirmed!
+        Assert.Contains("Đã gọi nhưng máy bận", res.Data.Reason);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_DateOnlyRequest_DoesNotChangeStatus()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 926,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending",
+            AppointmentId = null
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        var newDate = DateTime.UtcNow.AddDays(14);
+        var res = await service.UpdateFollowUpStatusAsync(50, 926, new UpdateFollowUpStatusRequest
+        {
+            Status = null, // Date-only request!
+            NewRecommendedDate = newDate
+        });
+
+        Assert.True(res.Success);
+        Assert.Equal("Pending", res.Data!.Status); // Remains Pending!
+        Assert.Equal(newDate, res.Data.RecommendedDate);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_ExplicitStatusRequest_ChangesStatus()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 927,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending",
+            AppointmentId = null
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        var res = await service.UpdateFollowUpStatusAsync(50, 927, new UpdateFollowUpStatusRequest
+        {
+            Status = "Confirmed", // Explicit status transition!
+            Note = "Lễ tân xác nhận trực tiếp"
+        });
+
+        Assert.True(res.Success);
+        Assert.Equal("Confirmed", res.Data!.Status);
+        Assert.Contains("Lễ tân xác nhận trực tiếp", res.Data.Reason);
+    }
 }

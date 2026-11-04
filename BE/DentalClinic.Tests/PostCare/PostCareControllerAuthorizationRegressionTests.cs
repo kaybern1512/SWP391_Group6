@@ -146,4 +146,34 @@ public class PostCareControllerAuthorizationRegressionTests
         var okResult = Assert.IsType<OkObjectResult>(result);
         Assert.Equal(StatusCodes.Status200OK, okResult.StatusCode);
     }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_StructuredErrorCodeForbidden_Returns403Forbidden()
+    {
+        var mockService = new Mock<IPostCareService>();
+        var mockScheduling = new Mock<IFollowUpSchedulingService>();
+
+        mockService
+            .Setup(s => s.UpdateFollowUpStatusAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<UpdateFollowUpStatusRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ApiResponse<FollowUpScheduleDto>.Forbidden("Access denied by object policy."));
+
+        var user = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "99"),
+            new Claim(ClaimTypes.Role, UserRole.Patient)
+        }, "TestAuth"));
+
+        var controller = new PostCareController(mockService.Object, mockScheduling.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = user }
+            }
+        };
+
+        var result = await controller.UpdateFollowUpStatus(123, new UpdateFollowUpStatusRequest(), CancellationToken.None);
+
+        var objResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, objResult.StatusCode);
+    }
 }
