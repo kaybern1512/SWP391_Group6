@@ -1,4 +1,4 @@
-﻿-- =========================================================================================
+-- =========================================================================================
 -- DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)
 -- MASTER CLEAN DATABASE SCHEMA (44 TABLES, VIEWS, STORED PROCEDURES)
 -- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
@@ -2117,7 +2117,7 @@ ALTER TABLE [dbo].[AppointmentChangeProposals] CHECK CONSTRAINT [CK_AppointmentC
 GO
 ALTER TABLE [dbo].[Notifications]  WITH CHECK ADD CHECK  (([Channel]='Email' OR [Channel]='InApp'))
 GO
-ALTER TABLE [dbo].[Notifications]  WITH CHECK ADD CHECK  (([DeliveryStatus]='Failed' OR [DeliveryStatus]='Sent' OR [DeliveryStatus]='Pending'))
+ALTER TABLE [dbo].[Notifications]  WITH CHECK ADD CHECK  (([DeliveryStatus]='Failed' OR [DeliveryStatus]='Sent' OR [DeliveryStatus]='Pending' OR [DeliveryStatus]='Read'))
 GO
 ALTER TABLE [dbo].[TreatmentPlans]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Completed' OR [Status]='InProgress' OR [Status]='Planned'))
 GO
@@ -2169,7 +2169,7 @@ ALTER TABLE [dbo].[InvoiceItems]  WITH CHECK ADD  CONSTRAINT [CK_InvoiceItems_Un
 GO
 ALTER TABLE [dbo].[InvoiceItems] CHECK CONSTRAINT [CK_InvoiceItems_UnitPrice]
 GO
-ALTER TABLE [dbo].[Payments]  WITH CHECK ADD CHECK  (([Method]='BankTransfer' OR [Method]='Online'))
+ALTER TABLE [dbo].[Payments]  WITH CHECK ADD CHECK  (([Method]='BankTransfer' OR [Method]='Online' OR [Method]='Cash' OR [Method]='CreditCard'))
 GO
 ALTER TABLE [dbo].[Payments]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Failed' OR [Status]='Successful' OR [Status]='Pending'))
 GO

@@ -65,9 +65,14 @@ public class ReceptionistBillingController : Controller
     }
 
     [HttpPost("Create")]
+    [HttpPost("Create/{appointmentId:long}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create([FromBody] CreateInvoiceRequest request)
+    public async Task<IActionResult> Create([FromBody] CreateInvoiceRequest request, [FromRoute] long? appointmentId)
     {
+        if (request != null && request.AppointmentId <= 0 && appointmentId.HasValue && appointmentId.Value > 0)
+        {
+            request.AppointmentId = appointmentId.Value;
+        }
         if (request == null || request.AppointmentId <= 0)
         {
             return Json(new { success = false, message = "Dữ liệu hóa đơn không hợp lệ." });
