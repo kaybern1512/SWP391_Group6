@@ -93,3 +93,5 @@ artifacts/
 setup-secrets.bat
 setup-secrets.ps1
 appsettings*.Local.json
+
+cookies.txt

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -45,10 +45,10 @@ public class DentistPrescriptionController : Controller
         var vm = new DentistPrescriptionIndexViewModel
         {
             Prescriptions = prescriptions,
-            EligibleAppointments = apptResult.IsSuccess && apptResult.Data != null ? apptResult.Data : new List<PrescriptionEligibleAppointmentDto>(),
+            EligibleAppointments = apptResult?.IsSuccess == true && apptResult.Data != null ? apptResult.Data : new List<PrescriptionEligibleAppointmentDto>(),
             Search = search,
             NewPrescriptionForm = new CreatePrescriptionFormModel(),
-            AvailableMedicines = medResult.IsSuccess && medResult.Data != null ? medResult.Data : new List<MedicineDto>(),
+            AvailableMedicines = medResult?.IsSuccess == true && medResult.Data != null ? medResult.Data : new List<MedicineDto>(),
             DispensationStatusMap = statusMap
         };
 

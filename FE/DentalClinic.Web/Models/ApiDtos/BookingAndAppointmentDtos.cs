@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -55,10 +55,34 @@ public class AvailableSlotDto
 {
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
-    public string TimeDisplay { get; set; } = string.Empty;
-    public long? RecommendedDentistUserId { get; set; }
-    public string? RecommendedDentistName { get; set; }
-    public bool IsAvailable { get; set; }
+    private string _timeDisplay = string.Empty;
+    public string TimeDisplay
+    {
+        get => !string.IsNullOrWhiteSpace(_timeDisplay) ? _timeDisplay : $"{StartTime:HH:mm} - {EndTime:HH:mm}";
+        set => _timeDisplay = value;
+    }
+
+    [JsonPropertyName("dentistUserId")]
+    public long? DentistUserId { get; set; }
+
+    [JsonPropertyName("dentistName")]
+    public string? DentistName { get; set; }
+
+    public long? RecommendedDentistUserId
+    {
+        get => DentistUserId ?? _recommendedDentistUserId;
+        set => _recommendedDentistUserId = value;
+    }
+    private long? _recommendedDentistUserId;
+
+    public string? RecommendedDentistName
+    {
+        get => !string.IsNullOrWhiteSpace(DentistName) ? DentistName : _recommendedDentistName;
+        set => _recommendedDentistName = value;
+    }
+    private string? _recommendedDentistName;
+
+    public bool IsAvailable { get; set; } = true;
 }
 
 public class CreateReceptionistAppointmentRequest

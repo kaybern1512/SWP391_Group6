@@ -260,16 +260,25 @@
                     const col = document.createElement('div');
                     col.className = 'col-6 col-sm-4 col-md-3 col-lg-2';
                     const start = new Date(slot.startTime);
-                    const timeStr = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
-                    const recDentist = slot.recommendedDentistName ? `<div class="small text-muted text-truncate" title="${slot.recommendedDentistName}"><i class="bi bi-person me-1"></i>${slot.recommendedDentistName}</div>` : '';
+                    const end = new Date(slot.endTime);
+                    const startStr = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
+                    const endStr = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
+                    const timeRange = slot.timeDisplay || `${startStr} - ${endStr}`;
+                    const dentistLabel = slot.dentistName || slot.recommendedDentistName || '';
+                    const recDentist = dentistLabel ? `<div class="small text-muted text-truncate" title="${dentistLabel}"><i class="bi bi-person me-1"></i>${dentistLabel}</div>` : '';
 
                     col.innerHTML = `
-                        <div class="slot-btn" data-start="${slot.startTime}" onclick="selectSlot('${slot.startTime}', '${timeStr} - ${slot.timeDisplay}')">
-                            <div class="fw-bold fs-5">${timeStr}</div>
-                            <div class="small text-muted">${slot.timeDisplay}</div>
+                        <div class="slot-btn" data-start="${slot.startTime}">
+                            <div class="fw-bold fs-5">${startStr}</div>
+                            <div class="small text-muted">${timeRange}</div>
                             ${recDentist}
                         </div>
                     `;
+
+                    col.querySelector('.slot-btn').addEventListener('click', function() {
+                        selectSlot(slot.startTime, timeRange);
+                    });
+
                     container.appendChild(col);
                 });
             } catch (err) {

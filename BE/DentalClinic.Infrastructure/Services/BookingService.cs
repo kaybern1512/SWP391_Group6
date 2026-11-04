@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -46,14 +46,24 @@ public class BookingService : IBookingService
 
     public async Task<ApiResponse<List<DepartmentServiceDto>>> GetServicesByDepartmentAsync(long departmentId, CancellationToken ct = default)
     {
-        var services = await _dbContext.DepartmentServices
+        var query = _dbContext.DepartmentServices
             .AsNoTracking()
-            .Where(s => s.DepartmentId == departmentId && s.Status == "Active")
-            .OrderBy(s => s.ServiceName)
+            .Include(s => s.Department)
+            .Where(s => s.Status == "Active");
+
+        if (departmentId > 0)
+        {
+            query = query.Where(s => s.DepartmentId == departmentId);
+        }
+
+        var services = await query
+            .OrderBy(s => s.DepartmentId)
+            .ThenBy(s => s.ServiceName)
             .Select(s => new DepartmentServiceDto
             {
                 DepartmentServiceId = s.DepartmentServiceId,
                 DepartmentId = s.DepartmentId,
+                DepartmentName = s.Department != null ? s.Department.Name : null,
                 ServiceName = s.ServiceName,
                 Description = s.Description,
                 DurationMinutes = s.DurationMinutes,

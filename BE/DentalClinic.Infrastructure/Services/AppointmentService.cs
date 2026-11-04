@@ -121,6 +121,21 @@ public class AppointmentService : IAppointmentService
             }
         }
 
+        // 5b. Prevent Duplicate Booking (WF-02 Chống tạo yêu cầu trùng do bấm gửi nhiều lần)
+        var duplicateExists = await _dbContext.Appointments
+            .AsNoTracking()
+            .AnyAsync(a => a.PatientUserId == patientUserId &&
+                           a.RequestedServiceId == request.RequestedServiceId &&
+                           a.ScheduledStart == request.ScheduledStart &&
+                           (a.Status == AppointmentStatus.PendingReceptionReview ||
+                            a.Status == AppointmentStatus.PendingDepartmentReview ||
+                            a.Status == AppointmentStatus.Confirmed), ct);
+
+        if (duplicateExists)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Bạn đã gửi một yêu cầu đặt lịch khám cho dịch vụ và khung giờ này rồi. Vui lòng kiểm tra lại trong Lịch hẹn của tôi.");
+        }
+
         // Calculate end time
         var duration = service.DurationMinutes.HasValue && service.DurationMinutes.Value > 0
             ? service.DurationMinutes.Value
@@ -432,6 +447,21 @@ public class AppointmentService : IAppointmentService
         else
         {
             request.RequestedDentistUserId = null;
+        }
+
+        // 5b. Prevent Duplicate Booking (WF-02 Chống tạo yêu cầu trùng do bấm gửi nhiều lần)
+        var duplicateExists = await _dbContext.Appointments
+            .AsNoTracking()
+            .AnyAsync(a => a.PatientUserId == request.PatientUserId &&
+                           a.RequestedServiceId == request.RequestedServiceId &&
+                           a.ScheduledStart == request.ScheduledStart &&
+                           (a.Status == AppointmentStatus.PendingReceptionReview ||
+                            a.Status == AppointmentStatus.PendingDepartmentReview ||
+                            a.Status == AppointmentStatus.Confirmed), ct);
+
+        if (duplicateExists)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Bạn đã gửi một yêu cầu đặt lịch khám cho dịch vụ và khung giờ này rồi. Vui lòng kiểm tra lại trong Lịch hẹn của tôi.");
         }
 
         // Calculate end time
