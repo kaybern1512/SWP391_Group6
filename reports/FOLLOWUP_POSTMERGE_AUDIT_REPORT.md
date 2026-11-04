@@ -359,7 +359,7 @@ Tất cả các kiểm thử đều thực thi trên bộ nhớ (`UseInMemoryDat
   - Không force push (`--force`).
 - **Commit Round 2:** `7eb62ba8dd4968272c6bb81fe4079c07dc4190d0` và `5e1976d61b7748fb524d4f5dd78048836580d2d5`.
 - **Commit Round 3 (Code & Tests):** `2dde1463613bffbda74a0cfa29a6949e852c7483` (triển khai BOLA/IDOR auth, loại trừ reminder completed, view lock badge, 16 unit tests mới).
-- **Commit Round 3 (Documentation):** `c11caaa8732c5890e1f744e21a28a2a095cf287a` (cập nhật báo cáo kiểm toán đầy đủ các phát hiện và số liệu test).
+- **Commit Round 3 (Documentation):** `92a61482e4ecff5f09769ec20af990a7f990a6e6` (cập nhật báo cáo kiểm toán đầy đủ các phát hiện và số liệu test Round 3).
 
 ---
 
@@ -368,4 +368,154 @@ Tất cả các kiểm thử đều thực thi trên bộ nhớ (`UseInMemoryDat
 - Endpoint `PATCH /api/post-care/follow-ups/{id}/status` hiện đã được bảo vệ hoàn toàn trước các lỗ hổng IDOR/BOLA và chuyển đổi trạng thái bất hợp lệ.
 - Giao diện Lễ tân an toàn, không còn liên kết giả lập, ranh giới kiến trúc đã được tài liệu hóa rõ ràng.
 - Bộ test suite 790 tests bảo đảm không có bất kỳ regression nào trong toàn bộ dự án DentalCare.
+- Trạng thái hiện tại: **`READY_FOR_REVIEW`**.
+
+
+---
+
+## 12. BÁO CÁO KIỂM TOÁN VÀ KHẮC PHỤC ROUND 4 (CANCELLATION CONSISTENCY & IMPLICIT STATUS FIX)
+
+### 12.1. Root cause từng vấn đề
+1. **Root cause Vấn đề 1 (Cancellation Consistency):**
+   - Trong `BE/DentalClinic.Infrastructure/Services/PostCareService.cs`, phương thức `UpdateFollowUpStatusAsync` cho phép người dùng truyền `Status = "Cancelled"` và cập nhật trực tiếp `followUp.Status = "Cancelled"` mà không kiểm tra trạng thái của cuộc hẹn `Appointment` liên kết.
+   - Khi lịch tái khám đã liên kết với cuộc hẹn chính thức (`AppointmentId != null`), việc cho phép hủy `FollowUpSchedule` độc lập khiến trạng thái lịch hẹn bị phân rã (desynchronization): `FollowUpSchedule` bị hủy nhưng `Appointment` vẫn ở trạng thái `Confirmed`, `CheckedIn`, `Waiting` hoặc `Completed`. Điều này tạo ra rủi ro ghế nha khoa (`RoomChair`) và bác sĩ vẫn bị chiếm dụng, hoặc cho phép hủy lịch của ca điều trị đã kết thúc thành công.
+2. **Root cause Vấn đề 2 (Implicit Status Change):**
+   - Trong `BE/DentalClinic.Application/Features/PostCare/DTOs/PostCareDtos.cs` và `FE/DentalClinic.Web/Models/ApiDtos/PostCareDtos.cs`, lớp DTO `UpdateFollowUpStatusRequest` được khởi tạo với giá trị mặc định:
+     `public string Status { get; set; } = "Confirmed";`
+   - Thuộc tính này khiến cho bất kỳ request nào từ client chỉ nhằm mục đích ghi nhận cuộc gọi (`Note`) hoặc đề xuất dời ngày (`NewRecommendedDate`) mà không gửi trường `status` đều bị gán mặc định là `"Confirmed"`. Kết quả là `followUp.Status` bị vô tình chuyển sang `"Confirmed"`, ngay cả khi đang là `Pending` hay `Scheduled`.
+3. **Root cause Vấn đề 3 (HTTP Error Contract Parsing):**
+   - Trong `PostCareController.cs`, logic phát hiện lỗi phân quyền để trả về mã `403 Forbidden` dựa vào việc tìm từ khóa tiếng Việt `"quyền"` trong `result.Message`.
+   - Cơ chế này phụ thuộc vào chuỗi tự nhiên (prose), thiếu tính cấu trúc, dễ vỡ nếu câu chữ thông báo bị chỉnh sửa hoặc hệ thống chuyển sang đa ngôn ngữ (i18n).
+4. **Root cause Vấn đề 4 (Lệch SHA commit báo cáo Round 3):**
+   - Commit báo cáo Round 3 ban đầu mang mã `c11caaa8732c5890e1f744e21a28a2a095cf287a`. Sau khi được amend (`git commit --amend`), Git tạo ra commit mới với SHA `92a61482e4ecff5f09769ec20af990a7f990a6e6`. Tuy nhiên, nội dung văn bản bên trong tệp vẫn lưu chuỗi SHA cũ `c11caaa...` do được sinh ra trước lệnh amend.
+
+---
+
+### 12.2. Quy tắc nghiệp vụ được lựa chọn và lý do
+1. **Quy tắc kiểm soát hủy lịch (Cancellation Consistency):**
+   - **Chặn hủy khi có cuộc hẹn đang hiệu lực:** Nếu `FollowUpSchedule` đã liên kết với `Appointment`, hệ thống kiểm tra trạng thái của cuộc hẹn:
+     - Nếu `Appointment.Status == Completed`: Chặn hủy với thông báo rõ ràng: `"Lịch tái khám đã liên kết với cuộc hẹn [{AppointmentCode}] đã hoàn tất điều trị. Không thể hủy lịch tái khám này."`
+     - Nếu `Appointment.Status` đang hoạt động (`Confirmed`, `CheckedIn`, `Waiting`, `Called`, `InService`, `Pending`, ...): Chặn thao tác trực tiếp và hướng dẫn người dùng: `"Lịch tái khám đã được tạo cuộc hẹn chính thức [{AppointmentCode}] (Trạng thái: {Status}). Để đảm bảo toàn vẹn dữ liệu và giải phóng ghế điều trị, vui lòng thực hiện hủy cuộc hẹn qua quy trình Hủy cuộc hẹn hợp lệ."`
+     - Nếu `Appointment.Status` đã là `Cancelled`, `Rejected`, hoặc `Withdrawn`: Cho phép cập nhật `followUp.Status = "Cancelled"`.
+     - Nếu lịch tái khám chưa có cuộc hẹn (`AppointmentId == null`): Cho phép cập nhật `followUp.Status = "Cancelled"`.
+   - **Lý do:** Không tự ý cập nhật ngầm trường `Appointment.Status` vì việc hủy một cuộc hẹn chính thức đòi hỏi nghiệp vụ phức tạp: giải phóng tài nguyên ghế/bác sĩ, kiểm tra chính sách hoàn tiền cọc, ghi nhận nhật ký trạng thái (`AppointmentStatusHistory`), và phát thông báo đa kênh.
+   - **Bảo đảm tính toàn vẹn (No Partial Mutation):** Toàn bộ kiểm tra được thực hiện trước khi gán dữ liệu và gọi `SaveChangesAsync`. Nếu vi phạm kiểm tra hủy, các trường khác như `Reason` (Note) cũng sẽ không bị lưu vào database.
+2. **Quy tắc cập nhật trạng thái tường minh (Explicit Status Change):**
+   - Chuyển trường `Status` trong `UpdateFollowUpStatusRequest` thành nullable: `public string? Status { get; set; }` (mặc định `null`).
+   - Phân biệt rõ 3 kịch bản:
+     - **Chỉ cập nhật Note:** `Status` và `NewRecommendedDate` là `null`. Hệ thống chỉ cập nhật `Reason`, giữ nguyên trạng thái hiện tại (ví dụ: `Pending` vẫn là `Pending`).
+     - **Chỉ dời ngày (Date-only):** `Status` là `null`. Hệ thống chỉ cập nhật `RecommendedDate` (sau khi kiểm tra xung đột cuộc hẹn), giữ nguyên `Status`.
+     - **Cập nhật trạng thái tường minh:** Client gửi `Status` có giá trị (`"Confirmed"`, `"Completed"`, `"Cancelled"`). Hệ thống kiểm tra hợp lệ và cập nhật trạng thái.
+   - **Lý do:** Tránh việc client vô tình làm thay đổi trạng thái quy trình làm việc; bảo đảm tương thích 100% với các luồng Confirm, Complete, Reschedule đang hoạt động của Lễ tân.
+3. **Quy tắc hợp đồng lỗi HTTP (Structured Error Contract):**
+   - Bổ sung thuộc tính cấu trúc `public string? ErrorCode { get; set; }` vào `ApiResponse<T>`.
+   - Bổ sung phương thức chuẩn `ApiResponse<T>.Forbidden(message, errorCode = "FORBIDDEN")`.
+   - Trong `PostCareController`, kiểm tra đồng thời:
+     ```csharp
+     if (string.Equals(result.ErrorCode, "FORBIDDEN", StringComparison.OrdinalIgnoreCase) ||
+         result.Message?.Contains("quyền", StringComparison.OrdinalIgnoreCase) == true)
+     {
+         return StatusCode(StatusCodes.Status403Forbidden, result);
+     }
+     ```
+   - **Lý do:** Chuẩn hóa mã lỗi trả về theo chuẩn REST API (`ErrorCode: "FORBIDDEN"`), loại bỏ sự phụ thuộc vào câu chữ tự nhiên tiếng Việt, đồng thời vẫn duy trì fallback tương thích ngược cho mọi client hiện hữu.
+
+---
+
+### 12.3. Danh sách file thay đổi
+1. `BE/DentalClinic.Application/Common/Models/ApiResponse.cs`:
+   - Bổ sung trường `ErrorCode`.
+   - Bổ sung factory method `Forbidden()` và overload `Fail()` với `errorCode`.
+2. `BE/DentalClinic.Application/Features/PostCare/DTOs/PostCareDtos.cs`:
+   - Sửa `UpdateFollowUpStatusRequest.Status` từ `"Confirmed"` thành `null` (`string? Status { get; set; }`).
+3. `FE/DentalClinic.Web/Models/ApiDtos/PostCareDtos.cs`:
+   - Đồng bộ `UpdateFollowUpStatusRequest.Status` thành nullable `string?`.
+4. `BE/DentalClinic.Api/Controllers/PostCareController.cs`:
+   - Bổ sung kiểm tra mã lỗi cấu trúc `string.Equals(result.ErrorCode, "FORBIDDEN", ...)` trên toàn bộ 10 điểm xử lý lỗi quyền hạn.
+5. `BE/DentalClinic.Infrastructure/Services/PostCareService.cs`:
+   - Bổ sung kiểm tra an toàn khi hủy lịch (`Status == "Cancelled"`) đối chiếu với trạng thái `Appointment`.
+   - Chỉ cập nhật `followUp.Status` khi client chỉ định giá trị hợp lệ.
+   - Trả về `ApiResponse<FollowUpScheduleDto>.Forbidden(...)` khi vi phạm phân quyền đối tượng.
+6. `BE/DentalClinic.Tests/PostCare/PostCareServiceTests.cs`:
+   - Bổ sung 8 unit tests kiểm tra toàn diện nghiệp vụ hủy lịch và cập nhật trạng thái tường minh.
+7. `BE/DentalClinic.Tests/PostCare/PostCareControllerAuthorizationRegressionTests.cs`:
+   - Bổ sung test kiểm tra mã lỗi cấu trúc `FORBIDDEN` chuyển hóa thành HTTP `403 Forbidden`.
+8. `reports/FOLLOWUP_POSTMERGE_AUDIT_REPORT.md`:
+   - Sửa chính xác commit SHA Round 3 và bổ sung Section 12 báo cáo Round 4.
+
+---
+
+### 12.4. Kết quả kiểm thử trước và sau Round 4
+
+| Hạng mục kiểm thử | Trước Round 4 | Sau Round 4 | Chênh lệch | Kết quả |
+| :--- | :---: | :---: | :---: | :---: |
+| **Backend Tests** (`BE/DentalClinic.Tests`) | 505 Passed / 1 Skipped | **514 Passed / 1 Skipped** | **+9 tests** | **100% PASS** |
+| **Frontend Tests** (`FE/DentalClinic.Web.Tests`) | 285 Passed | **285 Passed** | 0 | **100% PASS** |
+| **Tổng cộng kiểm thử toàn hệ thống** | **790 Passed / 1 Skipped** | **799 Passed / 1 Skipped** | **+9 tests** | **100% PASS** |
+| **Build Backend Solution** | Thành công | **Thành công (0 Errors, 13 Warnings CS8602/CS8604 cũ)** | 0 | Đạt |
+| **Build Frontend Solution** | Thành công | **Thành công (0 Errors, 0 Warnings)** | 0 | Đạt |
+
+---
+
+### 12.5. Test cases về Hủy lịch có Appointment liên kết
+Các test case được triển khai và chạy thực tế trong `PostCareServiceTests.cs`:
+1. `UpdateFollowUpStatus_ActiveAppointmentLinked_Cancel_FailsAndDoesNotMutate`:
+   - *Kịch bản:* Lịch tái khám liên kết cuộc hẹn `Confirmed` (`APT-520`). Bệnh nhân gọi yêu cầu hủy lịch kèm ghi chú.
+   - *Kết quả:* Thất bại (`res.Success == false`). Thông báo lỗi chứa mã `"APT-520"` và hướng dẫn `"quy trình Hủy cuộc hẹn hợp lệ"`.
+   - *Khẳng định toàn vẹn dữ liệu:* Kiểm tra DB xác nhận `followUp.Status` vẫn là `"Scheduled"`, `followUp.Reason` giữ nguyên (không bị cập nhật ghi chú một phần), và `appointment.Status` vẫn là `"Confirmed"`.
+2. `UpdateFollowUpStatus_CheckedInAppointmentLinked_Cancel_Fails`:
+   - *Kịch bản:* Lịch tái khám liên kết cuộc hẹn đã check-in (`CheckedIn`, `APT-521`).
+   - *Kết quả:* Thất bại, thông báo chứa `"APT-521"`.
+3. `UpdateFollowUpStatus_CompletedAppointmentLinked_Cancel_Fails`:
+   - *Kịch bản:* Lịch tái khám liên kết cuộc hẹn đã hoàn tất điều trị (`Completed`, `APT-501`).
+   - *Kết quả:* Thất bại, thông báo chứa `"APT-501"` và `"đã hoàn tất điều trị"`.
+4. `UpdateFollowUpStatus_CancelledAppointmentLinked_Cancel_Succeeds`:
+   - *Kịch bản:* Cuộc hẹn liên kết đã ở trạng thái hủy (`Cancelled`, `APT-523`).
+   - *Kết quả:* Thành công (`res.Success == true`), `followUp.Status` chuyển sang `"Cancelled"`.
+5. `UpdateFollowUpStatus_UnlinkedFollowUp_Cancel_Succeeds`:
+   - *Kịch bản:* Chỉ định tái khám chưa tạo cuộc hẹn (`AppointmentId == null`).
+   - *Kết quả:* Thành công, `followUp.Status` chuyển sang `"Cancelled"`.
+
+---
+
+### 12.6. Test cases về Cập nhật ghi chú không thay đổi Status
+1. `UpdateFollowUpStatus_NoteOnlyRequest_DoesNotChangeStatus`:
+   - *Kịch bản:* Lịch tái khám đang ở trạng thái `Pending`. Lễ tân gọi điện và chỉ gửi `Note = "Đã gọi nhưng máy bận, hẹn gọi lại"`, trường `Status = null`.
+   - *Kết quả:* Thành công. `followUp.Status` **giữ nguyên là `Pending`**, không bị tự ý chuyển thành `Confirmed`. Ghi chú được cập nhật chính xác.
+2. `UpdateFollowUpStatus_DateOnlyRequest_DoesNotChangeStatus`:
+   - *Kịch bản:* Lịch tái khám `Pending`, chỉ cập nhật `NewRecommendedDate`, trường `Status = null`.
+   - *Kết quả:* Thành công. `followUp.Status` **giữ nguyên là `Pending`**, ngày hẹn mới được cập nhật.
+3. `UpdateFollowUpStatus_ExplicitStatusRequest_ChangesStatus`:
+   - *Kịch bản:* Lễ tân gửi request có chỉ định rõ `Status = "Confirmed"`.
+   - *Kết quả:* Thành công, `followUp.Status` chuyển thành `Confirmed`.
+
+---
+
+### 12.7. Trạng thái lỗi HTTP/API và kiểm thử phân quyền cấu trúc
+- Đã bổ sung test `UpdateFollowUpStatus_StructuredErrorCodeForbidden_Returns403Forbidden` trong `PostCareControllerAuthorizationRegressionTests.cs`.
+- *Kịch bản:* Mock service trả về `ApiResponse<FollowUpScheduleDto>.Forbidden("Access denied by object policy.")` với `ErrorCode = "FORBIDDEN"` (hoàn toàn không chứa từ ngữ tiếng Việt "quyền").
+- *Kết quả:* `PostCareController` nhận diện mã lỗi cấu trúc và trả về HTTP `403 Forbidden` (`StatusCodes.Status403Forbidden`).
+
+---
+
+### 12.8. Commit SHA thực tế được kiểm chứng
+Toàn bộ commit hashes được kiểm chứng chính xác từ git history (`git rev-parse`):
+- **Commit Round 3 (Mã nguồn & Tests):** `2dde1463613bffbda74a0cfa29a6949e852c7483`
+- **Commit Round 3 (Báo cáo Section 11 đã đính chính SHA):** `92a61482e4ecff5f09769ec20af990a7f990a6e6`
+- **Commit Round 4 (Mã nguồn & 9 Automated Tests mới):** `33e7b43cac9df58a1643e51f52077c5b666541d3`
+
+---
+
+### 12.9. Các rủi ro còn lại
+- **Rủi ro rò rỉ phân quyền / BOLA:** Triệt tiêu hoàn toàn nhờ xác thực 2 chiều từ DB và mã lỗi `FORBIDDEN`.
+- **Rủi ro phân rã dữ liệu khi hủy:** Triệt tiêu hoàn toàn nhờ chặn hủy khi có cuộc hẹn chính thức và đảm bảo tính nguyên tử (không cập nhật một phần).
+- **Rủi ro chuyển trạng thái ngầm:** Triệt tiêu hoàn toàn nhờ loại bỏ giá trị mặc định `"Confirmed"` trên DTO.
+- **Rủi ro hồi quy (Regression):** Được kiểm soát an toàn bởi bộ 799 automated tests tự động thực thi trên CI/build.
+- **Phụ thuộc môi trường bên ngoài:** Kiểm thử upload Cloudinary live và tổng đài thoại telco tiếp tục giữ nguyên theo dõi ngoại vi trên Staging/Production.
+
+---
+
+### 12.10. Kết luận
+- Toàn bộ các yêu cầu của Technical Lead Round 4 đã được giải quyết trọn vẹn, chính xác và có đầy đủ bằng chứng kiểm thử tự động.
+- Không có bất kỳ vi phạm an toàn Git: Không đụng vào `main`, không merge `develop`, không force push.
 - Trạng thái hiện tại: **`READY_FOR_REVIEW`**.
