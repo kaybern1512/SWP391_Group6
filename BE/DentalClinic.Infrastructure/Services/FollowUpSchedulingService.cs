@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -1143,8 +1143,6 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             var followUpDate = f.Appointment?.ScheduledStart ?? f.RecommendedDate;
 
             string currentCallStatus = "NotCalled";
-            if (f.Status == "Called") currentCallStatus = "Called";
-            else if (f.Status == "Unreachable") currentCallStatus = "Unreachable";
 
             DateTime? lastCalledAt = null;
             string? lastCallerName = null;
@@ -1174,6 +1172,12 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                 {
                     // Fallback to default
                 }
+            }
+            else
+            {
+                // Fallback for legacy historical data where CallStatus was directly stored in FollowUpSchedule.Status
+                if (string.Equals(f.Status, "Called", StringComparison.OrdinalIgnoreCase)) currentCallStatus = "Called";
+                else if (string.Equals(f.Status, "Unreachable", StringComparison.OrdinalIgnoreCase)) currentCallStatus = "Unreachable";
             }
 
             if (!string.IsNullOrWhiteSpace(callStatus) && !callStatus.Equals("all", StringComparison.OrdinalIgnoreCase))
@@ -1250,10 +1254,17 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         {
             return ApiResponse<FollowUpReminderDto>.Fail("Không tìm thấy thông tin lịch tái khám cần nhắc.");
         }
-
-        if (followUp.Appointment != null && followUp.Appointment.Status == AppointmentStatus.Cancelled)
+        // Chan cap nhat nhac lich da Cancelled hoac Completed theo quy tac nghiep vu
+        if (string.Equals(followUp.Status, "Cancelled", StringComparison.OrdinalIgnoreCase) ||
+            (followUp.Appointment != null && followUp.Appointment.Status == AppointmentStatus.Cancelled))
         {
-            return ApiResponse<FollowUpReminderDto>.Fail("Lịch hẹn này đã bị hủy, không thể cập nhật nhắc lịch.");
+            return ApiResponse<FollowUpReminderDto>.Fail("Lịch hẹn tái khám này đã bị hủy, không thể cập nhật nhắc lịch.");
+        }
+
+        if (string.Equals(followUp.Status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+            (followUp.Appointment != null && followUp.Appointment.Status == AppointmentStatus.Completed))
+        {
+            return ApiResponse<FollowUpReminderDto>.Fail("Lịch hẹn tái khám này đã hoàn tất điều trị, không thể cập nhật nhắc lịch.");
         }
 
         var receptionistUser = await _dbContext.UserAccounts
@@ -1262,27 +1273,15 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
 
         var receptionistName = receptionistUser?.StaffProfile?.FullName ?? receptionistUser?.Email ?? "Lễ tân";
 
-        var oldStatus = followUp.Status;
-        if (normalizedCallStatus == "Called")
-        {
-            followUp.Status = "Called";
-        }
-        else if (normalizedCallStatus == "Unreachable")
-        {
-            followUp.Status = "Unreachable";
-        }
-        else
-        {
-            followUp.Status = followUp.AppointmentId.HasValue ? "Scheduled" : "Pending";
-        }
-
+        // Tach biet trang thai cuoc goi va trang thai nghiep vu tai kham.
+        // Tuyet doi KHONG thay doi followUp.Status khi ghi nhan cuoc goi!
         var audit = new AuditLog
         {
             UserId = receptionistUserId,
             Action = "FollowUpReminderCall",
             EntityName = "FollowUpSchedule",
             EntityId = followUp.FollowUpId.ToString(),
-            OldValues = oldStatus,
+            OldValues = followUp.Status,
             NewValues = System.Text.Json.JsonSerializer.Serialize(new
             {
                 CallStatus = normalizedCallStatus,
@@ -1318,7 +1317,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             FollowUpDate = followUp.Appointment?.ScheduledStart ?? followUp.RecommendedDate,
             ScheduledStart = followUp.Appointment?.ScheduledStart,
             ScheduledEnd = followUp.Appointment?.ScheduledEnd,
-            AppointmentStatus = followUp.Appointment?.Status ?? "Scheduled",
+            AppointmentStatus = followUp.Appointment?.Status ?? followUp.Status ?? "Pending",
             CallStatus = normalizedCallStatus,
             LastCalledAt = audit.CreatedAt,
             LastCallerName = receptionistName,

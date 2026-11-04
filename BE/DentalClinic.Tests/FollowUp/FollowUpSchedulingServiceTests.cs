@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -1556,7 +1556,7 @@ public class FollowUpSchedulingServiceTests
 
         var updatedFollowUp = await db.FollowUpSchedules.FindAsync(921L);
         Assert.NotNull(updatedFollowUp);
-        Assert.Equal("Called", updatedFollowUp.Status);
+        Assert.Equal("Scheduled", updatedFollowUp.Status);
 
         var audit = await db.AuditLogs.FirstOrDefaultAsync(a => a.EntityId == "921" && a.Action == "FollowUpReminderCall");
         Assert.NotNull(audit);
@@ -1596,7 +1596,7 @@ public class FollowUpSchedulingServiceTests
         Assert.Equal("Unreachable", response.Data?.CallStatus);
 
         var updated = await db.FollowUpSchedules.FindAsync(922L);
-        Assert.Equal("Unreachable", updated?.Status);
+        Assert.Equal("Scheduled", updated?.Status);
     }
 
     [Fact]
@@ -1672,5 +1672,266 @@ public class FollowUpSchedulingServiceTests
 
         Assert.False(response.Success);
         Assert.Contains("không hợp lệ", response.Message);
+    }
+
+    [Fact]
+    public async Task UpdateReminderCallStatus_Pending_Called_PreservesPendingStatus()
+    {
+        using var db = CreateDbContext("Reminders_Test_Pending_Called");
+        var today = DateTime.Today;
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 931,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Pending"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+        var request = new UpdateReminderCallStatusRequest
+        {
+            FollowUpId = 931,
+            CallStatus = "Called",
+            Note = "Nhắc bệnh nhân đặt lịch tái khám"
+        };
+
+        var response = await service.UpdateReminderCallStatusAsync(50, request);
+
+        Assert.True(response.Success);
+        Assert.Equal("Called", response.Data?.CallStatus);
+        Assert.Equal("Pending", response.Data?.AppointmentStatus);
+
+        var updated = await db.FollowUpSchedules.FindAsync(931L);
+        Assert.NotNull(updated);
+        Assert.Equal("Pending", updated.Status);
+
+        var audit = await db.AuditLogs.FirstOrDefaultAsync(a => a.EntityId == "931" && a.Action == "FollowUpReminderCall");
+        Assert.NotNull(audit);
+        Assert.Contains("Called", audit.NewValues);
+    }
+
+    [Fact]
+    public async Task UpdateReminderCallStatus_Confirmed_Called_PreservesConfirmedStatus()
+    {
+        using var db = CreateDbContext("Reminders_Test_Confirmed_Called");
+        var today = DateTime.Today;
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 932,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Confirmed"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+        var request = new UpdateReminderCallStatusRequest
+        {
+            FollowUpId = 932,
+            CallStatus = "Called",
+            Note = "Đã gọi xác nhận"
+        };
+
+        var response = await service.UpdateReminderCallStatusAsync(50, request);
+
+        Assert.True(response.Success);
+        Assert.Equal("Called", response.Data?.CallStatus);
+        Assert.Equal("Confirmed", response.Data?.AppointmentStatus);
+
+        var updated = await db.FollowUpSchedules.FindAsync(932L);
+        Assert.NotNull(updated);
+        Assert.Equal("Confirmed", updated.Status);
+    }
+
+    [Fact]
+    public async Task UpdateReminderCallStatus_CancelledFollowUp_FailsAndDoesNotMutate()
+    {
+        using var db = CreateDbContext("Reminders_Test_Cancelled_FollowUp");
+        var today = DateTime.Today;
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 933,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Cancelled"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+        var request = new UpdateReminderCallStatusRequest
+        {
+            FollowUpId = 933,
+            CallStatus = "Called"
+        };
+
+        var response = await service.UpdateReminderCallStatusAsync(50, request);
+
+        Assert.False(response.Success);
+        Assert.Contains("hủy", response.Message);
+
+        var updated = await db.FollowUpSchedules.FindAsync(933L);
+        Assert.NotNull(updated);
+        Assert.Equal("Cancelled", updated.Status);
+    }
+
+    [Fact]
+    public async Task UpdateReminderCallStatus_CompletedFollowUp_FailsAndDoesNotMutate()
+    {
+        using var db = CreateDbContext("Reminders_Test_Completed_FollowUp");
+        var today = DateTime.Today;
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 934,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Completed"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+        var request = new UpdateReminderCallStatusRequest
+        {
+            FollowUpId = 934,
+            CallStatus = "Called"
+        };
+
+        var response = await service.UpdateReminderCallStatusAsync(50, request);
+
+        Assert.False(response.Success);
+        Assert.Contains("hoàn tất", response.Message);
+
+        var updated = await db.FollowUpSchedules.FindAsync(934L);
+        Assert.NotNull(updated);
+        Assert.Equal("Completed", updated.Status);
+    }
+
+    [Fact]
+    public async Task UpdateReminderCallStatus_CompletedAppointmentLinked_Fails()
+    {
+        using var db = CreateDbContext("Reminders_Test_Completed_Appt");
+        var today = DateTime.Today;
+
+        var appt = new Appointment
+        {
+            AppointmentId = 835,
+            AppointmentCode = "APT-COMPLETED-835",
+            PatientUserId = 10,
+            AssignedDentistUserId = 20,
+            ScheduledStart = today.AddHours(14),
+            ScheduledEnd = today.AddHours(14).AddMinutes(30),
+            Status = AppointmentStatus.Completed,
+            ReasonForVisit = "Đã khám xong",
+            BookingSource = BookingSource.Receptionist
+        };
+        db.Appointments.Add(appt);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 935,
+            AppointmentId = 835,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Scheduled",
+            Appointment = appt
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+        var request = new UpdateReminderCallStatusRequest
+        {
+            FollowUpId = 935,
+            CallStatus = "Called"
+        };
+
+        var response = await service.UpdateReminderCallStatusAsync(50, request);
+
+        Assert.False(response.Success);
+        Assert.Contains("hoàn tất", response.Message);
+
+        var updated = await db.FollowUpSchedules.FindAsync(935L);
+        Assert.NotNull(updated);
+        Assert.Equal("Scheduled", updated.Status);
+    }
+
+    [Fact]
+    public async Task GetReceptionistReminders_ReadsCallStatusFromAuditLogs()
+    {
+        using var db = CreateDbContext("Reminders_Test_AuditLogRead");
+        var today = DateTime.Today;
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 936,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Scheduled",
+            Reason = "Tái khám niềng răng"
+        };
+        db.FollowUpSchedules.Add(followUp);
+
+        var audit = new AuditLog
+        {
+            UserId = 50,
+            Action = "FollowUpReminderCall",
+            EntityName = "FollowUpSchedule",
+            EntityId = "936",
+            OldValues = "Scheduled",
+            NewValues = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                CallStatus = "Called",
+                Note = "Bệnh nhân xác nhận chiều nay tới",
+                CalledAt = today.AddHours(8),
+                CallerStaffName = "Lễ Tân Thảo"
+            }),
+            CreatedAt = today.AddHours(8)
+        };
+        db.AuditLogs.Add(audit);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+        var response = await service.GetReceptionistRemindersAsync("today");
+
+        Assert.True(response.Success);
+        var item = response.Data?.FirstOrDefault(r => r.FollowUpId == 936);
+        Assert.NotNull(item);
+        Assert.Equal("Called", item.CallStatus);
+        Assert.Equal("Lễ Tân Thảo", item.LastCallerName);
+        Assert.Equal("Scheduled", item.AppointmentStatus);
+    }
+
+    [Fact]
+    public async Task GetReceptionistReminders_HistoricalLegacyStatus_FallbacksGracefully()
+    {
+        using var db = CreateDbContext("Reminders_Test_LegacyStatus");
+        var today = DateTime.Today;
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 937,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Called",
+            Reason = "Lịch cũ từ phiên bản trước"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+        var response = await service.GetReceptionistRemindersAsync("today");
+
+        Assert.True(response.Success);
+        var item = response.Data?.FirstOrDefault(r => r.FollowUpId == 937);
+        Assert.NotNull(item);
+        Assert.Equal("Called", item.CallStatus);
     }
 }
