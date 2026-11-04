@@ -378,6 +378,18 @@
         }
     });
 
+    function openProposalModalFromBtn(btn) {
+        openProposalModal(
+            btn.dataset.appointmentId,
+            btn.dataset.appointmentCode,
+            btn.dataset.dentistUserId,
+            btn.dataset.dentistName,
+            btn.dataset.departmentName,
+            btn.dataset.defaultDate,
+            btn.dataset.isRebook === 'true'
+        );
+    }
+
     function openProposalModal(appointmentId, appointmentCode, dentistUserId, dentistName, departmentName, defaultDate, isRebook) {
         document.getElementById('proposalAppointmentId').value = appointmentId;
         document.getElementById('proposalDentistUserId').value = dentistUserId;

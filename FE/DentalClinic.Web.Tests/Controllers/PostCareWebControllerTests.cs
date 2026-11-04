@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -334,5 +334,156 @@ public class PostCareWebControllerTests
         var result = await controller.UpdateCallStatus(req);
 
         result.Should().BeOfType<BadRequestObjectResult>();
+    }
+    [Fact]
+    public async Task ReceptionistFollowUpController_Confirm_WhenValid_CallsApiAndRedirectsWithSuccess()
+    {
+        _postCareApiMock.Setup(x => x.UpdateFollowUpStatusAsync(10, It.Is<UpdateFollowUpStatusRequest>(r => r.Status == "Confirmed")))
+            .ReturnsAsync(ApiResult<FollowUpScheduleDto>.Success(new FollowUpScheduleDto { FollowUpId = 10, Status = "Confirmed" }));
+
+        var controller = new ReceptionistFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(50, "Receptionist", "Lễ Tân Hoa"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.Confirm(10, "due", "today", "NotCalled");
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ReceptionistFollowUpController.Index));
+        controller.TempData["SuccessMessage"].Should().NotBeNull();
+        _postCareApiMock.Verify(x => x.UpdateFollowUpStatusAsync(10, It.IsAny<UpdateFollowUpStatusRequest>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReceptionistFollowUpController_Confirm_WhenApiFails_SetsErrorMessageAndRedirects()
+    {
+        _postCareApiMock.Setup(x => x.UpdateFollowUpStatusAsync(10, It.IsAny<UpdateFollowUpStatusRequest>()))
+            .ReturnsAsync(ApiResult<FollowUpScheduleDto>.Failure("Lỗi cập nhật"));
+
+        var controller = new ReceptionistFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(50, "Receptionist", "Lễ Tân Hoa"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.Confirm(10);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ReceptionistFollowUpController.Index));
+        controller.TempData["ErrorMessage"].Should().Be("Lỗi cập nhật");
+    }
+
+    [Fact]
+    public async Task ReceptionistFollowUpController_Confirm_WhenInvalidId_SetsErrorMessageWithoutApiCall()
+    {
+        var controller = new ReceptionistFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(50, "Receptionist", "Lễ Tân Hoa"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.Confirm(0);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ReceptionistFollowUpController.Index));
+        controller.TempData["ErrorMessage"].Should().Be("Mã lịch tái khám không hợp lệ.");
+        _postCareApiMock.Verify(x => x.UpdateFollowUpStatusAsync(It.IsAny<long>(), It.IsAny<UpdateFollowUpStatusRequest>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ReceptionistFollowUpController_Complete_WhenValid_CallsApiAndRedirectsWithSuccess()
+    {
+        _postCareApiMock.Setup(x => x.UpdateFollowUpStatusAsync(20, It.Is<UpdateFollowUpStatusRequest>(r => r.Status == "Completed")))
+            .ReturnsAsync(ApiResult<FollowUpScheduleDto>.Success(new FollowUpScheduleDto { FollowUpId = 20, Status = "Completed" }));
+
+        var controller = new ReceptionistFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(50, "Receptionist", "Lễ Tân Hoa"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.Complete(20);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ReceptionistFollowUpController.Index));
+        controller.TempData["SuccessMessage"].Should().NotBeNull();
+        _postCareApiMock.Verify(x => x.UpdateFollowUpStatusAsync(20, It.IsAny<UpdateFollowUpStatusRequest>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReceptionistFollowUpController_Complete_WhenInvalidId_SetsErrorMessageWithoutApiCall()
+    {
+        var controller = new ReceptionistFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(50, "Receptionist", "Lễ Tân Hoa"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.Complete(-1);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ReceptionistFollowUpController.Index));
+        controller.TempData["ErrorMessage"].Should().Be("Mã lịch tái khám không hợp lệ.");
+        _postCareApiMock.Verify(x => x.UpdateFollowUpStatusAsync(It.IsAny<long>(), It.IsAny<UpdateFollowUpStatusRequest>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ReceptionistFollowUpController_Reschedule_WhenValid_CallsApiAndRedirectsWithSuccess()
+    {
+        var futureDate = DateTime.Today.AddDays(5);
+        _postCareApiMock.Setup(x => x.UpdateFollowUpStatusAsync(30, It.Is<UpdateFollowUpStatusRequest>(r => r.Status == "Pending" && r.NewRecommendedDate == futureDate)))
+            .ReturnsAsync(ApiResult<FollowUpScheduleDto>.Success(new FollowUpScheduleDto { FollowUpId = 30, RecommendedDate = futureDate }));
+
+        var controller = new ReceptionistFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(50, "Receptionist", "Lễ Tân Hoa"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.Reschedule(30, futureDate, "Bệnh nhân bận công tác");
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ReceptionistFollowUpController.Index));
+        controller.TempData["SuccessMessage"].Should().NotBeNull();
+        _postCareApiMock.Verify(x => x.UpdateFollowUpStatusAsync(30, It.IsAny<UpdateFollowUpStatusRequest>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReceptionistFollowUpController_Reschedule_WhenDateNotFuture_SetsErrorMessageWithoutApiCall()
+    {
+        var pastDate = DateTime.Today;
+
+        var controller = new ReceptionistFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(50, "Receptionist", "Lễ Tân Hoa"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.Reschedule(30, pastDate, "Dời gấp hôm nay");
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ReceptionistFollowUpController.Index));
+        controller.TempData["ErrorMessage"].Should().Be("Ngày dời hẹn phải từ ngày mai trở đi.");
+        _postCareApiMock.Verify(x => x.UpdateFollowUpStatusAsync(It.IsAny<long>(), It.IsAny<UpdateFollowUpStatusRequest>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ReceptionistFollowUpController_Reschedule_WhenInvalidId_SetsErrorMessageWithoutApiCall()
+    {
+        var futureDate = DateTime.Today.AddDays(5);
+
+        var controller = new ReceptionistFollowUpController(_postCareApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(50, "Receptionist", "Lễ Tân Hoa"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.Reschedule(0, futureDate, "Lý do");
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(ReceptionistFollowUpController.Index));
+        controller.TempData["ErrorMessage"].Should().Be("Mã lịch tái khám không hợp lệ.");
+        _postCareApiMock.Verify(x => x.UpdateFollowUpStatusAsync(It.IsAny<long>(), It.IsAny<UpdateFollowUpStatusRequest>()), Times.Never);
     }
 }

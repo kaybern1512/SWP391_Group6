@@ -1,4 +1,4 @@
-@model DentalClinic.Web.ViewModels.PostCare.DentistReferralIndexViewModel
+﻿@model DentalClinic.Web.ViewModels.PostCare.DentistReferralIndexViewModel
 @{
     ViewData["Title"] = "Hội Chẩn & Chuyển Khoa - Hẹn Tái Khám";
 }
@@ -542,6 +542,24 @@
                 </text>
             }
         });
+
+        function openApproveModalFromBtn(btn) {
+            openApproveModal(
+                btn.dataset.proposalId,
+                btn.dataset.patientName,
+                btn.dataset.apptCode,
+                btn.dataset.proposedStart,
+                btn.dataset.isRebook === 'true'
+            );
+        }
+
+        function openRejectModalFromBtn(btn) {
+            openRejectModal(
+                btn.dataset.proposalId,
+                btn.dataset.patientName,
+                btn.dataset.apptCode
+            );
+        }
 
         function openApproveModal(proposalId, patientName, apptCode, proposedStart, isRebook) {
             document.getElementById('approveProposalId').value = proposalId;

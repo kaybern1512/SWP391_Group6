@@ -84,8 +84,14 @@ public class ReceptionistFollowUpController : Controller
 
     [HttpPost("Confirm/{id:long}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Confirm(long id, [FromForm] string? tab = "due")
+    public async Task<IActionResult> Confirm(long id, [FromForm] string? tab = "due", [FromQuery] string? dateFilter = "all", [FromQuery] string? callStatus = "all")
     {
+        if (id <= 0)
+        {
+            TempData["ErrorMessage"] = "Mã lịch tái khám không hợp lệ.";
+            return RedirectToAction(nameof(Index), new { tab, dateFilter, callStatus });
+        }
+
         var req = new UpdateFollowUpStatusRequest
         {
             Status = "Confirmed",
@@ -100,13 +106,19 @@ public class ReceptionistFollowUpController : Controller
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể cập nhật trạng thái.";
         }
-        return RedirectToAction(nameof(Index), new { tab });
+        return RedirectToAction(nameof(Index), new { tab, dateFilter, callStatus });
     }
 
     [HttpPost("Complete/{id:long}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Complete(long id, [FromForm] string? tab = "due")
+    public async Task<IActionResult> Complete(long id, [FromForm] string? tab = "due", [FromQuery] string? dateFilter = "all", [FromQuery] string? callStatus = "all")
     {
+        if (id <= 0)
+        {
+            TempData["ErrorMessage"] = "Mã lịch tái khám không hợp lệ.";
+            return RedirectToAction(nameof(Index), new { tab, dateFilter, callStatus });
+        }
+
         var req = new UpdateFollowUpStatusRequest
         {
             Status = "Completed",
@@ -121,17 +133,23 @@ public class ReceptionistFollowUpController : Controller
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể cập nhật trạng thái.";
         }
-        return RedirectToAction(nameof(Index), new { tab });
+        return RedirectToAction(nameof(Index), new { tab, dateFilter, callStatus });
     }
 
     [HttpPost("Reschedule/{id:long}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Reschedule(long id, [FromForm] DateTime newDate, [FromForm] string? note, [FromForm] string? tab = "due")
+    public async Task<IActionResult> Reschedule(long id, [FromForm] DateTime newDate, [FromForm] string? note, [FromForm] string? tab = "due", [FromQuery] string? dateFilter = "all", [FromQuery] string? callStatus = "all")
     {
+        if (id <= 0)
+        {
+            TempData["ErrorMessage"] = "Mã lịch tái khám không hợp lệ.";
+            return RedirectToAction(nameof(Index), new { tab, dateFilter, callStatus });
+        }
+
         if (newDate <= DateTime.Today)
         {
             TempData["ErrorMessage"] = "Ngày dời hẹn phải từ ngày mai trở đi.";
-            return RedirectToAction(nameof(Index), new { tab });
+            return RedirectToAction(nameof(Index), new { tab, dateFilter, callStatus });
         }
 
         var req = new UpdateFollowUpStatusRequest
@@ -149,6 +167,6 @@ public class ReceptionistFollowUpController : Controller
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể dời lịch tái khám.";
         }
-        return RedirectToAction(nameof(Index), new { tab });
+        return RedirectToAction(nameof(Index), new { tab, dateFilter, callStatus });
     }
 }
