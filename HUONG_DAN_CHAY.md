@@ -72,7 +72,7 @@ Mật khẩu chung cho toàn bộ các tài khoản thử nghiệm: **`Password1
 | :--- | :--- | :--- | :--- |
 | **Bệnh Nhân** (Patient) | `patient.booking@dentalcare.com`<br>hoặc `lehoangminh.test@dentalcare.com` | `Password123@` | Đặt lịch khám 6 bước, theo dõi danh sách, xem chi tiết, phản hồi đề xuất đổi lịch, thu hồi/hủy hẹn. |
 | **Lễ Tân** (Receptionist) | `receptionist@dentalcare.com` | `Password123@` | Rà soát hàng đợi tiếp nhận, chuyển tiếp Trưởng khoa hoặc từ chối; Check-in bệnh nhân hôm nay theo Số thứ tự (`QueueNumber`). |
-| **Trưởng Khoa** (Department Manager) | `manager.general@dentalcare.com`<br>(Trưởng Khoa Răng Tổng Quát) | `Password123@` | Phê duyệt lịch hẹn, gán Bác sĩ phụ trách, Phòng khám, Ghế nha khoa (cấp STT `Q001`) hoặc gửi Đề xuất đổi lịch. |
+| **Trưởng Khoa** (Department Manager) | `manager1@dentalcare.com`<br>(Trưởng Khoa 1: Răng Tổng Quát)<br>hoặc `manager@dentalcare.com` (Khoa 3: Implant) | `Password123@` | Phê duyệt lịch hẹn, gán Bác sĩ phụ trách, Phòng khám, Ghế nha khoa (cấp STT `Q001`) hoặc gửi Đề xuất đổi lịch. |
 | **Bác Sĩ** (Dentist) | `dentist@dentalcare.com` (BS. Hùng)<br>hoặc `dentist2@dentalcare.com` (BS. Thảo) | `Password123@` | Xem danh sách ca khám hôm nay đã Check-in, số thứ tự, phòng khám và vị trí ghế điều trị. |
 | **Quản Trị Viên** (System Admin) | `admin@dentalcare.com` | `Password123@` | Quản trị toàn hệ thống, toàn quyền can thiệp và giám sát các ca khám. |
 
@@ -103,7 +103,7 @@ Thực hiện lần lượt các bước sau trên trình duyệt để kiểm t
 4. Bấm nút **`Chuyển Trưởng Khoa`**, nhập ghi chú (tùy chọn) và bấm xác nhận. Trạng thái chuyển thành: **Chờ Trưởng Khoa Phân Bổ**. Đăng xuất tài khoản lễ tân.
 
 ### Bước 3: Trưởng Khoa Phân Bổ Tài Nguyên (Bác Sĩ, Phòng, Ghế)
-1. Đăng nhập tài khoản Trưởng khoa: `manager.general@dentalcare.com` / `Password123@`.
+1. Đăng nhập tài khoản Trưởng khoa tương ứng: `manager1@dentalcare.com` (Khoa 1 - Tổng quát) hoặc `manager@dentalcare.com` (Khoa 3 - Implant) / `Password123@`.
 2. Vào menu **`Assignment Queue`** (`/Department/Appointments/Requests`).
 3. Chọn yêu cầu khám vừa chuyển tới, bấm **`Phân Bổ & Duyệt`** (`/Department/Appointments/Review/{id}`).
 4. Tại Tab **Phương Án 1: Phê Duyệt & Phân Bổ Tài Nguyên**:
