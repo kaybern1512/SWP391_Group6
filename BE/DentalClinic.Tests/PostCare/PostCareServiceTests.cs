@@ -868,7 +868,7 @@ public class PostCareServiceTests
         var res = await service.UpdateFollowUpStatusAsync(10, 920, new UpdateFollowUpStatusRequest
         {
             Status = "Cancelled",
-            Note = "Attempt partial cancel"
+            Note = null
         });
 
         Assert.False(res.Success);
@@ -996,7 +996,7 @@ public class PostCareServiceTests
         var res = await service.UpdateFollowUpStatusAsync(10, 923, new UpdateFollowUpStatusRequest
         {
             Status = "Cancelled",
-            Note = "Bệnh nhân xác nhận hủy lịch sau khi cuộc hẹn đã hủy"
+            Note = null
         });
 
         Assert.True(res.Success);
@@ -1026,7 +1026,7 @@ public class PostCareServiceTests
         var res = await service.UpdateFollowUpStatusAsync(10, 924, new UpdateFollowUpStatusRequest
         {
             Status = "Cancelled",
-            Note = "Bệnh nhân không có nhu cầu tái khám tiếp"
+            Note = null
         });
 
         Assert.True(res.Success);
@@ -1127,5 +1127,186 @@ public class PostCareServiceTests
         Assert.True(res.Success);
         Assert.Equal("Confirmed", res.Data!.Status);
         Assert.Contains("Lễ tân xác nhận trực tiếp", res.Data.Reason);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_PatientRole_NoteOnly_FailsWithForbidden()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 928,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Reason = "Chỉ định y khoa ban đầu",
+            Status = "Pending",
+            AppointmentId = null
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Patient 10 (owner) attempts to send a note-only request
+        var res = await service.UpdateFollowUpStatusAsync(10, 928, new UpdateFollowUpStatusRequest
+        {
+            Status = null,
+            Note = "Bệnh nhân tự ý cập nhật ghi chú y khoa"
+        });
+
+        Assert.False(res.Success);
+        Assert.Equal("FORBIDDEN", res.ErrorCode);
+        Assert.Contains("không có quyền chỉnh sửa ghi chú hoặc chỉ định tái khám", res.Message);
+
+        // Verify DB entity remains completely untouched
+        var entity = await db.FollowUpSchedules.AsNoTracking().FirstAsync(f => f.FollowUpId == 928);
+        Assert.Equal("Chỉ định y khoa ban đầu", entity.Reason);
+        Assert.Equal("Pending", entity.Status);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_PatientRole_CancelledWithNote_FailsWithForbiddenAndDoesNotMutate()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 929,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Reason = "Chỉ định y khoa ban đầu",
+            Status = "Pending",
+            AppointmentId = null
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Patient 10 attempts to cancel while attaching a note to overwrite/alter Reason
+        var res = await service.UpdateFollowUpStatusAsync(10, 929, new UpdateFollowUpStatusRequest
+        {
+            Status = "Cancelled",
+            Note = "Lý do cá nhân của bệnh nhân"
+        });
+
+        Assert.False(res.Success);
+        Assert.Equal("FORBIDDEN", res.ErrorCode);
+        Assert.Contains("không có quyền chỉnh sửa ghi chú hoặc chỉ định tái khám", res.Message);
+
+        // Verify NO partial mutation: neither Status was cancelled nor Reason was modified
+        var entity = await db.FollowUpSchedules.AsNoTracking().FirstAsync(f => f.FollowUpId == 929);
+        Assert.Equal("Chỉ định y khoa ban đầu", entity.Reason);
+        Assert.Equal("Pending", entity.Status);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_PatientRole_EmptyRequest_FailsWithBadRequest()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 930,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Reason = "Chỉ định y khoa ban đầu",
+            Status = "Pending",
+            AppointmentId = null
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Patient sends empty request (Status = null, Note = null, NewRecommendedDate = null)
+        var res = await service.UpdateFollowUpStatusAsync(10, 930, new UpdateFollowUpStatusRequest());
+
+        Assert.False(res.Success);
+        Assert.Contains("Yêu cầu không hợp lệ", res.Message);
+
+        var entity = await db.FollowUpSchedules.AsNoTracking().FirstAsync(f => f.FollowUpId == 930);
+        Assert.Equal("Chỉ định y khoa ban đầu", entity.Reason);
+        Assert.Equal("Pending", entity.Status);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_PatientRole_CancelWithoutNote_UnlinkedFollowUp_Succeeds()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 931,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Reason = "Chỉ định y khoa ban đầu",
+            Status = "Pending",
+            AppointmentId = null
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Patient 10 cancels legitimate unlinked follow-up with no note
+        var res = await service.UpdateFollowUpStatusAsync(10, 931, new UpdateFollowUpStatusRequest
+        {
+            Status = "Cancelled",
+            Note = null
+        });
+
+        Assert.True(res.Success);
+        Assert.Equal("Cancelled", res.Data!.Status);
+
+        // Status is Cancelled, but Reason remains completely untouched
+        var entity = await db.FollowUpSchedules.AsNoTracking().FirstAsync(f => f.FollowUpId == 931);
+        Assert.Equal("Cancelled", entity.Status);
+        Assert.Equal("Chỉ định y khoa ban đầu", entity.Reason);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_DentistRole_ValidNote_SucceedsWithDentistTag()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 932,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Reason = "Khám ban đầu",
+            Status = "Pending",
+            AppointmentId = null
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Treating Dentist 20 updates clinical note
+        var res = await service.UpdateFollowUpStatusAsync(20, 932, new UpdateFollowUpStatusRequest
+        {
+            Status = null,
+            Note = "Vết mổ lành thương tốt, không nhiễm trùng"
+        });
+
+        Assert.True(res.Success);
+        Assert.Equal("Pending", res.Data!.Status);
+        Assert.Contains("[Bác sĩ: Vết mổ lành thương tốt, không nhiễm trùng]", res.Data.Reason);
+
+        var entity = await db.FollowUpSchedules.AsNoTracking().FirstAsync(f => f.FollowUpId == 932);
+        Assert.Contains("[Bác sĩ: Vết mổ lành thương tốt, không nhiễm trùng]", entity.Reason);
     }
 }

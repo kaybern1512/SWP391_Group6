@@ -535,24 +535,32 @@ public class PostCareService : IPostCareService
                 return ApiResponse<FollowUpScheduleDto>.Forbidden("Bạn không có quyền thao tác trên lịch tái khám của bệnh nhân khác.");
             }
 
+            // Bệnh nhân tuyệt đối không được tự ý sửa đổi ghi chú hoặc chỉ định tái khám y khoa qua endpoint này
+            if (!string.IsNullOrWhiteSpace(request.Note))
+            {
+                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bệnh nhân không có quyền chỉnh sửa ghi chú hoặc chỉ định tái khám.");
+            }
+
             if (request.NewRecommendedDate.HasValue)
             {
                 return ApiResponse<FollowUpScheduleDto>.Forbidden("Bệnh nhân không có quyền trực tiếp đổi ngày tái khám. Vui lòng gửi đề xuất đổi lịch qua chức năng Đề xuất đổi lịch.");
             }
 
-            if (!string.IsNullOrWhiteSpace(request.Status))
+            if (string.IsNullOrWhiteSpace(request.Status))
             {
-                var targetStatus = request.Status.Trim();
-                if (string.Equals(targetStatus, "Completed", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(targetStatus, "Confirmed", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(targetStatus, "Scheduled", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ApiResponse<FollowUpScheduleDto>.Forbidden("Bệnh nhân không có quyền xác nhận hoặc hoàn tất lịch tái khám.");
-                }
-                if (!string.Equals(targetStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ApiResponse<FollowUpScheduleDto>.Forbidden("Bệnh nhân chỉ có thể yêu cầu hủy hoặc gửi đề xuất đổi lịch tái khám.");
-                }
+                return ApiResponse<FollowUpScheduleDto>.Fail("Yêu cầu không hợp lệ. Vui lòng chỉ định trạng thái cần cập nhật.");
+            }
+
+            var targetStatus = request.Status.Trim();
+            if (string.Equals(targetStatus, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(targetStatus, "Confirmed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(targetStatus, "Scheduled", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bệnh nhân không có quyền xác nhận hoặc hoàn tất lịch tái khám.");
+            }
+            if (!string.Equals(targetStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bệnh nhân chỉ có thể yêu cầu hủy hoặc gửi đề xuất đổi lịch tái khám.");
             }
         }
         else if (caller.Role == UserRole.Dentist)
@@ -581,6 +589,12 @@ public class PostCareService : IPostCareService
         else
         {
             return ApiResponse<FollowUpScheduleDto>.Forbidden("Vai trò của bạn không có quyền cập nhật lịch tái khám.");
+        }
+
+        // Yêu cầu phải chứa ít nhất một thông tin cần cập nhật
+        if (string.IsNullOrWhiteSpace(request.Status) && !request.NewRecommendedDate.HasValue && string.IsNullOrWhiteSpace(request.Note))
+        {
+            return ApiResponse<FollowUpScheduleDto>.Fail("Yêu cầu không có thông tin thay đổi hợp lệ.");
         }
 
         // Kiểm soát chuyển đổi trạng thái hợp lệ (State Transition Consistency)
@@ -692,9 +706,17 @@ public class PostCareService : IPostCareService
 
         if (!string.IsNullOrWhiteSpace(request.Note))
         {
+            var noteTag = caller.Role switch
+            {
+                UserRole.Dentist => "Bác sĩ",
+                UserRole.DepartmentManager => "Trưởng khoa",
+                UserRole.SystemAdministrator => "Quản trị viên",
+                _ => "CSKH"
+            };
+
             followUp.Reason = string.IsNullOrWhiteSpace(followUp.Reason)
-                ? request.Note.Trim()
-                : $"{followUp.Reason} | [CSKH: {request.Note.Trim()}]";
+                ? (caller.Role == UserRole.Dentist ? request.Note.Trim() : $"[{noteTag}: {request.Note.Trim()}]")
+                : $"{followUp.Reason} | [{noteTag}: {request.Note.Trim()}]";
         }
 
         await _dbContext.SaveChangesAsync(ct);
