@@ -1,4 +1,4 @@
-﻿@model DentalClinic.Web.ViewModels.PostCare.DentistReferralIndexViewModel
+@model DentalClinic.Web.ViewModels.PostCare.DentistReferralIndexViewModel
 @{
     ViewData["Title"] = "Hội Chẩn & Chuyển Khoa - Hẹn Tái Khám";
 }
@@ -290,12 +290,20 @@
                                             </td>
                                             <td class="pe-4 text-end">
                                                 <div class="btn-group btn-group-sm">
-                                                    <button type="button" class="btn btn-success fw-semibold"
-                                                            onclick="openApproveModal(@p.ProposalId, '@p.PatientName', '@p.AppointmentCode', '@(p.ProposedStart.HasValue ? p.ProposedStart.Value.ToString("dd/MM/yyyy HH:mm") : "")', @(p.IsRebook ? "true" : "false"))">
+                                                    <button type="button"
+                                                            class="btn btn-success fw-semibold btn-open-approve-proposal"
+                                                            data-proposal-id="@p.ProposalId"
+                                                            data-patient-name="@p.PatientName"
+                                                            data-appt-code="@p.AppointmentCode"
+                                                            data-proposed-start="@(p.ProposedStart.HasValue ? p.ProposedStart.Value.ToString("dd/MM/yyyy HH:mm") : "")"
+                                                            data-is-rebook="@(p.IsRebook ? "true" : "false")">
                                                         <i class="bi bi-check2 me-1"></i>Duyệt
                                                     </button>
-                                                    <button type="button" class="btn btn-outline-danger fw-semibold"
-                                                            onclick="openRejectModal(@p.ProposalId, '@p.PatientName', '@p.AppointmentCode')">
+                                                    <button type="button"
+                                                            class="btn btn-outline-danger fw-semibold btn-open-reject-proposal"
+                                                            data-proposal-id="@p.ProposalId"
+                                                            data-patient-name="@p.PatientName"
+                                                            data-appt-code="@p.AppointmentCode">
                                                         <i class="bi bi-x me-1"></i>Từ chối
                                                     </button>
                                                 </div>
@@ -530,6 +538,19 @@
 
             const rejectEl = document.getElementById('modalDoctorRejectProposal');
             if (rejectEl) rejectModalInstance = new bootstrap.Modal(rejectEl);
+
+            document.addEventListener('click', function(e) {
+                const approveBtn = e.target.closest('.btn-open-approve-proposal');
+                if (approveBtn) {
+                    openApproveModalFromBtn(approveBtn);
+                    return;
+                }
+                const rejectBtn = e.target.closest('.btn-open-reject-proposal');
+                if (rejectBtn) {
+                    openRejectModalFromBtn(rejectBtn);
+                    return;
+                }
+            });
 
             @if (Model.SelectedSessionId.HasValue)
             {

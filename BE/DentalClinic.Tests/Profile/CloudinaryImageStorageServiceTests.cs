@@ -67,7 +67,7 @@ public class CloudinaryImageStorageServiceTests
         Assert.Contains("Dịch vụ lưu trữ Cloudinary chưa được cấu hình", ex.Message);
     }
 
-    [Fact]
+    [Fact(Skip = "Integration test requires live Cloudinary credentials in user secrets.")]
     public async Task UploadAvatarAsync_WithUserSecrets_UploadsSuccessfully()
     {
         var config = new ConfigurationBuilder()

@@ -7,6 +7,7 @@ using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.PostCare.DTOs;
 using DentalClinic.Infrastructure.Persistence;
+using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -517,12 +518,55 @@ public class PostCareService : IPostCareService
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            followUp.Status = request.Status.Trim();
+            // Status is applied after validation checks below
         }
 
-        if (request.NewRecommendedDate.HasValue && request.NewRecommendedDate.Value > DateTime.UtcNow)
+        if (request.NewRecommendedDate.HasValue)
+        {
+            if (followUp.AppointmentId.HasValue && followUp.Appointment != null)
+            {
+                if (followUp.Appointment.Status == AppointmentStatus.Completed)
+                {
+                    return ApiResponse<FollowUpScheduleDto>.Fail(
+                        $"Lịch tái khám đã liên kết với cuộc hẹn [{followUp.Appointment.AppointmentCode}] đã hoàn tất. Không thể dời lịch tái khám này.");
+                }
+
+                if (followUp.Appointment.Status != AppointmentStatus.Cancelled &&
+                    followUp.Appointment.Status != AppointmentStatus.Rejected &&
+                    followUp.Appointment.Status != AppointmentStatus.Withdrawn)
+                {
+                    return ApiResponse<FollowUpScheduleDto>.Fail(
+                        $"Lịch tái khám đã được xếp lịch hẹn chính thức [{followUp.Appointment.AppointmentCode}] (Trạng thái: {followUp.Appointment.Status}). " +
+                        "Để tránh xung đột bác sĩ và ghế điều trị, không thể dời ngày mà không chọn khung giờ cụ thể. " +
+                        "Vui lòng dời lịch trên Quản lý Cuộc hẹn hoặc hướng dẫn bệnh nhân gửi yêu cầu đổi lịch qua Cổng bệnh nhân.");
+                }
+            }
+
+            if (request.NewRecommendedDate.Value <= DateTime.UtcNow)
+            {
+                return ApiResponse<FollowUpScheduleDto>.Fail("Ngày dời hẹn tái khám phải là ngày trong tương lai.");
+            }
+        }
+
+        // Kiểm tra an toàn khi hoàn tất (Complete)
+        if (string.Equals(request.Status?.Trim(), "Completed", StringComparison.OrdinalIgnoreCase))
+        {
+            if (followUp.AppointmentId.HasValue && followUp.Appointment != null && followUp.Appointment.Status != AppointmentStatus.Completed)
+            {
+                return ApiResponse<FollowUpScheduleDto>.Fail(
+                    $"Cuộc hẹn liên kết [{followUp.Appointment.AppointmentCode}] đang ở trạng thái [{followUp.Appointment.Status}], chưa hoàn thành điều trị. " +
+                    "Chỉ có thể hoàn tất lịch tái khám khi bác sĩ đã hoàn tất buổi khám/điều trị.");
+            }
+        }
+
+        if (request.NewRecommendedDate.HasValue)
         {
             followUp.RecommendedDate = request.NewRecommendedDate.Value;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            followUp.Status = request.Status.Trim();
         }
 
         if (!string.IsNullOrWhiteSpace(request.Note))

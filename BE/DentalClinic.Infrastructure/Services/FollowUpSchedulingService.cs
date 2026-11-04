@@ -1199,7 +1199,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                 FollowUpDate = followUpDate,
                 ScheduledStart = f.Appointment?.ScheduledStart,
                 ScheduledEnd = f.Appointment?.ScheduledEnd,
-                AppointmentStatus = f.Appointment?.Status ?? "Scheduled",
+                AppointmentStatus = f.Appointment?.Status ?? f.Status ?? "Pending",
                 CallStatus = currentCallStatus,
                 LastCalledAt = lastCalledAt,
                 LastCallerName = lastCallerName,

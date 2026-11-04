@@ -1,4 +1,4 @@
-﻿@model DentalClinic.Web.ViewModels.PostCare.PatientFollowUpIndexViewModel
+@model DentalClinic.Web.ViewModels.PostCare.PatientFollowUpIndexViewModel
 @{
     ViewData["Title"] = "Lịch Hẹn Tái Khám Của Tôi";
     var today = DateTime.Today;
@@ -114,7 +114,7 @@
                                     <td class="pe-4 text-end">
                                         @if (p.Status == "Pending")
                                         {
-                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="handleWithdrawProposal(@p.ProposalId)">
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-withdraw-proposal" data-proposal-id="@p.ProposalId">
                                                 <i class="bi bi-x-lg me-1"></i>Rút Yêu Cầu
                                             </button>
                                         }
@@ -239,8 +239,15 @@
                                         }
                                         else if (f.AppointmentId.HasValue)
                                         {
-                                            <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-semibold"
-                                                    onclick="openProposalModal(@f.AppointmentId.Value, '@f.AppointmentCode', @f.DentistUserId, '@f.DentistName', '@f.DepartmentName', '@f.RecommendedDate.ToString("yyyy-MM-dd")', false)">
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-warning text-dark fw-semibold btn-open-proposal-modal"
+                                                    data-appointment-id="@f.AppointmentId.Value"
+                                                    data-appointment-code="@f.AppointmentCode"
+                                                    data-dentist-user-id="@f.DentistUserId"
+                                                    data-dentist-name="@f.DentistName"
+                                                    data-department-name="@f.DepartmentName"
+                                                    data-default-date="@f.RecommendedDate.ToString("yyyy-MM-dd")"
+                                                    data-is-rebook="false">
                                                 <i class="bi bi-arrow-repeat me-1"></i>Đổi Lịch
                                             </button>
                                         }
@@ -375,6 +382,29 @@
         const modalEl = document.getElementById('modalPatientProposal');
         if (modalEl) {
             currentProposalModal = new bootstrap.Modal(modalEl);
+
+            document.addEventListener('click', (e) => {
+                const proposalBtn = e.target.closest('.btn-open-proposal-modal');
+                if (proposalBtn) {
+                    openProposalModalFromBtn(proposalBtn);
+                    return;
+                }
+
+                const withdrawBtn = e.target.closest('.btn-withdraw-proposal');
+                if (withdrawBtn) {
+                    const proposalId = parseInt(withdrawBtn.dataset.proposalId, 10);
+                    if (proposalId > 0) {
+                        handleWithdrawProposal(proposalId);
+                    }
+                    return;
+                }
+
+                const slotBtn = e.target.closest('.slot-btn');
+                if (slotBtn) {
+                    selectProposalSlot(slotBtn, slotBtn.dataset.start, slotBtn.dataset.end);
+                    return;
+                }
+            });
         }
     });
 
@@ -485,7 +515,7 @@
                 const eTime = eDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
                 html += `
                     <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-1 fw-semibold slot-btn"
-                            onclick="selectProposalSlot(this, '${slot.startTime}', '${slot.endTime}')">
+                            data-start="${slot.startTime}" data-end="${slot.endTime}">
                         <i class="bi bi-clock me-1"></i>${sTime} - ${eTime}
                     </button>
                 `;

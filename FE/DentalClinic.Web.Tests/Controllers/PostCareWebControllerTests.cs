@@ -486,4 +486,53 @@ public class PostCareWebControllerTests
         controller.TempData["ErrorMessage"].Should().Be("Mã lịch tái khám không hợp lệ.");
         _postCareApiMock.Verify(x => x.UpdateFollowUpStatusAsync(It.IsAny<long>(), It.IsAny<UpdateFollowUpStatusRequest>()), Times.Never);
     }
+
+    [Fact]
+    public void Views_Receptionist_FollowUps_Index_ContainsRestoredActionsAndSafeDataAttributes()
+    {
+        var viewPath = Path.Combine(AppContext.BaseDirectory, "../../../../DentalClinic.Web/Views/Receptionist/FollowUps/Index.cshtml");
+        File.Exists(viewPath).Should().BeTrue();
+
+        var content = File.ReadAllText(viewPath);
+
+        content.Should().Contain("asp-action=\"Confirm\"");
+        content.Should().Contain("asp-action=\"Complete\"");
+        content.Should().Contain("modalRescheduleFollowUp");
+
+        content.Should().Contain("btn-open-call-modal");
+        content.Should().Contain("data-followup-id=");
+        content.Should().Contain("data-patient-name=");
+        content.Should().NotContain("onclick=\"openCallModal(");
+        content.Should().NotContain("onclick=\"openRescheduleModal(");
+    }
+
+    [Fact]
+    public void Views_Patient_FollowUps_Index_ContainsSafeDataAttributesAndNoUnsafeInlineScript()
+    {
+        var viewPath = Path.Combine(AppContext.BaseDirectory, "../../../../DentalClinic.Web/Views/Patient/FollowUps/Index.cshtml");
+        File.Exists(viewPath).Should().BeTrue();
+
+        var content = File.ReadAllText(viewPath);
+
+        content.Should().Contain("btn-open-proposal-modal");
+        content.Should().Contain("data-appointment-id=");
+        content.Should().Contain("data-dentist-name=");
+        content.Should().NotContain("onclick=\"openProposalModal(");
+    }
+
+    [Fact]
+    public void Views_Dentist_Referrals_Index_ContainsSafeDataAttributesAndNoUnsafeInlineScript()
+    {
+        var viewPath = Path.Combine(AppContext.BaseDirectory, "../../../../DentalClinic.Web/Views/Dentist/Referrals/Index.cshtml");
+        File.Exists(viewPath).Should().BeTrue();
+
+        var content = File.ReadAllText(viewPath);
+
+        content.Should().Contain("btn-open-approve-proposal");
+        content.Should().Contain("btn-open-reject-proposal");
+        content.Should().Contain("data-proposal-id=");
+        content.Should().Contain("data-patient-name=");
+        content.Should().NotContain("onclick=\"openApproveModal(");
+        content.Should().NotContain("onclick=\"openRejectModal(");
+    }
 }
