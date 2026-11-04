@@ -312,11 +312,10 @@
                                         {
                                             @if (item.AppointmentId.HasValue)
                                             {
-                                                <a href="/Receptionist/Appointments?search=@item.AppointmentCode"
-                                                   class="btn btn-outline-warning text-dark"
-                                                   title="Cuộc hẹn #@(item.AppointmentCode) đã được xếp lịch. Bấm để đổi lịch hẹn an toàn qua Quản lý Cuộc hẹn">
-                                                    <i class="bi bi-calendar-event me-1"></i>Đổi lịch hẹn
-                                                </a>
+                                                <span class="badge bg-light text-secondary border d-inline-flex align-items-center py-1 px-2"
+                                                      title="Lịch tái khám đã có cuộc hẹn chính thức (#@(item.AppointmentCode)). Việc đổi lịch cần do bệnh nhân đề xuất qua Cổng bệnh nhân hoặc bác sĩ phụ trách phê duyệt để tránh trùng ca/ghế.">
+                                                    <i class="bi bi-lock-fill me-1 text-muted"></i>#@(item.AppointmentCode)
+                                                </span>
                                             }
                                             else
                                             {

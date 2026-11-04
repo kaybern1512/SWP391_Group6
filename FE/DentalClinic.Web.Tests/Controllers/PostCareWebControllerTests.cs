@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -504,6 +504,8 @@ public class PostCareWebControllerTests
         content.Should().Contain("data-patient-name=");
         content.Should().NotContain("onclick=\"openCallModal(");
         content.Should().NotContain("onclick=\"openRescheduleModal(");
+        content.Should().NotContain("href=\"/Receptionist/Appointments?search=");
+        content.Should().Contain("bi-lock-fill");
     }
 
     [Fact]

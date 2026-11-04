@@ -1076,7 +1076,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             .AsQueryable();
 
         // Exclude cancelled and completed appointments
-        query = query.Where(f => (f.Appointment == null || (f.Appointment.Status != AppointmentStatus.Cancelled && f.Appointment.Status != AppointmentStatus.Completed)) && f.Status != "Cancelled");
+        query = query.Where(f => f.Status != "Cancelled" && f.Status != "Completed" && (f.Appointment == null || (f.Appointment.Status != AppointmentStatus.Cancelled && f.Appointment.Status != AppointmentStatus.Completed)));
 
         var followUps = await query.ToListAsync(ct);
 

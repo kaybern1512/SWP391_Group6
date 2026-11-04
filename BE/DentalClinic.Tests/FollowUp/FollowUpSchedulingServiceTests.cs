@@ -1383,6 +1383,45 @@ public class FollowUpSchedulingServiceTests
     }
 
     [Fact]
+    public async Task GetReceptionistReminders_CompletedFollowUpWithoutAppointment_IsExcludedFromReminders()
+    {
+        using var db = CreateDbContext("Reminders_CompletedUnlinked");
+        var today = DateTime.Today;
+
+        var followUpCompletedUnlinked = new FollowUpSchedule
+        {
+            FollowUpId = 905,
+            AppointmentId = null,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Completed",
+            Reason = "Đã hoàn thành tái khám"
+        };
+        db.FollowUpSchedules.Add(followUpCompletedUnlinked);
+
+        var followUpPendingUnlinked = new FollowUpSchedule
+        {
+            FollowUpId = 906,
+            AppointmentId = null,
+            TreatmentSessionId = 1,
+            RecommendedDate = today,
+            Status = "Pending",
+            Reason = "Cần gọi nhắc"
+        };
+        db.FollowUpSchedules.Add(followUpPendingUnlinked);
+
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+        var response = await service.GetReceptionistRemindersAsync();
+
+        Assert.True(response.Success);
+        Assert.NotNull(response.Data);
+        Assert.Contains(response.Data, r => r.FollowUpId == 906);
+        Assert.DoesNotContain(response.Data, r => r.FollowUpId == 905);
+    }
+
+    [Fact]
     public async Task GetReceptionistReminders_DateFilters_TodayAndTomorrow()
     {
         using var db = CreateDbContext("Reminders_Test2");

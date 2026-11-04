@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -58,6 +58,17 @@ public class PostCareServiceTests
         db.UserAccounts.Add(patientUser);
         db.PatientProfiles.Add(patientProfile);
 
+        var otherPatientUser = new UserAccount { UserId = 99, Email = "otherpatient@test.com", Role = UserRole.Patient, Status = AccountStatus.Active };
+        var otherPatientProfile = new PatientProfile
+        {
+            UserId = 99,
+            PatientCode = "PAT-099",
+            FullName = "Bệnh nhân B",
+            EmergencyContact = "0911223344"
+        };
+        db.UserAccounts.Add(otherPatientUser);
+        db.PatientProfiles.Add(otherPatientProfile);
+
         // Dentists & Managers
         var dentistUser = new UserAccount { UserId = 20, Email = "dentist@test.com", Role = UserRole.Dentist, Status = AccountStatus.Active };
         var dentistStaff = new StaffProfile { UserId = 20, EmployeeCode = "D001", FullName = "BS Nguyễn Văn B", EmploymentStatus = "Active" };
@@ -89,10 +100,27 @@ public class PostCareServiceTests
             AssignedAt = DateTime.UtcNow
         });
 
-        var mgrUser = new UserAccount { UserId = 102, Email = "mgr_ortho@test.com", Role = UserRole.DepartmentManager, Status = AccountStatus.Active };
-        var mgrStaff = new StaffProfile { UserId = 102, EmployeeCode = "M001", FullName = "Trưởng Khoa Chỉnh Nha", EmploymentStatus = "Active" };
-        db.UserAccounts.Add(mgrUser);
-        db.StaffProfiles.Add(mgrStaff);
+        // Department Managers
+        var dept1MgrUser = new UserAccount { UserId = 101, Email = "mgr_general@test.com", Role = UserRole.DepartmentManager, Status = AccountStatus.Active };
+        var dept1MgrStaff = new StaffProfile { UserId = 101, EmployeeCode = "M001", FullName = "Trưởng Khoa Răng Tổng Quát", EmploymentStatus = "Active" };
+        db.UserAccounts.Add(dept1MgrUser);
+        db.StaffProfiles.Add(dept1MgrStaff);
+
+        var dept2MgrUser = new UserAccount { UserId = 102, Email = "mgr_ortho@test.com", Role = UserRole.DepartmentManager, Status = AccountStatus.Active };
+        var dept2MgrStaff = new StaffProfile { UserId = 102, EmployeeCode = "M002", FullName = "Trưởng Khoa Chỉnh Nha", EmploymentStatus = "Active" };
+        db.UserAccounts.Add(dept2MgrUser);
+        db.StaffProfiles.Add(dept2MgrStaff);
+
+        // Receptionist & Admin
+        var receptionistUser = new UserAccount { UserId = 50, Email = "receptionist@test.com", Role = UserRole.Receptionist, Status = AccountStatus.Active };
+        var receptionistStaff = new StaffProfile { UserId = 50, EmployeeCode = "REC001", FullName = "Lễ Tân 1", EmploymentStatus = "Active" };
+        db.UserAccounts.Add(receptionistUser);
+        db.StaffProfiles.Add(receptionistStaff);
+
+        var adminUser = new UserAccount { UserId = 1, Email = "admin@test.com", Role = UserRole.SystemAdministrator, Status = AccountStatus.Active };
+        var adminStaff = new StaffProfile { UserId = 1, EmployeeCode = "ADM001", FullName = "Quản trị viên", EmploymentStatus = "Active" };
+        db.UserAccounts.Add(adminUser);
+        db.StaffProfiles.Add(adminStaff);
 
         // Appointment
         var appointment = new Appointment
@@ -464,5 +492,336 @@ public class PostCareServiceTests
 
         Assert.False(res.Success);
         Assert.Contains("APT-503", res.Message);
+    }
+
+    // ==========================================
+    // ROUND 3 OBJECT-LEVEL AUTHORIZATION TESTS (IDOR / BOLA)
+    // ==========================================
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_PatientRole_OtherPatientFollowUp_FailsWithForbidden()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 905,
+            TreatmentSessionId = 401, // belongs to patient 10
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Patient 99 tries to update Patient 10's follow up
+        var res = await service.UpdateFollowUpStatusAsync(99, 905, new UpdateFollowUpStatusRequest
+        {
+            Status = "Cancelled",
+            Note = "Unauthorized attempt"
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("bệnh nhân khác", res.Message);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_PatientRole_CannotMarkCompletedOrConfirmed()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 906,
+            TreatmentSessionId = 401, // belongs to patient 10
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Patient 10 tries to mark Completed
+        var resComplete = await service.UpdateFollowUpStatusAsync(10, 906, new UpdateFollowUpStatusRequest
+        {
+            Status = "Completed"
+        });
+
+        Assert.False(resComplete.Success);
+        Assert.Contains("không có quyền xác nhận hoặc hoàn tất", resComplete.Message);
+
+        // Patient 10 tries to mark Confirmed
+        var resConfirm = await service.UpdateFollowUpStatusAsync(10, 906, new UpdateFollowUpStatusRequest
+        {
+            Status = "Confirmed"
+        });
+
+        Assert.False(resConfirm.Success);
+        Assert.Contains("không có quyền xác nhận hoặc hoàn tất", resConfirm.Message);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_PatientRole_CannotDirectlyReschedule()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 907,
+            TreatmentSessionId = 401, // belongs to patient 10
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Patient 10 tries to directly set NewRecommendedDate
+        var res = await service.UpdateFollowUpStatusAsync(10, 907, new UpdateFollowUpStatusRequest
+        {
+            NewRecommendedDate = DateTime.UtcNow.AddDays(20)
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("trực tiếp đổi ngày", res.Message);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_DentistRole_OtherDentistFollowUp_Fails()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 908,
+            TreatmentSessionId = 401, // performed by Dentist 20 in Dept 1
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Dentist 30 (in Dept 2) tries to modify Dentist 20's follow up
+        var res = await service.UpdateFollowUpStatusAsync(30, 908, new UpdateFollowUpStatusRequest
+        {
+            Note = "Unauthorized dentist update"
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("không do mình điều trị hoặc không thuộc chuyên khoa", res.Message);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_DentistRole_TreatingDentist_Succeeds()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 909,
+            TreatmentSessionId = 401, // performed by Dentist 20
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Dentist 20 (treating dentist) updates note
+        var res = await service.UpdateFollowUpStatusAsync(20, 909, new UpdateFollowUpStatusRequest
+        {
+            Note = "Dặn dò bệnh nhân súc miệng nước muối ấm"
+        });
+
+        Assert.True(res.Success);
+        Assert.Contains("Dặn dò bệnh nhân súc miệng nước muối ấm", res.Data!.Reason);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_DeptManager_ManagingDepartment_Succeeds()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 910,
+            TreatmentSessionId = 401, // Dept 1
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Manager of Dept 1 (UserId 101) updates follow up
+        var res = await service.UpdateFollowUpStatusAsync(101, 910, new UpdateFollowUpStatusRequest
+        {
+            Note = "Trưởng khoa ghi chú theo dõi"
+        });
+
+        Assert.True(res.Success);
+        Assert.Contains("Trưởng khoa ghi chú theo dõi", res.Data!.Reason);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_DeptManager_OtherDepartment_Fails()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 911,
+            TreatmentSessionId = 401, // Dept 1
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Manager of Dept 2 (UserId 102) tries to modify Dept 1's follow up
+        var res = await service.UpdateFollowUpStatusAsync(102, 911, new UpdateFollowUpStatusRequest
+        {
+            Note = "Cross-dept unauthorized update"
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("không thuộc chuyên khoa quản lý", res.Message);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_InvalidStatusTransition_CompletedRecord_Fails()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 912,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Completed"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Receptionist 50 tries to set status back to Pending on Completed follow up
+        var res = await service.UpdateFollowUpStatusAsync(50, 912, new UpdateFollowUpStatusRequest
+        {
+            Status = "Pending"
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("đã hoàn tất", res.Message);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_InvalidStatusTransition_CancelledRecord_Fails()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 913,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Cancelled"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        // Receptionist 50 tries to set status to Confirmed on Cancelled follow up
+        var res = await service.UpdateFollowUpStatusAsync(50, 913, new UpdateFollowUpStatusRequest
+        {
+            Status = "Confirmed"
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("đã bị hủy", res.Message);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_InvalidStatusEnum_Fails()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 914,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        var res = await service.UpdateFollowUpStatusAsync(50, 914, new UpdateFollowUpStatusRequest
+        {
+            Status = "NonExistentStatus"
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("không hợp lệ", res.Message);
+    }
+
+    [Fact]
+    public async Task UpdateFollowUpStatus_UnknownCaller_Fails()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDbContext(dbName);
+        await SeedPostCareDataAsync(db);
+
+        var followUp = new FollowUpSchedule
+        {
+            FollowUpId = 915,
+            TreatmentSessionId = 401,
+            RecommendedDate = DateTime.UtcNow.AddDays(7),
+            Status = "Pending"
+        };
+        db.FollowUpSchedules.Add(followUp);
+        await db.SaveChangesAsync();
+
+        var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
+
+        var res = await service.UpdateFollowUpStatusAsync(99999, 915, new UpdateFollowUpStatusRequest
+        {
+            Status = "Confirmed"
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("Người dùng không tồn tại", res.Message);
     }
 }
