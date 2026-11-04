@@ -526,6 +526,12 @@ public class DentistMedicalRecordController : Controller
             return RedirectToAction(nameof(Index), new { patientId = request.PatientUserId });
         }
 
+        if (_postCareApi == null)
+        {
+            TempData["ErrorMessage"] = "Dịch vụ tái khám chưa được cấu hình.";
+            return RedirectToAction(nameof(Index), new { patientId = request.PatientUserId });
+        }
+
         var result = await _postCareApi.DoctorBookFollowUpAsync(request);
         if (result.IsSuccess)
         {
@@ -546,6 +552,11 @@ public class DentistMedicalRecordController : Controller
         if (!long.TryParse(userIdClaim, out var doctorUserId) || doctorUserId <= 0)
         {
             return BadRequest(new { success = false, message = "Không xác định được danh tính bác sĩ." });
+        }
+
+        if (_postCareApi == null)
+        {
+            return BadRequest(new { success = false, message = "Dịch vụ tái khám chưa được cấu hình." });
         }
 
         var result = await _postCareApi.GetFollowUpAvailableSlotsAsync(doctorUserId, date, durationMinutes);
