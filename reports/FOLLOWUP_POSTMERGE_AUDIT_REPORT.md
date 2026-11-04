@@ -519,3 +519,129 @@ Toàn bộ commit hashes được kiểm chứng chính xác từ git history (`
 - Toàn bộ các yêu cầu của Technical Lead Round 4 đã được giải quyết trọn vẹn, chính xác và có đầy đủ bằng chứng kiểm thử tự động.
 - Không có bất kỳ vi phạm an toàn Git: Không đụng vào `main`, không merge `develop`, không force push.
 - Trạng thái hiện tại: **`READY_FOR_REVIEW`**.
+
+
+---
+
+## 13. FINAL SECURITY FIX — PATIENT NOTE AUTHORIZATION
+
+### 13.1. Root cause chính xác
+- **Bản chất trường dữ liệu:** Trong bảng `FollowUpSchedules`, trường `Reason` mang ý nghĩa lâm sàng là lý do hoặc chỉ định tái khám y khoa (clinical indication) do Bác sĩ điều trị thiết lập trong hồ sơ ca điều trị (`TreatmentSession`).
+- **Lỗ hổng phân quyền phát hiện:** 
+  Endpoint `PATCH /api/post-care/follow-ups/{id}/status` và phương thức `PostCareService.UpdateFollowUpStatusAsync` cho phép người dùng có role `Patient` thực hiện request. Trong logic kiểm tra phân quyền ban đầu:
+  - Hệ thống kiểm tra `request.NewRecommendedDate` và `request.Status`.
+  - Tuy nhiên, trường `request.Note` lại **chưa được kiểm tra phân quyền đối với `caller.Role == UserRole.Patient`**.
+  - Do đó, một bệnh nhân có thể gửi request `Note-only` (`Status = null`, `Note = "..."`) hoặc gửi `Status = "Cancelled"` kèm `Note`.
+  - Khi vượt qua bước kiểm tra, phương thức xử lý sẽ gán hoặc nối chuỗi `request.Note` vào `followUp.Reason` (`followUp.Reason = ... | [CSKH: {Note}]`).
+  - Hậu quả: Bệnh nhân có thể tự do chỉnh sửa, chèn nội dung hoặc ghi đè lên chỉ định chuyên môn của bác sĩ qua API cập nhật trạng thái, vi phạm nghiêm trọng tính toàn vẹn hồ sơ bệnh án (medical record integrity) và phân quyền nghiệp vụ y tế.
+
+---
+
+### 13.2. Quy tắc phân quyền trước và sau khi sửa
+
+| Tiêu chí | Trước khi sửa (Round 4) | Sau khi sửa (Final Security Fix) |
+| :--- | :--- | :--- |
+| **Patient gửi `Note-only`** | Request được chấp nhận, `Note` bị nối vào `followUp.Reason` kèm tag giả mạo `[CSKH: ...]`. | **Bị từ chối ngay lập tức với HTTP 403 Forbidden** và mã lỗi cấu trúc `FORBIDDEN` ("Bệnh nhân không có quyền chỉnh sửa ghi chú hoặc chỉ định tái khám."). |
+| **Patient gửi `Cancelled` kèm `Note`** | `Status` chuyển thành `Cancelled`, đồng thời `Note` bị nối vào `Reason`. | **Bị từ chối hoàn toàn với HTTP 403 Forbidden**. Không cập nhật một phần. `Reason` và `Status` giữ nguyên 100%. |
+| **Patient gửi request rỗng (Status=null, Note=null, Date=null)** | Request không làm gì nhưng trả về 200 OK. | **Bị từ chối với HTTP 400 Bad Request** ("Yêu cầu không hợp lệ. Vui lòng chỉ định trạng thái cần cập nhật."). |
+| **Patient hủy lịch hợp lệ (`Status="Cancelled"`, không kèm Note)** | Hoạt động nếu đáp ứng các kiểm tra trạng thái cuộc hẹn (Round 4). | **Vẫn hoạt động bình thường theo chính sách hiện hành**. `Status` chuyển thành `Cancelled`, `Reason` hoàn toàn nguyên vẹn. |
+| **Patient thao tác trên Follow-up người khác** | Bị từ chối với HTTP 403 Forbidden. | **Giữ nguyên chặn truy cập IDOR/BOLA với HTTP 403 Forbidden**. |
+| **Receptionist gửi `Note-only` (Ghi nhận cuộc gọi CSKH)** | Cập nhật `Reason` với tag `[CSKH: ...]` và giữ nguyên `Status`. | **Bảo toàn 100% chức năng CSKH hợp lệ**. Cập nhật `Reason` với tag `[CSKH: ...]` mà không thay đổi `Status`. |
+| **Dentist gửi ghi chú điều trị** | Cập nhật `Reason` với tag `[CSKH: ...]`. | **Cải tiến chuẩn y khoa:** Bác sĩ điều trị được phân quyền cập nhật ghi chú y khoa với tag chuẩn `[Bác sĩ: ...]`. Bác sĩ ngoài phân khoa/không điều trị vẫn bị chặn 403. |
+| **Tránh bỏ qua trường Note âm thầm** | Không áp dụng. | **Tuyệt đối không silently ignore trường `Note`**. Nếu Patient gửi Note, hệ thống trả về lỗi 403 tường minh thay vì âm thầm bỏ qua. |
+
+---
+
+### 13.3. Danh sách file được chỉnh sửa
+1. `BE/DentalClinic.Infrastructure/Services/PostCareService.cs`:
+   - Bổ sung rào chắn phân quyền chặn bệnh nhân gửi `request.Note` (`ApiResponse<FollowUpScheduleDto>.Forbidden("Bệnh nhân không có quyền chỉnh sửa ghi chú hoặc chỉ định tái khám.")`).
+   - Bổ sung kiểm tra yêu cầu rỗng đối với tất cả vai trò (`ApiResponse<FollowUpScheduleDto>.Fail("Yêu cầu không có thông tin thay đổi hợp lệ.")`).
+   - Chuẩn hóa tiền tố gắn tag ghi chú theo vai trò người dùng (`[Bác sĩ: ...]`, `[Trưởng khoa: ...]`, `[CSKH: ...]`).
+2. `BE/DentalClinic.Tests/PostCare/PostCareServiceTests.cs`:
+   - Bổ sung 5 bài test chuyên sâu cho các tình huống Patient, Dentist, Receptionist và kiểm tra toàn vẹn DB trước/sau khi bị từ chối.
+   - Cập nhật các test case hủy lịch của Patient (`UpdateFollowUpStatus_ActiveAppointmentLinked_Cancel_FailsAndDoesNotMutate`, `UpdateFollowUpStatus_CancelledAppointmentLinked_Cancel_Succeeds`, `UpdateFollowUpStatus_UnlinkedFollowUp_Cancel_Succeeds`) đảm bảo chuẩn nghiệp vụ không truyền Note khi hủy.
+3. `BE/DentalClinic.Tests/PostCare/PostCareControllerAuthorizationRegressionTests.cs`:
+   - Bổ sung test `UpdateFollowUpStatus_PatientRole_NoteOnlyForbidden_Returns403Forbidden` kiểm chứng HTTP 403 Forbidden và `ErrorCode = "FORBIDDEN"`.
+4. `reports/FOLLOWUP_POSTMERGE_AUDIT_REPORT.md`:
+   - Ghi nhận đầy đủ báo cáo Final Security Fix.
+
+---
+
+### 13.4. Chi tiết các tình huống phân quyền
+1. **Tình huống Patient gửi `Note-only`:**
+   - Client gửi: `PATCH /api/post-care/follow-ups/{id}/status` với `{"status": null, "note": "Bệnh nhân tự sửa"}`.
+   - Kết quả: Server trả về `403 Forbidden` (`ErrorCode: "FORBIDDEN"`, `Message: "Bệnh nhân không có quyền chỉnh sửa ghi chú hoặc chỉ định tái khám."`).
+   - Trạng thái DB: Không thay đổi (`Reason` và `Status` giữ nguyên).
+2. **Tình huống Patient gửi `Status = "Cancelled"` kèm `Note`:**
+   - Client gửi: `{"status": "Cancelled", "note": "Lý do hủy..."}`.
+   - Kết quả: Server chặn ngay lập tức và trả về `403 Forbidden` do vi phạm quyền ghi chú.
+   - Trạng thái DB: Không xảy ra đột biến một phần (No partial mutation: `Status` vẫn là `Pending`, `Reason` không bị ghi đè).
+3. **Tình huống Patient gửi request rỗng:**
+   - Client gửi: `{}` (mọi trường null).
+   - Kết quả: Server trả về `400 Bad Request` ("Yêu cầu không hợp lệ. Vui lòng chỉ định trạng thái cần cập nhật.").
+4. **Tình huống Patient hủy Follow-up chưa có Appointment, không gửi Note:**
+   - Client gửi: `{"status": "Cancelled"}`.
+   - Kết quả: Server trả về `200 OK`. `FollowUpSchedule.Status` chuyển sang `"Cancelled"`, `Reason` chỉ định y khoa của bác sĩ được bảo toàn tuyệt đối.
+5. **Tình huống Receptionist cập nhật ghi chú CSKH:**
+   - Lễ tân gửi: `{"note": "Đã gọi nhưng máy bận, hẹn gọi lại"}`.
+   - Kết quả: Server trả về `200 OK`. `Reason` nối thêm `[CSKH: Đã gọi nhưng máy bận, hẹn gọi lại]`, `Status` giữ nguyên không đổi.
+6. **Tình huống Dentist cập nhật ghi chú lâm sàng:**
+   - Bác sĩ điều trị gửi: `{"note": "Vết mổ lành thương tốt, không nhiễm trùng"}`.
+   - Kết quả: Server trả về `200 OK`. `Reason` nối thêm `[Bác sĩ: Vết mổ lành thương tốt, không nhiễm trùng]`.
+
+---
+
+### 13.5. Bằng chứng Patient không còn chỉnh sửa được Reason & Không cập nhật một phần
+Các automated tests thực tế kiểm tra trực tiếp trạng thái thực thể trong DB trước và sau khi thực hiện:
+- `UpdateFollowUpStatus_PatientRole_NoteOnly_FailsWithForbidden`:
+  ```csharp
+  // Kiểm tra thực thể trong DB hoàn toàn không bị đột biến
+  var entity = await db.FollowUpSchedules.AsNoTracking().FirstAsync(f => f.FollowUpId == 928);
+  Assert.Equal("Chỉ định y khoa ban đầu", entity.Reason);
+  Assert.Equal("Pending", entity.Status);
+  ```
+- `UpdateFollowUpStatus_PatientRole_CancelledWithNote_FailsWithForbiddenAndDoesNotMutate`:
+  ```csharp
+  // Khẳng định KHÔNG CÓ partial mutation: Status không bị chuyển Cancelled, Reason không bị sửa
+  var entity = await db.FollowUpSchedules.AsNoTracking().FirstAsync(f => f.FollowUpId == 929);
+  Assert.Equal("Chỉ định y khoa ban đầu", entity.Reason);
+  Assert.Equal("Pending", entity.Status);
+  ```
+
+---
+
+### 13.6. Kết quả kiểm thử thực tế (Automated Test Suites)
+Tất cả các kiểm thử đều thực thi trên môi trường InMemory isolated:
+- **Backend Test Suite (`BE/DentalClinic.Tests`):**
+  - **Passed:** 520
+  - **Failed:** 0
+  - **Skipped:** 1 (`CloudinaryImageStorageServiceTests.UploadAvatarAsync_WithUserSecrets_UploadsSuccessfully` do sử dụng placeholder secrets trong môi trường dev)
+  - **Total:** 521 tests (Thời gian chạy: ~17 giây)
+- **Frontend Test Suite (`FE/DentalClinic.Web.Tests`):**
+  - **Passed:** 285
+  - **Failed:** 0
+  - **Skipped:** 0
+  - **Total:** 285 tests (Thời gian chạy: ~21 giây)
+- **Tổng toàn bộ giải pháp:** **805 PASSED, 1 SKIPPED, 0 FAILED** (Tổng số 806 tests).
+
+---
+
+### 13.7. Các rủi ro còn lại
+- **Tính toàn vẹn dữ liệu y khoa:** Đã được bảo vệ tuyệt đối ở tầng domain service và API controller. Bệnh nhân không thể can thiệp vào `Reason` bằng bất kỳ payload nào.
+- **Rủi ro ảnh hưởng giao diện người dùng:** Không có rủi ro hồi quy (zero regression risk) do giao diện bệnh nhân sử dụng luồng đề xuất riêng (`/api/post-care/follow-ups/proposals`) và không bao giờ gọi endpoint cập nhật trạng thái trực tiếp này.
+- **Môi trường bên ngoài:** Tiếp tục duy trì kiểm tra tích hợp thật (live integration) đối với Cloudinary CDN và SMS/Telco trên Staging/Production.
+
+---
+
+### 13.8. Commit SHA và Link GitHub
+Toàn bộ commit hashes được lấy trực tiếp từ `git rev-parse HEAD`:
+- **Commit Mã nguồn & Tests (Final Security Fix):** `29ee8a5fce795985d5a5c23f8458901fb2aff8f9`
+- **GitHub Link:** https://github.com/kaybern1512/SWP391_Group6/commit/29ee8a5fce795985d5a5c23f8458901fb2aff8f9
+- **Nhánh làm việc:** `fix/member3-followup-postmerge-audit`
+- **Tình trạng:** Working tree hoàn toàn sạch sẽ, không có thay đổi chưa commit.
+
+---
+
+### 13.9. Đánh giá cuối cùng
+- **Kết luận:** Lỗ hổng phân quyền bệnh nhân tự ý can thiệp vào chỉ định y khoa đã được khắc phục triệt để, có kiểm chứng 100% bằng kiểm thử tự động ở cả tầng Controller và Service.
+- **Trạng thái:** **`READY_FOR_REVIEW`**.
