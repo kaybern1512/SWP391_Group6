@@ -661,3 +661,108 @@ Mọi lo ngại về việc parse `LIKE '%[Status]%'` và nguy cơ xóa nhầm c
 
 **TRẠNG THÁI HIỆN TẠI:**
 ### **`READY_FOR_REVIEW`**
+
+
+---
+
+# 17. BỔ SUNG AUDIT AN TOÀN SCRIPT KIỂM THỬ QA & ĐỐI SOÁT TEST COUNT CHÍNH XÁC
+
+**Ngày thực hiện:** 2026-11-05  
+**Kỹ sư thực hiện:** Senior .NET 8 / SQL Server / QA Integration Engineer  
+**Technical Lead Reviewer:** ChatGPT  
+**Reviewed Commit:** `98967d5160092b2d1d4ed83f5ff6afb8ecd29573`  
+
+---
+
+### 17.1. Khắc phục Nguy cơ Xóa Nhầm Database trong Script QA (`Verify_Migration_Regression_Cases.ps1`)
+
+Kỹ sư đã tái cấu trúc toàn diện cơ chế an toàn trong script `DB/migrations/Verify_Migration_Regression_Cases.ps1` nhằm ngăn chặn tuyệt đối nguy cơ xóa nhầm cơ sở dữ liệu:
+
+1. **Loại bỏ Hoàn toàn Lệnh Cưỡng chế `SINGLE_USER WITH ROLLBACK IMMEDIATE`:**
+   - Script không bao giờ chạy lệnh ngắt kết nối cưỡng chế trên bất kỳ database nào chưa được chứng minh thuộc sở hữu của chính lần chạy kiểm thử.
+2. **Sinh Tên Database Tạm Duy Nhất cho Mỗi Lần Chạy:**
+   - Định dạng tên: `DentalClinic_QA_Verify_run_<yyyyMMdd_HHmmss>_<guid8>`.
+   - Mỗi lần chạy hoàn toàn độc lập, không dùng lại tên cố định, không xung đột tài nguyên.
+3. **Quy chuẩn Đặt Tên & Danh Sách Đen (Blacklist):**
+   - Tên database bắt buộc phải khớp pattern regex: `^DentalClinic_(QA_Verify|Disposable_Verify)_[a-zA-Z0-9_]+$`.
+   - Danh sách đen tuyệt đối ngăn chặn người dùng vô tình hay cố ý truyền tên database production/dùng chung:
+     `DentalClinicManagementDB`, `DentalClinicManagementDB_Test`, `DentalClinic_FollowUp_QA`, `DentalClinic_QA`, `master`, `tempdb`, `model`, `msdb`, v.v.
+   - Nếu vi phạm: Script ném lỗi `SECURITY VIOLATION` và dừng ngay lập tức với Exit Code = 1.
+4. **Kiểm tra Tồn tại Trước khi Tạo (Pre-Existence Guard):**
+   - Trước khi tạo database mới, script kiểm tra `DB_ID()`. Nếu database đã tồn tại từ trước: Script hủy bỏ ngay (`SAFETY ABORT`) và tuyệt đối không chạm vào database đó.
+5. **Chứng nhận Quyền Sở hữu (Ownership Provenance Tracking):**
+   - Ngay sau khi `CREATE DATABASE`, script tạo và insert một bản ghi vào bảng chứng nhận:
+     `[dbo].[__QA_TestRunOwnership] ([RunId], [CreatedAt], [ScriptSignature], [HostName], [UserName])`.
+6. **Xác minh Sở hữu Trước khi Dọn dẹp & Dọn dẹp Không Cưỡng chế:**
+   - Trước khi `DROP DATABASE`, script truy vấn kiểm tra bảng `__QA_TestRunOwnership` với đúng `RunId`.
+   - Nếu xác minh thất bại hoặc database không khớp: Script từ chối xóa và in cảnh báo.
+   - Thao tác drop sử dụng `DROP DATABASE` thông thường; nếu gặp lỗi (ví dụ còn kết nối mở), script giữ nguyên database để DBA kiểm tra thay vì cố cưỡng chế xóa.
+
+---
+
+### 17.2. Chuyển Đổi Sang Real Assertions (Assert-Condition)
+
+Toàn bộ các câu lệnh kiểm tra trước đây (`Write-Host "... -match '1'"`) đã được chuyển đổi thành hàm assertion thực thụ `Assert-Condition`:
+- Nếu bất kỳ điều kiện nào không thỏa mãn, script lập tức in `[ASSERTION FAILED]`, ném ngoại lệ dừng thực thi và trả về **Exit Code khác 0**.
+- Tuyệt đối không in `ALL REGRESSION TESTS PASSED` nếu có bất kỳ assertion nào thất bại.
+
+Các điều kiện được bảo đảm qua assertions:
+- Bảng đại diện và constraint ban đầu được tạo thành công.
+- Migration lần 1 thành công (Exit Code 0).
+- Constraint `CK_FollowUpSchedules_Status` tồn tại, active (`is_disabled = 0`) và trusted (`is_not_trusted = 0`).
+- Constraint Status cũ bị xóa/thay thế hoàn toàn (`count = 0`).
+- Các constraint `Reason`, `RecommendedDate`, và `LiteralStatus` được bảo toàn nguyên vẹn (`count = 1`).
+- Migration lần 2 (Idempotency) thành công (Exit Code 0) và không sinh duplicate.
+- Multi-column constraint gây Safe Abort chính xác (Exit Code 1, thông báo lỗi chuẩn).
+- Rollback Safe Abort khi có bản ghi `Confirmed` (Exit Code 1, thông báo bảo vệ dữ liệu lâm sàng).
+- Clean Rollback sau khi giải quyết dữ liệu lâm sàng thành công (Exit Code 0), phục hồi 4 status cũ và bảo toàn tất cả constraint unrelated.
+
+---
+
+### 17.3. Kiểm thử An toàn Phủ định (Negative Safety Tests)
+
+Hàm `Test-NegativeSafetyGuards` được tự động thực thi ngay đầu mỗi lần chạy script (hoặc chạy độc lập qua switch `-RunSafetyGuardVerification`), chứng minh hệ thống tự vệ thành công trước các kịch bản nguy hiểm:
+
+| Kịch bản Test An toàn | Đầu vào Mô phỏng | Phản ứng của Script | Kết quả |
+| :--- | :--- | :--- | :---: |
+| Truyền database production | `DentalClinicManagementDB` | Ném lỗi `SECURITY VIOLATION: Database name is blacklisted` | **PASS** |
+| Truyền database hệ thống | `master` | Ném lỗi `SECURITY VIOLATION: Database name is blacklisted` | **PASS** |
+| Truyền tên không đúng chuẩn | `MyRandomTempDb_123` | Ném lỗi `SECURITY VIOLATION: does not match allowed pattern` | **PASS** |
+| Database đã tồn tại từ trước | Database có sẵn trên server | Phát hiện qua `DB_ID()`, ném lỗi `SAFETY ABORT` và không drop | **PASS** |
+| Assertion thất bại | Điều kiện `$false` | `Assert-Condition` dừng script lập tức với Exit Code khác 0 | **PASS** |
+
+---
+
+### 17.4. Phân Định Rõ Ràng Phạm Vi Schema và Đối Soát Số Lượng Test (Test Reconciliation)
+
+#### 1. Làm rõ Phạm vi Schema của Script Tái hiện:
+- Script `Verify_Migration_Regression_Cases.ps1` sử dụng **Schema Đại diện (Representative Schema)** gồm 3 bảng trọng tâm:
+  - `FollowUpSchedules`: Chứa toàn bộ các cột liên quan trực tiếp đến nghiệp vụ tái khám (`FollowUpId`, `AppointmentId`, `RecommendedDate`, `Reason`, `Status`) với kiểu dữ liệu và ràng buộc chuẩn 100% như schema gốc `DentalClinic_Full_Database_And_Data.sql`.
+  - `Appointments`: Phục vụ kiểm thử suy diễn trạng thái lâm sàng (`Status`).
+  - `AuditLogs`: Phục vụ kiểm thử bảo toàn và tái dựng provenance dữ liệu cuộc gọi.
+- Việc sử dụng schema đại diện cho phép kiểm thử chuyên sâu, cô lập và tái hiện tức thì các trường hợp biên của migration DDL/DML mà không cần tạo hàng chục bảng không liên quan khác, đồng thời bảo đảm an toàn tuyệt đối cho môi trường SQL Server.
+
+#### 2. Đối soát Số lượng Test Từng Nhóm (Không Đếm Trùng Lặp):
+
+| Nhóm Kiểm thử | PASSED | SKIPPED | FAILED | TỔNG SỐ | Ghi chú |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Nhóm Chức năng Follow-Up** | **103** | **0** | **0** | **103** | 84 Scheduling, 4 Reminder, 2 E2E Integration, 13 SQL Server Integration. |
+| **Nhóm Các Module Khác** | **437** | **1** | **0** | **438** | 1 Skipped: `CloudinaryImageStorageServiceTests.UploadAvatarAsync_WithUserSecrets_UploadsSuccessfully` (thiếu dev secret key Cloudinary). |
+| **TỔNG CỘNG TOÀN HỆ THỐNG BE** | **540** | **1** | **0** | **541** | Khớp chính xác 100% với kết quả VSTest / xUnit runner. |
+
+#### 3. Báo cáo Trạng thái Frontend Test Suite:
+- **`DentalClinic.Web.Tests.csproj`:** **`BLOCKED / NOT_RUN`**.
+- Do lỗi biên dịch tiền định `CS1503` trong `ReceptionistBillingControllerTests.cs` (lines 131, 158) từ commit Billing `68e3221` trên nhánh `develop`. Nhóm Follow-Up tuân thủ nguyên tắc không tự ý can thiệp vào code phân hệ khác.
+
+---
+
+### 17.5. Kết quả Kiểm thử Hồi quy Cuối cùng (Final Verification)
+
+- **Backend Build:** `0 Error(s)`, `13 Warning(s)`.
+- **Backend Tests (`DentalClinic.Tests.csproj`):** `540 Passed, 1 Skipped, 0 Failed, Total: 541`.
+- **SQL Server Integration Tests:** `13/13 Passed`.
+- **Regression Suite (`Verify_Migration_Regression_Cases.ps1`):** `100% Assertions Passed, Exit Code: 0`.
+- **Database Server State:** Toàn bộ 10 database hiện hữu trên SQL Server không bị thay đổi hoặc xóa nhầm.
+
+**TRẠNG THÁI CUỐI CÙNG:**
+### **`READY_FOR_REVIEW`**
