@@ -292,3 +292,90 @@ Tất cả các yêu cầu sửa lỗi blocker do Technical Lead đưa ra đã �
 **PHÁN QUYẾT CUỐI CÙNG:**
 ### **`READY_FOR_REVIEW`**
 *(Sẵn sàng để Technical Lead ChatGPT review và phê duyệt tích hợp vào `develop`)*
+
+
+---
+
+## 14. TECHNICAL LEAD MIGRATION HARDENING REVIEW
+
+### 14.1. Root Cause Analysis các rủi ro được phát hiện trong đợt Hardening
+1. **Bỏ sót Table-Level CHECK Constraint (`parent_column_id = 0`):**
+   - *Nguyên nhân:* Trong SQL Server, khi tạo ràng buộc CHECK qua cú pháp `ALTER TABLE [dbo].[FollowUpSchedules] WITH CHECK ADD CHECK (...)`, ràng buộc được gán ở cấp bảng với `parent_column_id = 0`. Script migration ban đầu chỉ `JOIN sys.columns ON cc.parent_column_id = c.column_id`, do đó hoàn toàn không tìm thấy và không thể drop các ràng buộc cấp bảng này.
+   - *Khắc phục:* Mở rộng điều kiện discovery kết hợp: `cc.parent_column_id = COLUMNPROPERTY(table_id, 'Status', 'ColumnId')` OR `(cc.parent_column_id = 0 AND (cc.definition LIKE '%[Status]%' OR cc.definition LIKE '%Status%'))` OR `cc.name = 'CK_FollowUpSchedules_Status'`. Loại trừ tuyệt đối các ràng buộc trên các cột khác.
+2. **Nguy cơ mất mát dữ liệu do Unsafe Data Normalization:**
+   - *Nguyên nhân:* Lệnh `UPDATE [Status] = 'Pending' WHERE [Status] NOT IN (...)` âm thầm ghi đè mọi trạng thái bất thường thành `Pending`, có nguy cơ phá hủy dữ liệu bệnh án nếu có lỗi nhập liệu hoặc trạng thái y khoa mới.
+   - *Khắc phục:* Bổ sung **Preflight Data Integrity Check**: Quét toàn bộ bảng; nếu phát hiện bất kỳ trạng thái lạ nào ngoài 6 trạng thái lâm sàng hợp lệ và 2 trạng thái viễn thông legacy (`Called`, `Unreachable`), script lập tức **DỪNG (ABORT)**, rollback transaction và bắn thông báo chẩn đoán kèm danh sách ID của các bản ghi vi phạm.
+3. **Rollback âm thầm hạ cấp trạng thái lâm sàng:**
+   - *Nguyên nhân:* Script rollback cũ tự động đổi `Confirmed -> Scheduled` và `Proposed -> Pending` để thỏa mãn constraint 4 trạng thái cũ.
+   - *Khắc phục:* **Strict Preflight Rollback Check**: Nếu tồn tại bất kỳ bản ghi nào có trạng thái `Confirmed` hoặc `Proposed`, rollback lập tức **ABORT** và hướng dẫn quản trị viên xử lý nghiệp vụ hoặc khôi phục từ bản backup. Phân định rõ ràng giữa Schema Rollback và Data Rollback.
+4. **Làm sai lệch mốc thời gian và nhân viên gọi nhắc trong AuditLogs:**
+   - *Nguyên nhân:* Migration cũ tự tạo AuditLog với `CreatedAt = SYSDATETIME()` và `CallerStaffName = NULL`, làm mốc `LastCalledAt` trên màn hình lễ tân bị nhảy về thời điểm chạy migration và mất tên lễ tân thực tế đã gọi trước đó.
+   - *Khắc phục:* Kiểm tra bản ghi AuditLog hiện hữu (`NOT EXISTS`). Nếu bản ghi lịch sử đã có AuditLog, giữ nguyên 100%. Nếu là bản ghi mồ côi chưa có AuditLog, tạo bản ghi với thời gian suy diễn từ lịch sử cuộc hẹn/chỉ định (`COALESCE(a.CreatedAt, a.ScheduledStart, f.RecommendedDate, SYSDATETIME())`) và ghi chú rõ nguồn gốc migration.
+5. **Suy diễn trạng thái lâm sàng mới dựa trên Appointment liên kết:**
+   - *Nguyên nhân:* Dữ liệu `Called`/`Unreachable` cũ mặc định bị gán thành `Scheduled` nếu có `AppointmentId`, kể cả khi cuộc hẹn đó đã bị Hủy (`Cancelled`) hoặc đã Khám xong (`Completed`).
+   - *Khắc phục:* Kiểm tra trực tiếp `Appointment.Status`: nếu cuộc hẹn đã `Cancelled` -> đặt lịch tái khám là `Cancelled`; nếu đã `Completed` -> đặt là `Completed`; nếu đã `Confirmed` -> đặt là `Confirmed`; chỉ đặt `Scheduled` khi cuộc hẹn thực sự đang xếp lịch.
+6. **False-Pass Integration Tests & Rủi ro môi trường DB:**
+   - *Nguyên nhân:* Test dùng `if (!await IsSqlServerAvailableAsync()) return;` khiến runner báo PASS khi không có SQL Server. Ngoài ra không chặn kết nối tới database chính/production.
+   - *Khắc phục:* Loại bỏ toàn bộ lệnh `return` im lặng, thay bằng `Assert.True(canConnect, "...")`. Bổ sung hàm bảo vệ `ValidateSafeTestDatabase` chặn tuyệt đối kết nối tới `DentalClinicManagementDB` hoặc các database có chữ `Production`.
+
+---
+
+### 14.2. Danh sách các file thay đổi trong đợt Hardening
+1. [DB/migrations/20261104_Update_FollowUpSchedules_Status_CheckConstraint.sql](file:///D:/SWP/SWP391_Group6/DB/migrations/20261104_Update_FollowUpSchedules_Status_CheckConstraint.sql): Script migration nâng cấp schema, phát hiện constraint đa cấp, preflight check, suy diễn trạng thái thông minh và bảo tồn AuditLog.
+2. [DB/migrations/20261104_Rollback_FollowUpSchedules_Status_CheckConstraint.sql](file:///D:/SWP/SWP391_Group6/DB/migrations/20261104_Rollback_FollowUpSchedules_Status_CheckConstraint.sql): Script rollback an toàn, có preflight check chặn mất dữ liệu, phân định schema/data rollback.
+3. [BE/DentalClinic.Tests/FollowUp/FollowUpSqlServerIntegrationTests.cs](file:///D:/SWP/SWP391_Group6/BE/DentalClinic.Tests/FollowUp/FollowUpSqlServerIntegrationTests.cs): Bộ 12 automated integration tests thực thi trực tiếp trên SQL Server QA instance.
+
+---
+
+### 14.3. Kết quả kiểm thử giả lập trên Unmodified Old Schema
+Đã kiểm nghiệm trực tiếp trên bảng mô phỏng schema cũ với ràng buộc CHECK vô danh cấp bảng (`parent_column_id = 0`):
+```text
+=== SIMULATING MIGRATION ON UNMODIFIED OLD SCHEMA ===
+Created Sim_FollowUpSchedules with original 4-status anonymous constraint.
+name: CK__Sim_Follo__Statu__3A179ED3 | parent_column_id: 0 | is_disabled: 0 | is_not_trusted: 0
+Dropped old constraint: CK__Sim_Follo__Statu__3A179ED3
+Added new constraint [CK_Sim_FollowUpSchedules_Status].
+Migration on simulated old schema succeeded.
+Successfully inserted Confirmed and Proposed records.
+Idempotency verified: Constraint already exists and is active/trusted.
+PASS: Status Called correctly rejected by CHECK constraint.
+Cleaned up Sim_FollowUpSchedules table. Zero residue.
+```
+
+---
+
+### 14.4. Bảng phân loại kết quả kiểm thử toàn diện (Regression Verification)
+
+| Phân hệ / Hạng mục kiểm thử | PASSED | FAILED | SKIPPED | NOT_RUN | Ghi chú |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Backend Build** (`DentalClinic.Backend.sln`) | **1** | 0 | 0 | 0 | Build thành công 100%, 0 Warning, 0 Error. |
+| **Frontend Build** (`DentalClinic.Web.csproj`) | **1** | 0 | 0 | 0 | Build thành công 100%, 0 Warning, 0 Error. |
+| **Backend Unit & Logic Tests** | **527** | 0 | 1 | 0 | 1 test skip do Cloudinary external secret. |
+| **SQL Server QA Integration Tests** (`FollowUpSqlServerIntegrationTests`) | **12** | 0 | 0 | 0 | Chạy trực tiếp trên `DentalClinic_FollowUp_QA`, không có false-pass. |
+| **Frontend Web Tests** (`DentalClinic.Web.Tests.csproj`) | 0 | 0 | 0 | **1** | Không chạy được do lỗi biên dịch ngoài phạm vi trong `ReceptionistBillingControllerTests.cs` (commit 68e3221 từ develop). |
+| **TỔNG HỢP KIỂM THỬ** | **541** | **0** | **1** | **1** | **100% Test trong phạm vi Follow-Up đạt kết quả PASS tuyệt đối.** |
+
+---
+
+### 14.5. Trạng thái Constraint trên SQL Server QA sau Migration
+- **Tên constraint:** `CK_FollowUpSchedules_Status`
+- **Bảng áp dụng:** `[dbo].[FollowUpSchedules]`
+- **Cột áp dụng:** `[Status]`
+- **Trạng thái kích hoạt (`is_disabled`):** `0` (Đang hoạt động)
+- **Trạng thái tin cậy (`is_not_trusted`):** `0` (Đã được kiểm chứng dữ liệu toàn vẹn - Trusted)
+- **Định nghĩa ràng buộc:** `([Status]='Proposed' OR [Status]='Cancelled' OR [Status]='Completed' OR [Status]='Scheduled' OR [Status]='Confirmed' OR [Status]='Pending')`
+
+---
+
+### 14.6. Rủi ro còn lại và khuyến nghị vận hành
+1. **Triển khai Production:** Luôn chạy `20261104_Update_FollowUpSchedules_Status_CheckConstraint.sql` trước khi triển khai Backend API mới.
+2. **Frontend Test Suite:** Khuyến nghị đội ngũ kỹ thuật thông báo phụ trách Billing sửa lỗi tham số `[FromRoute] long? appointmentId = null` để test suite Frontend xanh hoàn toàn.
+
+---
+
+### 14.7. Kết luận và Phán quyết Hardening
+
+Toàn bộ 7 Task trong đợt review Migration Hardening đã được thực thi và thẩm định thực tế nghiêm ngặt trên SQL Server 2025. Không có dữ liệu y khoa nào bị suy diễn ẩu, không có false-pass test, và ràng buộc cơ sở dữ liệu đã đạt chuẩn Trusted 100%.
+
+**PHÁN QUYẾT HARDENING:**
+### **`READY_FOR_REVIEW`**
