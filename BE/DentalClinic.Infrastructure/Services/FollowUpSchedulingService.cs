@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -59,6 +59,13 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             return SchedulingValidationResult.Fail(
                 SchedulingFailureReason.InvalidTimeRange,
                 "Thời lượng cuộc hẹn tái khám phải từ 10 đến 240 phút.");
+        }
+
+        if (start.Date != end.Date)
+        {
+            return SchedulingValidationResult.Fail(
+                SchedulingFailureReason.OutsideDoctorShift,
+                "Thời gian hẹn tái khám không được vượt qua các ngày làm việc khác nhau.");
         }
 
         // 2. Validate future time & minimum booking buffer (30 minutes)
@@ -394,19 +401,107 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         // 4. Concurrency Protection & Transaction
         var isRelational = _dbContext.Database.IsRelational();
         var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? lockScope = null;
         try
         {
-            var hasConflict = await HasDoctorConflictAsync(
+            var lockKeys = new[]
+            {
+                $"Dentist_{doctorUserId}",
+                $"Patient_{request.PatientUserId}"
+            };
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
+
+            // Re-check doctor conflict inside lock & transaction
+            var hasDoctorConflict = await HasDoctorConflictAsync(
                 doctorUserId,
                 request.ScheduledStart,
                 request.ScheduledEnd,
                 null,
                 ct);
 
-            if (hasConflict)
+            if (hasDoctorConflict)
             {
                 if (tx != null) await tx.RollbackAsync(ct);
-                return ApiResponse<FollowUpAppointmentDto>.Fail("Khung giờ này vừa có cuộc hẹn khác được xác nhận. Vui lòng chọn khung giờ khác.");
+                return ApiResponse<FollowUpAppointmentDto>.Fail("Khung giờ này vừa có cuộc hẹn khác được xác nhận cho Bác sĩ. Vui lòng chọn khung giờ khác.");
+            }
+
+            // Re-check patient conflict inside lock & transaction
+            var hasPatientConflict = await HasPatientConflictAsync(
+                request.PatientUserId,
+                request.ScheduledStart,
+                request.ScheduledEnd,
+                null,
+                ct);
+
+            if (hasPatientConflict)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<FollowUpAppointmentDto>.Fail("Bệnh nhân đã có một cuộc hẹn khác trùng với khung giờ này. Vui lòng chọn khung giờ khác.");
+            }
+
+            // Re-check doctor availability / leave inside lock & transaction
+            var hasLeaveConflict = await _dbContext.DentistAvailabilities
+                .AsNoTracking()
+                .AnyAsync(da => da.DentistUserId == doctorUserId &&
+                                da.AvailabilityStatus != DentistAvailabilityStatus.Available &&
+                                da.StartDateTime < request.ScheduledEnd &&
+                                (da.EndDateTime == null || da.EndDateTime > request.ScheduledStart), ct);
+
+            if (hasLeaveConflict)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<FollowUpAppointmentDto>.Fail("Bác sĩ vừa có lịch nghỉ hoặc bận đột xuất trong khoảng thời gian này.");
+            }
+
+            // Re-check doctor shift inside lock & transaction
+            var targetDateOnly = DateOnly.FromDateTime(request.ScheduledStart.Date);
+            var startTimeOnly = TimeOnly.FromDateTime(request.ScheduledStart);
+            var endTimeOnly = TimeOnly.FromDateTime(request.ScheduledEnd);
+
+            var hasActiveShift = await _dbContext.DentistWorkSchedules
+                .AsNoTracking()
+                .AnyAsync(ws => ws.DentistUserId == doctorUserId &&
+                                ws.WorkDate == targetDateOnly &&
+                                ws.Status == "Scheduled" &&
+                                ws.StartTime <= startTimeOnly &&
+                                ws.EndTime >= endTimeOnly, ct);
+
+            if (!hasActiveShift)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<FollowUpAppointmentDto>.Fail("Ca làm việc của Bác sĩ đã bị thay đổi hoặc hủy.");
+            }
+
+            // 5. Clinical TreatmentSession Validation
+            TreatmentSession? session = null;
+            if (request.TreatmentSessionId.HasValue && request.TreatmentSessionId.Value > 0)
+            {
+                session = await _dbContext.TreatmentSessions
+                    .Include(ts => ts.TreatmentPlanItem)
+                        .ThenInclude(tpi => tpi.TreatmentPlan)
+                    .FirstOrDefaultAsync(ts => ts.TreatmentSessionId == request.TreatmentSessionId.Value, ct);
+
+                if (session == null)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<FollowUpAppointmentDto>.Fail("Phiên điều trị chỉ định không tồn tại.");
+                }
+
+                if (session.TreatmentPlanItem?.TreatmentPlan?.PatientUserId != request.PatientUserId)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<FollowUpAppointmentDto>.Fail("Phiên điều trị chỉ định không thuộc về hồ sơ của bệnh nhân này.");
+                }
+            }
+            else
+            {
+                session = await _dbContext.TreatmentSessions
+                    .Include(ts => ts.TreatmentPlanItem)
+                        .ThenInclude(tpi => tpi.TreatmentPlan)
+                    .Where(ts => ts.DentistUserId == doctorUserId &&
+                                 ts.TreatmentPlanItem.TreatmentPlan.PatientUserId == request.PatientUserId)
+                    .OrderByDescending(ts => ts.SessionDate)
+                    .FirstOrDefaultAsync(ct);
             }
 
             // Determine department
@@ -444,27 +539,8 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             _dbContext.Appointments.Add(appointment);
             await _dbContext.SaveChangesAsync(ct);
 
-            // 5. Link FollowUpSchedule
+            // 6. Link FollowUpSchedule
             long? followUpId = null;
-            TreatmentSession? session = null;
-
-            if (request.TreatmentSessionId.HasValue && request.TreatmentSessionId.Value > 0)
-            {
-                session = await _dbContext.TreatmentSessions
-                    .FirstOrDefaultAsync(ts => ts.TreatmentSessionId == request.TreatmentSessionId.Value, ct);
-            }
-
-            if (session == null)
-            {
-                session = await _dbContext.TreatmentSessions
-                    .Include(ts => ts.TreatmentPlanItem)
-                        .ThenInclude(tpi => tpi.TreatmentPlan)
-                    .Where(ts => ts.DentistUserId == doctorUserId &&
-                                 ts.TreatmentPlanItem.TreatmentPlan.PatientUserId == request.PatientUserId)
-                    .OrderByDescending(ts => ts.SessionDate)
-                    .FirstOrDefaultAsync(ct);
-            }
-
             if (session != null)
             {
                 var pendingFollowUp = await _dbContext.FollowUpSchedules
@@ -555,6 +631,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         }
         finally
         {
+            lockScope?.Dispose();
             if (tx != null) await tx.DisposeAsync();
         }
     }
@@ -621,96 +698,119 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             return ApiResponse<FollowUpProposalDto>.Fail("Thời gian kết thúc đề xuất phải sau thời gian bắt đầu.");
         }
 
-        // Prevent duplicate pending proposals
-        var hasPending = await _dbContext.AppointmentChangeProposals
-            .AnyAsync(p => p.AppointmentId == request.AppointmentId && p.Status == ProposalStatus.Pending, ct);
-
-        if (hasPending)
+        var isRelational = _dbContext.Database.IsRelational();
+        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? lockScope = null;
+        try
         {
-            return ApiResponse<FollowUpProposalDto>.Fail("Cuộc hẹn này đang có một yêu cầu thay đổi đang chờ bác sĩ phản hồi.");
-        }
+            var lockKeys = new[] { $"Appointment_{request.AppointmentId}" };
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
-        var doctorId = appointment.AssignedDentistUserId ?? appointment.RequestedDentistUserId;
-        if (doctorId.HasValue && doctorId.Value > 0)
-        {
-            var validation = await ValidateFollowUpSlotAsync(
-                doctorId.Value,
-                patientUserId,
-                request.ProposedStart,
-                request.ProposedEnd,
-                excludeAppointmentId: appointment.AppointmentId,
-                ct: ct);
+            // Prevent duplicate pending proposals
+            var hasPending = await _dbContext.AppointmentChangeProposals
+                .AnyAsync(p => p.AppointmentId == request.AppointmentId && p.Status == ProposalStatus.Pending, ct);
 
-            if (!validation.IsValid)
+            if (hasPending)
             {
-                return ApiResponse<FollowUpProposalDto>.Fail(validation.ErrorMessage ?? "Khung giờ đề xuất không phù hợp với lịch làm việc của bác sĩ.");
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<FollowUpProposalDto>.Fail("Cuộc hẹn này đang có một yêu cầu thay đổi đang chờ bác sĩ phản hồi.");
             }
-        }
 
-        var prefix = request.IsRebook ? "[Đặt lại lịch] " : "[Đổi lịch] ";
-        var fullReason = prefix + request.Reason.Trim();
-
-        var proposal = new AppointmentChangeProposal
-        {
-            AppointmentId = appointment.AppointmentId,
-            ProposedByUserId = patientUserId,
-            ProposedDepartmentId = appointment.DepartmentId,
-            ProposedDentistUserId = doctorId,
-            ProposedStart = request.ProposedStart,
-            ProposedEnd = request.ProposedEnd,
-            Reason = fullReason,
-            Status = ProposalStatus.Pending,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _dbContext.AppointmentChangeProposals.Add(proposal);
-        await _dbContext.SaveChangesAsync(ct);
-
-        if (doctorId.HasValue && doctorId.Value > 0)
-        {
-            try
+            var doctorId = appointment.AssignedDentistUserId ?? appointment.RequestedDentistUserId;
+            if (doctorId.HasValue && doctorId.Value > 0)
             {
-                if (_notificationService != null)
+                var validation = await ValidateFollowUpSlotAsync(
+                    doctorId.Value,
+                    patientUserId,
+                    request.ProposedStart,
+                    request.ProposedEnd,
+                    excludeAppointmentId: appointment.AppointmentId,
+                    ct: ct);
+
+                if (!validation.IsValid)
                 {
-                    var patientName = appointment.PatientUser?.FullName ?? "Bệnh nhân";
-                    var actionName = request.IsRebook ? "đặt lại lịch" : "đổi lịch";
-                    await _notificationService.CreateNotificationAsync(
-                        doctorId.Value,
-                        appointment.AppointmentId,
-                        "FollowUpChangeProposalSubmitted",
-                        $"Yêu cầu {actionName} tái khám mới",
-                        $"{patientName} đã gửi yêu cầu {actionName} cho cuộc hẹn {appointment.AppointmentCode} vào lúc {request.ProposedStart:HH:mm} ngày {request.ProposedStart:dd/MM/yyyy}. Lý do: {request.Reason.Trim()}.",
-                        ct);
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<FollowUpProposalDto>.Fail(validation.ErrorMessage ?? "Khung giờ đề xuất không phù hợp với lịch làm việc của bác sĩ.");
                 }
             }
-            catch (Exception ex)
+
+            var prefix = request.IsRebook ? "[Đặt lại lịch] " : "[Đổi lịch] ";
+            var fullReason = prefix + request.Reason.Trim();
+
+            var proposal = new AppointmentChangeProposal
             {
-                _logger.LogWarning(ex, "Không thể gửi thông báo yêu cầu đổi lịch cho bác sĩ.");
+                AppointmentId = appointment.AppointmentId,
+                ProposedByUserId = patientUserId,
+                ProposedDepartmentId = appointment.DepartmentId,
+                ProposedDentistUserId = doctorId,
+                ProposedStart = request.ProposedStart,
+                ProposedEnd = request.ProposedEnd,
+                Reason = fullReason,
+                Status = ProposalStatus.Pending,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.AppointmentChangeProposals.Add(proposal);
+            await _dbContext.SaveChangesAsync(ct);
+
+            if (tx != null) await tx.CommitAsync(ct);
+
+            if (doctorId.HasValue && doctorId.Value > 0)
+            {
+                try
+                {
+                    if (_notificationService != null)
+                    {
+                        var patientName = appointment.PatientUser?.FullName ?? "Bệnh nhân";
+                        var actionName = request.IsRebook ? "đặt lại lịch" : "đổi lịch";
+                        await _notificationService.CreateNotificationAsync(
+                            doctorId.Value,
+                            appointment.AppointmentId,
+                            "FollowUpChangeProposalSubmitted",
+                            $"Yêu cầu {actionName} tái khám mới",
+                            $"{patientName} đã gửi yêu cầu {actionName} cho cuộc hẹn {appointment.AppointmentCode} vào lúc {request.ProposedStart:HH:mm} ngày {request.ProposedStart:dd/MM/yyyy}. Lý do: {request.Reason.Trim()}.",
+                            ct);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Không thể gửi thông báo yêu cầu đổi lịch cho bác sĩ.");
+                }
             }
+
+            var dto = new FollowUpProposalDto
+            {
+                ProposalId = proposal.ProposalId,
+                AppointmentId = appointment.AppointmentId,
+                AppointmentCode = appointment.AppointmentCode,
+                PatientUserId = patientUserId,
+                PatientName = appointment.PatientUser?.FullName ?? "Bệnh nhân",
+                DentistUserId = doctorId,
+                DentistName = appointment.AssignedDentistUser?.User?.FullName ?? "Bác sĩ",
+                DepartmentId = appointment.DepartmentId,
+                DepartmentName = appointment.Department?.Name ?? "Nha khoa",
+                CurrentStart = appointment.ScheduledStart,
+                CurrentEnd = appointment.ScheduledEnd,
+                ProposedStart = proposal.ProposedStart,
+                ProposedEnd = proposal.ProposedEnd,
+                Reason = proposal.Reason,
+                Status = proposal.Status,
+                IsRebook = request.IsRebook,
+                CreatedAt = proposal.CreatedAt
+            };
+
+            return ApiResponse<FollowUpProposalDto>.Ok(dto, "Gửi yêu cầu thay đổi lịch thành công.");
         }
-
-        var dto = new FollowUpProposalDto
+        catch
         {
-            ProposalId = proposal.ProposalId,
-            AppointmentId = appointment.AppointmentId,
-            AppointmentCode = appointment.AppointmentCode,
-            PatientUserId = patientUserId,
-            PatientName = appointment.PatientUser?.FullName ?? "Bệnh nhân",
-            DentistUserId = doctorId,
-            DentistName = appointment.AssignedDentistUser?.User?.FullName ?? "Bác sĩ",
-            DepartmentId = appointment.DepartmentId,
-            DepartmentName = appointment.Department?.Name ?? "Nha khoa",
-            CurrentStart = appointment.ScheduledStart,
-            CurrentEnd = appointment.ScheduledEnd,
-            ProposedStart = proposal.ProposedStart,
-            ProposedEnd = proposal.ProposedEnd,
-            Reason = proposal.Reason,
-            Status = proposal.Status,
-            IsRebook = request.IsRebook,
-            CreatedAt = proposal.CreatedAt
-        };
-
-        return ApiResponse<FollowUpProposalDto>.Ok(dto, "Gửi yêu cầu thay đổi lịch thành công.");
+            if (tx != null) await tx.RollbackAsync(ct);
+            throw;
+        }
+        finally
+        {
+            lockScope?.Dispose();
+            if (tx != null) await tx.DisposeAsync();
+        }
     }
 
     public async Task<ApiResponse<bool>> WithdrawPatientProposalAsync(
@@ -948,19 +1048,56 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
 
         var isRelational = _dbContext.Database.IsRelational();
         var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? lockScope = null;
         try
         {
-            var hasConflict = await HasDoctorConflictAsync(
+            var lockKeys = new[]
+            {
+                $"Dentist_{doctorUserId}",
+                $"Patient_{proposal.Appointment.PatientUserId}",
+                $"Appointment_{proposal.AppointmentId}"
+            };
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
+
+            // Re-check appointment status under lock: ensure it wasn't cancelled concurrently
+            if (!isRebook)
+            {
+                if (proposal.Appointment.Status == AppointmentStatus.Cancelled ||
+                    proposal.Appointment.Status == AppointmentStatus.Completed ||
+                    proposal.Appointment.Status == AppointmentStatus.Rejected ||
+                    proposal.Appointment.Status == AppointmentStatus.Withdrawn)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<FollowUpProposalDto>.Fail($"Không thể chấp thuận đề xuất đổi lịch vì cuộc hẹn đã ở trạng thái '{proposal.Appointment.Status}'.");
+                }
+            }
+
+            // Re-check doctor conflict
+            var hasDoctorConflict = await HasDoctorConflictAsync(
                 doctorUserId,
                 proposedStart,
                 proposedEnd,
                 excludeAppointmentId: isRebook ? null : proposal.AppointmentId,
                 ct: ct);
 
-            if (hasConflict)
+            if (hasDoctorConflict)
             {
                 if (tx != null) await tx.RollbackAsync(ct);
-                return ApiResponse<FollowUpProposalDto>.Fail("Khung giờ này vừa có cuộc hẹn khác được xác nhận. Vui lòng từ chối hoặc chọn khung giờ khác.");
+                return ApiResponse<FollowUpProposalDto>.Fail("Khung giờ này vừa có cuộc hẹn khác được xác nhận cho Bác sĩ. Vui lòng từ chối hoặc chọn khung giờ khác.");
+            }
+
+            // Re-check patient conflict
+            var hasPatientConflict = await HasPatientConflictAsync(
+                proposal.Appointment.PatientUserId,
+                proposedStart,
+                proposedEnd,
+                excludeAppointmentId: isRebook ? null : proposal.AppointmentId,
+                ct: ct);
+
+            if (hasPatientConflict)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<FollowUpProposalDto>.Fail("Bệnh nhân vừa có cuộc hẹn khác trùng với khung giờ đề xuất.");
             }
 
             Appointment finalAppointment;
@@ -1055,6 +1192,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         }
         finally
         {
+            lockScope?.Dispose();
             if (tx != null) await tx.DisposeAsync();
         }
     }

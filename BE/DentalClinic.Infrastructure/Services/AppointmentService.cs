@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -2673,43 +2673,64 @@ public class AppointmentService : IAppointmentService
             AppointmentStatus.InService
         };
 
-        bool isOccupied = await _dbContext.Appointments
-            .AnyAsync(a => a.AppointmentId != appointmentId &&
-                           a.DentalChairId == dentalChairId &&
-                           activeStatuses.Contains(a.Status) &&
-                           a.ScheduledStart < end &&
-                           a.ScheduledEnd > start, ct);
-
-        if (isOccupied)
+        var isRelational = _dbContext.Database.IsRelational();
+        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? lockScope = null;
+        try
         {
-            return ApiResponse.Fail($"Ghế {chair.ChairCode} hiện đang có bệnh nhân khác sử dụng. Vui lòng chọn ghế khác.");
+            var lockKeys = new[] { $"DentalChair_{dentalChairId}" };
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
+
+            bool isOccupied = await _dbContext.Appointments
+                .AnyAsync(a => a.AppointmentId != appointmentId &&
+                               a.DentalChairId == dentalChairId &&
+                               activeStatuses.Contains(a.Status) &&
+                               a.ScheduledStart < end &&
+                               a.ScheduledEnd > start, ct);
+
+            if (isOccupied)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse.Fail($"Ghế {chair.ChairCode} hiện đang có bệnh nhân khác sử dụng. Vui lòng chọn ghế khác.");
+            }
+
+            appt.DentalChairId = dentalChairId;
+            appt.RoomId = chair.RoomId;
+            appt.UpdatedAt = DateTime.UtcNow;
+
+            var oldStatus = appt.Status;
+            var newStatus = appt.Status;
+            if (appt.Status == AppointmentStatus.CheckedIn)
+            {
+                newStatus = AppointmentStatus.InService;
+                appt.Status = newStatus;
+            }
+
+            _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+            {
+                AppointmentId = appointmentId,
+                OldStatus = oldStatus,
+                NewStatus = newStatus,
+                ChangedByUserId = dentistUserId,
+                Note = newStatus == AppointmentStatus.InService 
+                    ? $"Bác sĩ chọn ghế điều trị {chair.ChairCode} và chuyển ca sang trạng thái đang điều trị (InService)."
+                    : $"Bác sĩ cập nhật ghế điều trị {chair.ChairCode}.",
+                ChangedAt = DateTime.UtcNow
+            });
+
+            await _dbContext.SaveChangesAsync(ct);
+            if (tx != null) await tx.CommitAsync(ct);
+            return ApiResponse.Ok($"Đã chọn ghế {chair.ChairCode} cho ca khám thành công.");
         }
-
-        appt.DentalChairId = dentalChairId;
-        appt.RoomId = chair.RoomId;
-        appt.UpdatedAt = DateTime.UtcNow;
-
-        var oldStatus = appt.Status;
-        var newStatus = appt.Status;
-        if (appt.Status == AppointmentStatus.CheckedIn)
+        catch
         {
-            newStatus = AppointmentStatus.InService;
-            appt.Status = newStatus;
+            if (tx != null) await tx.RollbackAsync(ct);
+            throw;
         }
-
-        _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+        finally
         {
-            AppointmentId = appointmentId,
-            OldStatus = oldStatus,
-            NewStatus = newStatus,
-            ChangedByUserId = dentistUserId,
-            Note = newStatus == AppointmentStatus.InService 
-                ? $"Bác sĩ chọn ghế điều trị {chair.ChairCode} và chuyển ca sang trạng thái đang điều trị (InService)."
-                : $"Bác sĩ cập nhật ghế điều trị {chair.ChairCode}.",
-            ChangedAt = DateTime.UtcNow
-        });
-
-        await _dbContext.SaveChangesAsync(ct);
-        return ApiResponse.Ok($"Đã chọn ghế {chair.ChairCode} cho ca khám thành công.");
+            lockScope?.Dispose();
+            if (tx != null) await tx.DisposeAsync();
+        }
     }
 }

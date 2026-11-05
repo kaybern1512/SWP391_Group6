@@ -392,33 +392,79 @@ public class DentistScheduleService : IDentistScheduleService
             return ApiResponse<DentistAvailabilityDto>.Fail("Không tìm thấy hồ sơ bác sĩ.");
         }
 
-        var availability = new DentistAvailability
+        var isRelational = _dbContext.Database.IsRelational();
+        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? lockScope = null;
+        try
         {
-            DentistUserId = targetDentistId,
-            StartDateTime = request.StartDateTime,
-            EndDateTime = request.EndDateTime,
-            AvailabilityStatus = request.AvailabilityStatus,
-            Reason = request.Reason?.Trim(),
-            CreatedAt = DateTime.UtcNow
-        };
+            var lockKeys = new[] { $"Dentist_{targetDentistId}" };
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
-        _dbContext.DentistAvailabilities.Add(availability);
-        await _dbContext.SaveChangesAsync(ct);
+            // Re-check conflicting appointments inside lock & transaction
+            if (request.AvailabilityStatus != DentistAvailabilityStatus.Available)
+            {
+                var occupiedStatuses = new[]
+                {
+                    AppointmentStatus.Confirmed,
+                    AppointmentStatus.CheckedIn,
+                    AppointmentStatus.Waiting,
+                    AppointmentStatus.Called,
+                    AppointmentStatus.InService
+                };
 
-        var dto = new DentistAvailabilityDto
+                var hasAppointments = await _dbContext.Appointments
+                    .AsNoTracking()
+                    .AnyAsync(a => a.AssignedDentistUserId == targetDentistId &&
+                                   occupiedStatuses.Contains(a.Status) &&
+                                   a.ScheduledStart < request.EndDateTime &&
+                                   a.ScheduledEnd > request.StartDateTime, ct);
+
+                if (hasAppointments)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<DentistAvailabilityDto>.Fail("Bác sĩ đã có lịch hẹn khám với bệnh nhân trong khoảng thời gian này.");
+                }
+            }
+
+            var availability = new DentistAvailability
+            {
+                DentistUserId = targetDentistId,
+                StartDateTime = request.StartDateTime,
+                EndDateTime = request.EndDateTime,
+                AvailabilityStatus = request.AvailabilityStatus,
+                Reason = request.Reason?.Trim(),
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.DentistAvailabilities.Add(availability);
+            await _dbContext.SaveChangesAsync(ct);
+            if (tx != null) await tx.CommitAsync(ct);
+
+            var dto = new DentistAvailabilityDto
+            {
+                AvailabilityId = availability.AvailabilityId,
+                DentistUserId = availability.DentistUserId,
+                DentistName = dentist.User.FullName,
+                DentistEmployeeCode = dentist.User.EmployeeCode,
+                StartDateTime = availability.StartDateTime,
+                EndDateTime = availability.EndDateTime,
+                AvailabilityStatus = availability.AvailabilityStatus,
+                Reason = availability.Reason,
+                CreatedAt = availability.CreatedAt
+            };
+
+            return ApiResponse<DentistAvailabilityDto>.Ok(dto, "Đã cập nhật trạng thái làm việc thành công.");
+        }
+        catch
         {
-            AvailabilityId = availability.AvailabilityId,
-            DentistUserId = availability.DentistUserId,
-            DentistName = dentist.User.FullName,
-            DentistEmployeeCode = dentist.User.EmployeeCode,
-            StartDateTime = availability.StartDateTime,
-            EndDateTime = availability.EndDateTime,
-            AvailabilityStatus = availability.AvailabilityStatus,
-            Reason = availability.Reason,
-            CreatedAt = availability.CreatedAt
-        };
-
-        return ApiResponse<DentistAvailabilityDto>.Ok(dto, "Đã cập nhật trạng thái làm việc thành công.");
+            if (tx != null) await tx.RollbackAsync(ct);
+            throw;
+        }
+        finally
+        {
+            lockScope?.Dispose();
+            if (tx != null) await tx.DisposeAsync();
+        }
     }
 
     public async Task<ApiResponse<DentistAvailabilityDto>> UpdateAvailabilityAsync(long availabilityId, UpdateDentistAvailabilityRequest request, long currentUserId, string currentUserRole, CancellationToken ct = default)
