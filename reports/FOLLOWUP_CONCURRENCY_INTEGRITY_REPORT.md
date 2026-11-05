@@ -19,7 +19,7 @@
 | **Base Commit HEAD** | `9ca88ea9f24f5e74b93c4abb77717fb5fae62f79` (`origin/develop`) |
 | **Working Branch** | `fix/followup-concurrency-integrity` |
 | **Database Instance kiểm thử** | `.\SQL2025_DUC` (Dedicated disposable database: `DentalClinic_Concurrency_QA_<RunId>`) |
-| **Commit HEAD sau sửa** | *(Xem commit hash được tạo tại Phase 7)* |
+| **Commit HEAD sau sửa** | `29aa41c491e9be4a646f609475260323883dabfe` (nhánh `fix/followup-concurrency-integrity`) |
 | **Trạng thái tích hợp** | Tuyệt đối **KHÔNG** merge trực tiếp vào `develop` hoặc `main`. Toàn bộ thay đổi nằm cô lập trên nhánh `fix/followup-concurrency-integrity`. |
 
 ---
