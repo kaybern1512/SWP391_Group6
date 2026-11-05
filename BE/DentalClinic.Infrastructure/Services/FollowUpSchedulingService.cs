@@ -1166,6 +1166,17 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                             if (!string.IsNullOrWhiteSpace(parsedStatus))
                                 currentCallStatus = parsedStatus;
                         }
+                        if (doc.RootElement.TryGetProperty("CalledAt", out var cDate))
+                        {
+                            if (cDate.ValueKind == System.Text.Json.JsonValueKind.String && cDate.TryGetDateTime(out var dt))
+                                lastCalledAt = dt;
+                            else if (cDate.ValueKind == System.Text.Json.JsonValueKind.Null)
+                                lastCalledAt = null;
+                        }
+                        if (doc.RootElement.TryGetProperty("IsHistoricalReconstruction", out var isRecon) && isRecon.GetBoolean())
+                        {
+                            lastCalledAt = null;
+                        }
                     }
                 }
                 catch

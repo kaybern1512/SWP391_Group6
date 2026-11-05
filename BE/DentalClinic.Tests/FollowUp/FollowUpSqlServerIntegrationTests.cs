@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
@@ -21,21 +22,34 @@ public class FollowUpSqlServerIntegrationTests
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
         ?? "Server=.\\SQL2025_DUC;Database=DentalClinic_FollowUp_QA;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
-    private static void ValidateSafeTestDatabase(string connStr)
+    private static readonly HashSet<string> AllowedQaDatabases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "DentalClinic_FollowUp_QA",
+        "DentalClinic_Disposable_PreDeployClone",
+        "DentalClinic_QA"
+    };
+
+    private static string ValidateSafeTestDatabase(string connStr)
     {
         var builder = new SqlConnectionStringBuilder(connStr);
         var db = builder.InitialCatalog;
-        if (string.Equals(db, "DentalClinicManagementDB", StringComparison.OrdinalIgnoreCase) ||
-            db.IndexOf("Production", StringComparison.OrdinalIgnoreCase) >= 0)
+        if (string.IsNullOrWhiteSpace(db) || !AllowedQaDatabases.Contains(db))
         {
-            throw new InvalidOperationException($"SAFETY VIOLATION: Integration tests cannot run against '{db}'. Target must be a dedicated QA/Test database.");
+            var sanitizedServer = builder.DataSource;
+            throw new InvalidOperationException(
+                $"STRICT QA GUARD VIOLATION: Database '{db}' on server '{sanitizedServer}' is NOT in the allowed QA whitelist [{string.Join(", ", AllowedQaDatabases)}]. " +
+                "Integration tests are strictly restricted to dedicated QA databases to prevent any accidental write to production, staging, or shared databases.");
         }
+        return db;
     }
 
     private async Task<DentalClinicDbContext> CreateVerifiedDbContextAsync()
     {
         var connStr = ConnectionString;
-        ValidateSafeTestDatabase(connStr);
+        var expectedDb = ValidateSafeTestDatabase(connStr);
+
+        var builder = new SqlConnectionStringBuilder(connStr);
+        var sanitizedInfo = $"Server={builder.DataSource}, Database={builder.InitialCatalog}";
 
         var options = new DbContextOptionsBuilder<DentalClinicDbContext>()
             .UseSqlServer(connStr)
@@ -43,7 +57,18 @@ public class FollowUpSqlServerIntegrationTests
         var db = new DentalClinicDbContext(options);
 
         bool canConnect = await db.Database.CanConnectAsync();
-        Assert.True(canConnect, $"FAILED TO CONNECT to SQL Server QA database using connection string: '{connStr}'. Integration tests must run against a real, reachable QA SQL Server.");
+        Assert.True(canConnect, $"FAILED TO CONNECT to SQL Server QA database ({sanitizedInfo}). Integration tests must run against a real, reachable QA SQL Server.");
+
+        var conn = db.Database.GetDbConnection();
+        await conn.OpenAsync();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT DB_NAME();";
+            var activeDb = (string?)await cmd.ExecuteScalarAsync();
+            Assert.True(string.Equals(activeDb, expectedDb, StringComparison.OrdinalIgnoreCase),
+                $"STRICT QA GUARD: Connected database '{activeDb}' via DB_NAME() does not match expected QA database '{expectedDb}'.");
+        }
+        await conn.CloseAsync();
 
         return db;
     }
@@ -56,6 +81,12 @@ public class FollowUpSqlServerIntegrationTests
 
         var prodConnStr = "Server=sql.prod.domain;Database=DentalCare_Production;User Id=sa;Password=secret;";
         Assert.Throws<InvalidOperationException>(() => ValidateSafeTestDatabase(prodConnStr));
+
+        var stagingConnStr = "Server=sql.staging.domain;Database=DentalClinic_Staging;User Id=sa;Password=secret;";
+        Assert.Throws<InvalidOperationException>(() => ValidateSafeTestDatabase(stagingConnStr));
+
+        var sysMasterStr = "Server=localhost;Database=master;Trusted_Connection=True;";
+        Assert.Throws<InvalidOperationException>(() => ValidateSafeTestDatabase(sysMasterStr));
     }
 
     [Fact]
@@ -316,7 +347,7 @@ public class FollowUpSqlServerIntegrationTests
                 await cmd.ExecuteNonQueryAsync();
             }
 
-            // 2. Discover and drop constraint on Status (handles parent_column_id = 0)
+            // 2. Discover and drop constraint on Status using QUOTENAME (handles parent_column_id = 0)
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = $@"
@@ -329,14 +360,23 @@ public class FollowUpSqlServerIntegrationTests
                     WHERE cc.parent_object_id = OBJECT_ID(N'[dbo].[{tableName}]')
                       AND (
                           cc.parent_column_id = COLUMNPROPERTY(OBJECT_ID(N'[dbo].[{tableName}]'), 'Status', 'ColumnId')
-                          OR (cc.parent_column_id = 0 AND (cc.definition LIKE '%[Status]%' OR cc.definition LIKE '%Status%'))
+                          OR (
+                              cc.parent_column_id = 0 
+                              AND (cc.definition LIKE '%[Status]%' OR cc.definition LIKE '%Status%')
+                              AND NOT EXISTS (
+                                  SELECT 1 FROM sys.columns other_c 
+                                  WHERE other_c.object_id = cc.parent_object_id 
+                                    AND other_c.name <> 'Status'
+                                    AND (cc.definition LIKE '%[' + other_c.name + ']%' OR cc.definition LIKE '%' + other_c.name + '%')
+                              )
+                          )
                       );
 
                     OPEN cur;
                     FETCH NEXT FROM cur INTO @ConstraintName;
                     WHILE @@FETCH_STATUS = 0
                     BEGIN
-                        SET @DropSql = N'ALTER TABLE [dbo].[{tableName}] DROP CONSTRAINT [' + @ConstraintName + N'];';
+                        SET @DropSql = N'ALTER TABLE [dbo].[{tableName}] DROP CONSTRAINT ' + QUOTENAME(@ConstraintName) + N';';
                         EXEC sp_executesql @DropSql;
                         FETCH NEXT FROM cur INTO @ConstraintName;
                     END
@@ -389,6 +429,108 @@ public class FollowUpSqlServerIntegrationTests
         finally
         {
             // Zero residue cleanup
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = $"IF OBJECT_ID(N'[dbo].[{tableName}]', N'U') IS NOT NULL DROP TABLE [dbo].[{tableName}];";
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SqlServer_Migration_PreservesUnrelatedConstraintsOnOtherColumns()
+    {
+        using var db = await CreateVerifiedDbContextAsync();
+        var conn = db.Database.GetDbConnection();
+        await conn.OpenAsync();
+
+        var tableName = $"Test_Unrelated_{Guid.NewGuid():N}";
+        try
+        {
+            // Create table with Status constraint AND unrelated constraint on Reason column
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = $@"
+                    CREATE TABLE [dbo].[{tableName}] (
+                        FollowUpId BIGINT IDENTITY(1,1) PRIMARY KEY,
+                        Status NVARCHAR(20) NOT NULL DEFAULT 'Pending',
+                        Reason NVARCHAR(200) NOT NULL
+                    );
+                    -- Old table-level constraint on Status
+                    ALTER TABLE [dbo].[{tableName}] WITH CHECK ADD CONSTRAINT [CK_{tableName}_OldStatus] CHECK
+                    (([Status]='Cancelled' OR [Status]='Completed' OR [Status]='Scheduled' OR [Status]='Pending'));
+
+                    -- Unrelated constraint on Reason column
+                    ALTER TABLE [dbo].[{tableName}] WITH CHECK ADD CONSTRAINT [CK_{tableName}_ReasonLength] CHECK
+                    (LEN([Reason]) >= 5);
+                ";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            // Run constraint replacement targeting Status exclusively
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = $@"
+                    DECLARE @ConstraintName NVARCHAR(128);
+                    DECLARE @DropSql NVARCHAR(MAX);
+
+                    DECLARE cur CURSOR LOCAL FAST_FORWARD FOR
+                    SELECT cc.name
+                    FROM sys.check_constraints cc
+                    WHERE cc.parent_object_id = OBJECT_ID(N'[dbo].[{tableName}]')
+                      AND (
+                          cc.parent_column_id = COLUMNPROPERTY(OBJECT_ID(N'[dbo].[{tableName}]'), 'Status', 'ColumnId')
+                          OR (
+                              cc.parent_column_id = 0 
+                              AND (cc.definition LIKE '%[Status]%' OR cc.definition LIKE '%Status%')
+                              AND NOT EXISTS (
+                                  SELECT 1 FROM sys.columns other_c 
+                                  WHERE other_c.object_id = cc.parent_object_id 
+                                    AND other_c.name <> 'Status'
+                                    AND (cc.definition LIKE '%[' + other_c.name + ']%' OR cc.definition LIKE '%' + other_c.name + '%')
+                              )
+                          )
+                      );
+
+                    OPEN cur;
+                    FETCH NEXT FROM cur INTO @ConstraintName;
+                    WHILE @@FETCH_STATUS = 0
+                    BEGIN
+                        SET @DropSql = N'ALTER TABLE [dbo].[{tableName}] DROP CONSTRAINT ' + QUOTENAME(@ConstraintName) + N';';
+                        EXEC sp_executesql @DropSql;
+                        FETCH NEXT FROM cur INTO @ConstraintName;
+                    END
+                    CLOSE cur;
+                    DEALLOCATE cur;
+
+                    ALTER TABLE [dbo].[{tableName}] WITH CHECK ADD CONSTRAINT [CK_{tableName}_Status]
+                    CHECK ([Status] IN ('Pending', 'Confirmed', 'Scheduled', 'Completed', 'Cancelled', 'Proposed'));
+                ";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            // Verify that the unrelated constraint CK_ReasonLength was PRESERVED!
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = $@"
+                    SELECT COUNT(*) FROM sys.check_constraints
+                    WHERE parent_object_id = OBJECT_ID(N'[dbo].[{tableName}]')
+                      AND name = 'CK_{tableName}_ReasonLength';
+                ";
+                var exists = (int)(await cmd.ExecuteScalarAsync() ?? 0);
+                Assert.Equal(1, exists);
+            }
+
+            // Verify unrelated constraint still actively enforces rule (Reason < 5 chars rejected)
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = $"INSERT INTO [dbo].[{tableName}] (Status, Reason) VALUES ('Pending', 'abc');";
+                var ex = await Assert.ThrowsAsync<SqlException>(() => cmd.ExecuteNonQueryAsync());
+                Assert.Contains("CK_" + tableName + "_ReasonLength", ex.Message);
+            }
+        }
+        finally
+        {
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = $"IF OBJECT_ID(N'[dbo].[{tableName}]', N'U') IS NOT NULL DROP TABLE [dbo].[{tableName}];";
@@ -606,95 +748,91 @@ public class FollowUpSqlServerIntegrationTests
     }
 
     [Fact]
-    public async Task SqlServer_Migration_PreservesExistingHistoricalAuditLogs_DoesNotOverwrite()
+    public async Task SqlServer_CallProvenance_AuthenticAuditLogPreserved_AndReconstructedYieldsNullTimestamp()
     {
         using var db = await CreateVerifiedDbContextAsync();
-        var conn = db.Database.GetDbConnection();
-        await conn.OpenAsync();
-
-        var followUpTable = $"Test_FUpAudit_{Guid.NewGuid():N}";
-        var auditTable = $"Test_Audit_{Guid.NewGuid():N}";
+        using var tx = await db.Database.BeginTransactionAsync();
 
         try
         {
-            var pastDate = new DateTime(2026, 10, 15, 14, 30, 0);
-            var jsonAudit = "{\"CallStatus\":\"Called\",\"CallerStaffName\":\"Real Staff Le Tan Lan\"}";
-            using (var cmd = conn.CreateCommand())
+            var genuineStaffName = "Lễ Tân Mai Phương";
+            var genuinePastDate = new DateTime(2026, 10, 12, 11, 15, 0);
+
+            // FollowUp 1: has authentic AuditLog
+            var followUp1 = new FollowUpSchedule
             {
-                cmd.CommandText = $@"
-                    CREATE TABLE [dbo].[{followUpTable}] (
-                        FollowUpId BIGINT PRIMARY KEY,
-                        Status NVARCHAR(20) NOT NULL
-                    );
-                    CREATE TABLE [dbo].[{auditTable}] (
-                        AuditLogId BIGINT IDENTITY(1,1) PRIMARY KEY,
-                        Action VARCHAR(100) NOT NULL,
-                        EntityName VARCHAR(100) NOT NULL,
-                        EntityId VARCHAR(100) NOT NULL,
-                        NewValues NVARCHAR(MAX) NULL,
-                        CreatedAt DATETIME2 NOT NULL
-                    );
+                TreatmentSessionId = 1,
+                RecommendedDate = DateTime.Today,
+                Reason = "Case A: Authentic log",
+                Status = "Scheduled"
+            };
+            db.FollowUpSchedules.Add(followUp1);
+            await db.SaveChangesAsync();
 
-                    INSERT INTO [dbo].[{followUpTable}] VALUES (777, 'Called');
-
-                    -- Pre-existing genuine AuditLog
-                    INSERT INTO [dbo].[{auditTable}] (Action, EntityName, EntityId, NewValues, CreatedAt)
-                    VALUES ('FollowUpReminderCall', 'FollowUpSchedule', '777', 
-                            '{jsonAudit}', 
-                            '{pastDate:yyyy-MM-dd HH:mm:ss}');
-                ";
-                await cmd.ExecuteNonQueryAsync();
-            }
-
-            // Run migration AuditLog logic with preservation condition
-            using (var cmd = conn.CreateCommand())
+            var audit1 = new AuditLog
             {
-                cmd.CommandText = $@"
-                    INSERT INTO [dbo].[{auditTable}] (Action, EntityName, EntityId, NewValues, CreatedAt)
-                    SELECT 
-                        'FollowUpReminderCall',
-                        'FollowUpSchedule',
-                        CAST(f.[FollowUpId] AS VARCHAR(100)),
-                        N'{{""CallStatus"":""' + f.[Status] + N'""}}',
-                        SYSDATETIME()
-                    FROM [dbo].[{followUpTable}] f
-                    WHERE f.[Status] IN ('Called', 'Unreachable')
-                      AND NOT EXISTS (
-                          SELECT 1 FROM [dbo].[{auditTable}] existing
-                          WHERE existing.[EntityName] = 'FollowUpSchedule'
-                            AND existing.[EntityId] = CAST(f.[FollowUpId] AS VARCHAR(100))
-                            AND existing.[Action] = 'FollowUpReminderCall'
-                      );
-                ";
-                await cmd.ExecuteNonQueryAsync();
-            }
+                UserId = 2,
+                Action = "FollowUpReminderCall",
+                EntityName = "FollowUpSchedule",
+                EntityId = followUp1.FollowUpId.ToString(),
+                OldValues = "Scheduled",
+                NewValues = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    CallStatus = "Called",
+                    CallerStaffName = genuineStaffName,
+                    CalledAt = genuinePastDate,
+                    Note = "Bệnh nhân xác nhận tuần sau đến"
+                }),
+                CreatedAt = genuinePastDate
+            };
+            db.AuditLogs.Add(audit1);
 
-            // Assert: no duplicate inserted, original timestamp and staff preserved
-            using (var cmd = conn.CreateCommand())
+            // FollowUp 2: legacy orphan row with Reconstructed AuditLog (CalledAt = null, CallerStaffName = null)
+            var followUp2 = new FollowUpSchedule
             {
-                cmd.CommandText = $"SELECT COUNT(*), MIN(CreatedAt), MIN(NewValues) FROM [dbo].[{auditTable}] WHERE EntityId = '777';";
-                using var reader = await cmd.ExecuteReaderAsync();
+                TreatmentSessionId = 1,
+                RecommendedDate = DateTime.Today,
+                Reason = "Case B: Reconstructed legacy",
+                Status = "Scheduled"
+            };
+            db.FollowUpSchedules.Add(followUp2);
+            await db.SaveChangesAsync();
 
-                Assert.True(await reader.ReadAsync());
-                int count = reader.GetInt32(0);
-                DateTime createdAt = reader.GetDateTime(1);
-                string newValues = reader.GetString(2);
+            var audit2 = new AuditLog
+            {
+                UserId = null,
+                Action = "FollowUpReminderCall",
+                EntityName = "FollowUpSchedule",
+                EntityId = followUp2.FollowUpId.ToString(),
+                OldValues = "Called",
+                NewValues = "{\"CallStatus\":\"Called\",\"Note\":\"Tái dựng từ trạng thái FollowUpSchedule.Status cũ\",\"CalledAt\":null,\"CallerStaffName\":null,\"IsHistoricalReconstruction\":true}",
+                CreatedAt = DateTime.UtcNow
+            };
+            db.AuditLogs.Add(audit2);
+            await db.SaveChangesAsync();
 
-                Assert.Equal(1, count); // Exactly 1 log, no duplicates
-                Assert.Equal(pastDate, createdAt); // Timestamp untouched
-                Assert.Contains("Real Staff Le Tan Lan", newValues); // Staff name untouched
-            }
+            var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+            var remindersRes = await service.GetReceptionistRemindersAsync("all");
+            Assert.True(remindersRes.Success);
+            Assert.NotNull(remindersRes.Data);
+
+            // Case A assertions: authentic staff name and authentic timestamp are returned
+            var item1 = remindersRes.Data.FirstOrDefault(r => r.FollowUpId == followUp1.FollowUpId);
+            Assert.NotNull(item1);
+            Assert.Equal("Called", item1.CallStatus);
+            Assert.Equal(genuineStaffName, item1.LastCallerName);
+            Assert.Equal(genuinePastDate, item1.LastCalledAt);
+
+            // Case B assertions: reconstructed event returns CallStatus = "Called", but LastCalledAt is NULL and LastCallerName is NULL!
+            var item2 = remindersRes.Data.FirstOrDefault(r => r.FollowUpId == followUp2.FollowUpId);
+            Assert.NotNull(item2);
+            Assert.Equal("Called", item2.CallStatus);
+            Assert.Null(item2.LastCallerName); // Provenance safety: caller is unknown
+            Assert.Null(item2.LastCalledAt);   // Provenance safety: timestamp is not faked!
         }
         finally
         {
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = $@"
-                    IF OBJECT_ID(N'[dbo].[{followUpTable}]', N'U') IS NOT NULL DROP TABLE [dbo].[{followUpTable}];
-                    IF OBJECT_ID(N'[dbo].[{auditTable}]', N'U') IS NOT NULL DROP TABLE [dbo].[{auditTable}];
-                ";
-                await cmd.ExecuteNonQueryAsync();
-            }
+            await tx.RollbackAsync();
         }
     }
 }

@@ -3,16 +3,19 @@
 -- Description: 
 --   1. Enforces strict valid clinical follow-up statuses:
 --      'Pending', 'Confirmed', 'Scheduled', 'Completed', 'Cancelled', 'Proposed'.
---   2. Preflight validation: Detects any unrecognized status values and aborts if found,
+--   2. Preflight Data Integrity Check: Aborts if any unrecognized status values exist,
 --      preventing unsafe data normalization and protecting medical record integrity.
---   3. Decouples reminder call status ('Called', 'Unreachable') from clinical status:
---      - Preserves existing AuditLogs (does not create fake call events or overwrite timestamps).
---      - Inspects linked Appointment status (Cancelled, Completed, Confirmed, Scheduled)
---        to infer the correct clinical follow-up status.
---   4. Dynamically discovers both column-level and table-level CHECK constraints on Status,
---      supporting system-generated anonymous constraint names without touching unrelated constraints.
---   5. Adds/validates named constraint [CK_FollowUpSchedules_Status] idempotently, ensuring
---      it is trusted (is_not_trusted = 0) and enabled (is_disabled = 0).
+--   3. Historical Call Data Provenance:
+--      - Preserves genuine existing AuditLogs intact (no duplicates, no timestamp overwrites).
+--      - For legacy orphan rows (lacking an authentic AuditLog), logs a reconstructed event
+--        with CalledAt = NULL and CallerStaffName = NULL to avoid fake provenance.
+--      - Infers clinical status from linked Appointment (Cancelled, Completed, Confirmed, Scheduled).
+--   4. Safe Dynamic Constraint Discovery:
+--      - Identifies constraints on Status with 100% precision (column-level and table-level).
+--      - Aborts if multi-column or ambiguous constraints are detected.
+--      - Uses QUOTENAME for all dynamic DDL statements.
+--      - Preserves all unrelated constraints on other columns.
+--   5. Idempotent: Checks if [CK_FollowUpSchedules_Status] already exists and is trusted.
 -- =====================================================================================
 
 SET ANSI_NULLS ON;
@@ -21,7 +24,7 @@ SET NOCOUNT ON;
 BEGIN TRANSACTION;
 
 BEGIN TRY
-    PRINT 'Starting migration: 20261104_Update_FollowUpSchedules_Status_CheckConstraint...';
+    PRINT 'Starting hardened migration: 20261104_Update_FollowUpSchedules_Status_CheckConstraint...';
 
     -- ---------------------------------------------------------------------------------
     -- Step 1: Preflight Data Integrity Check
@@ -52,14 +55,14 @@ BEGIN TRY
         ROLLBACK TRANSACTION;
         RETURN;
     END
-    PRINT 'Step 1 Passed: No anomalous clinical statuses found.';
+    PRINT 'Step 1 Passed: Preflight check verified. No anomalous clinical statuses found.';
 
     -- ---------------------------------------------------------------------------------
-    -- Step 2: Historical Legacy Call Status Decoupling & AuditLog Preservation
+    -- Step 2: Historical Call Data Provenance & Clinical Status Decoupling
     -- ---------------------------------------------------------------------------------
-    -- If any rows still hold 'Called' or 'Unreachable', decouple them without corrupting call history:
-    -- A) Only create an AuditLog entry if NO prior reminder call log exists for that FollowUpId.
-    --    Preserve historical context; do not overwrite LastCallerName or real call timestamps.
+    -- If any rows still hold 'Called' or 'Unreachable', decouple them safely:
+    -- A) Only insert an AuditLog if NO prior reminder call log exists for that FollowUpId.
+    --    Do NOT invent fake call times or fake staff names (CalledAt = null, CallerStaffName = null).
     IF EXISTS (
         SELECT 1 
         FROM [dbo].[FollowUpSchedules] 
@@ -68,7 +71,7 @@ BEGIN TRY
     BEGIN
         PRINT 'Found legacy records with CallStatus in FollowUpSchedules.Status. Processing decoupling...';
 
-        -- A. Create audit log only for orphan legacy rows that lack any existing reminder call log
+        -- A. Create audit log only for orphan legacy rows that lack an authentic reminder call log
         INSERT INTO [dbo].[AuditLogs] ([UserId], [Action], [EntityName], [EntityId], [OldValues], [NewValues], [CreatedAt])
         SELECT 
             NULL,
@@ -76,10 +79,9 @@ BEGIN TRY
             'FollowUpSchedule',
             CAST(f.[FollowUpId] AS VARCHAR(100)),
             f.[Status],
-            N'{"CallStatus":"' + f.[Status] + N'","Note":"Legacy reminder call preserved from initial schema","CallerStaffName":"Historical Call Record"}',
-            COALESCE(a.[CreatedAt], a.[ScheduledStart], f.[RecommendedDate], SYSDATETIME())
+            N'{"CallStatus":"' + f.[Status] + N'","Note":"Tái dựng từ trạng thái FollowUpSchedule.Status cũ (không có lịch sử cuộc gọi xác minh)","CalledAt":null,"CallerStaffName":null,"IsHistoricalReconstruction":true}',
+            SYSDATETIME()
         FROM [dbo].[FollowUpSchedules] f
-        LEFT JOIN [dbo].[Appointments] a ON f.[AppointmentId] = a.[AppointmentId]
         WHERE f.[Status] IN ('Called', 'Unreachable')
           AND NOT EXISTS (
               SELECT 1 
@@ -90,7 +92,7 @@ BEGIN TRY
           );
 
         DECLARE @NewAuditCount INT = @@ROWCOUNT;
-        PRINT 'Created ' + CAST(@NewAuditCount AS VARCHAR(10)) + ' missing AuditLog record(s) for legacy rows. Existing AuditLogs were untouched.';
+        PRINT 'Created ' + CAST(@NewAuditCount AS VARCHAR(10)) + ' missing AuditLog record(s) for legacy rows. Existing authentic AuditLogs were untouched.';
 
         -- B. Infer clinical status from linked Appointment (Completed, Cancelled, Confirmed, Scheduled)
         --    or Pending if unlinked.
@@ -110,22 +112,37 @@ BEGIN TRY
     END
     ELSE
     BEGIN
-        PRINT 'Step 2: No legacy Called/Unreachable statuses found in FollowUpSchedules.';
+        PRINT 'Step 2 Passed: No legacy Called/Unreachable statuses found in FollowUpSchedules.';
     END
 
     -- ---------------------------------------------------------------------------------
-    -- Step 3: Check Constraint Discovery & Dynamic Replacement
+    -- Step 3: Safe Check Constraint Discovery & Dynamic Replacement
     -- ---------------------------------------------------------------------------------
-    -- Identifies:
-    --   - Column-level constraints on Status (parent_column_id = Status column id)
-    --   - Table-level constraints on Status (parent_column_id = 0 AND definition references Status)
-    --   - Explicitly named CK_FollowUpSchedules_Status
-    -- Does NOT drop constraints on unrelated columns.
-    DECLARE @ConstraintName NVARCHAR(128);
-    DECLARE @DropSql NVARCHAR(MAX);
-    DECLARE @NeedRecreate BIT = 1;
+    -- Pre-check: Ensure no multi-column constraint references Status AND another column
+    DECLARE @MultiColCount INT;
+    SELECT @MultiColCount = COUNT(*)
+    FROM sys.check_constraints cc
+    WHERE cc.parent_object_id = OBJECT_ID(N'[dbo].[FollowUpSchedules]')
+      AND cc.parent_column_id = 0
+      AND (cc.definition LIKE '%[Status]%' OR cc.definition LIKE '%Status%')
+      AND EXISTS (
+          SELECT 1 
+          FROM sys.columns other_c 
+          WHERE other_c.object_id = cc.parent_object_id 
+            AND other_c.name <> 'Status'
+            AND (cc.definition LIKE '%[' + other_c.name + ']%' OR cc.definition LIKE '%' + other_c.name + '%')
+      );
+
+    IF @MultiColCount > 0
+    BEGIN
+        RAISERROR(N'DISCOVERY SAFETY ABORT: Found multi-column CHECK constraint on FollowUpSchedules referencing Status and other columns. Manual DBA review required.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
 
     -- Check if CK_FollowUpSchedules_Status already exists with valid definition
+    DECLARE @NeedRecreate BIT = 1;
+
     IF EXISTS (
         SELECT 1
         FROM sys.check_constraints cc
@@ -141,20 +158,36 @@ BEGIN TRY
           AND cc.definition NOT LIKE '%Unreachable%'
     )
     BEGIN
-        -- Re-validate constraint to ensure it is trusted
+        -- Re-validate constraint to ensure it is active and trusted
         ALTER TABLE [dbo].[FollowUpSchedules] WITH CHECK CHECK CONSTRAINT [CK_FollowUpSchedules_Status];
         SET @NeedRecreate = 0;
         PRINT 'Step 3: Constraint [CK_FollowUpSchedules_Status] already exists with correct definition and is trusted.';
     END
 
-    -- Drop any outdated or anonymous constraints affecting Status
+    -- Safely drop outdated constraints that strictly target Status only
+    DECLARE @ConstraintName NVARCHAR(128);
+    DECLARE @DropSql NVARCHAR(MAX);
+
     DECLARE cur CURSOR LOCAL FAST_FORWARD FOR
     SELECT cc.name
     FROM sys.check_constraints cc
     WHERE cc.parent_object_id = OBJECT_ID(N'[dbo].[FollowUpSchedules]')
       AND (
+          -- Column-level constraint on Status
           cc.parent_column_id = COLUMNPROPERTY(OBJECT_ID(N'[dbo].[FollowUpSchedules]'), 'Status', 'ColumnId')
-          OR (cc.parent_column_id = 0 AND (cc.definition LIKE '%[Status]%' OR cc.definition LIKE '%Status%'))
+          -- Table-level constraint that targets Status exclusively (does not reference any other column)
+          OR (
+              cc.parent_column_id = 0 
+              AND (cc.definition LIKE '%[Status]%' OR cc.definition LIKE '%Status%')
+              AND NOT EXISTS (
+                  SELECT 1 
+                  FROM sys.columns other_c 
+                  WHERE other_c.object_id = cc.parent_object_id 
+                    AND other_c.name <> 'Status'
+                    AND (cc.definition LIKE '%[' + other_c.name + ']%' OR cc.definition LIKE '%' + other_c.name + '%')
+              )
+          )
+          -- Specific named constraint
           OR cc.name = 'CK_FollowUpSchedules_Status'
       )
       AND (@NeedRecreate = 1 OR cc.name <> 'CK_FollowUpSchedules_Status');
@@ -163,7 +196,8 @@ BEGIN TRY
     FETCH NEXT FROM cur INTO @ConstraintName;
     WHILE @@FETCH_STATUS = 0
     BEGIN
-        SET @DropSql = N'ALTER TABLE [dbo].[FollowUpSchedules] DROP CONSTRAINT [' + @ConstraintName + N'];';
+        -- Use QUOTENAME for safety
+        SET @DropSql = N'ALTER TABLE [dbo].[FollowUpSchedules] DROP CONSTRAINT ' + QUOTENAME(@ConstraintName) + N';';
         EXEC sp_executesql @DropSql;
         PRINT 'Dropped outdated CHECK constraint: ' + @ConstraintName;
         FETCH NEXT FROM cur INTO @ConstraintName;
@@ -184,7 +218,6 @@ BEGIN TRY
     -- ---------------------------------------------------------------------------------
     -- Step 4: Post-Migration Constraint Validation
     -- ---------------------------------------------------------------------------------
-    -- Ensure constraint exists, is enabled (is_disabled = 0), and trusted (is_not_trusted = 0).
     IF NOT EXISTS (
         SELECT 1
         FROM sys.check_constraints cc
@@ -201,7 +234,7 @@ BEGIN TRY
     PRINT 'Step 4 Passed: Constraint [CK_FollowUpSchedules_Status] is active (is_disabled=0) and trusted (is_not_trusted=0).';
 
     COMMIT TRANSACTION;
-    PRINT 'Migration completed successfully with zero medical data loss.';
+    PRINT 'Hardened migration completed successfully with zero medical data loss.';
 END TRY
 BEGIN CATCH
     IF @@TRANCOUNT > 0

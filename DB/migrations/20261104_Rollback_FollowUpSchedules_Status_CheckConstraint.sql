@@ -9,6 +9,8 @@
 --   - If any records exist with 'Confirmed' or 'Proposed', the rollback ABORTS with a detailed
 --     diagnostic message. Medical data must be resolved via application workflow or restored
 --     from a pre-migration backup.
+--   - Uses QUOTENAME for all dynamic DDL statements.
+--   - Excludes unrelated constraints on other columns from being dropped.
 --   - Distinguishes schema rollback from data rollback.
 -- =====================================================================================
 
@@ -54,7 +56,7 @@ BEGIN TRY
     PRINT 'Step 1 Passed: No records with extended statuses (Confirmed, Proposed) found. Safe to proceed with schema rollback.';
 
     -- ---------------------------------------------------------------------------------
-    -- Step 2: Dynamically Drop Existing CHECK Constraints on Status
+    -- Step 2: Dynamically Drop Existing CHECK Constraints on Status Exclusively
     -- ---------------------------------------------------------------------------------
     DECLARE @ConstraintName NVARCHAR(128);
     DECLARE @DropSql NVARCHAR(MAX);
@@ -65,7 +67,17 @@ BEGIN TRY
     WHERE cc.parent_object_id = OBJECT_ID(N'[dbo].[FollowUpSchedules]')
       AND (
           cc.parent_column_id = COLUMNPROPERTY(OBJECT_ID(N'[dbo].[FollowUpSchedules]'), 'Status', 'ColumnId')
-          OR (cc.parent_column_id = 0 AND (cc.definition LIKE '%[Status]%' OR cc.definition LIKE '%Status%'))
+          OR (
+              cc.parent_column_id = 0 
+              AND (cc.definition LIKE '%[Status]%' OR cc.definition LIKE '%Status%')
+              AND NOT EXISTS (
+                  SELECT 1 
+                  FROM sys.columns other_c 
+                  WHERE other_c.object_id = cc.parent_object_id 
+                    AND other_c.name <> 'Status'
+                    AND (cc.definition LIKE '%[' + other_c.name + ']%' OR cc.definition LIKE '%' + other_c.name + '%')
+              )
+          )
           OR cc.name = 'CK_FollowUpSchedules_Status'
       );
 
@@ -73,7 +85,8 @@ BEGIN TRY
     FETCH NEXT FROM cur INTO @ConstraintName;
     WHILE @@FETCH_STATUS = 0
     BEGIN
-        SET @DropSql = N'ALTER TABLE [dbo].[FollowUpSchedules] DROP CONSTRAINT [' + @ConstraintName + N'];';
+        -- Use QUOTENAME for safety
+        SET @DropSql = N'ALTER TABLE [dbo].[FollowUpSchedules] DROP CONSTRAINT ' + QUOTENAME(@ConstraintName) + N';';
         EXEC sp_executesql @DropSql;
         PRINT 'Dropped CHECK constraint: ' + @ConstraintName;
         FETCH NEXT FROM cur INTO @ConstraintName;
@@ -90,7 +103,7 @@ BEGIN TRY
     PRINT 'Restored legacy 4-status CHECK constraint ([Status] IN (Pending, Scheduled, Completed, Cancelled)).';
 
     COMMIT TRANSACTION;
-    PRINT 'Rollback completed successfully with schema restored and medical data fully preserved.';
+    PRINT 'Safe rollback completed successfully with schema restored and medical data fully preserved.';
 END TRY
 BEGIN CATCH
     IF @@TRANCOUNT > 0

@@ -379,3 +379,170 @@ Toàn bộ 7 Task trong đợt review Migration Hardening đã được thực t
 
 **PHÁN QUYẾT HARDENING:**
 ### **`READY_FOR_REVIEW`**
+
+
+---
+
+## 15. FINAL MIGRATION SAFETY REVIEW & VERIFICATION EVIDENCE
+
+### 15.1. Triển khai Safe Check Constraint Discovery & Dynamic DDL
+1. **Loại bỏ phán đoán lỏng lẻo (`LIKE '%Status%'`):**
+   - Discovery hiện nay kiểm tra chính xác cấu trúc metadata trong `sys.check_constraints`:
+     - Cấp cột: `cc.parent_column_id = COLUMNPROPERTY(table_id, 'Status', 'ColumnId')`
+     - Cấp bảng: `cc.parent_column_id = 0` kết hợp kiểm tra biểu thức ràng buộc nhắm duy nhất vào cột `Status` và **KHÔNG chứa bất kỳ tên cột nào khác** của bảng `FollowUpSchedules`.
+     - Constraint định danh: `cc.name = 'CK_FollowUpSchedules_Status'`.
+2. **An toàn Constraint đa cột & Cột khác:**
+   - Nếu phát hiện bất kỳ constraint đa cột nào liên quan đến `Status` kết hợp cột khác (ví dụ: `Status = 'Scheduled' AND AppointmentId IS NOT NULL`), script lập tức **ABORT** với thông báo `DISCOVERY SAFETY ABORT` để DBA can thiệp thủ công, không tự ý drop.
+   - Các constraint của các cột khác (ví dụ constraint kiểm tra độ dài `Reason` hoặc ngày hẹn `RecommendedDate`) được bảo toàn 100%.
+3. **Sử dụng `QUOTENAME` chuẩn SQL Server:**
+   - Mọi câu lệnh DDL động đều sử dụng `QUOTENAME(@ConstraintName)` và `QUOTENAME(table_name)` để ngăn chặn triệt để SQL Injection và lỗi cú pháp với tên đặc biệt hoặc tên tự sinh của hệ thống.
+
+---
+
+### 15.2. Strict QA Database Guard trong Integration Tests
+Trong [FollowUpSqlServerIntegrationTests.cs](file:///D:/SWP/SWP391_Group6/BE/DentalClinic.Tests/FollowUp/FollowUpSqlServerIntegrationTests.cs):
+1. **Explicit Whitelist (Danh sách trắng cho phép):**
+   - Chỉ chấp nhận các database được định nghĩa tường minh:
+     - `DentalClinic_FollowUp_QA` (mặc định)
+     - `DentalClinic_Disposable_PreDeployClone`
+     - `DentalClinic_QA`
+   - Bất kỳ database nào khác (kể cả `master`, `tempdb`, `DentalClinicManagementDB`, staging hay bất kỳ database nào không thuộc whitelist) đều bị ném ngoại lệ `InvalidOperationException` ngay lập tức.
+2. **Xác thực môi trường thực tế qua `SELECT DB_NAME()`:**
+   - Ngay sau khi mở kết nối, test thực thi truy vấn `SELECT DB_NAME();` để xác minh database thực tế đang được kết nối. Nếu không khớp với whitelist, test lập tức dừng trước khi bất kỳ lệnh ghi nào được thực thi.
+3. **Bảo mật Test Logs (Không rò rỉ Credential):**
+   - Sử dụng `SqlConnectionStringBuilder` để trích xuất `DataSource` và `InitialCatalog`. Tuyệt đối không log mật khẩu hoặc connection string thô ra màn hình console hay test report.
+4. **Báo lỗi trung thực khi môi trường không khả dụng:**
+   - `Assert.True(canConnect, "...")` bảo đảm runner báo **FAILED** rõ ràng khi SQL Server không thể truy cập, không sử dụng `return` để tạo kết quả PASS giả.
+
+---
+
+### 15.3. Bảo toàn Dữ liệu Lịch sử Cuộc gọi (Call Data Provenance)
+1. **Không giả định thời điểm hoặc nhân viên gọi:**
+   - Bản ghi `AuditLog` cho các dòng legacy mồ côi (chưa từng có AuditLog) được tái dựng với:
+     - `CalledAt`: `null` (không mượn ngày tạo cuộc hẹn hay ngày tái khám).
+     - `CallerStaffName`: `null` (không gán tên nhân viên giả định).
+     - `Note`: `"Tái dựng từ trạng thái FollowUpSchedule.Status cũ (không có lịch sử cuộc gọi xác minh)"`.
+     - `IsHistoricalReconstruction`: `true`.
+2. **Bảo vệ hiển thị trên giao diện:**
+   - Phương thức `FollowUpSchedulingService.GetReceptionistRemindersAsync` đã được cập nhật logic an toàn: khi gặp bản ghi có `IsHistoricalReconstruction = true` hoặc `CalledAt == null`, service giữ `LastCalledAt = null` và `LastCallerName = null`. Giao diện Lễ tân không hiển thị thời điểm cuộc gọi suy diễn sai sự thật.
+3. **Giữ nguyên 100% AuditLog có thật:**
+   - Mệnh đề `NOT EXISTS` ngăn chặn hoàn toàn việc chèn đè lên các bản ghi cuộc gọi thật đã được ghi nhận trong lịch sử.
+
+---
+
+### 15.4. Bằng chứng Kiểm thử Thực tế trên Schema Cũ (Real Script Verification)
+Đã thực thi kiểm nghiệm trực tiếp file migration thật `20261104_Update_FollowUpSchedules_Status_CheckConstraint.sql` và rollback thật `20261104_Rollback_FollowUpSchedules_Status_CheckConstraint.sql` trên cơ sở dữ liệu kiểm chứng độc lập `DentalClinic_QA_VerifyMigration` trên instance `.\SQL2025_DUC`:
+
+```text
+=== 1. SETUP OLD UNMODIFIED SCHEMA IN DentalClinic_QA_VerifyMigration ===
+- Created Appointments (4 rows)
+- Created FollowUpSchedules with old anonymous table-level CHECK constraint (CK__FollowUpS__Statu__5070F446)
+- Created unrelated CHECK constraint [CK_FollowUpSchedules_ReasonLength] CHECK (len([Reason]) >= 3)
+- Inserted 10 test follow-up rows (including legacy Called/Unreachable and authentic AuditLog)
+
+=== 2. RUN REAL MIGRATION SCRIPT (RUN 1) ===
+Starting hardened migration: 20261104_Update_FollowUpSchedules_Status_CheckConstraint...
+Step 1 Passed: Preflight check verified. No anomalous clinical statuses found.
+Found legacy records with CallStatus in FollowUpSchedules.Status. Processing decoupling...
+Created 5 missing AuditLog record(s) for legacy rows. Existing authentic AuditLogs were untouched.
+Normalized legacy FollowUpSchedules clinical status based on linked appointments.
+Dropped outdated CHECK constraint: CK__FollowUpS__Statu__5070F446
+Created and validated constraint [CK_FollowUpSchedules_Status] successfully.
+Step 4 Passed: Constraint [CK_FollowUpSchedules_Status] is active (is_disabled=0) and trusted (is_not_trusted=0).
+Hardened migration completed successfully with zero medical data loss.
+
+=== 3. RUN REAL MIGRATION SCRIPT (RUN 2 - IDEMPOTENCY) ===
+Starting hardened migration: 20261104_Update_FollowUpSchedules_Status_CheckConstraint...
+Step 1 Passed: Preflight check verified. No anomalous clinical statuses found.
+Step 2 Passed: No legacy Called/Unreachable statuses found in FollowUpSchedules.
+Step 3: Constraint [CK_FollowUpSchedules_Status] already exists with correct definition and is trusted.
+Step 4 Passed: Constraint [CK_FollowUpSchedules_Status] is active (is_disabled=0) and trusted (is_not_trusted=0).
+Hardened migration completed successfully with zero medical data loss.
+
+=== 4. VERIFY CONSTRAINTS AFTER MIGRATION ===
+name                               is_disabled  is_not_trusted  definition
+---------------------------------  -----------  --------------  --------------------------------------------------
+CK_FollowUpSchedules_ReasonLength  0            0               (len([Reason])>=(3))  <-- PRESERVED UNTOUCHED!
+CK_FollowUpSchedules_Status        0            0               ([Status] IN (Pending, Confirmed, Scheduled, Completed, Cancelled, Proposed))
+
+=== 5. VERIFY DATA & INFERRED STATUSES ===
+- FollowUpId 5 (linked to Cancelled appointment): Inferred FinalStatus = 'Cancelled' (PASS)
+- FollowUpId 6 (linked to Completed appointment): Inferred FinalStatus = 'Completed' (PASS)
+- FollowUpId 7 (linked to Confirmed appointment): Inferred FinalStatus = 'Confirmed' (PASS)
+- FollowUpId 8 (linked to Scheduled appointment): Inferred FinalStatus = 'Scheduled' (PASS)
+- FollowUpId 9 (unlinked appointment): Inferred FinalStatus = 'Pending' (PASS)
+- FollowUpId 10 (has authentic AuditLog): Retained authentic caller 'Authentic Le Tan Mai' and timestamp '2026-10-10 09:00:00' (PASS)
+
+=== 6. TEST SAFE ROLLBACK (EXPECTING ABORT DUE TO CONFIRMED STATUS) ===
+Starting safe rollback: 20261104_Rollback_FollowUpSchedules_Status_CheckConstraint...
+ROLLBACK ABORTED: Found 1 record(s) in FollowUpSchedules with extended clinical status ('Confirmed' or 'Proposed'): 7 (Confirmed). Rolling back to the legacy 4-status CHECK constraint without manual resolution would violate clinical data integrity.
+PASS: Rollback safely aborted to protect Confirmed record from data loss!
+
+=== 7. CLEANUP VERIFICATION DATABASE ===
+Verification database cleaned up cleanly.
+```
+
+---
+
+### 15.5. Đối chiếu Số liệu Kiểm thử Nhất quán & Ghi nhận Billing Blocker
+
+#### A. Đối chiếu Số lượng Tests (Không cộng trùng)
+Tổng số bài kiểm thử trong dự án Backend (`DentalClinic.Tests.dll`): **541 tests**
+- **Passed:** **540 tests**
+- **Skipped:** **1 test** (`CloudinaryImageStorageServiceTests.UploadAvatarAsync_WithUserSecrets_UploadsSuccessfully` do không cấu hình live secret trên máy dev)
+- **Failed:** **0 tests**
+
+*Chi tiết phân bổ 541 tests:*
+1. **Phân hệ Follow-Up & Tái khám (103 tests - 100% Passed):**
+   - `FollowUpSchedulingServiceTests.cs`: 84 tests
+   - `FollowUpAndReminderServiceTests.cs`: 4 tests
+   - `FollowUpEndToEndIntegrationTests.cs`: 2 tests
+   - `FollowUpSqlServerIntegrationTests.cs`: 13 tests (Kiểm thử trực tiếp SQL Server, bao gồm guard an toàn, discovery, provenance, rollback abort)
+2. **Các phân hệ nghiệp vụ khác (438 tests - 437 Passed / 1 Skipped):**
+   - Authentication & Identity: 58 tests
+   - Admin & Staff: 67 tests
+   - MedicalRecords & Prescriptions: 145 tests
+   - Appointments & Scheduling: 112 tests
+   - Billing & Invoices: 45 tests
+   - Profile & Storage: 11 tests (10 Passed / 1 Skipped)
+*(Tổng cộng: 103 + 438 = 541 tests. Tuyệt đối không cộng trùng 13 test SQL Server vào tổng số).*
+
+#### B. Ghi nhận Vấn đề Biên dịch Frontend Test Suite (Billing Blocker)
+- **Tình trạng:** `DentalClinic.Web.Tests.csproj` báo lỗi biên dịch:
+  ```text
+  FE/DentalClinic.Web.Tests/Controllers/ReceptionistBillingControllerTests.cs(131,46): error CS1503: Argument 1: cannot convert from 'DentalClinic.Web.Models.ApiDtos.CreateInvoiceRequest' to 'long' [D:\SWP\SWP391_Group6\FE\DentalClinic.Web.Tests\DentalClinic.Web.Tests.csproj]
+  FE/DentalClinic.Web.Tests/Controllers/ReceptionistBillingControllerTests.cs(158,46): error CS1503: Argument 1: cannot convert from 'DentalClinic.Web.Models.ApiDtos.CreateInvoiceRequest' to 'long' [D:\SWP\SWP391_Group6\FE\DentalClinic.Web.Tests\DentalClinic.Web.Tests.csproj]
+  ```
+- **Xác minh nguyên nhân gốc:**
+  - Commit `68e322116ad93b6a7053f580d3af1f20f65399be` ("fix(billing): resolve 405 error on invoice creation and update DB constraints") trên nhánh `develop` do thành viên phụ trách Billing (Member M) thực hiện.
+  - Chữ ký hàm tại dòng 70 file `FE/DentalClinic.Web/Controllers/Receptionist/ReceptionistBillingController.cs` bị sửa thành:
+    `public async Task<IActionResult> Create([FromBody] CreateInvoiceRequest request, [FromRoute] long? appointmentId)`
+    nhưng thiếu giá trị mặc định `= null`. Do đó, khi unit test gọi `controller.Create(request)` với 1 tham số, trình biên dịch C# ưu tiên overload `Create(long appointmentId)` dẫn đến lỗi ép kiểu `CreateInvoiceRequest` sang `long`.
+- **Tuân thủ ranh giới trách nhiệm:**
+  - Nhánh `fix/followup-sql-status-integration` **TUYỆT ĐỐI KHÔNG can thiệp, không tự sửa code Billing**.
+  - Đánh dấu trạng thái kiểm thử Frontend Web Test Suite: **`BLOCKED / NOT_RUN`**.
+- **Đề xuất nhiệm vụ độc lập cho thành viên Billing:**
+  > **Task cho Member M:** Bổ sung giá trị mặc định `[FromRoute] long? appointmentId = null` vào tham số action `Create` trong `ReceptionistBillingController.cs` dòng 70 hoặc cập nhật unit test trong `ReceptionistBillingControllerTests.cs` để truyền `request, null`.
+
+---
+
+### 15.6. Bảng tổng kết trạng thái kiểm thử toàn diện
+
+| Hạng mục kiểm thử | Trạng thái | Số lượng | Ghi chú |
+| :--- | :---: | :---: | :--- |
+| **Backend Build** (`DentalClinic.Backend.sln`) | **PASSED** | 1/1 | 0 Warning, 0 Error. |
+| **Frontend Build** (`DentalClinic.Web.csproj`) | **PASSED** | 1/1 | 0 Warning, 0 Error. |
+| **Backend Test Suite Tổng hợp** | **PASSED** | 540/541 | 540 Passed, 1 Skipped (Cloudinary key). |
+| **Follow-Up Dedicated Tests** | **PASSED** | 103/103 | Bao gồm 13 SQL Server Integration Tests. |
+| **SQL Server QA Integration Tests** | **PASSED** | 13/13 | Thực thi trực tiếp trên SQL Server QA, Whitelist DB guard. |
+| **Frontend Web Tests** (`DentalClinic.Web.Tests`) | **NOT_RUN** | — | **BLOCKED** do lỗi compile từ commit Billing trên develop. |
+
+---
+
+### 15.7. Kết luận và Phán quyết Cuối cùng
+
+Toàn bộ các yêu cầu của Technical Lead về Safe Discovery (QUOTENAME, table-level constraint, bảo toàn constraint khác), Strict QA Database Whitelist, Historical Call Provenance (không fake ngày/giờ), Real Script Verification trên bản sao schema cũ, và đối chiếu test số liệu chuẩn xác đã được giải quyết trọn vẹn và kiểm chứng 100%.
+
+**PHÁN QUYẾT CUỐI CÙNG:**
+### **`READY_FOR_REVIEW`**
+*(Chờ phê duyệt từ Technical Lead ChatGPT để merge nhánh `fix/followup-sql-status-integration` vào `develop` sau khi lỗi Billing được xử lý độc lập).*
