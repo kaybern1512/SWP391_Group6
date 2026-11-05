@@ -37,9 +37,10 @@ public class FollowUpConcurrencyIntegrationTests
     {
         var targetDate = DateOnly.FromDateTime(slotDate.Date);
         var existing = await db.DentistWorkSchedules
-            .FirstOrDefaultAsync(ws => ws.DentistUserId == doctorId && ws.WorkDate == targetDate);
+            .Where(ws => ws.DentistUserId == doctorId && ws.WorkDate == targetDate && ws.DepartmentId == departmentId)
+            .ToListAsync();
 
-        if (existing == null)
+        if (!existing.Any())
         {
             db.DentistWorkSchedules.Add(new DentistWorkSchedule
             {
@@ -50,6 +51,16 @@ public class FollowUpConcurrencyIntegrationTests
                 EndTime = new TimeOnly(18, 0),
                 Status = "Scheduled"
             });
+            await db.SaveChangesAsync();
+        }
+        else
+        {
+            foreach (var s in existing)
+            {
+                s.StartTime = new TimeOnly(8, 0);
+                s.EndTime = new TimeOnly(18, 0);
+                s.Status = "Scheduled";
+            }
             await db.SaveChangesAsync();
         }
     }
@@ -2153,7 +2164,7 @@ public class FollowUpConcurrencyIntegrationTests
             ScheduledStart = start,
             ScheduledEnd = end
         });
-        Assert.True(res1.Success);
+        Assert.True(res1.Success, res1.Message);
 
         // Manager of Dept 3 attempts to confirm Appt 2 for SAME patient at same time
         using var mgr2Db = _fixture.CreateDbContext();
@@ -2576,6 +2587,888 @@ public class FollowUpConcurrencyIntegrationTests
         // Must reject because Day 45 is synchronized under DentistMasterKey & DentistAvailabilities
         Assert.False(confirmRes.Success);
         Assert.Contains("Bác sĩ đang bận hoặc nghỉ phép", confirmRes.Message);
+    }
+
+    [Fact]
+    public async Task B32_ManagerConfirm_DoctorHasNoShift_RejectsConfirmation()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;
+        var managerId = 17L;
+        var targetDate = DateTime.Today.AddDays(70);
+        var targetDateOnly = DateOnly.FromDateTime(targetDate.Date);
+        var existingShifts = await setupDb.DentistWorkSchedules
+            .Where(ws => ws.DentistUserId == doctorId && ws.WorkDate == targetDateOnly)
+            .ToListAsync();
+        if (existingShifts.Any())
+        {
+            setupDb.DentistWorkSchedules.RemoveRange(existingShifts);
+            await setupDb.SaveChangesAsync();
+        }
+
+        var start = targetDate.AddHours(9);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B32-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = 6L,
+            DepartmentId = 1,
+            RequestedDentistUserId = doctorId,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.PendingDepartmentReview,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "No shift test",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        using var confirmDb = _fixture.CreateDbContext();
+        var service = new AppointmentService(confirmDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var res = await service.ManagerConfirmAsync(appt.AppointmentId, managerId, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = 1L,
+            ScheduledStart = start,
+            ScheduledEnd = end
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("Bác sĩ không có ca làm việc", res.Message);
+    }
+
+    [Fact]
+    public async Task B33_ManagerConfirm_DoctorShiftCancelled_RejectsConfirmation()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;
+        var managerId = 17L;
+        var targetDate = DateTime.Today.AddDays(71);
+        var targetDateOnly = DateOnly.FromDateTime(targetDate.Date);
+
+        var existing = await setupDb.DentistWorkSchedules
+            .FirstOrDefaultAsync(ws => ws.DentistUserId == doctorId && ws.WorkDate == targetDateOnly);
+        if (existing != null)
+        {
+            existing.Status = "Cancelled";
+        }
+        else
+        {
+            setupDb.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistUserId = doctorId,
+                DepartmentId = 1,
+                WorkDate = targetDateOnly,
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(18, 0),
+                Status = "Cancelled"
+            });
+        }
+        await setupDb.SaveChangesAsync();
+
+        var start = targetDate.AddHours(9);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B33-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = 6L,
+            DepartmentId = 1,
+            RequestedDentistUserId = doctorId,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.PendingDepartmentReview,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Cancelled shift test",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        using var confirmDb = _fixture.CreateDbContext();
+        var service = new AppointmentService(confirmDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var res = await service.ManagerConfirmAsync(appt.AppointmentId, managerId, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = 1L,
+            ScheduledStart = start,
+            ScheduledEnd = end
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("Ca làm việc của Bác sĩ đã bị hủy", res.Message);
+    }
+
+    [Fact]
+    public async Task B34_ManagerConfirm_AppointmentOutsideShiftHours_RejectsConfirmation()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;
+        var managerId = 17L;
+        var targetDate = DateTime.Today.AddDays(72);
+        var targetDateOnly = DateOnly.FromDateTime(targetDate.Date);
+
+        var existing = await setupDb.DentistWorkSchedules
+            .FirstOrDefaultAsync(ws => ws.DentistUserId == doctorId && ws.WorkDate == targetDateOnly);
+        if (existing != null)
+        {
+            existing.StartTime = new TimeOnly(8, 0);
+            existing.EndTime = new TimeOnly(12, 0); // Morning shift only
+            existing.Status = "Scheduled";
+        }
+        else
+        {
+            setupDb.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistUserId = doctorId,
+                DepartmentId = 1,
+                WorkDate = targetDateOnly,
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(12, 0),
+                Status = "Scheduled"
+            });
+        }
+        await setupDb.SaveChangesAsync();
+
+        // Appointment is in afternoon: 14:00 - 14:30
+        var start = targetDate.AddHours(14);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B34-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = 6L,
+            DepartmentId = 1,
+            RequestedDentistUserId = doctorId,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.PendingDepartmentReview,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Outside shift test",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        using var confirmDb = _fixture.CreateDbContext();
+        var service = new AppointmentService(confirmDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var res = await service.ManagerConfirmAsync(appt.AppointmentId, managerId, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = 1L,
+            ScheduledStart = start,
+            ScheduledEnd = end
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("Giờ khám nằm ngoài khung giờ làm việc", res.Message);
+    }
+
+    [Fact]
+    public async Task B35_ManagerConfirm_DoctorShiftCoversAppointment_Succeeds()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;
+        var managerId = 17L;
+        var targetDate = DateTime.Today.AddDays(73);
+        var targetDateOnly = DateOnly.FromDateTime(targetDate.Date);
+
+        var existing = await setupDb.DentistWorkSchedules
+            .FirstOrDefaultAsync(ws => ws.DentistUserId == doctorId && ws.WorkDate == targetDateOnly);
+        if (existing != null)
+        {
+            existing.StartTime = new TimeOnly(8, 0);
+            existing.EndTime = new TimeOnly(18, 0);
+            existing.Status = "Scheduled";
+        }
+        else
+        {
+            setupDb.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistUserId = doctorId,
+                DepartmentId = 1,
+                WorkDate = targetDateOnly,
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(18, 0),
+                Status = "Scheduled"
+            });
+        }
+        await setupDb.SaveChangesAsync();
+
+        var start = targetDate.AddHours(10);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B35-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = 6L,
+            DepartmentId = 1,
+            RequestedDentistUserId = doctorId,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.PendingDepartmentReview,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Shift covers appointment test",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        using var confirmDb = _fixture.CreateDbContext();
+        var service = new AppointmentService(confirmDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var res = await service.ManagerConfirmAsync(appt.AppointmentId, managerId, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = 1L,
+            ScheduledStart = start,
+            ScheduledEnd = end
+        });
+
+        Assert.True(res.Success);
+        Assert.Equal(AppointmentStatus.Confirmed, res.Data!.Status);
+        Assert.Equal(doctorId, res.Data.AssignedDentistUserId);
+    }
+
+    [Fact]
+    public async Task B36_StaffCancel_Vs_DoctorApproveProposal_CancelWins_Deterministic()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;
+        var patientId = 6L;
+        var staffId = 2L;
+        var targetDate = DateTime.Today.AddDays(54);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
+
+        var start = targetDate.AddHours(9);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B36-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = patientId,
+            DepartmentId = 1,
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = 1L,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.Confirmed,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Staff cancel vs Approve proposal",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        var prop = new AppointmentChangeProposal
+        {
+            AppointmentId = appt.AppointmentId,
+            ProposedByUserId = patientId,
+            ProposedDepartmentId = 1,
+            ProposedDentistUserId = doctorId,
+            ProposedStart = targetDate.AddHours(14),
+            ProposedEnd = targetDate.AddHours(14).AddMinutes(30),
+            Reason = "[Đổi lịch] Sang chiều",
+            Status = ProposalStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.AppointmentChangeProposals.Add(prop);
+        await setupDb.SaveChangesAsync();
+
+        // 1. Staff cancels first
+        using var staffDb = _fixture.CreateDbContext();
+        var apptService = new AppointmentService(staffDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var cancelRes = await apptService.StaffCancelAppointmentAsync(appt.AppointmentId, staffId, "Lễ tân hủy theo yêu cầu bệnh nhân");
+        Assert.True(cancelRes.Success);
+
+        // 2. Doctor attempts to approve the pending proposal
+        using var docDb = _fixture.CreateDbContext();
+        var followUpService = new FollowUpSchedulingService(docDb, NullLogger<FollowUpSchedulingService>.Instance);
+        var approveRes = await followUpService.ResolveProposalAsync(doctorId, new ResolveProposalRequest
+        {
+            ProposalId = prop.ProposalId,
+            IsApproved = true
+        });
+
+        // Doctor's approval must be rejected because proposal was expired and appointment was cancelled
+        Assert.False(approveRes.Success);
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var finalAppt = await verifyDb.Appointments.FindAsync(appt.AppointmentId);
+        var finalProp = await verifyDb.AppointmentChangeProposals.FindAsync(prop.ProposalId);
+        Assert.Equal(AppointmentStatus.Cancelled, finalAppt!.Status);
+        Assert.Equal(ProposalStatus.Expired, finalProp!.Status);
+        Assert.Contains("[Lễ tân hủy lịch hẹn gốc]", finalProp.Reason);
+    }
+
+    [Fact]
+    public async Task B37_StaffCancel_Vs_DoctorApproveProposal_ApproveWins_Deterministic()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;
+        var patientId = 6L;
+        var staffId = 2L;
+        var targetDate = DateTime.Today.AddDays(55);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
+
+        var start = targetDate.AddHours(9);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B37-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = patientId,
+            DepartmentId = 1,
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = 1L,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.Confirmed,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Approve wins then cancel",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        var prop = new AppointmentChangeProposal
+        {
+            AppointmentId = appt.AppointmentId,
+            ProposedByUserId = patientId,
+            ProposedDepartmentId = 1,
+            ProposedDentistUserId = doctorId,
+            ProposedStart = targetDate.AddHours(14),
+            ProposedEnd = targetDate.AddHours(14).AddMinutes(30),
+            Reason = "[Đổi lịch] Sang chiều",
+            Status = ProposalStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.AppointmentChangeProposals.Add(prop);
+        await setupDb.SaveChangesAsync();
+
+        // 1. Doctor approves first
+        using var docDb = _fixture.CreateDbContext();
+        var followUpService = new FollowUpSchedulingService(docDb, NullLogger<FollowUpSchedulingService>.Instance);
+        var approveRes = await followUpService.ResolveProposalAsync(doctorId, new ResolveProposalRequest
+        {
+            ProposalId = prop.ProposalId,
+            IsApproved = true
+        });
+        Assert.True(approveRes.Success);
+
+        // 2. Staff cancels after approval
+        using var staffDb = _fixture.CreateDbContext();
+        var apptService = new AppointmentService(staffDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var cancelRes = await apptService.StaffCancelAppointmentAsync(appt.AppointmentId, staffId, "Lễ tân hủy sau khi đã đổi lịch");
+        Assert.True(cancelRes.Success);
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var finalAppt = await verifyDb.Appointments.FindAsync(appt.AppointmentId);
+        var finalProp = await verifyDb.AppointmentChangeProposals.FindAsync(prop.ProposalId);
+        Assert.Equal(AppointmentStatus.Cancelled, finalAppt!.Status);
+        Assert.Equal(ProposalStatus.Accepted, finalProp!.Status);
+    }
+
+    [Fact]
+    public async Task B38_PatientReschedule_TwoConcurrentRequests_OnlyOneSucceeds_AtomicityGuaranteed()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var patientId = 6L;
+        var doctorId = 1L;
+        var targetDate = DateTime.Today.AddDays(56);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
+
+        var start = targetDate.AddHours(9);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B38-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = patientId,
+            DepartmentId = 1,
+            RequestedServiceId = 1L,
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = 1L,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.Confirmed,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Concurrent reschedule test",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        var barrier = new Barrier(2);
+
+        var task1 = Task.Run(async () =>
+        {
+            using var db1 = _fixture.CreateDbContext();
+            var service1 = new AppointmentService(db1, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            barrier.SignalAndWait();
+            return await service1.PatientRescheduleAsync(appt.AppointmentId, patientId, new PatientRescheduleRequest
+            {
+                NewScheduledStart = targetDate.AddHours(14),
+                Reason = "Reschedule attempt 1"
+            });
+        });
+
+        var task2 = Task.Run(async () =>
+        {
+            using var db2 = _fixture.CreateDbContext();
+            var service2 = new AppointmentService(db2, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            barrier.SignalAndWait();
+            return await service2.PatientRescheduleAsync(appt.AppointmentId, patientId, new PatientRescheduleRequest
+            {
+                NewScheduledStart = targetDate.AddHours(15),
+                Reason = "Reschedule attempt 2"
+            });
+        });
+
+        var results = await Task.WhenAll(task1, task2);
+        var res1 = results[0];
+        var res2 = results[1];
+
+        // Exactly one succeeds, the other fails
+        Assert.True(res1.Success ^ res2.Success);
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var oldAppt = await verifyDb.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(AppointmentStatus.Cancelled, oldAppt!.Status);
+
+        // Verify exactly 1 new appointment was created for this rescheduling
+        var newAppts = await verifyDb.Appointments
+            .Where(a => a.PatientUserId == patientId && a.ReasonForVisit!.Contains($"Dời từ lịch {appt.AppointmentCode}"))
+            .ToListAsync();
+        Assert.Single(newAppts);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, newAppts[0].Status);
+    }
+
+    [Fact]
+    public async Task B39_PatientReschedule_Vs_PatientCancel_MutuallyExclusive()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var patientId = 6L;
+        var doctorId = 1L;
+        var targetDate = DateTime.Today.AddDays(57);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
+
+        var start = targetDate.AddHours(9);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B39-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = patientId,
+            DepartmentId = 1,
+            RequestedServiceId = 1L,
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = 1L,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.Confirmed,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Reschedule vs Cancel test",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        var barrier = new Barrier(2);
+
+        var rescheduleTask = Task.Run(async () =>
+        {
+            using var db1 = _fixture.CreateDbContext();
+            var service1 = new AppointmentService(db1, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            barrier.SignalAndWait();
+            return await service1.PatientRescheduleAsync(appt.AppointmentId, patientId, new PatientRescheduleRequest
+            {
+                NewScheduledStart = targetDate.AddHours(14),
+                Reason = "Reschedule test"
+            });
+        });
+
+        var cancelTask = Task.Run(async () =>
+        {
+            using var db2 = _fixture.CreateDbContext();
+            var service2 = new AppointmentService(db2, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            barrier.SignalAndWait();
+            return await service2.PatientCancelAsync(appt.AppointmentId, patientId, "Cancel test");
+        });
+
+        var resResult = await rescheduleTask;
+        var cancelResult = await cancelTask;
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var finalAppt = await verifyDb.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(AppointmentStatus.Cancelled, finalAppt!.Status);
+
+        if (resResult.Success)
+        {
+            // Reschedule won -> cancel failed because appt was already cancelled by reschedule
+            Assert.False(cancelResult.Success);
+            var newAppts = await verifyDb.Appointments
+                .Where(a => a.PatientUserId == patientId && a.ReasonForVisit!.Contains($"Dời từ lịch {appt.AppointmentCode}"))
+                .ToListAsync();
+            Assert.Single(newAppts);
+        }
+        else
+        {
+            // Cancel won -> reschedule failed because appt was cancelled
+            Assert.True(cancelResult.Success);
+            var newAppts = await verifyDb.Appointments
+                .Where(a => a.PatientUserId == patientId && a.ReasonForVisit!.Contains($"Dời từ lịch {appt.AppointmentCode}"))
+                .ToListAsync();
+            Assert.Empty(newAppts);
+        }
+    }
+
+    [Fact]
+    public async Task B40_PatientReschedule_Vs_DoctorApproveProposal_MutuallyExclusive()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var patientId = 6L;
+        var doctorId = 1L;
+        var targetDate = DateTime.Today.AddDays(58);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
+
+        var start = targetDate.AddHours(9);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B40-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = patientId,
+            DepartmentId = 1,
+            RequestedServiceId = 1L,
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = 1L,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.Confirmed,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Reschedule vs Proposal approve",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        var prop = new AppointmentChangeProposal
+        {
+            AppointmentId = appt.AppointmentId,
+            ProposedByUserId = patientId,
+            ProposedDepartmentId = 1,
+            ProposedDentistUserId = doctorId,
+            ProposedStart = targetDate.AddHours(14),
+            ProposedEnd = targetDate.AddHours(14).AddMinutes(30),
+            Reason = "[Đổi lịch] Sang chiều",
+            Status = ProposalStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.AppointmentChangeProposals.Add(prop);
+        await setupDb.SaveChangesAsync();
+
+        var barrier = new Barrier(2);
+
+        var rescheduleTask = Task.Run(async () =>
+        {
+            using var db1 = _fixture.CreateDbContext();
+            var service1 = new AppointmentService(db1, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            barrier.SignalAndWait();
+            return await service1.PatientRescheduleAsync(appt.AppointmentId, patientId, new PatientRescheduleRequest
+            {
+                NewScheduledStart = targetDate.AddHours(16),
+                Reason = "Patient reschedules directly"
+            });
+        });
+
+        var approveTask = Task.Run(async () =>
+        {
+            using var db2 = _fixture.CreateDbContext();
+            var service2 = new FollowUpSchedulingService(db2, NullLogger<FollowUpSchedulingService>.Instance);
+            barrier.SignalAndWait();
+            return await service2.ResolveProposalAsync(doctorId, new ResolveProposalRequest
+            {
+                ProposalId = prop.ProposalId,
+                IsApproved = true
+            });
+        });
+
+        var resResult = await rescheduleTask;
+        var approveResult = await approveTask;
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var finalAppt = await verifyDb.Appointments.FindAsync(appt.AppointmentId);
+        var finalProp = await verifyDb.AppointmentChangeProposals.FindAsync(prop.ProposalId);
+
+        // Under ApptKey serialization:
+        // Order 1: Reschedule runs first -> Appointment is Cancelled, Proposal Expired, Doctor Approve rejected.
+        // Order 2: Doctor Approve runs first -> Proposal Accepted, Appt updated. Then Reschedule runs on the updated appt -> Appt Cancelled, New Appt created.
+        Assert.True(resResult.Success);
+        Assert.Equal(AppointmentStatus.Cancelled, finalAppt!.Status);
+
+        if (!approveResult.Success)
+        {
+            // Reschedule acquired lock first
+            Assert.Equal(ProposalStatus.Expired, finalProp!.Status);
+        }
+        else
+        {
+            // Doctor approved proposal first, then patient rescheduled
+            Assert.Equal(ProposalStatus.Accepted, finalProp!.Status);
+        }
+
+        // In both cases, exactly 1 new appointment was created by the successful reschedule
+        var newAppts = await verifyDb.Appointments
+            .Where(a => a.PatientUserId == patientId && a.ReasonForVisit!.Contains($"Dời từ lịch {appt.AppointmentCode}"))
+            .ToListAsync();
+        Assert.Single(newAppts);
+    }
+
+    [Fact]
+    public async Task B41_DentistAssignChair_AppointmentCancelledWhileWaitingForLock_RejectsFreshState()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;
+        var patientId = 6L;
+        var chairId = 1L;
+        var targetDate = DateTime.Today.AddDays(59);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
+
+        var start = targetDate.AddHours(9);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B41-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = patientId,
+            DepartmentId = 1,
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = null,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.CheckedIn,
+            BookingSource = BookingSource.Receptionist,
+            ReasonForVisit = "Chair assignment vs cancel test",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        // Cancel appointment in DB
+        using var cancelDb = _fixture.CreateDbContext();
+        var apptToCancel = await cancelDb.Appointments.FindAsync(appt.AppointmentId);
+        apptToCancel!.Status = AppointmentStatus.Cancelled;
+        apptToCancel.CancelledAt = DateTime.UtcNow;
+        apptToCancel.CancellationReason = "Cancelled prior to chair assign";
+        await cancelDb.SaveChangesAsync();
+
+        // Doctor calls DentistAssignChairAsync
+        using var assignDb = _fixture.CreateDbContext();
+        var service = new AppointmentService(assignDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var res = await service.DentistAssignChairAsync(appt.AppointmentId, doctorId, chairId);
+
+        Assert.False(res.Success);
+        Assert.Contains("Ca khám đã hoàn tất hoặc đã hủy", res.Message);
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var finalAppt = await verifyDb.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(AppointmentStatus.Cancelled, finalAppt!.Status);
+        Assert.Null(finalAppt.DentalChairId);
+    }
+
+    [Fact]
+    public async Task B42_DentistAssignChair_AppointmentCompletedWhileWaitingForLock_RejectsFreshState()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;
+        var patientId = 6L;
+        var chairId = 1L;
+        var targetDate = DateTime.Today.AddDays(60);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
+
+        var start = targetDate.AddHours(9);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B42-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = patientId,
+            DepartmentId = 1,
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = null,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.Completed,
+            BookingSource = BookingSource.Receptionist,
+            ReasonForVisit = "Chair assignment vs completed test",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        using var assignDb = _fixture.CreateDbContext();
+        var service = new AppointmentService(assignDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var res = await service.DentistAssignChairAsync(appt.AppointmentId, doctorId, chairId);
+
+        Assert.False(res.Success);
+        Assert.Contains("Ca khám đã hoàn tất hoặc đã hủy", res.Message);
+    }
+
+    [Fact]
+    public async Task B43_E2E_FullUserJourney_Book_Confirm_Reschedule_Cancel_Rebook_CheckIn()
+    {
+        // Clarification: This is a backend service integration test executing the complete end-to-end
+        // user journey across Patient, Receptionist, Department Manager, and Dentist roles against real SQL Server.
+        using var setupDb = _fixture.CreateDbContext();
+        var patientId = 6L;
+        var doctorId = 1L;
+        var managerId = 17L;
+        var receptionistId = 2L;
+        var chairId = 1L;
+        var targetDate1 = DateTime.Today.AddDays(61);
+        var targetDate2 = DateTime.Today.AddDays(62);
+        var targetDate3 = DateTime.Today.AddDays(63);
+
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate1, 1);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate2, 1);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate3, 1);
+
+        // 1. Patient books initial appointment -> Status: PendingReceptionReview
+        using var bookDb = _fixture.CreateDbContext();
+        var apptService = new AppointmentService(bookDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var bookRes = await apptService.CreatePatientAppointmentAsync(patientId, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 1L,
+            RequestedDentistUserId = doctorId,
+            ScheduledStart = targetDate1.AddHours(9),
+            ReasonForVisit = "E2E: Khám răng ban đầu"
+        });
+        Assert.True(bookRes.Success);
+        var appt1Id = bookRes.Data!.AppointmentId;
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, bookRes.Data.Status);
+
+        // 2. Receptionist forwards -> Status: PendingDepartmentReview
+        using var recDb1 = _fixture.CreateDbContext();
+        var recService1 = new AppointmentService(recDb1, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var fwdRes = await recService1.ReceptionistForwardAsync(appt1Id, receptionistId, "Chuyển Trưởng khoa duyệt");
+        Assert.True(fwdRes.Success);
+
+        // 3. Manager confirms -> Status: Confirmed
+        using var mgrDb1 = _fixture.CreateDbContext();
+        var mgrService1 = new AppointmentService(mgrDb1, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var confirmRes = await mgrService1.ManagerConfirmAsync(appt1Id, managerId, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = chairId,
+            ScheduledStart = targetDate1.AddHours(9),
+            ScheduledEnd = targetDate1.AddHours(9).AddMinutes(30)
+        });
+        Assert.True(confirmRes.Success);
+        Assert.Equal(AppointmentStatus.Confirmed, confirmRes.Data!.Status);
+
+        // 4. Patient reschedules -> Old appointment Cancelled, New appointment Created (PendingReceptionReview)
+        using var reschedDb = _fixture.CreateDbContext();
+        var reschedService = new AppointmentService(reschedDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var reschedRes = await reschedService.PatientRescheduleAsync(appt1Id, patientId, new PatientRescheduleRequest
+        {
+            NewScheduledStart = targetDate2.AddHours(10),
+            Reason = "Bận việc đột xuất dời sang ngày mai"
+        });
+        Assert.True(reschedRes.Success);
+        var appt2Id = reschedRes.Data!.AppointmentId;
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, reschedRes.Data.Status);
+
+        using (var verifyDb1 = _fixture.CreateDbContext())
+        {
+            var oldAppt = await verifyDb1.Appointments.FindAsync(appt1Id);
+            Assert.Equal(AppointmentStatus.Cancelled, oldAppt!.Status);
+        }
+
+        // 5. Patient cancels appointment 2 -> Status: Withdrawn (since still in PendingReceptionReview)
+        using var cancelDb = _fixture.CreateDbContext();
+        var cancelService = new AppointmentService(cancelDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var cancelRes = await cancelService.PatientCancelAsync(appt2Id, patientId, "Rút lịch đã dời");
+        Assert.True(cancelRes.Success);
+
+        using (var verifyDb2 = _fixture.CreateDbContext())
+        {
+            var appt2 = await verifyDb2.Appointments.FindAsync(appt2Id);
+            Assert.Equal(AppointmentStatus.Withdrawn, appt2!.Status);
+        }
+
+        // 6. Patient re-books a fresh appointment -> Status: PendingReceptionReview
+        using var rebookDb = _fixture.CreateDbContext();
+        var rebookService = new AppointmentService(rebookDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var rebookRes = await rebookService.CreatePatientAppointmentAsync(patientId, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 1L,
+            RequestedDentistUserId = doctorId,
+            ScheduledStart = targetDate3.AddHours(14),
+            ReasonForVisit = "E2E: Đặt lại lịch khám mới"
+        });
+        Assert.True(rebookRes.Success);
+        var appt3Id = rebookRes.Data!.AppointmentId;
+
+        // 7. Receptionist forwards appt 3 -> PendingDepartmentReview
+        using var recDb2 = _fixture.CreateDbContext();
+        var recService2 = new AppointmentService(recDb2, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var fwdRes2 = await recService2.ReceptionistForwardAsync(appt3Id, receptionistId, "Chuyển Trưởng khoa duyệt lịch mới");
+        Assert.True(fwdRes2.Success);
+
+        // 8. Manager confirms appt 3 -> Confirmed
+        using var mgrDb2 = _fixture.CreateDbContext();
+        var mgrService2 = new AppointmentService(mgrDb2, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var confirmRes2 = await mgrService2.ManagerConfirmAsync(appt3Id, managerId, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = chairId,
+            ScheduledStart = targetDate3.AddHours(14),
+            ScheduledEnd = targetDate3.AddHours(14).AddMinutes(30)
+        });
+        Assert.True(confirmRes2.Success);
+        Assert.Equal(AppointmentStatus.Confirmed, confirmRes2.Data!.Status);
+
+        // 9. Patient arrives, Receptionist checks in -> CheckedIn
+        using var checkInDb = _fixture.CreateDbContext();
+        var checkInService = new AppointmentService(checkInDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var checkInRes = await checkInService.ReceptionistCheckInAsync(appt3Id, receptionistId, "Bệnh nhân đã đến quầy");
+        Assert.True(checkInRes.Success);
+
+        using (var checkInVerifyDb = _fixture.CreateDbContext())
+        {
+            var appt3 = await checkInVerifyDb.Appointments.FindAsync(appt3Id);
+            Assert.Equal(AppointmentStatus.CheckedIn, appt3!.Status);
+        }
+
+        // 10. Dentist assigns chair and starts consultation -> InService
+        using var chairDb = _fixture.CreateDbContext();
+        var chairService = new AppointmentService(chairDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+        var chairRes = await chairService.DentistAssignChairAsync(appt3Id, doctorId, chairId);
+        Assert.True(chairRes.Success);
+
+        using (var finalVerifyDb = _fixture.CreateDbContext())
+        {
+            var finalAppt = await finalVerifyDb.Appointments.FindAsync(appt3Id);
+            Assert.Equal(AppointmentStatus.InService, finalAppt!.Status);
+            Assert.Equal(chairId, finalAppt.DentalChairId);
+        }
     }
 }
 

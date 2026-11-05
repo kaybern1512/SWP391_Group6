@@ -246,6 +246,45 @@ public class AppointmentFlowTests
             Status = "Active"
         };
         db.DentalChairs.AddRange(chair1, chair2);
+
+        // Seed work schedules for Dentists 401 and 402 covering -10 to +60 days
+        long schedId = 1;
+        var baseDate = DateOnly.FromDateTime(DateTime.Today);
+        for (int i = -10; i <= 60; i++)
+        {
+            var d = baseDate.AddDays(i);
+            db.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistScheduleId = schedId++,
+                DentistUserId = 401,
+                DepartmentId = 1,
+                WorkDate = d,
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59, 59),
+                Status = "Scheduled"
+            });
+            db.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistScheduleId = schedId++,
+                DentistUserId = 402,
+                DepartmentId = 1,
+                WorkDate = d,
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59, 59),
+                Status = "Scheduled"
+            });
+            db.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistScheduleId = schedId++,
+                DentistUserId = 403,
+                DepartmentId = 2,
+                WorkDate = d,
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59, 59),
+                Status = "Scheduled"
+            });
+        }
+
         await db.SaveChangesAsync();
     }
     [Fact]

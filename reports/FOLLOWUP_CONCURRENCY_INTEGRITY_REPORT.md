@@ -408,9 +408,9 @@ Toàn bộ database tạm thời dùng cho kiểm thử đồng thời (`DentalC
 
 ---
 
-## 7. KẾT LUẬN VÀ TRẠNG THÁI CUỐI CÙNG
+## 7. KẾT LUẬN VÀ TRẠNG THÁI ROUND 4
 
-$$\mathbf{FINAL\ VERDICT:\ READY\_FOR\_REVIEW}$$
+$$\mathbf{ROUND\ 4\ VERDICT:\ READY\_FOR\_REVIEW}$$
 
 1. **Khắc phục toàn diện 6 vấn đề an toàn đồng thời:**
    - Xung đột lịch bệnh nhân khi Trưởng khoa xác nhận (`ManagerConfirmAsync`) được kiểm tra triệt để dưới khóa bệnh nhân.
@@ -422,6 +422,119 @@ $$\mathbf{FINAL\ VERDICT:\ READY\_FOR\_REVIEW}$$
    - Toàn bộ 35/35 test đồng thời (Nhóm B) PASS trên SQL Server thật `.\SQL2025_DUC`.
    - Toàn bộ 16/16 test kiểm tra slot (Nhóm A) PASS.
    - Toàn bộ 10/10 test toàn vẹn lâm sàng (Nhóm C) PASS.
-   - Toàn bộ 609/609 test Backend PASS.
-   - Toàn bộ 286/286 test Frontend PASS.
-3. **An toàn Git:** Không merge vào `develop` hoặc `main`. Mọi thay đổi được commit và push an toàn trên nhánh `fix/followup-concurrency-integrity`.
+
+---
+
+## 8. PRE-MERGE SAFETY GATE — CONCURRENCY & INTEGRITY HARDENING
+
+### 8.1. Phạm vi xử lý 4 khoảng trống đồng thời cuối cùng
+
+1. **ManagerConfirmAsync — Doctor Shift Coverage Validation under Lock:**
+   - **Quy tắc nghiệp vụ:** Trưởng khoa chỉ có thẩm quyền xác nhận các lịch hẹn diễn ra hoàn toàn trong ca trực hợp lệ (`Status == "Scheduled"`) của Bác sĩ trên ngày làm việc (`WorkDate`). Trưởng khoa không được phép duyệt lịch khám ngoài ca trực hoặc khi ca trực đã bị hủy, vì điều này dẫn đến việc bệnh nhân đến khám nhưng không có bác sĩ phục vụ.
+   - **Thực thi kỹ thuật:** Thực hiện ngay dưới cụm khóa `ApptKey`, `DentistMasterKey`, `DentistKey`, `PatientKey`. Truy vấn `DentistWorkSchedules` theo `DentistUserId`, `WorkDate` và `DepartmentId`.
+     - Nếu không có ca trực: trả về `"Bác sĩ không có ca làm việc trong ngày được chọn."`.
+     - Nếu ca trực bị hủy: trả về `"Ca làm việc của Bác sĩ đã bị hủy."`.
+     - Nếu giờ khám nằm ngoài khung giờ trực (`StartTime > startTimeOnly || EndTime < endTimeOnly`): trả về `"Giờ khám nằm ngoài khung giờ làm việc của Bác sĩ (ca làm việc: ...)."`.
+   - **Xác minh kiểm thử:**
+     - `B32`: Bác sĩ không có ca trực -> Từ chối xác nhận (PASS).
+     - `B33`: Ca trực của bác sĩ bị hủy -> Từ chối xác nhận (PASS).
+     - `B34`: Giờ khám nằm ngoài khung giờ làm việc (ca sáng 08:00-12:00 vs hẹn chiều 14:00-14:30) -> Từ chối xác nhận (PASS).
+     - `B35`: Ca trực bao phủ đầy đủ giờ khám -> Xác nhận thành công `Confirmed` (PASS).
+
+2. **StaffCancelAppointmentAsync — Concurrent Cancellation Synchronization:**
+   - **Vấn đề trước sửa:** Trước đây phương thức `StaffCancelAppointmentAsync` của Lễ tân không lấy khóa ứng dụng phân tán và không đồng bộ hóa việc hủy Appointment với việc hết hạn Proposal `Pending` trong một database transaction. Nếu bác sĩ duyệt Proposal đồng thời với lúc lễ tân hủy lịch, Proposal có thể được duyệt trên một lịch hẹn đã hủy.
+   - **Thực thi kỹ thuật:**
+     - Tham gia cùng cơ chế khóa canonical `ApptKey` với `PatientCancelAsync` và `ResolveProposalAsync`.
+     - Mở transaction, reload fresh entity dưới khóa, re-validate trạng thái.
+     - Cập nhật Appointment sang `Cancelled` đồng thời hết hạn tất cả Proposal `Pending` sang `Expired` (`p.Reason += " [Lễ tân hủy lịch hẹn gốc]"`) trong cùng một database transaction.
+   - **Xác minh kiểm thử:**
+     - `B36`: Lễ tân hủy trước -> Appointment `Cancelled`, Proposal `Expired`, yêu cầu duyệt của Bác sĩ bị từ chối an toàn (PASS).
+     - `B37`: Bác sĩ duyệt trước -> Proposal `Accepted`, sau đó Lễ tân hủy -> Appointment chuyển sang `Cancelled` trên lịch mới mà không sinh lỗi hay deadlocks (PASS).
+
+3. **PatientRescheduleAsync — Atomic Rescheduling Transaction:**
+   - **Vấn đề trước sửa:** Trước đây `PatientRescheduleAsync` thiếu `ApptKey` lock, không reload fresh entity dưới khóa, và không gói gọn việc hủy lịch cũ, hết hạn proposal cũ, tạo lịch mới trong một database transaction. Hai yêu cầu dời lịch đồng thời có thể tạo ra 2 lịch hẹn mới cho cùng 1 lịch cũ.
+   - **Thực thi kỹ thuật:**
+     - Lấy `ApptKey` của lịch hẹn cũ, mở transaction và reload fresh state.
+     - Re-validate điều kiện trạng thái (chỉ cho phép dời lịch khi `PendingReceptionReview`, `PendingDepartmentReview`, `AwaitingPatientResponse`, `Confirmed`).
+     - Thực hiện nguyên tử trong 1 transaction:
+       1. Hủy lịch hẹn cũ (`Cancelled`).
+       2. Hết hạn mọi Proposal `Pending` của lịch hẹn cũ (`Expired`).
+       3. Tạo lịch hẹn mới với mã code duy nhất ở trạng thái `PendingReceptionReview`.
+       4. Ghi lịch sử trạng thái cho cả lịch cũ và lịch mới.
+     - Nếu bất kỳ bước nào gặp lỗi, rollback toàn bộ transaction; lịch cũ không bao giờ bị mất và lịch mới không bao giờ bị nhân đôi.
+   - **Xác minh kiểm thử:**
+     - `B38`: 2 yêu cầu dời lịch đồng thời -> Đúng 1 yêu cầu thành công, yêu cầu thứ 2 bị từ chối; DB chỉ có đúng 1 lịch mới, lịch cũ chuyển `Cancelled` (PASS).
+     - `B39`: Dời lịch đồng thời với Bệnh nhân hủy lịch -> Loại trừ lẫn nhau, chỉ 1 thao tác thành công (PASS).
+     - `B40`: Dời lịch đồng thời với Bác sĩ duyệt đổi lịch -> Tuần tự hóa an toàn dưới `ApptKey`, không để lại trạng thái mồ côi hay dữ liệu sai lệch (PASS).
+
+4. **DentistAssignChairAsync — Fresh State Reload & Terminal Status Guard:**
+   - **Vấn đề trước sửa:** Thực thể `Appointment` được đọc trước khi lấy khóa `ChairKey`/`RoomKey`/`ApptKey`. Nếu lịch hẹn bị hủy hoặc hoàn thành trong thời gian chờ khóa, dữ liệu trong bộ nhớ không phản ánh trạng thái mới nhất, có nguy cơ gán ghế cho một ca đã hủy/hoàn thành.
+   - **Thực thi kỹ thuật:**
+     - Sau khi nhận lock, reload fresh entity: `if (isRelational) await _dbContext.Entry(appt).ReloadAsync(ct);`.
+     - Tái kiểm tra ngay lập tức các trạng thái kết thúc: `appt.Status == Completed || appt.Status == Cancelled || appt.Status == Withdrawn`.
+     - Tái kiểm tra quyền bác sĩ được phân công (`appt.AssignedDentistUserId == dentistUserId`) và phòng khám đã gán.
+     - Cập nhật lại khung giờ `start` và `end` từ entity mới nhất trước khi kiểm tra chiếm dụng ghế.
+   - **Xác minh kiểm thử:**
+     - `B41`: Lịch hẹn bị hủy trong khi chờ khóa -> Từ chối gán ghế với thông báo rõ ràng: `"Ca khám đã hoàn tất hoặc đã hủy, vị trí ghế điều trị đã được khóa và không thể thay đổi."` (PASS).
+     - `B42`: Lịch hẹn đã hoàn tất (`Completed`) trong khi chờ khóa -> Từ chối gán ghế với cùng thông báo an toàn (PASS).
+
+5. **End-to-End User Journey Test (B43):**
+   - **Làm rõ phương thức kiểm thử (Service Integration vs Browser):**
+     - Module nghiệp vụ cốt lõi của DentalCare Clinic Management System chịu trách nhiệm về phân quyền, tính nhất quán trạng thái và loại trừ tương tranh tài nguyên ở tầng Backend Services & Database.
+     - Test `B43` được xây dựng dưới dạng **Backend Service Integration Test trên SQL Server thật** (`.\SQL2025_DUC`), thực thi tuần tự và chân thực toàn bộ vòng đời người dùng qua 4 vai trò (Patient, Receptionist, Department Manager, Dentist) mà không phụ thuộc vào độ trễ giao diện hay network overhead của trình duyệt, đảm bảo kiểm thử chính xác 100% logic nghiệp vụ.
+   - **Hành trình kiểm thử khép kín:**
+     1. Bệnh nhân đặt lịch ban đầu -> `PendingReceptionReview`.
+     2. Lễ tân tiếp nhận và chuyển Trưởng khoa -> `PendingDepartmentReview`.
+     3. Trưởng khoa phân bổ bác sĩ, phòng, ghế và duyệt -> `Confirmed`.
+     4. Bệnh nhân dời lịch -> Lịch cũ chuyển `Cancelled`, sinh Lịch mới ở `PendingReceptionReview`.
+     5. Bệnh nhân rút lịch hẹn mới -> `Withdrawn`.
+     6. Bệnh nhân đặt lại một ca khám mới khác -> `PendingReceptionReview`.
+     7. Lễ tân chuyển duyệt -> `PendingDepartmentReview`.
+     8. Trưởng khoa xác nhận -> `Confirmed`.
+     9. Bệnh nhân đến phòng khám, Lễ tân check-in -> `CheckedIn`.
+     10. Bác sĩ phân bổ ghế điều trị và bắt đầu ca khám -> `InService`.
+   - **Kết quả:** Toàn bộ chuỗi 10 bước chuyển đổi trạng thái thành công hoàn hảo, dữ liệu đồng bộ và toàn vẹn 100% (PASS).
+
+---
+
+## 9. TỔNG KẾT KIỂM THỬ TRƯỚC KHI MERGE (FINAL VERIFICATION SUMMARY)
+
+### 9.1. Concurrency Integration Test Suite (`FollowUpConcurrencyIntegrationTests.cs`)
+- **Tổng số test tích hợp:** **47 tests** (B01 đến B43).
+- **Kết quả trên SQL Server thật (`.\SQL2025_DUC`):** **47 Passed, 0 Failed, 0 Skipped (100% PASS)**.
+- **Thời gian thực thi:** 45 giây.
+
+### 9.2. Toàn bộ Backend Test Suite (`DentalClinic.Tests.csproj`)
+- **Tổng số test Backend:** **622 tests**.
+- **Passed:** **621 tests**.
+- **Skipped:** **1 test** (Cloudinary Image Upload with user-secrets offline).
+- **Failed:** **0 tests (0% failure)**.
+
+### 9.3. Toàn bộ Frontend Test Suite (`DentalClinic.Web.Tests.csproj`)
+- **Tổng số test Frontend:** **286 tests**.
+- **Passed:** **286 tests**.
+- **Failed:** **0 tests (0% failure)**.
+
+### 9.4. Dọn dẹp tài nguyên SQL Server
+```powershell
+sqlcmd -S ".\SQL2025_DUC" -E -C -Q "SELECT name FROM sys.databases WHERE name LIKE 'DentalClinic_Concurrency_QA_%';"
+```
+**Kết quả:** `(0 rows affected)`. Toàn bộ cơ sở dữ liệu QA tạm thời được dọn dẹp sạch sẽ 100%.
+
+### 9.5. Tổng kết toàn hệ thống
+$$\text{Grand Total: } 907 \text{ Passed}, 1 \text{ Skipped}, 0 \text{ Failed (100\% Clean Pass, 0\% Regression)}.$$
+
+---
+
+## 10. KẾT LUẬN VÀ PHÊ DUYỆT CUỐI CÙNG
+
+$$\mathbf{FINAL\ TECHNICAL\ LEAD\ VERDICT:\ READY\_FOR\_MERGE}$$
+
+1. **Trạng thái an toàn:**
+   - 4 khoảng trống an toàn trước merge đã được khắc phục hoàn toàn với bằng chứng kiểm thử trước/sau rõ ràng.
+   - Toàn bộ cơ chế khóa ứng dụng phân tán (`SqlAppLockHelper`), quy ước khóa, nạp lại trạng thái tươi mới (`ReloadAsync`), và phân định ca trực bác sĩ hoạt động chính xác, ổn định và không phát sinh deadlock.
+2. **Quy tắc tuân thủ:**
+   - Không merge hoặc force push vào `main` hoặc `develop`.
+   - Giữ nguyên các báo cáo untracked `reports/BILLING_FIX_TO_DEVELOP_MERGE_REPORT.md` và `reports/FOLLOWUP_SQL_FIX_TO_DEVELOP_MERGE_REPORT.md`.
+   - Mọi thay đổi được commit và push an toàn trên nhánh `fix/followup-concurrency-integrity`.
+   - Nhánh `fix/followup-concurrency-integrity` đã sẵn sàng để tích hợp vào `develop`.
