@@ -61,13 +61,6 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                 "Thời lượng cuộc hẹn tái khám phải từ 10 đến 240 phút.");
         }
 
-        if (start.Date != end.Date)
-        {
-            return SchedulingValidationResult.Fail(
-                SchedulingFailureReason.OutsideDoctorShift,
-                "Thời gian hẹn tái khám không được vượt qua các ngày làm việc khác nhau.");
-        }
-
         // 2. Validate future time & minimum booking buffer (30 minutes)
         var now = DateTime.Now;
         if (start <= now)
@@ -82,6 +75,13 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             return SchedulingValidationResult.Fail(
                 SchedulingFailureReason.TooCloseToPresent,
                 "Lịch hẹn tái khám phải được đặt trước thời điểm bắt đầu tối thiểu 30 phút.");
+        }
+
+        if (start.Date != end.Date)
+        {
+            return SchedulingValidationResult.Fail(
+                SchedulingFailureReason.OutsideDoctorShift,
+                "Thời gian hẹn tái khám không được vượt qua các ngày làm việc khác nhau.");
         }
 
         // 3. Verify doctor exists

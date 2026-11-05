@@ -500,13 +500,13 @@ $$\mathbf{ROUND\ 4\ VERDICT:\ READY\_FOR\_REVIEW}$$
 ## 9. TỔNG KẾT KIỂM THỬ TRƯỚC KHI MERGE (FINAL VERIFICATION SUMMARY)
 
 ### 9.1. Concurrency Integration Test Suite (`FollowUpConcurrencyIntegrationTests.cs`)
-- **Tổng số test tích hợp:** **47 tests** (B01 đến B43).
-- **Kết quả trên SQL Server thật (`.\SQL2025_DUC`):** **47 Passed, 0 Failed, 0 Skipped (100% PASS)**.
+- **Tổng số test tích hợp:** **50 tests** (B01 đến B44, bao gồm B15B, B15C, B41B, B42B).
+- **Kết quả trên SQL Server thật (`.\SQL2025_DUC`):** **50 Passed, 0 Failed, 0 Skipped (100% PASS)**.
 - **Thời gian thực thi:** 45 giây.
 
 ### 9.2. Toàn bộ Backend Test Suite (`DentalClinic.Tests.csproj`)
-- **Tổng số test Backend:** **622 tests**.
-- **Passed:** **621 tests**.
+- **Tổng số test Backend:** **628 tests**.
+- **Passed:** **627 tests**.
 - **Skipped:** **1 test** (Cloudinary Image Upload with user-secrets offline).
 - **Failed:** **0 tests (0% failure)**.
 
@@ -522,17 +522,39 @@ sqlcmd -S ".\SQL2025_DUC" -E -C -Q "SELECT name FROM sys.databases WHERE name LI
 **Kết quả:** `(0 rows affected)`. Toàn bộ cơ sở dữ liệu QA tạm thời được dọn dẹp sạch sẽ 100%.
 
 ### 9.5. Tổng kết toàn hệ thống
-$$\text{Grand Total: } 907 \text{ Passed}, 1 \text{ Skipped}, 0 \text{ Failed (100\% Clean Pass, 0\% Regression)}.$$
+$$\text{Grand Total: } 913 \text{ Passed}, 1 \text{ Skipped}, 0 \text{ Failed (100\% Clean Pass, 0\% Regression)}.$$
 
 ---
 
-## 10. KẾT LUẬN VÀ PHÊ DUYỆT CUỐI CÙNG
+## 10. HOÀN THIỆN BẢN VÁ AN TOÀN TRƯỚC SÁP NHẬP (FINAL PRE-MERGE PATCH)
+
+Chi tiết đầy đủ xem tại báo cáo độc lập: [`reports/FOLLOWUP_PREMERGE_FINAL_REPORT.md`](file:///D:/SWP/SWP391_Group6/reports/FOLLOWUP_PREMERGE_FINAL_REPORT.md).
+
+1. **Post-Commit Error Handling:**
+   - Đã tách bạch hoàn toàn lỗi pre-commit và post-commit trong `PatientRescheduleAsync` và `StaffCancelAppointmentAsync`.
+   - Lỗi thông báo sau khi transaction DB đã commit được ghi nhận bằng `_logger.LogWarning`, không rollback transaction đã commit và không trả về kết quả thất bại gây hiểu nhầm cho client.
+   - Thêm 3 unit test trong `AppointmentFlowTests.cs` kiểm chứng: dời lịch khi notification lỗi, hủy lịch khi notification lỗi, và từ chối dời lịch pre-commit bảo toàn dữ liệu.
+
+2. **Date Lock Consistency trong `DentistAssignChairAsync`:**
+   - Áp dụng Staged Locking: Lấy `ApptKey` trước để đóng băng cuộc hẹn $\rightarrow$ `ReloadAsync` nạp dữ liệu tươi mới $\rightarrow$ trích xuất `targetDate` chính xác từ `ScheduledStart` $\rightarrow$ lấy `ChairKey`/`RoomKey` theo đúng ngày thực tế.
+   - Thứ tự lấy khóa đồng bộ với `ManagerConfirmAsync`: `ApptKey` $\rightarrow$ `ChairKey` $\rightarrow$ `RoomKey`, chứng minh toán học phi chu trình và phi Deadlock.
+   - Bổ sung integration test `B44` trên SQL Server thật kiểm chứng việc lấy khóa ghế đúng ngày mới khi ngày khám bị dời trong lúc chờ khóa.
+
+3. **Tính chính xác và minh bạch của Test Suite:**
+   - `B36` và `B37` được chú thích rõ ràng là sequential ordering test, không ngộ nhận là race test.
+   - Bổ sung 2 test điều khiển xen kẽ thực tế (`B41B`, `B42B`) với 2 kết nối DB độc lập qua `Barrier`.
+   - `B43` được ghi nhận rõ ràng là Backend Service Integration Test; browser automated UI testing được ghi nhận là `NOT TESTED`.
+   - Sửa thứ tự kiểm tra `PastTime` và `TooCloseToPresent` trong `FollowUpSchedulingService` trước `start.Date != end.Date`.
+
+---
+
+## 11. KẾT LUẬN VÀ PHÊ DUYỆT CUỐI CÙNG
 
 $$\mathbf{FINAL\ TECHNICAL\ LEAD\ VERDICT:\ READY\_FOR\_MERGE}$$
 
 1. **Trạng thái an toàn:**
-   - 4 khoảng trống an toàn trước merge đã được khắc phục hoàn toàn với bằng chứng kiểm thử trước/sau rõ ràng.
-   - Toàn bộ cơ chế khóa ứng dụng phân tán (`SqlAppLockHelper`), quy ước khóa, nạp lại trạng thái tươi mới (`ReloadAsync`), và phân định ca trực bác sĩ hoạt động chính xác, ổn định và không phát sinh deadlock.
+   - Toàn bộ các khoảng trống an toàn trước merge đã được khắc phục hoàn toàn với bằng chứng kiểm thử trước/sau rõ ràng.
+   - Cơ chế khóa ứng dụng phân tán (`SqlAppLockHelper`), quy ước khóa, nạp lại trạng thái tươi mới (`ReloadAsync`), và phân định ca trực bác sĩ hoạt động chính xác, ổn định và không phát sinh deadlock.
 2. **Quy tắc tuân thủ:**
    - Không merge hoặc force push vào `main` hoặc `develop`.
    - Giữ nguyên các báo cáo untracked `reports/BILLING_FIX_TO_DEVELOP_MERGE_REPORT.md` và `reports/FOLLOWUP_SQL_FIX_TO_DEVELOP_MERGE_REPORT.md`.

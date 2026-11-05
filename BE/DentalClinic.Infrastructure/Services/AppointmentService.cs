@@ -928,12 +928,17 @@ public class AppointmentService : IAppointmentService
         var isRelational = _dbContext.Database.IsRelational();
         var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
         IDisposable? lockScope = null;
+        bool committed = false;
+        Appointment? appointment = null;
+        Appointment? newAppointment = null;
+        string? newCode = null;
+
         try
         {
             var lockKeys = new[] { SqlAppLockHelper.ApptKey(appointmentId) };
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
-            var appointment = await _dbContext.Appointments
+            appointment = await _dbContext.Appointments
                 .Include(a => a.RequestedService)
                 .Include(a => a.Department)
                 .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
@@ -994,7 +999,7 @@ public class AppointmentService : IAppointmentService
             if (duration <= 0) duration = 30;
             var scheduledEnd = request.NewScheduledStart.AddMinutes(duration);
 
-            var newCode = await GenerateUniqueAppointmentCodeAsync(ct);
+            newCode = await GenerateUniqueAppointmentCodeAsync(ct);
             var now = DateTime.UtcNow;
 
             // 1. Cancel old appointment and free resources
@@ -1042,7 +1047,7 @@ public class AppointmentService : IAppointmentService
             }
 
             // 2. Create new appointment
-            var newAppointment = new Appointment
+            newAppointment = new Appointment
             {
                 AppointmentCode = newCode,
                 PatientUserId = patientUserId,
@@ -1075,23 +1080,18 @@ public class AppointmentService : IAppointmentService
             _dbContext.AppointmentStatusHistories.Add(newHistory);
 
             await _dbContext.SaveChangesAsync(ct);
-            if (tx != null) await tx.CommitAsync(ct);
-
-            // Send notification
-            await _notificationService.CreateNotificationAsync(
-                patientUserId,
-                newAppointment.AppointmentId,
-                "AppointmentRescheduled",
-                "Dời lịch khám thành công",
-                $"Lịch hẹn {appointment.AppointmentCode} đã được hủy và chuyển sang lịch hẹn mới {newCode} vào lúc {request.NewScheduledStart:dd/MM/yyyy HH:mm}. Vui lòng chờ Lễ tân tiếp nhận.",
-                ct);
-
-            var dto = await MapToDtoAsync(newAppointment.AppointmentId, ct);
-            return ApiResponse<AppointmentDto>.Ok(dto!, $"Đã hủy lịch hẹn cũ ({appointment.AppointmentCode}) và dời sang lịch hẹn mới ({newCode}) vào lúc {request.NewScheduledStart:dd/MM/yyyy HH:mm} thành công!");
+            if (tx != null)
+            {
+                await tx.CommitAsync(ct);
+                committed = true;
+            }
         }
         catch
         {
-            if (tx != null) await tx.RollbackAsync(ct);
+            if (tx != null && !committed)
+            {
+                await tx.RollbackAsync(ct);
+            }
             throw;
         }
         finally
@@ -1099,6 +1099,25 @@ public class AppointmentService : IAppointmentService
             lockScope?.Dispose();
             if (tx != null) await tx.DisposeAsync();
         }
+
+        // Post-commit side effect: send notification (does not rollback or fail the main operation if delivery fails)
+        try
+        {
+            await _notificationService.CreateNotificationAsync(
+                patientUserId,
+                newAppointment!.AppointmentId,
+                "AppointmentRescheduled",
+                "Dời lịch khám thành công",
+                $"Lịch hẹn {appointment!.AppointmentCode} đã được hủy và chuyển sang lịch hẹn mới {newCode} vào lúc {request.NewScheduledStart:dd/MM/yyyy HH:mm}. Vui lòng chờ Lễ tân tiếp nhận.",
+                ct);
+        }
+        catch (Exception notifEx)
+        {
+            _logger.LogWarning(notifEx, "Failed to send notification for rescheduled appointment {AppointmentId}", appointment?.AppointmentId);
+        }
+
+        var dto = await MapToDtoAsync(newAppointment!.AppointmentId, ct);
+        return ApiResponse<AppointmentDto>.Ok(dto!, $"Đã hủy lịch hẹn cũ ({appointment!.AppointmentCode}) và dời sang lịch hẹn mới ({newCode}) vào lúc {request.NewScheduledStart:dd/MM/yyyy HH:mm} thành công!");
     }
 
     public async Task<ApiResponse<AppointmentChangeProposalDto>> GetAppointmentProposalAsync(
@@ -1667,12 +1686,14 @@ public class AppointmentService : IAppointmentService
         var isRelational = _dbContext.Database.IsRelational();
         var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
         IDisposable? lockScope = null;
+        bool committed = false;
+        Appointment? appointment = null;
         try
         {
             var lockKeys = new[] { SqlAppLockHelper.ApptKey(appointmentId) };
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
-            var appointment = await _dbContext.Appointments
+            appointment = await _dbContext.Appointments
                 .Include(a => a.PatientUser)
                 .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
 
@@ -1739,21 +1760,18 @@ public class AppointmentService : IAppointmentService
             }
 
             await _dbContext.SaveChangesAsync(ct);
-            if (tx != null) await tx.CommitAsync(ct);
-
-            await _notificationService.CreateNotificationAsync(
-                appointment.PatientUserId,
-                appointmentId,
-                "AppointmentCancelledByStaff",
-                "Lịch hẹn đã được hủy bởi phòng khám",
-                $"Lịch hẹn {appointment.AppointmentCode} đã được nhân viên phòng khám hỗ trợ hủy. Lý do: {reason.Trim()}. Bạn không bị tính điểm phạt gậy vi phạm.",
-                ct);
-
-            return ApiResponse.Ok("Đã hủy lịch hẹn thành công (không tính điểm phạt cho bệnh nhân).");
+            if (tx != null)
+            {
+                await tx.CommitAsync(ct);
+                committed = true;
+            }
         }
         catch
         {
-            if (tx != null) await tx.RollbackAsync(ct);
+            if (tx != null && !committed)
+            {
+                await tx.RollbackAsync(ct);
+            }
             throw;
         }
         finally
@@ -1761,6 +1779,24 @@ public class AppointmentService : IAppointmentService
             lockScope?.Dispose();
             if (tx != null) await tx.DisposeAsync();
         }
+
+        // Post-commit side effect: send notification (does not rollback or fail the main operation if delivery fails)
+        try
+        {
+            await _notificationService.CreateNotificationAsync(
+                appointment!.PatientUserId,
+                appointmentId,
+                "AppointmentCancelledByStaff",
+                "Lịch hẹn đã được hủy bởi phòng khám",
+                $"Lịch hẹn {appointment.AppointmentCode} đã được nhân viên phòng khám hỗ trợ hủy. Lý do: {reason.Trim()}. Bạn không bị tính điểm phạt gậy vi phạm.",
+                ct);
+        }
+        catch (Exception notifEx)
+        {
+            _logger.LogWarning(notifEx, "Failed to send notification for staff cancelled appointment {AppointmentId}", appointmentId);
+        }
+
+        return ApiResponse.Ok("Đã hủy lịch hẹn thành công (không tính điểm phạt cho bệnh nhân).");
     }
 
     public async Task<ApiResponse<List<AppointmentDto>>> GetDepartmentRequestsAsync(
@@ -2906,9 +2942,6 @@ public class AppointmentService : IAppointmentService
             return ApiResponse.Fail("Ghế nha khoa đã chọn không thuộc phòng khám của ca này.");
         }
 
-        var start = appt.ScheduledStart ?? DateTime.UtcNow;
-        var end = appt.ScheduledEnd ?? start.AddMinutes(30);
-
         var activeStatuses = new[]
         {
             AppointmentStatus.Confirmed,
@@ -2920,24 +2953,14 @@ public class AppointmentService : IAppointmentService
 
         var isRelational = _dbContext.Database.IsRelational();
         var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
-        IDisposable? lockScope = null;
+        IDisposable? apptLock = null;
+        IDisposable? resourceLock = null;
         try
         {
-            var targetDate = start.Date;
-            var lockKeys = new List<string>
-            {
-                SqlAppLockHelper.ChairKey(dentalChairId, targetDate),
-                SqlAppLockHelper.ApptKey(appointmentId)
-            };
+            // Step 1: Acquire ApptKey first to freeze appointment state and prevent concurrent modification of ScheduledStart or Status
+            apptLock = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, new[] { SqlAppLockHelper.ApptKey(appointmentId) }, 5000, ct);
 
-            if (room.IsExclusive)
-            {
-                lockKeys.Add(SqlAppLockHelper.RoomKey(chair.RoomId, targetDate));
-            }
-
-            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
-
-            // Re-validate fresh state under lock
+            // Step 2: Reload fresh state under ApptKey lock
             if (isRelational) await _dbContext.Entry(appt).ReloadAsync(ct);
 
             if (appt.Status == AppointmentStatus.Completed || appt.Status == AppointmentStatus.Cancelled || appt.Status == AppointmentStatus.Withdrawn)
@@ -2958,8 +2981,23 @@ public class AppointmentService : IAppointmentService
                 return ApiResponse.Fail("Ghế nha khoa đã chọn không thuộc phòng khám của ca này.");
             }
 
-            start = appt.ScheduledStart ?? DateTime.UtcNow;
-            end = appt.ScheduledEnd ?? start.AddMinutes(30);
+            // Step 3: Extract guaranteed-fresh date and time from the stabilized appointment entity
+            var start = appt.ScheduledStart ?? DateTime.UtcNow;
+            var end = appt.ScheduledEnd ?? start.AddMinutes(30);
+            var targetDate = start.Date;
+
+            // Step 4: Acquire date-consistent resource locks (ChairKey and RoomKey) matching the true date
+            var resourceKeys = new List<string>
+            {
+                SqlAppLockHelper.ChairKey(dentalChairId, targetDate)
+            };
+
+            if (room.IsExclusive)
+            {
+                resourceKeys.Add(SqlAppLockHelper.RoomKey(chair.RoomId, targetDate));
+            }
+
+            resourceLock = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, resourceKeys, 5000, ct);
 
             if (room.IsExclusive)
             {
@@ -3025,7 +3063,8 @@ public class AppointmentService : IAppointmentService
         }
         finally
         {
-            lockScope?.Dispose();
+            resourceLock?.Dispose();
+            apptLock?.Dispose();
             if (tx != null) await tx.DisposeAsync();
         }
     }

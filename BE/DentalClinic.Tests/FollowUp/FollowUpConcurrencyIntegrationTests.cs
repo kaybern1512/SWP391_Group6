@@ -2835,6 +2835,10 @@ public class FollowUpConcurrencyIntegrationTests
         Assert.Equal(doctorId, res.Data.AssignedDentistUserId);
     }
 
+    /// <summary>
+    /// NOTE: B36 is a sequential ordering test (Staff cancel executed first, then Doctor approve proposal executed second),
+    /// verifying deterministic state transitions and rejecting proposal approval on cancelled appointments, not an interleaved concurrency race.
+    /// </summary>
     [Fact]
     public async Task B36_StaffCancel_Vs_DoctorApproveProposal_CancelWins_Deterministic()
     {
@@ -2881,7 +2885,7 @@ public class FollowUpConcurrencyIntegrationTests
         setupDb.AppointmentChangeProposals.Add(prop);
         await setupDb.SaveChangesAsync();
 
-        // 1. Staff cancels first
+        // 1. Staff cancels first (sequential ordering)
         using var staffDb = _fixture.CreateDbContext();
         var apptService = new AppointmentService(staffDb, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
         var cancelRes = await apptService.StaffCancelAppointmentAsync(appt.AppointmentId, staffId, "Lễ tân hủy theo yêu cầu bệnh nhân");
@@ -2907,6 +2911,10 @@ public class FollowUpConcurrencyIntegrationTests
         Assert.Contains("[Lễ tân hủy lịch hẹn gốc]", finalProp.Reason);
     }
 
+    /// <summary>
+    /// NOTE: B37 is a sequential ordering test (Doctor approve proposal executed first, then Staff cancel executed second),
+    /// verifying deterministic state transitions when doctor proposal approval completes prior to staff cancellation, not an interleaved concurrency race.
+    /// </summary>
     [Fact]
     public async Task B37_StaffCancel_Vs_DoctorApproveProposal_ApproveWins_Deterministic()
     {
@@ -2953,7 +2961,7 @@ public class FollowUpConcurrencyIntegrationTests
         setupDb.AppointmentChangeProposals.Add(prop);
         await setupDb.SaveChangesAsync();
 
-        // 1. Doctor approves first
+        // 1. Doctor approves first (sequential ordering)
         using var docDb = _fixture.CreateDbContext();
         var followUpService = new FollowUpSchedulingService(docDb, NullLogger<FollowUpSchedulingService>.Instance);
         var approveRes = await followUpService.ResolveProposalAsync(doctorId, new ResolveProposalRequest
@@ -3327,11 +3335,272 @@ public class FollowUpConcurrencyIntegrationTests
         Assert.Contains("Ca khám đã hoàn tất hoặc đã hủy", res.Message);
     }
 
+    /// <summary>
+    /// B41B: Controlled interleaving test using two separate database connections.
+    /// Connection 1 holds ApptKey while Connection 2 attempts DentistAssignChairAsync.
+    /// While Connection 2 blocks waiting for ApptKey, Connection 1 cancels the appointment.
+    /// When Connection 2 unblocks, fresh reload under lock detects Cancelled and rejects safely.
+    /// </summary>
+    [Fact]
+    public async Task B41B_DentistAssignChair_WhileWaitingForApptKey_AppointmentCancelledByConcurrentConnection_RejectsFreshState()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;
+        var patientId = 6L;
+        var chairId = 1L;
+        var targetDate = DateTime.Today.AddDays(77);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
+
+        var start = targetDate.AddHours(9);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B41B-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = patientId,
+            DepartmentId = 1,
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = null,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.CheckedIn,
+            BookingSource = BookingSource.Receptionist,
+            ReasonForVisit = "Interleaved cancel test",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        var barrier = new Barrier(2);
+
+        // Thread 1: Acquires ApptKey first, waits at barrier, updates appt to Cancelled, then commits & releases ApptKey
+        var cancelTask = Task.Run(async () =>
+        {
+            using var conn1 = _fixture.CreateDbContext();
+            await using var tx1 = await conn1.Database.BeginTransactionAsync();
+            var lockKey = new[] { SqlAppLockHelper.ApptKey(appt.AppointmentId) };
+            using var lockScope1 = await SqlAppLockHelper.AcquireLocksAsync(conn1, lockKey, 5000);
+
+            // Signal barrier: Conn1 now holds ApptKey exclusively
+            barrier.SignalAndWait();
+
+            // Give Thread 2 a moment to block waiting for ApptKey
+            await Task.Delay(200);
+
+            var apptToCancel = await conn1.Appointments.FindAsync(appt.AppointmentId);
+            apptToCancel!.Status = AppointmentStatus.Cancelled;
+            apptToCancel.CancelledAt = DateTime.UtcNow;
+            apptToCancel.CancellationReason = "Cancelled by concurrent connection while assign chair was waiting";
+            await conn1.SaveChangesAsync();
+
+            await tx1.CommitAsync();
+        });
+
+        // Thread 2: Calls DentistAssignChairAsync; will block waiting for ApptKey until Thread 1 commits
+        var assignTask = Task.Run(async () =>
+        {
+            using var conn2 = _fixture.CreateDbContext();
+            var service2 = new AppointmentService(conn2, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+
+            // Synchronize with Thread 1 holding lock
+            barrier.SignalAndWait();
+
+            // This call will attempt to acquire ApptKey, block until Conn1 commits, then reload fresh state
+            return await service2.DentistAssignChairAsync(appt.AppointmentId, doctorId, chairId);
+        });
+
+        await cancelTask;
+        var assignRes = await assignTask;
+
+        // Fresh state check under lock must reject assignment
+        Assert.False(assignRes.Success);
+        Assert.Contains("Ca khám đã hoàn tất hoặc đã hủy", assignRes.Message);
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var finalAppt = await verifyDb.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(AppointmentStatus.Cancelled, finalAppt!.Status);
+        Assert.Null(finalAppt.DentalChairId);
+    }
+
+    /// <summary>
+    /// B42B: Controlled interleaving test using two separate database connections.
+    /// Connection 1 holds ApptKey while Connection 2 attempts DentistAssignChairAsync.
+    /// While Connection 2 blocks waiting for ApptKey, Connection 1 marks appointment Completed.
+    /// When Connection 2 unblocks, fresh reload under lock detects Completed and rejects safely.
+    /// </summary>
+    [Fact]
+    public async Task B42B_DentistAssignChair_WhileWaitingForApptKey_AppointmentCompletedByConcurrentConnection_RejectsFreshState()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;
+        var patientId = 6L;
+        var chairId = 1L;
+        var targetDate = DateTime.Today.AddDays(78);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
+
+        var start = targetDate.AddHours(9);
+        var end = start.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B42B-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = patientId,
+            DepartmentId = 1,
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = null,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.CheckedIn,
+            BookingSource = BookingSource.Receptionist,
+            ReasonForVisit = "Interleaved completed test",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        var barrier = new Barrier(2);
+
+        var completeTask = Task.Run(async () =>
+        {
+            using var conn1 = _fixture.CreateDbContext();
+            await using var tx1 = await conn1.Database.BeginTransactionAsync();
+            var lockKey = new[] { SqlAppLockHelper.ApptKey(appt.AppointmentId) };
+            using var lockScope1 = await SqlAppLockHelper.AcquireLocksAsync(conn1, lockKey, 5000);
+
+            barrier.SignalAndWait();
+
+            await Task.Delay(200);
+
+            var apptToComplete = await conn1.Appointments.FindAsync(appt.AppointmentId);
+            apptToComplete!.Status = AppointmentStatus.Completed;
+            await conn1.SaveChangesAsync();
+
+            await tx1.CommitAsync();
+        });
+
+        var assignTask = Task.Run(async () =>
+        {
+            using var conn2 = _fixture.CreateDbContext();
+            var service2 = new AppointmentService(conn2, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+
+            barrier.SignalAndWait();
+
+            return await service2.DentistAssignChairAsync(appt.AppointmentId, doctorId, chairId);
+        });
+
+        await completeTask;
+        var assignRes = await assignTask;
+
+        Assert.False(assignRes.Success);
+        Assert.Contains("Ca khám đã hoàn tất hoặc đã hủy", assignRes.Message);
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var finalAppt = await verifyDb.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(AppointmentStatus.Completed, finalAppt!.Status);
+    }
+
+    /// <summary>
+    /// B44: Date Lock Consistency Integration Test.
+    /// Verifies that when ScheduledStart date changes while DentistAssignChairAsync is waiting for ApptKey,
+    /// the fresh reload correctly derives targetDate from the updated appointment date and acquires ChairKey
+    /// on the true date (Day 80) rather than the stale date (Day 79).
+    /// </summary>
+    [Fact]
+    public async Task B44_DentistAssignChair_WhenScheduledStartChangedWhileWaitingForApptKey_LocksActualReloadedDate()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;
+        var patientId = 6L;
+        var chairId = 1L;
+        var oldDate = DateTime.Today.AddDays(79);
+        var newDate = DateTime.Today.AddDays(80);
+
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, oldDate, 1);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, newDate, 1);
+
+        var oldStart = oldDate.AddHours(9);
+        var oldEnd = oldStart.AddMinutes(30);
+
+        var newStart = newDate.AddHours(14);
+        var newEnd = newStart.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B44-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = patientId,
+            DepartmentId = 1,
+            AssignedDentistUserId = doctorId,
+            RoomId = 1L,
+            DentalChairId = null,
+            ScheduledStart = oldStart,
+            ScheduledEnd = oldEnd,
+            Status = AppointmentStatus.CheckedIn,
+            BookingSource = BookingSource.Receptionist,
+            ReasonForVisit = "Date lock consistency test",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        var barrier = new Barrier(2);
+
+        // Thread 1: Takes ApptKey first, shifts appointment to newDate (Day 80), commits
+        var shiftTask = Task.Run(async () =>
+        {
+            using var conn1 = _fixture.CreateDbContext();
+            await using var tx1 = await conn1.Database.BeginTransactionAsync();
+            var lockKey = new[] { SqlAppLockHelper.ApptKey(appt.AppointmentId) };
+            using var lockScope1 = await SqlAppLockHelper.AcquireLocksAsync(conn1, lockKey, 5000);
+
+            barrier.SignalAndWait();
+
+            await Task.Delay(200);
+
+            var apptToShift = await conn1.Appointments.FindAsync(appt.AppointmentId);
+            apptToShift!.ScheduledStart = newStart;
+            apptToShift.ScheduledEnd = newEnd;
+            await conn1.SaveChangesAsync();
+
+            await tx1.CommitAsync();
+        });
+
+        // Thread 2: Calls DentistAssignChairAsync. Initially in memory appt had oldDate (Day 79).
+        // Under ApptKey lock, it reloads, detects newDate (Day 80), acquires ChairKey for Day 80!
+        var assignTask = Task.Run(async () =>
+        {
+            using var conn2 = _fixture.CreateDbContext();
+            var service2 = new AppointmentService(conn2, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+
+            barrier.SignalAndWait();
+
+            return await service2.DentistAssignChairAsync(appt.AppointmentId, doctorId, chairId);
+        });
+
+        await shiftTask;
+        var assignRes = await assignTask;
+
+        // Chair assignment succeeds on the newly updated slot
+        Assert.True(assignRes.Success, assignRes.Message);
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var finalAppt = await verifyDb.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(chairId, finalAppt!.DentalChairId);
+        Assert.Equal(newStart, finalAppt.ScheduledStart);
+        Assert.Equal(AppointmentStatus.InService, finalAppt.Status);
+    }
+
+    /// <summary>
+    /// B43: Backend Service Integration Test executing the full user journey across Patient, Receptionist, Manager, and Dentist.
+    /// NOTE: Browser UI automated E2E testing is NOT TESTED in this suite; this test strictly verifies the full backend service lifecycle on SQL Server.
+    /// </summary>
     [Fact]
     public async Task B43_E2E_FullUserJourney_Book_Confirm_Reschedule_Cancel_Rebook_CheckIn()
     {
         // Clarification: This is a backend service integration test executing the complete end-to-end
         // user journey across Patient, Receptionist, Department Manager, and Dentist roles against real SQL Server.
+        // Browser automated UI testing is NOT TESTED in this suite.
         using var setupDb = _fixture.CreateDbContext();
         var patientId = 6L;
         var doctorId = 1L;
