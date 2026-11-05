@@ -20,7 +20,7 @@
 | **Working Branch** | `fix/followup-concurrency-integrity` |
 | **Database Instance kiểm thử** | `.\SQL2025_DUC` (Dedicated disposable database: `DentalClinic_Concurrency_QA_<RunId>`) |
 | **Commit HEAD vòng 1** | `2393fdc2487aacb061227b009e19b0e7e46ab8f5` |
-| **Commit HEAD vòng 2** | Sẽ được tạo sau khi báo cáo được cập nhật và kiểm thử 100% xanh. |
+| **Commit HEAD vòng 2** | `c9e553795bdd336ca99a3c6d14afd194c5187a30` (`origin/fix/followup-concurrency-integrity`) |
 | **Trạng thái tích hợp** | Tuyệt đối **KHÔNG** merge trực tiếp vào `develop` hoặc `main`. Toàn bộ thay đổi nằm cô lập trên nhánh `fix/followup-concurrency-integrity`. |
 
 ---
