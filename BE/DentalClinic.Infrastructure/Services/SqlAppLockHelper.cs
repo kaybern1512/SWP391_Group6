@@ -19,6 +19,46 @@ public static class SqlAppLockHelper
 {
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> InMemorySemaphores = new(StringComparer.Ordinal);
 
+    #region Canonical Lock Key Builders
+
+    /// <summary>Lock key for a dentist schedule on a specific calendar date.</summary>
+    public static string DentistKey(long dentistUserId, DateTime date) => $"Lock_Dentist_{dentistUserId}_{date:yyyyMMdd}";
+
+    /// <summary>Lock key for a patient schedule on a specific calendar date.</summary>
+    public static string PatientKey(long patientUserId, DateTime date) => $"Lock_Patient_{patientUserId}_{date:yyyyMMdd}";
+
+    /// <summary>Lock key for a dental chair on a specific calendar date.</summary>
+    public static string ChairKey(long chairId, DateTime date) => $"Lock_Chair_{chairId}_{date:yyyyMMdd}";
+
+    /// <summary>Lock key for an exclusive room on a specific calendar date.</summary>
+    public static string RoomKey(long roomId, DateTime date) => $"Lock_Room_{roomId}_{date:yyyyMMdd}";
+
+    /// <summary>Lock key for an appointment entity.</summary>
+    public static string ApptKey(long appointmentId) => $"Lock_Appt_{appointmentId}";
+
+    /// <summary>Lock key for an appointment change proposal entity.</summary>
+    public static string ProposalKey(long proposalId) => $"Lock_Proposal_{proposalId}";
+
+    /// <summary>Lock key for department queue numbering on a specific calendar date.</summary>
+    public static string DeptQueueKey(long departmentId, DateTime date) => $"Lock_DeptQueue_{departmentId}_{date:yyyyMMdd}";
+
+    /// <summary>Lock key for a treatment plan.</summary>
+    public static string PlanKey(long planId) => $"Lock_Plan_{planId}";
+
+    #endregion
+
+    /// <summary>
+    /// Checks if a DbUpdateException was caused by a SQL Server unique constraint violation (error 2627 or 2601).
+    /// </summary>
+    public static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        if (ex.InnerException is SqlException sqlEx && (sqlEx.Number == 2627 || sqlEx.Number == 2601))
+        {
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>
     /// Acquires transaction-scoped application locks for all specified resource keys in deterministic ascending order.
     /// In SQL Server, locks acquired with @LockOwner = 'Transaction' are automatically released when the transaction ends.

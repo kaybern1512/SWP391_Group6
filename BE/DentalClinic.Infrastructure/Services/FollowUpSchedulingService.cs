@@ -407,10 +407,11 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         IDisposable? lockScope = null;
         try
         {
+            var targetDate = request.ScheduledStart.Date;
             var lockKeys = new[]
             {
-                $"Dentist_{doctorUserId}",
-                $"Patient_{request.PatientUserId}"
+                SqlAppLockHelper.DentistKey(doctorUserId, targetDate),
+                SqlAppLockHelper.PatientKey(request.PatientUserId, targetDate)
             };
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
@@ -554,7 +555,24 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             };
 
             _dbContext.Appointments.Add(appointment);
-            await _dbContext.SaveChangesAsync(ct);
+
+            const int maxRetries = 3;
+            int retryCount = 0;
+            while (true)
+            {
+                try
+                {
+                    await _dbContext.SaveChangesAsync(ct);
+                    break;
+                }
+                catch (DbUpdateException ex) when (SqlAppLockHelper.IsUniqueConstraintViolation(ex) && retryCount < maxRetries)
+                {
+                    retryCount++;
+                    _logger.LogWarning("Va chạm mã AppointmentCode '{Code}' tại SQL Server. Thực hiện retry lần {Retry}/{MaxRetries}...", appointment.AppointmentCode, retryCount, maxRetries);
+                    var newRandomPart = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+                    appointment.AppointmentCode = $"APT-{DateTime.UtcNow:yyyyMMdd}-{newRandomPart}";
+                }
+            }
 
             // 6. Link FollowUpSchedule
             long? followUpId = null;
@@ -721,7 +739,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         IDisposable? lockScope = null;
         try
         {
-            var lockKeys = new[] { $"Appointment_{request.AppointmentId}" };
+            var lockKeys = new[] { SqlAppLockHelper.ApptKey(request.AppointmentId) };
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
             // Reload fresh appointment state under the lock
@@ -896,8 +914,8 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         {
             var lockKeys = new[]
             {
-                $"Proposal_{proposalId}",
-                $"Appointment_{proposal.AppointmentId}"
+                SqlAppLockHelper.ProposalKey(proposalId),
+                SqlAppLockHelper.ApptKey(proposal.AppointmentId)
             };
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
@@ -1074,13 +1092,20 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         IDisposable? lockScope = null;
         try
         {
-            var lockKeys = new[]
+            var propDate = proposal.ProposedStart?.Date ?? DateTime.Today;
+            var currDate = proposal.Appointment.ScheduledStart?.Date ?? propDate;
+            var lockKeys = new List<string>
             {
-                $"Proposal_{proposal.ProposalId}",
-                $"Appointment_{proposal.AppointmentId}",
-                $"Dentist_{doctorUserId}",
-                $"Patient_{proposal.Appointment.PatientUserId}"
+                SqlAppLockHelper.ProposalKey(proposal.ProposalId),
+                SqlAppLockHelper.ApptKey(proposal.AppointmentId),
+                SqlAppLockHelper.DentistKey(doctorUserId, propDate),
+                SqlAppLockHelper.PatientKey(proposal.Appointment.PatientUserId, propDate)
             };
+            if (currDate != propDate)
+            {
+                lockKeys.Add(SqlAppLockHelper.DentistKey(doctorUserId, currDate));
+                lockKeys.Add(SqlAppLockHelper.PatientKey(proposal.Appointment.PatientUserId, currDate));
+            }
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
             // Reload fresh proposal and appointment state under the lock

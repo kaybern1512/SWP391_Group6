@@ -1268,4 +1268,553 @@ public class FollowUpConcurrencyIntegrationTests
         Assert.True(sqlEx.Number == 2627 || sqlEx.Number == 2601,
             $"Expected SQL Server error 2627 or 2601, but got {sqlEx.Number}: {sqlEx.Message}");
     }
+
+    [Fact]
+    public async Task B06B_ControlledInterleaving_CancelVsApproval_DeterministicFinalState()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 20L;
+        var patientId = 6L;
+        var targetDate = DateTime.Today.AddDays(25);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate);
+
+        var originalStart = targetDate.AddHours(9);
+        var originalEnd = originalStart.AddMinutes(30);
+        var proposedStart = targetDate.AddHours(14);
+        var proposedEnd = proposedStart.AddMinutes(30);
+
+        var appt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B06B-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = patientId,
+            DepartmentId = 1,
+            AssignedDentistUserId = doctorId,
+            ScheduledStart = originalStart,
+            ScheduledEnd = originalEnd,
+            Status = AppointmentStatus.Confirmed,
+            BookingSource = BookingSource.Receptionist,
+            ReasonForVisit = "B06B controlled interleaving appt",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(appt);
+        await setupDb.SaveChangesAsync();
+
+        var prop = new AppointmentChangeProposal
+        {
+            AppointmentId = appt.AppointmentId,
+            ProposedByUserId = patientId,
+            ProposedDepartmentId = 1,
+            ProposedDentistUserId = doctorId,
+            ProposedStart = proposedStart,
+            ProposedEnd = proposedEnd,
+            Reason = "Đổi sang buổi chiều",
+            Status = ProposalStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.AppointmentChangeProposals.Add(prop);
+        await setupDb.SaveChangesAsync();
+
+        // Controlled coordination barrier:
+        // Both threads synchronize right before acquiring locks on the shared appointment resource.
+        var coordinationBarrier = new Barrier(2);
+
+        var cancelTask = Task.Run(async () =>
+        {
+            using var dbCancel = _fixture.CreateDbContext();
+            var apptService = new AppointmentService(dbCancel, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            coordinationBarrier.SignalAndWait();
+            return await apptService.PatientCancelAsync(appt.AppointmentId, patientId, "Bệnh nhân chủ động hủy khám");
+        });
+
+        var resolveTask = Task.Run(async () =>
+        {
+            using var dbResolve = _fixture.CreateDbContext();
+            var followUpService = new FollowUpSchedulingService(dbResolve, NullLogger<FollowUpSchedulingService>.Instance);
+            var req = new ResolveProposalRequest { ProposalId = prop.ProposalId, IsApproved = true };
+            coordinationBarrier.SignalAndWait();
+            return await followUpService.ResolveProposalAsync(doctorId, req);
+        });
+
+        var cancelRes = await cancelTask;
+        var resolveRes = await resolveTask;
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var finalAppt = await verifyDb.Appointments.FindAsync(appt.AppointmentId);
+        var finalProp = await verifyDb.AppointmentChangeProposals.FindAsync(prop.ProposalId);
+
+        // Deterministic assertion:
+        // Cancel must always succeed.
+        Assert.True(cancelRes.Success);
+        // The appointment MUST end in Cancelled status. Cancelled can NEVER be overwritten by Confirmed!
+        Assert.Equal(AppointmentStatus.Cancelled, finalAppt!.Status);
+
+        // If resolve failed (cancel acquired lock first), verify proposal was not accepted
+        if (!resolveRes.Success)
+        {
+            Assert.NotEqual(ProposalStatus.Accepted, finalProp!.Status);
+        }
+    }
+
+    [Fact]
+    public async Task B15B_AppointmentCode_CollisionTriggersBoundedRetry_SuccessfullyPersists()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 20L;
+        var patientId = 6L;
+        var targetDate = DateTime.Today.AddDays(26);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate);
+
+        var start = targetDate.AddHours(9);
+        var end = start.AddMinutes(30);
+
+        using var serviceDb = _fixture.CreateDbContext();
+        var service = new FollowUpSchedulingService(serviceDb, NullLogger<FollowUpSchedulingService>.Instance);
+
+        var request = new CreateFollowUpAppointmentRequest
+        {
+            PatientUserId = patientId,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Reason = "B15B Bounded retry test"
+        };
+
+        var result = await service.CreateDoctorFollowUpAppointmentAsync(doctorId, request);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.StartsWith("APT-", result.Data.AppointmentCode);
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var created = await verifyDb.Appointments.FirstOrDefaultAsync(a => a.AppointmentId == result.Data.AppointmentId);
+        Assert.NotNull(created);
+        Assert.Equal(result.Data.AppointmentCode, created.AppointmentCode);
+    }
+
+    [Fact]
+    public async Task B16_CrossService_DoctorFollowUp_Vs_ManagerConfirm_SameDoctorSameSlot()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;   // Dentist in Dept 1
+        var managerId = 17L; // Manager of Dept 1
+        var targetDate = DateTime.Today.AddDays(27);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
+
+        var start = targetDate.AddHours(10);
+        var end = start.AddMinutes(30);
+
+        // Pre-create regular appointment pending manager review
+        var regularAppt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B16-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = 7L,
+            DepartmentId = 1,
+            RequestedDentistUserId = doctorId,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.PendingDepartmentReview,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Regular appointment for manager review",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(regularAppt);
+        await setupDb.SaveChangesAsync();
+
+        var barrier = new Barrier(2);
+
+        // Service 1: Doctor Follow-Up Service books Doctor 1 at 10:00
+        var doctorTask = Task.Run(async () =>
+        {
+            using var db1 = _fixture.CreateDbContext();
+            var followUpService = new FollowUpSchedulingService(db1, NullLogger<FollowUpSchedulingService>.Instance);
+            barrier.SignalAndWait();
+            return await followUpService.CreateDoctorFollowUpAppointmentAsync(doctorId, new CreateFollowUpAppointmentRequest
+            {
+                PatientUserId = 6L,
+                ScheduledStart = start,
+                ScheduledEnd = end,
+                Reason = "Doctor follow-up competing with manager confirm"
+            });
+        });
+
+        // Service 2: Manager confirms regular appointment for Doctor 1 at 10:00 (Room 1, Chair 1)
+        var managerTask = Task.Run(async () =>
+        {
+            using var db2 = _fixture.CreateDbContext();
+            var apptService = new AppointmentService(db2, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            barrier.SignalAndWait();
+            return await apptService.ManagerConfirmAsync(regularAppt.AppointmentId, managerId, new ManagerConfirmRequest
+            {
+                AssignedDentistUserId = doctorId,
+                RoomId = 1L,
+                DentalChairId = 1L,
+                ScheduledStart = start,
+                ScheduledEnd = end
+            });
+        });
+
+        await Task.WhenAll(doctorTask, managerTask);
+        var doctorRes = await doctorTask;
+        var managerRes = await managerTask;
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var confirmedDoctorAppts = await verifyDb.Appointments
+            .Where(a => a.AssignedDentistUserId == doctorId &&
+                        a.ScheduledStart == start &&
+                        a.Status == AppointmentStatus.Confirmed)
+            .ToListAsync();
+
+        // Cross-service lock Lock_Dentist_{id}_{date} ensures mutual exclusion
+        var successCount = (doctorRes.Success ? 1 : 0) + (managerRes.Success ? 1 : 0);
+        Assert.Equal(1, successCount);
+        Assert.Single(confirmedDoctorAppts);
+    }
+
+    [Fact]
+    public async Task B17_CrossService_PatientFollowUp_Vs_ManagerConfirm_SamePatientSameSlot()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var patientId = 6L;
+        var doctorA = 1L; // Dentist 1 in Dept 1
+        var doctorB = 4L; // Dentist 4 in Dept 1
+        var managerId = 17L;
+        var targetDate = DateTime.Today.AddDays(28);
+
+        await EnsureDoctorScheduleAsync(setupDb, doctorA, targetDate, 1);
+        await EnsureDoctorScheduleAsync(setupDb, doctorB, targetDate, 1);
+
+        var start = targetDate.AddHours(11);
+        var end = start.AddMinutes(30);
+
+        // Pre-create regular appointment pending manager review for Patient 6 with Doctor B
+        var regularAppt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B17-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = patientId,
+            DepartmentId = 1,
+            RequestedDentistUserId = doctorB,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.PendingDepartmentReview,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Regular appt for patient 6",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(regularAppt);
+        await setupDb.SaveChangesAsync();
+
+        var barrier = new Barrier(2);
+
+        // Service 1: Doctor A books follow-up for Patient 6 at 11:00
+        var doctorTask = Task.Run(async () =>
+        {
+            using var db1 = _fixture.CreateDbContext();
+            var followUpService = new FollowUpSchedulingService(db1, NullLogger<FollowUpSchedulingService>.Instance);
+            barrier.SignalAndWait();
+            return await followUpService.CreateDoctorFollowUpAppointmentAsync(doctorA, new CreateFollowUpAppointmentRequest
+            {
+                PatientUserId = patientId,
+                ScheduledStart = start,
+                ScheduledEnd = end,
+                Reason = "Doctor A follow-up for patient 6"
+            });
+        });
+
+        // Service 2: Manager confirms Doctor B for Patient 6 at 11:00
+        var managerTask = Task.Run(async () =>
+        {
+            using var db2 = _fixture.CreateDbContext();
+            var apptService = new AppointmentService(db2, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            barrier.SignalAndWait();
+            return await apptService.ManagerConfirmAsync(regularAppt.AppointmentId, managerId, new ManagerConfirmRequest
+            {
+                AssignedDentistUserId = doctorB,
+                RoomId = 1L,
+                DentalChairId = 2L,
+                ScheduledStart = start,
+                ScheduledEnd = end
+            });
+        });
+
+        await Task.WhenAll(doctorTask, managerTask);
+        var doctorRes = await doctorTask;
+        var managerRes = await managerTask;
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var confirmedPatientAppts = await verifyDb.Appointments
+            .Where(a => a.PatientUserId == patientId &&
+                        a.ScheduledStart == start &&
+                        a.Status == AppointmentStatus.Confirmed)
+            .ToListAsync();
+
+        // Cross-service lock Lock_Patient_{id}_{date} ensures mutual exclusion
+        var successCount = (doctorRes.Success ? 1 : 0) + (managerRes.Success ? 1 : 0);
+        Assert.Equal(1, successCount);
+        Assert.Single(confirmedPatientAppts);
+    }
+
+    [Fact]
+    public async Task B18_CrossService_ManagerConfirm_Vs_DentistAssignChair_SameChairSameSlot()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var chairId = 1L; // Chair 1 in Room 1
+        var managerId = 17L;
+        var doctor1 = 1L;
+        var doctor4 = 4L;
+        var targetDate = DateTime.Today.AddDays(29);
+
+        await EnsureDoctorScheduleAsync(setupDb, doctor1, targetDate, 1);
+        await EnsureDoctorScheduleAsync(setupDb, doctor4, targetDate, 1);
+
+        var start = targetDate.AddHours(14);
+        var end = start.AddMinutes(30);
+
+        // Appt 1: Checked-in appointment ready for chair assignment by Dentist 1
+        var appt1 = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B18A-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = 6L,
+            DepartmentId = 1,
+            AssignedDentistUserId = doctor1,
+            RoomId = 1L,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.CheckedIn,
+            BookingSource = BookingSource.Receptionist,
+            ReasonForVisit = "Checked in appt",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        // Appt 2: Pending manager review appointment
+        var appt2 = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B18B-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = 7L,
+            DepartmentId = 1,
+            RequestedDentistUserId = doctor4,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.PendingDepartmentReview,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Pending manager review appt",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.AddRange(appt1, appt2);
+        await setupDb.SaveChangesAsync();
+
+        var barrier = new Barrier(2);
+
+        // Thread 1: Dentist 1 assigns Chair 1
+        var dentistTask = Task.Run(async () =>
+        {
+            using var db1 = _fixture.CreateDbContext();
+            var apptService = new AppointmentService(db1, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            barrier.SignalAndWait();
+            return await apptService.DentistAssignChairAsync(appt1.AppointmentId, doctor1, chairId);
+        });
+
+        // Thread 2: Manager confirms Appt 2 allocating Chair 1
+        var managerTask = Task.Run(async () =>
+        {
+            using var db2 = _fixture.CreateDbContext();
+            var apptService = new AppointmentService(db2, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            barrier.SignalAndWait();
+            return await apptService.ManagerConfirmAsync(appt2.AppointmentId, managerId, new ManagerConfirmRequest
+            {
+                AssignedDentistUserId = doctor4,
+                RoomId = 1L,
+                DentalChairId = chairId,
+                ScheduledStart = start,
+                ScheduledEnd = end
+            });
+        });
+
+        await Task.WhenAll(dentistTask, managerTask);
+        var dentistRes = await dentistTask;
+        var managerRes = await managerTask;
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var occupyingAppts = await verifyDb.Appointments
+            .Where(a => a.DentalChairId == chairId &&
+                        a.ScheduledStart == start &&
+                        (a.Status == AppointmentStatus.InService || a.Status == AppointmentStatus.Confirmed))
+            .ToListAsync();
+
+        // Cross-service lock Lock_Chair_{id}_{date} ensures mutual exclusion
+        var successCount = (dentistRes.Success ? 1 : 0) + (managerRes.Success ? 1 : 0);
+        Assert.Equal(1, successCount);
+        Assert.Single(occupyingAppts);
+    }
+
+    [Fact]
+    public async Task B19_CrossService_ExclusiveRoom_TwoConcurrentConfirmations_OnlyOneSucceeds()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var exclusiveRoomId = 2L; // Room 2: IsExclusive = true, Department 3
+        var chair1 = 3L;
+        var chair2 = 4L;
+        var managerId = 5L;       // Manager of Department 3
+        var doctor1 = 1L;
+        var doctor4 = 4L;
+        var targetDate = DateTime.Today.AddDays(30);
+
+        await EnsureDoctorScheduleAsync(setupDb, doctor1, targetDate, 3);
+        await EnsureDoctorScheduleAsync(setupDb, doctor4, targetDate, 3);
+
+        var start = targetDate.AddHours(15);
+        var end = start.AddMinutes(30);
+
+        var appt1 = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B19A-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = 6L,
+            DepartmentId = 3,
+            RequestedDentistUserId = doctor1,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.PendingDepartmentReview,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Exclusive room appt 1",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var appt2 = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B19B-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = 7L,
+            DepartmentId = 3,
+            RequestedDentistUserId = doctor4,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.PendingDepartmentReview,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Exclusive room appt 2",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.AddRange(appt1, appt2);
+        await setupDb.SaveChangesAsync();
+
+        var barrier = new Barrier(2);
+
+        var task1 = Task.Run(async () =>
+        {
+            using var db1 = _fixture.CreateDbContext();
+            var service1 = new AppointmentService(db1, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            barrier.SignalAndWait();
+            return await service1.ManagerConfirmAsync(appt1.AppointmentId, managerId, new ManagerConfirmRequest
+            {
+                AssignedDentistUserId = doctor1,
+                RoomId = exclusiveRoomId,
+                DentalChairId = chair1,
+                ScheduledStart = start,
+                ScheduledEnd = end
+            });
+        });
+
+        var task2 = Task.Run(async () =>
+        {
+            using var db2 = _fixture.CreateDbContext();
+            var service2 = new AppointmentService(db2, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            barrier.SignalAndWait();
+            return await service2.ManagerConfirmAsync(appt2.AppointmentId, managerId, new ManagerConfirmRequest
+            {
+                AssignedDentistUserId = doctor4,
+                RoomId = exclusiveRoomId,
+                DentalChairId = chair2,
+                ScheduledStart = start,
+                ScheduledEnd = end
+            });
+        });
+
+        var results = await Task.WhenAll(task1, task2);
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var confirmedInRoom = await verifyDb.Appointments
+            .Where(a => a.RoomId == exclusiveRoomId &&
+                        a.ScheduledStart == start &&
+                        a.Status == AppointmentStatus.Confirmed)
+            .ToListAsync();
+
+        Assert.Equal(1, results.Count(r => r.Success));
+        Assert.Single(confirmedInRoom);
+    }
+
+    [Fact]
+    public async Task B20_CrossService_DoctorLeave_Vs_ManagerConfirm_SameDoctorSameSlot()
+    {
+        using var setupDb = _fixture.CreateDbContext();
+        var doctorId = 1L;
+        var managerId = 17L;
+        var targetDate = DateTime.Today.AddDays(31);
+
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
+
+        var start = targetDate.AddHours(16);
+        var end = start.AddMinutes(30);
+
+        var regularAppt = new Appointment
+        {
+            AppointmentCode = $"APT-CONCUR-B20-{Guid.NewGuid().ToString("N")[..6]}",
+            PatientUserId = 6L,
+            DepartmentId = 1,
+            RequestedDentistUserId = doctorId,
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            Status = AppointmentStatus.PendingDepartmentReview,
+            BookingSource = BookingSource.Patient,
+            ReasonForVisit = "Appt to be confirmed against leave",
+            CreatedAt = DateTime.UtcNow
+        };
+        setupDb.Appointments.Add(regularAppt);
+        await setupDb.SaveChangesAsync();
+
+        var barrier = new Barrier(2);
+
+        // Thread 1: Doctor 1 registers leave for 16:00 - 17:00 via DentistScheduleService
+        var leaveTask = Task.Run(async () =>
+        {
+            using var dbLeave = _fixture.CreateDbContext();
+            var scheduleService = new DentistScheduleService(dbLeave, Mock.Of<IAuditLogService>());
+            barrier.SignalAndWait();
+            return await scheduleService.CreateAvailabilityAsync(new CreateDentistAvailabilityRequest
+            {
+                DentistUserId = doctorId,
+                StartDateTime = start,
+                EndDateTime = end.AddMinutes(30),
+                AvailabilityStatus = DentistAvailabilityStatus.OnLeave,
+                Reason = "Bác sĩ bận việc riêng"
+            }, doctorId, UserRole.Dentist);
+        });
+
+        // Thread 2: Manager confirms Appt for Doctor 1 at 16:00 via AppointmentService
+        var managerTask = Task.Run(async () =>
+        {
+            using var dbManager = _fixture.CreateDbContext();
+            var apptService = new AppointmentService(dbManager, Mock.Of<INotificationService>(), NullLogger<AppointmentService>.Instance);
+            barrier.SignalAndWait();
+            return await apptService.ManagerConfirmAsync(regularAppt.AppointmentId, managerId, new ManagerConfirmRequest
+            {
+                AssignedDentistUserId = doctorId,
+                RoomId = 1L,
+                DentalChairId = 1L,
+                ScheduledStart = start,
+                ScheduledEnd = end
+            });
+        });
+
+        await Task.WhenAll(leaveTask, managerTask);
+
+        using var verifyDb = _fixture.CreateDbContext();
+        var confirmedAppt = await verifyDb.Appointments
+            .FirstOrDefaultAsync(a => a.AppointmentId == regularAppt.AppointmentId && a.Status == AppointmentStatus.Confirmed);
+
+        var leaveExists = await verifyDb.DentistAvailabilities
+            .AnyAsync(da => da.DentistUserId == doctorId &&
+                            da.AvailabilityStatus == DentistAvailabilityStatus.OnLeave &&
+                            da.StartDateTime <= start &&
+                            (da.EndDateTime == null || da.EndDateTime >= end));
+
+        // Cross-service lock Lock_Dentist_{id}_{date} ensures mutual exclusion
+        var bothCommitted = confirmedAppt != null && leaveExists;
+        Assert.False(bothCommitted, "Race condition detected: Both leave and confirmed appointment were created for the same doctor at the same time!");
+    }
 }

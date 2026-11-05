@@ -791,11 +791,12 @@ public class TreatmentService : ITreatmentService
         IDisposable? lockScope = null;
         try
         {
+            var targetDate = request.ScheduledStart.Date;
             var lockKeys = new[]
             {
-                $"Dentist_{targetDentistId}",
-                $"Patient_{plan.PatientUserId}",
-                $"Plan_{planId}"
+                SqlAppLockHelper.DentistKey(targetDentistId, targetDate),
+                SqlAppLockHelper.PatientKey(plan.PatientUserId, targetDate),
+                SqlAppLockHelper.PlanKey(planId)
             };
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
@@ -851,7 +852,22 @@ public class TreatmentService : ITreatmentService
             };
 
             _dbContext.Appointments.Add(appt);
-            await _dbContext.SaveChangesAsync(ct);
+
+            const int maxRetries = 3;
+            int retryCount = 0;
+            while (true)
+            {
+                try
+                {
+                    await _dbContext.SaveChangesAsync(ct);
+                    break;
+                }
+                catch (DbUpdateException ex) when (SqlAppLockHelper.IsUniqueConstraintViolation(ex) && retryCount < maxRetries)
+                {
+                    retryCount++;
+                    appt.AppointmentCode = "APP-" + DateTime.UtcNow.ToString("yyyyMMdd") + "-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+                }
+            }
 
             // Thêm lịch sử trạng thái
             var history = new AppointmentStatusHistory

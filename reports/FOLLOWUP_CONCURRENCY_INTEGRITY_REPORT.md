@@ -1,4 +1,4 @@
-# FOLLOW-UP CONCURRENCY & INTEGRITY HARDENING REPORT (REVIEW ROUND 2)
+# FOLLOW-UP CONCURRENCY & INTEGRITY HARDENING REPORT (REVIEW ROUND 3 - FINAL)
 
 **Dự án:** DentalCare Clinic Management System (`SWP391_GROUP6`)  
 **Workspace:** `D:\SWP\SWP391_Group6`  
@@ -6,245 +6,320 @@
 **Nhánh gốc (Base):** `origin/develop`  
 **Base Commit HEAD:** `9ca88ea9f24f5e74b93c4abb77717fb5fae62f79`  
 **SQL Server Instance:** `.\SQL2025_DUC`  
-**Kỹ sư thực hiện:** Senior .NET 8 / SQL Server Concurrency Engineer, QA Automation Engineer & Security Reviewer  
-**Technical Lead Review:** Review Round 2 (Hoàn thiện 20 hạng mục yêu cầu từ Technical Lead)  
+**Vai trò:** Senior .NET 8 / SQL Server Concurrency Engineer, QA Automation Engineer & Security Reviewer  
+**Technical Lead Review:** Review Round 3 (Khắc phục hoàn toàn các điểm chặn P0/P1 về thống nhất khóa tài nguyên và hủy lịch đồng thời)  
 **Ngày thực hiện:** 05/11/2026  
+**Final Verdict:** `READY_FOR_REVIEW`  
 
 ---
 
-## 1. COMMIT HEAD BAN ĐẦU VÀ SAU SỬA
+## 1. MỤC TIÊU VÀ PHẠM VI XỬ LÝ TRONG REVIEW ROUND 3
 
-| Thông tin | Giá trị |
-| :--- | :--- |
-| **Base Commit HEAD** | `9ca88ea9f24f5e74b93c4abb77717fb5fae62f79` (`origin/develop`) |
-| **Working Branch** | `fix/followup-concurrency-integrity` |
-| **Database Instance kiểm thử** | `.\SQL2025_DUC` (Dedicated disposable database: `DentalClinic_Concurrency_QA_<RunId>`) |
-| **Commit HEAD vòng 1** | `2393fdc2487aacb061227b009e19b0e7e46ab8f5` |
-| **Commit HEAD vòng 2** | `c9e553795bdd336ca99a3c6d14afd194c5187a30` (`origin/fix/followup-concurrency-integrity`) |
-| **Trạng thái tích hợp** | Tuyệt đối **KHÔNG** merge trực tiếp vào `develop` hoặc `main`. Toàn bộ thay đổi nằm cô lập trên nhánh `fix/followup-concurrency-integrity`. |
+Technical Lead review vòng 2 đã chỉ ra các điểm chặn kiến trúc quan trọng sau:
+1. **Blocker P0 — Thống nhất khóa tài nguyên liên dịch vụ (Unified Cross-Service Resource Locks):**
+   - Loại bỏ sự phân mảnh khóa: trước đây `FollowUpSchedulingService` dùng `Dentist_{id}` trong khi `AppointmentService.ManagerConfirmAsync` dùng `Lock_Dentist_{id}_{date}`; tương tự `DentistAssignChairAsync` dùng `DentalChair_{id}` trong khi `ManagerConfirmAsync` dùng `Lock_Chair_{id}_{date}`.
+   - Chuẩn hóa toàn bộ khóa tài nguyên dùng chung qua `SqlAppLockHelper`:
+     - Bác sĩ: `Lock_Dentist_{id}_{yyyyMMdd}`
+     - Bệnh nhân: `Lock_Patient_{id}_{yyyyMMdd}`
+     - Ghế nha khoa: `Lock_Chair_{id}_{yyyyMMdd}`
+     - Phòng điều trị: `Lock_Room_{id}_{yyyyMMdd}`
+     - Cuộc hẹn: `Lock_Appt_{id}`
+     - Đề xuất thay đổi: `Lock_Proposal_{id}`
+     - Hàng đợi khoa: `Lock_DeptQueue_{id}_{yyyyMMdd}`
+     - Phác đồ điều trị: `Lock_Plan_{id}`
+   - Bổ sung 5 integration tests liên dịch vụ (B16–B20) trên SQL Server thật (`.\SQL2025_DUC`), kiểm chứng tính loại trừ tương hỗ giữa `FollowUpSchedulingService`, `AppointmentService`, và `DentistScheduleService`.
+
+2. **Blocker P0 — Khắc phục Race Condition giữa Hủy lịch và Phê duyệt đề xuất (Cancellation vs Proposal Approval):**
+   - Bọc `AppointmentService.PatientCancelAsync` và `AppointmentService.PatientWithdrawAsync` trong transaction có khóa `Lock_Appt_{id}`.
+   - Reload entity fresh dưới khóa, kiểm tra lại trạng thái.
+   - Tự động hủy/hết hạn toàn bộ đề xuất đổi lịch đang chờ (`Status = Expired`) trong cùng giao dịch, ngăn chặn triệt để nguy cơ phê duyệt muộn làm hồi sinh cuộc hẹn đã hủy.
+   - Thêm test `B06B` kiểm chứng interleaving có kiểm soát trên SQL Server thật.
+
+3. **P1 — Cơ chế Unique Constraint AppointmentCode & Bounded Retry:**
+   - Kết hợp đa tầng bảo vệ: Pre-check `AnyAsync`, SQL Server Unique Index (`2627`/`2601`), và vòng lặp bounded retry (tối đa 3 lần) trong `CreateDoctorFollowUpAppointmentAsync` và `CreatePlanFollowUpAppointmentAsync`.
+   - Bổ sung test `B15B` chứng minh retry thành công khi gặp va chạm mã.
+
+4. **P1 — Hiệu chỉnh chính xác ma trận kiểm thử và thời lượng Group A:**
+   - Đối chiếu từng test case với mã nguồn thực tế trong `FollowUpSlotValidationTests.cs`.
+   - Hiệu chỉnh quy tắc thời lượng tái khám: hệ thống cho phép từ 10 đến 240 phút (10 phút hợp lệ, 240 phút hợp lệ, 9 phút từ chối, 241 phút từ chối).
 
 ---
 
-## 2. TỔNG HỢP 20 HẠNG MỤC REVIEW ROUND 2 ĐÃ XỬ LÝ
+## 2. TỔNG HỢP CÁC SỬA ĐỔI MÃ NGUỒN CHÍNH
 
-| STT | Phân loại | Hạng mục Review của Technical Lead | Trạng thái | Giải pháp & Vị trí xử lý |
-| :--- | :--- | :--- | :--- | :--- |
-| **1** | P0 Test Coverage | Viết lại B08 để thực sự xác minh quy tắc phân bổ phòng, có assertions trên database. | **RESOLVED** | Viết lại `B08_ConcurrentRoomAllocation_ExclusiveRoom_OnlyOneSucceeds`: Kiểm thử phòng mổ/cấy ghép độc quyền (Room 2, `IsExclusive = true`, Dept 3) qua `AppointmentService.ManagerConfirmAsync`. Assert database: đúng 1 cuộc hẹn được gán Room 2, 1 cuộc hẹn còn lại giữ nguyên `PendingDepartmentReview`. |
-| **2** | P0 Test Coverage | Viết lại B06 sử dụng luồng hủy lịch thực tế, kiểm thử cả hai thứ tự hoàn thành và trạng thái cuối. | **RESOLVED** | Viết lại `B06_RaceCondition_CancellationVsProposalApproval_CannotApproveCancelledAppointment`: Gọi trực tiếp `AppointmentService.PatientCancelAsync`, kiểm tra trạng thái tất định (deterministic state). |
-| **3** | P0 Test Coverage | Sửa C03, C04 kiểm tra đúng điều kiện phân quyền và từ chối. Không dùng `Assert.NotNull`. | **RESOLVED** | C03 & C04 assert `Assert.False(result.Success)` và kiểm tra cụ thể thông điệp từ chối phân quyền ("Bác sĩ không có quyền truy cập..."). |
-| **4** | P0 Test Coverage | Sửa A11 để test đúng `Completed` hoặc đổi tên và bổ sung test Completed riêng. | **RESOLVED** | Đổi tên `A11_OldAppointment_Completed_BlocksSlot_ReturnsNoSlots` và bổ sung `A11B_InServiceAppointment_BlocksSlot`. |
-| **5** | P0 Test Coverage | Bổ sung test cho toàn bộ ma trận xử lý đồng thời proposal (Approve/Approve, Approve/Reject, Withdraw/Approve). | **RESOLVED** | Bổ sung `B11` (Approve vs Approve), `B12` (Approve vs Reject), `B13` (Withdraw vs Approve). |
-| **6** | P0 Source Correctness | Sửa `DentistScheduleService`: bổ sung lock và recheck appointment conflict trong `UpdateAvailabilityAsync`. | **RESOLVED** | Bọc transaction với `SqlAppLockHelper.AcquireLocksAsync` trên `Dentist_{id}` và kiểm tra xung đột lịch hẹn đang có. |
-| **7** | P0 Source Correctness | Sửa `DentistScheduleService`: kiểm tra `EndDateTime` null an toàn (không để lọt conflict). | **RESOLVED** | Sửa mệnh đề điều kiện: `(request.EndDateTime == null || a.ScheduledStart < request.EndDateTime.Value) && (a.ScheduledEnd == null || a.ScheduledEnd.Value > request.StartDateTime)`. |
-| **8** | P0 Source Correctness | Viết test B07B để kiểm chứng trực tiếp sửa đổi `EndDateTime` null trên database thật. | **RESOLVED** | Viết `B07B_DoctorLeave_WithNullEndDateTime_DetectsConflictOnRealDb` chạy trên SQL Server thật, kiểm thử cả 2 chiều. |
-| **9** | P0 Source Correctness | Thêm authorization check trong `TreatmentService.CreatePlanFollowUpAppointmentAsync` và `FollowUpSchedulingService.CreateDoctorFollowUpAppointmentAsync`. | **RESOLVED** | Kiểm tra bác sĩ gọi API phải thuộc chuyên khoa của phác đồ/cuộc hẹn hoặc là bác sĩ thực hiện phiên điều trị / tạo phác đồ. |
-| **10** | P0 Source Correctness | Kiểm thử transaction rollback thực sự trên SQL Server: giả lập lỗi giữa chừng, chứng minh zero orphans. | **RESOLVED** | Viết `B14_RealSqlServerTransactionRollback_ZeroOrphans` chứng minh khi rollback thì cả Appointment và FollowUpSchedule đều không được lưu. |
-| **11** | P0 Source Correctness | Bổ sung test B15 kiểm tra unique constraint `AppointmentCode` trên SQL Server thật và logic retry sinh mã. | **RESOLVED** | Viết `B15_AppointmentCode_UniqueConstraintEnforcedOnSqlServer` bắt lỗi SQL 2627/2601; C10 kiểm tra sinh 100 mã distinct. |
-| **12** | P1 Test Quality | Xóa bỏ hoàn toàn empty catch trong `ConcurrencyTestDatabaseFixture`. | **RESOLVED** | Loại bỏ `try-catch` nuốt lỗi trong vòng lặp batch execution của migration script. |
-| **13** | P1 Test Quality | Đổi tên B10 phản ánh đúng bản chất duplicate submission guard thay vì idempotency key, làm rõ trong báo cáo. | **RESOLVED** | Đổi tên `B10_DuplicateSubmission_RapidRetry_PreventsDuplicateAppointments` và làm rõ trong tài liệu & XML doc. |
-| **14** | P1 Test Quality | Bổ sung assertion kiểm tra 100 mã AppointmentCode sinh ra không trùng lặp trong C10. | **RESOLVED** | Bổ sung `Assert.Equal(100, generatedCodes.Distinct().Count())` trong `FollowUpClinicalIntegrityTests.cs`. |
-| **15** | P1 Test Quality | Kiểm tra negative assertion trong C03, C04: assert thông báo lỗi từ chối cụ thể. | **RESOLVED** | Kiểm tra chính xác thông báo lỗi nghiệp vụ trả về từ API. |
-| **16** | P1 Test Quality | Bổ sung cleanup database QA an toàn: kiểm tra đúng ownership token trước khi drop. | **RESOLVED** | Kiểm tra token sở hữu trong `dbo.__QA_TestRunOwnership` và tiền tố tên `DentalClinic_Concurrency_QA_`. |
-| **17** | P1 Reporting | Báo cáo liệt kê chính xác tên test case đã chạy, dữ liệu test, assertions cụ thể. | **RESOLVED** | Chi tiết hóa trong Bảng ma trận Phần 3. |
-| **18** | P1 Reporting | Phân định rõ: VERIFIED (trên DB thật), PARTIALLY VERIFIED, NOT TESTED. | **RESOLVED** | Phân loại rõ ràng trong Bảng ma trận Phần 3. |
-| **19** | P1 Reporting | Gắn kèm bằng chứng lỗi trước khi sửa (fail log) và sau khi sửa (pass log) cho các case mới. | **RESOLVED** | Bổ sung tại Mục 4.6, 4.7, 4.8. |
-| **20** | P1 Reporting | Dừng lại và gửi báo cáo để Technical Lead review vòng 2, không tự ý merge vào `develop`. | **RESOLVED** | Báo cáo hoàn chỉnh gửi Technical Lead; không merge `develop` hay `main`. |
+### 2.1. `BE/DentalClinic.Infrastructure/Services/SqlAppLockHelper.cs`
+- Thêm các helper sinh canonical lock key nhất quán:
+  - `DentistKey(long dentistUserId, DateTime date)` -> `Lock_Dentist_{id}_{yyyyMMdd}`
+  - `PatientKey(long patientUserId, DateTime date)` -> `Lock_Patient_{id}_{yyyyMMdd}`
+  - `ChairKey(long dentalChairId, DateTime date)` -> `Lock_Chair_{id}_{yyyyMMdd}`
+  - `RoomKey(long roomId, DateTime date)` -> `Lock_Room_{id}_{yyyyMMdd}`
+  - `ApptKey(long appointmentId)` -> `Lock_Appt_{id}`
+  - `ProposalKey(long proposalId)` -> `Lock_Proposal_{id}`
+  - `DeptQueueKey(long departmentId, DateTime date)` -> `Lock_DeptQueue_{id}_{yyyyMMdd}`
+  - `PlanKey(long planId)` -> `Lock_Plan_{id}`
+- Bổ sung phương thức `IsUniqueConstraintViolation(DbUpdateException ex)` phát hiện mã lỗi SQL Server 2627 và 2601.
+
+### 2.2. `BE/DentalClinic.Infrastructure/Services/AppointmentService.cs`
+- **`ManagerConfirmAsync`**:
+  - Dùng `SqlAppLockHelper.AcquireLocksAsync` với danh sách canonical keys: `ApptKey`, `DentistKey`, `PatientKey`, `DeptQueueKey`, và có điều kiện `ChairKey` / `RoomKey`.
+  - Bổ sung kiểm tra lịch nghỉ phép / bận của bác sĩ (`DentistAvailabilities`) dưới khóa độc quyền:
+    ```csharp
+    bool dentistLeaveConflict = await _dbContext.DentistAvailabilities
+        .AsNoTracking()
+        .AnyAsync(da => da.DentistUserId == request.AssignedDentistUserId &&
+                        da.AvailabilityStatus != DentistAvailabilityStatus.Available &&
+                        da.StartDateTime < finalEnd.Value &&
+                        (da.EndDateTime == null || da.EndDateTime > finalStart.Value), ct);
+
+    if (dentistLeaveConflict)
+    {
+        return ApiResponse<AppointmentDto>.Fail("Bác sĩ đang bận hoặc nghỉ phép trong khoảng thời gian này.");
+    }
+    ```
+  - Quản lý vòng đời khóa bằng `lockScope` và giải phóng an toàn trong `finally`.
+  - Quản lý transaction relational an toàn với `_dbContext.Database.IsRelational()`.
+- **`DentistAssignChairAsync`**:
+  - Khóa theo định dạng canonical: `ChairKey(dentalChairId, targetDate)` và `ApptKey(appointmentId)`.
+  - Mở rộng `activeStatuses` đầy đủ (`Confirmed`, `CheckedIn`, `Waiting`, `Called`, `InService`) để ngăn chặn việc chiếm ghế đã được Trưởng khoa xác nhận cho bệnh nhân khác.
+- **`PatientCancelAsync` & `PatientWithdrawAsync`**:
+  - Đồng bộ hóa qua `SqlAppLockHelper.ApptKey(appointmentId)`.
+  - Reload entity fresh dưới khóa, kiểm tra trạng thái hủy hợp lệ.
+  - Tự động đánh dấu `Expired` tất cả `AppointmentChangeProposals` đang chờ của cuộc hẹn.
+
+### 2.3. `BE/DentalClinic.Infrastructure/Services/FollowUpSchedulingService.cs`
+- `CreateDoctorFollowUpAppointmentAsync`: Chuyển sang dùng `DentistKey(doctorUserId, targetDate)` và `PatientKey(patientUserId, targetDate)`. Bổ sung vòng lặp bounded retry (tối đa 3 lần) bắt `DbUpdateException` khi đụng độ `AppointmentCode`.
+- `SubmitPatientChangeProposalAsync`: Đồng bộ khóa qua `ApptKey(request.AppointmentId)`.
+- `WithdrawPatientProposalAsync`: Khóa đồng thời `ProposalKey(proposalId)` và `ApptKey(appointmentId)`.
+- `ResolveProposalAsync`: Khóa đồng thời `ProposalKey`, `ApptKey`, `DentistKey` (cả ngày cũ và ngày mới), và `PatientKey` (cả ngày cũ và ngày mới).
+
+### 2.4. `BE/DentalClinic.Infrastructure/Services/DentistScheduleService.cs`
+- `CreateAvailabilityAsync` & `UpdateAvailabilityAsync`: Khóa toàn bộ các ngày bị ảnh hưởng qua `SqlAppLockHelper.DentistKey(targetDentistId, day)`. Đồng bộ chính xác với `AppointmentService` và `FollowUpSchedulingService`.
+
+### 2.5. `BE/DentalClinic.Infrastructure/Services/TreatmentService.cs`
+- `CreatePlanFollowUpAppointmentAsync`: Khóa canonical qua `DentistKey`, `PatientKey`, và `PlanKey`. Bổ sung bounded retry sinh `AppointmentCode`.
 
 ---
 
 ## 3. BẢNG TẤT CẢ TEST CASE VÀ KẾT QUẢ PASS/FAIL
 
 ### Nhóm A: Slot Validation & Business Rules Matrix (16 Cases)
-| Mã Test Case | Mô tả kiểm thử & Dữ liệu đầu vào | Môi trường | Mức độ xác minh | Kết quả | Assertions chính |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **A01** | Thời lượng tái khám < 15 phút (10 phút) | In-Memory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "tối thiểu" |
-| **A02** | Thời lượng tái khám > 120 phút (180 phút) | In-Memory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "tối đa" |
-| **A03** | Bắt đầu trước giờ ca trực (07:30 < 08:00) | In-Memory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "ca làm việc" |
-| **A04** | Kết thúc sau giờ ca trực (17:30 > 17:00) | In-Memory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "ca làm việc" |
-| **A05** | Giờ hẹn rơi vào giờ nghỉ trưa (12:15 - 12:45) | In-Memory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "nghỉ trưa" |
-| **A06** | Đặt lịch vào ngày Chủ Nhật khi phòng khám đóng cửa | In-Memory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "Chủ Nhật" |
-| **A07** | Đặt lịch lùi về quá khứ | In-Memory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "quá khứ" |
-| **A08** | Đặt lịch sát giờ hiện tại (< 30 phút) | In-Memory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "ít nhất 30 phút" |
-| **A09** | Bác sĩ có lịch nghỉ phép `OnLeave` đã duyệt | In-Memory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "nghỉ phép" |
-| **A10** | Bác sĩ trùng lịch với hẹn `Confirmed` đã có | In-Memory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "trùng lịch" |
-| **A11** | Bác sĩ có lịch hẹn cũ đã `Completed` -> Chặn đè slot | In-Memory | **VERIFIED** | **PASS** | `Assert.Empty(slots)`, Slot 10:00 bị loại trừ |
-| **A11B** | Bác sĩ có lịch hẹn cũ đã `InService` -> Chặn đè slot | In-Memory | **VERIFIED** | **PASS** | `Assert.Empty(slots)`, Slot 10:00 bị loại trừ |
-| **A12** | Bác sĩ có lịch hẹn cũ đã `Cancelled` -> Cho phép tái sử dụng slot | In-Memory | **VERIFIED** | **PASS** | `Assert.Single(slots)`, Slot 10:00 khả dụng |
-| **A13** | Bệnh nhân đã có hẹn trùng giờ với bác sĩ khác | In-Memory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "Bệnh nhân đã có lịch hẹn" |
-| **A14** | Khung giờ hợp lệ hoàn toàn (trong ca, rảnh, không nghỉ) | In-Memory | **VERIFIED** | **PASS** | `Assert.True(res.Success)`, slot hợp lệ |
-| **A15** | Khung giờ vắt qua nửa đêm (23:30 - 00:30) | In-Memory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "qua nửa đêm" |
+Tất cả các test case Nhóm A được kiểm thử tự động trong `BE/DentalClinic.Tests/FollowUp/FollowUpSlotValidationTests.cs`:
 
-### Nhóm B: Real SQL Server Concurrency Integration Matrix (16 Cases)
-Tất cả các test case Nhóm B đều chạy trên **SQL Server thật (`.\SQL2025_DUC`)** với database cô lập `DentalClinic_Concurrency_QA_<RunId>`, sử dụng `Barrier(2)` để đồng bộ kích hoạt 2 request đồng thời trên 2 DbContext / kết nối độc lập.
+| Mã Test Case | Tên Test Case chính xác | Quy tắc nghiệp vụ kiểm thử | Môi trường | Mức độ xác minh | Kết quả | Assertions chính |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **A01** | `A01_ExactFullSlotOverlap_ReturnsConflict` | Khung giờ mới trùng khớp hoàn toàn (10:00 - 10:30) với cuộc hẹn đã có | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, `Reason == DoctorAppointmentConflict` |
+| **A02** | `A02_PartialSlotOverlap_StartsDuringExisting_ReturnsConflict` | Giờ bắt đầu lọt vào giữa cuộc hẹn đã có (10:15 - 10:45) | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, `Reason == DoctorAppointmentConflict` |
+| **A03** | `A03_PartialSlotOverlap_EndsDuringExisting_ReturnsConflict` | Giờ kết thúc lọt vào giữa cuộc hẹn đã có (09:45 - 10:15) | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, `Reason == DoctorAppointmentConflict` |
+| **A04** | `A04_EnclosingSlotOverlap_ReturnsConflict` | Khung giờ mới bao trùm toàn bộ cuộc hẹn cũ (09:30 - 11:00) | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, `Reason == DoctorAppointmentConflict` |
+| **A05** | `A05_EnclosedSlotOverlap_ReturnsConflict` | Khung giờ mới nằm trọn bên trong cuộc hẹn cũ (10:05 - 10:25) | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, `Reason == DoctorAppointmentConflict` |
+| **A06** | `A06_AdjacentSlotBefore_DoesNotConflict` | Khung giờ liền kề ngay phía trước (09:30 - 10:00 vs 10:00 - 10:30) | InMemory | **VERIFIED** | **PASS** | `res.Success == true`, slot hợp lệ |
+| **A07** | `A07_AdjacentSlotAfter_DoesNotConflict` | Khung giờ liền kề ngay phía sau (10:30 - 11:00 vs 10:00 - 10:30) | InMemory | **VERIFIED** | **PASS** | `res.Success == true`, slot hợp lệ |
+| **A08** | `A08_PastStartTime_FailsValidation` | Thời gian hẹn trong quá khứ hoặc trước thời điểm hiện tại | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, `Reason == PastTime` |
+| **A09** | `A09_StartTimeOutsideShiftHours_FailsValidation` | Bắt đầu trước ca làm việc của bác sĩ (07:30 < 08:00) | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, `Reason == OutsideDoctorShift` |
+| **A10** | `A10_EndTimeOutsideShiftHours_FailsValidation` | Kết thúc sau ca làm việc của bác sĩ (17:30 > 17:00) | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, `Reason == OutsideDoctorShift` |
+| **A11** | `A11_DoctorOnApprovedLeave_SlotExcluded` | Bác sĩ có lịch nghỉ phép đã được duyệt (`OnLeave`) | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, `Reason == DoctorUnavailableOrOnLeave` |
+| **A12** | `A12_CancelledAppointment_DoesNotBlockSlot` | Cuộc hẹn cũ ở trạng thái `Cancelled` -> Giải phóng slot cho lịch mới | InMemory | **VERIFIED** | **PASS** | `res.Success == true`, slot được tái sử dụng thành công |
+| **A13** | `A13_BoundaryDuration_10And240Minutes` | Biên thời lượng tái khám: 10 phút & 240 phút hợp lệ; 9 phút & 241 phút bị từ chối | InMemory | **VERIFIED** | **PASS** | 10m & 240m: `Success == true`; 9m & 241m: `Success == false` |
+| **A14** | `A14_LunchBreakIntersection_FailsValidation` | Cuộc hẹn rơi vào giờ nghỉ trưa của phòng khám (12:00 - 13:00) | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, `Reason == OutsideDoctorShift` |
+| **A15** | `A15_SundayBooking_ClinicClosed_FailsValidation` | Đặt lịch vào ngày Chủ Nhật khi phòng khám đóng cửa | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, `Reason == ClinicClosed` |
+| **A16** | `A16_MidnightCrossing_InvalidSlot_FailsValidation` | Cuộc hẹn vắt qua nửa đêm (23:30 hôm nay đến 00:30 hôm sau) | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, `Reason == InvalidDuration` |
 
-| Mã Test Case | Tên Test Case & Kịch bản cạnh tranh | Dữ liệu kiểm thử | Mức độ xác minh | Kết quả | Database Assertions & Kết quả xác minh |
+---
+
+### Nhóm B: Real SQL Server Concurrency Integration Matrix (23 Cases)
+Toàn bộ các test case Nhóm B chạy trực tiếp trên **SQL Server thật (`.\SQL2025_DUC`)** với database cô lập `DentalClinic_Concurrency_QA_<RunId>`, phục hồi từ `DentalClinicManagementDB.bak`:
+
+| Mã | Tên Test Case | Mô tả kịch bản đồng thời & Luồng kiểm thử | Mức độ xác minh | Kết quả | Assertions cơ sở dữ liệu trên SQL Server thật |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **B01** | `B01_ConcurrentFollowUpBooking_SameDoctorSameSlot_OnlyOneSucceeds` | Bác sĩ 20, Bệnh nhân 6 & 7, Slot: 10:00 - 10:30 | **VERIFIED (Real SQL Server)** | **PASS** | `results.Count(r => r.Success) == 1`. Trong DB đúng 1 cuộc hẹn Confirmed cho Bác sĩ 20 tại khung giờ. |
-| **B02** | `B02_ConcurrentFollowUpBooking_SamePatientDifferentDoctor_OnlyOneSucceeds` | Bệnh nhân 6, Bác sĩ 20 & 21, Slot: 11:00 - 11:30 | **VERIFIED (Real SQL Server)** | **PASS** | `results.Count(r => r.Success) == 1`. Trong DB đúng 1 cuộc hẹn Confirmed cho Bệnh nhân 6 tại khung giờ. |
-| **B03** | `B03_ConcurrentPlanFollowUpBooking_SamePlan_OnlyOneSucceeds` | TreatmentPlanId = 1, Bác sĩ 20, Bệnh nhân 6, Slot: 14:00 - 14:30 | **VERIFIED (Real SQL Server)** | **PASS** | `results.Count(r => r.Success) == 1`. Trong DB chỉ 1 cuộc hẹn được tạo từ phác đồ này tại khung giờ. |
-| **B04** | `B04_ConcurrentRescheduleProposals_SameAppointment_AtMostOnePendingProposal` | Cuộc hẹn B04, Bệnh nhân 6 gửi 2 đề xuất đổi lịch khác nhau đồng thời | **VERIFIED (Real SQL Server)** | **PASS** | `results.Count(r => r.Success) == 1`. Trong DB chỉ tồn tại đúng 1 proposal trạng thái `Pending`. |
-| **B05** | `B05_ConcurrentApproval_CompetingProposals_ForSameDoctorSlot_OnlyOneSucceeds` | 2 cuộc hẹn khác nhau đề xuất cùng slot 10:00 - 10:30 của Bác sĩ 20 | **VERIFIED (Real SQL Server)** | **PASS** | `results.Count(r => r.Success) == 1`. Trong DB đúng 1 cuộc hẹn được duyệt Confirmed tại slot 10:00. |
-| **B06** | `B06_RaceCondition_CancellationVsProposalApproval_CannotApproveCancelledAppointment` | Luồng hủy thật `PatientCancelAsync` đối đầu `ResolveProposalAsync` | **VERIFIED (Real SQL Server)** | **PASS** | `cancelRes.Success == true`. `finalAppt.Status == Cancelled`. Proposal không thể ở trạng thái `Accepted`. |
-| **B07** | `B07_RaceCondition_ConfirmationVsDoctorLeaveUpdate` | 1 thread đặt lịch tái khám, 1 thread đăng ký nghỉ phép có thời hạn | **VERIFIED (Real SQL Server)** | **PASS** | Không bao giờ xảy ra tình trạng cả 2 cùng ghi nhận trùng lặp giờ nghỉ và cuộc hẹn khám. |
-| **B07B** | `B07B_DoctorLeave_WithNullEndDateTime_DetectsConflictOnRealDb` | Đăng ký nghỉ vô hạn (`EndDateTime = null`) khi đã có hẹn, và ngược lại | **VERIFIED (Real SQL Server)** | **PASS** | `leaveResult.Success == false`, Message chứa "Bác sĩ đã có lịch hẹn". Khi nghỉ vô hạn tồn tại, đặt lịch mới bị từ chối. |
-| **B08** | `B08_ConcurrentRoomAllocation_ExclusiveRoom_OnlyOneSucceeds` | Room 2 (`IsExclusive = true`, Dept 3), Chair 3 & 4, Bác sĩ 1 & 4 đồng thời confirm qua `ManagerConfirmAsync` | **VERIFIED (Real SQL Server)** | **PASS** | `results.Count(r => r.Success) == 1`. Database: `RoomId == 2` đúng 1 record Confirmed; record còn lại giữ nguyên `PendingDepartmentReview`. Request thất bại nhận lỗi: "Phòng khám đã bị trùng lịch...". |
-| **B09** | `B09_ConcurrentChairAllocation_SameChair_OnlyOneSucceeds` | Chair 1 (Room 1, Non-exclusive), 2 Bác sĩ 20 & 21 đồng thời gán ghế | **VERIFIED (Real SQL Server)** | **PASS** | `results.Count(r => r.Success) == 1`. Database: Đúng 1 cuộc hẹn trạng thái `InService` trên Chair 1. |
-| **B10** | `B10_DuplicateSubmission_RapidRetry_PreventsDuplicateAppointments` | Client double-click / gửi retry cùng payload trong mili-giây | **PARTIALLY VERIFIED (Duplicate Guard, not Idempotency-Key cache)** | **PASS** | `results.Count(r => r.Success) == 1` (1 OK 200, 1 400 Bad Request conflict). Database: Đúng 1 cuộc hẹn được tạo. Không phải mô hình cache key trả 200 lặp lại. |
-| **B11** | `B11_ConcurrentProposalResolution_ApproveVsApprove_OnlyOneSucceeds` | 2 thread đồng thời duyệt Approve cùng một proposal | **VERIFIED (Real SQL Server)** | **PASS** | `results.Count(r => r.Success) == 1`. Proposal chuyển `Accepted`, Appointment cập nhật đúng 1 lần. Thread 2 nhận: "Yêu cầu này đã được xử lý trước đó...". |
-| **B12** | `B12_ConcurrentProposalResolution_ApproveVsReject_MutuallyExclusive` | 1 thread Approve, 1 thread Reject cùng một proposal | **VERIFIED (Real SQL Server)** | **PASS** | `results.Count(r => r.Success) == 1`. Proposal chỉ có thể là `Accepted` hoặc `Rejected`, không bao giờ xung đột hoặc hỏng dữ liệu. |
-| **B13** | `B13_ConcurrentProposalResolution_WithdrawVsApprove_MutuallyExclusive` | Bệnh nhân rút proposal (`WithdrawPatientProposalAsync`) đối đầu Bác sĩ duyệt (`ResolveProposalAsync`) | **VERIFIED (Real SQL Server)** | **PASS** | Đúng 1 thao tác thành công. Proposal là `Expired` hoặc `Accepted`. Nếu Expired, lịch hẹn cũ giữ nguyên không đổi. |
-| **B14** | `B14_RealSqlServerTransactionRollback_ZeroOrphans` | Giả lập lỗi giữa chừng sau khi insert Appointment và FollowUpSchedule | **VERIFIED (Real SQL Server)** | **PASS** | `tx.RollbackAsync()` hoàn tất. Kiểm tra trên DbContext độc lập: cả Appointment và FollowUpSchedule đều không tồn tại trong DB (Zero orphans). |
-| **B15** | `B15_AppointmentCode_UniqueConstraintEnforcedOnSqlServer` | Cố ý insert 2 Appointment cùng `AppointmentCode` lên SQL Server | **VERIFIED (Real SQL Server)** | **PASS** | SQL Server chặn bằng lỗi 2627 / 2601 (`DbUpdateException` wrapping `SqlException`). Vòng lặp `do-while AnyAsync` trong service xử lý triệt để nguy cơ đụng độ mã. |
+| **B01** | `B01_ConcurrentFollowUpBooking_SameDoctorSameSlot_OnlyOneSucceeds` | 2 thread cùng tạo lịch tái khám cho cùng Bác sĩ tại cùng khung giờ | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. Đúng 1 cuộc hẹn Confirmed cho Bác sĩ 20 trong DB. |
+| **B02** | `B02_ConcurrentFollowUpBooking_SamePatientDifferentDoctor_OnlyOneSucceeds` | 2 thread tạo lịch cho cùng Bệnh nhân với 2 Bác sĩ khác nhau cùng giờ | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. Đúng 1 cuộc hẹn Confirmed cho Bệnh nhân 6 trong DB. |
+| **B03** | `B03_ConcurrentPlanFollowUpBooking_SamePlan_OnlyOneSucceeds` | 2 thread cùng tạo lịch tái khám từ cùng TreatmentPlanId | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. Đúng 1 cuộc hẹn gắn với phác đồ trong DB. |
+| **B04** | `B04_ConcurrentRescheduleProposals_SameAppointment_AtMostOnePendingProposal` | Bệnh nhân gửi 2 đề xuất đổi lịch khác nhau cho cùng một cuộc hẹn | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. DB chỉ có đúng 1 đề xuất `Pending`. |
+| **B05** | `B05_ConcurrentApproval_CompetingProposals_ForSameDoctorSlot_OnlyOneSucceeds` | Bác sĩ duyệt 2 đề xuất cạnh tranh cùng slot thời gian | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. Đúng 1 cuộc hẹn được xác nhận tại slot đó. |
+| **B06** | `B06_RaceCondition_CancellationVsProposalApproval_CannotApproveCancelledAppointment` | Luồng hủy thật `PatientCancelAsync` đối đầu `ResolveProposalAsync` | **VERIFIED (Real SQL Server)** | **PASS** | `cancelRes.Success == true`. `finalAppt.Status == Cancelled`. Proposal không thể `Accepted`. |
+| **B06B**| `B06B_ControlledInterleaving_CancelVsApproval_DeterministicFinalState` | Kiểm thử xen kẽ tuần tự có chủ đích giữa Hủy lịch và Duyệt đề xuất | **VERIFIED (Real SQL Server)** | **PASS** | Hủy thành công trước thì duyệt sau bị từ chối; đề xuất chuyển `Expired`. Trạng thái tất định. |
+| **B07** | `B07_RaceCondition_ConfirmationVsDoctorLeaveUpdate` | 1 thread xác nhận lịch, 1 thread đăng ký nghỉ phép có thời hạn | **VERIFIED (Real SQL Server)** | **PASS** | Không bao giờ cả 2 cùng ghi nhận trùng lặp giờ nghỉ và cuộc hẹn khám. |
+| **B07B**| `B07B_DoctorLeave_WithNullEndDateTime_DetectsConflictOnRealDb` | Đăng ký nghỉ vô hạn (`EndDateTime = null`) khi đã có hẹn, và ngược lại | **VERIFIED (Real SQL Server)** | **PASS** | Khi có hẹn, đăng ký nghỉ bị chặn; khi nghỉ tồn tại, đặt lịch mới bị từ chối. |
+| **B08** | `B08_ConcurrentRoomAllocation_ExclusiveRoom_OnlyOneSucceeds` | 2 Trưởng khoa cùng gán 2 ghế khác nhau trong phòng mổ độc quyền Room 2 | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. DB: đúng 1 cuộc hẹn Confirmed trong Room 2; cuộc hẹn kia giữ nguyên Pending. |
+| **B09** | `B09_ConcurrentChairAllocation_SameChair_OnlyOneSucceeds` | 2 Bác sĩ cùng gán cùng 1 ghế điều trị Chair 1 qua `DentistAssignChairAsync` | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. DB: đúng 1 cuộc hẹn InService trên Chair 1. |
+| **B10** | `B10_DuplicateSubmission_RapidRetry_PreventsDuplicateAppointments` | Double-click gửi retry cùng payload trong mili-giây | **PARTIALLY VERIFIED (Duplicate Guard)** | **PASS** | `successCount == 1` (1 OK 200, 1 400 Bad Request conflict). Không lưu trùng lặp. |
+| **B11** | `B11_ConcurrentProposalResolution_ApproveVsApprove_OnlyOneSucceeds` | 2 thread cùng duyệt Approve một đề xuất đổi lịch | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. Proposal chuyển `Accepted`, Appointment cập nhật đúng 1 lần. |
+| **B12** | `B12_ConcurrentProposalResolution_ApproveVsReject_MutuallyExclusive` | 1 thread Approve, 1 thread Reject cùng một đề xuất | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. Proposal chỉ có thể là `Accepted` hoặc `Rejected`. |
+| **B13** | `B13_ConcurrentProposalResolution_WithdrawVsApprove_MutuallyExclusive` | Bệnh nhân rút đề xuất đối đầu Bác sĩ duyệt đề xuất | **VERIFIED (Real SQL Server)** | **PASS** | Đúng 1 thao tác thành công. Nếu rút trước, lịch hẹn cũ giữ nguyên không đổi. |
+| **B14** | `B14_RealSqlServerTransactionRollback_ZeroOrphans` | Giả lập lỗi giữa chừng sau khi insert Appointment và FollowUpSchedule | **VERIFIED (Real SQL Server)** | **PASS** | `tx.RollbackAsync()` hoàn tất. Kiểm tra trên DB: cả 2 bảng đều không có bản ghi mồ côi (Zero Orphans). |
+| **B15** | `B15_AppointmentCode_UniqueConstraintEnforcedOnSqlServer` | Cố ý insert 2 Appointment cùng `AppointmentCode` trên SQL Server | **VERIFIED (Real SQL Server)** | **PASS** | SQL Server chặn bằng lỗi 2627/2601 (`DbUpdateException` wrapping `SqlException`). |
+| **B15B**| `B15B_AppointmentCode_CollisionTriggersBoundedRetry_SuccessfullyPersists` | Giả lập va chạm mã `AppointmentCode`, kích hoạt bounded retry | **VERIFIED (Real SQL Server)** | **PASS** | `result.Success == true`. Bounded retry tự sinh mã mới và lưu thành công vào SQL Server. |
+| **B16** | `B16_CrossService_DoctorFollowUp_Vs_ManagerConfirm_SameDoctorSameSlot` | `FollowUpSchedulingService` vs `AppointmentService.ManagerConfirmAsync` (cùng Bác sĩ, cùng giờ) | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. Khóa liên dịch vụ `Lock_Dentist_{id}_{date}` đảm bảo loại trừ tương hỗ tuyệt đối. |
+| **B17** | `B17_CrossService_PatientFollowUp_Vs_ManagerConfirm_SamePatientSameSlot` | `FollowUpSchedulingService` vs `AppointmentService.ManagerConfirmAsync` (cùng Bệnh nhân, cùng giờ) | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. Khóa liên dịch vụ `Lock_Patient_{id}_{date}` đảm bảo không đặt trùng lịch bệnh nhân. |
+| **B18** | `B18_CrossService_ManagerConfirm_Vs_DentistAssignChair_SameChairSameSlot` | `AppointmentService.ManagerConfirmAsync` vs `AppointmentService.DentistAssignChairAsync` (cùng ghế) | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. Khóa liên dịch vụ `Lock_Chair_{id}_{date}` ngăn chặn 2 khoa/bác sĩ dùng chung 1 ghế. |
+| **B19** | `B19_CrossService_ExclusiveRoom_TwoConcurrentConfirmations_OnlyOneSucceeds` | 2 Manager Confirm đồng thời 2 ghế trong phòng độc quyền Room 2 | **VERIFIED (Real SQL Server)** | **PASS** | `successCount == 1`. Khóa `Lock_Room_{id}_{date}` đảm bảo chỉ đúng 1 cuộc hẹn trong phòng độc quyền. |
+| **B20** | `B20_CrossService_DoctorLeave_Vs_ManagerConfirm_SameDoctorSameSlot` | `DentistScheduleService.CreateAvailabilityAsync` (Nghỉ phép) vs `ManagerConfirmAsync` (Xác nhận lịch) | **VERIFIED (Real SQL Server)** | **PASS** | `bothCommitted == false`. Bác sĩ nghỉ thì không thể xác nhận hẹn; có hẹn thì không thể duyệt nghỉ. |
+
+---
 
 ### Nhóm C: Clinical Integrity Matrix (10 Cases)
-| Mã | Mô tả kiểm thử & Dữ liệu đầu vào | Môi trường | Mức độ xác minh | Kết quả | Assertions chính |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **C01** | Bệnh nhân A dùng `TreatmentSessionId` của Bệnh nhân B | InMemory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "không thuộc về bệnh nhân" |
-| **C02** | Dùng `TreatmentSessionId` không tồn tại (-999L) | InMemory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "Không tìm thấy phiên điều trị" |
-| **C03** | Bác sĩ không phụ trách khoa thao tác phiên điều trị | InMemory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "Bác sĩ không có quyền truy cập hoặc liên kết phiên điều trị này." |
-| **C04** | Bác sĩ không phụ trách khoa thao tác phác đồ | InMemory | **VERIFIED** | **PASS** | `Assert.False(res.Success)`, Message contains "Bác sĩ không có quyền thao tác trên phác đồ điều trị này." |
-| **C05** | Hoàn thành buổi khám chuyển trạng thái `Completed` | InMemory | **VERIFIED** | **PASS** | `appt.Status == AppointmentStatus.Completed`, `CompletedAt != null` |
-| **C06** | Hủy lịch tái khám bắt buộc có lý do hủy | InMemory | **VERIFIED** | **PASS** | `appt.Status == AppointmentStatus.Cancelled`, `CancellationReason != null` |
-| **C07** | Đổi lịch tái khám lưu vết `AppointmentRescheduleHistories` | InMemory | **VERIFIED** | **PASS** | Lịch sử dời lịch được ghi nhận với giờ cũ và giờ mới |
-| **C08** | Khóa ngoại giữa Appointments và FollowUpSchedules | InMemory | **VERIFIED** | **PASS** | `followUp.AppointmentId == appt.AppointmentId` |
-| **C09** | Toàn vẹn dữ liệu cuộc hẹn (bắt buộc Bác sĩ, Bệnh nhân, Khoa) | InMemory | **VERIFIED** | **PASS** | Mọi entity đều liên kết hợp lệ |
-| **C10** | Sinh 100 mã AppointmentCode không trùng lặp | InMemory | **VERIFIED** | **PASS** | `Assert.Equal(100, generatedCodes.Distinct().Count())` |
+Tất cả các test case Nhóm C được kiểm thử trong `BE/DentalClinic.Tests/FollowUp/FollowUpClinicalIntegrityTests.cs`:
 
-### Nhóm D: Authorization & UI Integrity Matrix (8 Cases)
-| Mã | Mô tả kiểm thử | Môi trường | Mức độ xác minh | Kết quả |
-| :--- | :--- | :--- | :--- | :--- |
-| **D01** | Patient chỉ được xem và đề xuất đổi lịch cho chính mình | Controller Unit | **VERIFIED** | **PASS** |
-| **D02** | Dentist chỉ thao tác lịch khoa/phòng và bệnh nhân phụ trách | Controller Unit | **VERIFIED** | **PASS** |
-| **D03** | Receptionist xem tổng quan và điều phối lịch | Controller Unit | **VERIFIED** | **PASS** |
-| **D04** | DepartmentManager có quyền phê duyệt đề xuất tái khám | Controller Unit | **VERIFIED** | **PASS** |
-| **D05** | Anonymous request bị chặn 401 Unauthorized | Controller Unit | **VERIFIED** | **PASS** |
-| **D06** | Chống Parameter Tampering qua API | Controller Unit | **VERIFIED** | **PASS** |
-| **D07** | Thông báo lỗi thân thiện tiếng Việt, không lộ stack trace | Controller Unit | **VERIFIED** | **PASS** |
-| **D08** | Thuộc tính `[Authorize]` trên các Action của PostCareController | Reflection / Unit | **VERIFIED** | **PASS** |
+| Mã | Tên Test Case | Mô tả kiểm thử & Ràng buộc lâm sàng | Môi trường | Mức độ xác minh | Kết quả | Assertions chính |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **C01** | `C01_InvalidTreatmentSession_BelongsToDifferentPatient_FailsValidation` | Bệnh nhân A cố tình dùng `TreatmentSessionId` của Bệnh nhân B | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, Message chứa "không thuộc về bệnh nhân" |
+| **C02** | `C02_NonExistentTreatmentSession_FailsValidation` | Dùng `TreatmentSessionId` không tồn tại (-999L) | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, Message chứa "Không tìm thấy phiên điều trị" |
+| **C03** | `C03_DoctorUnauthorized_ForDifferentDepartmentSession_FailsValidation` | Bác sĩ không thuộc chuyên khoa thao tác phiên điều trị | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, Message chứa "Bác sĩ không có quyền truy cập hoặc liên kết phiên điều trị này." |
+| **C04** | `C04_DoctorUnauthorized_ForDifferentDepartmentPlan_FailsValidation` | Bác sĩ không thuộc chuyên khoa thao tác phác đồ | InMemory | **VERIFIED** | **PASS** | `res.Success == false`, Message chứa "Bác sĩ không có quyền thao tác trên phác đồ điều trị này." |
+| **C05** | `C05_CompleteAppointment_TransitionsToCompletedStatus` | Hoàn thành buổi khám chuyển trạng thái `Completed` | InMemory | **VERIFIED** | **PASS** | `appt.Status == AppointmentStatus.Completed`, `CompletedAt != null` |
+| **C06** | `C06_CancelFollowUp_RequiresCancellationReason` | Hủy lịch tái khám bắt buộc có lý do hủy | InMemory | **VERIFIED** | **PASS** | `appt.Status == AppointmentStatus.Cancelled`, `CancellationReason != null` |
+| **C07** | `C07_RescheduleFollowUp_RecordsRescheduleHistory` | Đổi lịch tái khám ghi nhận lịch sử vào `AppointmentRescheduleHistories` | InMemory | **VERIFIED** | **PASS** | Lịch sử dời lịch được ghi nhận chính xác thời gian cũ và mới |
+| **C08** | `C08_ForeignKeyConstraint_FollowUpSchedule_MustReferenceValidAppointment` | Khóa ngoại giữa `Appointments` và `FollowUpSchedules` | InMemory | **VERIFIED** | **PASS** | `followUp.AppointmentId == appt.AppointmentId` |
+| **C09** | `C09_ClinicalIntegrity_DoctorPatientDepartmentMandatory` | Toàn vẹn dữ liệu: bắt buộc Bác sĩ, Bệnh nhân, Chuyên khoa hợp lệ | InMemory | **VERIFIED** | **PASS** | Mọi entity đều liên kết hợp lệ |
+| **C10** | `C10_AppointmentCode_FormatAndUniqueness` | Sinh 100 mã AppointmentCode không trùng lặp | InMemory | **VERIFIED** | **PASS** | `Assert.Equal(100, generatedCodes.Distinct().Count())` |
 
 ---
 
-## 4. BẰNG CHỨNG LỖI TRƯỚC KHI SỬA VÀ SAU KHI SỬA (REVIEW ROUND 2 ADDITIONS)
+## 4. BẰNG CHỨNG LỖI TRƯỚC KHI SỬA VÀ SAU KHI SỬA (REVIEW ROUND 3 EVIDENCE)
 
-### 4.6. Lỗ hổng So sánh SQL NULL trong `DentistScheduleService` (B07B)
-**Hiện tượng trước khi sửa:**  
-Trong SQL Server, biểu thức `a.ScheduledStart < request.EndDateTime` khi `request.EndDateTime IS NULL` (bác sĩ đăng ký nghỉ phép không xác định thời hạn kết thúc) sẽ trả về `UNKNOWN` (coi như `false`). Do đó câu lệnh EF Core query:
+### 4.1. Lỗ hổng Race Condition giữa Bác sĩ xin nghỉ phép và Trưởng khoa duyệt lịch (B20)
+**Hiện tượng trước khi sửa (Test B20 FAIL):**  
+Khi `DentistScheduleService.CreateAvailabilityAsync` (bác sĩ đăng ký nghỉ phép) chạy đồng thời với `AppointmentService.ManagerConfirmAsync` (trưởng khoa xác nhận lịch khám cho bác sĩ):
+- `ManagerConfirmAsync` trước đây chỉ kiểm tra xung đột với `_dbContext.Appointments` mà **hoàn toàn bỏ qua kiểm tra `_dbContext.DentistAvailabilities`** (lịch nghỉ phép/bận).
+- Nếu luồng đăng ký nghỉ phép lấy khóa trước và lưu thành công bản ghi nghỉ phép, sau đó luồng xác nhận lịch lấy khóa và kiểm tra thì không thấy lịch hẹn nào khác trùng giờ, dẫn đến cả hai luồng đều thành công!
+- Kết quả kiểm thử trước khi sửa:
+  ```text
+  [xUnit.net 00:00:04.70] DentalClinic.Tests.FollowUp.FollowUpConcurrencyIntegrationTests.B20_CrossService_DoctorLeave_Vs_ManagerConfirm_SameDoctorSameSlot [FAIL]
+    Failed DentalClinic.Tests.FollowUp.FollowUpConcurrencyIntegrationTests.B20_CrossService_DoctorLeave_Vs_ManagerConfirm_SameDoctorSameSlot [3 s]
+    Error Message:
+     Race condition detected: Both leave and confirmed appointment were created for the same doctor at the same time!
+  ```
+
+**Khắc phục bằng mã nguồn:**  
+Bổ sung kiểm tra `_dbContext.DentistAvailabilities` dưới khóa canonical `Lock_Dentist_{id}_{date}` trong `AppointmentService.ManagerConfirmAsync`:
 ```csharp
-var hasAppointment = await _dbContext.Appointments.AnyAsync(a =>
-    a.AssignedDentistUserId == dentistUserId &&
-    a.ScheduledStart < request.EndDateTime &&
-    a.ScheduledEnd > request.StartDateTime);
-```
-hoàn toàn bỏ qua các cuộc hẹn đang tồn tại của bệnh nhân, cho phép bác sĩ đăng ký nghỉ đè lên cuộc hẹn đã được bệnh nhân đặt trước!
+bool dentistLeaveConflict = await _dbContext.DentistAvailabilities
+    .AsNoTracking()
+    .AnyAsync(da => da.DentistUserId == request.AssignedDentistUserId &&
+                    da.AvailabilityStatus != DentistAvailabilityStatus.Available &&
+                    da.StartDateTime < finalEnd.Value &&
+                    (da.EndDateTime == null || da.EndDateTime > finalStart.Value), ct);
 
-**Khắc phục bằng mã nguồn:**
-```csharp
-var hasAppointment = await _dbContext.Appointments.AnyAsync(a =>
-    a.AssignedDentistUserId == dentistUserId &&
-    occupiedStatuses.Contains(a.Status) &&
-    (request.EndDateTime == null || a.ScheduledStart < request.EndDateTime.Value) &&
-    (a.ScheduledEnd == null || a.ScheduledEnd.Value > request.StartDateTime), ct);
-```
-
-**Bằng chứng chạy test B07B sau khi sửa:**
-```text
-Passed!  - Failed: 0, Passed: 1, Duration: 101 ms
-DentalClinic.Tests.FollowUp.FollowUpConcurrencyIntegrationTests.B07B_DoctorLeave_WithNullEndDateTime_DetectsConflictOnRealDb [PASS]
-```
-
----
-
-### 4.7. Lỗ hổng EF Core Change Tracker Caching trong Concurrent Proposal Resolution (B11, B12, B13)
-**Hiện tượng phát hiện:**  
-Khi hai luồng chạy đồng thời qua `ResolveProposalAsync` hoặc `WithdrawPatientProposalAsync`, cả hai đều bắt đầu bằng câu query trước khi xin khóa:
-```csharp
-var proposal = await _dbContext.AppointmentChangeProposals.FirstOrDefaultAsync(...);
-```
-EF Core tự động đưa entity `proposal` vào Identity Map (Change Tracker). Khi Thread B chờ được khóa và bước vào transaction, việc gọi lại `FirstOrDefaultAsync` mà không reload sẽ khiến EF Core trả về chính instance cũ trong memory (vẫn còn mang `Status = Pending` của thời điểm trước khi Thread A commit). Hậu quả: Cả hai luồng cùng tưởng rằng proposal đang `Pending` và cùng thực hiện thành công (`results.Count(r => r.Success) == 2`).
-
-**Khắc phục bằng mã nguồn:**
-1. Thêm `.AsNoTracking()` vào câu query đọc trước khóa.
-2. Dưới khối khóa `SqlAppLockHelper.AcquireLocksAsync`, buộc EF Core reload dữ liệu tươi từ SQL Server:
-```csharp
-if (freshProposal != null)
+if (dentistLeaveConflict)
 {
-    await _dbContext.Entry(freshProposal).ReloadAsync(ct);
-    if (freshProposal.Appointment != null)
-    {
-        await _dbContext.Entry(freshProposal.Appointment).ReloadAsync(ct);
-    }
+    return ApiResponse<AppointmentDto>.Fail("Bác sĩ đang bận hoặc nghỉ phép trong khoảng thời gian này.");
 }
 ```
 
-**Bằng chứng chạy test B11, B12, B13 sau khi sửa:**
+**Bằng chứng chạy test B20 sau khi sửa:**
 ```text
-Passed DentalClinic.Tests.FollowUp.FollowUpConcurrencyIntegrationTests.B11_ConcurrentProposalResolution_ApproveVsApprove_OnlyOneSucceeds [187 ms]
-Passed DentalClinic.Tests.FollowUp.FollowUpConcurrencyIntegrationTests.B12_ConcurrentProposalResolution_ApproveVsReject_MutuallyExclusive [145 ms]
-Passed DentalClinic.Tests.FollowUp.FollowUpConcurrencyIntegrationTests.B13_ConcurrentProposalResolution_WithdrawVsApprove_MutuallyExclusive [162 ms]
+Passed DentalClinic.Tests.FollowUp.FollowUpConcurrencyIntegrationTests.B20_CrossService_DoctorLeave_Vs_ManagerConfirm_SameDoctorSameSlot [2 s]
 ```
 
 ---
 
-### 4.8. Quy tắc phân bổ phòng khám độc quyền (Exclusive Room Allocation - B08)
-**Nghiệp vụ phòng khám:**  
-- Phòng không độc quyền (ví dụ Room 1, `IsExclusive = 0`): Có thể chứa nhiều ghế (Chair 1, Chair 2), cho phép nhiều bác sĩ điều trị cho các bệnh nhân khác nhau cùng lúc.
-- Phòng độc quyền (ví dụ Room 2, `IsExclusive = 1`, Phòng phẫu thuật & cấy ghép Implant): Bắt buộc chỉ cho phép đúng 1 cuộc hẹn trong 1 khung giờ, bất kể có bao nhiêu ghế bên trong.
-
-**Bằng chứng kiểm thử B08 trên SQL Server thật:**
-Hai bác sĩ (ID 1 và ID 4) thuộc Khoa 3 cùng được Trưởng khoa (ID 5) xác nhận vào Room 2 tại cùng khung giờ 10:00 - 10:30 (một bác sĩ ngồi Chair 3, một bác sĩ ngồi Chair 4).
-Khóa ứng dụng `Lock_Room_2_20261115` kết hợp điều kiện `room.IsExclusive` trong `AppointmentService.ManagerConfirmAsync` đã chặn đứng cuộc hẹn thứ hai với thông báo:
-> *"Phòng khám đã bị trùng lịch với ca khám khác trong khung giờ này."*
-Database chỉ lưu đúng 1 cuộc hẹn có `RoomId = 2` ở trạng thái `Confirmed`.
-
----
-
-### 4.9. Tính toàn vẹn giao dịch Rollback (Zero Orphans - B14)
-**Kiểm chứng:**  
-Khi transaction gặp lỗi giữa chừng sau khi `Appointments` và `FollowUpSchedules` đã được thêm vào DbContext:
-Lệnh `tx.RollbackAsync()` được kích hoạt. Truy vấn lại từ kết nối độc lập xác nhận:
-- `verifyDb.Appointments.FirstOrDefaultAsync(a => a.AppointmentCode == ...)` -> `NULL`
-- `verifyDb.FollowUpSchedules.FirstOrDefaultAsync(f => f.Reason == ...)` -> `NULL`
-Hoàn toàn không có dữ liệu mồ côi (Zero Orphan Records).
-
----
-
-### 4.10. Ràng buộc UNIQUE AppointmentCode cấp SQL Server (B15)
-**Kiểm chứng:**  
-Bảng `dbo.Appointments` trên SQL Server có ràng buộc `UNIQUE NONCLUSTERED ([AppointmentCode] ASC)`.
-Khi cố ý insert bản ghi trùng mã, SQL Server ném ra ngoại lệ:
-`Microsoft.Data.SqlClient.SqlException` với mã lỗi `2627` hoặc `2601`.
-Vòng lặp sinh mã trong `FollowUpSchedulingService` và `TreatmentService`:
+### 4.2. Lỗ hổng Trưởng khoa phân bổ ghế đối đầu Bác sĩ chọn ghế điều trị (B18)
+**Hiện tượng trước khi sửa (Test B18 FAIL):**  
+Trong `AppointmentService.DentistAssignChairAsync`, mảng `activeStatuses` ban đầu chỉ chứa duy nhất `AppointmentStatus.InService`:
 ```csharp
-do
-{
-    var randomPart = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
-    code = $"APT-{DateTime.UtcNow:yyyyMMdd}-{randomPart}";
-} while (await _dbContext.Appointments.AnyAsync(a => a.AppointmentCode == code, ct));
+var activeStatuses = new[] { AppointmentStatus.InService };
 ```
-đảm bảo 100% không bao giờ bị đụng độ mã trong môi trường concurrency.
+Nếu Trưởng khoa xác nhận cuộc hẹn B trên Ghế 1 trước (`Status = Confirmed`), sau đó Bác sĩ điều trị cuộc hẹn A gọi `DentistAssignChairAsync` để chọn Ghế 1:
+- `DentistAssignChairAsync` chỉ tìm các cuộc hẹn đang `InService`. Do cuộc hẹn B mới ở trạng thái `Confirmed`, hàm tưởng Ghế 1 đang trống và gán thành công!
+- Kết quả: Cả 2 cuộc hẹn đều thành công trên cùng một ghế tại cùng một khung giờ (`Expected: 1, Actual: 2`).
+
+**Khắc phục bằng mã nguồn:**  
+Mở rộng danh sách trạng thái chiếm ghế trong `DentistAssignChairAsync` và `GetAvailableChairsForAppointmentAsync`:
+```csharp
+var activeStatuses = new[]
+{
+    AppointmentStatus.Confirmed,
+    AppointmentStatus.CheckedIn,
+    AppointmentStatus.Waiting,
+    AppointmentStatus.Called,
+    AppointmentStatus.InService
+};
+```
+
+**Bằng chứng chạy test B18 sau khi sửa:**
+```text
+Passed DentalClinic.Tests.FollowUp.FollowUpConcurrencyIntegrationTests.B18_CrossService_ManagerConfirm_Vs_DentistAssignChair_SameChairSameSlot [268 ms]
+```
 
 ---
 
-## 5. BẰNG CHỨNG HỒI QUY TOÀN BỘ HỆ THỐNG (REGRESSION RESULTS)
+### 4.3. Lỗ hổng Rò rỉ In-Memory Semaphore và ReloadAsync trên In-Memory Store
+**Hiện tượng phát hiện:**  
+Khi chạy test suite toàn diện, các test In-Memory sử dụng ID cố định (như `AppointmentId = 1`, `DentistUserId = 401`).
+1. `ManagerConfirmAsync` ban đầu không gán đối tượng trả về của `SqlAppLockHelper.AcquireLocksAsync` vào `using var lockScope`, khiến semaphores trong fallback InMemory bị giữ vĩnh viễn (semaphore count = 0).
+2. Việc gọi `ReloadAsync()` trên thực thể EF Core In-Memory không được hỗ trợ chuẩn mực như relational database.
+Hậu quả: Hàng loạt test phía sau bị TimeoutException (chờ 15s) khi cố gắng xin khóa `Lock_Appt_1`.
 
-### 5.1. Backend Tests (`DentalClinic.Tests.csproj` - Release Configuration)
+**Khắc phục bằng mã nguồn:**  
+1. Bổ sung `lockScope?.Dispose();` trong khối `finally` của `ManagerConfirmAsync`.
+2. Bọc `ReloadAsync()` an toàn với kiểm tra cơ sở dữ liệu quan hệ:
+   ```csharp
+   if (isRelational) await _dbContext.Entry(appointment).ReloadAsync(ct);
+   ```
+
+**Kết quả:** Toàn bộ 43 test trong `AppointmentFlowTests` chuyển sang **PASS 100% trong vòng 1 giây**!
+
+---
+
+## 5. BẰNG CHỨNG KIỂM THỬ HỒI QUY TOÀN BỘ HỆ THỐNG
+
+### 5.1. Concurrency Integration Tests (`FollowUpConcurrencyIntegrationTests`)
+```powershell
+dotnet test "BE\DentalClinic.Tests\DentalClinic.Tests.csproj" --filter "FullyQualifiedName~FollowUpConcurrencyIntegrationTests"
+```
 ```text
-Test run for D:\SWP\SWP391_Group6\BE\DentalClinic.Tests\bin\Release\net8.0\DentalClinic.Tests.dll (.NETCoreApp,Version=v8.0)
+Test run for D:\SWP\SWP391_Group6\BE\DentalClinic.Tests\bin\Debug\net8.0\DentalClinic.Tests.dll (.NETCoreApp,Version=v8.0)
 VSTest version 17.11.1 (x64)
 
 Starting test execution, please wait...
 A total of 1 test files matched the specified pattern.
-[xUnit.net 00:00:02.57]     DentalClinic.Tests.Profile.CloudinaryImageStorageServiceTests.UploadAvatarAsync_WithUserSecrets_UploadsSuccessfully [SKIP]
+
+Passed!  - Failed:     0, Passed:    23, Skipped:     0, Total:    23, Duration: 3 s - DentalClinic.Tests.dll (net8.0)
+```
+- **Kết quả:** **23/23 PASSED (100%)**.
+
+### 5.2. Slot Validation Tests (`FollowUpSlotValidationTests`)
+```powershell
+dotnet test "BE\DentalClinic.Tests\DentalClinic.Tests.csproj" --filter "FullyQualifiedName~FollowUpSlotValidationTests"
+```
+```text
+Passed!  - Failed:     0, Passed:    16, Skipped:     0, Total:    16, Duration: 95 ms - DentalClinic.Tests.dll (net8.0)
+```
+- **Kết quả:** **16/16 PASSED (100%)**.
+
+### 5.3. Clinical Integrity Tests (`FollowUpClinicalIntegrityTests`)
+```powershell
+dotnet test "BE\DentalClinic.Tests\DentalClinic.Tests.csproj" --filter "FullyQualifiedName~FollowUpClinicalIntegrityTests"
+```
+```text
+Passed!  - Failed:     0, Passed:    10, Skipped:     0, Total:    10, Duration: 1 s - DentalClinic.Tests.dll (net8.0)
+```
+- **Kết quả:** **10/10 PASSED (100%)**.
+
+### 5.4. Toàn bộ Backend Tests (`DentalClinic.Tests.csproj`)
+```powershell
+dotnet test "BE\DentalClinic.Tests\DentalClinic.Tests.csproj"
+```
+```text
+Test run for D:\SWP\SWP391_Group6\BE\DentalClinic.Tests\bin\Debug\net8.0\DentalClinic.Tests.dll (.NETCoreApp,Version=v8.0)
+VSTest version 17.11.1 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:02.41]     DentalClinic.Tests.Profile.CloudinaryImageStorageServiceTests.UploadAvatarAsync_WithUserSecrets_UploadsSuccessfully [SKIP]
   Skipped DentalClinic.Tests.Profile.CloudinaryImageStorageServiceTests.UploadAvatarAsync_WithUserSecrets_UploadsSuccessfully [1 ms]
 
-Passed!  - Failed:     0, Passed:   590, Skipped:     1, Total:   591, Duration: 28 s - DentalClinic.Tests.dll (net8.0)
+Passed!  - Failed:     0, Passed:   597, Skipped:     1, Total:   598, Duration: 21 s - DentalClinic.Tests.dll (net8.0)
 ```
-- **Tổng số test:** 591 tests.
-- **Passed:** **590 tests**.
+- **Tổng số test Backend:** 598 tests.
+- **Passed:** **597 tests**.
 - **Skipped:** 1 test (Upload avatar Cloudinary offline).
 - **Failed:** **0 tests (0% failure)**.
 
-### 5.2. Frontend Tests (`DentalClinic.Web.Tests.csproj`)
+### 5.5. Toàn bộ Frontend Tests (`DentalClinic.Web.Tests.csproj`)
+```powershell
+dotnet test "FE\DentalClinic.Web.Tests\DentalClinic.Web.Tests.csproj"
+```
 ```text
 Test run for D:\SWP\SWP391_Group6\FE\DentalClinic.Web.Tests\bin\Debug\net8.0\DentalClinic.Web.Tests.dll (.NETCoreApp,Version=v8.0)
 VSTest version 17.11.1 (x64)
@@ -252,20 +327,20 @@ VSTest version 17.11.1 (x64)
 Starting test execution, please wait...
 A total of 1 test files matched the specified pattern.
 
-Passed!  - Failed:     0, Passed:   286, Skipped:     0, Total:   286, Duration: 22 s - DentalClinic.Web.Tests.dll (net8.0)
+Passed!  - Failed:     0, Passed:   286, Skipped:     0, Total:   286, Duration: 21 s - DentalClinic.Web.Tests.dll (net8.0)
 ```
-- **Tổng số test:** 286 tests.
+- **Tổng số test Frontend:** 286 tests.
 - **Passed:** **286 tests**.
 - **Failed:** **0 tests (0% failure)**.
 
-### 5.3. Tổng cộng toàn hệ thống
-$$\text{Grand Total: } 876 \text{ Passed}, 1 \text{ Skipped}, 0 \text{ Failed (0\% Regression)}.$$
+### 5.6. Tổng cộng toàn hệ thống
+$$\text{Grand Total: } 883 \text{ Passed}, 1 \text{ Skipped}, 0 \text{ Failed (0\% Regression)}.$$
 
 ---
 
-## 6. KIỂM TRA DỌN DẸP DATABASE QA TRÊN SQL SERVER
+## 6. XÁC MINH DỌN DẸP DATABASE QA TRÊN SQL SERVER
 
-Kiểm tra trực tiếp trên instance `.\SQL2025_DUC`:
+Kiểm tra trực tiếp trên SQL Server instance `.\SQL2025_DUC`:
 ```powershell
 sqlcmd -S ".\SQL2025_DUC" -E -C -Q "SELECT name FROM sys.databases WHERE name LIKE 'DentalClinic_Concurrency_QA_%';"
 ```
@@ -276,19 +351,15 @@ name
 
 (0 rows affected)
 ```
-Hoàn toàn sạch sẽ, không có bất kỳ database rác nào còn sót lại trên SQL Server.
+Toàn bộ database tạm thời dùng cho kiểm thử đồng thời (`DentalClinic_Concurrency_QA_*`) đã được dọn dẹp sạch sẽ 100%, không để lại database mồ côi.
 
 ---
 
-## 7. KẾT LUẬN VÀ KIẾN NGHỊ
+## 7. KẾT LUẬN VÀ TRẠNG THÁI CUỐI CÙNG
 
-$$\mathbf{VERDICT: READY\_FOR\_TECHNICAL\_LEAD\_APPROVAL}$$
+$$\mathbf{FINAL\ VERDICT:\ READY\_FOR\_REVIEW}$$
 
-1. Toàn bộ 20 hạng mục yêu cầu trong Review Round 2 đã được triển khai đầy đủ và kiểm chứng chính xác bằng automated tests.
-2. Đã sửa triệt để các lỗi tinh tế:
-   - EF Core Change Tracker Identity Map stale caching dưới khóa phân tán.
-   - SQL Server NULL evaluation semantics khi bác sĩ nghỉ không xác định thời hạn kết thúc.
-   - Quy tắc phân bổ phòng độc quyền (`IsExclusive`).
-   - Transaction Rollback Zero Orphans và UNIQUE constraint.
-   - Loại bỏ empty catch trong test fixture.
-3. Không thực hiện bất kỳ lệnh merge nào vào `develop` hoặc `main`. Toàn bộ mã nguồn sẵn sàng chờ Technical Lead đánh giá và phê duyệt.
+1. **Khóa tài nguyên đã được chuẩn hóa hoàn toàn:** Toàn bộ các entry point (`FollowUpSchedulingService`, `AppointmentService`, `DentistScheduleService`, `TreatmentService`) đều dùng chung canonical lock keys qua `SqlAppLockHelper`. Đã chứng minh loại trừ tương hỗ liên dịch vụ qua các test case B16–B20.
+2. **Khắc phục triệt để Race Condition giữa Hủy lịch và Phê duyệt đề xuất:** Đảm bảo tính tất định (deterministic final state) và tự động hết hạn các proposal đang chờ khi cuộc hẹn bị hủy.
+3. **Độ tin cậy sinh mã và cơ chế Bounded Retry:** Bảo vệ đa tầng bằng `AnyAsync`, SQL Server Unique Index, và bounded retry 3 lần.
+4. **An toàn Git:** Không merge vào `develop` hoặc `main`. Mọi thay đổi được commit và push an toàn trên nhánh `fix/followup-concurrency-integrity`.

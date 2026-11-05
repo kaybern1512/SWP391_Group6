@@ -397,7 +397,13 @@ public class DentistScheduleService : IDentistScheduleService
         IDisposable? lockScope = null;
         try
         {
-            var lockKeys = new[] { $"Dentist_{targetDentistId}" };
+            var lockKeys = new List<string>();
+            var startDay = request.StartDateTime.Date;
+            var endDay = request.EndDateTime?.Date ?? startDay.AddDays(30);
+            for (var day = startDay; day <= endDay && (day - startDay).TotalDays <= 60; day = day.AddDays(1))
+            {
+                lockKeys.Add(SqlAppLockHelper.DentistKey(targetDentistId, day));
+            }
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
             // Re-check conflicting appointments inside lock & transaction (handling nullable EndDateTime)
@@ -499,7 +505,13 @@ public class DentistScheduleService : IDentistScheduleService
         IDisposable? lockScope = null;
         try
         {
-            var lockKeys = new[] { $"Dentist_{da.DentistUserId}" };
+            var lockKeys = new List<string>();
+            var startDay = request.StartDateTime.Date;
+            var endDay = request.EndDateTime?.Date ?? startDay.AddDays(30);
+            for (var day = startDay; day <= endDay && (day - startDay).TotalDays <= 60; day = day.AddDays(1))
+            {
+                lockKeys.Add(SqlAppLockHelper.DentistKey(da.DentistUserId, day));
+            }
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
             // Re-check conflicting appointments inside lock & transaction (handling nullable EndDateTime)
