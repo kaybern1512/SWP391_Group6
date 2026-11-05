@@ -105,14 +105,8 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
 
                 await using var batchCmd = dbConn.CreateCommand();
                 batchCmd.CommandText = trimmed;
-                try
-                {
-                    await batchCmd.ExecuteNonQueryAsync();
-                }
-                catch
-                {
-                    // Ignore benign migration batch errors if already handled
-                }
+                // Any migration failure must fail test setup explicitly
+                await batchCmd.ExecuteNonQueryAsync();
             }
         }
     }

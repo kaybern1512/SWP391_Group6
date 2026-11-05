@@ -774,6 +774,15 @@ public class TreatmentService : ITreatmentService
         if (plan == null)
             return ApiResponse<AppointmentDto>.Fail("Không tìm thấy phác đồ điều trị chỉ định.");
 
+        // Kiểm tra quyền hạn của bác sĩ đối với phác đồ điều trị
+        var isDoctorInDept = await _dbContext.DentistDepartments
+            .AnyAsync(dd => dd.DentistUserId == dentistUserId && dd.DepartmentId == plan.DepartmentId && dd.Status == "Active", ct);
+
+        if (plan.CreatedByDentistUserId != dentistUserId && !isDoctorInDept)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Bác sĩ không có quyền thao tác trên phác đồ điều trị này.");
+        }
+
         var proposedEnd = request.ScheduledStart.AddMinutes(request.DurationMinutes ?? 30);
         var targetDentistId = request.RequestedDentistUserId ?? dentistUserId;
 
@@ -818,7 +827,11 @@ public class TreatmentService : ITreatmentService
                 }
             }
 
-            var apptCode = "APP-" + DateTime.UtcNow.ToString("yyyyMMdd") + "-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+            string apptCode;
+            do
+            {
+                apptCode = "APP-" + DateTime.UtcNow.ToString("yyyyMMdd") + "-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+            } while (await _dbContext.Appointments.AnyAsync(a => a.AppointmentCode == apptCode, ct));
 
             var appt = new Appointment
             {

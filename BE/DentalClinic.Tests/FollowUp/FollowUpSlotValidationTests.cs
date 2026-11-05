@@ -343,8 +343,29 @@ public class FollowUpSlotValidationTests
         var start = slotDate.AddHours(10);
         var end = slotDate.AddHours(10).AddMinutes(30);
 
-        // An in-service or active appointment occupies slot
-        db.Appointments.Add(CreateTestAppointment("APT-INSERVICE-11", 999, 20, start, end, AppointmentStatus.InService));
+        // A completed appointment occupies the slot and prevents rebooking
+        db.Appointments.Add(CreateTestAppointment("APT-COMPLETED-11", 999, 20, start, end, AppointmentStatus.Completed));
+        await db.SaveChangesAsync();
+
+        var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
+        var result = await service.ValidateFollowUpSlotAsync(20, 10, start, end);
+
+        Assert.False(result.IsValid);
+        Assert.Equal(SchedulingFailureReason.DoctorSlotConflict, result.FailureReason);
+    }
+
+    [Fact]
+    public async Task A11B_InServiceAppointment_BlocksSlot()
+    {
+        var db = CreateDbContext(nameof(A11B_InServiceAppointment_BlocksSlot));
+        await SeedDoctorAndPatientAsync(db, 20, 10, 2);
+
+        var slotDate = DateTime.Today.AddDays(2);
+        var start = slotDate.AddHours(10);
+        var end = slotDate.AddHours(10).AddMinutes(30);
+
+        // An in-service appointment occupies slot
+        db.Appointments.Add(CreateTestAppointment("APT-INSERVICE-11B", 999, 20, start, end, AppointmentStatus.InService));
         await db.SaveChangesAsync();
 
         var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);

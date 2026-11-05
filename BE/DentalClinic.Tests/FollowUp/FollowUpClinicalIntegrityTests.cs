@@ -235,7 +235,7 @@ public class FollowUpClinicalIntegrityTests
         var service = new FollowUpSchedulingService(db, NullLogger<FollowUpSchedulingService>.Instance);
         var targetDate = DateTime.Today.AddDays(2);
 
-        // Doctor 20 attempts to link session 9915 of Doctor 25
+        // Doctor 20 (Dept 1) attempts to link session 9915 of Doctor 25 (Dept 2) without access
         var req = new CreateFollowUpAppointmentRequest
         {
             PatientUserId = 15,
@@ -246,8 +246,8 @@ public class FollowUpClinicalIntegrityTests
         };
 
         var result = await service.CreateDoctorFollowUpAppointmentAsync(20, req);
-        // Handled with appropriate validation
-        Assert.NotNull(result);
+        Assert.False(result.Success);
+        Assert.Equal("Bác sĩ không có quyền truy cập hoặc liên kết phiên điều trị này.", result.Message);
     }
 
     [Fact]
@@ -259,7 +259,7 @@ public class FollowUpClinicalIntegrityTests
         var treatmentService = new TreatmentService(db);
         var targetDate = DateTime.Today.AddDays(2);
 
-        // Doctor 20 attempts to create plan follow-up on plan 150 (patient 15)
+        // Doctor 20 attempts to create plan follow-up on plan 150 (patient 15, dept 2, doctor 25)
         var req = new CreatePlanFollowUpAppointmentRequest
         {
             ScheduledStart = targetDate.AddHours(13),
@@ -268,9 +268,8 @@ public class FollowUpClinicalIntegrityTests
         };
 
         var result = await treatmentService.CreatePlanFollowUpAppointmentAsync(20, 150, req);
-
-        // Plan 150 belongs to patient 15 in Department 2. Doctor 20 is in Department 1.
-        Assert.NotNull(result);
+        Assert.False(result.Success);
+        Assert.Equal("Bác sĩ không có quyền thao tác trên phác đồ điều trị này.", result.Message);
     }
 
     [Fact]
@@ -457,12 +456,13 @@ public class FollowUpClinicalIntegrityTests
         var generatedCodes = new System.Collections.Concurrent.ConcurrentBag<string>();
         var tasks = Enumerable.Range(0, 100).Select(_ => Task.Run(() =>
         {
-            var randomPart = Random.Shared.Next(100000, 999999);
+            var randomPart = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
             var code = $"APT-{DateTime.UtcNow:yyyyMMdd}-{randomPart}";
             generatedCodes.Add(code);
         }));
 
         await Task.WhenAll(tasks);
         Assert.Equal(100, generatedCodes.Count);
+        Assert.Equal(100, generatedCodes.Distinct().Count()); // Verify all generated codes are distinct
     }
 }
