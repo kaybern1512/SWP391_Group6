@@ -794,6 +794,7 @@ public class TreatmentService : ITreatmentService
             var targetDate = request.ScheduledStart.Date;
             var lockKeys = new[]
             {
+                SqlAppLockHelper.DentistMasterKey(targetDentistId),
                 SqlAppLockHelper.DentistKey(targetDentistId, targetDate),
                 SqlAppLockHelper.PatientKey(plan.PatientUserId, targetDate),
                 SqlAppLockHelper.PlanKey(planId)
@@ -862,8 +863,13 @@ public class TreatmentService : ITreatmentService
                     await _dbContext.SaveChangesAsync(ct);
                     break;
                 }
-                catch (DbUpdateException ex) when (SqlAppLockHelper.IsUniqueConstraintViolation(ex) && retryCount < maxRetries)
+                catch (DbUpdateException ex) when (SqlAppLockHelper.IsUniqueConstraintViolation(ex))
                 {
+                    if (retryCount >= maxRetries)
+                    {
+                        if (tx != null) await tx.RollbackAsync(ct);
+                        return ApiResponse<AppointmentDto>.Fail("Không thể tạo cuộc hẹn do xung đột mã cuộc hẹn liên tiếp. Vui lòng thử lại sau.");
+                    }
                     retryCount++;
                     appt.AppointmentCode = "APP-" + DateTime.UtcNow.ToString("yyyyMMdd") + "-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
                 }

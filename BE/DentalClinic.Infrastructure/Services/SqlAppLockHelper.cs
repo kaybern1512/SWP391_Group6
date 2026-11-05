@@ -24,6 +24,9 @@ public static class SqlAppLockHelper
     /// <summary>Lock key for a dentist schedule on a specific calendar date.</summary>
     public static string DentistKey(long dentistUserId, DateTime date) => $"Lock_Dentist_{dentistUserId}_{date:yyyyMMdd}";
 
+    /// <summary>Master lock key for all scheduling and availability operations of a dentist across all dates.</summary>
+    public static string DentistMasterKey(long dentistUserId) => $"Lock_DentistMaster_{dentistUserId}";
+
     /// <summary>Lock key for a patient schedule on a specific calendar date.</summary>
     public static string PatientKey(long patientUserId, DateTime date) => $"Lock_Patient_{patientUserId}_{date:yyyyMMdd}";
 

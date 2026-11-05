@@ -410,6 +410,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             var targetDate = request.ScheduledStart.Date;
             var lockKeys = new[]
             {
+                SqlAppLockHelper.DentistMasterKey(doctorUserId),
                 SqlAppLockHelper.DentistKey(doctorUserId, targetDate),
                 SqlAppLockHelper.PatientKey(request.PatientUserId, targetDate)
             };
@@ -565,8 +566,14 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                     await _dbContext.SaveChangesAsync(ct);
                     break;
                 }
-                catch (DbUpdateException ex) when (SqlAppLockHelper.IsUniqueConstraintViolation(ex) && retryCount < maxRetries)
+                catch (DbUpdateException ex) when (SqlAppLockHelper.IsUniqueConstraintViolation(ex))
                 {
+                    if (retryCount >= maxRetries)
+                    {
+                        if (tx != null) await tx.RollbackAsync(ct);
+                        _logger.LogError(ex, "Đã vượt quá số lần thử lại ({MaxRetries}) khi sinh mã AppointmentCode.", maxRetries);
+                        return ApiResponse<FollowUpAppointmentDto>.Fail("Không thể tạo cuộc hẹn do xung đột mã cuộc hẹn liên tiếp. Vui lòng thử lại sau.");
+                    }
                     retryCount++;
                     _logger.LogWarning("Va chạm mã AppointmentCode '{Code}' tại SQL Server. Thực hiện retry lần {Retry}/{MaxRetries}...", appointment.AppointmentCode, retryCount, maxRetries);
                     var newRandomPart = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
@@ -1098,6 +1105,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             {
                 SqlAppLockHelper.ProposalKey(proposal.ProposalId),
                 SqlAppLockHelper.ApptKey(proposal.AppointmentId),
+                SqlAppLockHelper.DentistMasterKey(doctorUserId),
                 SqlAppLockHelper.DentistKey(doctorUserId, propDate),
                 SqlAppLockHelper.PatientKey(proposal.Appointment.PatientUserId, propDate)
             };

@@ -157,6 +157,19 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
         return new DentalClinicDbContext(options);
     }
 
+    public DentalClinicDbContext CreateDbContext(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
+    {
+        var builder = new DbContextOptionsBuilder<DentalClinicDbContext>()
+            .UseSqlServer(ConnectionString);
+
+        if (interceptors != null && interceptors.Length > 0)
+        {
+            builder.AddInterceptors(interceptors);
+        }
+
+        return new DentalClinicDbContext(builder.Options);
+    }
+
     private static string FindRepoRoot(string startDir)
     {
         var dir = new DirectoryInfo(startDir);

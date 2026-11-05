@@ -232,44 +232,136 @@ public class DentistScheduleService : IDentistScheduleService
             return ApiResponse<DentistWorkScheduleDto>.Fail("Không tìm thấy chuyên khoa.");
         }
 
-        // Check overlap with other schedules of this dentist
-        if (request.Status == "Scheduled")
+        var isRelational = _dbContext.Database.IsRelational();
+        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? lockScope = null;
+        try
         {
-            var overlap = await _dbContext.DentistWorkSchedules
-                .AnyAsync(ws => ws.DentistScheduleId != scheduleId &&
-                                ws.DentistUserId == schedule.DentistUserId &&
-                                ws.WorkDate == request.WorkDate &&
-                                ws.Status == "Scheduled" &&
-                                ws.StartTime < request.EndTime &&
-                                ws.EndTime > request.StartTime, ct);
-
-            if (overlap)
+            var lockKeys = new List<string>
             {
-                return ApiResponse<DentistWorkScheduleDto>.Fail("Bác sĩ đã có ca làm việc khác bị giao thoa thời gian.");
+                SqlAppLockHelper.DentistMasterKey(schedule.DentistUserId),
+                SqlAppLockHelper.DentistKey(schedule.DentistUserId, schedule.WorkDate.ToDateTime(TimeOnly.MinValue))
+            };
+            if (request.WorkDate != schedule.WorkDate)
+            {
+                lockKeys.Add(SqlAppLockHelper.DentistKey(schedule.DentistUserId, request.WorkDate.ToDateTime(TimeOnly.MinValue)));
             }
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
+
+            if (isRelational) await _dbContext.Entry(schedule).ReloadAsync(ct);
+
+            // Check overlap with other schedules of this dentist on the target work date
+            if (request.Status == "Scheduled")
+            {
+                var overlap = await _dbContext.DentistWorkSchedules
+                    .AnyAsync(ws => ws.DentistScheduleId != scheduleId &&
+                                    ws.DentistUserId == schedule.DentistUserId &&
+                                    ws.WorkDate == request.WorkDate &&
+                                    ws.Status == "Scheduled" &&
+                                    ws.StartTime < request.EndTime &&
+                                    ws.EndTime > request.StartTime, ct);
+
+                if (overlap)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<DentistWorkScheduleDto>.Fail("Bác sĩ đã có ca làm việc khác bị giao thoa thời gian.");
+                }
+            }
+
+            var occupiedStatuses = new[]
+            {
+                AppointmentStatus.Confirmed,
+                AppointmentStatus.CheckedIn,
+                AppointmentStatus.Waiting,
+                AppointmentStatus.Called,
+                AppointmentStatus.InService
+            };
+
+            // Check all occupied appointments that were covered by the original shift
+            var oldShiftStart = schedule.WorkDate.ToDateTime(schedule.StartTime);
+            var oldShiftEnd = schedule.WorkDate.ToDateTime(schedule.EndTime);
+
+            var existingAppts = await _dbContext.Appointments
+                .AsNoTracking()
+                .Where(a => a.AssignedDentistUserId == schedule.DentistUserId &&
+                            occupiedStatuses.Contains(a.Status) &&
+                            a.ScheduledStart < oldShiftEnd &&
+                            (a.ScheduledEnd == null || a.ScheduledEnd > oldShiftStart))
+                .ToListAsync(ct);
+
+            if (existingAppts.Any())
+            {
+                // Other scheduled shifts on the old work date (excluding this schedule)
+                var otherCoveringShifts = await _dbContext.DentistWorkSchedules
+                    .AsNoTracking()
+                    .Where(ws => ws.DentistScheduleId != scheduleId &&
+                                 ws.DentistUserId == schedule.DentistUserId &&
+                                 ws.WorkDate == schedule.WorkDate &&
+                                 ws.Status == "Scheduled")
+                    .ToListAsync(ct);
+
+                bool allCovered = existingAppts.All(appt =>
+                {
+                    var apptStart = appt.ScheduledStart ?? DateTime.MinValue;
+                    var apptEnd = appt.ScheduledEnd ?? apptStart.AddMinutes(30);
+
+                    // Covered by the updated shift? (only if updated shift remains on the same day and status is Scheduled)
+                    bool coveredByThisShift = request.Status == "Scheduled" &&
+                                              request.WorkDate == schedule.WorkDate &&
+                                              schedule.WorkDate.ToDateTime(request.StartTime) <= apptStart &&
+                                              schedule.WorkDate.ToDateTime(request.EndTime) >= apptEnd;
+
+                    if (coveredByThisShift) return true;
+
+                    // Or covered by another scheduled shift of this doctor on that day
+                    return otherCoveringShifts.Any(s =>
+                    {
+                        var sStart = s.WorkDate.ToDateTime(s.StartTime);
+                        var sEnd = s.WorkDate.ToDateTime(s.EndTime);
+                        return sStart <= apptStart && sEnd >= apptEnd;
+                    });
+                });
+
+                if (!allCovered)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<DentistWorkScheduleDto>.Fail("Không thể thay đổi ca làm việc vì có lịch khám đã xác nhận của bệnh nhân không còn được ca trực bao phủ. Vui lòng điều phối lại lịch khám trước khi cập nhật ca trực.");
+                }
+            }
+
+            var oldValues = JsonSerializer.Serialize(new { schedule.DepartmentId, schedule.WorkDate, schedule.StartTime, schedule.EndTime, schedule.Status, schedule.Note });
+
+            schedule.DepartmentId = request.DepartmentId;
+            schedule.WorkDate = request.WorkDate;
+            schedule.StartTime = request.StartTime;
+            schedule.EndTime = request.EndTime;
+            schedule.Status = request.Status;
+            schedule.Note = request.Note?.Trim();
+
+            await _dbContext.SaveChangesAsync(ct);
+            if (tx != null) await tx.CommitAsync(ct);
+
+            await _auditLog.LogAsync(
+                currentUserId,
+                "UPDATE",
+                "DentistWorkSchedule",
+                schedule.DentistScheduleId.ToString(),
+                oldValues,
+                JsonSerializer.Serialize(new { schedule.DepartmentId, schedule.WorkDate, schedule.StartTime, schedule.EndTime, schedule.Status, schedule.Note }),
+                ct);
+
+            return await GetScheduleByIdAsync(scheduleId, ct);
         }
-
-        var oldValues = JsonSerializer.Serialize(new { schedule.DepartmentId, schedule.WorkDate, schedule.StartTime, schedule.EndTime, schedule.Status, schedule.Note });
-
-        schedule.DepartmentId = request.DepartmentId;
-        schedule.WorkDate = request.WorkDate;
-        schedule.StartTime = request.StartTime;
-        schedule.EndTime = request.EndTime;
-        schedule.Status = request.Status;
-        schedule.Note = request.Note?.Trim();
-
-        await _dbContext.SaveChangesAsync(ct);
-
-        await _auditLog.LogAsync(
-            currentUserId,
-            "UPDATE",
-            "DentistWorkSchedule",
-            schedule.DentistScheduleId.ToString(),
-            oldValues,
-            JsonSerializer.Serialize(new { schedule.DepartmentId, schedule.WorkDate, schedule.StartTime, schedule.EndTime, schedule.Status, schedule.Note }),
-            ct);
-
-        return await GetScheduleByIdAsync(scheduleId, ct);
+        catch
+        {
+            if (tx != null) await tx.RollbackAsync(ct);
+            throw;
+        }
+        finally
+        {
+            lockScope?.Dispose();
+            if (tx != null) await tx.DisposeAsync();
+        }
     }
 
     public async Task<ApiResponse<bool>> CancelScheduleAsync(long scheduleId, long currentUserId, CancellationToken ct = default)
@@ -287,20 +379,103 @@ public class DentistScheduleService : IDentistScheduleService
             return ApiResponse<bool>.Fail("Ca làm việc đã ở trạng thái hủy trước đó.");
         }
 
-        var oldValues = JsonSerializer.Serialize(new { schedule.Status });
-        schedule.Status = "Cancelled";
-        await _dbContext.SaveChangesAsync(ct);
+        var isRelational = _dbContext.Database.IsRelational();
+        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? lockScope = null;
+        try
+        {
+            var lockKeys = new List<string>
+            {
+                SqlAppLockHelper.DentistMasterKey(schedule.DentistUserId),
+                SqlAppLockHelper.DentistKey(schedule.DentistUserId, schedule.WorkDate.ToDateTime(TimeOnly.MinValue))
+            };
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
 
-        await _auditLog.LogAsync(
-            currentUserId,
-            "CANCEL",
-            "DentistWorkSchedule",
-            schedule.DentistScheduleId.ToString(),
-            oldValues,
-            JsonSerializer.Serialize(new { Status = "Cancelled" }),
-            ct);
+            if (isRelational) await _dbContext.Entry(schedule).ReloadAsync(ct);
 
-        return ApiResponse<bool>.Ok(true, "Đã hủy ca làm việc thành công.");
+            if (schedule.Status == "Cancelled")
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<bool>.Fail("Ca làm việc đã ở trạng thái hủy trước đó.");
+            }
+
+            var shiftStart = schedule.WorkDate.ToDateTime(schedule.StartTime);
+            var shiftEnd = schedule.WorkDate.ToDateTime(schedule.EndTime);
+
+            var occupiedStatuses = new[]
+            {
+                AppointmentStatus.Confirmed,
+                AppointmentStatus.CheckedIn,
+                AppointmentStatus.Waiting,
+                AppointmentStatus.Called,
+                AppointmentStatus.InService
+            };
+
+            // Find all occupied appointments during this shift
+            var affectedAppts = await _dbContext.Appointments
+                .AsNoTracking()
+                .Where(a => a.AssignedDentistUserId == schedule.DentistUserId &&
+                            occupiedStatuses.Contains(a.Status) &&
+                            a.ScheduledStart < shiftEnd &&
+                            (a.ScheduledEnd == null || a.ScheduledEnd > shiftStart))
+                .ToListAsync(ct);
+
+            if (affectedAppts.Any())
+            {
+                // Check if any other scheduled shift of this doctor on the same day covers them
+                var otherCoveringShifts = await _dbContext.DentistWorkSchedules
+                    .AsNoTracking()
+                    .Where(ws => ws.DentistScheduleId != scheduleId &&
+                                 ws.DentistUserId == schedule.DentistUserId &&
+                                 ws.WorkDate == schedule.WorkDate &&
+                                 ws.Status == "Scheduled")
+                    .ToListAsync(ct);
+
+                bool allCovered = affectedAppts.All(appt =>
+                {
+                    var apptStart = appt.ScheduledStart ?? DateTime.MinValue;
+                    var apptEnd = appt.ScheduledEnd ?? apptStart.AddMinutes(30);
+                    return otherCoveringShifts.Any(s =>
+                    {
+                        var sStart = s.WorkDate.ToDateTime(s.StartTime);
+                        var sEnd = s.WorkDate.ToDateTime(s.EndTime);
+                        return sStart <= apptStart && sEnd >= apptEnd;
+                    });
+                });
+
+                if (!allCovered)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<bool>.Fail("Không thể hủy ca làm việc vì bác sĩ đang có lịch khám với bệnh nhân trong ca này. Vui lòng điều phối lại lịch khám trước khi hủy ca.");
+                }
+            }
+
+            var oldValues = JsonSerializer.Serialize(new { schedule.Status });
+            schedule.Status = "Cancelled";
+            await _dbContext.SaveChangesAsync(ct);
+            if (tx != null) await tx.CommitAsync(ct);
+
+            await _auditLog.LogAsync(
+                currentUserId,
+                "CANCEL",
+                "DentistWorkSchedule",
+                schedule.DentistScheduleId.ToString(),
+                oldValues,
+                JsonSerializer.Serialize(new { Status = "Cancelled" }),
+                ct);
+
+            return ApiResponse<bool>.Ok(true, "Đã hủy ca làm việc thành công.");
+        }
+        catch
+        {
+            if (tx != null) await tx.RollbackAsync(ct);
+            throw;
+        }
+        finally
+        {
+            lockScope?.Dispose();
+            if (tx != null) await tx.DisposeAsync();
+        }
     }
 
     // ==========================================
@@ -397,14 +572,24 @@ public class DentistScheduleService : IDentistScheduleService
         IDisposable? lockScope = null;
         try
         {
-            var lockKeys = new List<string>();
-            var startDay = request.StartDateTime.Date;
-            var endDay = request.EndDateTime?.Date ?? startDay.AddDays(30);
-            for (var day = startDay; day <= endDay && (day - startDay).TotalDays <= 60; day = day.AddDays(1))
+            var lockKeys = new List<string>
             {
-                lockKeys.Add(SqlAppLockHelper.DentistKey(targetDentistId, day));
+                SqlAppLockHelper.DentistMasterKey(targetDentistId)
+            };
+            if (request.EndDateTime.HasValue)
+            {
+                var startDay = request.StartDateTime.Date;
+                var endDay = request.EndDateTime.Value.Date;
+                var totalDays = (endDay - startDay).TotalDays;
+                if (totalDays >= 0 && totalDays <= 14)
+                {
+                    for (var day = startDay; day <= endDay; day = day.AddDays(1))
+                    {
+                        lockKeys.Add(SqlAppLockHelper.DentistKey(targetDentistId, day));
+                    }
+                }
             }
-            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
 
             // Re-check conflicting appointments inside lock & transaction (handling nullable EndDateTime)
             if (request.AvailabilityStatus != DentistAvailabilityStatus.Available)
@@ -505,14 +690,24 @@ public class DentistScheduleService : IDentistScheduleService
         IDisposable? lockScope = null;
         try
         {
-            var lockKeys = new List<string>();
-            var startDay = request.StartDateTime.Date;
-            var endDay = request.EndDateTime?.Date ?? startDay.AddDays(30);
-            for (var day = startDay; day <= endDay && (day - startDay).TotalDays <= 60; day = day.AddDays(1))
+            var lockKeys = new List<string>
             {
-                lockKeys.Add(SqlAppLockHelper.DentistKey(da.DentistUserId, day));
+                SqlAppLockHelper.DentistMasterKey(da.DentistUserId)
+            };
+            if (request.EndDateTime.HasValue)
+            {
+                var startDay = request.StartDateTime.Date;
+                var endDay = request.EndDateTime.Value.Date;
+                var totalDays = (endDay - startDay).TotalDays;
+                if (totalDays >= 0 && totalDays <= 14)
+                {
+                    for (var day = startDay; day <= endDay; day = day.AddDays(1))
+                    {
+                        lockKeys.Add(SqlAppLockHelper.DentistKey(da.DentistUserId, day));
+                    }
+                }
             }
-            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
 
             // Re-check conflicting appointments inside lock & transaction (handling nullable EndDateTime)
             if (request.AvailabilityStatus != DentistAvailabilityStatus.Available)

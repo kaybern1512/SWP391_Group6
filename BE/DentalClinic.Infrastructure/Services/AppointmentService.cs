@@ -2036,6 +2036,7 @@ public class AppointmentService : IAppointmentService
             var lockKeys = new List<string>
             {
                 SqlAppLockHelper.ApptKey(appointmentId),
+                SqlAppLockHelper.DentistMasterKey(request.AssignedDentistUserId),
                 SqlAppLockHelper.DentistKey(request.AssignedDentistUserId, targetDate),
                 SqlAppLockHelper.PatientKey(appointment.PatientUserId, targetDate)
             };
@@ -2096,6 +2097,19 @@ public class AppointmentService : IAppointmentService
             if (dentistConflict)
             {
                 return ApiResponse<AppointmentDto>.Fail("Bác sĩ đã có lịch hẹn khác trong khung giờ này.");
+            }
+
+            // 2. REVALIDATE PATIENT CONFLICT (Across all dentists and departments)
+            bool patientConflict = await _dbContext.Appointments
+                .AnyAsync(a => a.AppointmentId != appointmentId &&
+                               a.PatientUserId == appointment.PatientUserId &&
+                               occupiedStatuses.Contains(a.Status) &&
+                               a.ScheduledStart < finalEnd.Value &&
+                               a.ScheduledEnd > finalStart.Value, ct);
+
+            if (patientConflict)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Bệnh nhân đã có lịch hẹn khác trong khung giờ này.");
             }
 
             // 2. REVALIDATE ROOM CONFLICT (Only if room is designated as exclusive!)
@@ -2773,6 +2787,15 @@ public class AppointmentService : IAppointmentService
             return ApiResponse.Fail("Ghế nha khoa không tồn tại hoặc đã ngừng hoạt động.");
         }
 
+        var room = await _dbContext.Rooms
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.RoomId == chair.RoomId && r.Status == "Active", ct);
+
+        if (room == null)
+        {
+            return ApiResponse.Fail("Phòng khám không tồn tại hoặc đã ngừng hoạt động.");
+        }
+
         if (appt.RoomId.HasValue && chair.RoomId != appt.RoomId.Value)
         {
             return ApiResponse.Fail("Ghế nha khoa đã chọn không thuộc phòng khám của ca này.");
@@ -2796,12 +2819,34 @@ public class AppointmentService : IAppointmentService
         try
         {
             var targetDate = start.Date;
-            var lockKeys = new[]
+            var lockKeys = new List<string>
             {
                 SqlAppLockHelper.ChairKey(dentalChairId, targetDate),
                 SqlAppLockHelper.ApptKey(appointmentId)
             };
+
+            if (room.IsExclusive)
+            {
+                lockKeys.Add(SqlAppLockHelper.RoomKey(chair.RoomId, targetDate));
+            }
+
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
+
+            if (room.IsExclusive)
+            {
+                bool isRoomOccupied = await _dbContext.Appointments
+                    .AnyAsync(a => a.AppointmentId != appointmentId &&
+                                   a.RoomId == chair.RoomId &&
+                                   activeStatuses.Contains(a.Status) &&
+                                   a.ScheduledStart < end &&
+                                   a.ScheduledEnd > start, ct);
+
+                if (isRoomOccupied)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse.Fail($"Phòng {room.RoomName} là phòng độc quyền và hiện đang có ca khám khác sử dụng.");
+                }
+            }
 
             bool isOccupied = await _dbContext.Appointments
                 .AnyAsync(a => a.AppointmentId != appointmentId &&
