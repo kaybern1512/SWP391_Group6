@@ -1910,4 +1910,54 @@ public class AppointmentFlowTests
         var allAppts = await db.Appointments.Where(a => a.PatientUserId == 101).ToListAsync();
         Assert.Single(allAppts);
     }
+
+    [Fact]
+    public async Task Test_ManagerConfirm_WhenNotificationFailsAfterCommit_ReturnsSuccessAndPersistsData()
+    {
+        using var db = CreateDbContext(nameof(Test_ManagerConfirm_WhenNotificationFailsAfterCommit_ReturnsSuccessAndPersistsData));
+        await SeedBasicDataAsync(db);
+
+        var mockNotif = new Mock<INotificationService>();
+        mockNotif
+            .Setup(n => n.CreateNotificationAsync(
+                It.IsAny<long>(),
+                It.IsAny<long?>(),
+                It.Is<string>(t => t == "AppointmentConfirmed"),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("FCM push delivery timeout"));
+
+        var service = new AppointmentService(db, mockNotif.Object, _mockLogger.Object);
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ReasonForVisit = "Khám răng tổng quát"
+        });
+        var apptId = bookResult.Data!.AppointmentId;
+        await service.ReceptionistForwardAsync(apptId, 201, "Tiếp nhận");
+
+        var confirmRequest = new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(2).AddHours(9).AddMinutes(30)
+        };
+
+        var confirmResult = await service.ManagerConfirmAsync(apptId, 301, confirmRequest);
+
+        // 1. Must return success indicating the primary database transaction succeeded
+        Assert.True(confirmResult.Success);
+        Assert.NotNull(confirmResult.Data);
+        Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data.Status);
+
+        // 2. Database state must be confirmed properly with queue number
+        var apptDb = await db.Appointments.FindAsync(apptId);
+        Assert.Equal(AppointmentStatus.Confirmed, apptDb!.Status);
+        Assert.NotNull(apptDb.QueueNumber);
+    }
 }

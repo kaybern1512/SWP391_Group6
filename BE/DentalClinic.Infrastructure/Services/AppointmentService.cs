@@ -2049,6 +2049,7 @@ public class AppointmentService : IAppointmentService
         var isRelational = _dbContext.Database.IsRelational();
         var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
         IDisposable? lockScope = null;
+        bool committed = false;
         try
         {
             var appointment = await _dbContext.Appointments
@@ -2329,15 +2330,27 @@ public class AppointmentService : IAppointmentService
             _dbContext.AppointmentStatusHistories.Add(history);
 
             await _dbContext.SaveChangesAsync(ct);
-            if (tx != null) await tx.CommitAsync(ct);
+            if (tx != null)
+            {
+                await tx.CommitAsync(ct);
+                committed = true;
+            }
 
-            await _notificationService.CreateNotificationAsync(
-                appointment.PatientUserId,
-                appointmentId,
-                "AppointmentConfirmed",
-                "Lịch khám đã được xác nhận!",
-                $"Lịch khám mã {appointment.AppointmentCode} đã được Trưởng khoa xác nhận thành công. Số thứ tự tiếp đón của bạn là {queueNumber}.",
-                ct);
+            // Post-commit side effect: send notification (does not rollback or fail the main operation if delivery fails)
+            try
+            {
+                await _notificationService.CreateNotificationAsync(
+                    appointment.PatientUserId,
+                    appointmentId,
+                    "AppointmentConfirmed",
+                    "Lịch khám đã được xác nhận!",
+                    $"Lịch khám mã {appointment.AppointmentCode} đã được Trưởng khoa xác nhận thành công. Số thứ tự tiếp đón của bạn là {queueNumber}.",
+                    ct);
+            }
+            catch (Exception notifEx)
+            {
+                _logger.LogWarning(notifEx, "Failed to send notification for confirmed appointment {AppointmentId}", appointmentId);
+            }
 
             if (_emailService != null)
             {
@@ -2424,7 +2437,7 @@ public class AppointmentService : IAppointmentService
         }
         catch (Exception ex)
         {
-            if (tx != null) await tx.RollbackAsync(ct);
+            if (tx != null && !committed) await tx.RollbackAsync(ct);
             _logger.LogError(ex, "Failed to confirm appointment {AppointmentId}", appointmentId);
             return ApiResponse<AppointmentDto>.Fail("Đã xảy ra lỗi trong quá trình xác nhận lịch hẹn.");
         }
