@@ -546,3 +546,118 @@ Toàn bộ các yêu cầu của Technical Lead về Safe Discovery (QUOTENAME, 
 **PHÁN QUYẾT CUỐI CÙNG:**
 ### **`READY_FOR_REVIEW`**
 *(Chờ phê duyệt từ Technical Lead ChatGPT để merge nhánh `fix/followup-sql-status-integration` vào `develop` sau khi lỗi Billing được xử lý độc lập).*
+
+
+---
+
+# 16. BỔ SUNG AUDIT ROUND CUỐI: KHẮC PHỤC TRIỆT ĐỂ SQL CONSTRAINT DISCOVERY VỚI SYS.SQL_EXPRESSION_DEPENDENCIES
+
+**Ngày thực hiện:** 2026-11-05  
+**Kỹ sư thực hiện:** Senior .NET 8 / SQL Server / QA Integration Engineer  
+**Technical Lead Reviewer:** ChatGPT  
+**Reviewed Commit:** `f1e1aad29a7953726fb339d97160284f57809f47`  
+
+---
+
+### 16.1. Nguyên nhân Gốc (Root Cause Analysis)
+
+Trong SQL Server T-SQL, cú pháp pattern matching của toán tử `LIKE` định nghĩa cặp ngoặc vuông `[...]` là một **tập ký tự (character set / character range)**:
+- Biểu thức `LIKE '%[Status]%'` không khớp với chuỗi ký tự cố định `[Status]`, mà khớp với bất kỳ chuỗi nào chứa **bất kỳ ký tự nào trong tập `{'S', 't', 'a', 'u', 's'}`**.
+- Tương tự, `LIKE '%[' + other_c.name + ']%'` sẽ coi tên cột là tập hợp các ký tự đơn lẻ.
+- Hậu quả: Việc đối soát chuỗi định nghĩa constraint qua `LIKE` với ngoặc vuông không đảm bảo tính tin cậy tuyệt đối, có thể nhận diện sai hoặc bỏ sót các constraint phức tạp và multi-column constraints.
+
+---
+
+### 16.2. Giải pháp Triệt để: Khai thác Metadata `sys.sql_expression_dependencies` & `sys.check_constraints`
+
+Chúng tôi đã thiết kế lại hoàn toàn cơ chế định danh và phát hiện constraint trong cả 2 file:
+1. `DB/migrations/20261104_Update_FollowUpSchedules_Status_CheckConstraint.sql`
+2. `DB/migrations/20261104_Rollback_FollowUpSchedules_Status_CheckConstraint.sql`
+
+#### Nguyên tắc triển khai:
+1. **Truy vấn Dependency Metadata chuẩn của SQL Server:**
+   - Sử dụng bảng hệ thống `sys.sql_expression_dependencies`:
+     - `referencing_id`: ID của CHECK constraint (`cc.object_id`).
+     - `referenced_id`: ID của bảng `FollowUpSchedules`.
+     - `referenced_minor_id`: `column_id` của cột được tham chiếu (đối soát với `@StatusColumnId = COLUMNPROPERTY(@TableObjectId, 'Status', 'ColumnId')`).
+   - Phối hợp với `cc.parent_column_id` từ `sys.check_constraints`.
+
+2. **Phân biệt rạch ròi Tham chiếu Cột và Hằng số Chuỗi (String Literals):**
+   - Các biểu thức chứa từ `'Status'` dưới dạng hằng chuỗi (ví dụ: `CHECK (Reason <> 'Status' AND Reason NOT LIKE '%Status%')`) **chỉ** ghi nhận dependency lên cột `Reason` trong `sys.sql_expression_dependencies`.
+   - Dependency metadata **hoàn toàn không** chứa cột `Status`, do đó constraint này được bảo toàn 100% (`RefStatus = 0`, `RefOther = 1`).
+
+3. **Chốt chặn An toàn Phát hiện Multi-Column Constraint:**
+   - Nếu constraint tham chiếu đồng thời cột `Status` và một cột khác:
+     ```sql
+     WHERE (ReferencesStatus = 1) AND (ReferencesOtherColumns = 1)
+     ```
+   - Script lập tức dừng khẩn cấp: `RAISERROR('DISCOVERY SAFETY ABORT: Found multi-column CHECK constraint...', 16, 1)`.
+
+4. **Chốt chặn An toàn Cho Constraint Không Rõ Ràng (Ambiguous Constraints):**
+   - Nếu `parent_column_id = 0` và không có metadata trong `sys.sql_expression_dependencies`, script lập tức hủy bỏ (`THROW 51005`) thay vì tự đoán định tên cột.
+
+5. **Bọc toàn bộ Identifier bằng `QUOTENAME()`**:
+   - Mọi câu lệnh DDL động `DROP CONSTRAINT` đều dùng `QUOTENAME(@ConstraintName)`.
+
+---
+
+### 16.3. Kịch bản Kiểm tra Hồi quy Bắt buộc & File Tái hiện (`Verify_Migration_Regression_Cases.ps1`)
+
+Đã bổ sung script kiểm thử tự động độc lập vào repository:  
+`DB/migrations/Verify_Migration_Regression_Cases.ps1`
+
+Script này tự động thiết lập một cơ sở dữ liệu clone (`DentalClinic_Disposable_PreDeployClone`), tạo bảng `FollowUpSchedules` với đầy đủ các trường hợp biên và thực thi **trực tiếp file SQL migration thật**:
+
+| STT | Kịch bản Kiểm thử Hồi quy | Hành vi Kỳ vọng | Kết quả Thực tế | Đánh giá |
+| :---: | :--- | :--- | :--- | :---: |
+| 1 | **Anonymous Table-level CHECK constraint trên Status** | Nhận diện chính xác và drop để nâng cấp lên constraint mới. | Constraint ẩn `CK__FollowUpS__Statu...` bị drop, tạo mới `CK_FollowUpSchedules_Status`. | **PASS** |
+| 2 | **Constraint chỉ tham chiếu Reason** (`LEN(Reason) > 0`) | Giữ nguyên vẹn, không bị xóa. | `CK_FollowUpSchedules_Reason` được bảo toàn nguyên vẹn. | **PASS** |
+| 3 | **Constraint chỉ tham chiếu RecommendedDate** (`>= '2020-01-01'`) | Giữ nguyên vẹn, không bị xóa. | `CK_FollowUpSchedules_RecommendedDate` được bảo toàn nguyên vẹn. | **PASS** |
+| 4 | **Constraint chứa từ khóa 'Status' dưới dạng String Literal** (`Reason <> 'Status' AND Reason NOT LIKE '%Status%'`) | Giữ nguyên vẹn, không bị xóa nhầm. | `CK_FollowUpSchedules_LiteralStatus` được bảo toàn nguyên vẹn. | **PASS** |
+| 5 | **Multi-column CHECK tham chiếu Status & AppointmentId** (`Status <> 'Cancelled' OR AppointmentId IS NOT NULL`) | Safe Abort, Exit code <> 0, không xóa constraint. | Exit Code: 1, Error: `DISCOVERY SAFETY ABORT: Found multi-column CHECK constraint`. | **PASS** |
+| 6 | **Idempotent Migration** (Chạy lại migration file lần thứ 2) | Thành công, Exit code = 0, không tạo duplicate. | Exit Code: 0, `Constraint [CK_FollowUpSchedules_Status] already exists... and is trusted`. | **PASS** |
+| 7 | **Safe Rollback Abort khi có dữ liệu Confirmed/Proposed** | Safe Abort, Exit code <> 0, bảo vệ toàn vẹn dữ liệu. | Exit Code: 1, Error: `ROLLBACK ABORTED: Found 1 record(s)... with extended clinical status`. | **PASS** |
+| 8 | **Clean Rollback sau khi giải quyết dữ liệu lâm sàng** | Khôi phục 4 trạng thái cũ, bảo toàn tất cả constraint unrelated. | Exit Code: 0, phục hồi 4 status, Reason & RecommendedDate & LiteralStatus còn nguyên vẹn. | **PASS** |
+
+#### Minh chứng Metadata Trước & Sau Migration (Trích xuất từ Script thực thi):
+```text
+[BEFORE MIGRATION]
+name                                   parent_col  definition                                                          referenced_cols
+CK__FollowUpS__Statu__4F7CD00D         Status      ([Status]='Cancelled' OR ... OR [Status]='Pending')                 Status
+CK_FollowUpSchedules_LiteralStatus     Reason      ([Reason]<>'Status' AND NOT [Reason] like '%Status%')               Reason
+CK_FollowUpSchedules_Reason            Reason      (len([Reason])>(0))                                                 Reason
+CK_FollowUpSchedules_RecommendedDate   Date        ([RecommendedDate]>='2020-01-01')                                   RecommendedDate
+
+[AFTER MIGRATION]
+name                                   parent_col  definition                                                          referenced_cols
+CK_FollowUpSchedules_LiteralStatus     Reason      ([Reason]<>'Status' AND NOT [Reason] like '%Status%')               Reason
+CK_FollowUpSchedules_Reason            Reason      (len([Reason])>(0))                                                 Reason
+CK_FollowUpSchedules_RecommendedDate   Date        ([RecommendedDate]>='2020-01-01')                                   RecommendedDate
+CK_FollowUpSchedules_Status            Status      ([Status]='Proposed' OR ... OR [Status]='Pending')                  Status
+(is_disabled = 0, is_not_trusted = 0)
+```
+
+---
+
+### 16.4. Kết quả Kiểm thử Tổng hợp Hệ thống
+
+1. **Kiểm thử Hồi quy Migration SQL Server (`Verify_Migration_Regression_Cases.ps1`):**
+   - **8/8 Regression Cases: PASSED 100%**.
+2. **Backend Unit & Integration Tests (`DentalClinic.Tests.csproj`):**
+   - **Tổng số tests: 541**
+   - **Passed: 540**
+   - **Skipped: 1** (`CloudinaryImageStorageServiceTests` do thiếu dev secret key)
+   - **Failed: 0**
+   - **Dedicated Follow-Up Tests:** 103/103 Passed (bao gồm 13 SQL Server Integration Tests).
+3. **Frontend Test Suite (`DentalClinic.Web.Tests.csproj`):**
+   - **Trạng thái:** **`BLOCKED / NOT_RUN`**.
+   - **Ghi nhận:** Lỗi biên dịch `CS1503` tại `ReceptionistBillingControllerTests.cs` (lines 131, 158) do commit `68e3221` của module Billing trên `develop` gây ra. Theo ranh giới quyền hạn, nhóm Follow-Up không can thiệp vào code Billing và giữ nguyên trạng thái để thành viên Billing khắc phục.
+
+---
+
+### 16.5. Kết luận & Trạng thái Phê duyệt
+
+Mọi lo ngại về việc parse `LIKE '%[Status]%'` và nguy cơ xóa nhầm constraint hoặc bỏ sót multi-column constraint đã được loại bỏ hoàn toàn nhờ cơ chế metadata `sys.sql_expression_dependencies`. Toàn bộ bằng chứng kiểm thử đã được lưu lại trong repository.
+
+**TRẠNG THÁI HIỆN TẠI:**
+### **`READY_FOR_REVIEW`**

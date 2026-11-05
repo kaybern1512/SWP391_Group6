@@ -9,9 +9,11 @@
 --   - If any records exist with 'Confirmed' or 'Proposed', the rollback ABORTS with a detailed
 --     diagnostic message. Medical data must be resolved via application workflow or restored
 --     from a pre-migration backup.
+--   - Uses sys.sql_expression_dependencies metadata and parent_column_id for precise constraint targeting.
 --   - Uses QUOTENAME for all dynamic DDL statements.
---   - Excludes unrelated constraints on other columns from being dropped.
---   - Distinguishes schema rollback from data rollback.
+--   - Preserves all unrelated constraints on other columns (even if definition contains 'Status').
+--   - Aborts on multi-column constraints referencing Status and another column.
+--   - Aborts on ambiguous constraints (parent_column_id = 0 with missing metadata).
 -- =====================================================================================
 
 SET ANSI_NULLS ON;
@@ -56,29 +58,105 @@ BEGIN TRY
     PRINT 'Step 1 Passed: No records with extended statuses (Confirmed, Proposed) found. Safe to proceed with schema rollback.';
 
     -- ---------------------------------------------------------------------------------
-    -- Step 2: Dynamically Drop Existing CHECK Constraints on Status Exclusively
+    -- Step 2: Precise Dependency-Based Constraint Discovery & Dynamic Removal
     -- ---------------------------------------------------------------------------------
+    DECLARE @TableObjectId INT = OBJECT_ID(N'[dbo].[FollowUpSchedules]');
+    DECLARE @StatusColumnId INT = COLUMNPROPERTY(@TableObjectId, 'Status', 'ColumnId');
+
+    IF @TableObjectId IS NULL OR @StatusColumnId IS NULL
+    BEGIN
+        RAISERROR(N'SCHEMA ERROR: Table [dbo].[FollowUpSchedules] or column [Status] not found.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+
+    -- Pre-check 1: Detect multi-column constraints referencing Status AND another column
+    DECLARE @MultiColCount INT;
+    SELECT @MultiColCount = COUNT(DISTINCT cc.object_id)
+    FROM sys.check_constraints cc
+    WHERE cc.parent_object_id = @TableObjectId
+      AND (
+          -- References Status:
+          EXISTS (
+              SELECT 1 
+              FROM sys.sql_expression_dependencies dep
+              WHERE dep.referencing_id = cc.object_id
+                AND (dep.referenced_id = @TableObjectId OR dep.referenced_entity_name = 'FollowUpSchedules')
+                AND dep.referenced_minor_id = @StatusColumnId
+          )
+          OR cc.parent_column_id = @StatusColumnId
+      )
+      AND (
+          -- Also references other column(s) on FollowUpSchedules or another entity:
+          EXISTS (
+              SELECT 1 
+              FROM sys.sql_expression_dependencies dep
+              WHERE dep.referencing_id = cc.object_id
+                AND (
+                    (dep.referenced_id = @TableObjectId OR dep.referenced_entity_name = 'FollowUpSchedules') AND dep.referenced_minor_id <> @StatusColumnId
+                    OR (dep.referenced_id <> @TableObjectId AND dep.referenced_entity_name <> 'FollowUpSchedules')
+                )
+          )
+          OR (cc.parent_column_id <> 0 AND cc.parent_column_id <> @StatusColumnId)
+      );
+
+    IF @MultiColCount > 0
+    BEGIN
+        RAISERROR(N'ROLLBACK SAFETY ABORT: Found multi-column CHECK constraint on FollowUpSchedules referencing Status and other columns. Manual DBA review required.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+
+    -- Pre-check 2: Detect ambiguous constraints (table-level parent_column_id = 0 with no dependency metadata)
+    DECLARE @AmbiguousCount INT;
+    SELECT @AmbiguousCount = COUNT(*)
+    FROM sys.check_constraints cc
+    WHERE cc.parent_object_id = @TableObjectId
+      AND cc.parent_column_id = 0
+      AND NOT EXISTS (
+          SELECT 1 
+          FROM sys.sql_expression_dependencies dep
+          WHERE dep.referencing_id = cc.object_id
+      );
+
+    IF @AmbiguousCount > 0
+    BEGIN
+        RAISERROR(N'ROLLBACK SAFETY ABORT: Ambiguous CHECK constraint detected on FollowUpSchedules (parent_column_id = 0 with missing dependency metadata). Manual DBA inspection required.', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+
+    -- Safely drop existing CHECK constraints targeting Status exclusively
     DECLARE @ConstraintName NVARCHAR(128);
     DECLARE @DropSql NVARCHAR(MAX);
 
     DECLARE cur CURSOR LOCAL FAST_FORWARD FOR
     SELECT cc.name
     FROM sys.check_constraints cc
-    WHERE cc.parent_object_id = OBJECT_ID(N'[dbo].[FollowUpSchedules]')
+    WHERE cc.parent_object_id = @TableObjectId
       AND (
-          cc.parent_column_id = COLUMNPROPERTY(OBJECT_ID(N'[dbo].[FollowUpSchedules]'), 'Status', 'ColumnId')
-          OR (
-              cc.parent_column_id = 0 
-              AND (cc.definition LIKE '%[Status]%' OR cc.definition LIKE '%Status%')
-              AND NOT EXISTS (
-                  SELECT 1 
-                  FROM sys.columns other_c 
-                  WHERE other_c.object_id = cc.parent_object_id 
-                    AND other_c.name <> 'Status'
-                    AND (cc.definition LIKE '%[' + other_c.name + ']%' OR cc.definition LIKE '%' + other_c.name + '%')
-              )
+          -- References Status:
+          EXISTS (
+              SELECT 1 
+              FROM sys.sql_expression_dependencies dep
+              WHERE dep.referencing_id = cc.object_id
+                AND (dep.referenced_id = @TableObjectId OR dep.referenced_entity_name = 'FollowUpSchedules')
+                AND dep.referenced_minor_id = @StatusColumnId
           )
-          OR cc.name = 'CK_FollowUpSchedules_Status'
+          OR cc.parent_column_id = @StatusColumnId
+      )
+      AND NOT (
+          -- Does NOT reference any other column or entity:
+          EXISTS (
+              SELECT 1 
+              FROM sys.sql_expression_dependencies dep
+              WHERE dep.referencing_id = cc.object_id
+                AND (
+                    (dep.referenced_id = @TableObjectId OR dep.referenced_entity_name = 'FollowUpSchedules') AND dep.referenced_minor_id <> @StatusColumnId
+                    OR (dep.referenced_id <> @TableObjectId AND dep.referenced_entity_name <> 'FollowUpSchedules')
+                )
+          )
+          OR (cc.parent_column_id <> 0 AND cc.parent_column_id <> @StatusColumnId)
       );
 
     OPEN cur;
