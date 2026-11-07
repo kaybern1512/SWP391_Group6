@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Net.WebSockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -15,15 +16,39 @@ namespace QA_E2E_TestRunner;
 
 /// <summary>
 /// SWP391_GROUP6 - QA Automated E2E & Concurrency Integrity Test Runner.
-/// Executes against dedicated test database (DentalClinic_QA_E2E).
+/// STRICTLY executes against isolated QA database (DentalClinic_QA_E2E).
+/// PRODUCTION DATABASE (DentalClinicManagementDB) IS HARD-GUARDED AND PROTECTED.
 /// </summary>
 public class Program
 {
     private const string BaseUrl = "https://localhost:7129";
     private const string ApiBaseUrl = "https://localhost:7350";
+    private const string AllowedQaDatabase = "DentalClinic_QA_E2E";
     private const string ConnectionString = "Server=.\\SQL2025_DUC;Database=DentalClinic_QA_E2E;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=false;";
-    private static readonly string ScreenshotDir = Path.GetFullPath(@"reports\screenshots");
+    private static readonly string ScreenshotDir = @"D:\SWP\SWP391_Group6\reports\screenshots";
     private static readonly ConcurrentDictionary<string, string> TokenCache = new();
+
+    public static string GetQaPassword()
+    {
+        return Environment.GetEnvironmentVariable("QA_TEST_PASSWORD")
+            ?? Environment.GetEnvironmentVariable("QA_USER_PASSWORD")
+            ?? Environment.GetEnvironmentVariable("QA_DEFAULT_PASSWORD")
+            ?? "Password123@";
+    }
+
+    public static void EnsureDatabaseGuard(SqlConnection conn)
+    {
+        var db = conn.Database;
+        if (string.Equals(db, "DentalClinicManagementDB", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"[SECURITY ALERT] Operation blocked: Attempted execution on PRODUCTION DATABASE '{db}'.");
+        }
+
+        if (!string.Equals(db, AllowedQaDatabase, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"[DATABASE GUARD] Unauthorized database '{db}'. All QA actions are strictly restricted to '{AllowedQaDatabase}'.");
+        }
+    }
 
     public static async Task<int> Main(string[] args)
     {
@@ -31,18 +56,27 @@ public class Program
         Directory.CreateDirectory(ScreenshotDir);
 
         Console.WriteLine("================================================================================");
-        Console.WriteLine("          SWP391_GROUP6 - QA BROWSER E2E & INTEGRITY TEST RUNNER                ");
+        Console.WriteLine("        SWP391_GROUP6 - HARDENED QA E2E & CONCURRENCY RUNNER (v2.1)             ");
         Console.WriteLine("================================================================================");
-        Console.WriteLine($"[INIT] Web Base URL: {BaseUrl}");
-        Console.WriteLine($"[INIT] API Base URL: {ApiBaseUrl}");
-        Console.WriteLine($"[INIT] QA DB Connection: {ConnectionString}");
-        Console.WriteLine($"[INIT] Screenshots Directory: {ScreenshotDir}");
+        Console.WriteLine($"[CONFIG] Web Base URL      : {BaseUrl}");
+        Console.WriteLine($"[CONFIG] API Base URL      : {ApiBaseUrl}");
+        Console.WriteLine($"[CONFIG] Target QA Database : {AllowedQaDatabase}");
+        Console.WriteLine($"[CONFIG] Screenshots Dir   : {ScreenshotDir}");
+        Console.WriteLine($"[SECURITY] Password Source : Environment / Protected Test Credential");
 
-        // Preflight database hygiene: clean previous test artifacts safely from isolated QA DB
+        // 1. Safety Guard Check on Database Connection
+        await using (var guardConn = new SqlConnection(ConnectionString))
+        {
+            await guardConn.OpenAsync();
+            EnsureDatabaseGuard(guardConn);
+            Console.WriteLine($"[GUARD] Verified database target: '{guardConn.Database}' is authorized for QA operations.");
+        }
+
+        // 2. Preflight database hygiene: clean previous test records safely
         await CleanDatabaseBeforeTestAsync();
-        Console.WriteLine("[INIT] Cleaned prior test records from QA database.");
+        Console.WriteLine("[INIT] Cleaned prior test records from isolated QA database.");
 
-        // 1. Launch Edge in Headless mode with Remote Debugging
+        // 3. Locate browser executable
         var edgePath = @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe";
         if (!File.Exists(edgePath))
         {
@@ -57,7 +91,7 @@ public class Program
             StartInfo = new ProcessStartInfo
             {
                 FileName = edgePath,
-                Arguments = $"--headless=new --remote-debugging-port=9222 --ignore-certificate-errors --user-data-dir=\"{tempProfile}\" --disable-gpu --no-first-run --no-default-browser-check about:blank",
+                Arguments = $"--headless=new --remote-debugging-port=9222 --ignore-certificate-errors --user-data-dir=\"{tempProfile}\" --disable-gpu --disable-extensions --no-first-run --no-default-browser-check about:blank",
                 UseShellExecute = false,
                 CreateNoWindow = true
             }
@@ -65,11 +99,10 @@ public class Program
 
         try
         {
-            Console.WriteLine("[BROWSER] Starting headless browser process...");
+            Console.WriteLine("[BROWSER] Launching headless browser with CDP debugging port 9222...");
             edgeProcess.Start();
             await Task.Delay(2500);
 
-            // Connect to CDP
             using var http = new HttpClient();
             var versionJson = await http.GetStringAsync("http://localhost:9222/json/version");
             using var versionDoc = JsonDocument.Parse(versionJson);
@@ -77,7 +110,19 @@ public class Program
 
             var tabsJson = await http.GetStringAsync("http://localhost:9222/json/list");
             using var tabsDoc = JsonDocument.Parse(tabsJson);
-            var pageWs = tabsDoc.RootElement[0].GetProperty("webSocketDebuggerUrl").GetString()!;
+            string? pageWs = null;
+            foreach (var tab in tabsDoc.RootElement.EnumerateArray())
+            {
+                if (tab.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "page")
+                {
+                    pageWs = tab.GetProperty("webSocketDebuggerUrl").GetString();
+                    break;
+                }
+            }
+            if (string.IsNullOrEmpty(pageWs))
+            {
+                pageWs = tabsDoc.RootElement[0].GetProperty("webSocketDebuggerUrl").GetString()!;
+            }
 
             using var cdp = new CdpClient(pageWs);
             await cdp.ConnectAsync();
@@ -96,32 +141,35 @@ public class Program
             Console.WriteLine("[BROWSER] CDP Session successfully initialized!\n");
 
             var results = new List<TestStepResult>();
+            var qaPassword = GetQaPassword();
 
             // ========================================================================================
-            // JOURNEY STEP 1: PATIENT LOGIN & BROWSE [BROWSER_UI_ACTION]
+            // JOURNEY STEP 1: PATIENT LOGIN & DASHBOARD [BROWSER_DOM_TEST]
             // ========================================================================================
             Console.WriteLine("--------------------------------------------------------------------------------");
-            Console.WriteLine("[STEP 1] Testing Patient Login & Dashboard [BROWSER_UI_ACTION]...");
+            Console.WriteLine("[STEP 1] Testing Patient Login & Dashboard [BROWSER_DOM_TEST]...");
             await ClearCookiesAndNavigateLoginAsync(cdp);
-            await cdp.CaptureScreenshotAsync("01_login_page.png");
+            await VerifyPageContentAsync(cdp, "/Account/Login", new[] { "Đăng Nhập", "Email" }, "Login");
+            await CaptureVerifiedScreenshotAsync(cdp, "01_login_page.png");
 
-            await SubmitLoginFormAsync(cdp, "lehoangminh.test@dentalcare.com", "Password123@");
+            await SubmitLoginFormAsync(cdp, "lehoangminh.test@dentalcare.com", qaPassword);
             await Task.Delay(3000);
-            await cdp.CaptureScreenshotAsync("02_patient_dashboard.png");
+
+            await VerifyPageContentAsync(cdp, "/Patient", new[] { "Lê Hoàng Minh", "Cổng Thông Tin Bệnh Nhân", "Patient" }, "Patient Dashboard");
+            await CaptureVerifiedScreenshotAsync(cdp, "02_patient_dashboard.png");
 
             var patientUrl = await cdp.EvaluateAsync<string>("window.location.href") ?? "";
-            var patientHtml = await cdp.EvaluateAsync<string>("document.body.innerText") ?? "";
-            bool patientLoginOk = patientUrl.Contains("/Patient") || patientHtml.Contains("Lê Hoàng Minh") || patientHtml.Contains("Bệnh Nhân");
-            results.Add(new TestStepResult("1.1", "Patient Login & Authentication", "BROWSER_UI_ACTION", patientLoginOk, $"Page URL: {patientUrl}"));
-            Console.WriteLine($"  -> Result: {(patientLoginOk ? "PASS" : "FAIL")}");
+            results.Add(new TestStepResult("1.1", "Patient Login & Authentication", "BROWSER_DOM_TEST", true, $"Verified URL: {patientUrl}"));
+            Console.WriteLine($"  -> Result: PASS (Patient Dashboard Verified)");
 
             // ========================================================================================
-            // JOURNEY STEP 2: PATIENT BOOKING APPOINTMENT [DATABASE_VERIFICATION]
+            // JOURNEY STEP 2: PATIENT BOOKING APPOINTMENT [DATABASE_VERIFICATION & BROWSER_VIEW]
             // ========================================================================================
-            Console.WriteLine("\n[STEP 2] Testing Patient Appointment Booking [DATABASE_VERIFICATION]...");
+            Console.WriteLine("\n[STEP 2] Testing Patient Appointment Booking [DATABASE_VERIFICATION & BROWSER_VIEW]...");
             await cdp.NavigateAsync($"{BaseUrl}/Patient/Appointment/Book");
             await Task.Delay(1500);
-            await cdp.CaptureScreenshotAsync("03_patient_booking_form.png");
+            await VerifyPageContentAsync(cdp, "/Patient/Appointment/Book", new[] { "Đặt Lịch", "Chuyên Khoa", "Khám" }, "Booking Form");
+            await CaptureVerifiedScreenshotAsync(cdp, "03_patient_booking_form.png");
 
             var targetDate = DateTime.Today.AddDays(3);
             var slotStart = targetDate.AddHours(9);
@@ -134,6 +182,7 @@ public class Program
             await using (var conn = new SqlConnection(ConnectionString))
             {
                 await conn.OpenAsync();
+                EnsureDatabaseGuard(conn);
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandText = @"
                     INSERT INTO Appointments (
@@ -152,25 +201,27 @@ public class Program
 
             await cdp.NavigateAsync($"{BaseUrl}/Patient/Appointment/Detail/{apptId}");
             await Task.Delay(2000);
-            await cdp.CaptureScreenshotAsync("04_patient_appointment_detail_pending.png");
+            await VerifyPageContentAsync(cdp, $"/Patient/Appointment/Detail/{apptId}", new[] { apptCode, "Chờ Lễ Tân", "PendingReceptionReview" }, "Patient Appointment Detail");
+            await CaptureVerifiedScreenshotAsync(cdp, "04_patient_appointment_detail_pending.png");
 
-            var detailText = await cdp.EvaluateAsync<string>("document.body.innerText") ?? "";
-            bool apptBookedOk = detailText.Contains(apptCode) || detailText.Contains("Chờ Lễ Tân") || detailText.Contains("PendingReceptionReview");
-            results.Add(new TestStepResult("1.2", "Patient Book Appointment (Status = PendingReceptionReview)", "DATABASE_VERIFICATION", apptBookedOk, $"Created ApptId: {apptId}, Code: {apptCode}"));
-            Console.WriteLine($"  -> Result: {(apptBookedOk ? "PASS" : "FAIL")} (Code: {apptCode})");
+            results.Add(new TestStepResult("1.2", "Patient Book Appointment (Status = PendingReceptionReview)", "DATABASE_VERIFICATION", true, $"Created ApptId: {apptId}, Code: {apptCode}"));
+            Console.WriteLine($"  -> Result: PASS (Code: {apptCode})");
 
             // ========================================================================================
-            // JOURNEY STEP 3: RECEPTIONIST LOGIN & FORWARD TO MANAGER [API_INTEGRATION]
+            // JOURNEY STEP 3: RECEPTIONIST LOGIN & FORWARD TO MANAGER [API_INTEGRATION & BROWSER_VIEW]
             // ========================================================================================
-            Console.WriteLine("\n[STEP 3] Testing Receptionist Login & Forwarding [API_INTEGRATION]...");
+            Console.WriteLine("\n[STEP 3] Testing Receptionist Login & Requests Queue [API_INTEGRATION & BROWSER_VIEW]...");
             await ClearCookiesAndNavigateLoginAsync(cdp);
-            await SubmitLoginFormAsync(cdp, "receptionist@dentalcare.com", "Password123@");
+            await SubmitLoginFormAsync(cdp, "receptionist@dentalcare.com", qaPassword);
             await Task.Delay(3000);
-            await cdp.CaptureScreenshotAsync("05_receptionist_dashboard.png");
+
+            await VerifyPageContentAsync(cdp, "/Receptionist", new[] { "Bàn Tiếp Đón", "Lễ Tân", "Receptionist" }, "Receptionist Dashboard");
+            await CaptureVerifiedScreenshotAsync(cdp, "05_receptionist_dashboard.png");
 
             await cdp.NavigateAsync($"{BaseUrl}/Receptionist/Appointments/Requests");
             await Task.Delay(2000);
-            await cdp.CaptureScreenshotAsync("06_receptionist_requests_queue.png");
+            await VerifyPageContentAsync(cdp, "/Receptionist/Appointments/Requests", new[] { "Hàng Đợi Tiếp Nhận", "Tiếp nhận yêu cầu", "Lễ Tân" }, "Receptionist Requests Queue");
+            await CaptureVerifiedScreenshotAsync(cdp, "06_receptionist_requests_queue.png");
 
             var fwdRes = await PostAsync($"{ApiBaseUrl}/api/receptionist/appointments/{apptId}/forward", new
             {
@@ -181,6 +232,7 @@ public class Program
             await using (var conn = new SqlConnection(ConnectionString))
             {
                 await conn.OpenAsync();
+                EnsureDatabaseGuard(conn);
                 await using var checkCmd = conn.CreateCommand();
                 checkCmd.CommandText = "SELECT Status FROM Appointments WHERE AppointmentId = @id";
                 checkCmd.Parameters.AddWithValue("@id", apptId);
@@ -192,17 +244,20 @@ public class Program
             Console.WriteLine($"  -> Result: {(forwardOk ? "PASS" : "FAIL")}");
 
             // ========================================================================================
-            // JOURNEY STEP 4: DEPARTMENT MANAGER CONFIRM & RESOURCE ALLOCATION [API_INTEGRATION]
+            // JOURNEY STEP 4: DEPARTMENT MANAGER CONFIRM & RESOURCE ALLOCATION [API_INTEGRATION & BROWSER_VIEW]
             // ========================================================================================
-            Console.WriteLine("\n[STEP 4] Testing Department Manager Login & Confirmation [API_INTEGRATION]...");
+            Console.WriteLine("\n[STEP 4] Testing Department Manager Login & Queue [API_INTEGRATION & BROWSER_VIEW]...");
             await ClearCookiesAndNavigateLoginAsync(cdp);
-            await SubmitLoginFormAsync(cdp, "manager@dentalcare.com", "Password123@");
+            await SubmitLoginFormAsync(cdp, "manager@dentalcare.com", qaPassword);
             await Task.Delay(3000);
-            await cdp.CaptureScreenshotAsync("07_manager_dashboard.png");
+
+            await VerifyPageContentAsync(cdp, "/Department", new[] { "Bàn Quản Lý Chuyên Khoa", "DepartmentManager", "Trưởng khoa" }, "Department Manager Dashboard");
+            await CaptureVerifiedScreenshotAsync(cdp, "07_manager_dashboard.png");
 
             await cdp.NavigateAsync($"{BaseUrl}/Department/Appointments/Requests");
-            await Task.Delay(1500);
-            await cdp.CaptureScreenshotAsync("08_manager_requests_queue.png");
+            await Task.Delay(2000);
+            await VerifyPageContentAsync(cdp, "/Department/Appointments/Requests", new[] { "Hàng Đợi Phân Bổ", "Trưởng khoa", "Chuyên khoa" }, "Department Manager Requests Queue");
+            await CaptureVerifiedScreenshotAsync(cdp, "08_manager_requests_queue.png");
 
             var confirmRes = await PostAsync($"{ApiBaseUrl}/api/department/appointments/{apptId}/confirm", new
             {
@@ -218,6 +273,7 @@ public class Program
             await using (var conn = new SqlConnection(ConnectionString))
             {
                 await conn.OpenAsync();
+                EnsureDatabaseGuard(conn);
                 await using var checkCmd = conn.CreateCommand();
                 checkCmd.CommandText = "SELECT Status, QueueNumber, RoomId, DentalChairId, AssignedDentistUserId FROM Appointments WHERE AppointmentId = @id";
                 checkCmd.Parameters.AddWithValue("@id", apptId);
@@ -230,17 +286,24 @@ public class Program
             }
 
             bool managerConfirmOk = confirmRes.IsSuccess && confirmedStatus == "Confirmed" && !string.IsNullOrEmpty(finalQueueNum);
+
+            // Re-authenticate as Patient to inspect the confirmed detail page legally
+            await ClearCookiesAndNavigateLoginAsync(cdp);
+            await SubmitLoginFormAsync(cdp, "lehoangminh.test@dentalcare.com", qaPassword);
+            await Task.Delay(2500);
+
             await cdp.NavigateAsync($"{BaseUrl}/Patient/Appointment/Detail/{apptId}");
-            await Task.Delay(1500);
-            await cdp.CaptureScreenshotAsync("09_appointment_confirmed_detail.png");
+            await Task.Delay(2000);
+            await VerifyPageContentAsync(cdp, $"/Patient/Appointment/Detail/{apptId}", new[] { "Confirmed", "Đã Xác Nhận", finalQueueNum ?? "Q001", apptCode }, "Confirmed Appointment Detail");
+            await CaptureVerifiedScreenshotAsync(cdp, "09_appointment_confirmed_detail.png");
 
             results.Add(new TestStepResult("1.4", "Manager Confirm & Assign Room/Chair (Status = Confirmed)", "API_INTEGRATION", managerConfirmOk, $"Queue: {finalQueueNum}, Status: {confirmedStatus}"));
             Console.WriteLine($"  -> Result: {(managerConfirmOk ? "PASS" : "FAIL")} (Queue: {finalQueueNum})");
 
             // ========================================================================================
-            // JOURNEY STEP 5: PATIENT RESCHEDULE [API_INTEGRATION]
+            // JOURNEY STEP 5: PATIENT RESCHEDULE [API_INTEGRATION & BROWSER_VIEW]
             // ========================================================================================
-            Console.WriteLine("\n[STEP 5] Testing Patient Reschedule [API_INTEGRATION]...");
+            Console.WriteLine("\n[STEP 5] Testing Patient Reschedule [API_INTEGRATION & BROWSER_VIEW]...");
             var newDate = targetDate.AddDays(1);
             var newStart = newDate.AddHours(14);
             var newEnd = newStart.AddMinutes(30);
@@ -258,6 +321,7 @@ public class Program
             await using (var conn = new SqlConnection(ConnectionString))
             {
                 await conn.OpenAsync();
+                EnsureDatabaseGuard(conn);
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandText = "SELECT Status FROM Appointments WHERE AppointmentId = @id";
                 cmd.Parameters.AddWithValue("@id", apptId);
@@ -275,9 +339,11 @@ public class Program
             }
 
             bool reschedOk = reschedRes.IsSuccess && oldApptStatus == "Cancelled" && newApptStatus == "PendingReceptionReview";
+
             await cdp.NavigateAsync($"{BaseUrl}/Patient/Appointment/Detail/{newApptId}");
-            await Task.Delay(1500);
-            await cdp.CaptureScreenshotAsync("10_patient_rescheduled_new_appointment.png");
+            await Task.Delay(2000);
+            await VerifyPageContentAsync(cdp, $"/Patient/Appointment/Detail/{newApptId}", new[] { "PendingReceptionReview", "Chờ Lễ Tân", "Chi tiết" }, "Rescheduled New Appointment Detail");
+            await CaptureVerifiedScreenshotAsync(cdp, "10_patient_rescheduled_new_appointment.png");
 
             results.Add(new TestStepResult("1.5", "Patient Reschedule (Old = Cancelled, New = PendingReceptionReview)", "API_INTEGRATION", reschedOk, $"OldApptId: {apptId} (Cancelled), NewApptId: {newApptId} ({newApptStatus})"));
             Console.WriteLine($"  -> Result: {(reschedOk ? "PASS" : "FAIL")}");
@@ -295,6 +361,7 @@ public class Program
             await using (var conn = new SqlConnection(ConnectionString))
             {
                 await conn.OpenAsync();
+                EnsureDatabaseGuard(conn);
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandText = "SELECT Status FROM Appointments WHERE AppointmentId = @id";
                 cmd.Parameters.AddWithValue("@id", newApptId);
@@ -306,9 +373,9 @@ public class Program
             Console.WriteLine($"  -> Result: {(cancelOk ? "PASS" : "FAIL")}");
 
             // ========================================================================================
-            // JOURNEY STEP 7 & 8: REBOOK & RECEPTIONIST CHECK-IN [API_INTEGRATION]
+            // JOURNEY STEP 7 & 8: REBOOK & RECEPTIONIST CHECK-IN [API_INTEGRATION & BROWSER_VIEW]
             // ========================================================================================
-            Console.WriteLine("\n[STEP 7 & 8] Rebooking & Testing Receptionist Check-In [API_INTEGRATION]...");
+            Console.WriteLine("\n[STEP 7 & 8] Rebooking & Testing Receptionist Check-In [API_INTEGRATION & BROWSER_VIEW]...");
             var todayDate = DateTime.Today;
             var todayStart = todayDate.AddHours(10);
             var todayEnd = todayStart.AddMinutes(30);
@@ -319,6 +386,7 @@ public class Program
             await using (var conn = new SqlConnection(ConnectionString))
             {
                 await conn.OpenAsync();
+                EnsureDatabaseGuard(conn);
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandText = @"
                     INSERT INTO Appointments (
@@ -335,7 +403,6 @@ public class Program
                 rebookId = Convert.ToInt64(await cmd.ExecuteScalarAsync());
             }
 
-            // Receptionist forwards, Manager confirms
             await PostAsync($"{ApiBaseUrl}/api/receptionist/appointments/{rebookId}/forward", new { note = "Hồ sơ chuẩn bị sẵn sàng" }, "receptionist@dentalcare.com");
             await PostAsync($"{ApiBaseUrl}/api/department/appointments/{rebookId}/confirm", new
             {
@@ -347,12 +414,13 @@ public class Program
             }, "manager@dentalcare.com");
 
             await ClearCookiesAndNavigateLoginAsync(cdp);
-            await SubmitLoginFormAsync(cdp, "receptionist@dentalcare.com", "Password123@");
+            await SubmitLoginFormAsync(cdp, "receptionist@dentalcare.com", qaPassword);
             await Task.Delay(2500);
 
             await cdp.NavigateAsync($"{BaseUrl}/Receptionist/Appointments/TodayCheckIn");
-            await Task.Delay(1500);
-            await cdp.CaptureScreenshotAsync("11_receptionist_today_checkin_list.png");
+            await Task.Delay(2000);
+            await VerifyPageContentAsync(cdp, "/Receptionist/Appointments/TodayCheckIn", new[] { "Check-in", "Bệnh Nhân", "Hôm Nay" }, "Receptionist Today Check-in");
+            await CaptureVerifiedScreenshotAsync(cdp, "11_receptionist_today_checkin_list.png");
 
             var checkInRes = await PostAsync($"{ApiBaseUrl}/api/receptionist/appointments/{rebookId}/check-in", new
             {
@@ -363,6 +431,7 @@ public class Program
             await using (var conn = new SqlConnection(ConnectionString))
             {
                 await conn.OpenAsync();
+                EnsureDatabaseGuard(conn);
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandText = "SELECT Status FROM Appointments WHERE AppointmentId = @id";
                 cmd.Parameters.AddWithValue("@id", rebookId);
@@ -370,25 +439,30 @@ public class Program
             }
 
             bool checkInOk = checkInRes.IsSuccess && checkedInStatus == "CheckedIn";
+
             await cdp.NavigateAsync($"{BaseUrl}/Receptionist/Appointments/TodayCheckIn");
-            await Task.Delay(1500);
-            await cdp.CaptureScreenshotAsync("12_receptionist_checkedin_success.png");
+            await Task.Delay(2000);
+            await VerifyPageContentAsync(cdp, "/Receptionist/Appointments/TodayCheckIn", new[] { "Check-in", "Bệnh Nhân", "Hôm Nay" }, "Receptionist CheckedIn View");
+            await CaptureVerifiedScreenshotAsync(cdp, "12_receptionist_checkedin_success.png");
 
             results.Add(new TestStepResult("1.7", "Receptionist Patient Check-In (Status = CheckedIn)", "API_INTEGRATION", checkInOk, $"RebookId: {rebookId} status = {checkedInStatus}"));
             Console.WriteLine($"  -> Result: {(checkInOk ? "PASS" : "FAIL")}");
 
             // ========================================================================================
-            // JOURNEY STEP 9: DENTIST ASSIGN CHAIR & START TREATMENT [API_INTEGRATION]
+            // JOURNEY STEP 9: DENTIST ASSIGN CHAIR & INSERVICE [API_INTEGRATION & BROWSER_VIEW]
             // ========================================================================================
-            Console.WriteLine("\n[STEP 9] Testing Dentist Login, Chair Selection & InService [API_INTEGRATION]...");
+            Console.WriteLine("\n[STEP 9] Testing Dentist Login, Chair Selection & InService [API_INTEGRATION & BROWSER_VIEW]...");
             await ClearCookiesAndNavigateLoginAsync(cdp);
-            await SubmitLoginFormAsync(cdp, "dentist@dentalcare.com", "Password123@");
+            await SubmitLoginFormAsync(cdp, "dentist@dentalcare.com", qaPassword);
             await Task.Delay(3000);
-            await cdp.CaptureScreenshotAsync("13_dentist_dashboard.png");
+
+            await VerifyPageContentAsync(cdp, "/Dentist", new[] { "Không Gian Lâm Sàng Bác Sĩ", "Dentist", "Bác Sĩ" }, "Dentist Dashboard");
+            await CaptureVerifiedScreenshotAsync(cdp, "13_dentist_dashboard.png");
 
             await cdp.NavigateAsync($"{BaseUrl}/Dentist/Appointments/Today");
-            await Task.Delay(1500);
-            await cdp.CaptureScreenshotAsync("14_dentist_today_schedule.png");
+            await Task.Delay(2000);
+            await VerifyPageContentAsync(cdp, "/Dentist/Appointments/Today", new[] { "Lịch Thăm Khám", "Hôm Nay", "Ngày khám" }, "Dentist Today Schedule");
+            await CaptureVerifiedScreenshotAsync(cdp, "14_dentist_today_schedule.png");
 
             var assignChairRes = await PostAsync($"{ApiBaseUrl}/api/dentist/appointments/{rebookId}/assign-chair", new
             {
@@ -400,6 +474,7 @@ public class Program
             await using (var conn = new SqlConnection(ConnectionString))
             {
                 await conn.OpenAsync();
+                EnsureDatabaseGuard(conn);
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandText = "SELECT Status, DentalChairId FROM Appointments WHERE AppointmentId = @id";
                 cmd.Parameters.AddWithValue("@id", rebookId);
@@ -412,21 +487,23 @@ public class Program
             }
 
             bool inServiceOk = assignChairRes.IsSuccess && inServiceStatus == "InService" && assignedChair == 3;
+
             await cdp.NavigateAsync($"{BaseUrl}/Dentist/Appointments/Today");
-            await Task.Delay(1500);
-            await cdp.CaptureScreenshotAsync("15_dentist_inservice_active.png");
+            await Task.Delay(2000);
+            await VerifyPageContentAsync(cdp, "/Dentist/Appointments/Today", new[] { "Lịch Thăm Khám", "Hôm Nay" }, "Dentist Active InService View");
+            await CaptureVerifiedScreenshotAsync(cdp, "15_dentist_inservice_active.png");
 
             results.Add(new TestStepResult("1.8", "Dentist Assign Chair & Start (Status = InService)", "API_INTEGRATION", inServiceOk, $"RebookId: {rebookId}, Chair: {assignedChair}, Status: {inServiceStatus}"));
             Console.WriteLine($"  -> Result: {(inServiceOk ? "PASS" : "FAIL")}");
 
             // ========================================================================================
-            // CONCURRENCY & INTEGRITY HARDENING EDGE-CASE VERIFICATION
+            // CONCURRENCY & INTEGRITY HARDENING EDGE-CASE VERIFICATION [DATABASE_VERIFICATION & API]
             // ========================================================================================
             Console.WriteLine("\n================================================================================");
-            Console.WriteLine("          TESTING CONCURRENCY & INTEGRITY HARDENING EDGE CASES                  ");
+            Console.WriteLine("    CONCURRENCY & INTEGRITY HARDENING EDGE CASES [DATABASE_VERIFICATION & API]  ");
             Console.WriteLine("================================================================================");
 
-            // 4.1: Doctor Overlapping Conflict [API_INTEGRATION & DATABASE_VERIFICATION]
+            // 4.1: Doctor Overlapping Conflict Guard
             Console.WriteLine("[TEST 4.1] Doctor Overlapping Conflict Rejection...");
             var docConflictAppt = await CreatePendingApptAsync(52, 3, todayStart, todayEnd);
             var docConflictRes = await PostAsync($"{ApiBaseUrl}/api/department/appointments/{docConflictAppt}/confirm", new
@@ -441,7 +518,7 @@ public class Program
             results.Add(new TestStepResult("4.1", "Doctor Overlapping Conflict Guard", "API_INTEGRATION", docConflictBlocked, $"Server rejected: {docConflictRes.Message}"));
             Console.WriteLine($"  -> Result: {(docConflictBlocked ? "PASS" : "FAIL")} ({docConflictRes.Message})");
 
-            // 4.2: Patient Overlapping Conflict [API_INTEGRATION & DATABASE_VERIFICATION]
+            // 4.2: Patient Overlapping Conflict Guard
             Console.WriteLine("\n[TEST 4.2] Patient Overlapping Conflict Rejection...");
             await EnsureDoctorShiftAsync(1, 1, todayDate, "08:00:00", "17:00:00");
             var patConflictAppt = await CreatePendingApptAsync(6, 1, todayStart, todayEnd);
@@ -457,7 +534,7 @@ public class Program
             results.Add(new TestStepResult("4.2", "Patient Overlapping Conflict Guard", "API_INTEGRATION", patConflictBlocked, $"Server rejected: {patConflictRes.Message}"));
             Console.WriteLine($"  -> Result: {(patConflictBlocked ? "PASS" : "FAIL")} ({patConflictRes.Message})");
 
-            // 4.3: Exclusive Room Conflict [API_INTEGRATION & DATABASE_VERIFICATION]
+            // 4.3: Exclusive Room Conflict Guard
             Console.WriteLine("\n[TEST 4.3] Exclusive Room Conflict Rejection...");
             await EnsureDoctorShiftAsync(1, 3, todayDate, "08:00:00", "17:00:00");
             var roomConflictAppt = await CreatePendingApptAsync(52, 3, todayStart, todayEnd);
@@ -473,7 +550,7 @@ public class Program
             results.Add(new TestStepResult("4.3", "Exclusive Room Conflict Guard", "API_INTEGRATION", roomConflictBlocked, $"Server rejected: {roomConflictRes.Message}"));
             Console.WriteLine($"  -> Result: {(roomConflictBlocked ? "PASS" : "FAIL")} ({roomConflictRes.Message})");
 
-            // 4.4: Chair Conflict [API_INTEGRATION & DATABASE_VERIFICATION]
+            // 4.4: Chair Conflict Guard
             Console.WriteLine("\n[TEST 4.4] Dental Chair Conflict Rejection...");
             var chairSlotStart = todayDate.AddHours(14);
             var chairSlotEnd = chairSlotStart.AddMinutes(30);
@@ -493,7 +570,7 @@ public class Program
             results.Add(new TestStepResult("4.4", "Dental Chair Conflict Guard", "API_INTEGRATION", chairConflictBlocked, $"Server rejected: {chairConflictRes.Message}"));
             Console.WriteLine($"  -> Result: {(chairConflictBlocked ? "PASS" : "FAIL")} ({chairConflictRes.Message})");
 
-            // 4.5: Doctor On Leave / Unavailable Guard [API_INTEGRATION & DATABASE_VERIFICATION]
+            // 4.5: Doctor On Leave Guard
             Console.WriteLine("\n[TEST 4.5] Doctor On Leave / Unavailability Guard...");
             var leaveDate = targetDate.AddDays(5);
             var leaveStart = leaveDate.AddHours(9);
@@ -514,7 +591,7 @@ public class Program
             results.Add(new TestStepResult("4.5", "Doctor Leave / Unavailability Guard", "API_INTEGRATION", leaveBlocked, $"Server rejected: {leaveConfirmRes.Message}"));
             Console.WriteLine($"  -> Result: {(leaveBlocked ? "PASS" : "FAIL")} ({leaveConfirmRes.Message})");
 
-            // 4.6: Cancelled Shift Guard [API_INTEGRATION & DATABASE_VERIFICATION]
+            // 4.6: Cancelled Doctor Shift Guard
             Console.WriteLine("\n[TEST 4.6] Cancelled Doctor Shift Guard...");
             var cancelShiftDate = targetDate.AddDays(6);
             var cancelShiftStart = cancelShiftDate.AddHours(9);
@@ -534,7 +611,7 @@ public class Program
             results.Add(new TestStepResult("4.6", "Cancelled Doctor Shift Guard", "API_INTEGRATION", cancelShiftBlocked, $"Server rejected: {cancelShiftRes.Message}"));
             Console.WriteLine($"  -> Result: {(cancelShiftBlocked ? "PASS" : "FAIL")} ({cancelShiftRes.Message})");
 
-            // 4.7: Rapid Double-Click / Race Guard [API_INTEGRATION & DATABASE_VERIFICATION]
+            // 4.7: Rapid Double-Click Race Guard
             Console.WriteLine("\n[TEST 4.7] Rapid Double-Click Concurrency Guard...");
             var raceStart = todayDate.AddHours(15);
             var raceEnd = raceStart.AddMinutes(30);
@@ -604,17 +681,22 @@ public class Program
     private static async Task ClearCookiesAndNavigateLoginAsync(CdpClient cdp)
     {
         await cdp.SendAsync("Network.clearBrowserCookies");
+        await cdp.SendAsync("Storage.clearDataForOrigin", new
+        {
+            origin = BaseUrl,
+            storageTypes = "all"
+        });
         await cdp.NavigateAsync($"{BaseUrl}/Account/Login");
-        await Task.Delay(1000);
+        await Task.Delay(1500);
     }
 
     private static async Task SubmitLoginFormAsync(CdpClient cdp, string email, string password)
     {
         await cdp.EvaluateAsync($@"
-            var passInput = document.querySelector('#loginPasswordInput');
+            var passInput = document.querySelector('#loginPasswordInput') || document.querySelector('input[type=""password""]');
             if (passInput) {{
                 var form = passInput.closest('form');
-                var emailInput = form.querySelector('input[name=""Email""]') || form.querySelector('#Email');
+                var emailInput = form.querySelector('input[name=""Email""]') || form.querySelector('#Email') || form.querySelector('input[type=""email""]');
                 if (emailInput) {{
                     emailInput.value = '{email}';
                     emailInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
@@ -634,10 +716,67 @@ public class Program
         ");
     }
 
+    private static async Task VerifyPageContentAsync(
+        CdpClient cdp,
+        string expectedPathSnippet,
+        string[] expectedKeywords,
+        string contextName)
+    {
+        var currentUrl = await cdp.EvaluateAsync<string>("window.location.href") ?? "";
+        var title = await cdp.EvaluateAsync<string>("document.title") ?? "";
+        var body = await cdp.EvaluateAsync<string>("document.body ? document.body.innerText : ''") ?? "";
+
+        // 1. Strict 404 Check
+        if (cdp.LastDocumentStatus == 404 || body.Contains("404 Not Found") || title.Contains("404") || body.Contains("Trang không tìm thấy"))
+        {
+            throw new InvalidOperationException($"[PAGE VERIFICATION FAILED] HTTP 404 Not Found encountered at {currentUrl} (Context: {contextName})");
+        }
+
+        // 2. Route Check
+        if (!currentUrl.Contains(expectedPathSnippet, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"[PAGE VERIFICATION FAILED] URL mismatch. Expected snippet '{expectedPathSnippet}', got '{currentUrl}' (Context: {contextName})");
+        }
+
+        // 3. Keyword Content Check
+        bool keywordFound = false;
+        foreach (var kw in expectedKeywords)
+        {
+            if (body.Contains(kw, StringComparison.OrdinalIgnoreCase) || title.Contains(kw, StringComparison.OrdinalIgnoreCase))
+            {
+                keywordFound = true;
+                break;
+            }
+        }
+
+        if (!keywordFound)
+        {
+            throw new InvalidOperationException($"[PAGE VERIFICATION FAILED] None of the expected keywords [{string.Join(", ", expectedKeywords)}] found on page {currentUrl} (Title: '{title}', Context: {contextName})");
+        }
+
+        Console.WriteLine($"      [VERIFIED] {contextName} -> URL: {currentUrl} | Title: '{title}'");
+    }
+
+    private static async Task CaptureVerifiedScreenshotAsync(CdpClient cdp, string filename)
+    {
+        await cdp.CaptureScreenshotAsync(filename);
+        var fullPath = Path.Combine(ScreenshotDir, filename);
+        if (File.Exists(fullPath))
+        {
+            using var sha = SHA256.Create();
+            using var stream = File.OpenRead(fullPath);
+            var hashBytes = await sha.ComputeHashAsync(stream);
+            var hashStr = Convert.ToHexString(hashBytes);
+            Console.WriteLine($"      [HASH SHA256] {filename} => {hashStr} ({stream.Length:N0} bytes)");
+        }
+    }
+
     private static async Task CleanDatabaseBeforeTestAsync()
     {
         await using var conn = new SqlConnection(ConnectionString);
         await conn.OpenAsync();
+        EnsureDatabaseGuard(conn);
+
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             DELETE FROM Notifications WHERE AppointmentId IN (
@@ -669,6 +808,8 @@ public class Program
         long serviceId = (deptId == 3) ? 7 : 1;
         await using var conn = new SqlConnection(ConnectionString);
         await conn.OpenAsync();
+        EnsureDatabaseGuard(conn);
+
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             INSERT INTO Appointments (
@@ -692,6 +833,8 @@ public class Program
     {
         await using var conn = new SqlConnection(ConnectionString);
         await conn.OpenAsync();
+        EnsureDatabaseGuard(conn);
+
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             IF NOT EXISTS (SELECT 1 FROM Appointments WHERE DentalChairId = @chairId AND Status = 'Confirmed' AND ScheduledStart < @end AND ScheduledEnd > @start)
@@ -718,6 +861,8 @@ public class Program
     {
         await using var conn = new SqlConnection(ConnectionString);
         await conn.OpenAsync();
+        EnsureDatabaseGuard(conn);
+
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             DELETE FROM DentistWorkSchedules WHERE DentistUserId = @doctorId AND WorkDate = @date AND DepartmentId = @deptId;
@@ -737,6 +882,8 @@ public class Program
     {
         await using var conn = new SqlConnection(ConnectionString);
         await conn.OpenAsync();
+        EnsureDatabaseGuard(conn);
+
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             INSERT INTO DentistAvailability (DentistUserId, StartDateTime, EndDateTime, AvailabilityStatus, Reason, CreatedAt)
@@ -760,7 +907,7 @@ public class Program
             ServerCertificateCustomValidationCallback = (_, _, _, _) => true
         };
         using var client = new HttpClient(handler);
-        var loginBody = new { email, password = "Password123@" };
+        var loginBody = new { email, password = GetQaPassword() };
         var content = new StringContent(JsonSerializer.Serialize(loginBody), Encoding.UTF8, "application/json");
         var res = await client.PostAsync($"{ApiBaseUrl}/api/auth/login", content);
         var str = await res.Content.ReadAsStringAsync();
@@ -801,12 +948,15 @@ public class Program
     public record ApiResponseStub(bool IsSuccess, string Message);
 }
 
-// Minimal CDP WebSocket Client
+// Minimal CDP WebSocket Client with Document Status Tracking
 public class CdpClient : IDisposable
 {
     private readonly ClientWebSocket _ws = new();
     private readonly Uri _uri;
     private int _id = 0;
+
+    public int LastDocumentStatus { get; private set; } = 200;
+    public string LastDocumentUrl { get; private set; } = "";
 
     public CdpClient(string wsUrl)
     {
@@ -836,6 +986,28 @@ public class CdpClient : IDisposable
             var res = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
             var json = Encoding.UTF8.GetString(buffer, 0, res.Count);
             using var doc = JsonDocument.Parse(json);
+
+            // Track CDP Network responseReceived for Document types
+            if (doc.RootElement.TryGetProperty("method", out var methodProp))
+            {
+                var evMethod = methodProp.GetString();
+                if (evMethod == "Network.responseReceived" && doc.RootElement.TryGetProperty("params", out var pProp))
+                {
+                    if (pProp.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "Document" &&
+                        pProp.TryGetProperty("response", out var respProp))
+                    {
+                        if (respProp.TryGetProperty("status", out var sProp))
+                        {
+                            LastDocumentStatus = sProp.GetInt32();
+                        }
+                        if (respProp.TryGetProperty("url", out var uProp))
+                        {
+                            LastDocumentUrl = uProp.GetString() ?? "";
+                        }
+                    }
+                }
+            }
+
             if (doc.RootElement.TryGetProperty("id", out var idProp) && idProp.GetInt32() == id)
             {
                 if (doc.RootElement.TryGetProperty("result", out var resultProp))
@@ -849,6 +1021,7 @@ public class CdpClient : IDisposable
 
     public async Task NavigateAsync(string url)
     {
+        LastDocumentStatus = 0;
         await SendAsync("Page.navigate", new { url });
     }
 

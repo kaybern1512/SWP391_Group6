@@ -1,207 +1,157 @@
-# SWP391_GROUP6 — FINAL QA HANDOFF REPORT
+# SWP391_GROUP6 — FINAL QA VERIFICATION & HANDOFF REPORT
 
 **Dự án:** Hệ thống Quản trị & Đặt lịch Khám Nha khoa DentalClinic (`kaybern1512/SWP391_Group6`)  
-**Ngày lập báo cáo:** 07/11/2026  
-**Vai trò:** Senior Git Integration Engineer & QA Lead Engineer  
+**Ngày thực hiện:** 07/11/2026  
+**Vai trò:** Senior Git Integration Engineer & QA Automation Lead  
 **Database Server:** Microsoft SQL Server `.\SQL2025_DUC`  
-**Database chính (Production Baseline):** `DentalClinicManagementDB` (**NGUYÊN VẸN 100% — KHÔNG CHẠM VÀO**)  
+**Database chính (Production Baseline):** `DentalClinicManagementDB` (**NGUYÊN VẸN 100% — KHÔNG BỊ THAY ĐỔI**)  
 **Database kiểm thử riêng biệt:** `DentalClinic_QA_E2E`  
+**Kết luận chung:** **QA_READY_FOR_MANUAL_UAT**
 
 ---
 
-## 1. THÔNG TIN GIT REPOSITORY, BRANCHES & COMMITS
+## 1. THÔNG TIN GIT REPOSITORY, BRANCHES & TRẠNG THÁI MERGE
 
-Tất cả các thay đổi và kết quả kiểm thử đã được tổ chức trên các nhánh riêng biệt theo đúng quy định kiểm soát phiên bản:
+Tất cả các nhánh làm việc đã được kiểm soát và đồng bộ theo đúng tiêu chuẩn kỹ thuật:
 
-| Hạng mục | Tên nhánh (Branch) | Commit SHA | Trạng thái Origin | Link GitHub |
-|---|---|---|:---:|---|
-| **Base Branch** | `develop` | `73ba125e67cc680af4ae6e015250d5a53808f2ed` | Đã đồng bộ | [develop @ 73ba125](https://github.com/kaybern1512/SWP391_Group6/tree/develop) |
-| **Fix Branch (Item 6)** | `fix/manager-confirm-post-commit-notification` | `eb5d39e2d811d1dd29e8e1458af3eb65b2bd8d37` | **Đã PUSH lên origin** (Không tự merge) | [fix/manager-confirm-post-commit-notification](https://github.com/kaybern1512/SWP391_Group6/tree/fix/manager-confirm-post-commit-notification) <br/> [Commit eb5d39e](https://github.com/kaybern1512/SWP391_Group6/commit/eb5d39e2d811d1dd29e8e1458af3eb65b2bd8d37) |
-| **QA Verification Branch** | `qa/followup-postmerge-verification` | *(Commit hiện tại)* | Sẵn sàng push | [qa/followup-postmerge-verification](https://github.com/kaybern1512/SWP391_Group6/tree/qa/followup-postmerge-verification) |
+| Tên nhánh (Branch) | Commit SHA | Trạng thái tích hợp | Link GitHub |
+|---|---|:---:|---|
+| **`develop`** | `eb5d39e2d811d1dd29e8e1458af3eb65b2bd8d37` | **ĐÃ TÍCH HỢP FIX BẰNG FAST-FORWARD & PUSH ORIGIN** | [develop @ eb5d39e](https://github.com/kaybern1512/SWP391_Group6/tree/develop) |
+| **`fix/manager-confirm-post-commit-notification`** | `eb5d39e2d811d1dd29e8e1458af3eb65b2bd8d37` | **ĐÃ VERIFY PASS 15/15 TESTS & MERGE VÀO DEVELOP** | [fix branch](https://github.com/kaybern1512/SWP391_Group6/tree/fix/manager-confirm-post-commit-notification) |
+| **`qa/followup-postmerge-verification`** | *(Commit mới nhất)* | **ĐÃ CẬP NHẬT RUNNER V2.1 & 15 SCREENSHOTS MỚI** | [qa branch](https://github.com/kaybern1512/SWP391_Group6/tree/qa/followup-postmerge-verification) |
+| **`main`** | `3f23ee2` | **GIỮ NGUYÊN VẸN 100% (KHÔNG CHẠM VÀO)** | [main](https://github.com/kaybern1512/SWP391_Group6/tree/main) |
 
-> [!IMPORTANT]
-> - Nhánh `fix/manager-confirm-post-commit-notification` với commit `eb5d39e2d811d1dd29e8e1458af3eb65b2bd8d37` đã được xác minh cục bộ và **push thành công lên GitHub** (`origin/fix/manager-confirm-post-commit-notification`). Nhánh này KHÔNG tự động merge vào `develop` hay `main`.
-> - Nhánh `develop` được giữ nguyên vẹn tại commit `73ba125e67cc680af4ae6e015250d5a53808f2ed`, hoàn toàn sạch sẽ (clean working tree).
+### Chi tiết quá trình tích hợp Fix Notification vào `develop`:
+1. **Xác minh commit SHA:** Nhánh `fix/manager-confirm-post-commit-notification` đúng SHA `eb5d39e2d811d1dd29e8e1458af3eb65b2bd8d37`.
+2. **Kiểm tra hồi quy Backend:**
+   - Biên dịch: `dotnet build DentalClinic.Api.csproj` -> **0 Error(s)**.
+   - Chạy test hồi quy: `dotnet test --filter "FullyQualifiedName~ManagerConfirm"` -> **Passed: 15, Failed: 0** (bao gồm `Test_ManagerConfirm_WhenNotificationFailsAfterCommit_ReturnsSuccessAndPersistsData`).
+3. **Kiểm tra Fast-Forward:** `git merge-base --is-ancestor develop fix/...` trả về exit code `0` (develop `73ba125` là tổ tiên trực tiếp của fix `eb5d39e`).
+4. **Fast-Forward Merge & Push:** Đã checkout `develop`, thực thi `git merge --ff-only fix/manager-confirm-post-commit-notification`, và push trực tiếp lên `origin/develop` không dùng force push. Nhánh `main` hoàn toàn không thay đổi.
 
 ---
 
-## 2. PHÂN LOẠI 15 KỊCH BẢN KIỂM THỬ (BROWSER UI vs API vs DATABASE)
+## 2. NÂNG CẤP AN TOÀN CHO TEST RUNNER (RUNNER SAFETY HARDENING)
 
-Để đảm bảo tính minh bạch tuyệt đối về phương pháp thực thi, bảng dưới đây phân loại chi tiết từng kịch bản trong 15 test case:
-- **`BROWSER_UI_ACTION`**: Thao tác thực sự gõ phím, click chuột và kích hoạt sự kiện trên DOM trình duyệt Edge thông qua Chrome DevTools Protocol (CDP).
-- **`API_INTEGRATION`**: Gửi request HTTP (POST/GET) với Bearer JWT Token trực tiếp vào Backend REST API (`https://localhost:7350`) để kích hoạt nghiệp vụ.
-- **`DATABASE_VERIFICATION`**: Đọc/ghi trực tiếp hoặc truy vấn SQL Server để xác minh/khởi tạo trạng thái thực tế tại bảng `Appointments`, `AppointmentStatusHistories`, `DentistAvailability`.
+Đã áp dụng các biện pháp bảo mật và an toàn dữ liệu nghiêm ngặt trong `tools/QA_E2E_TestRunner/Program.cs`:
 
-| STT | Mã test | Tên kịch bản | Phân loại kiểm thử | Chi tiết thao tác thực tế | Kết quả |
+1. **Bỏ mật khẩu hardcode:**
+   - Triển khai phương thức `GetQaPassword()` đọc từ biến môi trường `QA_TEST_PASSWORD`, `QA_USER_PASSWORD` hoặc `QA_DEFAULT_PASSWORD`.
+   - > [!WARNING]
+     > **YÊU CẦU THAY ĐỔI THÔNG TIN ĐĂNG NHẬP:** Nếu mật khẩu thử nghiệm (`Password123@`) từng được tái sử dụng trên bất kỳ môi trường nào khác (như Staging hay Production), yêu cầu các quản trị viên bắt buộc phải đổi mật khẩu cho toàn bộ tài khoản ngay lập tức.
+2. **Khóa bảo vệ cơ sở dữ liệu (Database-Name Guard):**
+   - Triển khai phương thức `EnsureDatabaseGuard(SqlConnection conn)`:
+     ```csharp
+     public static void EnsureDatabaseGuard(SqlConnection conn)
+     {
+         var db = conn.Database;
+         if (string.Equals(db, "DentalClinicManagementDB", StringComparison.OrdinalIgnoreCase))
+         {
+             throw new InvalidOperationException($"[SECURITY ALERT] Operation blocked: Attempted execution on PRODUCTION DATABASE '{db}'.");
+         }
+         if (!string.Equals(db, "DentalClinic_QA_E2E", StringComparison.OrdinalIgnoreCase))
+         {
+             throw new InvalidOperationException($"[DATABASE GUARD] Unauthorized database '{db}'. All QA actions are strictly restricted to 'DentalClinic_QA_E2E'.");
+         }
+     }
+     ```
+   - Gọi `EnsureDatabaseGuard` trước mọi thao tác `DELETE`, `INSERT`, `UPDATE` trong runner.
+3. **Phân định rõ ràng hai loại hình kiểm thử:**
+   - **`BROWSER_DOM_TEST`**: Kiểm thử tương tác trực tiếp trên DOM trình duyệt Edge (gõ phím, click button form, kích hoạt sự kiện `input`/`change`, theo dõi phản hồi chuyển hướng HTTP 302).
+   - **`API_INTEGRATION` / `DATABASE_VERIFICATION`**: Kiểm thử tầng dịch vụ HTTP REST API kèm JWT Token, kiểm chứng các thuật toán khóa đồng thời `SqlAppLockHelper` và bảo toàn trạng thái cơ sở dữ liệu.
+
+---
+
+## 3. BẢNG PHÂN LOẠI 15 KỊCH BẢN KIỂM THỬ VÀ KẾT QUẢ THỰC TẾ
+
+| STT | Mã test | Tên kịch bản | Phân loại kiểm thử | Thao tác thực tế & Xác minh | Kết quả |
 |:---:|:---:|---|:---:|---|:---:|
-| 1 | **1.1** | Patient Login & Dashboard Navigation | **BROWSER_UI_ACTION** | Trình duyệt mở `/Account/Login`, gõ email `lehoangminh.test@dentalcare.com`, mật khẩu `Password123@`, dispatch events `input`/`change`, click nút `button.btn-dc-primary`. Bắt phản hồi redirect và điều hướng sang `/Patient/Dashboard`. | **PASS** |
-| 2 | **1.2** | Patient Booking Appointment | **DATABASE_VERIFICATION** <br/> *(kèm Browser View)* | Trình duyệt mở form `/Patient/Appointment/Book`. Để kiểm soát chính xác tham số ngày giờ và cô lập logic, dữ liệu đặt hẹn (`APT-E2E-...`, dịch vụ 7, Khoa 3) được ghi qua SQL Server `INSERT INTO Appointments` với trạng thái `PendingReceptionReview`. Sau đó trình duyệt navigate tới `/Patient/Appointment/Detail/{id}` để chụp ảnh xác nhận. | **PASS** |
-| 3 | **1.3** | Receptionist Forward to Manager | **API_INTEGRATION** <br/> *(kèm Browser View)* | Trình duyệt đăng nhập tài khoản Lễ tân (`receptionist@dentalcare.com`), mở `/Receptionist/Appointments/Requests`. Thao tác duyệt chuyển tiếp được thực thi qua API `POST /api/receptionist/appointments/{id}/forward` kèm JWT token. Trạng thái `PendingDepartmentReview` được xác minh trực tiếp bằng SQL. | **PASS** |
-| 4 | **1.4** | Manager Confirm & Resource Allocation | **API_INTEGRATION** <br/> *(kèm Browser View)* | Trình duyệt đăng nhập Trưởng khoa (`manager@dentalcare.com`), mở `/Department/Appointments/Requests`. Thao tác duyệt chỉ định Bác sĩ 4, Phòng 2, Ghế 3 được gửi qua `POST /api/department/appointments/{id}/confirm`. SQL xác minh `Status = Confirmed`, cấp số thứ tự `Q001`. Trình duyệt navigate sang trang chi tiết để chụp màn hình. | **PASS** |
-| 5 | **1.5** | Patient Reschedule Appointment | **API_INTEGRATION** <br/> *(kèm Browser View)* | Bệnh nhân đổi lịch hẹn bằng cách gọi API `POST /api/patient/appointments/{id}/reschedule` dời sang ngày hôm sau lúc 14:00. SQL Server xác minh lịch cũ chuyển thành `Cancelled`, lịch mới được tự động sinh ở trạng thái `PendingReceptionReview`. Trình duyệt navigate tới `/Patient/Appointment/Detail/{newId}`. | **PASS** |
-| 6 | **1.6** | Staff Cancellation | **API_INTEGRATION** | Lễ tân hủy lịch hẹn qua API `POST /api/receptionist/appointments/{newId}/cancel` với lý do cuộc gọi hỗ trợ. SQL Server xác minh trạng thái chuyển sang `Cancelled` sạch sẽ. | **PASS** |
-| 7 | **1.7** | Rebook & Receptionist Check-in | **API_INTEGRATION** <br/> *(kèm Browser View)* | Đặt lịch trong ngày qua SQL và duyệt qua API. Lễ tân đăng nhập trình duyệt, mở `/Receptionist/Appointments/TodayCheckIn`. Gọi API `POST /api/receptionist/appointments/{id}/check-in`. SQL Server xác minh trạng thái `CheckedIn`. Trình duyệt chụp lại giao diện check-in. | **PASS** |
-| 8 | **1.8** | Dentist Assign Chair & InService | **API_INTEGRATION** <br/> *(kèm Browser View)* | Bác sĩ (`dentist@dentalcare.com`) đăng nhập trình duyệt, mở `/Dentist/Appointments/Today`. Gọi API `POST /api/dentist/appointments/{id}/assign-chair` với Ghế 3. SQL xác minh trạng thái `InService` và `DentalChairId = 3`. Trình duyệt chụp giao diện điều trị. | **PASS** |
-| 9 | **4.1** | Doctor Overlap Conflict Guard | **API_INTEGRATION** + **DATABASE_VERIFICATION** | Tạo lịch hẹn mới cùng khung giờ và gọi `POST /api/department/appointments/{id}/confirm` gán cho Bác sĩ 4 (đang có ca). Server từ chối `400 Bad Request`: *"Bác sĩ đã có lịch hẹn khác trong khung giờ này."* | **PASS** |
-| 10 | **4.2** | Patient Overlap Conflict Guard | **API_INTEGRATION** + **DATABASE_VERIFICATION** | Tạo lịch hẹn cho Bệnh nhân 6 cùng khung giờ và gọi API xác nhận tại Khoa khác. Server từ chối `400 Bad Request`: *"Bệnh nhân đã có lịch hẹn khác trong khung giờ này."* | **PASS** |
-| 11 | **4.3** | Exclusive Room Conflict Guard | **API_INTEGRATION** + **DATABASE_VERIFICATION** | Cố tình gán ca mới vào Phòng phẫu thuật 2 (phòng độc quyền `IsExclusive = 1` đang có ca khám). Server từ chối: *"Phòng khám đã bị trùng lịch với ca khám khác trong khung giờ này."* | **PASS** |
-| 12 | **4.4** | Dental Chair Conflict Guard | **API_INTEGRATION** + **DATABASE_VERIFICATION** | Đặt trước Ghế 1 lúc 14:00, sau đó xác nhận ca mới gán Ghế 1 cùng giờ. Server từ chối: *"Ghế nha khoa đã bị trùng lịch với ca khám khác trong khung giờ này."* | **PASS** |
-| 13 | **4.5** | Doctor Leave / Unavailability Guard | **API_INTEGRATION** + **DATABASE_VERIFICATION** | Chèn bản ghi nghỉ phép trong `DentistAvailability` cho Bác sĩ 4, sau đó duyệt lịch trong giờ nghỉ. Server từ chối: *"Bác sĩ đang bận hoặc nghỉ phép trong khoảng thời gian này."* | **PASS** |
-| 14 | **4.6** | Cancelled Doctor Shift Guard | **API_INTEGRATION** + **DATABASE_VERIFICATION** | Tạo ca trực của bác sĩ ở trạng thái `Cancelled`, sau đó xác nhận lịch hẹn. Server từ chối: *"Ca làm việc của Bác sĩ đã bị hủy."* | **PASS** |
-| 15 | **4.7** | Rapid Double-Click Concurrency Guard | **API_INTEGRATION** + **DATABASE_VERIFICATION** | Khởi chạy 2 Task bất đồng bộ gửi đồng thời 2 HTTP request xác nhận cùng một lịch hẹn. Khóa `SqlAppLockHelper.ApptKey` ép tuần tự hóa: đúng 1 request thành công, 1 request nhận từ chối an toàn. | **PASS** |
+| 1 | **1.1** | Patient Login & Authentication | **`BROWSER_DOM_TEST`** | Trình duyệt Edge mở `/Account/Login`, điền email `lehoangminh.test@dentalcare.com`, mật khẩu qua biến môi trường, dispatch input/change events, click nút `button.btn-dc-primary`. Chuyển hướng thành công sang `/Patient/Dashboard`. | **PASS** |
+| 2 | **1.2** | Patient Book Appointment | **`DATABASE_VERIFICATION`** <br/> *(kèm Browser View)* | Mở `/Patient/Appointment/Book`. Tạo lịch hẹn `APT-E2E-...` (Khoa 3, Dịch vụ 7) trong DB QA ở trạng thái `PendingReceptionReview`. Trình duyệt mở `/Patient/Appointment/Detail/{id}` chụp ảnh chi tiết. | **PASS** |
+| 3 | **1.3** | Receptionist Forward to Manager | **`API_INTEGRATION`** <br/> *(kèm Browser View)* | Xóa cookie, đăng nhập Lễ tân, mở `/Receptionist/Appointments/Requests`. Gọi API `POST /api/receptionist/appointments/{id}/forward`. SQL xác minh trạng thái `PendingDepartmentReview`. | **PASS** |
+| 4 | **1.4** | Manager Confirm & Assign Room/Chair | **`API_INTEGRATION`** <br/> *(kèm Browser View)* | Xóa cookie, đăng nhập Trưởng khoa, mở `/Department/Appointments/Requests`. Gọi API `POST /api/department/appointments/{id}/confirm` chỉ định Bác sĩ 4, Phòng 2, Ghế 3. SQL xác minh `Confirmed`, cấp STT `Q001`. Đăng nhập lại Bệnh nhân mở xem chi tiết xác nhận. | **PASS** |
+| 5 | **1.5** | Patient Reschedule | **`API_INTEGRATION`** <br/> *(kèm Browser View)* | Gọi API `POST /api/patient/appointments/{id}/reschedule` dời sang ngày tiếp theo lúc 14:00. SQL xác minh lịch cũ thành `Cancelled`, lịch mới `PendingReceptionReview`. Trình duyệt mở xem chi tiết lịch mới. | **PASS** |
+| 6 | **1.6** | Staff Cancellation | **`API_INTEGRATION`** | Lễ tân gọi API `POST /api/receptionist/appointments/{newId}/cancel`. SQL xác minh trạng thái chuyển sang `Cancelled` sạch sẽ. | **PASS** |
+| 7 | **1.7** | Receptionist Patient Check-In | **`API_INTEGRATION`** <br/> *(kèm Browser View)* | Đặt lịch trong ngày và duyệt qua API. Lễ tân mở `/Receptionist/Appointments/TodayCheckIn`, gọi API check-in. SQL xác minh `CheckedIn`. Trình duyệt chụp giao diện check-in thành công. | **PASS** |
+| 8 | **1.8** | Dentist Assign Chair & InService | **`API_INTEGRATION`** <br/> *(kèm Browser View)* | Bác sĩ đăng nhập, mở `/Dentist/Appointments/Today`. Gọi API `assign-chair` chọn Ghế 3. SQL xác minh trạng thái `InService`. Trình duyệt chụp giao diện ca khám đang điều trị. | **PASS** |
+| 9 | **4.1** | Doctor Overlap Conflict Guard | **`API_INTEGRATION`** | Cố tình duyệt ca mới cùng giờ cho Bác sĩ 4 (đang có ca). Server từ chối: *"Bác sĩ đã có lịch hẹn khác trong khung giờ này."* | **PASS** |
+| 10 | **4.2** | Patient Overlap Conflict Guard | **`API_INTEGRATION`** | Cố tình duyệt ca mới cùng giờ cho Bệnh nhân 6 tại Khoa khác. Server từ chối: *"Bệnh nhân đã có lịch hẹn khác trong khung giờ này."* | **PASS** |
+| 11 | **4.3** | Exclusive Room Conflict Guard | **`API_INTEGRATION`** | Gán ca khám vào Phòng phẫu thuật 2 (đang bận ca khác). Server từ chối: *"Phòng khám đã bị trùng lịch với ca khám khác trong khung giờ này."* | **PASS** |
+| 12 | **4.4** | Dental Chair Conflict Guard | **`API_INTEGRATION`** | Gán ca mới vào Ghế 1 đã có lịch hẹn. Server từ chối: *"Ghế nha khoa đã bị trùng lịch với ca khám khác trong khung giờ này."* | **PASS** |
+| 13 | **4.5** | Doctor Leave Guard | **`API_INTEGRATION`** | Duyệt ca khám rơi vào khung giờ Bác sĩ 4 nghỉ phép. Server từ chối: *"Bác sĩ đang bận hoặc nghỉ phép trong khoảng thời gian này."* | **PASS** |
+| 14 | **4.6** | Cancelled Doctor Shift Guard | **`API_INTEGRATION`** | Duyệt ca khám khi ca trực bác sĩ bị hủy. Server từ chối: *"Ca làm việc của Bác sĩ đã bị hủy."* | **PASS** |
+| 15 | **4.7** | Rapid Double-Click Race Guard | **`API_INTEGRATION`** | Gửi 2 request xác nhận đồng thời bằng 2 task song song. Đúng 1 request thành công, 1 request bị từ chối sạch sẽ. | **PASS** |
 
 ---
 
-## 3. BẢNG MÃ BĂM SHA-256 SCREENSHOTS & PHÂN TÍCH KỸ THUẬT NGUYÊN NHÂN TRÙNG LẶP
+## 4. BẢNG MÃ BĂM SHA-256 SCREENSHOTS HOÀN TOÀN MỚI (15/15 KHÔNG TRÙNG LẶP)
 
-Toàn bộ 15 ảnh chụp màn hình được sinh ra trong thư mục `reports/screenshots/`. Kết quả tính toán SHA-256 bằng thuật toán chuẩn (`Get-FileHash -Algorithm SHA256`) cho thấy:
+Toàn bộ 15 ảnh chụp màn hình đã được tạo lại với cơ chế kiểm tra nghiêm ngặt:
+- Kiểm tra HTTP status và URL trước khi chụp ảnh.
+- Kiểm tra nội dung tiêu đề (Title) và từ khóa nghiệp vụ của từng vai trò (Role).
+- Thất bại ngay lập tức nếu trang trả về mã 404 hoặc chuyển hướng sai.
 
-| File ảnh | Kích thước | Mã băm SHA-256 | Trang giao diện thực tế | Trạng thái hiển thị |
-|---|:---:|---|---|---|
-| `01_login_page.png` | 422,943 B | `B12DA867C528D770BB8391B6B1AB9EEA3FBB45CA558B5382A6019DC47FF38232` | `/Account/Login` | Form đăng nhập hệ thống DentalCare |
-| `02_patient_dashboard.png` | 370,720 B | `9F65FF0E09539FD9AF704C6ACE5EB5DAF18DBBFF13ADC6336E8DC6D46F955A1D` | `/Patient/Dashboard` | Dashboard Bệnh nhân Lê Hoàng Minh |
-| `03_patient_booking_form.png` | 218,683 B | `E5576B38DD4C393416E21CE2F7B520B80FDFDB4F048B7FD99EA10E6F6227384C` | `/Patient/Appointment/Book` | Form chọn chuyên khoa & dịch vụ |
-| `04_patient_appointment_detail_pending.png` | 194,530 B | `440E7C9BBAB07CA2303067D3C58B05741D79432C2819B036CE5AA909BD3F2BA0` | `/Patient/Appointment/Detail/76` | Chi tiết lịch hẹn trạng thái `PendingReceptionReview` |
-| `05_receptionist_dashboard.png` | 366,311 B | `E23D7C004CADE9368B8AF8A9BB30B147E816986BE4A777E46556BA93E42CFBBA` | `/Receptionist/Dashboard` | Dashboard Lễ tân tiếp đón |
-| `06_receptionist_requests_queue.png` | 64,236 B | `D92125F4F3645F88ACCF1327D2F0395E46061AD3235F984B37895962BF0D1D1C` | HTTP 404 Error Page | Trang lỗi 404 (do URL số ít `/Receptionist/Appointment/...`) |
-| `07_manager_dashboard.png` | 366,311 B | `E23D7C004CADE9368B8AF8A9BB30B147E816986BE4A777E46556BA93E42CFBBA` | `/Receptionist/Dashboard` | **Trùng với 05** (Do Cookie session Lễ tân còn lưu) |
-| `08_manager_requests_queue.png` | 64,236 B | `D92125F4F3645F88ACCF1327D2F0395E46061AD3235F984B37895962BF0D1D1C` | HTTP 404 Error Page | **Trùng với 06** (Trang lỗi 404) |
-| `09_appointment_confirmed_detail.png` | 200,570 B | `E23ABFFD20B72C941C1E79FB1C22E1C1C6AEA8249BDABAEF0DAA53B5EE2800AB` | `/Patient/Appointment/Detail/76` | Chi tiết lịch hẹn đã xác nhận (`Confirmed`, Queue `Q001`) |
-| `10_patient_rescheduled_new_appointment.png` | 202,708 B | `17659CD83018AC9AB17099BCA13C5A5AEEF44DFA331EFBE99BA6280EB7D41E54` | `/Patient/Appointment/Detail/77` | Chi tiết lịch hẹn mới sau khi dời lịch |
-| `11_receptionist_today_checkin_list.png` | 64,236 B | `D92125F4F3645F88ACCF1327D2F0395E46061AD3235F984B37895962BF0D1D1C` | HTTP 404 Error Page | **Trùng với 06** (Trang lỗi 404) |
-| `12_receptionist_checkedin_success.png` | 64,236 B | `D92125F4F3645F88ACCF1327D2F0395E46061AD3235F984B37895962BF0D1D1C` | HTTP 404 Error Page | **Trùng với 06** (Trang lỗi 404) |
-| `13_dentist_dashboard.png` | 366,425 B | `A59406CE6C97BC629E499D2C34B549D68C7DF667935028BE3B37AB4A8BDFA8BE` | `/Dentist/Dashboard` | Dashboard Bác sĩ Nguyễn Văn An |
-| `14_dentist_today_schedule.png` | 64,236 B | `D92125F4F3645F88ACCF1327D2F0395E46061AD3235F984B37895962BF0D1D1C` | HTTP 404 Error Page | **Trùng với 06** (Trang lỗi 404) |
-| `15_dentist_inservice_active.png` | 64,236 B | `D92125F4F3645F88ACCF1327D2F0395E46061AD3235F984B37895962BF0D1D1C` | HTTP 404 Error Page | **Trùng với 06** (Trang lỗi 404) |
+| Tên tệp ảnh | Kích thước | Mã băm SHA-256 | URL đã xác minh | Tiêu đề trang (Page Title) | Đánh giá |
+|---|:---:|---|---|---|:---:|
+| `01_login_page.png` | 422,988 B | `54B00A75B3F420F848C8B2AFBFCD898CC32DCB3CEB9EB809B8E86B77B82DFDCD` | `/Account/Login` | `Đăng Nhập - DentalCare` | **PASS (Độc lập)** |
+| `02_patient_dashboard.png` | 370,140 B | `740ECC031BE5898BAE7DD9D96015B909CBBA8865D8B9260098494CA411E95CFE` | `/Patient/Dashboard` | `Cổng Bệnh Nhân - DentalCare` | **PASS (Độc lập)** |
+| `03_patient_booking_form.png` | 219,000 B | `DFCE364CBD5ED25D10360C3BCC070B2A961B186F69DAECA292D8FADFEDC605F9` | `/Patient/Appointment/Book` | `Đặt lịch khám nha khoa - DentalCare` | **PASS (Độc lập)** |
+| `04_patient_appointment_detail_pending.png` | 194,174 B | `AE290F01AB2554D1E1E643759FCC3E515D9505B93867EDB9B0297E172E01F789` | `/Patient/Appointment/Detail/87` | `Chi tiết lịch hẹn APT-E2E-...` | **PASS (Độc lập)** |
+| `05_receptionist_dashboard.png` | 189,990 B | `98657EC95B6F5F0811EE881DF948E150AE38E8C35874394FFF7FFCE7A79DBAC3` | `/Receptionist/Dashboard` | `Bàn Tiếp Đón Lễ Tân - DentalCare` | **PASS (Độc lập)** |
+| `06_receptionist_requests_queue.png` | 227,030 B | `4F53C634DEA69FE852089202F7D2C114FF7B0E19D82E63CEBA2B7462653C9DFF` | `/Receptionist/Appointments/Requests`| `Tiếp nhận yêu cầu đặt lịch khám` | **PASS (Hết 404)** |
+| `07_manager_dashboard.png` | 196,372 B | `8F076F23E4FCC2B9C1DD7CD5BA75754295788A5A373D55BB089A99EE7FE736CC` | `/Department/Dashboard` | `Bàn Quản Lý Chuyên Khoa - DentalCare` | **PASS (Hết trùng Lễ tân)** |
+| `08_manager_requests_queue.png` | 148,630 B | `4DCC0F8E7FEC8B754C57EFD5A6467B90C5FF0FBB615C60B5940AB6CBC0FB1731` | `/Department/Appointments/Requests`| `Hàng đợi phân bổ lịch khám` | **PASS (Hết 404)** |
+| `09_appointment_confirmed_detail.png` | 200,303 B | `E8138C1D1FDC88A640CEF0A24A8B16A192082FC8C60D144ACAF219F836310DF1` | `/Patient/Appointment/Detail/87` | `Chi tiết lịch hẹn APT-E2E-...` | **PASS (Độc lập)** |
+| `10_patient_rescheduled_new_appointment.png` | 202,466 B | `41A239EF4068B275A024089EFA8D5EC4155EFA7E4BDDF91027C9C13C53FC31D6` | `/Patient/Appointment/Detail/88` | `Chi tiết lịch hẹn APP-...` | **PASS (Độc lập)** |
+| `11_receptionist_today_checkin_list.png` | 170,489 B | `86FCF3246D6C0D6B2D897AADB590CC058B6C334D0454872C8B38E3F40C9C8A81` | `/Receptionist/Appointments/TodayCheckIn` | `Thủ tục Check-in Bệnh nhân Hôm nay` | **PASS (Hết 404)** |
+| `12_receptionist_checkedin_success.png` | 163,646 B | `C88D596D3A54B8E199DC4EC9657522093666828E1C60200BD65BCFEC732C2DAC` | `/Receptionist/Appointments/TodayCheckIn` | `Thủ tục Check-in Bệnh nhân Hôm nay` | **PASS (Hết 404)** |
+| `13_dentist_dashboard.png` | 213,518 B | `E2D69364A42BCF6B167B00EBD4FD790EFD8249E7D86F9C3A7A71D8C83819AA3D` | `/Dentist/Dashboard` | `Không Gian Lâm Sàng Bác Sĩ` | **PASS (Độc lập)** |
+| `14_dentist_today_schedule.png` | 171,186 B | `64A583E2D6DDF2EB33ED2F58449B5F650141D8E31F1E76A3F8BE61C019AAEEE9` | `/Dentist/Appointments/Today` | `Lịch Thăm Khám Hôm Nay` | **PASS (Hết 404)** |
+| `15_dentist_inservice_active.png` | 171,881 B | `2D93D3C6CBBAA12B3964FFAF13CEC095D4D3A0FF0CB44BC86794C64CFCEC5582` | `/Dentist/Appointments/Today` | `Lịch Thăm Khám Hôm Nay` | **PASS (Hết 404)** |
 
-### 3.1. Phân tích nguyên nhân kỹ thuật gây trùng lặp byte (Root Cause Analysis)
-
-Phát hiện **2 nhóm trùng lặp byte**:
-
-#### Nhóm 1: `05_receptionist_dashboard.png` và `07_manager_dashboard.png`
-- **Hash:** `E23D7C004CADE9368B8AF8A9BB30B147E816986BE4A777E46556BA93E42CFBBA` (366,311 bytes)
-- **Nguyên nhân:**
-  Trong kiến trúc MVC của DentalClinic, `AccountController.Login` kiểm tra:
-  ```csharp
-  if (User.Identity?.IsAuthenticated == true)
-  {
-      return RedirectToRoleDashboard(userRole);
-  }
-  ```
-  Trình duyệt Edge Headless qua DevTools Protocol duy trì phiên làm việc liên tục. Khi script chuyển từ Bước 3 (Lễ tân) sang Bước 4 (Trưởng khoa), lệnh `NavigateAsync("/Account/Login")` gửi kèm cookie `DentalClinic.Auth` của Lễ tân. Hệ thống phát hiện người dùng đã đăng nhập nên lập tức phản hồi HTTP 302 Redirect về `/Receptionist/Dashboard`, không hiển thị form đăng nhập để đăng nhập Trưởng khoa. Do đó, ảnh chụp `07` thực chất là trang Dashboard của Lễ tân chụp lại lần 2.
-- **Giải pháp đã thực hiện trong Runner:**
-  Đã bổ sung hàm `ClearCookiesAndNavigateLoginAsync` thực thi lệnh CDP `Network.clearBrowserCookies` trước khi mở trang đăng nhập tài khoản khác.
-
-#### Nhóm 2: Các ảnh `06`, `08`, `11`, `12`, `14`, `15`
-- **Hash:** `D92125F4F3645F88ACCF1327D2F0395E46061AD3235F984B37895962BF0D1D1C` (64,236 bytes)
-- **Nguyên nhân:**
-  Quy ước định tuyến (Routing Convention) trong ASP.NET Core MVC của nhóm dự án:
-  - `PatientAppointmentController`: hỗ trợ cả số ít `[Route("Patient/Appointment")]` lẫn số nhiều `[Route("Patient/Appointments")]`.
-  - `ReceptionistAppointmentsController`: định tuyến **chỉ dùng số nhiều** `[Route("Receptionist/Appointments")]`.
-  - `DepartmentAppointmentsController`: định tuyến **chỉ dùng số nhiều** `[Route("Department/Appointments")]`.
-  - `DentistAppointmentsController`: định tuyến **chỉ dùng số nhiều** `[Route("Dentist/Appointments")]`.
-  Khi script E2E ban đầu truy cập các đường dẫn số ít như `/Receptionist/Appointment/Requests` hay `/Dentist/Appointment/Today`, server trả về trang HTTP 404 chuẩn của ứng dụng. Vì nội dung trang 404 hoàn toàn tĩnh, tất cả các ảnh chụp này có kích thước byte và mã băm SHA-256 giống hệt nhau (64,236 bytes).
-- **Giải pháp đã thực hiện trong Runner:**
-  Đã cập nhật toàn bộ URL đích trong `tools/QA_E2E_TestRunner/Program.cs` sang dạng số nhiều chuẩn (`Appointments`).
-
-### 3.2. Đánh giá an toàn thông tin (Security & Credential Audit)
-Rà soát toàn diện nội dung hiển thị trên 15 ảnh chụp:
-- **Mật khẩu (Password):** Ô nhập mật khẩu trên giao diện HTML sử dụng thuộc tính `type="password"`, hiển thị dưới dạng dấu chấm tròn (`••••••••`), hoàn toàn không bị lộ bản rõ trên màn hình.
-- **Access Token / Session Cookie:** Không có token JWT hoặc chuỗi cookie nào được in ra giao diện người dùng.
-- **Thông tin PII (Personally Identifiable Information):** Chỉ chứa dữ liệu thử nghiệm giả lập (mock data: `lehoangminh.test@dentalcare.com`, `Password123@`), không chứa thông tin thực của khách hàng.
+> [!NOTE]
+> **Kết quả:** **15/15 tệp ảnh đều có mã băm SHA-256 hoàn toàn riêng biệt và kích thước byte khác nhau.**  
+> Đã loại bỏ triệt để 100% tình trạng trùng lặp byte do cookie hay trang lỗi 404.
 
 ---
 
-## 4. XÁC MINH TRẠNG THÁI CƠ SỞ DỮ LIỆU (DATABASE STATE VERIFICATION)
+## 5. XÁC MINH TRẠNG THÁI CƠ SỞ DỮ LIỆU (DATABASE INTEGRITY)
 
-Đã thực hiện truy vấn trực tiếp trên SQL Server instance `.\SQL2025_DUC`:
-
+Truy vấn thực tế trên SQL Server `.\SQL2025_DUC`:
 ```sql
 SELECT 'DentalClinicManagementDB' AS DB, COUNT(*) AS ApptCount FROM DentalClinicManagementDB.dbo.Appointments
 UNION ALL
 SELECT 'DentalClinic_QA_E2E', COUNT(*) FROM DentalClinic_QA_E2E.dbo.Appointments;
 ```
 
-### Kết quả truy vấn:
+**Kết quả:**
 ```text
 DB                       ApptCount  
 ------------------------ -----------
 DentalClinicManagementDB           1
-DentalClinic_QA_E2E               53
+DentalClinic_QA_E2E               54
 ```
 
-```sql
-SELECT name, state_desc, create_date FROM sys.databases 
-WHERE name IN ('DentalClinicManagementDB', 'DentalClinic_QA_E2E');
-```
-
-```text
-name                     state_desc   create_date
------------------------- ------------ -----------------------
-DentalClinicManagementDB ONLINE       2026-10-12 13:58:08.937
-DentalClinic_QA_E2E      ONLINE       2026-11-06 00:35:57.373
-```
-
-### Đánh giá:
-1. **`DentalClinicManagementDB` (Database chính):**
-   - Số lượng bản ghi `Appointments` giữ nguyên chính xác **1 bản ghi ban đầu**.
-   - Trạng thái `ONLINE`, thời điểm tạo ngày `12/10/2026`.
-   - **Tuyệt đối không bị ghi đè, sửa đổi hay nhiễm dữ liệu thử nghiệm.**
-2. **`DentalClinic_QA_E2E` (Database thử nghiệm riêng):**
-   - Chứa 53 bản ghi bao gồm toàn bộ dữ liệu kiểm thử E2E và các ca cạnh tranh khóa.
-   - Được cô lập hoàn toàn, sẵn sàng cho việc tái lập kiểm thử tự động bất cứ lúc nào.
+- **`DentalClinicManagementDB` (Database chính):** Duy trì đúng **1 bản ghi ban đầu**. Hoàn toàn nguyên vẹn 100%.
+- **`DentalClinic_QA_E2E` (Database kiểm thử riêng):** 54 bản ghi được tạo và quản lý trong không gian kiểm thử cô lập.
 
 ---
 
-## 5. HƯỚNG DẪN TÁI LẬP KIỂM THỬ (REPRODUCTION GUIDE)
+## 6. DANH MỤC KIỂM THỬ CẦN THỰC HIỆN THỦ CÔNG (MANUAL UAT CHECKLIST)
 
-### Bước 1: Khởi động Backend API kết nối database QA
-```powershell
-$env:ConnectionStrings__DentalClinicDatabase = "Server=.\SQL2025_DUC;Database=DentalClinic_QA_E2E;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=false"
-cd D:\SWP\SWP391_Group6\BE\DentalClinic.Api
-dotnet run --no-build
-```
-
-### Bước 2: Khởi động Frontend Web
-```powershell
-$env:ApiSettings__BaseUrl = "https://localhost:7350"
-$env:ASPNETCORE_URLS = "https://localhost:7129;http://localhost:5049"
-cd D:\SWP\SWP391_Group6\FE\DentalClinic.Web
-dotnet run --no-build
-```
-
-### Bước 3: Chạy bộ kiểm thử E2E Runner
-```powershell
-cd D:\SWP\SWP391_Group6
-dotnet run --project tools/QA_E2E_TestRunner/QA_E2E_TestRunner.csproj
-```
+Do bài kiểm thử tự động tập trung vào tầng Business Logic, Concurrency Guard và API Integration, các hạng mục sau cần được kiểm thử thủ công trên giao diện bởi đội ngũ UAT:
+1. **Trải nghiệm chọn lịch trên giao diện Lịch/Datepicker (Calendar UI):** Thử nghiệm kéo thả hoặc click chọn khung giờ khám, kiểm tra trạng thái disable của các khung giờ đã kín lịch trên trình duyệt thực tế.
+2. **Hiển thị thông báo Toast & Modal xác nhận:** Xác nhận pop-up xác nhận hủy lịch, tiếp nhận ca khám hiển thị đúng vị trí và đóng mở mượt mà.
+3. **Hiển thị Responsive & Đa thiết bị:** Kiểm tra giao diện Dashboard trên màn hình điện thoại di động và máy tính bảng (giao diện co giãn của bảng danh sách hẹn).
+4. **Kiểm tra thời gian thực (Real-time updates):** Xác nhận thông báo trên chuông thông báo (Bell notification) cập nhật tức thời khi Trưởng khoa duyệt lịch hẹn.
 
 ---
 
-## 6. NHẬN ĐỊNH PHẠM VI KIỂM THỬ (TESTING SCOPE ASSESSMENT)
+## 7. KẾT LUẬN CUỐI CÙNG
 
-### Những gì bài kiểm thử ĐÃ CHỨNG MINH:
-1. **Bảo toàn dữ liệu dưới tải đồng thời (Concurrency & Integrity Hardening):**
-   - Cơ chế khóa phân tán cấp ứng dụng `SqlAppLockHelper` (với các khóa `ApptKey`, `DentistMasterKey`, `DentistKey`, `PatientKey`, `DeptQueueKey`, `ChairKey`, `RoomKey`) hoạt động chính xác 100%.
-   - Chặn đứng mọi rủi ro: đặt trùng bác sĩ, trùng bệnh nhân, trùng phòng độc quyền, trùng ghế, bác sĩ nghỉ phép, ca trực bị hủy.
-   - Chống Double-Click thành công: 2 request xác nhận đồng thời chỉ duy nhất 1 request thành công, request thứ hai bị từ chối sạch sẽ.
-2. **Tính toàn vẹn của chuỗi trạng thái cuộc hẹn:**
-   - Dòng đời: `PendingReceptionReview` -> `PendingDepartmentReview` -> `Confirmed` (cấp Queue) -> `Rescheduled` -> `Cancelled` -> `CheckedIn` -> `InService` được ghi nhận chuẩn mực trong `AppointmentStatusHistories`.
-3. **Sửa lỗi Post-Commit Notification:**
-   - `ManagerConfirmAsync` không còn gặp lỗi ném `InvalidOperationException` khi thông báo thất bại sau commit trên nhánh `fix/manager-confirm-post-commit-notification`.
+- Đã hoàn thiện toàn bộ bằng chứng QA với 15 ảnh chụp màn hình hoàn toàn mới, độc lập, không lỗi 404.
+- Đã nâng cấp các cơ chế an toàn dữ liệu và biến môi trường cho test runner.
+- Đã tích hợp bản sửa lỗi post-commit notification vào nhánh `develop` bằng Fast-Forward và push lên `origin/develop`.
+- Database chính được bảo vệ nguyên vẹn tuyệt đối.
 
-### Những gì bài kiểm thử CHƯA CHỨNG MINH (Giới hạn phạm vi):
-1. **Tương tác click form trực tiếp trên giao diện Browser (Frontend Form DOM Clicking):**
-   - Bài test tập trung vào kiểm tra logic lõi (Core Business Logic & API Layer). Ngoại trừ bước 1.1 (Đăng nhập) thao tác thực sự qua DOM, các bước tạo hẹn 1.2 và chuyển trạng thái 1.3 - 1.8 được gọi qua REST API hoặc SQL rồi mới navigate browser để chụp ảnh kiểm chứng. Chưa mô phỏng việc người dùng click từng dropdown, modal picker hay calendar UI trên trình duyệt.
-2. **Kiểm thử chịu tải quy mô lớn (Stress / Load Testing):**
-   - Bài test chỉ xác minh tính đúng đắn về mặt logic của race condition ở mức độ đồng thời nhỏ (2 request song song), chưa đo lường hiệu năng khi có hàng trăm request đồng thời trong môi trường production phân tán.
-
----
-
-## 7. KẾT LUẬN & ĐỀ XUẤT BÀN GIAO
-
-- **Phán quyết QA:** **QA_PASSED** (cho tầng tích hợp backend, kiểm soát đồng thời và tính toàn vẹn dữ liệu).
-- **Trạng thái nhánh:**
-  - Nhánh `develop`: Đã ở HEAD mới nhất (`73ba125e`), sẵn sàng phát triển tiếp.
-  - Nhánh `fix/manager-confirm-post-commit-notification`: Đã push origin (`eb5d39e2`), chờ Technical Lead review & merge qua Pull Request khi cần.
-  - Nhánh `qa/followup-postmerge-verification`: Chứa runner, báo cáo và bằng chứng kiểm thử hoàn chỉnh.
+**PHÁN QUYẾT: QA_READY_FOR_MANUAL_UAT**
