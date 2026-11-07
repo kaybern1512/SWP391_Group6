@@ -18,7 +18,7 @@ Tất cả các nhánh làm việc đã được kiểm soát và đồng bộ t
 |---|---|:---:|---|
 | **`develop`** | `eb5d39e2d811d1dd29e8e1458af3eb65b2bd8d37` | **ĐÃ TÍCH HỢP FIX BẰNG FAST-FORWARD & PUSH ORIGIN** | [develop @ eb5d39e](https://github.com/kaybern1512/SWP391_Group6/tree/develop) |
 | **`fix/manager-confirm-post-commit-notification`** | `eb5d39e2d811d1dd29e8e1458af3eb65b2bd8d37` | **ĐÃ VERIFY PASS 15/15 TESTS & MERGE VÀO DEVELOP** | [fix branch](https://github.com/kaybern1512/SWP391_Group6/tree/fix/manager-confirm-post-commit-notification) |
-| **`qa/followup-postmerge-verification`** | *(Commit mới nhất)* | **ĐÃ CẬP NHẬT RUNNER V2.1 & 15 SCREENSHOTS MỚI** | [qa branch](https://github.com/kaybern1512/SWP391_Group6/tree/qa/followup-postmerge-verification) |
+| **`qa/followup-postmerge-verification`** | `0485dfa0d9eb4cf5ba70e0a4f5fbebb54b2fc544` | **RUNNER V2.2 & 15 SCREENSHOTS MỚI ĐÃ PUSH** | [qa branch](https://github.com/kaybern1512/SWP391_Group6/tree/qa/followup-postmerge-verification) |
 | **`main`** | `3f23ee2` | **GIỮ NGUYÊN VẸN 100% (KHÔNG CHẠM VÀO)** | [main](https://github.com/kaybern1512/SWP391_Group6/tree/main) |
 
 ### Chi tiết quá trình tích hợp Fix Notification vào `develop`:
@@ -35,10 +35,11 @@ Tất cả các nhánh làm việc đã được kiểm soát và đồng bộ t
 
 Đã áp dụng các biện pháp bảo mật và an toàn dữ liệu nghiêm ngặt trong `tools/QA_E2E_TestRunner/Program.cs`:
 
-1. **Bỏ mật khẩu hardcode:**
-   - Triển khai phương thức `GetQaPassword()` đọc từ biến môi trường `QA_TEST_PASSWORD`, `QA_USER_PASSWORD` hoặc `QA_DEFAULT_PASSWORD`.
+1. **Loại bỏ hoàn toàn mật khẩu hardcode & Fail-Fast:**
+   - Triển khai phương thức `GetQaPassword()` bắt buộc biến môi trường `QA_TEST_PASSWORD`. Không có bất kỳ fallback mặc định nào trong code.
+   - Nếu `QA_TEST_PASSWORD` bị thiếu hoặc rỗng, runner dừng ngay lập tức (Fail-Fast với Exit Code 2) trước khi mở bất kỳ kết nối DB nào, bảo đảm tuyệt đối không cleanup hoặc sửa đổi database.
    - > [!WARNING]
-     > **YÊU CẦU THAY ĐỔI THÔNG TIN ĐĂNG NHẬP:** Nếu mật khẩu thử nghiệm (`Password123@`) từng được tái sử dụng trên bất kỳ môi trường nào khác (như Staging hay Production), yêu cầu các quản trị viên bắt buộc phải đổi mật khẩu cho toàn bộ tài khoản ngay lập tức.
+     > **YÊU CẦU THAY ĐỔI THÔNG TIN ĐĂNG NHẬP:** Nếu mật khẩu thử nghiệm (`Password123@`) từng được tái sử dụng trên bất kỳ môi trường nào khác (như Staging hay Production), yêu cầu các quản trị viên bắt buộc phải đổi mật khẩu cho toàn bộ tài khoản ngay lập tức. Không in mật khẩu hoặc JWT token vào log.
 2. **Khóa bảo vệ cơ sở dữ liệu (Database-Name Guard):**
    - Triển khai phương thức `EnsureDatabaseGuard(SqlConnection conn)`:
      ```csharp

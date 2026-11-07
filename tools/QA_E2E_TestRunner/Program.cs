@@ -30,10 +30,12 @@ public class Program
 
     public static string GetQaPassword()
     {
-        return Environment.GetEnvironmentVariable("QA_TEST_PASSWORD")
-            ?? Environment.GetEnvironmentVariable("QA_USER_PASSWORD")
-            ?? Environment.GetEnvironmentVariable("QA_DEFAULT_PASSWORD")
-            ?? "Password123@";
+        var password = Environment.GetEnvironmentVariable("QA_TEST_PASSWORD");
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            throw new InvalidOperationException("[SECURITY FAIL-FAST] Missing or empty required environment variable 'QA_TEST_PASSWORD'. All QA execution halted before any database operations.");
+        }
+        return password;
     }
 
     public static void EnsureDatabaseGuard(SqlConnection conn)
@@ -53,16 +55,33 @@ public class Program
     public static async Task<int> Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
-        Directory.CreateDirectory(ScreenshotDir);
 
         Console.WriteLine("================================================================================");
-        Console.WriteLine("        SWP391_GROUP6 - HARDENED QA E2E & CONCURRENCY RUNNER (v2.1)             ");
+        Console.WriteLine("        SWP391_GROUP6 - HARDENED QA E2E & CONCURRENCY RUNNER (v2.2)             ");
         Console.WriteLine("================================================================================");
         Console.WriteLine($"[CONFIG] Web Base URL      : {BaseUrl}");
         Console.WriteLine($"[CONFIG] API Base URL      : {ApiBaseUrl}");
         Console.WriteLine($"[CONFIG] Target QA Database : {AllowedQaDatabase}");
         Console.WriteLine($"[CONFIG] Screenshots Dir   : {ScreenshotDir}");
-        Console.WriteLine($"[SECURITY] Password Source : Environment / Protected Test Credential");
+        Console.WriteLine($"[SECURITY] Password Source : Environment Variable 'QA_TEST_PASSWORD'");
+
+        // 0. Fail-fast credential validation: abort before any database connection or mutation
+        string qaPassword;
+        try
+        {
+            qaPassword = GetQaPassword();
+            Console.WriteLine("[SECURITY] Environment variable 'QA_TEST_PASSWORD' is present and verified.");
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"\n{ex.Message}");
+            Console.ResetColor();
+            Console.WriteLine("[SAFETY GUARD] No database connection was opened. No database cleanup or mutation was performed.\n");
+            return 2;
+        }
+
+        Directory.CreateDirectory(ScreenshotDir);
 
         // 1. Safety Guard Check on Database Connection
         await using (var guardConn = new SqlConnection(ConnectionString))
@@ -141,7 +160,6 @@ public class Program
             Console.WriteLine("[BROWSER] CDP Session successfully initialized!\n");
 
             var results = new List<TestStepResult>();
-            var qaPassword = GetQaPassword();
 
             // ========================================================================================
             // JOURNEY STEP 1: PATIENT LOGIN & DASHBOARD [BROWSER_DOM_TEST]
