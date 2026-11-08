@@ -24,9 +24,9 @@ Quá trình tích hợp tuân thủ quy trình kiểm soát thay đổi tối th
 | :--- | :---: | :---: | :--- |
 | **`backup/main-before-followup-integration-20261108`** | Local | `64155958571ce6bd982e757181bb7234537a4147` | Nhánh lưu trữ an toàn trước khi tích hợp. |
 | **`main` (Trước tích hợp)** | Local/Remote | `64155958571ce6bd982e757181bb7234537a4147` | Điểm xuất phát của `main`. |
-| **`release/followup-to-main-integration`** | Local/Remote | `98f6dd36da904b789139fc174780ce420653ea95` | Nhánh release candidate đã fix 2 blocker. |
+| **`release/followup-to-main-integration`** | Local/Remote | `fe8467c69992f025e1bc97858cfa40cfd66322b7` | Nhánh release candidate đã fix 2 blocker. |
 | **`develop` / `origin/develop`** | Local/Remote | `a8c7334dffcb37dc57ddae55cfb61b60444bfff3` | Nhánh develop đã fast-forward bugfix lễ tân. |
-| **`main` (Sau tích hợp)** | Local/Remote | *Xem mục 5* | Chứa đầy đủ commit từ release branch. |
+| **`main` (Sau tích hợp)** | Local/Remote | `685d63f715c79ed14ba8d4e82b42379394e42d35` | Merge commit tích hợp toàn bộ release branch. |
 
 ---
 
