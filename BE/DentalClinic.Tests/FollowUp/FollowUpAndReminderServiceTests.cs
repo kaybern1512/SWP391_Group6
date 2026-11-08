@@ -142,7 +142,7 @@ public class FollowUpAndReminderServiceTests
         var appt = await db.Appointments.FirstOrDefaultAsync(a => a.AppointmentId == result.Data.AppointmentId);
         Assert.NotNull(appt);
         Assert.Equal(AppointmentStatus.PendingDepartmentReview, appt.Status);
-        Assert.Equal(BookingSource.FollowUp, appt.BookingSource);
+        Assert.Equal(BookingSource.Receptionist, appt.BookingSource);
         Assert.Equal(101, appt.PatientUserId);
         Assert.Equal(1, appt.DepartmentId);
         Assert.Contains("Tái khám theo dõi cắt chỉ", appt.ReasonForVisit);

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using DentalClinic.Web.Models.Api;
 using DentalClinic.Web.Models.ApiDtos;
@@ -16,4 +16,13 @@ public interface IPostCareApiService
     Task<ApiResult<List<FollowUpScheduleDto>>> GetDentistFollowUpsAsync();
     Task<ApiResult<List<FollowUpScheduleDto>>> GetReceptionistFollowUpsAsync();
     Task<ApiResult<FollowUpScheduleDto>> UpdateFollowUpStatusAsync(long followUpId, UpdateFollowUpStatusRequest request);
+    Task<ApiResult<FollowUpAppointmentDto>> DoctorBookFollowUpAsync(CreateFollowUpAppointmentRequest request);
+    Task<ApiResult<List<FollowUpSlotDto>>> GetFollowUpAvailableSlotsAsync(long dentistUserId, System.DateTime date, int durationMinutes = 30);
+    Task<ApiResult<FollowUpProposalDto>> SubmitPatientProposalAsync(PatientFollowUpChangeRequest request);
+    Task<ApiResult<bool>> WithdrawPatientProposalAsync(long proposalId);
+    Task<ApiResult<List<FollowUpProposalDto>>> GetPatientProposalsAsync();
+    Task<ApiResult<List<FollowUpProposalDto>>> GetDoctorPendingProposalsAsync();
+    Task<ApiResult<FollowUpProposalDto>> ResolveProposalAsync(ResolveProposalRequest request);
+    Task<ApiResult<List<FollowUpReminderDto>>> GetReceptionistRemindersAsync(string? dateFilter = null, string? callStatus = null);
+    Task<ApiResult<FollowUpReminderDto>> UpdateReminderCallStatusAsync(UpdateReminderCallStatusRequest request);
 }

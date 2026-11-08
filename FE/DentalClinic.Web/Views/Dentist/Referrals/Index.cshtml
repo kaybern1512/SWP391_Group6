@@ -24,13 +24,26 @@
     <!-- Navigation Tabs -->
     <ul class="nav nav-pills mb-4 gap-2 bg-white p-2 rounded shadow-sm border" id="postCareTabs" role="tablist">
         <li class="nav-item" role="presentation">
-            <button class="nav-link @(Model.ActiveTab != "followups" ? "active" : "") fw-semibold" id="referrals-tab" data-bs-toggle="tab" data-bs-target="#referrals-content" type="button" role="tab">
+            <button class="nav-link @(Model.ActiveTab != "followups" && Model.ActiveTab != "proposals" ? "active" : "") fw-semibold" id="referrals-tab" data-bs-toggle="tab" data-bs-target="#referrals-content" type="button" role="tab">
                 <i class="bi bi-arrow-left-right me-2"></i>Phiếu Chuyển Khoa (@Model.Referrals.Count)
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link @(Model.ActiveTab == "followups" ? "active" : "") fw-semibold" id="followups-tab" data-bs-toggle="tab" data-bs-target="#followups-content" type="button" role="tab">
                 <i class="bi bi-calendar-heart me-2"></i>Lịch Hẹn Tái Khám (@Model.FollowUps.Count)
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(Model.ActiveTab == "proposals" ? "active" : "") fw-semibold d-flex align-items-center" id="proposals-tab" data-bs-toggle="tab" data-bs-target="#proposals-content" type="button" role="tab">
+                <i class="bi bi-clock-history me-2"></i>Duyệt Đổi / Đặt Lại Lịch
+                @if (Model.PendingProposals != null && Model.PendingProposals.Count > 0)
+                {
+                    <span class="badge bg-danger ms-2">@Model.PendingProposals.Count</span>
+                }
+                else
+                {
+                    <span class="badge bg-light text-muted ms-2 border">0</span>
+                }
             </button>
         </li>
     </ul>
@@ -204,6 +217,106 @@
                 </div>
             </div>
         </div>
+
+        <!-- TAB 3: PENDING PROPOSALS (Day 05) -->
+        <div class="tab-pane fade @(Model.ActiveTab == "proposals" ? "show active" : "")" id="proposals-content" role="tabpanel">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                    <h5 class="card-title fw-bold mb-0 text-dark">
+                        <i class="bi bi-clock-history me-2 text-warning"></i>Yêu Cầu Thay Đổi Lịch Tái Khám Từ Bệnh Nhân
+                    </h5>
+                    <span class="badge bg-warning text-dark px-3 py-2">@(Model.PendingProposals?.Count ?? 0) yêu cầu chờ duyệt</span>
+                </div>
+                <div class="card-body p-0">
+                    @if (Model.PendingProposals == null || Model.PendingProposals.Count == 0)
+                    {
+                        <div class="text-center py-5">
+                            <i class="bi bi-calendar-check display-4 text-muted mb-3 d-block"></i>
+                            <h6 class="fw-bold text-muted">Không có yêu cầu thay đổi lịch nào đang chờ phê duyệt</h6>
+                            <p class="text-muted small">Khi bệnh nhân gửi đề xuất đổi lịch hoặc đặt lại lịch tái khám, yêu cầu sẽ xuất hiện tại đây để bạn xử lý.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-4">Mã Đề Xuất</th>
+                                        <th>Bệnh Nhân</th>
+                                        <th>Lịch Hẹn Hiện Tại</th>
+                                        <th>Khung Giờ Đề Xuất</th>
+                                        <th>Loại Yêu Cầu</th>
+                                        <th>Lý Do Của Bệnh Nhân</th>
+                                        <th>Thời Điểm Gửi</th>
+                                        <th class="pe-4 text-end">Xử Lý Phê Duyệt</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var p in Model.PendingProposals)
+                                    {
+                                        <tr>
+                                            <td class="ps-4 fw-bold font-monospace text-primary">#REQ-@p.ProposalId</td>
+                                            <td>
+                                                <div class="fw-bold text-dark">@p.PatientName</div>
+                                                <div class="small text-muted font-monospace">@p.AppointmentCode</div>
+                                            </td>
+                                            <td>
+                                                <div class="text-dark">
+                                                    @(p.CurrentStart.HasValue ? p.CurrentStart.Value.ToString("dd/MM/yyyy HH:mm") : "--")
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="fw-bold text-success fs-6">
+                                                    @(p.ProposedStart.HasValue ? p.ProposedStart.Value.ToString("dd/MM/yyyy HH:mm") : "--")
+                                                </div>
+                                                <div class="small text-muted">Thời lượng: 30 phút</div>
+                                            </td>
+                                            <td>
+                                                @if (p.IsRebook)
+                                                {
+                                                    <span class="badge bg-warning text-dark"><i class="bi bi-calendar2-plus me-1"></i>Đặt Lại Lịch</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-info text-dark"><i class="bi bi-arrow-repeat me-1"></i>Đổi Lịch</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="small text-dark" style="max-width: 250px;">@p.Reason</div>
+                                            </td>
+                                            <td class="small text-muted">
+                                                @p.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+                                            </td>
+                                            <td class="pe-4 text-end">
+                                                <div class="btn-group btn-group-sm">
+                                                    <button type="button"
+                                                            class="btn btn-success fw-semibold btn-open-approve-proposal"
+                                                            data-proposal-id="@p.ProposalId"
+                                                            data-patient-name="@p.PatientName"
+                                                            data-appt-code="@p.AppointmentCode"
+                                                            data-proposed-start="@(p.ProposedStart.HasValue ? p.ProposedStart.Value.ToString("dd/MM/yyyy HH:mm") : "")"
+                                                            data-is-rebook="@(p.IsRebook ? "true" : "false")">
+                                                        <i class="bi bi-check2 me-1"></i>Duyệt
+                                                    </button>
+                                                    <button type="button"
+                                                            class="btn btn-outline-danger fw-semibold btn-open-reject-proposal"
+                                                            data-proposal-id="@p.ProposalId"
+                                                            data-patient-name="@p.PatientName"
+                                                            data-appt-code="@p.AppointmentCode">
+                                                        <i class="bi bi-x me-1"></i>Từ chối
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -322,12 +435,121 @@
     </div>
 </div>
 
+<!-- MODAL: BÁC SĨ PHÊ DUYỆT ĐỔI / ĐẶT LẠI LỊCH (Day 05) -->
+<div class="modal fade" id="modalDoctorApproveProposal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white py-3">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-check2-circle me-2"></i>Chấp Thuận Yêu Cầu Thay Đổi Lịch
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="approveProposalId" value="" />
+                <p class="text-dark mb-3">Bạn có chắc chắn muốn chấp thuận yêu cầu thay đổi lịch hẹn này không?</p>
+                <div class="bg-light p-3 rounded-3 border mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted small">Bệnh nhân:</span>
+                        <span class="fw-bold text-dark" id="approvePatientName">--</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted small">Mã cuộc hẹn:</span>
+                        <span class="fw-bold font-monospace text-primary" id="approveApptCode">--</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted small">Khung giờ mới:</span>
+                        <span class="fw-bold text-success" id="approveProposedStart">--</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted small">Hành động:</span>
+                        <span class="badge bg-primary" id="approveActionType">Cập nhật lịch hẹn</span>
+                    </div>
+                </div>
+                <div id="approveAlertBox" class="alert d-none py-2 px-3 small rounded-3 mb-0"></div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" id="btnConfirmApprove" class="btn btn-success fw-bold px-4" onclick="confirmApproveProposal()">
+                    <span id="btnConfirmApproveText"><i class="bi bi-check-lg me-1"></i>Xác Nhận Phê Duyệt</span>
+                    <span id="btnConfirmApproveSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: BÁC SĨ TỪ CHỐI ĐỔI / ĐẶT LẠI LỊCH (Day 05) -->
+<div class="modal fade" id="modalDoctorRejectProposal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white py-3">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-x-circle me-2"></i>Từ Chối Yêu Cầu Thay Đổi Lịch
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="rejectProposalId" value="" />
+                <div class="bg-light p-3 rounded-3 border mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted small">Bệnh nhân:</span>
+                        <span class="fw-bold text-dark" id="rejectPatientName">--</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted small">Mã cuộc hẹn:</span>
+                        <span class="fw-bold font-monospace text-primary" id="rejectApptCode">--</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold text-dark">
+                        <i class="bi bi-chat-dots me-1 text-danger"></i>Lý do từ chối: <span class="text-danger">*</span>
+                    </label>
+                    <textarea id="rejectReasonInput" class="form-control" rows="3" required
+                              placeholder="Ví dụ: Bác sĩ bận hội chẩn ca đột xuất, đề nghị bệnh nhân chọn ngày khác hoặc liên hệ hotline..."></textarea>
+                    <div class="form-text small text-muted">Lý do từ chối sẽ được gửi thông báo trực tiếp đến bệnh nhân.</div>
+                </div>
+                <div id="rejectAlertBox" class="alert d-none py-2 px-3 small rounded-3 mb-0"></div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" id="btnConfirmReject" class="btn btn-danger fw-bold px-4" onclick="confirmRejectProposal()">
+                    <span id="btnConfirmRejectText"><i class="bi bi-x-lg me-1"></i>Xác Nhận Từ Chối</span>
+                    <span id="btnConfirmRejectSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
+        let approveModalInstance = null;
+        let rejectModalInstance = null;
+
         document.addEventListener('DOMContentLoaded', function () {
             var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
             popoverTriggerList.map(function (popoverTriggerEl) {
                 return new bootstrap.Popover(popoverTriggerEl);
+            });
+
+            const approveEl = document.getElementById('modalDoctorApproveProposal');
+            if (approveEl) approveModalInstance = new bootstrap.Modal(approveEl);
+
+            const rejectEl = document.getElementById('modalDoctorRejectProposal');
+            if (rejectEl) rejectModalInstance = new bootstrap.Modal(rejectEl);
+
+            document.addEventListener('click', function(e) {
+                const approveBtn = e.target.closest('.btn-open-approve-proposal');
+                if (approveBtn) {
+                    openApproveModalFromBtn(approveBtn);
+                    return;
+                }
+                const rejectBtn = e.target.closest('.btn-open-reject-proposal');
+                if (rejectBtn) {
+                    openRejectModalFromBtn(rejectBtn);
+                    return;
+                }
             });
 
             @if (Model.SelectedSessionId.HasValue)
@@ -341,5 +563,161 @@
                 </text>
             }
         });
+
+        function openApproveModalFromBtn(btn) {
+            openApproveModal(
+                btn.dataset.proposalId,
+                btn.dataset.patientName,
+                btn.dataset.apptCode,
+                btn.dataset.proposedStart,
+                btn.dataset.isRebook === 'true'
+            );
+        }
+
+        function openRejectModalFromBtn(btn) {
+            openRejectModal(
+                btn.dataset.proposalId,
+                btn.dataset.patientName,
+                btn.dataset.apptCode
+            );
+        }
+
+        function openApproveModal(proposalId, patientName, apptCode, proposedStart, isRebook) {
+            document.getElementById('approveProposalId').value = proposalId;
+            document.getElementById('approvePatientName').textContent = patientName || 'Bệnh nhân';
+            document.getElementById('approveApptCode').textContent = apptCode || '--';
+            document.getElementById('approveProposedStart').textContent = proposedStart || '--';
+            document.getElementById('approveActionType').textContent = isRebook ? 'Tạo lịch hẹn mới (Đặt lại)' : 'Dời thời gian lịch hẹn';
+            document.getElementById('approveActionType').className = isRebook ? 'badge bg-warning text-dark' : 'badge bg-info text-dark';
+            document.getElementById('approveAlertBox').className = 'alert d-none';
+
+            if (!approveModalInstance) {
+                approveModalInstance = new bootstrap.Modal(document.getElementById('modalDoctorApproveProposal'));
+            }
+            approveModalInstance.show();
+        }
+
+        function openRejectModal(proposalId, patientName, apptCode) {
+            document.getElementById('rejectProposalId').value = proposalId;
+            document.getElementById('rejectPatientName').textContent = patientName || 'Bệnh nhân';
+            document.getElementById('rejectApptCode').textContent = apptCode || '--';
+            document.getElementById('rejectReasonInput').value = '';
+            document.getElementById('rejectAlertBox').className = 'alert d-none';
+
+            if (!rejectModalInstance) {
+                rejectModalInstance = new bootstrap.Modal(document.getElementById('modalDoctorRejectProposal'));
+            }
+            rejectModalInstance.show();
+        }
+
+        async function confirmApproveProposal() {
+            const proposalId = parseInt(document.getElementById('approveProposalId').value);
+            const alertBox = document.getElementById('approveAlertBox');
+            const submitBtn = document.getElementById('btnConfirmApprove');
+            const btnText = document.getElementById('btnConfirmApproveText');
+            const btnSpinner = document.getElementById('btnConfirmApproveSpinner');
+
+            submitBtn.disabled = true;
+            btnText.classList.add('d-none');
+            btnSpinner.classList.remove('d-none');
+            alertBox.className = 'alert d-none';
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+            try {
+                const res = await fetch('/Dentist/Referrals/ResolveProposal', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token || ''
+                    },
+                    body: JSON.stringify({
+                        proposalId: proposalId,
+                        isApproved: true
+                    })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    alertBox.className = 'alert alert-success py-2 px-3 small rounded-3 mb-0';
+                    alertBox.textContent = data.message || 'Đã chấp thuận đề xuất thành công! Đang tải lại...';
+                    setTimeout(() => {
+                        window.location.href = '/Dentist/Referrals?tab=proposals';
+                    }, 1200);
+                } else {
+                    alertBox.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-0';
+                    alertBox.textContent = data.message || 'Không thể phê duyệt yêu cầu.';
+                    submitBtn.disabled = false;
+                    btnText.classList.remove('d-none');
+                    btnSpinner.classList.add('d-none');
+                }
+            } catch (err) {
+                console.error(err);
+                alertBox.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-0';
+                alertBox.textContent = 'Lỗi kết nối máy chủ.';
+                submitBtn.disabled = false;
+                btnText.classList.remove('d-none');
+                btnSpinner.classList.add('d-none');
+            }
+        }
+
+        async function confirmRejectProposal() {
+            const proposalId = parseInt(document.getElementById('rejectProposalId').value);
+            const reason = document.getElementById('rejectReasonInput').value.trim();
+            const alertBox = document.getElementById('rejectAlertBox');
+            const submitBtn = document.getElementById('btnConfirmReject');
+            const btnText = document.getElementById('btnConfirmRejectText');
+            const btnSpinner = document.getElementById('btnConfirmRejectSpinner');
+
+            if (!reason) {
+                alertBox.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-0';
+                alertBox.textContent = 'Vui lòng nhập lý do từ chối yêu cầu.';
+                return;
+            }
+
+            submitBtn.disabled = true;
+            btnText.classList.add('d-none');
+            btnSpinner.classList.remove('d-none');
+            alertBox.className = 'alert d-none';
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+            try {
+                const res = await fetch('/Dentist/Referrals/ResolveProposal', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token || ''
+                    },
+                    body: JSON.stringify({
+                        proposalId: proposalId,
+                        isApproved: false,
+                        rejectionReason: reason
+                    })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    alertBox.className = 'alert alert-success py-2 px-3 small rounded-3 mb-0';
+                    alertBox.textContent = data.message || 'Đã từ chối đề xuất thành công! Đang tải lại...';
+                    setTimeout(() => {
+                        window.location.href = '/Dentist/Referrals?tab=proposals';
+                    }, 1200);
+                } else {
+                    alertBox.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-0';
+                    alertBox.textContent = data.message || 'Không thể từ chối yêu cầu.';
+                    submitBtn.disabled = false;
+                    btnText.classList.remove('d-none');
+                    btnSpinner.classList.add('d-none');
+                }
+            } catch (err) {
+                console.error(err);
+                alertBox.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-0';
+                alertBox.textContent = 'Lỗi kết nối máy chủ.';
+                submitBtn.disabled = false;
+                btnText.classList.remove('d-none');
+                btnSpinner.classList.add('d-none');
+            }
+        }
     </script>
 }

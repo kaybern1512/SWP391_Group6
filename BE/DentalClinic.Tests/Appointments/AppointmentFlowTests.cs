@@ -246,6 +246,45 @@ public class AppointmentFlowTests
             Status = "Active"
         };
         db.DentalChairs.AddRange(chair1, chair2);
+
+        // Seed work schedules for Dentists 401 and 402 covering -10 to +60 days
+        long schedId = 1;
+        var baseDate = DateOnly.FromDateTime(DateTime.Today);
+        for (int i = -10; i <= 60; i++)
+        {
+            var d = baseDate.AddDays(i);
+            db.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistScheduleId = schedId++,
+                DentistUserId = 401,
+                DepartmentId = 1,
+                WorkDate = d,
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59, 59),
+                Status = "Scheduled"
+            });
+            db.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistScheduleId = schedId++,
+                DentistUserId = 402,
+                DepartmentId = 1,
+                WorkDate = d,
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59, 59),
+                Status = "Scheduled"
+            });
+            db.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistScheduleId = schedId++,
+                DentistUserId = 403,
+                DepartmentId = 2,
+                WorkDate = d,
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59, 59),
+                Status = "Scheduled"
+            });
+        }
+
         await db.SaveChangesAsync();
     }
     [Fact]
@@ -1700,5 +1739,271 @@ public class AppointmentFlowTests
             .Where(h => h.AppointmentId == appt.AppointmentId || h.Appointment.AppointmentCode == newAppt.AppointmentCode)
             .ToListAsync();
         Assert.True(histories.Count >= 2);
+    }
+
+    [Fact]
+    public async Task Test_PatientReschedule_WhenNotificationFailsAfterCommit_ReturnsSuccessAndPersistsData()
+    {
+        using var db = CreateDbContext(nameof(Test_PatientReschedule_WhenNotificationFailsAfterCommit_ReturnsSuccessAndPersistsData));
+        await SeedBasicDataAsync(db);
+
+        var mockNotif = new Mock<INotificationService>();
+        mockNotif
+            .Setup(n => n.CreateNotificationAsync(
+                It.IsAny<long>(),
+                It.IsAny<long?>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("External push notification delivery failed"));
+
+        var service = new AppointmentService(db, mockNotif.Object, _mockLogger.Object);
+
+        var oldSlot = DateTime.Today.AddDays(2).AddHours(9);
+        var appt = new Appointment
+        {
+            AppointmentCode = "APP-ORIG-NOTIF-FAIL",
+            PatientUserId = 101,
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = oldSlot,
+            ScheduledEnd = oldSlot.AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Khám răng",
+            BookingSource = "Patient",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var newSlot = DateTime.Today.AddDays(5).AddHours(10);
+        var result = await service.PatientRescheduleAsync(appt.AppointmentId, 101, new PatientRescheduleRequest
+        {
+            NewScheduledStart = newSlot,
+            Reason = "Đổi lịch khi notification service lỗi"
+        });
+
+        // 1. Must return success indicating the primary database transaction succeeded
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, result.Data.Status);
+
+        // 2. Database state must be committed properly
+        var oldDb = await db.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(AppointmentStatus.Cancelled, oldDb!.Status);
+        Assert.Contains(result.Data.AppointmentCode, oldDb.CancellationReason);
+
+        var newDb = await db.Appointments.FindAsync(result.Data.AppointmentId);
+        Assert.NotNull(newDb);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, newDb.Status);
+    }
+
+    [Fact]
+    public async Task Test_StaffCancel_WhenNotificationFailsAfterCommit_ReturnsSuccessAndPersistsData()
+    {
+        using var db = CreateDbContext(nameof(Test_StaffCancel_WhenNotificationFailsAfterCommit_ReturnsSuccessAndPersistsData));
+        await SeedBasicDataAsync(db);
+
+        var mockNotif = new Mock<INotificationService>();
+        mockNotif
+            .Setup(n => n.CreateNotificationAsync(
+                It.IsAny<long>(),
+                It.IsAny<long?>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Firebase FCM network timeout"));
+
+        var service = new AppointmentService(db, mockNotif.Object, _mockLogger.Object);
+
+        var slot = DateTime.Today.AddDays(2).AddHours(14);
+        var appt = new Appointment
+        {
+            AppointmentCode = "APP-STAFF-NOTIF-FAIL",
+            PatientUserId = 101,
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = slot,
+            ScheduledEnd = slot.AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Khám răng định kỳ",
+            BookingSource = "Patient",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+
+        var prop = new AppointmentChangeProposal
+        {
+            AppointmentId = appt.AppointmentId,
+            ProposedByUserId = 101,
+            ProposedDepartmentId = 1,
+            ProposedDentistUserId = 401,
+            ProposedStart = slot.AddDays(1),
+            ProposedEnd = slot.AddDays(1).AddMinutes(30),
+            Reason = "Đổi lịch sang mai",
+            Status = ProposalStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.AppointmentChangeProposals.Add(prop);
+        await db.SaveChangesAsync();
+
+        var result = await service.StaffCancelAppointmentAsync(appt.AppointmentId, 201, "Lễ tân hỗ trợ hủy lịch");
+
+        // 1. Must succeed without throwing or failing main operation
+        Assert.True(result.Success);
+
+        // 2. Database state must be cancelled and proposals expired
+        var apptDb = await db.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(AppointmentStatus.Cancelled, apptDb!.Status);
+        Assert.Contains("[Lễ tân hủy]", apptDb.CancellationReason);
+
+        var propDb = await db.AppointmentChangeProposals.FindAsync(prop.ProposalId);
+        Assert.Equal(ProposalStatus.Expired, propDb!.Status);
+    }
+
+    [Fact]
+    public async Task Test_PatientReschedule_WhenValidationFailsPreCommit_DoesNotCorruptDatabase()
+    {
+        using var db = CreateDbContext(nameof(Test_PatientReschedule_WhenValidationFailsPreCommit_DoesNotCorruptDatabase));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        var slot = DateTime.Today.AddDays(2).AddHours(9);
+        var appt = new Appointment
+        {
+            AppointmentCode = "APP-PRE-FAIL",
+            PatientUserId = 101,
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            AssignedDentistUserId = 401,
+            ScheduledStart = slot,
+            ScheduledEnd = slot.AddMinutes(30),
+            Status = AppointmentStatus.Completed, // Terminal status -> Cannot reschedule!
+            ReasonForVisit = "Đã khám xong",
+            BookingSource = "Patient",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var result = await service.PatientRescheduleAsync(appt.AppointmentId, 101, new PatientRescheduleRequest
+        {
+            NewScheduledStart = DateTime.Today.AddDays(3).AddHours(10),
+            Reason = "Dời ca đã hoàn thành"
+        });
+
+        // Must reject cleanly pre-commit without changing state or creating orphan appointments
+        Assert.False(result.Success);
+        Assert.Contains("hoàn thành", result.Message);
+
+        var apptDb = await db.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(AppointmentStatus.Completed, apptDb!.Status);
+
+        var allAppts = await db.Appointments.Where(a => a.PatientUserId == 101).ToListAsync();
+        Assert.Single(allAppts);
+    }
+
+    [Fact]
+    public async Task Test_ManagerConfirm_WhenNotificationFailsAfterCommit_ReturnsSuccessAndPersistsData()
+    {
+        using var db = CreateDbContext(nameof(Test_ManagerConfirm_WhenNotificationFailsAfterCommit_ReturnsSuccessAndPersistsData));
+        await SeedBasicDataAsync(db);
+
+        var mockNotif = new Mock<INotificationService>();
+        mockNotif
+            .Setup(n => n.CreateNotificationAsync(
+                It.IsAny<long>(),
+                It.IsAny<long?>(),
+                It.Is<string>(t => t == "AppointmentConfirmed"),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("FCM push delivery timeout"));
+
+        var service = new AppointmentService(db, mockNotif.Object, _mockLogger.Object);
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ReasonForVisit = "Khám răng tổng quát"
+        });
+        var apptId = bookResult.Data!.AppointmentId;
+        await service.ReceptionistForwardAsync(apptId, 201, "Tiếp nhận");
+
+        var confirmRequest = new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(2).AddHours(9).AddMinutes(30)
+        };
+
+        var confirmResult = await service.ManagerConfirmAsync(apptId, 301, confirmRequest);
+
+        // 1. Must return success indicating the primary database transaction succeeded
+        Assert.True(confirmResult.Success);
+        Assert.NotNull(confirmResult.Data);
+        Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data.Status);
+
+        // 2. Database state must be confirmed properly with queue number
+        var apptDb = await db.Appointments.FindAsync(apptId);
+        Assert.Equal(AppointmentStatus.Confirmed, apptDb!.Status);
+        Assert.NotNull(apptDb.QueueNumber);
+    }
+
+    [Fact]
+    public async Task GetReceptionistRequestsAsync_OrdersDescendingByCreatedAt_LatestRequestFirst()
+    {
+        var db = CreateDbContext(nameof(GetReceptionistRequestsAsync_OrdersDescendingByCreatedAt_LatestRequestFirst));
+        await SeedBasicDataAsync(db);
+
+        var olderAppt = new Appointment
+        {
+            AppointmentCode = "APP-OLD-01",
+            PatientUserId = 101,
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            BookingSource = "Patient",
+            ReasonForVisit = "Khám răng tổng quát",
+            Status = AppointmentStatus.PendingReceptionReview,
+            CreatedAt = DateTime.UtcNow.AddHours(-5),
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(2).AddHours(9).AddMinutes(30)
+        };
+        var newerAppt = new Appointment
+        {
+            AppointmentCode = "APP-NEW-02",
+            PatientUserId = 102,
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            BookingSource = "Patient",
+            ReasonForVisit = "Đau răng hàm",
+            Status = AppointmentStatus.PendingReceptionReview,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+            ScheduledStart = DateTime.Today.AddDays(3).AddHours(10),
+            ScheduledEnd = DateTime.Today.AddDays(3).AddHours(10).AddMinutes(30)
+        };
+        db.Appointments.AddRange(olderAppt, newerAppt);
+        await db.SaveChangesAsync();
+
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var result = await service.GetReceptionistRequestsAsync();
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.Equal(2, result.Data.Count);
+        // Latest created appointment must be first
+        Assert.Equal("APP-NEW-02", result.Data[0].AppointmentCode);
+        Assert.Equal("APP-OLD-01", result.Data[1].AppointmentCode);
     }
 }

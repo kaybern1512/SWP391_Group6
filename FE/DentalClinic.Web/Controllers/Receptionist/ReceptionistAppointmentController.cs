@@ -17,30 +17,61 @@ public class ReceptionistAppointmentController : Controller
 {
     private readonly IAppointmentApiService _appointmentApiService;
     private readonly IAdminApiService? _adminApiService;
+    private readonly ILogger<ReceptionistAppointmentController>? _logger;
 
     public ReceptionistAppointmentController(IAppointmentApiService appointmentApiService)
-        : this(appointmentApiService, null)
+        : this(appointmentApiService, null, null)
     {
     }
 
     [ActivatorUtilitiesConstructor]
     public ReceptionistAppointmentController(
         IAppointmentApiService appointmentApiService,
-        IAdminApiService? adminApiService)
+        IAdminApiService? adminApiService,
+        ILogger<ReceptionistAppointmentController>? logger = null)
     {
         _appointmentApiService = appointmentApiService;
         _adminApiService = adminApiService;
+        _logger = logger;
     }
 
     [HttpGet("")]
     [HttpGet("Requests")]
-    public async Task<IActionResult> Requests()
+    public async Task<IActionResult> Requests([FromQuery] string? search = null)
     {
         var result = await _appointmentApiService.GetReceptionistRequestsAsync();
         var vm = new ReceptionistRequestsViewModel
         {
-            Requests = result.Data ?? new()
+            SearchQuery = search
         };
+
+        if (!result.IsSuccess)
+        {
+            var errMsg = result.Message ?? "Không thể tải danh sách yêu cầu đặt lịch từ máy chủ API. Vui lòng thử lại sau.";
+            _logger?.LogWarning("Failed to retrieve receptionist appointment requests: {Message} (Status {StatusCode})", errMsg, result.StatusCode);
+            vm.ErrorMessage = errMsg;
+            if (TempData != null)
+            {
+                TempData["ErrorMessage"] = errMsg;
+            }
+            return View("~/Views/Receptionist/Appointments/Requests.cshtml", vm);
+        }
+
+        var requests = result.Data ?? new();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.Trim();
+            requests = requests.Where(r =>
+                (!string.IsNullOrEmpty(r.AppointmentCode) && r.AppointmentCode.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(r.PatientName) && r.PatientName.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(r.PatientCode) && r.PatientCode.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(r.PatientPhone) && r.PatientPhone.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(r.ServiceName) && r.ServiceName.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(r.DepartmentName) && r.DepartmentName.Contains(q, StringComparison.OrdinalIgnoreCase))
+            ).ToList();
+        }
+
+        vm.Requests = requests;
         return View("~/Views/Receptionist/Appointments/Requests.cshtml", vm);
     }
 

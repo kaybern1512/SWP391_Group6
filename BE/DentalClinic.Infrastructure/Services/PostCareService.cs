@@ -7,6 +7,7 @@ using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.PostCare.DTOs;
 using DentalClinic.Infrastructure.Persistence;
+using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -67,7 +68,7 @@ public class PostCareService : IPostCareService
             return ApiResponse<DepartmentReferralDto>.Fail("Không tìm thấy buổi điều trị chỉ định.");
 
         if (session.DentistUserId != requestingDentistUserId)
-            return ApiResponse<DepartmentReferralDto>.Fail("Bạn chỉ có thể chuyển khoa từ buổi điều trị do mình phụ trách.");
+            return ApiResponse<DepartmentReferralDto>.Forbidden("Bạn không có quyền chuyển khoa từ buổi điều trị không do mình phụ trách.");
 
         var fromDeptId = session.Appointment.DepartmentId ?? session.TreatmentPlanItem.TreatmentPlan.DepartmentId;
         if (fromDeptId <= 0)
@@ -219,7 +220,7 @@ public class PostCareService : IPostCareService
             return ApiResponse<DepartmentReferralDto>.Fail("Không tìm thấy yêu cầu chuyển khoa.");
 
         if (referral.ToDepartment.ManagerUserId != managerUserId)
-            return ApiResponse<DepartmentReferralDto>.Fail("Bạn không có quyền duyệt ca chuyển khoa đến chuyên khoa này.");
+            return ApiResponse<DepartmentReferralDto>.Forbidden("Bạn không có quyền duyệt ca chuyển khoa đến chuyên khoa này.");
 
         if (referral.Status != "Pending")
             return ApiResponse<DepartmentReferralDto>.Fail($"Ca chuyển khoa này đã được xử lý trước đó (Trạng thái: {referral.Status}).");
@@ -315,7 +316,7 @@ public class PostCareService : IPostCareService
             return ApiResponse<FollowUpScheduleDto>.Fail("Không tìm thấy buổi điều trị chỉ định.");
 
         if (session.DentistUserId != dentistUserId)
-            return ApiResponse<FollowUpScheduleDto>.Fail("Bạn chỉ có thể hẹn tái khám từ buổi điều trị do mình phụ trách.");
+            return ApiResponse<FollowUpScheduleDto>.Forbidden("Bạn không có quyền hẹn tái khám từ buổi điều trị không do mình phụ trách.");
 
         var followUp = new FollowUpSchedule
         {
@@ -332,10 +333,10 @@ public class PostCareService : IPostCareService
         // Notify patient
         try
         {
-            var patientUserId = session.TreatmentPlanItem.TreatmentPlan.PatientUserId;
+            var patientUserId = session.TreatmentPlanItem.TreatmentPlan.PatientUser.FullName;
             var deptName = session.Appointment.Department?.Name ?? "Nha khoa tổng quát";
             await _notificationService.CreateNotificationAsync(
-                patientUserId,
+                session.TreatmentPlanItem.TreatmentPlan.PatientUserId,
                 session.AppointmentId,
                 "FollowUpScheduled",
                 "Lịch hẹn tái khám mới",
@@ -473,7 +474,7 @@ public class PostCareService : IPostCareService
         {
             FollowUpId = f.FollowUpId,
             TreatmentSessionId = f.TreatmentSessionId,
-            PatientUserId = f.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUserId,
+            PatientUserId = f.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.FullName != null ? f.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUserId : 0,
             PatientName = f.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.FullName,
             PatientCode = f.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.PatientCode,
             PatientPhoneNumber = f.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.EmergencyContact,
@@ -500,6 +501,13 @@ public class PostCareService : IPostCareService
         if (request == null)
             return ApiResponse<FollowUpScheduleDto>.Fail("Dữ liệu cập nhật không hợp lệ.");
 
+        var caller = await _dbContext.UserAccounts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.UserId == staffOrPatientUserId, ct);
+
+        if (caller == null)
+            return ApiResponse<FollowUpScheduleDto>.Forbidden("Người dùng không tồn tại hoặc không có quyền truy cập.");
+
         var followUp = await _dbContext.FollowUpSchedules
             .Include(f => f.Appointment)
                 .ThenInclude(a => a!.Department)
@@ -515,26 +523,205 @@ public class PostCareService : IPostCareService
         if (followUp == null)
             return ApiResponse<FollowUpScheduleDto>.Fail("Không tìm thấy lịch hẹn tái khám.");
 
+        var patientUserId = followUp.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.PatientUserId;
+        var dentistUserId = followUp.TreatmentSession?.DentistUserId;
+        var deptId = followUp.Appointment?.DepartmentId ?? followUp.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.DepartmentId;
+
+        // Phân quyền chi tiết trên từng đối tượng (Object-Level Authorization / BOLA Prevention)
+        if (caller.Role == UserRole.Patient)
+        {
+            if (!patientUserId.HasValue || caller.UserId != patientUserId.Value)
+            {
+                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bạn không có quyền thao tác trên lịch tái khám của bệnh nhân khác.");
+            }
+
+            // Bệnh nhân tuyệt đối không được tự ý sửa đổi ghi chú hoặc chỉ định tái khám y khoa qua endpoint này
+            if (!string.IsNullOrWhiteSpace(request.Note))
+            {
+                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bệnh nhân không có quyền chỉnh sửa ghi chú hoặc chỉ định tái khám.");
+            }
+
+            if (request.NewRecommendedDate.HasValue)
+            {
+                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bệnh nhân không có quyền trực tiếp đổi ngày tái khám. Vui lòng gửi đề xuất đổi lịch qua chức năng Đề xuất đổi lịch.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Status))
+            {
+                return ApiResponse<FollowUpScheduleDto>.Fail("Yêu cầu không hợp lệ. Vui lòng chỉ định trạng thái cần cập nhật.");
+            }
+
+            var targetStatus = request.Status.Trim();
+            if (string.Equals(targetStatus, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(targetStatus, "Confirmed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(targetStatus, "Scheduled", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bệnh nhân không có quyền xác nhận hoặc hoàn tất lịch tái khám.");
+            }
+            if (!string.Equals(targetStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bệnh nhân chỉ có thể yêu cầu hủy hoặc gửi đề xuất đổi lịch tái khám.");
+            }
+        }
+        else if (caller.Role == UserRole.Dentist)
+        {
+            bool isTreatingDentist = dentistUserId.HasValue && caller.UserId == dentistUserId.Value;
+            bool isDeptManager = deptId.HasValue && await _dbContext.Departments.AnyAsync(d => d.DepartmentId == deptId.Value && d.ManagerUserId == caller.UserId, ct);
+
+            if (!isTreatingDentist && !isDeptManager)
+            {
+                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bác sĩ không có quyền cập nhật lịch tái khám không do mình điều trị hoặc không thuộc chuyên khoa quản lý.");
+            }
+        }
+        else if (caller.Role == UserRole.DepartmentManager)
+        {
+            bool isDeptManager = deptId.HasValue && await _dbContext.Departments.AnyAsync(d => d.DepartmentId == deptId.Value && d.ManagerUserId == caller.UserId, ct);
+
+            if (!isDeptManager)
+            {
+                return ApiResponse<FollowUpScheduleDto>.Forbidden("Trưởng khoa không có quyền cập nhật lịch tái khám không thuộc chuyên khoa quản lý.");
+            }
+        }
+        else if (caller.Role == UserRole.Receptionist || caller.Role == UserRole.SystemAdministrator)
+        {
+            // Receptionist & Admin có phạm vi quản trị vận hành toàn phòng khám
+        }
+        else
+        {
+            return ApiResponse<FollowUpScheduleDto>.Forbidden("Vai trò của bạn không có quyền cập nhật lịch tái khám.");
+        }
+
+        // Yêu cầu phải chứa ít nhất một thông tin cần cập nhật
+        if (string.IsNullOrWhiteSpace(request.Status) && !request.NewRecommendedDate.HasValue && string.IsNullOrWhiteSpace(request.Note))
+        {
+            return ApiResponse<FollowUpScheduleDto>.Fail("Yêu cầu không có thông tin thay đổi hợp lệ.");
+        }
+
+        // Kiểm soát chuyển đổi trạng thái hợp lệ (State Transition Consistency)
+        if (string.Equals(followUp.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+        {
+            var apptInfo = followUp.Appointment != null ? $" liên kết với cuộc hẹn [{followUp.Appointment.AppointmentCode}]" : "";
+            if (!string.IsNullOrWhiteSpace(request.Status) && !string.Equals(request.Status.Trim(), "Completed", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiResponse<FollowUpScheduleDto>.Fail($"Không thể thay đổi trạng thái của lịch tái khám{apptInfo} đã hoàn tất.");
+            }
+            if (request.NewRecommendedDate.HasValue)
+            {
+                return ApiResponse<FollowUpScheduleDto>.Fail($"Lịch tái khám{apptInfo} đã hoàn tất. Không thể dời lịch tái khám này.");
+            }
+        }
+
+        if (string.Equals(followUp.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(request.Status) && !string.Equals(request.Status.Trim(), "Cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiResponse<FollowUpScheduleDto>.Fail("Không thể thay đổi trạng thái của lịch tái khám đã bị hủy.");
+            }
+            if (request.NewRecommendedDate.HasValue)
+            {
+                return ApiResponse<FollowUpScheduleDto>.Fail("Không thể dời ngày tái khám cho lịch đã bị hủy.");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            var validStatuses = new[] { "Pending", "Confirmed", "Scheduled", "Completed", "Cancelled", "Proposed" };
+            if (!validStatuses.Any(s => string.Equals(s, request.Status.Trim(), StringComparison.OrdinalIgnoreCase)))
+            {
+                return ApiResponse<FollowUpScheduleDto>.Fail($"Trạng thái '{request.Status}' không hợp lệ.");
+            }
+        }
+
+        // Kiểm tra an toàn khi dời ngày (Reschedule)
+        if (request.NewRecommendedDate.HasValue)
+        {
+            if (followUp.AppointmentId.HasValue && followUp.Appointment != null)
+            {
+                if (followUp.Appointment.Status == AppointmentStatus.Completed)
+                {
+                    return ApiResponse<FollowUpScheduleDto>.Fail(
+                        $"Lịch tái khám đã liên kết với cuộc hẹn [{followUp.Appointment.AppointmentCode}] đã hoàn tất. Không thể dời lịch tái khám này.");
+                }
+
+                if (followUp.Appointment.Status != AppointmentStatus.Cancelled &&
+                    followUp.Appointment.Status != AppointmentStatus.Rejected &&
+                    followUp.Appointment.Status != AppointmentStatus.Withdrawn)
+                {
+                    return ApiResponse<FollowUpScheduleDto>.Fail(
+                        $"Lịch tái khám đã được xếp lịch hẹn chính thức [{followUp.Appointment.AppointmentCode}] (Trạng thái: {followUp.Appointment.Status}). " +
+                        "Để tránh xung đột bác sĩ và ghế điều trị, không thể dời ngày mà không chọn khung giờ cụ thể. " +
+                        "Vui lòng dời lịch trên Quản lý Cuộc hẹn hoặc hướng dẫn bệnh nhân gửi yêu cầu đổi lịch qua Cổng bệnh nhân.");
+                }
+            }
+
+            if (request.NewRecommendedDate.Value <= DateTime.UtcNow)
+            {
+                return ApiResponse<FollowUpScheduleDto>.Fail("Ngày dời hẹn tái khám phải là ngày trong tương lai.");
+            }
+        }
+
+        // Kiểm tra an toàn khi hoàn tất (Complete)
+        if (string.Equals(request.Status?.Trim(), "Completed", StringComparison.OrdinalIgnoreCase))
+        {
+            if (followUp.AppointmentId.HasValue && followUp.Appointment != null && followUp.Appointment.Status != AppointmentStatus.Completed)
+            {
+                return ApiResponse<FollowUpScheduleDto>.Fail(
+                    $"Cuộc hẹn liên kết [{followUp.Appointment.AppointmentCode}] đang ở trạng thái [{followUp.Appointment.Status}], chưa hoàn thành điều trị. " +
+                    "Chỉ có thể hoàn tất lịch tái khám khi bác sĩ đã hoàn tất buổi khám/điều trị.");
+            }
+        }
+
+        // Kiểm tra an toàn khi hủy (Cancel) - Task 1 Cancellation Consistency
+        if (string.Equals(request.Status?.Trim(), "Cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            if (followUp.AppointmentId.HasValue && followUp.Appointment != null)
+            {
+                if (followUp.Appointment.Status == AppointmentStatus.Completed)
+                {
+                    return ApiResponse<FollowUpScheduleDto>.Fail(
+                        $"Lịch tái khám đã liên kết với cuộc hẹn [{followUp.Appointment.AppointmentCode}] đã hoàn tất điều trị. Không thể hủy lịch tái khám này.");
+                }
+
+                if (followUp.Appointment.Status != AppointmentStatus.Cancelled &&
+                    followUp.Appointment.Status != AppointmentStatus.Rejected &&
+                    followUp.Appointment.Status != AppointmentStatus.Withdrawn)
+                {
+                    return ApiResponse<FollowUpScheduleDto>.Fail(
+                        $"Lịch tái khám đã được tạo cuộc hẹn chính thức [{followUp.Appointment.AppointmentCode}] (Trạng thái: {followUp.Appointment.Status}). " +
+                        "Để đảm bảo toàn vẹn dữ liệu và giải phóng ghế điều trị, vui lòng thực hiện hủy cuộc hẹn qua quy trình Hủy cuộc hẹn hợp lệ.");
+                }
+            }
+        }
+
+        // Áp dụng các thay đổi an toàn (Không cập nhật một phần nếu validation phía trên vi phạm)
+        if (request.NewRecommendedDate.HasValue)
+        {
+            followUp.RecommendedDate = request.NewRecommendedDate.Value;
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
             followUp.Status = request.Status.Trim();
         }
 
-        if (request.NewRecommendedDate.HasValue && request.NewRecommendedDate.Value > DateTime.UtcNow)
-        {
-            followUp.RecommendedDate = request.NewRecommendedDate.Value;
-        }
-
         if (!string.IsNullOrWhiteSpace(request.Note))
         {
+            var noteTag = caller.Role switch
+            {
+                UserRole.Dentist => "Bác sĩ",
+                UserRole.DepartmentManager => "Trưởng khoa",
+                UserRole.SystemAdministrator => "Quản trị viên",
+                _ => "CSKH"
+            };
+
             followUp.Reason = string.IsNullOrWhiteSpace(followUp.Reason)
-                ? request.Note.Trim()
-                : $"{followUp.Reason} | [CSKH: {request.Note.Trim()}]";
+                ? (caller.Role == UserRole.Dentist ? request.Note.Trim() : $"[{noteTag}: {request.Note.Trim()}]")
+                : $"{followUp.Reason} | [{noteTag}: {request.Note.Trim()}]";
         }
 
         await _dbContext.SaveChangesAsync(ct);
 
-        var deptId = followUp.Appointment?.DepartmentId ?? followUp.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.DepartmentId;
+        var finalDeptId = followUp.Appointment?.DepartmentId ?? followUp.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.DepartmentId;
         var dto = new FollowUpScheduleDto
         {
             FollowUpId = followUp.FollowUpId,
@@ -545,7 +732,7 @@ public class PostCareService : IPostCareService
             PatientPhoneNumber = followUp.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.EmergencyContact,
             DentistUserId = followUp.TreatmentSession.DentistUserId,
             DentistName = followUp.TreatmentSession.DentistUser.User.FullName,
-            DepartmentId = deptId,
+            DepartmentId = finalDeptId,
             DepartmentName = followUp.Appointment?.Department?.Name ?? "Nha khoa tổng quát",
             RecommendedDate = followUp.RecommendedDate,
             Reason = followUp.Reason,
@@ -556,6 +743,7 @@ public class PostCareService : IPostCareService
 
         return ApiResponse<FollowUpScheduleDto>.Ok(dto, "Đã cập nhật trạng thái lịch tái khám thành công.");
     }
+
     private async Task<DepartmentReferralDto?> MapReferralToDtoAsync(long referralId, CancellationToken ct)
     {
         var r = await _dbContext.DepartmentReferrals

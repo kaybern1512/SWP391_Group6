@@ -2160,7 +2160,9 @@ ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [CK_Departme
 GO
 ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [CK_DepartmentReferrals_Urgency]
 GO
-ALTER TABLE [dbo].[FollowUpSchedules]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Completed' OR [Status]='Scheduled' OR [Status]='Pending'))
+ALTER TABLE [dbo].[FollowUpSchedules]  WITH CHECK ADD  CONSTRAINT [CK_FollowUpSchedules_Status] CHECK  (([Status]='Cancelled' OR [Status]='Completed' OR [Status]='Scheduled' OR [Status]='Pending' OR [Status]='Confirmed' OR [Status]='Proposed'))
+GO
+ALTER TABLE [dbo].[FollowUpSchedules] CHECK CONSTRAINT [CK_FollowUpSchedules_Status]
 GO
 ALTER TABLE [dbo].[Invoices]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Paid' OR [Status]='PartiallyPaid' OR [Status]='Unpaid'))
 GO

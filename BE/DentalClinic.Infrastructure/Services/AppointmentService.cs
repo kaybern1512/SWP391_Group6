@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -611,50 +611,87 @@ public class AppointmentService : IAppointmentService
         string? reason,
         CancellationToken ct = default)
     {
-        var appointment = await _dbContext.Appointments
-            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
-
-        if (appointment == null)
+        var isRelational = _dbContext.Database.IsRelational();
+        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? lockScope = null;
+        try
         {
-            return ApiResponse.Fail("Không tìm thấy lịch hẹn.");
+            var lockKeys = new[] { SqlAppLockHelper.ApptKey(appointmentId) };
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
+
+            var appointment = await _dbContext.Appointments
+                .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+
+            if (appointment == null)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse.Fail("Không tìm thấy lịch hẹn.");
+            }
+
+            if (isRelational) await _dbContext.Entry(appointment).ReloadAsync(ct);
+
+            if (appointment.PatientUserId != patientUserId)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse.Fail("Bạn không có quyền rút yêu cầu đặt lịch này.");
+            }
+
+            var withdrawableStatuses = new[]
+            {
+                AppointmentStatus.PendingReceptionReview,
+                AppointmentStatus.PendingDepartmentReview,
+                AppointmentStatus.AwaitingPatientResponse
+            };
+
+            if (!withdrawableStatuses.Contains(appointment.Status))
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse.Fail($"Không thể rút yêu cầu khi lịch hẹn đang ở trạng thái {appointment.Status}.");
+            }
+
+            var oldStatus = appointment.Status;
+            var now = DateTime.UtcNow;
+            appointment.Status = AppointmentStatus.Withdrawn;
+            appointment.CancelledAt = now;
+            appointment.CancellationReason = string.IsNullOrWhiteSpace(reason) ? "Bệnh nhân rút lại yêu cầu đặt lịch." : reason.Trim();
+            appointment.UpdatedAt = now;
+
+            var history = new AppointmentStatusHistory
+            {
+                AppointmentId = appointmentId,
+                OldStatus = oldStatus,
+                NewStatus = AppointmentStatus.Withdrawn,
+                ChangedByUserId = patientUserId,
+                Note = appointment.CancellationReason,
+                ChangedAt = now
+            };
+            _dbContext.AppointmentStatusHistories.Add(history);
+
+            // Expire any pending change proposals
+            var pendingProposals = await _dbContext.AppointmentChangeProposals
+                .Where(p => p.AppointmentId == appointmentId && p.Status == ProposalStatus.Pending)
+                .ToListAsync(ct);
+            foreach (var p in pendingProposals)
+            {
+                p.Status = ProposalStatus.Expired;
+                p.RespondedAt = now;
+                p.Reason += " [Rút lịch hẹn gốc]";
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
+            if (tx != null) await tx.CommitAsync(ct);
+            return ApiResponse.Ok("Đã rút yêu cầu đặt lịch khám thành công.");
         }
-
-        if (appointment.PatientUserId != patientUserId)
+        catch
         {
-            return ApiResponse.Fail("Bạn không có quyền rút yêu cầu đặt lịch này.");
+            if (tx != null) await tx.RollbackAsync(ct);
+            throw;
         }
-
-        var withdrawableStatuses = new[]
+        finally
         {
-            AppointmentStatus.PendingReceptionReview,
-            AppointmentStatus.PendingDepartmentReview,
-            AppointmentStatus.AwaitingPatientResponse
-        };
-
-        if (!withdrawableStatuses.Contains(appointment.Status))
-        {
-            return ApiResponse.Fail($"Không thể rút yêu cầu khi lịch hẹn đang ở trạng thái {appointment.Status}.");
+            lockScope?.Dispose();
+            if (tx != null) await tx.DisposeAsync();
         }
-
-        var oldStatus = appointment.Status;
-        appointment.Status = AppointmentStatus.Withdrawn;
-        appointment.CancelledAt = DateTime.UtcNow;
-        appointment.CancellationReason = string.IsNullOrWhiteSpace(reason) ? "Bệnh nhân rút lại yêu cầu đặt lịch." : reason.Trim();
-        appointment.UpdatedAt = DateTime.UtcNow;
-
-        var history = new AppointmentStatusHistory
-        {
-            AppointmentId = appointmentId,
-            OldStatus = oldStatus,
-            NewStatus = AppointmentStatus.Withdrawn,
-            ChangedByUserId = patientUserId,
-            Note = appointment.CancellationReason,
-            ChangedAt = DateTime.UtcNow
-        };
-        _dbContext.AppointmentStatusHistories.Add(history);
-
-        await _dbContext.SaveChangesAsync(ct);
-        return ApiResponse.Ok("Đã rút yêu cầu đặt lịch khám thành công.");
     }
 
     public async Task<ApiResponse> PatientCancelAsync(
@@ -663,140 +700,205 @@ public class AppointmentService : IAppointmentService
         string reason,
         CancellationToken ct = default)
     {
-        var appointment = await _dbContext.Appointments
-            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
-
-        if (appointment == null)
-        {
-            return ApiResponse.Fail("Không tìm thấy lịch hẹn.");
-        }
-
-        if (appointment.PatientUserId != patientUserId)
-        {
-            return ApiResponse.Fail("Bạn không có quyền hủy lịch hẹn này.");
-        }
-
-        var withdrawableStatuses = new[]
-        {
-            AppointmentStatus.PendingReceptionReview,
-            AppointmentStatus.PendingDepartmentReview,
-            AppointmentStatus.AwaitingPatientResponse
-        };
-
-        if (withdrawableStatuses.Contains(appointment.Status))
-        {
-            return await PatientWithdrawAsync(appointmentId, patientUserId, reason, ct);
-        }
-
-        if (appointment.Status != AppointmentStatus.Confirmed)
-        {
-            if (appointment.Status == AppointmentStatus.Cancelled || appointment.Status == AppointmentStatus.Withdrawn)
-            {
-                return ApiResponse.Fail("Lịch hẹn này đã được hủy trước đó.");
-            }
-            if (appointment.Status == AppointmentStatus.Completed)
-            {
-                return ApiResponse.Fail("Không thể hủy lịch hẹn đã hoàn thành.");
-            }
-            return ApiResponse.Fail($"Chỉ có thể hủy lịch hẹn đang chờ duyệt hoặc đã được xác nhận (Hiện tại: {appointment.Status}).");
-        }
-
         if (string.IsNullOrWhiteSpace(reason))
         {
             return ApiResponse.Fail("Vui lòng cung cấp lý do hủy lịch.");
         }
 
-        var now = DateTime.UtcNow;
-        var localNow = DateTime.Now;
-        bool isLate = false;
-        double hoursNotice = 0;
-        if (appointment.ScheduledStart.HasValue)
+        var isRelational = _dbContext.Database.IsRelational();
+        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? lockScope = null;
+        try
         {
-            hoursNotice = (appointment.ScheduledStart.Value - localNow).TotalHours;
-            isLate = hoursNotice < 12;
-        }
+            var lockKeys = new[] { SqlAppLockHelper.ApptKey(appointmentId) };
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
-        var oldStatus = appointment.Status;
-        appointment.Status = AppointmentStatus.Cancelled;
-        appointment.CancelledAt = now;
-        var reasonPrefix = isLate ? "[Hủy sát giờ <12h] " : "";
-        appointment.CancellationReason = $"{reasonPrefix}{reason.Trim()}";
-        appointment.UpdatedAt = now;
+            var appointment = await _dbContext.Appointments
+                .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
 
-        var historyNote = isLate
-            ? $"Bệnh nhân hủy lịch sát giờ (<12h, báo trước {Math.Max(0, Math.Round(hoursNotice, 1))}h): {reason.Trim()}"
-            : $"Bệnh nhân hủy lịch: {reason.Trim()}";
-
-        var history = new AppointmentStatusHistory
-        {
-            AppointmentId = appointmentId,
-            OldStatus = oldStatus,
-            NewStatus = AppointmentStatus.Cancelled,
-            ChangedByUserId = patientUserId,
-            Note = historyNote,
-            ChangedAt = now
-        };
-        _dbContext.AppointmentStatusHistories.Add(history);
-
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Fetch updated strike eligibility
-        var eligibilityResult = await GetBookingEligibilityAsync(patientUserId, ct);
-        var strikeCount = eligibilityResult.Data?.StrikeCount ?? (isLate ? 1 : 0);
-        var isBlocked = eligibilityResult.Data?.IsEligible == false;
-        var blockedUntil = eligibilityResult.Data?.BlockedUntil;
-
-        if (isLate)
-        {
-            if (isBlocked && blockedUntil.HasValue)
+            if (appointment == null)
             {
-                await _notificationService.CreateNotificationAsync(
-                    patientUserId,
-                    appointmentId,
-                    "AppointmentStrikePolicyBlocked",
-                    "Cảnh báo vi phạm & Tạm khóa đặt lịch online",
-                    $"Bạn vừa hủy lịch hẹn {appointment.AppointmentCode} sát giờ (<12h). Tài khoản đã tích lũy {strikeCount} lần vi phạm trong 30 ngày qua. Quyền tự đặt lịch trực tuyến tạm khóa đến {blockedUntil.Value:dd/MM/yyyy HH:mm}. Vui lòng liên hệ hotline 1900 1234 nếu cần hỗ trợ.",
-                    ct);
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse.Fail("Không tìm thấy lịch hẹn.");
             }
-            else
-            {
-                await _notificationService.CreateNotificationAsync(
-                    patientUserId,
-                    appointmentId,
-                    "AppointmentStrikeWarning",
-                    "Cảnh báo hủy lịch hẹn sát giờ (<12h)",
-                    $"Bạn vừa hủy lịch hẹn {appointment.AppointmentCode} sát giờ (<12h) và bị tính 1 gậy vi phạm. Hiện tại bạn có {strikeCount}/3 lần vi phạm trong 30 ngày qua. Nếu đạt 3 lần, quyền tự đặt lịch trực tuyến sẽ bị tạm khóa 30 ngày.",
-                    ct);
-            }
-        }
-        else
-        {
-            await _notificationService.CreateNotificationAsync(
-                patientUserId,
-                appointmentId,
-                "AppointmentCancelled",
-                "Lịch hẹn đã bị hủy",
-                $"Lịch hẹn {appointment.AppointmentCode} đã được hủy thành công theo yêu cầu của bạn.",
-                ct);
-        }
 
-        if (_reminderService != null)
-        {
+            if (isRelational) await _dbContext.Entry(appointment).ReloadAsync(ct);
+
+            if (appointment.PatientUserId != patientUserId)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse.Fail("Bạn không có quyền hủy lịch hẹn này.");
+            }
+
+            var withdrawableStatuses = new[]
+            {
+                AppointmentStatus.PendingReceptionReview,
+                AppointmentStatus.PendingDepartmentReview,
+                AppointmentStatus.AwaitingPatientResponse
+            };
+
+            var now = DateTime.UtcNow;
+            if (withdrawableStatuses.Contains(appointment.Status))
+            {
+                var oldStatusW = appointment.Status;
+                appointment.Status = AppointmentStatus.Withdrawn;
+                appointment.CancelledAt = now;
+                appointment.CancellationReason = reason.Trim();
+                appointment.UpdatedAt = now;
+
+                var historyW = new AppointmentStatusHistory
+                {
+                    AppointmentId = appointmentId,
+                    OldStatus = oldStatusW,
+                    NewStatus = AppointmentStatus.Withdrawn,
+                    ChangedByUserId = patientUserId,
+                    Note = appointment.CancellationReason,
+                    ChangedAt = now
+                };
+                _dbContext.AppointmentStatusHistories.Add(historyW);
+
+                var pendingProposalsW = await _dbContext.AppointmentChangeProposals
+                    .Where(p => p.AppointmentId == appointmentId && p.Status == ProposalStatus.Pending)
+                    .ToListAsync(ct);
+                foreach (var p in pendingProposalsW)
+                {
+                    p.Status = ProposalStatus.Expired;
+                    p.RespondedAt = now;
+                    p.Reason += " [Rút lịch hẹn gốc]";
+                }
+
+                await _dbContext.SaveChangesAsync(ct);
+                if (tx != null) await tx.CommitAsync(ct);
+                return ApiResponse.Ok("Đã rút yêu cầu đặt lịch khám thành công.");
+            }
+
+            if (appointment.Status != AppointmentStatus.Confirmed)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                if (appointment.Status == AppointmentStatus.Cancelled || appointment.Status == AppointmentStatus.Withdrawn)
+                {
+                    return ApiResponse.Fail("Lịch hẹn này đã được hủy trước đó.");
+                }
+                if (appointment.Status == AppointmentStatus.Completed)
+                {
+                    return ApiResponse.Fail("Không thể hủy lịch hẹn đã hoàn thành.");
+                }
+                return ApiResponse.Fail($"Chỉ có thể hủy lịch hẹn đang chờ duyệt hoặc đã được xác nhận (Hiện tại: {appointment.Status}).");
+            }
+
+            var localNow = DateTime.Now;
+            bool isLate = false;
+            double hoursNotice = 0;
+            if (appointment.ScheduledStart.HasValue)
+            {
+                hoursNotice = (appointment.ScheduledStart.Value - localNow).TotalHours;
+                isLate = hoursNotice < 12;
+            }
+
+            var oldStatus = appointment.Status;
+            appointment.Status = AppointmentStatus.Cancelled;
+            appointment.CancelledAt = now;
+            var reasonPrefix = isLate ? "[Hủy sát giờ <12h] " : "";
+            appointment.CancellationReason = $"{reasonPrefix}{reason.Trim()}";
+            appointment.UpdatedAt = now;
+
+            var historyNote = isLate
+                ? $"Bệnh nhân hủy lịch sát giờ (<12h, báo trước {Math.Max(0, Math.Round(hoursNotice, 1))}h): {reason.Trim()}"
+                : $"Bệnh nhân hủy lịch: {reason.Trim()}";
+
+            var history = new AppointmentStatusHistory
+            {
+                AppointmentId = appointmentId,
+                OldStatus = oldStatus,
+                NewStatus = AppointmentStatus.Cancelled,
+                ChangedByUserId = patientUserId,
+                Note = historyNote,
+                ChangedAt = now
+            };
+            _dbContext.AppointmentStatusHistories.Add(history);
+
+            // Also expire any pending proposals on this appointment so they cannot be approved later
+            var pendingProposals = await _dbContext.AppointmentChangeProposals
+                .Where(p => p.AppointmentId == appointmentId && p.Status == ProposalStatus.Pending)
+                .ToListAsync(ct);
+            foreach (var p in pendingProposals)
+            {
+                p.Status = ProposalStatus.Expired;
+                p.RespondedAt = now;
+                p.Reason += " [Hủy tự động do cuộc hẹn gốc đã bị hủy]";
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
+            if (tx != null) await tx.CommitAsync(ct);
+
+            // Fetch updated strike eligibility & send notification outside transaction
             try
             {
-                await _reminderService.CancelRemindersForAppointmentAsync(appointmentId, ct);
+                var eligibilityResult = await GetBookingEligibilityAsync(patientUserId, ct);
+                var strikeCount = eligibilityResult.Data?.StrikeCount ?? (isLate ? 1 : 0);
+                var isBlocked = eligibilityResult.Data?.IsEligible == false;
+                var blockedUntil = eligibilityResult.Data?.BlockedUntil;
+
+                if (isLate)
+                {
+                    if (isBlocked && blockedUntil.HasValue)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            patientUserId,
+                            appointmentId,
+                            "AppointmentStrikePolicyBlocked",
+                            "Cảnh báo vi phạm & Tạm khóa đặt lịch online",
+                            $"Bạn vừa hủy lịch hẹn {appointment.AppointmentCode} sát giờ (<12h). Tài khoản đã tích lũy {strikeCount} lần vi phạm trong 30 ngày qua. Quyền tự đặt lịch trực tuyến tạm khóa đến {blockedUntil.Value:dd/MM/yyyy HH:mm}. Vui lòng liên hệ hotline 1900 1234 nếu cần hỗ trợ.",
+                            ct);
+                    }
+                    else
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            patientUserId,
+                            appointmentId,
+                            "AppointmentStrikeWarning",
+                            "Cảnh báo hủy lịch hẹn sát giờ (<12h)",
+                            $"Bạn vừa hủy lịch hẹn {appointment.AppointmentCode} sát giờ (<12h) và bị tính 1 gậy vi phạm. Hiện tại bạn có {strikeCount}/3 lần vi phạm trong 30 ngày qua. Nếu đạt 3 lần, quyền tự đặt lịch trực tuyến sẽ bị tạm khóa 30 ngày.",
+                            ct);
+                    }
+                }
+                else
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        patientUserId,
+                        appointmentId,
+                        "AppointmentCancelled",
+                        "Lịch hẹn đã bị hủy",
+                        $"Lịch hẹn {appointment.AppointmentCode} đã được hủy thành công theo yêu cầu của bạn.",
+                        ct);
+                }
+
+                if (_reminderService != null)
+                {
+                    await _reminderService.CancelRemindersForAppointmentAsync(appointmentId, ct);
+                }
             }
-            catch (Exception remEx)
+            catch (Exception ex)
             {
-                _logger.LogWarning(remEx, "Failed to cancel automated reminders for appointment {AppointmentId}", appointmentId);
+                _logger.LogWarning(ex, "Lỗi khi gửi thông báo hủy lịch cho cuộc hẹn {AppointmentId}.", appointmentId);
             }
+
+            var successMessage = isLate
+                ? "Hủy lịch hẹn thành công. Lưu ý: Lịch hẹn bị hủy sát giờ (<12 tiếng) nên hệ thống đã ghi nhận 1 lần vi phạm."
+                : "Hủy lịch hẹn thành công.";
+
+            return ApiResponse.Ok(successMessage);
         }
-
-        var successMessage = isLate
-            ? $"Hủy lịch khám thành công. Lưu ý: Do hủy trong vòng 12h trước giờ hẹn, bạn đã bị tính 1 lần vi phạm ({strikeCount}/3 lần trong 30 ngày)."
-            : "Hủy lịch khám thành công.";
-
-        return ApiResponse.Ok(successMessage);
+        catch
+        {
+            if (tx != null) await tx.RollbackAsync(ct);
+            throw;
+        }
+        finally
+        {
+            lockScope?.Dispose();
+            if (tx != null) await tx.DisposeAsync();
+        }
     }
 
     public async Task<ApiResponse<AppointmentDto>> PatientRescheduleAsync(
@@ -805,40 +907,15 @@ public class AppointmentService : IAppointmentService
         PatientRescheduleRequest request,
         CancellationToken ct = default)
     {
-        var appointment = await _dbContext.Appointments
-            .Include(a => a.RequestedService)
-            .Include(a => a.Department)
-            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
-
-        if (appointment == null)
+        if (string.IsNullOrWhiteSpace(request.Reason))
         {
-            return ApiResponse<AppointmentDto>.Fail("Không tìm thấy lịch hẹn.");
+            return ApiResponse<AppointmentDto>.Fail("Vui lòng nhập lý do dời lịch hẹn.");
         }
 
-        if (appointment.PatientUserId != patientUserId)
+        // Validate new schedule time
+        if (request.NewScheduledStart < DateTime.Now.AddMinutes(-5))
         {
-            return ApiResponse<AppointmentDto>.Fail("Bạn không có quyền dời lịch hẹn này.");
-        }
-
-        var reschedulableStatuses = new[]
-        {
-            AppointmentStatus.PendingReceptionReview,
-            AppointmentStatus.PendingDepartmentReview,
-            AppointmentStatus.AwaitingPatientResponse,
-            AppointmentStatus.Confirmed
-        };
-
-        if (!reschedulableStatuses.Contains(appointment.Status))
-        {
-            if (appointment.Status == AppointmentStatus.Cancelled || appointment.Status == AppointmentStatus.Withdrawn)
-            {
-                return ApiResponse<AppointmentDto>.Fail("Lịch hẹn này đã bị hủy trước đó, không thể dời lịch.");
-            }
-            if (appointment.Status == AppointmentStatus.Completed)
-            {
-                return ApiResponse<AppointmentDto>.Fail("Lịch hẹn này đã hoàn thành, không thể dời lịch.");
-            }
-            return ApiResponse<AppointmentDto>.Fail($"Không thể dời lịch khi ca khám đang ở trạng thái {appointment.Status}.");
+            return ApiResponse<AppointmentDto>.Fail("Thời gian khám mới không được nằm trong quá khứ.");
         }
 
         // Validate booking eligibility
@@ -848,118 +925,199 @@ public class AppointmentService : IAppointmentService
             return ApiResponse<AppointmentDto>.Fail(eligibilityResult.Data.BlockReason ?? "Tài khoản của bạn hiện đang bị tạm khóa quyền đặt lịch khám trực tuyến.");
         }
 
-        // Validate new schedule time
-        if (request.NewScheduledStart < DateTime.Now.AddMinutes(-5))
-        {
-            return ApiResponse<AppointmentDto>.Fail("Thời gian khám mới không được nằm trong quá khứ.");
-        }
+        var isRelational = _dbContext.Database.IsRelational();
+        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? lockScope = null;
+        bool committed = false;
+        Appointment? appointment = null;
+        Appointment? newAppointment = null;
+        string? newCode = null;
 
-        if (string.IsNullOrWhiteSpace(request.Reason))
+        try
         {
-            return ApiResponse<AppointmentDto>.Fail("Vui lòng nhập lý do dời lịch hẹn.");
-        }
+            var lockKeys = new[] { SqlAppLockHelper.ApptKey(appointmentId) };
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
-        // Validate requested dentist if changed
-        if (request.NewRequestedDentistUserId.HasValue && request.NewRequestedDentistUserId.Value > 0)
-        {
-            var isDentistInDept = await _dbContext.DentistDepartments
-                .AsNoTracking()
-                .AnyAsync(dd => dd.DentistUserId == request.NewRequestedDentistUserId.Value &&
-                                dd.DepartmentId == appointment.DepartmentId &&
-                                dd.Status == "Active", ct);
+            appointment = await _dbContext.Appointments
+                .Include(a => a.RequestedService)
+                .Include(a => a.Department)
+                .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
 
-            if (!isDentistInDept)
+            if (appointment == null)
             {
-                return ApiResponse<AppointmentDto>.Fail("Bác sĩ được yêu cầu không thuộc chuyên khoa của ca khám này.");
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<AppointmentDto>.Fail("Không tìm thấy lịch hẹn.");
+            }
+
+            if (isRelational) await _dbContext.Entry(appointment).ReloadAsync(ct);
+
+            if (appointment.PatientUserId != patientUserId)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<AppointmentDto>.Fail("Bạn không có quyền dời lịch hẹn này.");
+            }
+
+            var reschedulableStatuses = new[]
+            {
+                AppointmentStatus.PendingReceptionReview,
+                AppointmentStatus.PendingDepartmentReview,
+                AppointmentStatus.AwaitingPatientResponse,
+                AppointmentStatus.Confirmed
+            };
+
+            if (!reschedulableStatuses.Contains(appointment.Status))
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                if (appointment.Status == AppointmentStatus.Cancelled || appointment.Status == AppointmentStatus.Withdrawn)
+                {
+                    return ApiResponse<AppointmentDto>.Fail("Lịch hẹn này đã bị hủy trước đó, không thể dời lịch.");
+                }
+                if (appointment.Status == AppointmentStatus.Completed)
+                {
+                    return ApiResponse<AppointmentDto>.Fail("Lịch hẹn này đã hoàn thành, không thể dời lịch.");
+                }
+                return ApiResponse<AppointmentDto>.Fail($"Không thể dời lịch khi ca khám đang ở trạng thái {appointment.Status}.");
+            }
+
+            // Validate requested dentist if changed
+            if (request.NewRequestedDentistUserId.HasValue && request.NewRequestedDentistUserId.Value > 0)
+            {
+                var isDentistInDept = await _dbContext.DentistDepartments
+                    .AsNoTracking()
+                    .AnyAsync(dd => dd.DentistUserId == request.NewRequestedDentistUserId.Value &&
+                                    dd.DepartmentId == appointment.DepartmentId &&
+                                    dd.Status == "Active", ct);
+
+                if (!isDentistInDept)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<AppointmentDto>.Fail("Bác sĩ được yêu cầu không thuộc chuyên khoa của ca khám này.");
+                }
+            }
+
+            var duration = appointment.RequestedService?.DurationMinutes ?? 30;
+            if (duration <= 0) duration = 30;
+            var scheduledEnd = request.NewScheduledStart.AddMinutes(duration);
+
+            newCode = await GenerateUniqueAppointmentCodeAsync(ct);
+            var now = DateTime.UtcNow;
+
+            // 1. Cancel old appointment and free resources
+            var oldStatus = appointment.Status;
+            appointment.RoomId = null;
+            appointment.DentalChairId = null;
+            appointment.AssignedDentistUserId = null;
+            appointment.Status = AppointmentStatus.Cancelled;
+            appointment.CancelledAt = now;
+            appointment.CancellationReason = $"[Dời lịch] Hủy để dời sang lịch khám mới {newCode}. Lý do: {request.Reason.Trim()}";
+            appointment.UpdatedAt = now;
+
+            var oldHistory = new AppointmentStatusHistory
+            {
+                AppointmentId = appointment.AppointmentId,
+                OldStatus = oldStatus,
+                NewStatus = AppointmentStatus.Cancelled,
+                ChangedByUserId = patientUserId,
+                Note = $"Bệnh nhân hủy hẹn để dời sang lịch mới: {newCode}. Lý do: {request.Reason.Trim()}",
+                ChangedAt = now
+            };
+            _dbContext.AppointmentStatusHistories.Add(oldHistory);
+
+            // Expire any pending change proposals for the old appointment
+            var pendingProposals = await _dbContext.AppointmentChangeProposals
+                .Where(p => p.AppointmentId == appointmentId && p.Status == ProposalStatus.Pending)
+                .ToListAsync(ct);
+            foreach (var p in pendingProposals)
+            {
+                p.Status = ProposalStatus.Expired;
+                p.RespondedAt = now;
+                p.Reason = (string.IsNullOrWhiteSpace(p.Reason) ? "" : p.Reason + " ") + "[Dời sang lịch hẹn mới]";
+            }
+
+            if (_reminderService != null)
+            {
+                try
+                {
+                    await _reminderService.CancelRemindersForAppointmentAsync(appointment.AppointmentId, ct);
+                }
+                catch (Exception remEx)
+                {
+                    _logger.LogWarning(remEx, "Failed to cancel reminders for rescheduled appointment {AppointmentId}", appointment.AppointmentId);
+                }
+            }
+
+            // 2. Create new appointment
+            newAppointment = new Appointment
+            {
+                AppointmentCode = newCode,
+                PatientUserId = patientUserId,
+                DepartmentId = appointment.DepartmentId,
+                RequestedServiceId = appointment.RequestedServiceId,
+                RequestedDentistUserId = request.NewRequestedDentistUserId ?? appointment.RequestedDentistUserId,
+                AssignedDentistUserId = null,
+                RoomId = null,
+                DentalChairId = null,
+                ScheduledStart = request.NewScheduledStart,
+                ScheduledEnd = scheduledEnd,
+                ReasonForVisit = $"{appointment.ReasonForVisit} (Dời từ lịch {appointment.AppointmentCode})",
+                BookingSource = BookingSource.Patient,
+                QueueNumber = null,
+                Status = AppointmentStatus.PendingReceptionReview,
+                CreatedByUserId = patientUserId,
+                CreatedAt = now
+            };
+            _dbContext.Appointments.Add(newAppointment);
+
+            var newHistory = new AppointmentStatusHistory
+            {
+                Appointment = newAppointment,
+                OldStatus = null,
+                NewStatus = AppointmentStatus.PendingReceptionReview,
+                ChangedByUserId = patientUserId,
+                Note = $"Đặt lịch mới chuyển từ lịch đã hủy {appointment.AppointmentCode}. Lý do: {request.Reason.Trim()}",
+                ChangedAt = now
+            };
+            _dbContext.AppointmentStatusHistories.Add(newHistory);
+
+            await _dbContext.SaveChangesAsync(ct);
+            if (tx != null)
+            {
+                await tx.CommitAsync(ct);
+                committed = true;
             }
         }
-
-        var duration = appointment.RequestedService?.DurationMinutes ?? 30;
-        if (duration <= 0) duration = 30;
-        var scheduledEnd = request.NewScheduledStart.AddMinutes(duration);
-
-        var newCode = await GenerateUniqueAppointmentCodeAsync(ct);
-        var now = DateTime.UtcNow;
-
-        // 1. Cancel old appointment and free resources
-        var oldStatus = appointment.Status;
-        appointment.RoomId = null;
-        appointment.DentalChairId = null;
-        appointment.AssignedDentistUserId = null;
-        appointment.Status = AppointmentStatus.Cancelled;
-        appointment.CancelledAt = now;
-        appointment.CancellationReason = $"[Dời lịch] Hủy để dời sang lịch khám mới {newCode}. Lý do: {request.Reason.Trim()}";
-        appointment.UpdatedAt = now;
-
-        var oldHistory = new AppointmentStatusHistory
+        catch
         {
-            AppointmentId = appointment.AppointmentId,
-            OldStatus = oldStatus,
-            NewStatus = AppointmentStatus.Cancelled,
-            ChangedByUserId = patientUserId,
-            Note = $"Bệnh nhân hủy hẹn để dời sang lịch mới: {newCode}. Lý do: {request.Reason.Trim()}",
-            ChangedAt = now
-        };
-        _dbContext.AppointmentStatusHistories.Add(oldHistory);
-
-        if (_reminderService != null)
+            if (tx != null && !committed)
+            {
+                await tx.RollbackAsync(ct);
+            }
+            throw;
+        }
+        finally
         {
-            try
-            {
-                await _reminderService.CancelRemindersForAppointmentAsync(appointment.AppointmentId, ct);
-            }
-            catch (Exception remEx)
-            {
-                _logger.LogWarning(remEx, "Failed to cancel reminders for rescheduled appointment {AppointmentId}", appointment.AppointmentId);
-            }
+            lockScope?.Dispose();
+            if (tx != null) await tx.DisposeAsync();
         }
 
-        // 2. Create new appointment
-        var newAppointment = new Appointment
+        // Post-commit side effect: send notification (does not rollback or fail the main operation if delivery fails)
+        try
         {
-            AppointmentCode = newCode,
-            PatientUserId = patientUserId,
-            DepartmentId = appointment.DepartmentId,
-            RequestedServiceId = appointment.RequestedServiceId,
-            RequestedDentistUserId = request.NewRequestedDentistUserId ?? appointment.RequestedDentistUserId,
-            AssignedDentistUserId = null,
-            RoomId = null,
-            DentalChairId = null,
-            ScheduledStart = request.NewScheduledStart,
-            ScheduledEnd = scheduledEnd,
-            ReasonForVisit = $"{appointment.ReasonForVisit} (Dời từ lịch {appointment.AppointmentCode})",
-            BookingSource = BookingSource.Patient,
-            QueueNumber = null,
-            Status = AppointmentStatus.PendingReceptionReview,
-            CreatedByUserId = patientUserId,
-            CreatedAt = now
-        };
-        _dbContext.Appointments.Add(newAppointment);
-
-        var newHistory = new AppointmentStatusHistory
+            await _notificationService.CreateNotificationAsync(
+                patientUserId,
+                newAppointment!.AppointmentId,
+                "AppointmentRescheduled",
+                "Dời lịch khám thành công",
+                $"Lịch hẹn {appointment!.AppointmentCode} đã được hủy và chuyển sang lịch hẹn mới {newCode} vào lúc {request.NewScheduledStart:dd/MM/yyyy HH:mm}. Vui lòng chờ Lễ tân tiếp nhận.",
+                ct);
+        }
+        catch (Exception notifEx)
         {
-            Appointment = newAppointment,
-            OldStatus = null,
-            NewStatus = AppointmentStatus.PendingReceptionReview,
-            ChangedByUserId = patientUserId,
-            Note = $"Đặt lịch mới chuyển từ lịch đã hủy {appointment.AppointmentCode}. Lý do: {request.Reason.Trim()}",
-            ChangedAt = now
-        };
-        _dbContext.AppointmentStatusHistories.Add(newHistory);
+            _logger.LogWarning(notifEx, "Failed to send notification for rescheduled appointment {AppointmentId}", appointment?.AppointmentId);
+        }
 
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Send notification
-        await _notificationService.CreateNotificationAsync(
-            patientUserId,
-            newAppointment.AppointmentId,
-            "AppointmentRescheduled",
-            "Dời lịch khám thành công",
-            $"Lịch hẹn {appointment.AppointmentCode} đã được hủy và chuyển sang lịch hẹn mới {newCode} vào lúc {request.NewScheduledStart:dd/MM/yyyy HH:mm}. Vui lòng chờ Lễ tân tiếp nhận.",
-            ct);
-
-        var dto = await MapToDtoAsync(newAppointment.AppointmentId, ct);
-        return ApiResponse<AppointmentDto>.Ok(dto!, $"Đã hủy lịch hẹn cũ ({appointment.AppointmentCode}) và dời sang lịch hẹn mới ({newCode}) vào lúc {request.NewScheduledStart:dd/MM/yyyy HH:mm} thành công!");
+        var dto = await MapToDtoAsync(newAppointment!.AppointmentId, ct);
+        return ApiResponse<AppointmentDto>.Ok(dto!, $"Đã hủy lịch hẹn cũ ({appointment!.AppointmentCode}) và dời sang lịch hẹn mới ({newCode}) vào lúc {request.NewScheduledStart:dd/MM/yyyy HH:mm} thành công!");
     }
 
     public async Task<ApiResponse<AppointmentChangeProposalDto>> GetAppointmentProposalAsync(
@@ -1258,7 +1416,7 @@ public class AppointmentService : IAppointmentService
         var ids = await _dbContext.Appointments
             .AsNoTracking()
             .Where(a => a.Status == AppointmentStatus.PendingReceptionReview)
-            .OrderBy(a => a.CreatedAt)
+            .OrderByDescending(a => a.CreatedAt)
             .Select(a => a.AppointmentId)
             .ToListAsync(ct);
 
@@ -1520,71 +1678,123 @@ public class AppointmentService : IAppointmentService
         string reason,
         CancellationToken ct = default)
     {
-        var appointment = await _dbContext.Appointments
-            .Include(a => a.PatientUser)
-            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
-
-        if (appointment == null)
-        {
-            return ApiResponse.Fail("Không tìm thấy lịch hẹn.");
-        }
-
-        var cancellableStatuses = new[]
-        {
-            AppointmentStatus.PendingReceptionReview,
-            AppointmentStatus.PendingDepartmentReview,
-            AppointmentStatus.AwaitingPatientResponse,
-            AppointmentStatus.Confirmed,
-            AppointmentStatus.Waiting
-        };
-
-        if (!cancellableStatuses.Contains(appointment.Status))
-        {
-            if (appointment.Status == AppointmentStatus.Cancelled || appointment.Status == AppointmentStatus.Withdrawn)
-            {
-                return ApiResponse.Fail("Lịch hẹn này đã được hủy trước đó.");
-            }
-            if (appointment.Status == AppointmentStatus.Completed)
-            {
-                return ApiResponse.Fail("Không thể hủy lịch hẹn đã hoàn thành khám.");
-            }
-            return ApiResponse.Fail($"Không thể hủy lịch hẹn ở trạng thái hiện tại ({appointment.Status}).");
-        }
-
         if (string.IsNullOrWhiteSpace(reason))
         {
             return ApiResponse.Fail("Vui lòng cung cấp lý do hủy lịch hẹn.");
         }
 
-        var now = DateTime.UtcNow;
-        var oldStatus = appointment.Status;
-        appointment.Status = AppointmentStatus.Cancelled;
-        appointment.CancelledAt = now;
-        appointment.CancellationReason = $"[Lễ tân hủy] {reason.Trim()}";
-        appointment.UpdatedAt = now;
-
-        var historyNote = $"Lễ tân/Nhân viên hủy lịch: {reason.Trim()}";
-
-        var history = new AppointmentStatusHistory
+        var isRelational = _dbContext.Database.IsRelational();
+        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? lockScope = null;
+        bool committed = false;
+        Appointment? appointment = null;
+        try
         {
-            AppointmentId = appointmentId,
-            OldStatus = oldStatus,
-            NewStatus = AppointmentStatus.Cancelled,
-            ChangedByUserId = staffUserId,
-            Note = historyNote,
-            ChangedAt = now
-        };
-        _dbContext.AppointmentStatusHistories.Add(history);
+            var lockKeys = new[] { SqlAppLockHelper.ApptKey(appointmentId) };
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
 
-        await _dbContext.SaveChangesAsync(ct);
+            appointment = await _dbContext.Appointments
+                .Include(a => a.PatientUser)
+                .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
 
-        await _notificationService.CreateNotificationAsync(
-            appointment.PatientUserId,
-            appointmentId,
-            "AppointmentCancelledByStaff",
-            "Lịch hẹn đã được hủy bởi phòng khám",
-            $"Lịch hẹn {appointment.AppointmentCode} đã được nhân viên phòng khám hỗ trợ hủy. Lý do: {reason.Trim()}. Bạn không bị tính điểm phạt gậy vi phạm.",
-            ct);
+            if (appointment == null)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse.Fail("Không tìm thấy lịch hẹn.");
+            }
+
+            if (isRelational) await _dbContext.Entry(appointment).ReloadAsync(ct);
+
+            var cancellableStatuses = new[]
+            {
+                AppointmentStatus.PendingReceptionReview,
+                AppointmentStatus.PendingDepartmentReview,
+                AppointmentStatus.AwaitingPatientResponse,
+                AppointmentStatus.Confirmed,
+                AppointmentStatus.Waiting
+            };
+
+            if (!cancellableStatuses.Contains(appointment.Status))
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                if (appointment.Status == AppointmentStatus.Cancelled || appointment.Status == AppointmentStatus.Withdrawn)
+                {
+                    return ApiResponse.Fail("Lịch hẹn này đã được hủy trước đó.");
+                }
+                if (appointment.Status == AppointmentStatus.Completed)
+                {
+                    return ApiResponse.Fail("Không thể hủy lịch hẹn đã hoàn thành khám.");
+                }
+                return ApiResponse.Fail($"Không thể hủy lịch hẹn ở trạng thái hiện tại ({appointment.Status}).");
+            }
+
+            var now = DateTime.UtcNow;
+            var oldStatus = appointment.Status;
+            appointment.Status = AppointmentStatus.Cancelled;
+            appointment.CancelledAt = now;
+            appointment.CancellationReason = $"[Lễ tân hủy] {reason.Trim()}";
+            appointment.UpdatedAt = now;
+
+            var historyNote = $"Lễ tân/Nhân viên hủy lịch: {reason.Trim()}";
+
+            var history = new AppointmentStatusHistory
+            {
+                AppointmentId = appointmentId,
+                OldStatus = oldStatus,
+                NewStatus = AppointmentStatus.Cancelled,
+                ChangedByUserId = staffUserId,
+                Note = historyNote,
+                ChangedAt = now
+            };
+            _dbContext.AppointmentStatusHistories.Add(history);
+
+            // Expire any pending change proposals atomically
+            var pendingProposals = await _dbContext.AppointmentChangeProposals
+                .Where(p => p.AppointmentId == appointmentId && p.Status == ProposalStatus.Pending)
+                .ToListAsync(ct);
+            foreach (var p in pendingProposals)
+            {
+                p.Status = ProposalStatus.Expired;
+                p.RespondedAt = now;
+                p.Reason = (string.IsNullOrWhiteSpace(p.Reason) ? "" : p.Reason + " ") + "[Lễ tân hủy lịch hẹn gốc]";
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
+            if (tx != null)
+            {
+                await tx.CommitAsync(ct);
+                committed = true;
+            }
+        }
+        catch
+        {
+            if (tx != null && !committed)
+            {
+                await tx.RollbackAsync(ct);
+            }
+            throw;
+        }
+        finally
+        {
+            lockScope?.Dispose();
+            if (tx != null) await tx.DisposeAsync();
+        }
+
+        // Post-commit side effect: send notification (does not rollback or fail the main operation if delivery fails)
+        try
+        {
+            await _notificationService.CreateNotificationAsync(
+                appointment!.PatientUserId,
+                appointmentId,
+                "AppointmentCancelledByStaff",
+                "Lịch hẹn đã được hủy bởi phòng khám",
+                $"Lịch hẹn {appointment.AppointmentCode} đã được nhân viên phòng khám hỗ trợ hủy. Lý do: {reason.Trim()}. Bạn không bị tính điểm phạt gậy vi phạm.",
+                ct);
+        }
+        catch (Exception notifEx)
+        {
+            _logger.LogWarning(notifEx, "Failed to send notification for staff cancelled appointment {AppointmentId}", appointmentId);
+        }
 
         return ApiResponse.Ok("Đã hủy lịch hẹn thành công (không tính điểm phạt cho bệnh nhân).");
     }
@@ -1836,7 +2046,10 @@ public class AppointmentService : IAppointmentService
         ManagerConfirmRequest request,
         CancellationToken ct = default)
     {
-        using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
+        var isRelational = _dbContext.Database.IsRelational();
+        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? lockScope = null;
+        bool committed = false;
         try
         {
             var appointment = await _dbContext.Appointments
@@ -1929,41 +2142,30 @@ public class AppointmentService : IAppointmentService
             }
 
             // Phase 2: Multi-Resource Concurrency Lock in Canonical Order (Deadlock-Free, Cross-Department Safe)
-            if (_dbContext.Database.IsSqlServer())
+            var lockKeys = new List<string>
             {
-                var lockKeys = new List<string>
-                {
-                    $"Lock_Appt_{appointmentId}",
-                    $"Lock_Dentist_{request.AssignedDentistUserId}_{targetDate:yyyyMMdd}",
-                    $"Lock_DeptQueue_{appointment.DepartmentId}_{targetDate:yyyyMMdd}"
-                };
+                SqlAppLockHelper.ApptKey(appointmentId),
+                SqlAppLockHelper.DentistMasterKey(request.AssignedDentistUserId),
+                SqlAppLockHelper.DentistKey(request.AssignedDentistUserId, targetDate),
+                SqlAppLockHelper.PatientKey(appointment.PatientUserId, targetDate)
+            };
 
-                if (request.DentalChairId.HasValue && request.DentalChairId.Value > 0)
-                {
-                    lockKeys.Add($"Lock_Chair_{request.DentalChairId.Value}_{targetDate:yyyyMMdd}");
-                }
-
-                if (room.IsExclusive)
-                {
-                    lockKeys.Add($"Lock_Room_{request.RoomId}_{targetDate:yyyyMMdd}");
-                }
-
-                var sortedKeys = lockKeys.Distinct().OrderBy(k => k, StringComparer.Ordinal).ToList();
-
-                var applockSql = @"
-                    DECLARE @res int;
-                    EXEC @res = sp_getapplock @Resource = {0}, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000;
-                    IF @res < 0
-                    BEGIN
-                        DECLARE @msg nvarchar(250) = FORMATMESSAGE('Không thể lấy application lock cho tài nguyên %s. Mã trạng thái: %d', {0}, @res);
-                        THROW 51000, @msg, 1;
-                    END";
-
-                foreach (var key in sortedKeys)
-                {
-                    await _dbContext.Database.ExecuteSqlRawAsync(applockSql, new object[] { key }, ct);
-                }
+            if (appointment.DepartmentId.HasValue)
+            {
+                lockKeys.Add(SqlAppLockHelper.DeptQueueKey(appointment.DepartmentId.Value, targetDate));
             }
+
+            if (request.DentalChairId.HasValue && request.DentalChairId.Value > 0)
+            {
+                lockKeys.Add(SqlAppLockHelper.ChairKey(request.DentalChairId.Value, targetDate));
+            }
+
+            if (room.IsExclusive)
+            {
+                lockKeys.Add(SqlAppLockHelper.RoomKey(request.RoomId, targetDate));
+            }
+
+            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
 
             // Revalidate appointment state within the lock
             var freshAppt = await _dbContext.Appointments.AsNoTracking().FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
@@ -1981,7 +2183,52 @@ public class AppointmentService : IAppointmentService
                 AppointmentStatus.InService
             };
 
-            // 1. REVALIDATE DENTIST CONFLICT (Across all departments)
+            // 1. REVALIDATE DENTIST WORK SHIFT COVERAGE (Under lock)
+            var targetDateOnly = DateOnly.FromDateTime(targetDate);
+            var startTimeOnly = TimeOnly.FromDateTime(finalStart.Value);
+            var endTimeOnly = TimeOnly.FromDateTime(finalEnd.Value);
+
+            var doctorShifts = await _dbContext.DentistWorkSchedules
+                .AsNoTracking()
+                .Where(ws => ws.DentistUserId == request.AssignedDentistUserId &&
+                             ws.WorkDate == targetDateOnly &&
+                             (appointment.DepartmentId == null || ws.DepartmentId == appointment.DepartmentId.Value))
+                .ToListAsync(ct);
+
+            if (!doctorShifts.Any())
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<AppointmentDto>.Fail("Bác sĩ không có ca làm việc trong ngày được chọn.");
+            }
+
+            var activeShifts = doctorShifts.Where(ws => ws.Status == "Scheduled").ToList();
+            if (!activeShifts.Any())
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<AppointmentDto>.Fail("Ca làm việc của Bác sĩ đã bị hủy.");
+            }
+
+            var coveringShift = activeShifts.FirstOrDefault(ws => ws.StartTime <= startTimeOnly && ws.EndTime >= endTimeOnly);
+            if (coveringShift == null)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                var shiftTimes = string.Join(", ", activeShifts.Select(s => $"{s.StartTime:hh\\:mm} - {s.EndTime:hh\\:mm}"));
+                return ApiResponse<AppointmentDto>.Fail($"Giờ khám nằm ngoài khung giờ làm việc của Bác sĩ (ca làm việc: {shiftTimes}).");
+            }
+
+            // 2. REVALIDATE DENTIST CONFLICT (Across all departments and unavailabilities/leaves)
+            bool dentistLeaveConflict = await _dbContext.DentistAvailabilities
+                .AsNoTracking()
+                .AnyAsync(da => da.DentistUserId == request.AssignedDentistUserId &&
+                                da.AvailabilityStatus != DentistAvailabilityStatus.Available &&
+                                da.StartDateTime < finalEnd.Value &&
+                                (da.EndDateTime == null || da.EndDateTime > finalStart.Value), ct);
+
+            if (dentistLeaveConflict)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Bác sĩ đang bận hoặc nghỉ phép trong khoảng thời gian này.");
+            }
+
             bool dentistConflict = await _dbContext.Appointments
                 .AnyAsync(a => a.AppointmentId != appointmentId &&
                                a.AssignedDentistUserId == request.AssignedDentistUserId &&
@@ -1992,6 +2239,19 @@ public class AppointmentService : IAppointmentService
             if (dentistConflict)
             {
                 return ApiResponse<AppointmentDto>.Fail("Bác sĩ đã có lịch hẹn khác trong khung giờ này.");
+            }
+
+            // 2. REVALIDATE PATIENT CONFLICT (Across all dentists and departments)
+            bool patientConflict = await _dbContext.Appointments
+                .AnyAsync(a => a.AppointmentId != appointmentId &&
+                               a.PatientUserId == appointment.PatientUserId &&
+                               occupiedStatuses.Contains(a.Status) &&
+                               a.ScheduledStart < finalEnd.Value &&
+                               a.ScheduledEnd > finalStart.Value, ct);
+
+            if (patientConflict)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Bệnh nhân đã có lịch hẹn khác trong khung giờ này.");
             }
 
             // 2. REVALIDATE ROOM CONFLICT (Only if room is designated as exclusive!)
@@ -2070,15 +2330,27 @@ public class AppointmentService : IAppointmentService
             _dbContext.AppointmentStatusHistories.Add(history);
 
             await _dbContext.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
+            if (tx != null)
+            {
+                await tx.CommitAsync(ct);
+                committed = true;
+            }
 
-            await _notificationService.CreateNotificationAsync(
-                appointment.PatientUserId,
-                appointmentId,
-                "AppointmentConfirmed",
-                "Lịch khám đã được xác nhận!",
-                $"Lịch khám mã {appointment.AppointmentCode} đã được Trưởng khoa xác nhận thành công. Số thứ tự tiếp đón của bạn là {queueNumber}.",
-                ct);
+            // Post-commit side effect: send notification (does not rollback or fail the main operation if delivery fails)
+            try
+            {
+                await _notificationService.CreateNotificationAsync(
+                    appointment.PatientUserId,
+                    appointmentId,
+                    "AppointmentConfirmed",
+                    "Lịch khám đã được xác nhận!",
+                    $"Lịch khám mã {appointment.AppointmentCode} đã được Trưởng khoa xác nhận thành công. Số thứ tự tiếp đón của bạn là {queueNumber}.",
+                    ct);
+            }
+            catch (Exception notifEx)
+            {
+                _logger.LogWarning(notifEx, "Failed to send notification for confirmed appointment {AppointmentId}", appointmentId);
+            }
 
             if (_emailService != null)
             {
@@ -2165,9 +2437,14 @@ public class AppointmentService : IAppointmentService
         }
         catch (Exception ex)
         {
-            await tx.RollbackAsync(ct);
+            if (tx != null && !committed) await tx.RollbackAsync(ct);
             _logger.LogError(ex, "Failed to confirm appointment {AppointmentId}", appointmentId);
             return ApiResponse<AppointmentDto>.Fail("Đã xảy ra lỗi trong quá trình xác nhận lịch hẹn.");
+        }
+        finally
+        {
+            lockScope?.Dispose();
+            if (tx != null) await tx.DisposeAsync();
         }
     }
 
@@ -2595,6 +2872,10 @@ public class AppointmentService : IAppointmentService
 
         var activeStatuses = new[]
         {
+            AppointmentStatus.Confirmed,
+            AppointmentStatus.CheckedIn,
+            AppointmentStatus.Waiting,
+            AppointmentStatus.Called,
             AppointmentStatus.InService
         };
 
@@ -2641,7 +2922,7 @@ public class AppointmentService : IAppointmentService
             return ApiResponse.Fail("Không tìm thấy thông tin lịch hẹn.");
         }
 
-        if (appt.Status == AppointmentStatus.Completed || appt.Status == AppointmentStatus.Cancelled)
+        if (appt.Status == AppointmentStatus.Completed || appt.Status == AppointmentStatus.Cancelled || appt.Status == AppointmentStatus.Withdrawn)
         {
             return ApiResponse.Fail("Ca khám đã hoàn tất hoặc đã hủy, vị trí ghế điều trị đã được khóa và không thể thay đổi.");
         }
@@ -2660,56 +2941,144 @@ public class AppointmentService : IAppointmentService
             return ApiResponse.Fail("Ghế nha khoa không tồn tại hoặc đã ngừng hoạt động.");
         }
 
+        var room = await _dbContext.Rooms
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.RoomId == chair.RoomId && r.Status == "Active", ct);
+
+        if (room == null)
+        {
+            return ApiResponse.Fail("Phòng khám không tồn tại hoặc đã ngừng hoạt động.");
+        }
+
         if (appt.RoomId.HasValue && chair.RoomId != appt.RoomId.Value)
         {
             return ApiResponse.Fail("Ghế nha khoa đã chọn không thuộc phòng khám của ca này.");
         }
 
-        var start = appt.ScheduledStart ?? DateTime.UtcNow;
-        var end = appt.ScheduledEnd ?? start.AddMinutes(30);
-
         var activeStatuses = new[]
         {
+            AppointmentStatus.Confirmed,
+            AppointmentStatus.CheckedIn,
+            AppointmentStatus.Waiting,
+            AppointmentStatus.Called,
             AppointmentStatus.InService
         };
 
-        bool isOccupied = await _dbContext.Appointments
-            .AnyAsync(a => a.AppointmentId != appointmentId &&
-                           a.DentalChairId == dentalChairId &&
-                           activeStatuses.Contains(a.Status) &&
-                           a.ScheduledStart < end &&
-                           a.ScheduledEnd > start, ct);
-
-        if (isOccupied)
+        var isRelational = _dbContext.Database.IsRelational();
+        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        IDisposable? apptLock = null;
+        IDisposable? resourceLock = null;
+        try
         {
-            return ApiResponse.Fail($"Ghế {chair.ChairCode} hiện đang có bệnh nhân khác sử dụng. Vui lòng chọn ghế khác.");
+            // Step 1: Acquire ApptKey first to freeze appointment state and prevent concurrent modification of ScheduledStart or Status
+            apptLock = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, new[] { SqlAppLockHelper.ApptKey(appointmentId) }, 5000, ct);
+
+            // Step 2: Reload fresh state under ApptKey lock
+            if (isRelational) await _dbContext.Entry(appt).ReloadAsync(ct);
+
+            if (appt.Status == AppointmentStatus.Completed || appt.Status == AppointmentStatus.Cancelled || appt.Status == AppointmentStatus.Withdrawn)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse.Fail("Ca khám đã hoàn tất hoặc đã hủy, vị trí ghế điều trị đã được khóa và không thể thay đổi.");
+            }
+
+            if (appt.AssignedDentistUserId != dentistUserId)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
+            }
+
+            if (appt.RoomId.HasValue && chair.RoomId != appt.RoomId.Value)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse.Fail("Ghế nha khoa đã chọn không thuộc phòng khám của ca này.");
+            }
+
+            // Step 3: Extract guaranteed-fresh date and time from the stabilized appointment entity
+            var start = appt.ScheduledStart ?? DateTime.UtcNow;
+            var end = appt.ScheduledEnd ?? start.AddMinutes(30);
+            var targetDate = start.Date;
+
+            // Step 4: Acquire date-consistent resource locks (ChairKey and RoomKey) matching the true date
+            var resourceKeys = new List<string>
+            {
+                SqlAppLockHelper.ChairKey(dentalChairId, targetDate)
+            };
+
+            if (room.IsExclusive)
+            {
+                resourceKeys.Add(SqlAppLockHelper.RoomKey(chair.RoomId, targetDate));
+            }
+
+            resourceLock = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, resourceKeys, 5000, ct);
+
+            if (room.IsExclusive)
+            {
+                bool isRoomOccupied = await _dbContext.Appointments
+                    .AnyAsync(a => a.AppointmentId != appointmentId &&
+                                   a.RoomId == chair.RoomId &&
+                                   activeStatuses.Contains(a.Status) &&
+                                   a.ScheduledStart < end &&
+                                   a.ScheduledEnd > start, ct);
+
+                if (isRoomOccupied)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse.Fail($"Phòng {room.RoomName} là phòng độc quyền và hiện đang có ca khám khác sử dụng.");
+                }
+            }
+
+            bool isOccupied = await _dbContext.Appointments
+                .AnyAsync(a => a.AppointmentId != appointmentId &&
+                               a.DentalChairId == dentalChairId &&
+                               activeStatuses.Contains(a.Status) &&
+                               a.ScheduledStart < end &&
+                               a.ScheduledEnd > start, ct);
+
+            if (isOccupied)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse.Fail($"Ghế {chair.ChairCode} hiện đang có bệnh nhân khác sử dụng. Vui lòng chọn ghế khác.");
+            }
+
+            appt.DentalChairId = dentalChairId;
+            appt.RoomId = chair.RoomId;
+            appt.UpdatedAt = DateTime.UtcNow;
+
+            var oldStatus = appt.Status;
+            var newStatus = appt.Status;
+            if (appt.Status == AppointmentStatus.CheckedIn)
+            {
+                newStatus = AppointmentStatus.InService;
+                appt.Status = newStatus;
+            }
+
+            _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+            {
+                AppointmentId = appointmentId,
+                OldStatus = oldStatus,
+                NewStatus = newStatus,
+                ChangedByUserId = dentistUserId,
+                Note = newStatus == AppointmentStatus.InService 
+                    ? $"Bác sĩ chọn ghế điều trị {chair.ChairCode} và chuyển ca sang trạng thái đang điều trị (InService)."
+                    : $"Bác sĩ cập nhật ghế điều trị {chair.ChairCode}.",
+                ChangedAt = DateTime.UtcNow
+            });
+
+            await _dbContext.SaveChangesAsync(ct);
+            if (tx != null) await tx.CommitAsync(ct);
+            return ApiResponse.Ok($"Đã chọn ghế {chair.ChairCode} cho ca khám thành công.");
         }
-
-        appt.DentalChairId = dentalChairId;
-        appt.RoomId = chair.RoomId;
-        appt.UpdatedAt = DateTime.UtcNow;
-
-        var oldStatus = appt.Status;
-        var newStatus = appt.Status;
-        if (appt.Status == AppointmentStatus.CheckedIn)
+        catch
         {
-            newStatus = AppointmentStatus.InService;
-            appt.Status = newStatus;
+            if (tx != null) await tx.RollbackAsync(ct);
+            throw;
         }
-
-        _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+        finally
         {
-            AppointmentId = appointmentId,
-            OldStatus = oldStatus,
-            NewStatus = newStatus,
-            ChangedByUserId = dentistUserId,
-            Note = newStatus == AppointmentStatus.InService 
-                ? $"Bác sĩ chọn ghế điều trị {chair.ChairCode} và chuyển ca sang trạng thái đang điều trị (InService)."
-                : $"Bác sĩ cập nhật ghế điều trị {chair.ChairCode}.",
-            ChangedAt = DateTime.UtcNow
-        });
-
-        await _dbContext.SaveChangesAsync(ct);
-        return ApiResponse.Ok($"Đã chọn ghế {chair.ChairCode} cho ca khám thành công.");
+            resourceLock?.Dispose();
+            apptLock?.Dispose();
+            if (tx != null) await tx.DisposeAsync();
+        }
     }
 }
