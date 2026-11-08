@@ -1416,7 +1416,7 @@ public class AppointmentService : IAppointmentService
         var ids = await _dbContext.Appointments
             .AsNoTracking()
             .Where(a => a.Status == AppointmentStatus.PendingReceptionReview)
-            .OrderBy(a => a.CreatedAt)
+            .OrderByDescending(a => a.CreatedAt)
             .Select(a => a.AppointmentId)
             .ToListAsync(ct);
 

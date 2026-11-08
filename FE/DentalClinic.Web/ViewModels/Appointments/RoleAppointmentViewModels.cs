@@ -8,6 +8,9 @@ namespace DentalClinic.Web.ViewModels.Appointments;
 public class ReceptionistRequestsViewModel
 {
     public List<AppointmentDto> Requests { get; set; } = new();
+    public string? SearchQuery { get; set; }
+    public string? ErrorMessage { get; set; }
+    public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
 }
 
 public class ReceptionistTodayCheckInViewModel

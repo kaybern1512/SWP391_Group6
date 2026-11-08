@@ -116,8 +116,37 @@ public class AppointmentDto
     public string DepartmentName { get; set; } = string.Empty;
     public long RequestedServiceId { get; set; }
     public string ServiceName { get; set; } = string.Empty;
-    public int? DurationMinutes { get; set; }
-    public decimal? ServicePrice { get; set; }
+    private int? _durationMinutes;
+
+    [JsonPropertyName("serviceDuration")]
+    public int? ServiceDuration
+    {
+        get => _durationMinutes;
+        set { if (value.HasValue) _durationMinutes = value; }
+    }
+
+    [JsonPropertyName("durationMinutes")]
+    public int? DurationMinutes
+    {
+        get => _durationMinutes;
+        set { if (value.HasValue) _durationMinutes = value; }
+    }
+
+    private decimal? _servicePrice;
+
+    [JsonPropertyName("servicePrice")]
+    public decimal? ServicePrice
+    {
+        get => _servicePrice;
+        set { if (value.HasValue) _servicePrice = value; }
+    }
+
+    [JsonPropertyName("price")]
+    public decimal? Price
+    {
+        get => _servicePrice;
+        set { if (value.HasValue) _servicePrice = value; }
+    }
     public long? RequestedDentistUserId { get; set; }
     public string? RequestedDentistName { get; set; }
     public long? AssignedDentistUserId { get; set; }

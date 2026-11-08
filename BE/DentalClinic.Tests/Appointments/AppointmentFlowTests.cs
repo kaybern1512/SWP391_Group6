@@ -1960,4 +1960,50 @@ public class AppointmentFlowTests
         Assert.Equal(AppointmentStatus.Confirmed, apptDb!.Status);
         Assert.NotNull(apptDb.QueueNumber);
     }
+
+    [Fact]
+    public async Task GetReceptionistRequestsAsync_OrdersDescendingByCreatedAt_LatestRequestFirst()
+    {
+        var db = CreateDbContext(nameof(GetReceptionistRequestsAsync_OrdersDescendingByCreatedAt_LatestRequestFirst));
+        await SeedBasicDataAsync(db);
+
+        var olderAppt = new Appointment
+        {
+            AppointmentCode = "APP-OLD-01",
+            PatientUserId = 101,
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            BookingSource = "Patient",
+            ReasonForVisit = "Khám răng tổng quát",
+            Status = AppointmentStatus.PendingReceptionReview,
+            CreatedAt = DateTime.UtcNow.AddHours(-5),
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(2).AddHours(9).AddMinutes(30)
+        };
+        var newerAppt = new Appointment
+        {
+            AppointmentCode = "APP-NEW-02",
+            PatientUserId = 102,
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            BookingSource = "Patient",
+            ReasonForVisit = "Đau răng hàm",
+            Status = AppointmentStatus.PendingReceptionReview,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+            ScheduledStart = DateTime.Today.AddDays(3).AddHours(10),
+            ScheduledEnd = DateTime.Today.AddDays(3).AddHours(10).AddMinutes(30)
+        };
+        db.Appointments.AddRange(olderAppt, newerAppt);
+        await db.SaveChangesAsync();
+
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var result = await service.GetReceptionistRequestsAsync();
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.Equal(2, result.Data.Count);
+        // Latest created appointment must be first
+        Assert.Equal("APP-NEW-02", result.Data[0].AppointmentCode);
+        Assert.Equal("APP-OLD-01", result.Data[1].AppointmentCode);
+    }
 }
