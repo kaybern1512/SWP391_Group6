@@ -32,15 +32,17 @@ public class DentistReferralController : Controller
     {
         var referralsResult = await _postCareApi.GetDentistReferralsAsync();
         var followUpsResult = await _postCareApi.GetDentistFollowUpsAsync();
+        var proposalsResult = await _postCareApi.GetDoctorPendingProposalsAsync();
         var deptsResult = await _appointmentApi.GetDepartmentsAsync();
         var sessionsResult = await _treatmentApi.GetDentistTreatmentSessionsAsync();
 
         var vm = new DentistReferralIndexViewModel
         {
-            Referrals = referralsResult.IsSuccess && referralsResult.Data != null ? referralsResult.Data : new List<DepartmentReferralDto>(),
-            FollowUps = followUpsResult.IsSuccess && followUpsResult.Data != null ? followUpsResult.Data : new List<FollowUpScheduleDto>(),
-            Departments = deptsResult.IsSuccess && deptsResult.Data != null ? deptsResult.Data : new List<DepartmentDto>(),
-            RecentSessions = sessionsResult.IsSuccess && sessionsResult.Data != null ? sessionsResult.Data : new List<TreatmentSessionDto>(),
+            Referrals = referralsResult != null && referralsResult.IsSuccess && referralsResult.Data != null ? referralsResult.Data : new List<DepartmentReferralDto>(),
+            FollowUps = followUpsResult != null && followUpsResult.IsSuccess && followUpsResult.Data != null ? followUpsResult.Data : new List<FollowUpScheduleDto>(),
+            PendingProposals = proposalsResult != null && proposalsResult.IsSuccess && proposalsResult.Data != null ? proposalsResult.Data : new List<FollowUpProposalDto>(),
+            Departments = deptsResult != null && deptsResult.IsSuccess && deptsResult.Data != null ? deptsResult.Data : new List<DepartmentDto>(),
+            RecentSessions = sessionsResult != null && sessionsResult.IsSuccess && sessionsResult.Data != null ? sessionsResult.Data : new List<TreatmentSessionDto>(),
             ActiveTab = tab,
             SelectedSessionId = sessionId
         };
@@ -110,5 +112,28 @@ public class DentistReferralController : Controller
         }
 
         return RedirectToAction(nameof(Index), new { tab = "followups" });
+    }
+
+    [HttpPost("ResolveProposal")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResolveProposal([FromBody] ResolveProposalRequest request)
+    {
+        if (request == null || request.ProposalId <= 0)
+        {
+            return BadRequest(new { success = false, message = "Dữ liệu phản hồi không hợp lệ." });
+        }
+
+        if (!request.IsApproved && string.IsNullOrWhiteSpace(request.RejectionReason))
+        {
+            return BadRequest(new { success = false, message = "Vui lòng nhập lý do từ chối yêu cầu." });
+        }
+
+        var result = await _postCareApi.ResolveProposalAsync(request);
+        if (!result.IsSuccess)
+        {
+            return BadRequest(new { success = false, message = result.Message ?? "Không thể xử lý yêu cầu thay đổi lịch." });
+        }
+
+        return Ok(new { success = true, message = result.Message ?? "Xử lý yêu cầu thành công.", data = result.Data });
     }
 }

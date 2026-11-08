@@ -67,7 +67,7 @@ public class ReceptionistBillingController : Controller
     [HttpPost("Create")]
     [HttpPost("Create/{appointmentId:long}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create([FromBody] CreateInvoiceRequest request, [FromRoute] long? appointmentId)
+    public async Task<IActionResult> Create([FromBody] CreateInvoiceRequest request, [FromRoute] long? appointmentId = null)
     {
         if (request != null && request.AppointmentId <= 0 && appointmentId.HasValue && appointmentId.Value > 0)
         {

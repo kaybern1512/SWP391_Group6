@@ -63,7 +63,7 @@ public class ReceptionistBillingControllerTests
     {
         var method = typeof(ReceptionistBillingController).GetMethod(
             nameof(ReceptionistBillingController.Create),
-            new[] { typeof(CreateInvoiceRequest) });
+            new[] { typeof(CreateInvoiceRequest), typeof(long?) });
         method.Should().NotBeNull();
 
         var validateAttr = method!.GetCustomAttribute<ValidateAntiForgeryTokenAttribute>();
@@ -138,6 +138,60 @@ public class ReceptionistBillingControllerTests
 
         successVal.Should().BeTrue();
         invoiceIdVal.Should().Be(55);
+    }
+
+    [Fact]
+    public async Task Create_WithRouteAppointmentId_OverridesRequestBodyWhenMissing()
+    {
+        var requestWithoutAppointment = new CreateInvoiceRequest
+        {
+            AppointmentId = 0,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new()
+                {
+                    Description = "Dịch vụ cạo vôi răng",
+                    Quantity = 1,
+                    UnitPrice = 150000m
+                }
+            }
+        };
+
+        var expectedDto = new InvoiceDto
+        {
+            InvoiceId = 77,
+            InvoiceCode = "INV-20261102-077",
+            AppointmentId = 200,
+            TotalAmount = 150000m,
+            Status = "Unpaid"
+        };
+
+        _billingApiMock.Setup(x => x.CreateInvoiceAsync(It.Is<CreateInvoiceRequest>(r => r.AppointmentId == 200)))
+            .ReturnsAsync(ApiResult<InvoiceDto>.Success(expectedDto));
+
+        var mockUrl = new Mock<IUrlHelper>();
+        mockUrl.Setup(x => x.Action(It.IsAny<UrlActionContext>()))
+            .Returns("/Receptionist/Billing/Detail/77");
+
+        var controller = new ReceptionistBillingController(_billingApiMock.Object)
+        {
+            ControllerContext = CreateContext(2, "Receptionist"),
+            TempData = CreateTempData(),
+            Url = mockUrl.Object
+        };
+
+        var result = await controller.Create(requestWithoutAppointment, appointmentId: 200);
+
+        var jsonResult = result.Should().BeOfType<JsonResult>().Subject;
+        jsonResult.Value.Should().NotBeNull();
+
+        var successVal = jsonResult.Value!.GetType().GetProperty("success")?.GetValue(jsonResult.Value) as bool?;
+        var invoiceIdVal = jsonResult.Value!.GetType().GetProperty("invoiceId")?.GetValue(jsonResult.Value) as long?;
+
+        successVal.Should().BeTrue();
+        invoiceIdVal.Should().Be(77);
+        requestWithoutAppointment.AppointmentId.Should().Be(200);
+        _billingApiMock.Verify(x => x.CreateInvoiceAsync(It.Is<CreateInvoiceRequest>(r => r.AppointmentId == 200)), Times.Once);
     }
 
     [Fact]

@@ -116,6 +116,78 @@ public class AppointmentWebControllerTests
         var view = result.Should().BeOfType<ViewResult>().Subject;
         var vm = view.Model.Should().BeOfType<ReceptionistRequestsViewModel>().Subject;
         vm.Requests.Should().HaveCount(2);
+        vm.HasError.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Receptionist_Requests_ApiFailure_SetsErrorMessageAndDoesNotMaskAsSilentEmpty()
+    {
+        _apiMock.Setup(x => x.GetReceptionistRequestsAsync())
+            .ReturnsAsync(ApiResult<List<AppointmentDto>>.Failure("Máy chủ API quá tải hoặc phiên đăng nhập đã hết hạn.", statusCode: 401));
+
+        var controller = new ReceptionistAppointmentController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(201, "Receptionist"),
+            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
+        };
+
+        var result = await controller.Requests();
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<ReceptionistRequestsViewModel>().Subject;
+        vm.Requests.Should().BeEmpty();
+        vm.HasError.Should().BeTrue();
+        vm.ErrorMessage.Should().Contain("Máy chủ API");
+        controller.TempData["ErrorMessage"].Should().Be(vm.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task Receptionist_Requests_SearchQuery_FiltersRequestsCorrectly()
+    {
+        _apiMock.Setup(x => x.GetReceptionistRequestsAsync())
+            .ReturnsAsync(ApiResult<List<AppointmentDto>>.Success(new List<AppointmentDto>
+            {
+                new() { AppointmentId = 1, AppointmentCode = "APP-001", PatientName = "Nguyễn Văn A", PatientPhone = "0901234567" },
+                new() { AppointmentId = 98, AppointmentCode = "APP-20261107-11C577", PatientName = "Lê Hoàng Minh", PatientPhone = "0988112233" }
+            }));
+
+        var controller = new ReceptionistAppointmentController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(201, "Receptionist")
+        };
+
+        var result = await controller.Requests("11C577");
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<ReceptionistRequestsViewModel>().Subject;
+        vm.Requests.Should().HaveCount(1);
+        vm.Requests[0].AppointmentId.Should().Be(98);
+        vm.Requests[0].AppointmentCode.Should().Be("APP-20261107-11C577");
+        vm.SearchQuery.Should().Be("11C577");
+    }
+
+    [Fact]
+    public void Receptionist_AppointmentDto_DeserializesServiceDurationCorrectly()
+    {
+        var json = """
+        {
+            "appointmentId": 98,
+            "appointmentCode": "APP-20261107-11C577",
+            "serviceName": "Cấy Ghép Implant Straumann QA 831",
+            "serviceDuration": 90,
+            "servicePrice": 28500000.00
+        }
+        """;
+
+        var dto = System.Text.Json.JsonSerializer.Deserialize<AppointmentDto>(json, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+
+        dto.Should().NotBeNull();
+        dto!.DurationMinutes.Should().Be(90);
+        dto.ServiceDuration.Should().Be(90);
+        dto.ServicePrice.Should().Be(28500000.00m);
     }
 
     [Fact]
