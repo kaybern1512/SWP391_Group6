@@ -18,20 +18,30 @@ public class ReceptionistAppointmentController : Controller
 {
     private readonly IAppointmentApiService _appointmentApiService;
     private readonly IAdminApiService? _adminApiService;
+    private readonly IAppointmentDisruptionApiService? _disruptionApi;
     private readonly ILogger<ReceptionistAppointmentController>? _logger;
 
     public ReceptionistAppointmentController(IAppointmentApiService appointmentApiService)
-        : this(appointmentApiService, null, null)
+        : this(appointmentApiService, (IAppointmentDisruptionApiService)null!, null, null)
+    {
+    }
+
+    public ReceptionistAppointmentController(
+        IAppointmentApiService appointmentApiService,
+        IAppointmentDisruptionApiService? disruptionApi)
+        : this(appointmentApiService, disruptionApi!, null, null)
     {
     }
 
     [ActivatorUtilitiesConstructor]
     public ReceptionistAppointmentController(
         IAppointmentApiService appointmentApiService,
+        IAppointmentDisruptionApiService disruptionApi,
         IAdminApiService? adminApiService,
         ILogger<ReceptionistAppointmentController>? logger = null)
     {
         _appointmentApiService = appointmentApiService;
+        _disruptionApi = disruptionApi;
         _adminApiService = adminApiService;
         _logger = logger;
     }
@@ -389,5 +399,68 @@ public class ReceptionistAppointmentController : Controller
         }
 
         return RedirectToAction(nameof(TodayCheckIn));
+    }
+
+    // ==========================================
+    // RECEPTIONIST DISRUPTION COORDINATION ACTIONS
+    // ==========================================
+
+    [HttpGet("Disruptions")]
+    public async Task<IActionResult> Disruptions([FromQuery] string? status = null, [FromQuery] bool? urgentOnly = null)
+    {
+        var result = await _disruptionApi!.GetReceptionistDisruptionsAsync(status, urgentOnly);
+        var disruptions = result.IsSuccess && result.Data != null ? result.Data : new List<AppointmentDisruptionDto>();
+        ViewBag.CurrentStatus = status;
+        ViewBag.UrgentOnly = urgentOnly;
+        return View("~/Views/Receptionist/Appointments/Disruptions.cshtml", disruptions);
+    }
+
+    [HttpGet("DisruptionDetailJson/{id:long}")]
+    public async Task<IActionResult> DisruptionDetailJson(long id)
+    {
+        var detailResult = await _disruptionApi!.GetDisruptionDetailAsync(id);
+        if (!detailResult.IsSuccess || detailResult.Data == null)
+            return Json(new { success = false, message = detailResult.Message ?? "KhÃ´ng tÃ¬m tháº¥y dá»¯ liá»‡u giÃ¡n Ä‘oáº¡n." });
+
+        var altResult = await _disruptionApi!.GetAvailableAlternativeDentistsAsync(id);
+        var alternatives = altResult.IsSuccess && altResult.Data != null ? altResult.Data : new List<AlternativeDentistDto>();
+
+        return Json(new
+        {
+            success = true,
+            disruption = detailResult.Data,
+            alternatives
+        });
+    }
+
+    [HttpPost("ResolveDisruption/{id:long}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResolveDisruption(long id, [FromForm] string resolutionType, [FromForm] long? newDentistUserId, [FromForm] DateTime? newScheduledStart, [FromForm] string staffNotes)
+    {
+        if (string.IsNullOrWhiteSpace(staffNotes))
+        {
+            TempData["ErrorMessage"] = "Vui lÃ²ng nháº­p ghi chÃº biÃªn báº£n xá»­ lÃ½ cá»§a lá»… tÃ¢n.";
+            return RedirectToAction(nameof(Disruptions));
+        }
+
+        var req = new ReceptionistResolveDisruptionRequest
+        {
+            ResolutionType = resolutionType,
+            NewDentistUserId = newDentistUserId,
+            NewScheduledStart = newScheduledStart,
+            StaffNotes = staffNotes
+        };
+
+        var result = await _disruptionApi!.ReceptionistResolveDisruptionAsync(id, req);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Äiá»u phá»‘i vÃ  xá»­ lÃ½ giÃ¡n Ä‘oáº¡n lá»‹ch háº¹n thÃ nh cÃ´ng!";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "KhÃ´ng thá»ƒ xá»­ lÃ½ giÃ¡n Ä‘oáº¡n.";
+        }
+
+        return RedirectToAction(nameof(Disruptions));
     }
 }

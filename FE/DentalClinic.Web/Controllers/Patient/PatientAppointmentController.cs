@@ -37,6 +37,7 @@ public class PatientAppointmentController : Controller
     private readonly IAppointmentApiService _appointmentApiService;
 
     private readonly IFeedbackApiService _feedbackApiService;
+    private readonly IAppointmentDisruptionApiService? _disruptionApi;
 
 public static readonly TimeZoneInfo ClinicTimeZone = ResolveClinicTimeZone();
 
@@ -92,18 +93,14 @@ public static DateOnly GetClinicToday()
 
     }
 
-public PatientAppointmentController(
-
+    public PatientAppointmentController(
         IAppointmentApiService appointmentApiService,
-
-        IFeedbackApiService feedbackApiService)
-
+        IFeedbackApiService feedbackApiService,
+        IAppointmentDisruptionApiService? disruptionApi = null)
     {
-
         _appointmentApiService = appointmentApiService;
-
         _feedbackApiService = feedbackApiService;
-
+        _disruptionApi = disruptionApi;
     }
 
 [HttpGet("")]
@@ -1056,7 +1053,7 @@ return RedirectToAction(nameof(Detail), new { id });
 
         {
 
-            TempData["SuccessMessage"] = "Đã từ chối phương án thay đổi. Yêu cầu đã được chuyển về Trưởng khoa xử lý.";
+            TempData["SuccessMessage"] = "Đã từ chối phương án thay đổi. Yêu cầu đã được chuyển về bộ phận Lễ tân phòng khám xử lý.";
 
         }
 
@@ -1210,4 +1207,99 @@ return RedirectToAction(nameof(Detail), new { id = model.AppointmentId });
 
     }
 
+    // ==========================================
+    // DOCTOR LEAVE DISRUPTION RECOVERY ACTIONS
+    // ==========================================
+
+    [HttpGet("Disruption/{id:long}")]
+    public async Task<IActionResult> Disruption(long id, [FromQuery] string? token)
+    {
+        if (_disruptionApi == null)
+        {
+            TempData["ErrorMessage"] = "Dịch vụ xử lý gián đoạn lịch khám hiện chưa khả dụng.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var disruptionResult = await _disruptionApi.GetDisruptionDetailAsync(id, token);
+        if (!disruptionResult.IsSuccess || disruptionResult.Data == null)
+        {
+            TempData["ErrorMessage"] = disruptionResult.Message ?? "Không tìm thấy thông tin sự cố gián đoạn lịch hẹn hoặc liên kết đã hết hiệu lực.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var disruption = disruptionResult.Data;
+        var altResult = await _disruptionApi.GetAvailableAlternativeDentistsAsync(id);
+        var alternatives = altResult.IsSuccess && altResult.Data != null ? altResult.Data : new List<AlternativeDentistDto>();
+
+        var apptResult = await _appointmentApiService.GetAppointmentDetailAsync(disruption.AppointmentId);
+        var appt = apptResult.IsSuccess ? apptResult.Data : null;
+
+        var vm = new PatientDisruptionViewModel
+        {
+            Disruption = disruption,
+            AlternativeDentists = alternatives,
+            Appointment = appt,
+            ActionToken = token ?? disruption.ActionToken
+        };
+
+        return View("~/Views/Patient/Appointment/DisruptionDetail.cshtml", vm);
+    }
+
+    [HttpPost("Disruption/{id:long}/ChooseDentist")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ChooseAlternativeDentist(long id, [FromForm] long newDentistUserId, [FromForm] string? note, [FromForm] string? actionToken)
+    {
+        if (_disruptionApi == null)
+        {
+            TempData["ErrorMessage"] = "Dịch vụ xử lý gián đoạn lịch khám hiện chưa khả dụng.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var req = new PatientChooseNewDentistRequest
+        {
+            NewDentistUserId = newDentistUserId,
+            Note = note,
+            ActionToken = actionToken
+        };
+
+        var result = await _disruptionApi.PatientChooseNewDentistAsync(id, req);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đã chuyển đổi bác sĩ điều trị thành công. Lịch hẹn của bạn giữ nguyên ngày giờ đã đặt!";
+            var apptId = result.Data?.AppointmentId ?? id;
+            return RedirectToAction(nameof(Detail), new { id = apptId });
+        }
+
+        TempData["ErrorMessage"] = result.Message ?? "Không thể chọn bác sĩ thay thế.";
+        return RedirectToAction(nameof(Disruption), new { id, token = actionToken });
+    }
+
+    [HttpPost("Disruption/{id:long}/Reschedule")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RescheduleDisruption(long id, [FromForm] DateTime newScheduledStart, [FromForm] string? reason, [FromForm] string? actionToken)
+    {
+        if (_disruptionApi == null)
+        {
+            TempData["ErrorMessage"] = "Dịch vụ xử lý gián đoạn lịch khám hiện chưa khả dụng.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var req = new PatientDisruptionRescheduleRequest
+        {
+            NewScheduledStart = newScheduledStart,
+            Reason = string.IsNullOrWhiteSpace(reason) ? "Bệnh nhân dời lịch do bác sĩ phụ trách nghỉ phép" : reason,
+            ActionToken = actionToken
+        };
+
+        var result = await _disruptionApi.PatientRescheduleDisruptionAsync(id, req);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đã dời lịch hẹn khám mới thành công! Hệ thống đã gửi email xác nhận đến bạn.";
+            var targetId = result.Data?.ResolvedAppointmentId ?? result.Data?.AppointmentId ?? id;
+            return RedirectToAction(nameof(Detail), new { id = targetId });
+        }
+
+        TempData["ErrorMessage"] = result.Message ?? "Không thể dời lịch hẹn.";
+        return RedirectToAction(nameof(Disruption), new { id, token = actionToken });
+    }
 }

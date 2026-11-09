@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -56,6 +56,10 @@ public partial class Appointment
     public virtual ICollection<AppointmentChangeProposal> AppointmentChangeProposals { get; set; } = new List<AppointmentChangeProposal>();
 
     public virtual ICollection<AppointmentStatusHistory> AppointmentStatusHistories { get; set; } = new List<AppointmentStatusHistory>();
+
+    public virtual ICollection<AppointmentDisruption> AppointmentDisruptions { get; set; } = new List<AppointmentDisruption>();
+
+    public virtual ICollection<AppointmentDisruption> ResolvedAppointmentDisruptions { get; set; } = new List<AppointmentDisruption>();
 
     public virtual DentistProfile? AssignedDentistUser { get; set; }
 

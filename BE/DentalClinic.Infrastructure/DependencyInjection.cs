@@ -56,6 +56,8 @@ public static class DependencyInjection
         services.AddScoped<IAppointmentService, AppointmentService>();
         services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<IDentistScheduleService, DentistScheduleService>();
+        services.AddScoped<IDentistLeaveService, DentistLeaveService>();
+        services.AddScoped<IAppointmentDisruptionService, AppointmentDisruptionService>();
         services.AddScoped<IFeedbackService, FeedbackService>();
         services.AddScoped<IMedicalRecordService>(sp => new MedicalRecordService(
             sp.GetRequiredService<DentalClinicDbContext>(),
@@ -72,7 +74,13 @@ public static class DependencyInjection
         services.AddScoped<IBlogService, BlogService>();
         services.AddScoped<IAppointmentReminderService, AppointmentReminderService>();
         services.AddScoped<IMedicineService, MedicineService>();
+        services.AddScoped<IReceptionistCoverageService, ReceptionistCoverageService>();
+        services.AddScoped<IReceptionistScheduleService, ReceptionistScheduleService>();
+        services.AddScoped<IReceptionistLeaveService, ReceptionistLeaveService>();
+        services.AddScoped<IReceptionistShiftSwapService, ReceptionistShiftSwapService>();
+        services.AddScoped<IReceptionistHandoverService, ReceptionistHandoverService>();
         services.AddHostedService<AppointmentReminderBackgroundWorker>();
+        services.AddHostedService<AppointmentDisruptionBackgroundWorker>();
 
         return services;
     }
