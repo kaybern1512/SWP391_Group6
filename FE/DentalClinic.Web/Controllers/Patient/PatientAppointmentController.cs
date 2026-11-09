@@ -1,4 +1,4 @@
-using DentalClinic.Web.ViewModels.Services;
+﻿using DentalClinic.Web.ViewModels.Services;
 
 using DentalClinic.Web.Helpers;
 
@@ -249,55 +249,210 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
 
     }
 
-[HttpGet("Book")]
-
-    public async Task<IActionResult> Book(
-
-        [FromQuery] long? departmentId = null,
-
-        [FromQuery] long? dentistId = null,
-
-        [FromQuery] string? date = null,
-
-        [FromQuery] string? reason = null)
-
+    public static List<BookingComboViewModel> GetAvailableCombos()
     {
+        return new List<BookingComboViewModel>
+        {
+            new()
+            {
+                Code = "COMBO_HYGIENE",
+                Title = "Chăm Sóc & Vệ Sinh Nụ Cười Sáng Khỏe",
+                Tagline = "Làm sạch mảng bám, ngừa sâu răng và viêm nướu định kỳ",
+                Badge = "Bán chạy nhất",
+                IconClass = "bi-shield-check",
+                Description = "Gói chăm sóc răng miệng toàn diện giúp loại bỏ hoàn toàn cao răng tích tụ, đánh bóng men răng sáng bóng và bổ sung lớp bảo vệ Flour chống sâu răng hiệu quả.",
+                OriginalPrice = 450000,
+                ComboPrice = 350000,
+                DurationMinutes = 45,
+                DepartmentId = 1,
+                DepartmentName = "Khoa Răng Hàm Mặt Tổng Quát",
+                ServiceId = 2,
+                ServiceName = "Lấy cao răng & Đánh bóng",
+                IncludedServices = new()
+                {
+                    "Khám tổng quát & Đánh giá sức khỏe răng nướu",
+                    "Lấy cao răng siêu âm vô cảm không đau",
+                    "Đánh bóng loại bỏ mảng bám ố vàng",
+                    "Bôi Flouride tái khoáng men răng ngừa sâu răng"
+                },
+                Benefits = new()
+                {
+                    "Tiết kiệm 22% so với đặt từng dịch vụ lẻ",
+                    "Bảo vệ men răng và nướu chắc khỏe suốt 6 tháng",
+                    "Bác sĩ chuyên khoa trực tiếp thực hiện nhẹ nhàng"
+                }
+            },
+            new()
+            {
+                Code = "COMBO_WHITENING",
+                Title = "Nụ Cười Trắng Sáng Laser Whitening",
+                Tagline = "Bật 2 - 3 tone màu răng ngay sau 60 phút với công nghệ Mỹ",
+                Badge = "Thẩm mỹ cao cấp",
+                IconClass = "bi-stars",
+                Description = "Gói thẩm mỹ cao cấp kết hợp vệ sinh làm sạch sâu bề mặt và kích hoạt hoạt chất tẩy trắng an toàn bằng ánh sáng Laser lạnh chuẩn nha khoa quốc tế.",
+                OriginalPrice = 2250000,
+                ComboPrice = 1950000,
+                DurationMinutes = 60,
+                DepartmentId = 2,
+                DepartmentName = "Khoa Chỉnh Nha & Nha Khoa Thẩm Mỹ",
+                ServiceId = 6,
+                ServiceName = "Tẩy trắng răng Laser Whitening",
+                IncludedServices = new()
+                {
+                    "Khám đo độ sáng màu răng hiện tại theo bảng Vita",
+                    "Lấy cao răng & Vệ sinh chuẩn bị bề mặt men răng",
+                    "Cách ly bảo vệ nướu và môi chuyên dụng",
+                    "Chiếu đèn Laser Whitening kích hoạt trắng sáng",
+                    "Thoa gel chống ê buốt và hướng dẫn duy trì nụ cười đẹp"
+                },
+                Benefits = new()
+                {
+                    "Hiệu quả tức thì, không làm mòn men răng",
+                    "Tiết kiệm 300.000đ khi kết hợp lấy cao răng",
+                    "Cam kết độ sáng bền lâu từ 1.5 - 2 năm"
+                }
+            },
+            new()
+            {
+                Code = "COMBO_ORTHO",
+                Title = "Thăm Khám & Tư Vấn Chỉnh Nha Toàn Diện",
+                Tagline = "Khảo sát khớp cắn, lấy dấu 3D và lập phác đồ niềng răng chi tiết",
+                Badge = "Chuyên gia chỉnh nha",
+                IconClass = "bi-emoji-smile",
+                Description = "Gói dành riêng cho khách hàng có nhu cầu niềng răng (mắc cài kim loại, sứ, hoặc khay trong suốt Invisalign). Bác sĩ chuyên khoa II chỉnh nha sẽ trực tiếp thăm khám và lên phác đồ cá nhân hóa.",
+                OriginalPrice = 500000,
+                ComboPrice = 300000,
+                DurationMinutes = 45,
+                DepartmentId = 2,
+                DepartmentName = "Khoa Chỉnh Nha & Nha Khoa Thẩm Mỹ",
+                ServiceId = 5,
+                ServiceName = "Khám & Tư vấn Chỉnh nha",
+                IncludedServices = new()
+                {
+                    "Khám trực tiếp cùng Chuyên gia Chỉnh nha",
+                    "Khảo sát tương quan xương hàm & đường cười thẩm mỹ",
+                    "Lấy dấu răng mẫu hàm hoặc quét dấu kỹ thuật số 3D",
+                    "Lập kế hoạch phác đồ điều trị và dự toán thời gian/chi phí"
+                },
+                Benefits = new()
+                {
+                    "Tư vấn 1:1 chuyên sâu cùng Bác sĩ Chỉnh nha",
+                    "Xem trước mô phỏng kết quả sau khi niềng răng",
+                    "Miễn phí 100% chi phí khám nếu đăng ký gói niềng răng"
+                }
+            },
+            new()
+            {
+                Code = "COMBO_IMPLANT",
+                Title = "Thăm Khám & Khảo Sát Chuyên Sâu Cấy Ghép Implant",
+                Tagline = "Đánh giá chất lượng xương hàm và kế hoạch phục hình răng mất",
+                Badge = "Chuyên khoa Implant",
+                IconClass = "bi-award",
+                Description = "Gói chuyên sâu dành cho người mất 1 hoặc nhiều răng. Bác sĩ phẫu thuật sẽ đo độ dày và mật độ xương cung hàm, tư vấn chọn dòng trụ Implant tương thích sinh học cao nhất.",
+                OriginalPrice = 700000,
+                ComboPrice = 500000,
+                DurationMinutes = 45,
+                DepartmentId = 3,
+                DepartmentName = "Khoa Phẫu Thuật Trong Miệng & Cấy Ghép Implant",
+                ServiceId = 7,
+                ServiceName = "Khám chuyên sâu & Tư vấn cấy ghép Implant",
+                IncludedServices = new()
+                {
+                    "Thăm khám lâm sàng và tiền sử bệnh nền toàn thân",
+                    "Đọc phim khảo sát xoang hàm & dây thần kinh răng dưới",
+                    "Đo mật độ xương và chỉ định kỹ thuật ghép xương (nếu cần)",
+                    "Lên phương án phục hình răng sứ trên trụ Implant"
+                },
+                Benefits = new()
+                {
+                    "Bác sĩ chuyên gia trên 10 năm kinh nghiệm phẫu thuật Implant",
+                    "Tư vấn dòng trụ chính hãng Châu Âu / Hàn Quốc bảo hành trọn đời",
+                    "Khấu trừ toàn bộ phí khám khi thực hiện cấy trụ"
+                }
+            }
+        };
+    }
 
+[HttpGet("Book")]
+    public async Task<IActionResult> Book(
+        [FromQuery] long? departmentId = null,
+        [FromQuery] long? serviceId = null,
+        [FromQuery] long? dentistId = null,
+        [FromQuery] string? date = null,
+        [FromQuery] string? reason = null,
+        [FromQuery] string? category = null,
+        [FromQuery] string? combo = null)
+    {
         var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
         if (eligibilityResult?.StatusCode == 401)
         {
             TempData["ErrorMessage"] = "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.";
-            return RedirectToAction("Login", "Account", new { returnUrl = Url.Action(nameof(Book), "PatientAppointment", new { departmentId, dentistId, date, reason }) });
+            return RedirectToAction("Login", "Account", new { returnUrl = Url.Action(nameof(Book), "PatientAppointment", new { departmentId, serviceId, dentistId, date, reason, category, combo }) });
         }
 
         var eligibility = eligibilityResult?.Data ?? new BookingEligibilityDto();
-
-var (filteredDepts, filteredServices) = await GetAllowedBookingCatalogAsync();
+        var (filteredDepts, filteredServices) = await GetAllowedBookingCatalogAsync();
+        var availableCombos = GetAvailableCombos();
 
         var vm = new PatientBookViewModel
-
         {
-
             Departments = filteredDepts,
-
             Services = filteredServices,
-
             Eligibility = eligibility,
-
+            Combos = availableCombos,
             DepartmentId = departmentId ?? 0,
-
+            RequestedServiceId = serviceId ?? 0,
             RequestedDentistUserId = dentistId,
-
             AppointmentDate = !string.IsNullOrWhiteSpace(date) ? date : GetClinicToday().AddDays(1).ToString("yyyy-MM-dd"),
-
-            ReasonForVisit = reason ?? string.Empty
-
+            ReasonForVisit = reason ?? string.Empty,
+            PatientFullName = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? User.FindFirst("unique_name")?.Value,
+            PatientEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
         };
 
+        // Categorization & pre-selection based on query parameters or defaults
+        if (!string.IsNullOrEmpty(combo))
+        {
+            var matchedCombo = availableCombos.FirstOrDefault(c => c.Code.Equals(combo, StringComparison.OrdinalIgnoreCase));
+            if (matchedCombo != null)
+            {
+                vm.BookingCategory = "Combo";
+                vm.SelectedComboCode = matchedCombo.Code;
+                vm.DepartmentId = matchedCombo.DepartmentId;
+                vm.RequestedServiceId = matchedCombo.ServiceId;
+            }
+        }
+        else if (!string.IsNullOrEmpty(category))
+        {
+            vm.BookingCategory = category;
+            if (category == "GeneralCheckup")
+            {
+                vm.DepartmentId = 1;
+                vm.RequestedServiceId = 1;
+            }
+            else if (category == "Combo" && availableCombos.Any())
+            {
+                var first = availableCombos.First();
+                vm.SelectedComboCode = first.Code;
+                vm.DepartmentId = first.DepartmentId;
+                vm.RequestedServiceId = first.ServiceId;
+            }
+        }
+        else if (departmentId.HasValue && serviceId.HasValue)
+        {
+            vm.BookingCategory = "SingleService";
+            vm.DepartmentId = departmentId.Value;
+            vm.RequestedServiceId = serviceId.Value;
+        }
+        else
+        {
+            // Default: Khám tổng quát / Chưa biết nhu cầu
+            vm.BookingCategory = "GeneralCheckup";
+            vm.DepartmentId = 1;
+            vm.RequestedServiceId = 1;
+        }
+
         return View("~/Views/Patient/Appointment/Book.cshtml", vm);
-
     }
-
 [HttpGet("GetServices")]
 
     public async Task<IActionResult> GetServices(long departmentId)
@@ -387,81 +542,61 @@ return Json(slots);
     }
 
 [HttpPost("Book")]
-
     [ValidateAntiForgeryToken]
-
     public async Task<IActionResult> Book(PatientBookViewModel model)
-
     {
-
         var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
-
         var eligibility = eligibilityResult?.Data ?? new BookingEligibilityDto();
 
-if (!eligibility.IsEligible)
-
+        if (!eligibility.IsEligible)
         {
-
             TempData["ErrorMessage"] = eligibility.BlockReason ?? "Tài khoản của bạn hiện đang bị tạm khóa quyền đặt lịch trực tuyến.";
-
             model.Eligibility = eligibility;
-
             var catalog = await GetAllowedBookingCatalogAsync();
-
             model.Departments = catalog.Departments;
-
             model.Services = catalog.Services;
-
+            model.Combos = GetAvailableCombos();
             return View("~/Views/Patient/Appointment/Book.cshtml", model);
-
         }
 
-var clinicNow = GetClinicNow();
-
+        var clinicNow = GetClinicNow();
         if (model.ScheduledStart.HasValue && model.ScheduledStart.Value <= clinicNow.AddMinutes(15))
-
         {
-
             ModelState.AddModelError("ScheduledStart", "Thời gian khám không được nằm trong quá khứ hoặc quá sát giờ hiện tại (cần đặt trước tối thiểu 15 phút). Vui lòng chọn khung giờ khám hợp lệ.");
-
         }
 
-if (!ModelState.IsValid)
-
+        if (!ModelState.IsValid)
         {
-
             model.Eligibility = eligibility;
-
             var catalog = await GetAllowedBookingCatalogAsync();
-
             model.Departments = catalog.Departments;
-
             model.Services = catalog.Services;
-
+            model.Combos = GetAvailableCombos();
             return View("~/Views/Patient/Appointment/Book.cshtml", model);
-
         }
 
-var request = new CreateAppointmentRequest
-
+        var availableCombos = GetAvailableCombos();
+        var reasonToSubmit = model.ReasonForVisit ?? string.Empty;
+        if (model.BookingCategory == "Combo" && !string.IsNullOrEmpty(model.SelectedComboCode))
         {
+            var matchedCombo = availableCombos.FirstOrDefault(c => c.Code.Equals(model.SelectedComboCode, StringComparison.OrdinalIgnoreCase));
+            if (matchedCombo != null && !reasonToSubmit.Contains($"[Gói Combo: {matchedCombo.Title}]"))
+            {
+                reasonToSubmit = $"[Gói Combo: {matchedCombo.Title}] {(string.IsNullOrWhiteSpace(reasonToSubmit) ? "Đăng ký khám trọn gói combo." : reasonToSubmit)}";
+            }
+        }
 
+        var request = new CreateAppointmentRequest
+        {
             DepartmentId = model.DepartmentId,
-
             RequestedServiceId = model.RequestedServiceId,
-
             RequestedDentistUserId = string.Equals(model.DoctorSelectionMode, "ClinicAssignment", StringComparison.OrdinalIgnoreCase) ? null : model.RequestedDentistUserId,
-
             ScheduledStart = model.ScheduledStart!.Value,
-
-            ReasonForVisit = model.ReasonForVisit
-
+            ReasonForVisit = reasonToSubmit
         };
 
-var result = await _appointmentApiService.BookAppointmentAsync(request);
-
+        var result = await _appointmentApiService.BookAppointmentAsync(request);
         if (!result.IsSuccess)
-
         {
             if (result.StatusCode == 401)
             {
@@ -470,25 +605,17 @@ var result = await _appointmentApiService.BookAppointmentAsync(request);
             }
 
             ModelState.AddModelError(string.Empty, result.Message ?? "Không thể đặt lịch khám.");
-
             model.Eligibility = eligibility;
-
             var catalog = await GetAllowedBookingCatalogAsync();
-
             model.Departments = catalog.Departments;
-
             model.Services = catalog.Services;
-
+            model.Combos = GetAvailableCombos();
             return View("~/Views/Patient/Appointment/Book.cshtml", model);
-
         }
 
-TempData["SuccessMessage"] = "Yêu cầu đặt lịch khám đã được gửi thành công!";
-
+        TempData["SuccessMessage"] = "Yêu cầu đặt lịch khám đã được gửi thành công!";
         return RedirectToAction(nameof(Success), new { id = result.Data!.AppointmentId });
-
     }
-
 [HttpGet("Success")]
 
     public async Task<IActionResult> Success(long id)

@@ -16,6 +16,21 @@ public class PatientBookViewModel
     public long RequestedServiceId { get; set; }
 
     /// <summary>
+    /// Hình thức đặt lịch theo sơ đồ luồng mới:
+    /// "GeneralCheckup" = Khám tổng quát / Chưa biết nhu cầu (Khám tư vấn)
+    /// "Combo" = Combo dịch vụ (Xem chi tiết & đặt trọn gói)
+    /// "SingleService" = Dịch vụ lẻ (Chọn dịch vụ cụ thể theo chuyên khoa)
+    /// </summary>
+    [Display(Name = "Hình thức đặt lịch")]
+    public string BookingCategory { get; set; } = "GeneralCheckup";
+
+    /// <summary>
+    /// Mã gói Combo nếu người dùng chọn đặt theo Combo dịch vụ
+    /// </summary>
+    [Display(Name = "Gói combo dịch vụ")]
+    public string? SelectedComboCode { get; set; }
+
+    /// <summary>
     /// Chế độ phân công bác sĩ:
     /// "ClinicAssignment" = Để phòng khám phân công bác sĩ phù hợp (mặc định)
     /// "PreferredDentist" = Tôi muốn chọn bác sĩ cụ thể
@@ -59,4 +74,32 @@ public class PatientBookViewModel
     public List<DentistOptionDto> Dentists { get; set; } = new();
     public List<AvailableSlotDto> AvailableSlots { get; set; } = new();
     public BookingEligibilityDto? Eligibility { get; set; }
+
+    /// <summary>
+    /// Danh sách các gói Combo dịch vụ nha khoa định sẵn
+    /// </summary>
+    public List<BookingComboViewModel> Combos { get; set; } = new();
+}
+
+/// <summary>
+/// Đại diện cho một gói combo dịch vụ trong luồng đặt lịch mới
+/// </summary>
+public class BookingComboViewModel
+{
+    public string Code { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Tagline { get; set; } = string.Empty;
+    public string Badge { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public decimal OriginalPrice { get; set; }
+    public decimal ComboPrice { get; set; }
+    public int DiscountPercent => OriginalPrice > 0 ? (int)Math.Round((OriginalPrice - ComboPrice) / OriginalPrice * 100) : 0;
+    public int DurationMinutes { get; set; } = 45;
+    public long DepartmentId { get; set; }
+    public string DepartmentName { get; set; } = string.Empty;
+    public long ServiceId { get; set; }
+    public string ServiceName { get; set; } = string.Empty;
+    public List<string> IncludedServices { get; set; } = new();
+    public List<string> Benefits { get; set; } = new();
+    public string IconClass { get; set; } = "bi-stars";
 }

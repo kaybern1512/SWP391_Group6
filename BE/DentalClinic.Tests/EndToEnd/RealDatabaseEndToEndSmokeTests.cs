@@ -38,12 +38,12 @@ public class RealDatabaseEndToEndSmokeTests
 
     private static async Task<DateTime> GetValidTestWorkDateAsync(DentalClinicDbContext db, long dentistUserId, int offsetDays = 24, int hour = 10, int requiredDurationHours = 2)
     {
-        var minDate = DateOnly.FromDateTime(DateTime.Today).AddDays(offsetDays);
+        var minDate = DateOnly.FromDateTime(DateTime.Today).AddDays(offsetDays + 55);
         var shifts = await db.DentistWorkSchedules
             .AsNoTracking()
             .Where(ws => ws.DentistUserId == dentistUserId && ws.WorkDate >= minDate && ws.Status == "Scheduled")
             .OrderBy(ws => ws.WorkDate)
-            .Take(120)
+            .Take(500)
             .ToListAsync();
 
         foreach (var shift in shifts)

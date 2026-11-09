@@ -1,4 +1,4 @@
-@model DentalClinic.Web.ViewModels.Appointments.PatientBookViewModel
+﻿@model DentalClinic.Web.ViewModels.Appointments.PatientBookViewModel
 @{
     ViewData["Title"] = "Đặt lịch khám nha khoa";
 }
@@ -10,7 +10,7 @@
             <h1 class="h3 fw-bold text-dark mb-1">
                 <i class="bi bi-calendar-plus text-primary me-2"></i>Đặt Lịch Khám Nha Khoa Trực Tuyến
             </h1>
-            <p class="text-muted mb-0">Hệ thống phòng khám DentalCare &bull; Đặt hẹn theo dịch vụ thực tế & chuyên khoa phù hợp</p>
+            <p class="text-muted mb-0">Hệ thống phòng khám DentalCare &bull; Đặt hẹn theo Combo dịch vụ, Dịch vụ lẻ hoặc Khám tư vấn tổng quát</p>
         </div>
         <div>
             <a asp-action="Index" class="btn btn-outline-secondary">
@@ -50,25 +50,25 @@
                 <div class="d-flex align-items-center">
                     <i class="bi bi-exclamation-triangle-fill fs-5 me-2 text-warning"></i>
                     <div class="small">
-                        <strong>Lưu ý chính sách hủy lịch:</strong> Tài khoản của bạn đang có <strong>@Model.Eligibility.StrikeCount / 3</strong> lần vi phạm trong 30 ngày qua (hủy sát giờ &lt;12h hoặc không đến khám). Vui lòng cân nhắc sắp xếp thời gian hợp lý khi đặt lịch để tránh bị tạm khóa quyền đặt lịch trực tuyến 30 ngày.
+                        <strong>Lưu ý chính sách hủy lịch:</strong> Tài khoản của bạn đang có <strong>@Model.Eligibility.StrikeCount / 3</strong> lần vi phạm trong 30 ngày qua (hủy sát giờ &lt;12h hoặc không đến khám). Vui lòng sắp xếp thời gian hợp lý khi đặt lịch.
                     </div>
                 </div>
                 <span class="badge bg-warning text-dark px-2 py-1">@Model.Eligibility.StrikeCount/3 Vi phạm</span>
             </div>
         }
 
-        <!-- Stepper Navigation (5 Bước Trực Quan Chuẩn Chuyên Nghiệp) -->
+        <!-- Stepper Navigation (Chuẩn theo sơ đồ luồng quy trình mới) -->
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-body p-3">
                 <div class="d-flex justify-content-between align-items-center text-center position-relative stepper-wrapper">
                     <div class="step-item active" id="step-nav-1" onclick="goToStep(1)">
-                        <div class="step-circle"><i class="bi bi-heart-pulse"></i></div>
-                        <div class="step-label">1. Dịch vụ</div>
+                        <div class="step-circle"><i class="bi bi-diagram-3-fill"></i></div>
+                        <div class="step-label">1. Chọn hình thức</div>
                     </div>
                     <div class="step-line"></div>
                     <div class="step-item" id="step-nav-2" onclick="goToStep(2)">
                         <div class="step-circle"><i class="bi bi-person-badge"></i></div>
-                        <div class="step-label">2. Chọn bác sĩ</div>
+                        <div class="step-label">2. Khoa & Bác sĩ</div>
                     </div>
                     <div class="step-line"></div>
                     <div class="step-item" id="step-nav-3" onclick="goToStep(3)">
@@ -77,12 +77,12 @@
                     </div>
                     <div class="step-line"></div>
                     <div class="step-item" id="step-nav-4" onclick="goToStep(4)">
-                        <div class="step-circle"><i class="bi bi-card-text"></i></div>
+                        <div class="step-circle"><i class="bi bi-person-lines-fill"></i></div>
                         <div class="step-label">4. Thông tin BN</div>
                     </div>
                     <div class="step-line"></div>
                     <div class="step-item" id="step-nav-5" onclick="goToStep(5)">
-                        <div class="step-circle"><i class="bi bi-check-circle"></i></div>
+                        <div class="step-circle"><i class="bi bi-check-circle-fill"></i></div>
                         <div class="step-label">5. Xác nhận</div>
                     </div>
                 </div>
@@ -95,6 +95,8 @@
 
             <input type="hidden" asp-for="DepartmentId" id="hiddenDepartmentId" />
             <input type="hidden" asp-for="RequestedServiceId" id="hiddenServiceId" />
+            <input type="hidden" asp-for="BookingCategory" id="hiddenBookingCategory" value="@Model.BookingCategory" />
+            <input type="hidden" asp-for="SelectedComboCode" id="hiddenSelectedComboCode" value="@Model.SelectedComboCode" />
             <input type="hidden" asp-for="DoctorSelectionMode" id="hiddenDoctorSelectionMode" value="@Model.DoctorSelectionMode" />
             <input type="hidden" asp-for="RequestedDentistUserId" id="hiddenDentistId" />
             <input type="hidden" asp-for="ScheduledStart" id="hiddenScheduledStart" />
@@ -103,598 +105,656 @@
                 <!-- MAIN FORM STEPS (Cột Bên Trái 8/12) -->
                 <div class="col-lg-8">
 
-                    <!-- STEP 1: CHỌN DỊCH VỤ THỰC TẾ (Service-First) -->
+                    <!-- ============================================================== -->
+                    <!-- BƯỚC 1: CHỌN HÌNH THỨC (COMBO / DỊCH VỤ LẺ / KHÁM TỔNG QUÁT)   -->
+                    <!-- ============================================================== -->
                     <div class="step-panel" id="step-panel-1">
-                        <div class="card border-0 shadow-sm">
+                        <div class="card border-0 shadow-sm mb-4">
                             <div class="card-header bg-white py-3 border-bottom">
-                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                    <div>
-                                        <h5 class="card-title mb-1 fw-bold text-primary">
-                                            <i class="bi bi-heart-pulse me-2"></i>Bước 1: Chọn Dịch Vụ Nha Khoa Thực Tế
-                                        </h5>
-                                        <p class="text-muted small mb-0">Hệ thống nạp cấu hình thời lượng, giá tham khảo và khung giờ khám trực tiếp từ dữ liệu thực tế.</p>
-                                    </div>
-                                    <span class="badge bg-primary-subtle text-primary px-3 py-2 fs-6 rounded-pill" id="badgeServiceCount">
-                                        @Model.Services.Count dịch vụ khả dụng
-                                    </span>
-                                </div>
+                                <h5 class="card-title mb-1 fw-bold text-primary">
+                                    <i class="bi bi-diagram-3-fill me-2"></i>Bước 1: Chọn Hình Thức Đặt Lịch
+                                </h5>
+                                <p class="text-muted small mb-0">Vui lòng chọn 1 trong 3 hình thức thăm khám phù hợp nhất với nhu cầu của bạn:</p>
                             </div>
                             <div class="card-body p-4">
-                                <!-- Bộ lọc và tìm kiếm dịch vụ -->
+                                <!-- 3 Nhánh Chọn Hình Thức (Cards Selector) -->
                                 <div class="row g-3 mb-4">
-                                    <div class="col-md-7">
-                                        <div class="input-group">
-                                            <span class="input-group-text bg-light border-end-0 text-muted">
-                                                <i class="bi bi-search"></i>
+                                    <!-- Nhánh 1: Combo Dịch Vụ -->
+                                    <div class="col-md-4">
+                                        <div class="category-card p-3 h-100 rounded-3 text-center position-relative cursor-pointer @(Model.BookingCategory == "Combo" ? "active" : "")"
+                                             id="cat-card-combo" onclick="switchBookingCategory('Combo')">
+                                            <span class="badge bg-warning text-dark position-absolute top-0 end-0 m-2 px-2 py-1 small rounded-pill">
+                                                <i class="bi bi-stars me-1"></i>Tiết kiệm 20%
                                             </span>
-                                            <input type="text" id="serviceSearchInput" class="form-control border-start-0 ps-0" placeholder="Tìm theo tên dịch vụ (ví dụ: lấy cao răng, trám răng, nhổ răng, niềng răng...)" oninput="filterServices()" />
-                                        </div>
-                                    </div>
-                                    <div class="col-md-5">
-                                        <select id="departmentFilterSelect" class="form-select" onchange="filterServices()">
-                                            <option value="">-- Tất cả chuyên khoa --</option>
-                                            @foreach (var dept in Model.Departments)
-                                            {
-                                                <option value="@dept.DepartmentId" selected="@(Model.DepartmentId == dept.DepartmentId ? "selected" : null)">
-                                                    @dept.Name
-                                                </option>
-                                            }
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <!-- Box cảnh báo đã chọn dịch vụ -->
-                                <div id="serviceSelectedAlert" class="alert alert-success border-success d-none py-2 px-3 mb-3 rounded-3">
-                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                        <div class="d-flex align-items-center gap-2">
-                                            <i class="bi bi-check-circle-fill text-success fs-4"></i>
-                                            <div>
-                                                <span class="small text-muted d-block">Bạn đang chọn:</span>
-                                                <strong id="alertServiceName" class="text-success fs-6"></strong>
-                                                <div class="small mt-1 text-muted">
-                                                    <span>Chuyên khoa: <strong id="alertDeptName" class="text-dark"></strong></span>
-                                                    <span class="mx-2">&bull;</span>
-                                                    <span>Thời lượng: <strong id="alertServiceDuration" class="text-primary"></strong></span>
-                                                    <span class="mx-2">&bull;</span>
-                                                    <span>Giá tham khảo: <strong id="alertServicePrice" class="text-primary"></strong></span>
-                                                </div>
+                                            <div class="cat-icon rounded-circle bg-warning-subtle text-warning mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 56px; height: 56px;">
+                                                <i class="bi bi-box2-heart-fill fs-3"></i>
                                             </div>
+                                            <h6 class="fw-bold text-dark mb-1">Combo Dịch Vụ</h6>
+                                            <p class="text-muted small mb-2">Trọn gói kết hợp nhiều dịch vụ tiện ích, tối ưu chi phí & thời gian.</p>
+                                            <div class="small fw-semibold text-warning"><i class="bi bi-arrow-right-circle me-1"></i>Xem & chọn gói</div>
                                         </div>
-                                        <div>
-                                            <span class="badge bg-success-subtle text-success border border-success px-3 py-2">
-                                                <i class="bi bi-check2 me-1"></i>Đã chọn
+                                    </div>
+
+                                    <!-- Nhánh 2: Dịch Vụ Lẻ -->
+                                    <div class="col-md-4">
+                                        <div class="category-card p-3 h-100 rounded-3 text-center position-relative cursor-pointer @(Model.BookingCategory == "SingleService" ? "active" : "")"
+                                             id="cat-card-single" onclick="switchBookingCategory('SingleService')">
+                                            <span class="badge bg-info-subtle text-info position-absolute top-0 end-0 m-2 px-2 py-1 small rounded-pill">
+                                                31 Dịch vụ
                                             </span>
+                                            <div class="cat-icon rounded-circle bg-info-subtle text-info mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 56px; height: 56px;">
+                                                <i class="bi bi-grid-3x3-gap-fill fs-3"></i>
+                                            </div>
+                                            <h6 class="fw-bold text-dark mb-1">Dịch Vụ Lẻ</h6>
+                                            <p class="text-muted small mb-2">Chủ động chọn đúng thủ thuật cụ thể theo từng chuyên khoa nha khoa.</p>
+                                            <div class="small fw-semibold text-info"><i class="bi bi-arrow-right-circle me-1"></i>Chọn dịch vụ cụ thể</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Nhánh 3: Khám Tổng Quát / Chưa Biết Nhu Cầu -->
+                                    <div class="col-md-4">
+                                        <div class="category-card p-3 h-100 rounded-3 text-center position-relative cursor-pointer @(Model.BookingCategory == "GeneralCheckup" ? "active" : "")"
+                                             id="cat-card-general" onclick="switchBookingCategory('GeneralCheckup')">
+                                            <span class="badge bg-success text-white position-absolute top-0 end-0 m-2 px-2 py-1 small rounded-pill">
+                                                Khuyên Dùng
+                                            </span>
+                                            <div class="cat-icon rounded-circle bg-success-subtle text-success mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 56px; height: 56px;">
+                                                <i class="bi bi-clipboard2-pulse-fill fs-3"></i>
+                                            </div>
+                                            <h6 class="fw-bold text-dark mb-1">Khám Tổng Quát</h6>
+                                            <p class="text-muted small mb-2">Chưa rõ tình trạng răng miệng? Bác sĩ sẽ thăm khám & tư vấn chuẩn xác.</p>
+                                            <div class="small fw-semibold text-success"><i class="bi bi-arrow-right-circle me-1"></i>Đặt lịch khám tư vấn</div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Lưới danh sách dịch vụ -->
-                                <div class="row g-3" id="servicesGrid">
-                                    @if (Model.Services.Count == 0)
-                                    {
-                                        <div class="col-12 text-center text-muted py-5">
-                                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-                                            Hiện chưa có dịch vụ nào đang mở đặt lịch trực tuyến.
+                                <hr class="my-4 text-muted opacity-25" />
+
+                                <!-- NỘI DUNG NHÁNH A: COMBO DỊCH VỤ -->
+                                <div id="category-content-combo" class="@(Model.BookingCategory == "Combo" ? "" : "d-none")">
+                                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                                        <div>
+                                            <h6 class="fw-bold text-dark mb-0">
+                                                <i class="bi bi-box2-heart text-warning me-2"></i>Danh Sách Gói Combo Tuyển Chọn
+                                            </h6>
+                                            <small class="text-muted">Chọn gói combo phù hợp hoặc bấm "Xem chi tiết combo" để đọc quyền lợi chi tiết</small>
                                         </div>
-                                    }
-                                    else
-                                    {
-                                        @foreach (var svc in Model.Services)
+                                        <span class="badge bg-warning-subtle text-dark px-3 py-2 rounded-pill">
+                                            @Model.Combos.Count gói ưu đãi
+                                        </span>
+                                    </div>
+
+                                    <div class="row g-3">
+                                        @foreach (var combo in Model.Combos)
                                         {
-                                            var deptName = !string.IsNullOrWhiteSpace(svc.DepartmentName) ? svc.DepartmentName : "Chuyên khoa tiếp nhận";
-                                            var isSelected = Model.RequestedServiceId == svc.DepartmentServiceId;
-                                            var duration = svc.DurationMinutes.HasValue && svc.DurationMinutes.Value > 0 ? svc.DurationMinutes.Value : 30;
-                                            var priceStr = svc.Price.HasValue && svc.Price.Value > 0 ? svc.Price.Value.ToString("N0") + " đ" : "Miễn phí / BHYT";
-                                            var hasOfficialInstructions = !string.IsNullOrWhiteSpace(svc.BookingInstructions);
-                                            var isComplex = svc.RequiresConsultationFirst == true || hasOfficialInstructions ||
-                                                            svc.ServiceName.Contains("Implant", StringComparison.OrdinalIgnoreCase) ||
-                                                            svc.ServiceName.Contains("Niềng", StringComparison.OrdinalIgnoreCase) ||
-                                                            svc.ServiceName.Contains("khôn", StringComparison.OrdinalIgnoreCase) ||
-                                                            svc.ServiceName.Contains("Veneer", StringComparison.OrdinalIgnoreCase) ||
-                                                            svc.ServiceName.Contains("Bọc răng", StringComparison.OrdinalIgnoreCase);
-
-                                            <div class="col-md-6 service-item" 
-                                                 data-service-id="@svc.DepartmentServiceId" 
-                                                 data-dept-id="@svc.DepartmentId" 
-                                                 data-dept-name="@deptName" 
-                                                 data-name="@svc.ServiceName"
-                                                 data-duration="@duration"
-                                                 data-price="@priceStr"
-                                                 data-is-complex="@(isComplex ? "true" : "false")">
-                                                <div class="card h-100 selection-card service-card p-3 @(isSelected ? "active" : "")">
+                                            var isSelected = Model.SelectedComboCode == combo.Code;
+                                            <div class="col-md-6">
+                                                <div class="card h-100 combo-card border p-3 rounded-3 position-relative @(isSelected ? "active border-warning" : "")"
+                                                     id="combo-card-@combo.Code"
+                                                     data-combo-code="@combo.Code"
+                                                     data-dept-id="@combo.DepartmentId"
+                                                     data-dept-name="@combo.DepartmentName"
+                                                     data-service-id="@combo.ServiceId"
+                                                     data-service-name="@combo.ServiceName"
+                                                     data-duration="@combo.DurationMinutes"
+                                                     data-price="@combo.ComboPrice.ToString("N0") đ">
                                                     <div class="d-flex justify-content-between align-items-start mb-2">
-                                                        <h6 class="fw-bold mb-0 text-dark flex-grow-1 pe-2 service-name-title">@svc.ServiceName</h6>
-                                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle small text-truncate" style="max-width: 160px;" title="@deptName">
-                                                            @deptName
+                                                        <span class="badge bg-warning-subtle text-warning-emphasis fw-bold px-2 py-1 rounded-pill">
+                                                            @combo.Badge
+                                                        </span>
+                                                        <span class="badge bg-light text-muted border">
+                                                            <i class="bi bi-clock me-1"></i>@combo.DurationMinutes phút
                                                         </span>
                                                     </div>
-                                                    <p class="text-muted small mb-2 flex-grow-1 service-desc-text">
-                                                        @(string.IsNullOrWhiteSpace(svc.Description) ? "Thăm khám, kiểm tra và điều trị chuẩn y khoa với trang thiết bị hiện đại." : svc.Description)
-                                                    </p>
 
-                                                    <div class="d-flex align-items-center justify-content-between py-2 px-2 bg-light rounded-2 mb-2">
-                                                        <div class="d-flex align-items-center gap-1 text-secondary small">
-                                                            <i class="bi bi-clock-history text-primary"></i>
-                                                            <span>Thời lượng: <strong>@duration phút</strong></span>
-                                                        </div>
-                                                        <div class="small">
-                                                            <span class="text-muted">Giá:</span>
-                                                            <strong class="text-primary ms-1">@priceStr</strong>
-                                                        </div>
+                                                    <h6 class="fw-bold text-dark mb-1">@combo.Title</h6>
+                                                    <p class="text-muted small mb-3 text-truncate-2" style="min-height: 38px;">@combo.Tagline</p>
+
+                                                    <!-- Included summary -->
+                                                    <div class="bg-light p-2 rounded small mb-3">
+                                                        <div class="fw-semibold text-dark mb-1 small"><i class="bi bi-check2-circle text-success me-1"></i>Bao gồm:</div>
+                                                        <ul class="list-unstyled mb-0 ps-2 small text-muted">
+                                                            @foreach (var inc in combo.IncludedServices.Take(2))
+                                                            {
+                                                                <li class="text-truncate">&bull; @inc</li>
+                                                            }
+                                                            @if (combo.IncludedServices.Count > 2)
+                                                            {
+                                                                <li class="text-primary small fw-semibold">+ @(combo.IncludedServices.Count - 2) dịch vụ/quyền lợi khác...</li>
+                                                            }
+                                                        </ul>
                                                     </div>
 
-                                                    @if (hasOfficialInstructions)
-                                                    {
-                                                        <div class="mb-2 p-2 bg-info-subtle rounded border border-info-subtle text-dark small">
-                                                            <i class="bi bi-info-circle-fill text-primary me-1"></i><strong>Hướng dẫn:</strong> @svc.BookingInstructions
+                                                    <!-- Price & Action -->
+                                                    <div class="mt-auto pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                        <div>
+                                                            <div class="text-decoration-line-through text-muted small">@combo.OriginalPrice.ToString("N0") đ</div>
+                                                            <div class="fw-bold text-danger fs-5">@combo.ComboPrice.ToString("N0") đ</div>
                                                         </div>
-                                                    }
-                                                    else if (isComplex)
-                                                    {
-                                                        <div class="mb-2 p-2 bg-warning-subtle rounded border border-warning-subtle text-dark small">
-                                                            <i class="bi bi-shield-check text-warning me-1"></i><strong>Thủ thuật chuyên sâu:</strong> Cần khám tư vấn chuyên sâu trước khi thực hiện.
+                                                        <div class="d-flex gap-2">
+                                                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="event.stopPropagation(); viewComboDetail('@combo.Code')">
+                                                                <i class="bi bi-info-circle me-1"></i>Xem chi tiết
+                                                            </button>
+                                                            <button type="button" class="btn btn-warning btn-sm fw-bold px-3 btn-select-combo" onclick="selectCombo('@combo.Code')">
+                                                                @(isSelected ? "Đã chọn" : "Chọn Combo")
+                                                            </button>
                                                         </div>
-                                                    }
-
-                                                    <div class="d-flex justify-content-between align-items-center pt-2 border-top">
-                                                        <span class="text-primary small fw-semibold">
-                                                            <i class="bi bi-check2-circle me-1"></i>Chọn dịch vụ này
-                                                        </span>
-                                                        <span class="selection-arrow text-muted">
-                                                            <i class="bi bi-chevron-right"></i>
-                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
                                         }
-                                        <div id="filterEmptyAlert" class="col-12 text-center text-muted py-5 d-none">
-                                            <i class="bi bi-search fs-1 d-block mb-2 text-secondary"></i>
-                                            <h6>Không tìm thấy dịch vụ nào phù hợp với từ khóa tìm kiếm.</h6>
-                                        </div>
-                                    }
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="card-footer bg-white text-end py-3 border-top">
-                                <button type="button" class="btn btn-primary btn-lg px-4 shadow-sm" id="btnNext1" disabled onclick="goToStep(2)">
-                                    Tiếp tục: Chọn bác sĩ khám <i class="bi bi-arrow-right ms-1"></i>
-                                </button>
+
+                                <!-- NỘI DUNG NHÁNH B: DỊCH VỤ LẺ -->
+                                <div id="category-content-single" class="@(Model.BookingCategory == "SingleService" ? "" : "d-none")">
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-7">
+                                            <div class="input-group">
+                                                <span class="input-group-text bg-light border-end-0 text-muted">
+                                                    <i class="bi bi-search"></i>
+                                                </span>
+                                                <input type="text" id="serviceSearchInput" class="form-control border-start-0 ps-0" placeholder="Tìm theo tên dịch vụ (ví dụ: lấy cao răng, trám răng, nhổ răng khôn...)" oninput="filterServices()" />
+                                            </div>
+                                        </div>
+                                        <div class="col-md-5">
+                                            <select id="departmentFilterSelect" class="form-select" onchange="filterServices()">
+                                                <option value="">-- Tất cả chuyên khoa --</option>
+                                                @foreach (var dept in Model.Departments)
+                                                {
+                                                    <option value="@dept.DepartmentId" selected="@(Model.DepartmentId == dept.DepartmentId ? "selected" : null)">
+                                                        @dept.Name
+                                                    </option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="row g-3" id="serviceListContainer" style="max-height: 520px; overflow-y: auto; padding-right: 4px;">
+                                        @foreach (var s in Model.Services)
+                                        {
+                                            var isSelected = Model.BookingCategory == "SingleService" && Model.RequestedServiceId == s.DepartmentServiceId;
+                                            <div class="col-md-6 service-item"
+                                                 data-service-id="@s.DepartmentServiceId"
+                                                 data-dept-id="@s.DepartmentId"
+                                                 data-dept-name="@s.DepartmentName"
+                                                 data-name="@s.ServiceName"
+                                                 data-duration="@s.DurationMinutes"
+                                                 data-price="@((s.Price ?? 0).ToString("N0")) đ">
+                                                <div class="card service-card p-3 h-100 rounded-3 border @(isSelected ? "active border-primary" : "")">
+                                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                                        <span class="badge bg-light text-primary border small text-truncate" style="max-width: 180px;">
+                                                            @s.DepartmentName
+                                                        </span>
+                                                        <span class="badge bg-light text-muted border small">
+                                                            <i class="bi bi-clock me-1"></i>@s.DurationMinutes phút
+                                                        </span>
+                                                    </div>
+                                                    <h6 class="fw-bold text-dark mb-1">@s.ServiceName</h6>
+                                                    <p class="text-muted small mb-2 text-truncate-2" style="min-height: 36px;">
+                                                        @(string.IsNullOrWhiteSpace(s.Description) ? "Dịch vụ nha khoa tiêu chuẩn chuyên sâu." : s.Description)
+                                                    </p>
+                                                    <div class="mt-auto pt-2 border-top d-flex justify-content-between align-items-center">
+                                                        <span class="fw-bold text-primary fs-6">@((s.Price ?? 0).ToString("N0")) đ</span>
+                                                        <button type="button" class="btn btn-outline-primary btn-sm px-3 fw-semibold">
+                                                            @(isSelected ? "Đã chọn" : "Chọn dịch vụ")
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                    <div id="filterEmptyAlert" class="alert alert-light border text-center my-4 d-none">
+                                        <i class="bi bi-info-circle text-muted fs-4 d-block mb-1"></i>
+                                        Không tìm thấy dịch vụ nào phù hợp với từ khóa hoặc chuyên khoa đã chọn.
+                                    </div>
+                                </div>
+
+                                <!-- NỘI DUNG NHÁNH C: KHÁM TỔNG QUÁT / CHƯA BIẾT NHU CẦU -->
+                                <div id="category-content-general" class="@(Model.BookingCategory == "GeneralCheckup" ? "" : "d-none")">
+                                    <div class="card bg-success-subtle border-success-subtle p-3 rounded-3 mb-4">
+                                        <div class="d-flex align-items-start gap-3">
+                                            <div class="rounded-circle bg-success text-white p-2 d-flex align-items-center justify-content-center" style="width: 44px; height: 44px; flex-shrink: 0;">
+                                                <i class="bi bi-lightbulb-fill fs-5"></i>
+                                            </div>
+                                            <div>
+                                                <h6 class="fw-bold text-success-emphasis mb-1">Bạn chưa biết rõ tình trạng răng miệng hoặc muốn kiểm tra định kỳ?</h6>
+                                                <p class="small text-success-emphasis mb-0">
+                                                    Đừng lo lắng! Bác sĩ chuyên khoa tại DentalCare sẽ trực tiếp thăm khám tổng quát, khảo sát phim X-Quang (khi cần) và tư vấn phác đồ điều trị an toàn, minh bạch nhất trước khi tiến hành bất kỳ thủ thuật nào.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Thẻ dịch vụ mặc định khám tổng quát -->
+                                    <div class="card border border-success p-3 rounded-3 mb-4 shadow-sm">
+                                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                                            <div>
+                                                <span class="badge bg-success text-white px-2 py-1 rounded-pill mb-1">Dịch Vụ Khám Tư Vấn Khuyên Dùng</span>
+                                                <h5 class="fw-bold text-dark mb-0">Khám Tổng Quát & Tư Vấn Chuyên Sâu</h5>
+                                                <small class="text-muted"><i class="bi bi-hospital me-1"></i>Khoa Răng Hàm Mặt Tổng Quát &bull; Thời lượng: 30 phút</small>
+                                            </div>
+                                            <div class="text-end">
+                                                <div class="fs-4 fw-bold text-success">100.000 đ</div>
+                                                <small class="text-muted">Chi phí niêm yết</small>
+                                            </div>
+                                        </div>
+                                        <p class="text-muted small mb-3">
+                                            Quy trình: Kiểm tra toàn diện răng nướu & khớp cắn &bull; Đánh giá nguy cơ sâu răng và viêm nha chu &bull; Bác sĩ giải thích tình trạng và đề xuất giải pháp tối ưu.
+                                        </p>
+                                    </div>
+
+                                    <!-- Nút bấm chọn triệu chứng nhanh -->
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold text-dark mb-2">
+                                            <i class="bi bi-tags text-primary me-1"></i>Chọn nhanh triệu chứng bạn đang gặp phải (nếu có):
+                                        </label>
+                                        <div class="d-flex flex-wrap gap-2" id="symptomQuickChips">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill symptom-chip" onclick="quickSelectSymptom('Đau nhức / Ê buốt răng khi ăn uống')">
+                                                🦷 Đau nhức / Ê buốt khi ăn
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill symptom-chip" onclick="quickSelectSymptom('Chảy máu chân răng / Viêm sưng nướu')">
+                                                🩸 Chảy máu chân răng / Sưng nướu
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill symptom-chip" onclick="quickSelectSymptom('Răng bị sâu / Mẻ vỡ / Có lỗ hổng')">
+                                                ⚡ Sâu răng / Mẻ vỡ
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill symptom-chip" onclick="quickSelectSymptom('Răng khấp khểnh, muốn tư vấn niềng răng')">
+                                                ✨ Muốn tư vấn niềng răng
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill symptom-chip" onclick="quickSelectSymptom('Răng ố vàng, muốn tẩy trắng / dán sứ')">
+                                                💎 Muốn làm trắng răng / Thẩm mỹ
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill symptom-chip" onclick="quickSelectSymptom('Khám định kỳ 6 tháng / Vệ sinh răng miệng')">
+                                                🩺 Khám sức khỏe định kỳ
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="text-center pt-2">
+                                        <button type="button" class="btn btn-success btn-lg px-5 py-2 fw-bold shadow-sm" onclick="selectGeneralCheckup()">
+                                            Đặt Lịch Khám Tư Vấn Này Ngay <i class="bi bi-arrow-right ms-2"></i>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- STEP 2: CHỌN BÁC SĨ (OPTION A / OPTION B - QUAN TRỌNG NHẤT) -->
+                    <!-- ============================================================== -->
+                    <!-- BƯỚC 2: XÁC ĐỊNH KHOA VÀ BÁC SĨ (Sau khi 3 nhánh hội tụ)        -->
+                    <!-- ============================================================== -->
                     <div class="step-panel d-none" id="step-panel-2">
                         <div class="card border-0 shadow-sm">
                             <div class="card-header bg-white py-3 border-bottom">
-                                <h5 class="card-title mb-0 fw-bold text-primary">
-                                    <i class="bi bi-person-badge me-2"></i>Bước 2: Chọn Hình Thức Phân Công Bác Sĩ
+                                <h5 class="card-title mb-1 fw-bold text-primary">
+                                    <i class="bi bi-person-badge me-2"></i>Bước 2: Xác Định Khoa & Hình Thức Bác Sĩ
                                 </h5>
-                                <p class="text-muted small mb-0 mt-1">Bạn có thể để phòng khám tự động sắp xếp hoặc chủ động chọn bác sĩ mong muốn</p>
+                                <p class="text-muted small mb-0">Hệ thống tự động liên kết chuyên khoa tương ứng với dịch vụ bạn đã chọn.</p>
                             </div>
                             <div class="card-body p-4">
-                                <!-- Banner dịch vụ đã chọn -->
-                                <div class="card bg-light-subtle border mb-4 p-3 rounded-3">
-                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                        <div>
-                                            <span class="badge bg-primary-subtle text-primary mb-1">Dịch vụ đã chọn</span>
-                                            <h6 class="mb-1 fw-bold text-dark fs-5" id="panel2ServiceName">--</h6>
-                                            <div class="text-muted small">
-                                                <i class="bi bi-hospital me-1 text-primary"></i>Chuyên khoa: <strong class="text-dark" id="panel2DeptName">--</strong>
-                                                <span class="ms-3"><i class="bi bi-clock me-1 text-primary"></i>Thời lượng: <strong class="text-dark" id="panel2ServiceDuration">--</strong></span>
-                                                <span class="ms-3"><i class="bi bi-tag me-1 text-primary"></i>Giá: <strong class="text-dark" id="panel2ServicePrice">--</strong></span>
-                                            </div>
-                                        </div>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="goToStep(1)">
-                                            <i class="bi bi-pencil me-1"></i> Đổi dịch vụ
+                                <!-- Chuyên khoa phụ trách -->
+                                <div class="p-3 bg-light rounded-3 mb-4 border d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div>
+                                        <small class="text-muted d-block text-uppercase fw-semibold" style="font-size: 0.75rem;">Chuyên khoa tiếp nhận điều trị:</small>
+                                        <h5 class="fw-bold text-dark mb-0" id="step2DeptName">Khoa Răng Hàm Mặt Tổng Quát</h5>
+                                    </div>
+                                    <div>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="goToStep(1)">
+                                            <i class="bi bi-arrow-repeat me-1"></i>Đổi hình thức / dịch vụ
                                         </button>
                                     </div>
                                 </div>
 
-                                <!-- 2 LỰA CHỌN NGHIỆP VỤ (OPTION A vs OPTION B) -->
-                                <label class="form-label fw-bold mb-3">Vui lòng chọn hình thức khám mong muốn: <span class="text-danger">*</span></label>
-                                
+                                <label class="form-label fw-bold text-dark mb-2">Vui lòng chọn hình thức khám mong muốn: <span class="text-danger">*</span></label>
                                 <div class="row g-3 mb-4">
-                                    <!-- OPTION B: PHÒNG KHÁM PHÂN CÔNG (Khuyên dùng) -->
+                                    <!-- Option A: Clinic Assignment (Default) -->
                                     <div class="col-md-6">
-                                        <div class="card selection-card p-3 h-100 option-doctor-mode active" id="cardModeClinicAssignment" onclick="setDoctorSelectionMode('ClinicAssignment')">
+                                        <div class="card selection-card p-3 h-100 cursor-pointer active" id="modeCardClinic" onclick="setDoctorSelectionMode('ClinicAssignment')">
                                             <div class="d-flex align-items-start gap-3">
-                                                <div class="selection-icon bg-success-subtle text-success rounded-3 p-3">
-                                                    <i class="bi bi-hospital-fill fs-3"></i>
+                                                <div class="rounded-circle bg-success-subtle text-success p-2 d-flex align-items-center justify-content-center" style="width: 44px; height: 44px; flex-shrink: 0;">
+                                                    <i class="bi bi-hospital fs-4"></i>
                                                 </div>
-                                                <div class="flex-grow-1">
+                                                <div>
                                                     <div class="d-flex align-items-center gap-2 mb-1">
-                                                        <span class="fw-bold text-dark fs-6">Để phòng khám phân công bác sĩ phù hợp</span>
-                                                        <span class="badge bg-success-subtle text-success border border-success small">Khuyên dùng</span>
+                                                        <h6 class="fw-bold text-dark mb-0">Để phòng khám phân công bác sĩ phù hợp</h6>
+                                                        <span class="badge bg-success-subtle text-success small">Khuyên dùng</span>
                                                     </div>
-                                                    <p class="text-muted small mb-0">
-                                                        Lễ tân phòng khám sẽ tự động sắp xếp bác sĩ chuyên môn phù hợp nhất trong ca trực khi tiếp nhận và xác nhận lịch hẹn của bạn.
-                                                    </p>
+                                                    <p class="text-muted small mb-0">Lễ tân phòng khám sẽ tự động sắp xếp bác sĩ chuyên môn phù hợp nhất trong ca trực khi tiếp nhận và xác nhận lịch hẹn của bạn.</p>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <!-- OPTION A: CHỌN BÁC SĨ CỤ THỂ (PreferredDentist) -->
+                                    <!-- Option B: Preferred Dentist -->
                                     <div class="col-md-6">
-                                        <div class="card selection-card p-3 h-100 option-doctor-mode" id="cardModePreferredDentist" onclick="setDoctorSelectionMode('PreferredDentist')">
+                                        <div class="card selection-card p-3 h-100 cursor-pointer" id="modeCardDoctor" onclick="setDoctorSelectionMode('PreferredDentist')">
                                             <div class="d-flex align-items-start gap-3">
-                                                <div class="selection-icon bg-primary-subtle text-primary rounded-3 p-3">
-                                                    <i class="bi bi-person-check-fill fs-3"></i>
+                                                <div class="rounded-circle bg-primary-subtle text-primary p-2 d-flex align-items-center justify-content-center" style="width: 44px; height: 44px; flex-shrink: 0;">
+                                                    <i class="bi bi-person-check fs-4"></i>
                                                 </div>
-                                                <div class="flex-grow-1">
-                                                    <div class="d-flex align-items-center gap-2 mb-1">
-                                                        <span class="fw-bold text-dark fs-6">Tôi muốn chọn bác sĩ</span>
-                                                    </div>
-                                                    <p class="text-muted small mb-0">
-                                                        Xem danh sách các bác sĩ chuyên khoa phụ trách dịch vụ này và chỉ định bác sĩ ưu tiên thăm khám cho bạn.
-                                                    </p>
+                                                <div>
+                                                    <h6 class="fw-bold text-dark mb-1">Tôi muốn chọn bác sĩ</h6>
+                                                    <p class="text-muted small mb-0">Xem danh sách các bác sĩ chuyên khoa phụ trách dịch vụ này và chỉ định bác sĩ ưu tiên thăm khám cho bạn.</p>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Container danh sách bác sĩ khi chọn Option A (PreferredDentist) -->
-                                <div id="dentistSelectionSubpanel" class="d-none">
+                                <!-- Danh sách bác sĩ (Chỉ hiện khi chọn Option B) -->
+                                <div id="preferredDoctorSection" class="d-none">
                                     <div class="d-flex justify-content-between align-items-center mb-3">
                                         <h6 class="fw-bold text-dark mb-0">
-                                            <i class="bi bi-people me-1 text-primary"></i>Danh Sách Bác Sĩ Chuyên Khoa Phù Hợp:
+                                            <i class="bi bi-people me-2 text-primary"></i>Chọn bác sĩ chuyên khoa ưu tiên:
                                         </h6>
-                                        <small class="text-muted" id="dentistCountBadge">0 bác sĩ</small>
+                                        <span class="badge bg-light text-muted border" id="badgeDentistCount">Đang tải danh sách...</span>
                                     </div>
 
-                                    <div class="text-center py-4 d-none" id="dentistLoadingSpinner">
-                                        <div class="spinner-border text-primary spinner-border-sm" role="status"></div>
-                                        <span class="text-muted small ms-2">Đang tải danh sách bác sĩ...</span>
+                                    <div id="dentistListLoading" class="text-center py-4">
+                                        <div class="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
+                                        <span class="text-muted small">Đang nạp danh sách bác sĩ chuyên khoa...</span>
                                     </div>
 
-                                    <div class="row g-3" id="dentistCardsContainer">
-                                        <!-- Doctor cards dynamically injected via JS -->
+                                    <div class="row g-3" id="dentistListContainer">
+                                        <!-- Rendered by JS -->
                                     </div>
 
-                                    <div id="noDentistsAlert" class="alert alert-warning d-none text-center py-3">
-                                        <i class="bi bi-info-circle me-1"></i>Chuyên khoa này hiện chưa có bác sĩ cụ thể để chỉ định. Vui lòng chọn <strong>"Để phòng khám phân công bác sĩ phù hợp"</strong>.
+                                    <div id="noDentistsAlert" class="alert alert-light border text-center my-3 d-none">
+                                        <i class="bi bi-info-circle text-muted fs-4 d-block mb-1"></i>
+                                        Hiện chưa có bác sĩ nào được cấu hình cho chuyên khoa này. Bạn có thể chọn hình thức "Để phòng khám phân công bác sĩ phù hợp".
                                     </div>
                                 </div>
 
-                                <div class="alert alert-light border rounded-3 p-3 mt-4 small text-muted">
-                                    <i class="bi bi-shield-check text-primary me-1"></i><strong>Lưu ý nghiệp vụ:</strong> Nếu chọn bác sĩ cụ thể, hệ thống sẽ ghi nhận bác sĩ ưu tiên (Preferred Dentist). Lễ tân sẽ xác nhận bác sĩ này hoặc thông báo điều chỉnh nếu bác sĩ có lịch công tác đột xuất.
+                                <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-4">
+                                    <button type="button" class="btn btn-outline-secondary px-4" onclick="goToStep(1)">
+                                        <i class="bi bi-arrow-left me-1"></i> Quay lại Bước 1
+                                    </button>
+                                    <button type="button" class="btn btn-primary px-4 fw-bold" onclick="goToStep(3)">
+                                        Tiếp tục: Chọn ngày giờ khám <i class="bi bi-arrow-right ms-1"></i>
+                                    </button>
                                 </div>
-                            </div>
-                            <div class="card-footer bg-white d-flex justify-content-between py-3 border-top">
-                                <button type="button" class="btn btn-outline-secondary" onclick="goToStep(1)">
-                                    <i class="bi bi-arrow-left me-1"></i> Quay lại Bước 1
-                                </button>
-                                <button type="button" class="btn btn-primary px-4 shadow-sm" id="btnNext2" onclick="goToStep(3)">
-                                    Tiếp tục: Chọn ngày giờ khám <i class="bi bi-arrow-right ms-1"></i>
-                                </button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- STEP 3: CHỌN NGÀY VÀ GIỜ HẸN KHÁM -->
+                    <!-- ============================================================== -->
+                    <!-- BƯỚC 3: CHỌN NGÀY VÀ GIỜ KHÁM                                  -->
+                    <!-- ============================================================== -->
                     <div class="step-panel d-none" id="step-panel-3">
                         <div class="card border-0 shadow-sm">
-                            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                <div>
-                                    <h5 class="card-title mb-0 fw-bold text-primary">
-                                        <i class="bi bi-calendar2-week me-2"></i>Bước 3: Chọn Ngày & Khung Giờ Hẹn Khám
-                                    </h5>
-                                    <p class="text-muted small mb-0">Hệ thống tra cứu các khung giờ thực tế có khả năng tiếp nhận</p>
-                                </div>
-                                <span class="badge bg-light text-dark border px-3 py-2 small" id="slotFilterSummary"></span>
+                            <div class="card-header bg-white py-3 border-bottom">
+                                <h5 class="card-title mb-1 fw-bold text-primary">
+                                    <i class="bi bi-calendar2-week me-2"></i>Bước 3: Chọn Ngày & Khung Giờ Khám
+                                </h5>
+                                <p class="text-muted small mb-0">Chọn ngày bạn mong muốn đến phòng khám và khung giờ còn trống khả dụng.</p>
                             </div>
                             <div class="card-body p-4">
-                                <!-- 1. Chọn ngày khám -->
+                                <!-- Chọn ngày khám -->
                                 <div class="mb-4">
-                                    <label class="form-label fw-bold">1. Chọn ngày khám mong muốn: <span class="text-danger">*</span></label>
-                                    
-                                    <!-- Quick date chips -->
-                                    <div class="d-flex gap-2 mb-2">
-                                        <button type="button" class="btn btn-outline-primary btn-sm flex-fill fw-semibold" onclick="setQuickDate(0)">Hôm nay</button>
-                                        <button type="button" class="btn btn-outline-primary btn-sm flex-fill fw-semibold" onclick="setQuickDate(1)">Ngày mai</button>
-                                        <button type="button" class="btn btn-outline-primary btn-sm flex-fill fw-semibold" onclick="setQuickDate(2)">Ngày kia</button>
+                                    <label class="form-label fw-bold text-dark mb-2">Ngày khám mong muốn: <span class="text-danger">*</span></label>
+                                    <div class="d-flex flex-wrap gap-2 mb-3">
+                                        <button type="button" class="btn btn-outline-primary btn-sm quick-date-btn" onclick="setQuickDate(0)">Hôm nay</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm quick-date-btn active" onclick="setQuickDate(1)">Ngày mai</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm quick-date-btn" onclick="setQuickDate(2)">Ngày kia</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm quick-date-btn" onclick="setQuickDate(3)">3 ngày tới</button>
                                     </div>
-
-                                    <div class="row align-items-center g-2">
-                                        <div class="col-md-6">
-                                            <input type="date" asp-for="AppointmentDate" id="inputAppointmentDate" class="form-control form-control-lg fw-bold" min="@DentalClinic.Web.Controllers.Patient.PatientAppointmentController.GetClinicToday().ToString("yyyy-MM-dd")" onchange="onDateChanged()" />
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div id="selectedDateDisplay" class="text-primary fw-semibold small">
-                                                <i class="bi bi-calendar-event me-1"></i><span id="dateTextFull"></span>
-                                            </div>
-                                        </div>
+                                    <div class="input-group" style="max-width: 320px;">
+                                        <span class="input-group-text bg-light"><i class="bi bi-calendar-event"></i></span>
+                                        <input type="date" asp-for="AppointmentDate" id="inputAppointmentDate" class="form-control" onchange="onDateChanged()" min="@DateTime.Today.ToString("yyyy-MM-dd")" />
                                     </div>
-                                    <small class="text-muted mt-2 d-block">
-                                        <i class="bi bi-clock me-1"></i>Phòng khám đón tiếp bệnh nhân từ <strong>08:00 đến 20:00</strong> tất cả các ngày trong tuần.
-                                    </small>
+                                    <div class="form-text text-muted small mt-1">
+                                        Ngày đã chọn: <strong class="text-dark" id="dateTextFull">--</strong>
+                                    </div>
                                 </div>
 
-                                <hr />
-
-                                <!-- 2. Chọn khung giờ khám -->
-                                <div class="mb-2">
-                                    <label class="form-label fw-bold d-flex justify-content-between align-items-center">
-                                        <span>2. Chọn khung giờ khám còn trống: <span class="text-danger">*</span></span>
-                                        <span class="small text-muted font-normal" id="labelSlotDoctorContext"></span>
-                                    </label>
-
-                                    <div id="slotsLoading" class="text-center py-5 d-none">
-                                        <div class="spinner-border text-primary" role="status"></div>
-                                        <p class="mt-2 text-muted fw-semibold">Đang tra cứu lịch trực và tính toán khung giờ trống...</p>
-                                    </div>
-
-                                    <div id="noSlotsMessage" class="alert alert-warning d-none text-center py-4 border-warning shadow-sm rounded-3">
-                                        <i class="bi bi-calendar-x fs-1 d-block mb-2 text-warning"></i>
-                                        <h5 class="fw-bold text-dark mb-2">Chưa tìm thấy khung giờ khám phù hợp</h5>
-                                        <p class="text-muted mb-3" id="noSlotsDetailText">
-                                            Trong ngày đã chọn, không còn khung giờ trống thỏa mãn thời lượng dịch vụ.
-                                        </p>
-                                        <div class="d-flex justify-content-center gap-2 flex-wrap">
-                                            <button type="button" class="btn btn-primary px-3 shadow-sm" onclick="setQuickDate(1)">
-                                                <i class="bi bi-calendar-date me-1"></i> Đổi sang ngày mai
-                                            </button>
-                                            <button type="button" class="btn btn-outline-primary px-3" onclick="switchToClinicAssignmentAndReload()">
-                                                <i class="bi bi-hospital me-1"></i> Để phòng khám phân công bác sĩ
-                                            </button>
+                                <!-- Box thông báo đã chọn slot -->
+                                <div id="slotSelectedAlert" class="alert alert-success border-success d-none py-2 px-3 mb-3 rounded-3">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                                        <div>
+                                            Khung giờ đã chọn: <strong id="alertSlotText" class="text-dark">--</strong>
                                         </div>
                                     </div>
+                                </div>
 
-                                    <!-- Slots Grid Container -->
-                                    <div id="slotsContainerWrapper">
-                                        <!-- Ca sáng (08:00 - 12:00) -->
-                                        <div id="morningSection" class="mb-4 d-none">
-                                            <h6 class="fw-bold text-dark d-flex align-items-center gap-2 mb-3">
-                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1">
-                                                    <i class="bi bi-sun-fill me-1"></i>Buổi Sáng
-                                                </span>
-                                                <span class="text-muted small">(Khung giờ từ 08:00 đến 12:00)</span>
-                                            </h6>
-                                            <div class="row g-2" id="morningSlotsGrid"></div>
-                                        </div>
-
-                                        <!-- Ca chiều & tối (13:00 - 20:00) -->
-                                        <div id="afternoonSection" class="mb-3 d-none">
-                                            <h6 class="fw-bold text-dark d-flex align-items-center gap-2 mb-3">
-                                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1">
-                                                    <i class="bi bi-sunset-fill me-1"></i>Buổi Chiều & Tối
-                                                </span>
-                                                <span class="text-muted small">(Khung giờ từ 13:00 đến 20:00)</span>
-                                            </h6>
-                                            <div class="row g-2" id="afternoonSlotsGrid"></div>
-                                        </div>
+                                <!-- Danh sách Khung giờ khả dụng -->
+                                <div>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <label class="form-label fw-bold text-dark mb-0">Khung giờ khám khả dụng: <span class="text-danger">*</span></label>
+                                        <small class="text-muted" id="labelSlotDoctorContext">(Khung giờ còn trống theo lịch trực)</small>
                                     </div>
 
-                                    <!-- Box thông báo giờ đã chọn -->
-                                    <div id="slotSelectedAlert" class="alert alert-success border-success d-none py-3 px-3 mt-4 rounded-3 d-flex align-items-center justify-content-between">
+                                    <div id="slotsLoading" class="text-center py-4 d-none">
+                                        <div class="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
+                                        <span class="text-muted small">Đang kiểm tra lịch trống phòng khám...</span>
+                                    </div>
+
+                                    <div id="noSlotsMessage" class="alert alert-warning border-warning d-none my-3">
                                         <div class="d-flex align-items-center gap-2">
-                                            <i class="bi bi-check-circle-fill fs-4 text-success"></i>
+                                            <i class="bi bi-exclamation-circle-fill fs-5 text-warning"></i>
                                             <div>
-                                                <div class="small text-muted">Giờ hẹn đã chọn:</div>
-                                                <strong class="text-success fs-5" id="alertSlotText"></strong>
+                                                <strong>Không còn khung giờ trống trong ngày này!</strong>
+                                                <div class="small" id="noSlotsDetailText">Vui lòng chọn ngày khác hoặc chuyển sang hình thức "Để phòng khám phân công bác sĩ phù hợp".</div>
                                             </div>
                                         </div>
-                                        <button type="button" class="btn btn-success px-4" onclick="goToStep(4)">
-                                            Tiếp tục Bước 4 <i class="bi bi-arrow-right ms-1"></i>
-                                        </button>
+                                    </div>
+
+                                    <!-- Ca Sáng -->
+                                    <div class="mb-3" id="morningSection">
+                                        <div class="small fw-bold text-muted mb-2 text-uppercase" style="font-size: 0.75rem;">
+                                            <i class="bi bi-sun text-warning me-1"></i>Buổi Sáng (08:00 - 12:00)
+                                        </div>
+                                        <div class="row g-2" id="morningSlotsGrid">
+                                            <!-- Rendered by JS -->
+                                        </div>
+                                    </div>
+
+                                    <!-- Ca Chiều -->
+                                    <div class="mb-3" id="afternoonSection">
+                                        <div class="small fw-bold text-muted mb-2 text-uppercase" style="font-size: 0.75rem;">
+                                            <i class="bi bi-sunset text-primary me-1"></i>Buổi Chiều (13:30 - 20:30)
+                                        </div>
+                                        <div class="row g-2" id="afternoonSlotsGrid">
+                                            <!-- Rendered by JS -->
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="card-footer bg-white d-flex justify-content-between py-3 border-top">
-                                <button type="button" class="btn btn-outline-secondary" onclick="goToStep(2)">
-                                    <i class="bi bi-arrow-left me-1"></i> Quay lại Bước 2
-                                </button>
-                                <button type="button" class="btn btn-primary px-4 shadow-sm" id="btnNext3" disabled onclick="goToStep(4)">
-                                    Tiếp tục: Nhập thông tin <i class="bi bi-arrow-right ms-1"></i>
-                                </button>
+
+                                <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-4">
+                                    <button type="button" class="btn btn-outline-secondary px-4" onclick="goToStep(2)">
+                                        <i class="bi bi-arrow-left me-1"></i> Quay lại Bước 2
+                                    </button>
+                                    <button type="button" class="btn btn-primary px-4 fw-bold" id="btnNext3" onclick="goToStep(4)" disabled>
+                                        Tiếp tục: Nhập thông tin BN <i class="bi bi-arrow-right ms-1"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- STEP 4: THÔNG TIN BỆNH NHÂN & TRIỆU CHỨNG -->
+                    <!-- ============================================================== -->
+                    <!-- BƯỚC 4: NHẬP THÔNG TIN BỆNH NHÂN & TRIỆU CHỨNG                  -->
+                    <!-- ============================================================== -->
                     <div class="step-panel d-none" id="step-panel-4">
                         <div class="card border-0 shadow-sm">
                             <div class="card-header bg-white py-3 border-bottom">
-                                <h5 class="card-title mb-0 fw-bold text-primary">
-                                    <i class="bi bi-card-text me-2"></i>Bước 4: Thông Tin Bệnh Nhân & Lý Do Khám
+                                <h5 class="card-title mb-1 fw-bold text-primary">
+                                    <i class="bi bi-person-lines-fill me-2"></i>Bước 4: Nhập Thông Tin Bệnh Nhân & Triệu Chứng
                                 </h5>
-                                <p class="text-muted small mb-0 mt-1">Thông tin được tự động điền từ tài khoản của bạn, vui lòng mô tả triệu chứng răng miệng</p>
+                                <p class="text-muted small mb-0">Hệ thống tự động điền thông tin tài khoản của bạn để phòng khám liên hệ và chuẩn bị hồ sơ.</p>
                             </div>
                             <div class="card-body p-4">
-                                <!-- Thông tin liên hệ bệnh nhân (Auto-fill) -->
-                                <div class="card bg-light-subtle border p-3 rounded-3 mb-4">
-                                    <h6 class="fw-bold text-dark mb-3">
-                                        <i class="bi bi-person-circle text-primary me-1"></i>Thông Tin Bệnh Nhân Tiếp Nhận:
-                                    </h6>
-                                    <div class="row g-3">
-                                        <div class="col-md-4">
-                                            <label class="form-label small text-muted mb-1">Họ và tên:</label>
-                                            <input type="text" asp-for="PatientFullName" id="inputPatientFullName" class="form-control" readonly />
-                                        </div>
-                                        <div class="col-md-4">
-                                            <label class="form-label small text-muted mb-1">Số điện thoại liên hệ:</label>
-                                            <input type="text" asp-for="PatientPhoneNumber" id="inputPatientPhoneNumber" class="form-control" placeholder="09xxxxxxxx" />
-                                        </div>
-                                        <div class="col-md-4">
-                                            <label class="form-label small text-muted mb-1">Email:</label>
-                                            <input type="email" asp-for="PatientEmail" id="inputPatientEmail" class="form-control" readonly />
-                                        </div>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold text-dark">Họ và tên bệnh nhân:</label>
+                                        <input type="text" asp-for="PatientFullName" id="inputPatientFullName" class="form-control" placeholder="Họ và tên bệnh nhân" />
                                     </div>
-                                    <small class="text-muted mt-2 d-block">
-                                        <i class="bi bi-check2-circle text-success me-1"></i>Lễ tân sẽ sử dụng số điện thoại này để gửi tin nhắn xác nhận lịch khám.
-                                    </small>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold text-dark">Số điện thoại liên hệ:</label>
+                                        <input type="tel" asp-for="PatientPhoneNumber" id="inputPatientPhoneNumber" class="form-control" placeholder="Ví dụ: 0912345678" />
+                                    </div>
+                                    <div class="col-md-12">
+                                        <label class="form-label fw-bold text-dark">Email nhận thông báo lịch hẹn:</label>
+                                        <input type="email" asp-for="PatientEmail" id="inputPatientEmail" class="form-control" placeholder="email@example.com" />
+                                    </div>
                                 </div>
 
-                                <!-- Textarea mô tả chi tiết lý do khám -->
+                                <!-- Lý do khám / Triệu chứng -->
                                 <div class="mb-3">
-                                    <label asp-for="ReasonForVisit" class="form-label fw-bold">Lý do khám / Triệu chứng răng miệng: <span class="text-danger">*</span></label>
-                                    <textarea asp-for="ReasonForVisit" id="inputReasonForVisit" class="form-control" rows="3" placeholder="Ví dụ: Đau nhức răng hàm dưới bên trái khi ăn đồ nóng lạnh, kiểm tra vôi răng định kỳ..."></textarea>
-                                    <div id="reasonErrorMsg" class="text-danger small mt-1 d-none">
-                                        <i class="bi bi-exclamation-circle me-1"></i>Vui lòng nhập lý do khám tối thiểu 5 ký tự để bác sĩ chuẩn bị chu đáo nhất.
-                                    </div>
+                                    <label class="form-label fw-bold text-dark">
+                                        Lý do khám / Triệu chứng hiện tại: <span class="text-danger">*</span>
+                                    </label>
+                                    <textarea asp-for="ReasonForVisit" id="inputReasonForVisit" class="form-control" rows="3" placeholder="Mô tả cụ thể tình trạng răng miệng của bạn (ví dụ: đau răng hàm dưới bên phải 2 ngày nay, cần tẩy trắng răng đón Tết...)" required></textarea>
+                                    <span asp-validation-for="ReasonForVisit" class="text-danger small" id="reasonValidationError"></span>
                                 </div>
 
                                 <!-- Ghi chú thêm -->
-                                <div class="mb-3">
-                                    <label asp-for="Notes" class="form-label fw-semibold text-muted small">Ghi chú thêm (Tùy chọn):</label>
-                                    <textarea asp-for="Notes" id="inputNotes" class="form-control" rows="2" placeholder="Yêu cầu đặc biệt, lưu ý tiền sử dị ứng hoặc yêu cầu hỗ trợ thêm..."></textarea>
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold text-dark">Ghi chú thêm cho bác sĩ (nếu có):</label>
+                                    <textarea asp-for="Notes" id="inputNotes" class="form-control" rows="2" placeholder="Tiền sử dị ứng thuốc tê, bệnh lý nền huyết áp, yêu cầu hỗ trợ đặc biệt..."></textarea>
                                 </div>
-                            </div>
-                            <div class="card-footer bg-white d-flex justify-content-between py-3 border-top">
-                                <button type="button" class="btn btn-outline-secondary" onclick="goToStep(3)">
-                                    <i class="bi bi-arrow-left me-1"></i> Quay lại Bước 3
-                                </button>
-                                <button type="button" class="btn btn-primary px-4 shadow-sm" id="btnNext4" onclick="goToStep(5)">
-                                    Tiếp tục: Xác nhận yêu cầu <i class="bi bi-arrow-right ms-1"></i>
-                                </button>
+
+                                <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-4">
+                                    <button type="button" class="btn btn-outline-secondary px-4" onclick="goToStep(3)">
+                                        <i class="bi bi-arrow-left me-1"></i> Quay lại Bước 3
+                                    </button>
+                                    <button type="button" class="btn btn-primary px-4 fw-bold" onclick="goToStep(5)">
+                                        Tiếp tục: Xem lại & Xác nhận <i class="bi bi-arrow-right ms-1"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- STEP 5: XÁC NHẬN VÀ GỬI YÊU CẦU ĐẶT LỊCH (PendingReceptionReview) -->
+                    <!-- ============================================================== -->
+                    <!-- BƯỚC 5: XÁC NHẬN LỊCH HẸN                                      -->
+                    <!-- ============================================================== -->
                     <div class="step-panel d-none" id="step-panel-5">
                         <div class="card border-0 shadow-sm">
                             <div class="card-header bg-white py-3 border-bottom">
-                                <h5 class="card-title mb-0 fw-bold text-success">
-                                    <i class="bi bi-check-circle-fill me-2"></i>Bước 5: Kiểm Tra Lại Thông Tin & Gửi Yêu Cầu Đặt Lịch
+                                <h5 class="card-title mb-1 fw-bold text-success">
+                                    <i class="bi bi-check-circle-fill me-2"></i>Bước 5: Xác Nhận Yêu Cầu Đặt Lịch Hẹn
                                 </h5>
-                                <p class="text-muted small mb-0 mt-1">Vui lòng rà soát kỹ các thông tin trước khi gửi yêu cầu tới phòng khám</p>
+                                <p class="text-muted small mb-0">Vui lòng rà soát lại thông tin trước khi gửi yêu cầu đến phòng khám DentalCare.</p>
                             </div>
                             <div class="card-body p-4">
-                                <div class="alert alert-info border-0 mb-4 shadow-sm rounded-3">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <i class="bi bi-info-circle-fill fs-4 text-info flex-shrink-0"></i>
-                                        <div class="small">
-                                            <strong>Quy trình tiếp nhận:</strong> Sau khi bấm gửi, yêu cầu đặt lịch của bạn sẽ được chuyển đến trạng thái <strong class="badge bg-warning text-dark">Chờ Lễ Tân Tiếp Nhận (PendingReceptionReview)</strong>. Lễ tân phòng khám sẽ kiểm tra và xác nhận lịch hẹn.
+                                <div class="card bg-light border-0 p-3 rounded-3 mb-4">
+                                    <div class="row g-3">
+                                        <div class="col-sm-6">
+                                            <small class="text-muted d-block">Hình thức đặt lịch:</small>
+                                            <strong class="text-dark fs-6" id="summaryCategoryText">Khám Tổng Quát</strong>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <small class="text-muted d-block">Dịch vụ / Gói khám:</small>
+                                            <strong class="text-primary fs-6" id="summaryService">--</strong>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <small class="text-muted d-block">Chuyên khoa phụ trách:</small>
+                                            <span class="text-dark fw-semibold" id="summaryDept">--</span>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <small class="text-muted d-block">Bác sĩ khám:</small>
+                                            <span class="text-dark fw-semibold" id="summaryDentist">Để phòng khám phân công</span>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <small class="text-muted d-block">Thời gian khám:</small>
+                                            <strong class="text-success fs-6" id="summarySlot">--</strong>
+                                            <div class="small text-muted" id="summaryDate">--</div>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <small class="text-muted d-block">Chi phí dự kiến & Thời lượng:</small>
+                                            <strong class="text-danger fs-5" id="summaryPrice">--</strong>
+                                            <span class="badge bg-light text-muted border ms-2" id="summaryDuration">-- phút</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Phiếu tóm tắt xác nhận điện tử -->
-                                <div class="border rounded-3 p-4 bg-light-subtle shadow-sm mb-4">
-                                    <div class="text-center pb-3 mb-3 border-bottom">
-                                        <div class="badge bg-primary px-3 py-2 fs-6 mb-2">PHIẾU ĐĂNG KÝ KHÁM NHA KHOA ĐIỆN TỬ</div>
-                                        <h5 class="fw-bold text-dark mb-0">HỆ THỐNG NHA KHOA CHUYÊN KHOA DENTALCARE</h5>
-                                    </div>
-
-                                    <div class="row g-4">
-                                        <!-- Cột dịch vụ & bác sĩ -->
-                                        <div class="col-md-6 border-end">
-                                            <h6 class="fw-bold text-primary text-uppercase small mb-3">
-                                                <i class="bi bi-bookmark-check me-1"></i>Dịch Vụ & Bác Sĩ
-                                            </h6>
-                                            <table class="table table-borderless table-sm mb-0">
-                                                <tr>
-                                                    <td class="text-muted" style="width: 150px;">Dịch vụ khám:</td>
-                                                    <td class="fw-bold text-dark fs-6" id="summaryService">--</td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="text-muted">Chuyên khoa:</td>
-                                                    <td class="fw-semibold text-secondary" id="summaryDept">--</td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="text-muted">Thời lượng dự kiến:</td>
-                                                    <td class="fw-semibold text-dark" id="summaryDuration">--</td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="text-muted">Giá tham khảo:</td>
-                                                    <td class="fw-bold text-primary" id="summaryPrice">--</td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="text-muted">Bác sĩ phụ trách:</td>
-                                                    <td class="fw-bold text-success" id="summaryDentist">Để phòng khám phân công bác sĩ phù hợp</td>
-                                                </tr>
-                                            </table>
-                                        </div>
-
-                                        <!-- Cột thời gian & bệnh nhân -->
-                                        <div class="col-md-6">
-                                            <h6 class="fw-bold text-primary text-uppercase small mb-3">
-                                                <i class="bi bi-clock-history me-1"></i>Thời Gian & Bệnh Nhân
-                                            </h6>
-                                            <table class="table table-borderless table-sm mb-0">
-                                                <tr>
-                                                    <td class="text-muted" style="width: 140px;">Ngày khám:</td>
-                                                    <td class="fw-bold text-dark fs-6" id="summaryDate">--</td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="text-muted">Giờ hẹn:</td>
-                                                    <td class="fw-bold text-success fs-5" id="summarySlot">--</td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="text-muted">Bệnh nhân:</td>
-                                                    <td class="fw-bold text-dark" id="summaryPatient">--</td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="text-muted">Số điện thoại:</td>
-                                                    <td class="fw-semibold font-monospace" id="summaryPhone">--</td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="text-muted">Lý do khám:</td>
-                                                    <td class="fst-italic text-break" id="summaryReason">--</td>
-                                                </tr>
-                                            </table>
-                                        </div>
+                                <div class="card border p-3 rounded-3 mb-4">
+                                    <h6 class="fw-bold text-dark mb-2"><i class="bi bi-person me-2 text-primary"></i>Thông tin bệnh nhân liên hệ:</h6>
+                                    <div class="row g-2 small">
+                                        <div class="col-sm-6">Họ tên: <strong id="summaryPatient">--</strong></div>
+                                        <div class="col-sm-6">Số điện thoại: <strong id="summaryPhone">--</strong></div>
+                                        <div class="col-sm-12">Lý do khám: <span id="summaryReason" class="text-muted">--</span></div>
                                     </div>
                                 </div>
 
-                                <div class="alert alert-light border rounded-3 p-3 small text-muted">
-                                    <i class="bi bi-shield-check text-success me-1"></i><strong>Cam kết bảo mật:</strong> Thông tin đăng ký khám được bảo mật theo tiêu chuẩn y khoa và quy định pháp luật.
+                                <div class="alert alert-info border-info py-2 px-3 mb-4 small">
+                                    <i class="bi bi-info-circle-fill me-1 text-info"></i>
+                                    <strong>Quy định phòng khám:</strong> Yêu cầu của bạn sẽ được gửi tới Lễ tân tiếp nhận. Bạn có thể dời/hủy lịch hẹn miễn phí trước giờ khám tối thiểu 12 tiếng. Vui lòng có mặt trước giờ hẹn 10 phút.
                                 </div>
-                            </div>
-                            <div class="card-footer bg-white d-flex justify-content-between py-3 border-top">
-                                <button type="button" class="btn btn-outline-secondary" onclick="goToStep(4)">
-                                    <i class="bi bi-arrow-left me-1"></i> Sửa lại thông tin
-                                </button>
-                                <button type="submit" id="btnSubmitBooking" class="btn btn-success btn-lg px-5 shadow fw-bold">
-                                    <i class="bi bi-send-check me-2"></i> Xác Nhận Gửi Yêu Cầu Đặt Lịch
-                                </button>
+
+                                <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                                    <button type="button" class="btn btn-outline-secondary px-4" onclick="goToStep(4)">
+                                        <i class="bi bi-arrow-left me-1"></i> Quay lại Bước 4
+                                    </button>
+                                    <button type="submit" class="btn btn-success btn-lg px-5 py-2 fw-bold shadow-sm" id="btnSubmitBooking">
+                                        <i class="bi bi-send-check me-2"></i> Xác Nhận & Đặt Lịch Hẹn
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-
                 </div>
 
-                <!-- STICKY BOOKING SUMMARY PANEL (Cột Bên Phải 4/12) -->
+                <!-- SIDEBAR TÓM TẮT THÔNG TIN REAL-TIME (Cột Bên Phải 4/12) -->
                 <div class="col-lg-4">
-                    <div class="card border-0 shadow-sm sticky-top" style="top: 85px; z-index: 10;">
+                    <div class="card border-0 shadow-sm sticky-top" style="top: 20px;">
                         <div class="card-header bg-primary text-white py-3">
-                            <h5 class="card-title mb-0 fw-bold fs-6">
-                                <i class="bi bi-clipboard2-check me-2"></i>Tóm Tắt Yêu Cầu Đặt Lịch
-                            </h5>
+                            <h6 class="card-title mb-0 fw-bold">
+                                <i class="bi bi-receipt me-2"></i>Tóm Tắt Yêu Cầu Đặt Lịch
+                            </h6>
                         </div>
                         <div class="card-body p-3">
-                            <!-- Dịch vụ -->
+                            <!-- Hình thức -->
                             <div class="mb-3 pb-3 border-bottom">
-                                <div class="text-muted small text-uppercase fw-semibold mb-1">Dịch vụ khám:</div>
-                                <div class="fw-bold text-dark fs-6" id="sideServiceName">Chưa chọn dịch vụ</div>
-                                <div class="text-muted small mt-1" id="sideDeptName">
-                                    <i class="bi bi-hospital me-1"></i>Vui lòng chọn ở Bước 1
+                                <small class="text-muted d-block text-uppercase fw-semibold" style="font-size: 0.72rem;">HÌNH THỨC ĐẶT LỊCH:</small>
+                                <div class="fw-bold text-dark mt-1" id="sideCategoryText">
+                                    <i class="bi bi-clipboard2-pulse text-success me-1"></i>Khám Tổng Quát / Tư Vấn
                                 </div>
-                                <div class="d-flex align-items-center justify-content-between mt-2 pt-2 border-top small">
-                                    <span class="text-muted"><i class="bi bi-clock me-1 text-primary"></i>Thời lượng:</span>
-                                    <strong class="text-dark" id="sideDurationText">--</strong>
+                            </div>
+
+                            <!-- Dịch vụ / Combo -->
+                            <div class="mb-3 pb-3 border-bottom">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted text-uppercase fw-semibold" style="font-size: 0.72rem;">DỊCH VỤ / COMBO:</small>
+                                    <button type="button" class="btn btn-link btn-sm text-decoration-none p-0" onclick="goToStep(1)">
+                                        <i class="bi bi-pencil-square"></i> Đổi
+                                    </button>
                                 </div>
-                                <div class="d-flex align-items-center justify-content-between mt-1 small">
-                                    <span class="text-muted"><i class="bi bi-tag me-1 text-primary"></i>Giá tham khảo:</span>
-                                    <strong class="text-primary" id="sidePriceText">--</strong>
+                                <h6 class="fw-bold text-dark mb-1" id="sideServiceName">Khám tổng quát & Tư vấn</h6>
+                                <div class="text-muted small" id="sideDeptName">
+                                    <i class="bi bi-hospital me-1"></i>Khoa Răng Hàm Mặt Tổng Quát
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
+                                    <span class="small text-muted"><i class="bi bi-clock me-1"></i>Thời lượng: <strong id="sideDurationText">30 phút</strong></span>
+                                    <span class="fw-bold text-danger fs-6" id="sidePriceText">100.000 đ</span>
                                 </div>
                             </div>
 
                             <!-- Bác sĩ -->
                             <div class="mb-3 pb-3 border-bottom">
-                                <div class="text-muted small text-uppercase fw-semibold mb-1">Hình thức bác sĩ:</div>
-                                <div class="fw-semibold text-dark" id="sideDentistName">
-                                    <i class="bi bi-hospital text-primary me-1"></i>Để phòng khám phân công bác sĩ phù hợp
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted text-uppercase fw-semibold" style="font-size: 0.72rem;">HÌNH THỨC BÁC SĨ:</small>
+                                    <button type="button" class="btn btn-link btn-sm text-decoration-none p-0" onclick="goToStep(2)">
+                                        <i class="bi bi-pencil-square"></i> Đổi
+                                    </button>
+                                </div>
+                                <div class="small fw-semibold text-dark" id="sideDentistName">
+                                    <i class="bi bi-hospital me-1 text-success"></i>Để phòng khám phân công bác sĩ phù hợp
                                 </div>
                             </div>
 
-                            <!-- Thời gian khám -->
+                            <!-- Thời gian hẹn -->
                             <div class="mb-3 pb-3 border-bottom">
-                                <div class="text-muted small text-uppercase fw-semibold mb-1">Thời gian hẹn khám:</div>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted text-uppercase fw-semibold" style="font-size: 0.72rem;">THỜI GIAN HẸN KHÁM:</small>
+                                    <button type="button" class="btn btn-link btn-sm text-decoration-none p-0" onclick="goToStep(3)">
+                                        <i class="bi bi-pencil-square"></i> Đổi
+                                    </button>
+                                </div>
                                 <div class="d-flex align-items-center gap-2 mb-1">
-                                    <i class="bi bi-calendar3 text-primary"></i>
+                                    <i class="bi bi-calendar-event text-primary"></i>
                                     <span class="fw-semibold text-dark" id="sideDateText">Chưa chọn ngày</span>
                                 </div>
                                 <div class="d-flex align-items-center gap-2">
@@ -715,7 +775,7 @@
 
                             <!-- Nút hành động nhanh -->
                             <button type="button" class="btn btn-primary w-100 fw-bold py-2 shadow-sm" id="sideActionButton" onclick="onSideActionClick()">
-                                Tiếp tục: Chọn bác sĩ <i class="bi bi-arrow-right ms-1"></i>
+                                Tiếp tục: Khoa & Bác sĩ <i class="bi bi-arrow-right ms-1"></i>
                             </button>
                         </div>
                     </div>
@@ -725,231 +785,403 @@
     }
 </div>
 
+<!-- ============================================================== -->
+<!-- MODAL: XEM CHI TIẾT COMBO DỊCH VỤ                              -->
+<!-- ============================================================== -->
+<div class="modal fade" id="comboDetailModal" tabindex="-1" aria-labelledby="comboDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-warning-subtle text-warning-emphasis">
+                <h5 class="modal-title fw-bold" id="comboModalTitle">
+                    <i class="bi bi-stars me-2"></i>Chi Tiết Gói Combo Dịch Vụ
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                    <div>
+                        <span class="badge bg-warning text-dark px-2 py-1 rounded-pill mb-1" id="comboModalBadge">Bán chạy</span>
+                        <h4 class="fw-bold text-dark mb-0" id="comboModalHeading">Tên Gói Combo</h4>
+                        <small class="text-muted" id="comboModalDept">Khoa Răng Hàm Mặt</small>
+                    </div>
+                    <div class="text-end">
+                        <div class="text-decoration-line-through text-muted small" id="comboModalOldPrice">450.000 đ</div>
+                        <div class="fs-4 fw-bold text-danger" id="comboModalNewPrice">350.000 đ</div>
+                        <span class="badge bg-danger-subtle text-danger" id="comboModalDiscount">Tiết kiệm 22%</span>
+                    </div>
+                </div>
+
+                <p class="text-muted mb-4" id="comboModalDescription">Mô tả chi tiết gói combo.</p>
+
+                <div class="card bg-light border-0 p-3 rounded-3 mb-4">
+                    <h6 class="fw-bold text-dark mb-2"><i class="bi bi-check2-circle text-success me-2"></i>Các dịch vụ thành phần bao gồm:</h6>
+                    <ul class="list-unstyled mb-0" id="comboModalIncludedList">
+                        <!-- Rendered by JS -->
+                    </ul>
+                </div>
+
+                <div class="card bg-success-subtle border-0 p-3 rounded-3 mb-2">
+                    <h6 class="fw-bold text-success-emphasis mb-2"><i class="bi bi-award text-success me-2"></i>Đặc quyền & Lợi ích vượt trội:</h6>
+                    <ul class="list-unstyled mb-0" id="comboModalBenefitsList">
+                        <!-- Rendered by JS -->
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-warning fw-bold px-4" id="btnModalSelectCombo" onclick="applyComboFromModal()">
+                    <i class="bi bi-check-lg me-1"></i> Chọn Dùng Gói Combo Này
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
-/* Stepper Styles */
-.stepper-wrapper {
-    position: relative;
-    padding: 0 10px;
-}
-.step-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    position: relative;
-    z-index: 2;
-    cursor: pointer;
-    min-width: 80px;
-}
-.step-circle {
-    width: 46px;
-    height: 46px;
-    border-radius: 50%;
-    background-color: #f1f5f9;
-    color: #64748b;
-    border: 2px solid #e2e8f0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.25rem;
-    margin-bottom: 6px;
-    transition: all 0.25s ease;
-}
-.step-label {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: #64748b;
-    white-space: nowrap;
-}
-.step-item.active .step-circle {
-    background-color: #0d6efd;
-    border-color: #0d6efd;
-    color: #fff;
-    box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.2);
-}
-.step-item.active .step-label {
-    color: #0d6efd;
-}
-.step-item.completed .step-circle {
-    background-color: #198754;
-    border-color: #198754;
-    color: #fff;
-}
-.step-line {
-    flex-grow: 1;
-    height: 3px;
-    background-color: #e2e8f0;
-    margin: 0 8px;
-    position: relative;
-    top: -16px;
-    z-index: 1;
-}
+    /* Stepper Styles */
+    .stepper-wrapper {
+        position: relative;
+        padding: 0 10px;
+    }
+    .step-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+        z-index: 2;
+        cursor: pointer;
+        min-width: 80px;
+    }
+    .step-circle {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        background-color: #f1f5f9;
+        color: #64748b;
+        border: 2px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        margin-bottom: 6px;
+        transition: all 0.25s ease;
+    }
+    .step-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #64748b;
+        transition: color 0.25s ease;
+    }
+    .step-item.active .step-circle {
+        background-color: #0d6efd;
+        color: #fff;
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.2);
+    }
+    .step-item.active .step-label {
+        color: #0d6efd;
+        font-weight: 700;
+    }
+    .step-item.completed .step-circle {
+        background-color: #198754;
+        color: #fff;
+        border-color: #198754;
+    }
+    .step-item.completed .step-label {
+        color: #198754;
+    }
+    .step-line {
+        flex: 1;
+        height: 2px;
+        background-color: #e2e8f0;
+        position: relative;
+        top: -14px;
+        z-index: 1;
+    }
 
-/* Card Selection */
-.selection-card {
-    border: 2px solid #e2e8f0;
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.2s ease-in-out;
-    background-color: #fff;
-}
-.selection-card:hover {
-    border-color: #93c5fd;
-    box-shadow: 0 4px 12px rgba(13, 110, 253, 0.08);
-    transform: translateY(-2px);
-}
-.selection-card.active {
-    border-color: #0d6efd !important;
-    background-color: #eff6ff !important;
-    box-shadow: 0 0 0 1px #0d6efd;
-}
+    /* Category Cards (Branch Selector) */
+    .category-card {
+        border: 2px solid #e2e8f0;
+        transition: all 0.25s ease;
+        background-color: #fff;
+    }
+    .category-card:hover {
+        border-color: #94a3b8;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+    .category-card.active {
+        border-color: #0d6efd;
+        background-color: #f8faff;
+        box-shadow: 0 4px 14px rgba(13, 110, 253, 0.12);
+    }
+    #cat-card-combo.active {
+        border-color: #ffc107;
+        background-color: #fffdf5;
+        box-shadow: 0 4px 14px rgba(255, 193, 7, 0.15);
+    }
+    #cat-card-general.active {
+        border-color: #198754;
+        background-color: #f4fbf7;
+        box-shadow: 0 4px 14px rgba(25, 135, 84, 0.15);
+    }
 
-.selection-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
+    /* Combo Cards */
+    .combo-card {
+        cursor: pointer;
+        transition: all 0.25s ease;
+        border: 1.5px solid #e2e8f0;
+    }
+    .combo-card:hover {
+        border-color: #ffc107;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 193, 7, 0.12);
+    }
+    .combo-card.active {
+        border-color: #ffc107 !important;
+        background-color: #fffdf5;
+        box-shadow: 0 0 0 2px #ffc107;
+    }
 
-/* Slot button */
-.slot-btn {
-    border: 2px solid #e2e8f0;
-    background-color: #fff;
-    border-radius: 10px;
-    padding: 12px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-.slot-btn:hover {
-    border-color: #0d6efd;
-    background-color: #f8faff;
-    transform: translateY(-2px);
-}
-.slot-btn.active {
-    border-color: #198754 !important;
-    background-color: #d1e7dd !important;
-    box-shadow: 0 0 0 2px #198754;
-}
+    /* Service Cards */
+    .service-card {
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .service-card:hover {
+        border-color: #0d6efd;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    }
+    .service-card.active {
+        border-color: #0d6efd !important;
+        background-color: #f8faff;
+        box-shadow: 0 0 0 2px #0d6efd;
+    }
+
+    /* Selection Cards (Doctor Option) */
+    .selection-card {
+        border: 2px solid #e2e8f0;
+        transition: all 0.2s ease;
+    }
+    .selection-card:hover {
+        border-color: #cbd5e1;
+    }
+    .selection-card.active {
+        border-color: #0d6efd;
+        background-color: #f8faff;
+        box-shadow: 0 0 0 2px #0d6efd;
+    }
+
+    /* Time Slots */
+    .slot-btn {
+        border: 1.5px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 8px 4px;
+        cursor: pointer;
+        background: #fff;
+        transition: all 0.2s ease;
+    }
+    .slot-btn:hover {
+        border-color: #0d6efd;
+        background-color: #f0f7ff;
+    }
+    .slot-btn.active {
+        border-color: #0d6efd;
+        background-color: #0d6efd;
+        color: #fff !important;
+    }
+    .slot-btn.active .text-dark,
+    .slot-btn.active .text-muted {
+        color: #fff !important;
+    }
+
+    /* Symptom Chips */
+    .symptom-chip {
+        font-size: 0.82rem;
+        transition: all 0.2s ease;
+    }
+    .symptom-chip:hover, .symptom-chip.active {
+        background-color: #0d6efd;
+        color: #fff;
+        border-color: #0d6efd;
+    }
+
+    /* Utility */
+    .cursor-pointer { cursor: pointer; }
+    .text-truncate-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
 </style>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
 
     <script>
+        // State variables
         let currentStep = 1;
-        let selectedService = { id: 0, name: '', deptId: 0, deptName: '', duration: 30, price: '', isComplex: false };
+        let bookingCategory = '@Model.BookingCategory' || 'GeneralCheckup';
+        let selectedCombo = null;
+        let selectedService = {
+            id: parseInt('@Model.RequestedServiceId') || 1,
+            name: 'Khám tổng quát & Tư vấn',
+            deptId: parseInt('@Model.DepartmentId') || 1,
+            deptName: 'Khoa Răng Hàm Mặt Tổng Quát',
+            duration: 30,
+            price: '100.000 đ'
+        };
         let doctorSelectionMode = '@Model.DoctorSelectionMode' || 'ClinicAssignment';
-        let selectedDentist = { id: null, name: 'Để phòng khám phân công bác sĩ phù hợp' };
+        let selectedDentist = { id: null, name: '' };
         let selectedSlot = null;
         let isSubmitting = false;
 
-        function formatDayOfWeek(dateStr) {
-            if (!dateStr) return '';
-            const parts = dateStr.split('-');
-            if (parts.length !== 3) return dateStr;
+        // Combos dataset injected from Model
+        const availableCombosData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Combos, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }));
+        let modalActiveComboCode = null;
+
+        // Helper: Format day of week in Vietnamese
+        function formatDayOfWeek(dateString) {
+            if (!dateString) return '';
+            const parts = dateString.split('-');
+            if (parts.length !== 3) return dateString;
             const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
             const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
             const dayName = days[d.getDay()];
             return `${dayName}, ${parts[2]}/${parts[1]}/${parts[0]}`;
         }
 
-        function onSideActionClick() {
-            if (currentStep < 5) {
-                goToStep(currentStep + 1);
-            } else if (currentStep === 5) {
-                const form = document.getElementById('bookingForm');
-                if (form) form.requestSubmit();
+        // ============================================
+        // BRANCH SELECTION: 3 HÌNH THỨC
+        // ============================================
+        function switchBookingCategory(cat) {
+            bookingCategory = cat;
+            document.getElementById('hiddenBookingCategory').value = cat;
+
+            // Highlight category selector card
+            document.querySelectorAll('.category-card').forEach(c => c.classList.remove('active'));
+            if (cat === 'Combo') document.getElementById('cat-card-combo').classList.add('active');
+            if (cat === 'SingleService') document.getElementById('cat-card-single').classList.add('active');
+            if (cat === 'GeneralCheckup') document.getElementById('cat-card-general').classList.add('active');
+
+            // Show/hide category content sections
+            document.getElementById('category-content-combo').classList.toggle('d-none', cat !== 'Combo');
+            document.getElementById('category-content-single').classList.toggle('d-none', cat !== 'SingleService');
+            document.getElementById('category-content-general').classList.toggle('d-none', cat !== 'GeneralCheckup');
+
+            // Update sidebar label
+            const sideCatText = document.getElementById('sideCategoryText');
+            if (cat === 'Combo') {
+                sideCatText.innerHTML = '<i class="bi bi-box2-heart text-warning me-1"></i>Combo Dịch Vụ';
+                // Auto preselect first combo if none selected
+                if (!selectedCombo && availableCombosData && availableCombosData.length > 0) {
+                    selectCombo(availableCombosData[0].code, false);
+                }
+            } else if (cat === 'SingleService') {
+                sideCatText.innerHTML = '<i class="bi bi-grid-3x3-gap text-info me-1"></i>Dịch Vụ Lẻ Theo Khoa';
+            } else {
+                sideCatText.innerHTML = '<i class="bi bi-clipboard2-pulse text-success me-1"></i>Khám Tổng Quát / Tư Vấn';
+                selectGeneralCheckup(false);
             }
         }
 
-        function goToStep(step) {
-            if (step > currentStep) {
-                // Validate Step 1
-                if (currentStep === 1 && selectedService.id === 0) {
-                    alert('Vui lòng chọn một dịch vụ nha khoa để tiếp tục.');
-                    return;
-                }
+        // Branch A: Combo Selection
+        function selectCombo(code, proceedToStep2 = true) {
+            const combo = availableCombosData.find(c => c.code === code);
+            if (!combo) return;
 
-                // Validate Step 2
-                if (currentStep === 2 && doctorSelectionMode === 'PreferredDentist' && !selectedDentist.id) {
-                    alert('Bạn đã chọn hình thức "Tôi muốn chọn bác sĩ". Vui lòng chọn một bác sĩ cụ thể từ danh sách.');
-                    return;
-                }
+            selectedCombo = combo;
+            document.getElementById('hiddenSelectedComboCode').value = code;
+            document.getElementById('hiddenBookingCategory').value = 'Combo';
 
-                // Validate Step 3
-                if (currentStep === 3) {
-                    const dateVal = document.getElementById('inputAppointmentDate').value;
-                    if (!dateVal) {
-                        alert('Vui lòng chọn ngày bạn muốn đến khám.');
-                        return;
-                    }
-                    if (!selectedSlot) {
-                        alert('Vui lòng chọn một khung giờ hẹn còn trống để tiếp tục.');
-                        return;
-                    }
-                }
+            selectService(combo.serviceId, `[Combo] ${combo.title}`, combo.departmentId, combo.departmentName, combo.durationMinutes, `${combo.comboPrice.toLocaleString('vi-VN')} đ`);
 
-                // Validate Step 4
-                if (currentStep === 4) {
-                    const reason = document.getElementById('inputReasonForVisit').value.trim();
-                    const reasonError = document.getElementById('reasonErrorMsg');
-                    const reasonInput = document.getElementById('inputReasonForVisit');
-                    if (reason.length < 5) {
-                        if (reasonError) reasonError.classList.remove('d-none');
-                        if (reasonInput) {
-                            reasonInput.classList.add('is-invalid');
-                            reasonInput.focus();
-                        }
-                        return;
-                    }
-                    if (reasonError) reasonError.classList.add('d-none');
-                    if (reasonInput) reasonInput.classList.remove('is-invalid');
-                    updateSummary();
-                }
+            // UI highlight
+            document.querySelectorAll('.combo-card').forEach(c => {
+                c.classList.remove('active');
+                const btn = c.querySelector('.btn-select-combo');
+                if (btn) btn.innerText = 'Chọn Combo';
+            });
+            const card = document.getElementById(`combo-card-${code}`);
+            if (card) {
+                card.classList.add('active');
+                const btn = card.querySelector('.btn-select-combo');
+                if (btn) btn.innerText = 'Đã chọn';
             }
 
-            for (let i = 1; i <= 5; i++) {
-                const panel = document.getElementById(`step-panel-${i}`);
-                if (panel) panel.classList.add('d-none');
-                const nav = document.getElementById(`step-nav-${i}`);
-                if (nav) {
-                    nav.classList.remove('active', 'completed');
-                    if (i < step) nav.classList.add('completed');
-                    if (i === step) nav.classList.add('active');
-                }
+            if (proceedToStep2) {
+                goToStep(2);
             }
-
-            const currentPanel = document.getElementById(`step-panel-${step}`);
-            if (currentPanel) currentPanel.classList.remove('d-none');
-            currentStep = step;
-
-            const sideAction = document.getElementById('sideActionButton');
-            if (sideAction) {
-                switch (step) {
-                    case 1: sideAction.innerHTML = 'Tiếp tục: Chọn bác sĩ <i class="bi bi-arrow-right ms-1"></i>'; break;
-                    case 2: sideAction.innerHTML = 'Tiếp tục: Chọn ngày giờ <i class="bi bi-arrow-right ms-1"></i>'; break;
-                    case 3: sideAction.innerHTML = 'Tiếp tục: Nhập thông tin <i class="bi bi-arrow-right ms-1"></i>'; break;
-                    case 4: sideAction.innerHTML = 'Tiếp tục: Xem lại & Xác nhận <i class="bi bi-arrow-right ms-1"></i>'; break;
-                    case 5: sideAction.innerHTML = '<i class="bi bi-send-check me-2"></i> Gửi Yêu Cầu Đặt Lịch'; break;
-                }
-            }
-
-            if (step === 2) {
-                loadDentistsForDepartment(selectedService.deptId);
-            } else if (step === 3) {
-                loadAvailableSlots();
-            } else if (step === 5) {
-                updateSummary();
-            }
-
-            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        // ============================================
-        // STEP 1 LOGIC: DỊCH VỤ
-        // ============================================
+        // Branch A: Modal View Detail
+        function viewComboDetail(code) {
+            const combo = availableCombosData.find(c => c.code === code);
+            if (!combo) return;
+
+            modalActiveComboCode = code;
+            document.getElementById('comboModalHeading').innerText = combo.title;
+            document.getElementById('comboModalBadge').innerText = combo.badge;
+            document.getElementById('comboModalDept').innerText = combo.departmentName;
+            document.getElementById('comboModalOldPrice').innerText = `${combo.originalPrice.toLocaleString('vi-VN')} đ`;
+            document.getElementById('comboModalNewPrice').innerText = `${combo.comboPrice.toLocaleString('vi-VN')} đ`;
+            document.getElementById('comboModalDiscount').innerText = `Tiết kiệm ${combo.discountPercent}%`;
+            document.getElementById('comboModalDescription').innerText = combo.description;
+
+            // Render included list
+            const incList = document.getElementById('comboModalIncludedList');
+            incList.innerHTML = combo.includedServices.map(item => `
+                <li class="mb-1 text-dark small"><i class="bi bi-check-circle-fill text-success me-2"></i>${escapeHtml(item)}</li>
+            `).join('');
+
+            // Render benefits list
+            const benList = document.getElementById('comboModalBenefitsList');
+            benList.innerHTML = combo.benefits.map(item => `
+                <li class="mb-1 text-success-emphasis small"><i class="bi bi-shield-check text-success me-2"></i>${escapeHtml(item)}</li>
+            `).join('');
+
+            const modal = new bootstrap.Modal(document.getElementById('comboDetailModal'));
+            modal.show();
+        }
+
+        function applyComboFromModal() {
+            if (modalActiveComboCode) {
+                const modalEl = document.getElementById('comboDetailModal');
+                const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                if (modalInstance) modalInstance.hide();
+                selectCombo(modalActiveComboCode, true);
+            }
+        }
+
+        // Branch C: Khám Tổng Quát Tư Vấn
+        function selectGeneralCheckup(proceedToStep2 = true) {
+            bookingCategory = 'GeneralCheckup';
+            document.getElementById('hiddenBookingCategory').value = 'GeneralCheckup';
+            document.getElementById('hiddenSelectedComboCode').value = '';
+
+            selectService(1, 'Khám tổng quát & Tư vấn', 1, 'Khoa Răng Hàm Mặt Tổng Quát', 30, '100.000 đ');
+
+            if (proceedToStep2) {
+                goToStep(2);
+            }
+        }
+
+        function quickSelectSymptom(text) {
+            const textarea = document.getElementById('inputReasonForVisit');
+            if (!textarea) return;
+            const current = textarea.value.trim();
+            if (current && !current.includes(text)) {
+                textarea.value = `${current}; ${text}`;
+            } else if (!current) {
+                textarea.value = text;
+            }
+            const error = document.getElementById('reasonValidationError');
+            if (error) error.innerText = '';
+        }
+
+        // Branch B: Dịch Vụ Lẻ Selection
         function filterServices() {
             const query = (document.getElementById('serviceSearchInput').value || '').trim().toLowerCase();
             const deptId = document.getElementById('departmentFilterSelect').value;
@@ -971,77 +1203,138 @@
             });
 
             const emptyAlert = document.getElementById('filterEmptyAlert');
-            if (emptyAlert) {
-                emptyAlert.classList.toggle('d-none', visibleCount > 0);
-            }
-            const countBadge = document.getElementById('badgeServiceCount');
-            if (countBadge) {
-                countBadge.innerText = `${visibleCount} dịch vụ khả dụng`;
-            }
+            if (emptyAlert) emptyAlert.classList.toggle('d-none', visibleCount > 0);
         }
 
-        function selectService(id, name, deptId, deptName, duration, price, isComplex) {
-            selectedService = { id, name, deptId, deptName, duration, price, isComplex };
+        function selectService(id, name, deptId, deptName, duration, price) {
+            selectedService = { id, name, deptId, deptName, duration, price };
             document.getElementById('hiddenServiceId').value = id;
             document.getElementById('hiddenDepartmentId').value = deptId;
 
+            // UI highlight for service items
             document.querySelectorAll('.service-card').forEach(c => c.classList.remove('active'));
             const selectedItem = document.querySelector(`.service-item[data-service-id="${id}"] .service-card`);
             if (selectedItem) selectedItem.classList.add('active');
 
-            const alertBox = document.getElementById('serviceSelectedAlert');
-            if (alertBox) alertBox.classList.remove('d-none');
-            document.getElementById('alertServiceName').innerText = name;
-            document.getElementById('alertDeptName').innerText = deptName;
-            document.getElementById('alertServiceDuration').innerText = `${duration} phút`;
-            document.getElementById('alertServicePrice').innerText = price;
-
+            // Update sidebar
             document.getElementById('sideServiceName').innerText = name;
             document.getElementById('sideDeptName').innerHTML = `<i class="bi bi-hospital me-1"></i>${deptName}`;
             document.getElementById('sideDurationText').innerText = `${duration} phút`;
             document.getElementById('sidePriceText').innerText = price;
-
-            document.getElementById('panel2ServiceName').innerText = name;
-            document.getElementById('panel2DeptName').innerText = deptName;
-            document.getElementById('panel2ServiceDuration').innerText = `${duration} phút`;
-            document.getElementById('panel2ServicePrice').innerText = price;
-
-            const btnNext1 = document.getElementById('btnNext1');
-            if (btnNext1) btnNext1.disabled = false;
+            document.getElementById('step2DeptName').innerText = deptName;
         }
 
         // ============================================
-        // STEP 2 LOGIC: CHỌN HÌNH THỨC BÁC SĨ
+        // STEP NAVIGATION (goToStep)
+        // ============================================
+        function onSideActionClick() {
+            if (currentStep < 5) {
+                goToStep(currentStep + 1);
+            } else if (currentStep === 5) {
+                const form = document.getElementById('bookingForm');
+                if (form) form.requestSubmit();
+            }
+        }
+
+        function goToStep(step) {
+            if (step > currentStep) {
+                // Validate Step 1
+                if (currentStep === 1 && (!selectedService.id || selectedService.id === 0)) {
+                    alert('Vui lòng chọn 1 hình thức hoặc dịch vụ nha khoa để tiếp tục.');
+                    return;
+                }
+
+                // Validate Step 2
+                if (currentStep === 2 && doctorSelectionMode === 'PreferredDentist' && !selectedDentist.id) {
+                    alert('Bạn đã chọn "Tôi muốn chọn bác sĩ". Vui lòng chọn 1 bác sĩ cụ thể từ danh sách.');
+                    return;
+                }
+
+                // Validate Step 3
+                if (currentStep === 3 && (!selectedSlot || !document.getElementById('hiddenScheduledStart').value)) {
+                    alert('Vui lòng chọn 1 khung giờ khám còn trống.');
+                    return;
+                }
+
+                // Validate Step 4
+                if (currentStep === 4) {
+                    const reason = document.getElementById('inputReasonForVisit').value.trim();
+                    if (reason.length < 5) {
+                        alert('Vui lòng nhập lý do khám hoặc triệu chứng tối thiểu 5 ký tự.');
+                        document.getElementById('inputReasonForVisit').focus();
+                        return;
+                    }
+                    updateSummary();
+                }
+            }
+
+            // Update panel visibility & stepper active styles
+            for (let i = 1; i <= 5; i++) {
+                const panel = document.getElementById(`step-panel-${i}`);
+                if (panel) panel.classList.add('d-none');
+                const nav = document.getElementById(`step-nav-${i}`);
+                if (nav) {
+                    nav.classList.remove('active', 'completed');
+                    if (i < step) nav.classList.add('completed');
+                    if (i === step) nav.classList.add('active');
+                }
+            }
+
+            const currentPanel = document.getElementById(`step-panel-${step}`);
+            if (currentPanel) currentPanel.classList.remove('d-none');
+            currentStep = step;
+
+            // Side Action text
+            const sideAction = document.getElementById('sideActionButton');
+            if (sideAction) {
+                switch (step) {
+                    case 1: sideAction.innerHTML = 'Tiếp tục: Khoa & Bác sĩ <i class="bi bi-arrow-right ms-1"></i>'; break;
+                    case 2: sideAction.innerHTML = 'Tiếp tục: Chọn ngày giờ <i class="bi bi-arrow-right ms-1"></i>'; break;
+                    case 3: sideAction.innerHTML = 'Tiếp tục: Nhập thông tin BN <i class="bi bi-arrow-right ms-1"></i>'; break;
+                    case 4: sideAction.innerHTML = 'Tiếp tục: Xem lại & Xác nhận <i class="bi bi-arrow-right ms-1"></i>'; break;
+                    case 5: sideAction.innerHTML = '<i class="bi bi-send-check me-2"></i> Xác Nhận & Đặt Lịch'; break;
+                }
+            }
+
+            if (step === 2) {
+                loadDentistsForDepartment(selectedService.deptId);
+            } else if (step === 3) {
+                loadAvailableSlots();
+            } else if (step === 5) {
+                updateSummary();
+            }
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // ============================================
+        // STEP 2: DOCTOR SELECTION
         // ============================================
         function setDoctorSelectionMode(mode) {
             doctorSelectionMode = mode;
             document.getElementById('hiddenDoctorSelectionMode').value = mode;
 
-            const cardClinic = document.getElementById('cardModeClinicAssignment');
-            const cardPreferred = document.getElementById('cardModePreferredDentist');
-            const subpanel = document.getElementById('dentistSelectionSubpanel');
+            document.getElementById('modeCardClinic').classList.toggle('active', mode === 'ClinicAssignment');
+            document.getElementById('modeCardDoctor').classList.toggle('active', mode === 'PreferredDentist');
 
-            if (mode === 'ClinicAssignment') {
-                if (cardClinic) cardClinic.classList.add('active');
-                if (cardPreferred) cardPreferred.classList.remove('active');
-                if (subpanel) subpanel.classList.add('d-none');
-
-                selectedDentist = { id: null, name: 'Để phòng khám phân công bác sĩ phù hợp' };
-                document.getElementById('hiddenDentistId').value = '';
-                document.getElementById('sideDentistName').innerHTML = '<i class="bi bi-hospital text-primary me-1"></i>Để phòng khám phân công bác sĩ phù hợp';
+            const doctorSec = document.getElementById('preferredDoctorSection');
+            if (mode === 'PreferredDentist') {
+                doctorSec.classList.remove('d-none');
+                loadDentistsForDepartment(selectedService.deptId);
             } else {
-                if (cardClinic) cardClinic.classList.remove('active');
-                if (cardPreferred) cardPreferred.classList.add('active');
-                if (subpanel) subpanel.classList.remove('d-none');
+                doctorSec.classList.add('d-none');
+                selectedDentist = { id: null, name: '' };
+                document.getElementById('hiddenDentistId').value = '';
+                document.getElementById('sideDentistName').innerHTML = '<i class="bi bi-hospital me-1 text-success"></i>Để phòng khám phân công bác sĩ phù hợp';
             }
         }
 
         function loadDentistsForDepartment(deptId) {
             if (!deptId) return;
-            const container = document.getElementById('dentistCardsContainer');
-            const spinner = document.getElementById('dentistLoadingSpinner');
+            const spinner = document.getElementById('dentistListLoading');
+            const container = document.getElementById('dentistListContainer');
             const noAlert = document.getElementById('noDentistsAlert');
-            const badge = document.getElementById('dentistCountBadge');
+            const badge = document.getElementById('badgeDentistCount');
 
             if (spinner) spinner.classList.remove('d-none');
             if (container) container.innerHTML = '';
@@ -1049,18 +1342,18 @@
 
             fetch(`/Patient/Appointment/GetDentists?departmentId=${deptId}`)
                 .then(r => r.json())
-                .then(data => {
+                .then(dentists => {
                     if (spinner) spinner.classList.add('d-none');
-                    const dentists = data || [];
-                    if (badge) badge.innerText = `${dentists.length} bác sĩ`;
+                    const list = dentists || [];
+                    if (badge) badge.innerText = `${list.length} bác sĩ chuyên khoa`;
 
-                    if (dentists.length === 0) {
+                    if (list.length === 0) {
                         if (noAlert) noAlert.classList.remove('d-none');
                         return;
                     }
 
                     let html = '';
-                    dentists.forEach(d => {
+                    list.forEach(d => {
                         const isSel = selectedDentist.id === d.userId;
                         const avatar = d.avatarUrl || '/images/default-avatar.svg';
                         const exp = d.yearsOfExperience ? `${d.yearsOfExperience} năm kinh nghiệm` : 'Bác sĩ chuyên khoa';
@@ -1068,7 +1361,7 @@
 
                         html += `
                             <div class="col-md-6">
-                                <div class="card selection-card p-3 h-100 doctor-item-card ${isSel ? 'active' : ''}" 
+                                <div class="card selection-card p-3 h-100 doctor-item-card ${isSel ? 'active' : ''}"
                                      data-dentist-id="${d.userId}"
                                      onclick="selectSpecificDentist(${d.userId}, '${escapeHtml(d.fullName)}')">
                                     <div class="d-flex align-items-center gap-3">
@@ -1085,7 +1378,7 @@
                     });
                     if (container) container.innerHTML = html;
                 })
-                .catch(err => {
+                .catch(() => {
                     if (spinner) spinner.classList.add('d-none');
                     if (noAlert) noAlert.classList.remove('d-none');
                 });
@@ -1108,7 +1401,7 @@
         }
 
         // ============================================
-        // STEP 3 LOGIC: NGÀY VÀ GIỜ HẸN
+        // STEP 3: DATE & AVAILABLE SLOTS
         // ============================================
         function setQuickDate(offsetDays) {
             const now = new Date();
@@ -1119,6 +1412,10 @@
                 dateInput.value = dateStr;
                 onDateChanged();
             }
+
+            document.querySelectorAll('.quick-date-btn').forEach((b, idx) => {
+                b.classList.toggle('active', idx === offsetDays);
+            });
         }
 
         function onDateChanged() {
@@ -1157,7 +1454,7 @@
             if (contextLabel) {
                 contextLabel.innerText = doctorSelectionMode === 'PreferredDentist' && selectedDentist.id
                     ? `(Lịch trống của BS. ${selectedDentist.name})`
-                    : '(Khung giờ trống có bác sĩ trực khả dụng)';
+                    : '(Khung giờ có bác sĩ trực khả dụng)';
             }
 
             if (!deptId || !serviceId || !date) return;
@@ -1181,8 +1478,8 @@
                         const detail = document.getElementById('noSlotsDetailText');
                         if (detail) {
                             detail.innerText = doctorSelectionMode === 'PreferredDentist'
-                                ? `Bác sĩ ${selectedDentist.name} hiện đã kín lịch trong ngày ${date}. Bạn có thể đổi sang ngày khác hoặc chọn "Để phòng khám phân công bác sĩ phù hợp".`
-                                : `Không còn khung giờ trống trong ngày ${date}. Vui lòng chọn ngày tiếp theo.`;
+                                ? `Bác sĩ ${selectedDentist.name} đã kín lịch ngày ${date}. Bạn có thể chọn ngày khác hoặc chọn "Để phòng khám phân công bác sĩ phù hợp".`
+                                : `Không còn khung giờ trống ngày ${date}. Vui lòng chọn ngày tiếp theo.`;
                         }
                         return;
                     }
@@ -1202,8 +1499,8 @@
 
                         const btnHtml = `
                             <div class="col-4 col-sm-3 col-md-2">
-                                <div class="slot-btn text-center" 
-                                     data-slot-start="${isoStart}" 
+                                <div class="slot-btn text-center"
+                                     data-slot-start="${isoStart}"
                                      data-slot-text="${timeStr} - ${endTimeStr}"
                                      onclick="selectSlot('${isoStart}', '${timeStr} - ${endTimeStr}')">
                                     <div class="fw-bold fs-6 text-dark">${timeStr}</div>
@@ -1230,7 +1527,7 @@
                         if (afterSec) afterSec.classList.remove('d-none');
                     }
                 })
-                .catch(err => {
+                .catch(() => {
                     if (loading) loading.classList.add('d-none');
                     if (noSlots) noSlots.classList.remove('d-none');
                 });
@@ -1249,7 +1546,7 @@
 
             const alertBox = document.getElementById('slotSelectedAlert');
             if (alertBox) alertBox.classList.remove('d-none');
-            document.getElementById('alertSlotText').innerText = `${displayTime} &bull; ${fullDate}`;
+            document.getElementById('alertSlotText').innerText = `${displayTime} • ${fullDate}`;
 
             document.getElementById('sideSlotText').innerText = displayTime;
 
@@ -1257,15 +1554,15 @@
             if (btnNext3) btnNext3.disabled = false;
         }
 
-        function switchToClinicAssignmentAndReload() {
-            setDoctorSelectionMode('ClinicAssignment');
-            loadAvailableSlots();
-        }
-
         // ============================================
-        // STEP 5: TÓM TẮT & XÁC NHẬN
+        // STEP 5: REVIEW & SUBMISSION
         // ============================================
         function updateSummary() {
+            let catDisplay = 'Khám Tổng Quát';
+            if (bookingCategory === 'Combo') catDisplay = 'Gói Combo Dịch Vụ';
+            if (bookingCategory === 'SingleService') catDisplay = 'Dịch Vụ Lẻ Theo Khoa';
+            document.getElementById('summaryCategoryText').innerText = catDisplay;
+
             document.getElementById('summaryService').innerText = selectedService.name || '--';
             document.getElementById('summaryDept').innerText = selectedService.deptName || '--';
             document.getElementById('summaryDuration').innerText = `${selectedService.duration} phút`;
@@ -1289,9 +1586,6 @@
             document.getElementById('summaryReason').innerText = reason;
         }
 
-        // ============================================
-        // ANTI DOUBLE-CLICK SUBMIT
-        // ============================================
         function validateAndSubmitBooking(e) {
             if (isSubmitting) {
                 e.preventDefault();
@@ -1322,9 +1616,11 @@
             return true;
         }
 
-        // Init on DOM ready
+        // ============================================
+        // DOM READY
+        // ============================================
         document.addEventListener('DOMContentLoaded', function () {
-            // Bind service click events
+            // Bind service click events for Single Services
             document.querySelectorAll('.service-item').forEach(el => {
                 el.addEventListener('click', function () {
                     const id = parseInt(this.getAttribute('data-service-id'));
@@ -1333,17 +1629,13 @@
                     const name = this.getAttribute('data-name');
                     const duration = parseInt(this.getAttribute('data-duration') || 30);
                     const price = this.getAttribute('data-price');
-                    const isComplex = this.getAttribute('data-is-complex') === 'true';
-                    selectService(id, name, deptId, deptName, duration, price, isComplex);
+                    selectService(id, name, deptId, deptName, duration, price);
+                    goToStep(2);
                 });
             });
 
-            // Check preselected service
-            const initialServiceId = parseInt('@Model.RequestedServiceId');
-            if (initialServiceId > 0) {
-                const target = document.querySelector(`.service-item[data-service-id="${initialServiceId}"]`);
-                if (target) target.click();
-            }
+            // Initial Category Switch
+            switchBookingCategory(bookingCategory);
 
             // Init date display
             const initialDate = document.getElementById('inputAppointmentDate').value;
