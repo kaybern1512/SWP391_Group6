@@ -373,10 +373,15 @@ public class AppointmentWebControllerTests
     [Fact]
     public async Task Patient_GetSlots_ValidDate_ReturnsJsonResult()
     {
-        _apiMock.Setup(x => x.GetAvailableSlotsAsync(1, 10, new DateOnly(2026, 10, 15), null))
+        var futureDate = PatientAppointmentController.GetClinicToday().AddDays(3);
+        var dateStr = futureDate.ToString("yyyy-MM-dd");
+        var startTime = futureDate.ToDateTime(new TimeOnly(9, 0));
+        var endTime = futureDate.ToDateTime(new TimeOnly(9, 30));
+
+        _apiMock.Setup(x => x.GetAvailableSlotsAsync(1, 10, futureDate, null))
             .ReturnsAsync(ApiResult<List<AvailableSlotDto>>.Success(new List<AvailableSlotDto>
             {
-                new() { StartTime = new DateTime(2026, 10, 15, 9, 0, 0), EndTime = new DateTime(2026, 10, 15, 9, 30, 0) }
+                new() { StartTime = startTime, EndTime = endTime }
             }));
 
         var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
@@ -384,11 +389,56 @@ public class AppointmentWebControllerTests
             ControllerContext = CreateContextWithUser(101, "Patient")
         };
 
-        var result = await controller.GetSlots(1, 10, "2026-10-15", null);
+        var result = await controller.GetSlots(1, 10, dateStr, null);
 
         var json = result.Should().BeOfType<JsonResult>().Subject;
         var list = json.Value.Should().BeAssignableTo<IEnumerable<AvailableSlotDto>>().Subject;
         list.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Patient_GetSlots_PastDate_ReturnsEmptyList()
+    {
+        var pastDate = PatientAppointmentController.GetClinicToday().AddDays(-2);
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.GetSlots(1, 10, pastDate.ToString("yyyy-MM-dd"), null);
+
+        var json = result.Should().BeOfType<JsonResult>().Subject;
+        var list = json.Value.Should().BeAssignableTo<IEnumerable<AvailableSlotDto>>().Subject;
+        list.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Patient_Book_PastScheduledStart_ReturnsModelError()
+    {
+        var model = new PatientBookViewModel
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = PatientAppointmentController.GetClinicNow().AddHours(-3),
+            ReasonForVisit = "Đau nhức răng cần khám gấp"
+        };
+
+        _apiMock.Setup(x => x.GetBookingEligibilityAsync())
+            .ReturnsAsync(ApiResult<BookingEligibilityDto>.Success(new BookingEligibilityDto { IsEligible = true }));
+        _apiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(new List<DepartmentDto>()));
+        _apiMock.Setup(x => x.GetServicesAsync(0))
+            .ReturnsAsync(ApiResult<List<DepartmentServiceDto>>.Success(new List<DepartmentServiceDto>()));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Book(model);
+
+        controller.ModelState.IsValid.Should().BeFalse();
+        controller.ModelState.ContainsKey("ScheduledStart").Should().BeTrue();
     }
 
     [Fact]

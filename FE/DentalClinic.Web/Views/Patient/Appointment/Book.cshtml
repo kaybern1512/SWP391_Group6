@@ -182,7 +182,8 @@
                                             var isSelected = Model.RequestedServiceId == svc.DepartmentServiceId;
                                             var duration = svc.DurationMinutes.HasValue && svc.DurationMinutes.Value > 0 ? svc.DurationMinutes.Value : 30;
                                             var priceStr = svc.Price.HasValue && svc.Price.Value > 0 ? svc.Price.Value.ToString("N0") + " đ" : "Miễn phí / BHYT";
-                                            var isComplex = svc.RequiresConsultationFirst == true ||
+                                            var hasOfficialInstructions = !string.IsNullOrWhiteSpace(svc.BookingInstructions);
+                                            var isComplex = svc.RequiresConsultationFirst == true || hasOfficialInstructions ||
                                                             svc.ServiceName.Contains("Implant", StringComparison.OrdinalIgnoreCase) ||
                                                             svc.ServiceName.Contains("Niềng", StringComparison.OrdinalIgnoreCase) ||
                                                             svc.ServiceName.Contains("khôn", StringComparison.OrdinalIgnoreCase) ||
@@ -220,7 +221,13 @@
                                                         </div>
                                                     </div>
 
-                                                    @if (isComplex)
+                                                    @if (hasOfficialInstructions)
+                                                    {
+                                                        <div class="mb-2 p-2 bg-info-subtle rounded border border-info-subtle text-dark small">
+                                                            <i class="bi bi-info-circle-fill text-primary me-1"></i><strong>Hướng dẫn chuyên khoa:</strong> @svc.BookingInstructions
+                                                        </div>
+                                                    }
+                                                    else if (isComplex)
                                                     {
                                                         <div class="mb-2 p-2 bg-warning-subtle rounded border border-warning-subtle text-dark small">
                                                             <i class="bi bi-shield-check text-warning me-1"></i><strong>Thủ thuật chuyên sâu:</strong> Cần khám đánh giá & tư vấn lâm sàng trước khi thực hiện.
@@ -293,7 +300,7 @@
                                             <button type="button" class="btn btn-outline-primary btn-sm flex-fill" onclick="setQuickDate(2)">Ngày kia</button>
                                         </div>
 
-                                        <input type="date" asp-for="AppointmentDate" id="inputAppointmentDate" class="form-control form-control-lg fw-bold" min="@DateTime.Today.ToString("yyyy-MM-dd")" onchange="onDateOrDentistChange()" />
+                                        <input type="date" asp-for="AppointmentDate" id="inputAppointmentDate" class="form-control form-control-lg fw-bold" min="@DentalClinic.Web.Controllers.Patient.PatientAppointmentController.GetClinicToday().ToString("yyyy-MM-dd")" onchange="onDateOrDentistChange()" />
                                         <div id="selectedDateDisplay" class="text-primary fw-semibold small mt-2">
                                             <i class="bi bi-calendar-event me-1"></i><span id="dateTextFull"></span>
                                         </div>
@@ -792,7 +799,21 @@
                 if (currentStep === 2) {
                     const dateVal = document.getElementById('inputAppointmentDate').value;
                     if (!dateVal) {
-                        alert('Vui lòng chọn ngày bạn muốn đến khám.');
+                        if (window.toastWarning) {
+                            window.toastWarning('Vui lòng chọn ngày bạn muốn đến khám.', 'Yêu Cầu Chọn');
+                        } else {
+                            alert('Vui lòng chọn ngày bạn muốn đến khám.');
+                        }
+                        return;
+                    }
+                    const now = new Date();
+                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    if (dateVal < todayStr) {
+                        if (window.toastWarning) {
+                            window.toastWarning('Ngày khám không được nằm trong quá khứ. Vui lòng chọn ngày từ hôm nay trở đi.', 'Ngày Không Hợp Lệ');
+                        } else {
+                            alert('Ngày khám không được nằm trong quá khứ. Vui lòng chọn ngày từ hôm nay trở đi.');
+                        }
                         return;
                     }
                 }
@@ -1061,11 +1082,18 @@
                 const slots = await res.json();
                 loading.classList.add('d-none');
 
-                if (!slots || slots.length === 0) {
+                // Filter out any past slots if viewing today (P0 Past Booking Protection)
+                const nowTime = new Date();
+                const validSlots = (slots || []).filter(slot => {
+                    const slotDate = new Date(slot.startTime);
+                    return slotDate > nowTime;
+                });
+
+                if (validSlots.length === 0) {
                     const detailText = document.getElementById('noSlotsDetailText');
                     if (detailText) {
                         const doctorLabel = selectedDentist.id ? `Bác sĩ ${selectedDentist.name}` : 'Nhóm dịch vụ';
-                        detailText.innerText = `Vào ngày ${fullDateStr}, ${doctorLabel} không còn khung giờ trống đủ ${selectedService.duration} phút. Vui lòng chọn ngày khác hoặc chọn bác sĩ bất kỳ.`;
+                        detailText.innerText = `Vào ngày ${fullDateStr}, ${doctorLabel} không còn khung giờ trống khả dụng (hoặc các khung giờ trong ngày đã qua). Vui lòng chọn ngày khác hoặc chọn bác sĩ bất kỳ.`;
                     }
                     noSlots.classList.remove('d-none');
                     return;
@@ -1074,7 +1102,7 @@
                 let morningCount = 0;
                 let afternoonCount = 0;
 
-                slots.forEach(slot => {
+                validSlots.forEach(slot => {
                     const start = new Date(slot.startTime);
                     const end = new Date(slot.endTime);
                     const startStr = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;

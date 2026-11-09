@@ -15,7 +15,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString("DentalClinicDatabase")
-            ?? "Server=.\\SQLEXPRESS;Database=DentalClinicManagementDB;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=false";
+            ?? "Server=.\\SQLEXPRESS;Database=DentalCare_Patient_Dev;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=false";
 
         services.AddDbContext<DentalClinicDbContext>(options =>
             options.UseSqlServer(connectionString));

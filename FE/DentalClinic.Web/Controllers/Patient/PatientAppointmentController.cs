@@ -19,6 +19,37 @@ public class PatientAppointmentController : Controller
     private readonly IAppointmentApiService _appointmentApiService;
     private readonly IFeedbackApiService _feedbackApiService;
 
+    public static readonly TimeZoneInfo ClinicTimeZone = ResolveClinicTimeZone();
+
+    private static TimeZoneInfo ResolveClinicTimeZone()
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh");
+        }
+        catch
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+            }
+            catch
+            {
+                return TimeZoneInfo.Local;
+            }
+        }
+    }
+
+    public static DateTime GetClinicNow()
+    {
+        return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, ClinicTimeZone);
+    }
+
+    public static DateOnly GetClinicToday()
+    {
+        return DateOnly.FromDateTime(GetClinicNow());
+    }
+
     public PatientAppointmentController(
         IAppointmentApiService appointmentApiService,
         IFeedbackApiService feedbackApiService)
@@ -84,7 +115,7 @@ public class PatientAppointmentController : Controller
             Eligibility = eligibility,
             DepartmentId = departmentId ?? 0,
             RequestedDentistUserId = dentistId,
-            AppointmentDate = !string.IsNullOrWhiteSpace(date) ? date : DateTime.Today.AddDays(1).ToString("yyyy-MM-dd"),
+            AppointmentDate = !string.IsNullOrWhiteSpace(date) ? date : GetClinicToday().AddDays(1).ToString("yyyy-MM-dd"),
             ReasonForVisit = reason ?? string.Empty
         };
         return View("~/Views/Patient/Appointment/Book.cshtml", vm);
@@ -124,8 +155,22 @@ public class PatientAppointmentController : Controller
             return BadRequest(new { message = "Định dạng ngày không hợp lệ." });
         }
 
+        var clinicToday = GetClinicToday();
+        if (parsedDate < clinicToday)
+        {
+            return Json(new List<AvailableSlotDto>());
+        }
+
         var result = await _appointmentApiService.GetAvailableSlotsAsync(departmentId, serviceId, parsedDate, dentistUserId);
-        return Json(result.Data ?? new());
+        var slots = result?.Data ?? new List<AvailableSlotDto>();
+
+        if (parsedDate == clinicToday)
+        {
+            var clinicNow = GetClinicNow();
+            slots = slots.Where(s => s.StartTime > clinicNow.AddMinutes(15)).ToList();
+        }
+
+        return Json(slots);
     }
 
     [HttpPost("Book")]
@@ -143,6 +188,12 @@ public class PatientAppointmentController : Controller
             model.Departments = catalog.Departments;
             model.Services = catalog.Services;
             return View("~/Views/Patient/Appointment/Book.cshtml", model);
+        }
+
+        var clinicNow = GetClinicNow();
+        if (model.ScheduledStart.HasValue && model.ScheduledStart.Value <= clinicNow)
+        {
+            ModelState.AddModelError("ScheduledStart", "Thời gian khám không được nằm trong quá khứ. Vui lòng chọn khung giờ khám hợp lệ.");
         }
 
         if (!ModelState.IsValid)
@@ -306,6 +357,12 @@ public class PatientAppointmentController : Controller
         {
             TempData["ErrorMessage"] = eligibility.BlockReason ?? "Tài khoản của bạn hiện đang bị tạm khóa quyền đặt/dời lịch khám trực tuyến.";
             return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var rescheduleClinicNow = GetClinicNow();
+        if (model.NewScheduledStart.HasValue && model.NewScheduledStart.Value <= rescheduleClinicNow)
+        {
+            ModelState.AddModelError("NewScheduledStart", "Thời gian khám mới không được nằm trong quá khứ. Vui lòng chọn khung giờ khám hợp lệ.");
         }
 
         if (!ModelState.IsValid)
