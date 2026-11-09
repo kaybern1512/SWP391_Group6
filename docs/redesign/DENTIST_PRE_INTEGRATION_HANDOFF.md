@@ -13,11 +13,10 @@
 - **Workspace:** `D:\SWP391\DentalCare-Dentist`
 - **Branch:** `feature/dentist-redesign`
 - **Baseline Commit:** `5ad6d9542c9273dbdbc716609f8a5a56aa0b80ee`
-- **Dentist Local HEAD SHA:** `0737d17e257b8b75175a7404b47a64aae59ce1ae`
-- **Dentist Remote SHA (`origin/feature/dentist-redesign`):** `0737d17e257b8b75175a7404b47a64aae59ce1ae`
-- **Trạng thái đối chiếu SHA:** **100% Trùng khớp (Local SHA == Remote SHA)**
-- **Working Tree:** `nothing to commit, working tree clean`
+- **Dentist Functional Stabilization Commit:** `0737d17e257b8b75175a7404b47a64aae59ce1ae`
+- **Dentist Final Handoff Pack Commit:** `36170918696f5306eacd776ab9bbd4d98c3c214d`
 - **Tracking Branch:** `feature/dentist-redesign -> origin/feature/dentist-redesign`
+- **Trạng thái đối chiếu SHA:** **100% Trùng khớp (Local SHA == Remote SHA: 36170918696f5306eacd776ab9bbd4d98c3c214d)**
 - **Cam kết an toàn:** Không force-push, không rebase, không merge nhánh khác vào branch Dentist.
 
 ```text
