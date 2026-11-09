@@ -18,7 +18,9 @@ namespace DentalClinic.Tests.Concurrency;
 [Collection("SqlServerReceptionistIntegration")]
 public class SqlServerReceptionistConcurrencyIntegrationTests
 {
-    private const string ConnectionString = "Server=.\\SQLEXPRESS;Database=DentalCare_ReceptionistShift_Dev;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
+    private static readonly string ConnectionString =
+        Environment.GetEnvironmentVariable("TEST_SQL_CONNECTION")
+        ?? "Server=.\\SQLEXPRESS;Database=DentalCare_Integration_Dev;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
 
     private readonly Mock<IAuditLogService> _mockAudit = new();
     private readonly Mock<INotificationService> _mockNotify = new();
@@ -43,6 +45,44 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
             .UseSqlServer(ConnectionString)
             .Options;
         return new DentalClinicDbContext(options);
+    }
+
+    private static async Task<List<long>> EnsureTestReceptionistsAsync(DentalClinicDbContext db)
+    {
+        var existing = await db.UserAccounts
+            .Where(u => u.Role == "Receptionist" && u.Status == "Active")
+            .OrderBy(u => u.UserId)
+            .ToListAsync();
+
+        while (existing.Count < 4)
+        {
+            int nextIdx = existing.Count + 1;
+            var newAccount = new UserAccount
+            {
+                Email = $"receptionist{nextIdx}_{Guid.NewGuid():N}@dentalcare.com",
+                PasswordHash = "AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==",
+                Role = "Receptionist",
+                Status = "Active",
+                CreatedAt = DateTime.UtcNow
+            };
+            db.UserAccounts.Add(newAccount);
+            await db.SaveChangesAsync();
+
+            var newProfile = new StaffProfile
+            {
+                UserId = newAccount.UserId,
+                EmployeeCode = $"EMP-REC-{newAccount.UserId:D3}",
+                FullName = $"Lễ Tân Test {newAccount.UserId}",
+                EmploymentStatus = "Active",
+                CreatedAt = DateTime.UtcNow
+            };
+            db.StaffProfiles.Add(newProfile);
+            await db.SaveChangesAsync();
+
+            existing.Add(newAccount);
+        }
+
+        return existing.Take(4).Select(u => u.UserId).ToList();
     }
 
     private static async Task CleanTestDataForDateRangeAsync(DateOnly fromDate, DateOnly toDate)
@@ -95,10 +135,10 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
         var targetDate = new DateOnly(2026, 11, 20);
         await CleanTestDataForDateRangeAsync(targetDate, targetDate);
 
-        long userA = 2;   // receptionist@dentalcare.com
-        long userB = 44;  // receptionist2@dentalcare.com
-        long userC = 45;  // receptionist3@dentalcare.com
-        long userD = 87;  // receptionist4@dentalcare.com
+        long userA;
+        long userB;
+        long userC;
+        long userD;
 
         long leaveBId;
         long leaveCId;
@@ -106,6 +146,12 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
         // 1. Seed schedules: 4 staff working on 2026-11-20 (07:00 - 19:00)
         using (var dbSetup = CreateDbContext())
         {
+            var users = await EnsureTestReceptionistsAsync(dbSetup);
+            userA = users[0];
+            userB = users[1];
+            userC = users[2];
+            userD = users[3];
+
             dbSetup.ReceptionistWorkSchedules.AddRange(
                 new ReceptionistWorkSchedule { ReceptionistUserId = userA, WorkDate = targetDate, StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(19, 0), Status = "Scheduled", CreatedBy = 1, CreatedAt = DateTime.UtcNow },
                 new ReceptionistWorkSchedule { ReceptionistUserId = userB, WorkDate = targetDate, StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(19, 0), Status = "Scheduled", CreatedBy = 1, CreatedAt = DateTime.UtcNow },
@@ -186,7 +232,7 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
         // Fire both approvals concurrently across real SQL Server connection sessions
         await Task.WhenAll(
             Task.Run(() => ApproveLeaveAsync(leaveBId, 1)),
-            Task.Run(() => ApproveLeaveAsync(leaveCId, 43))
+            Task.Run(() => ApproveLeaveAsync(leaveCId, 1))
         );
 
         // 5. Verification on SQL Server: Exactly 1 must succeed, 1 must fail
@@ -222,15 +268,20 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
         var targetDate = new DateOnly(2026, 11, 21);
         await CleanTestDataForDateRangeAsync(targetDate, targetDate);
 
-        long userB = 44;
-        long userC = 45;
-        long userD = 87;
+        long userB;
+        long userC;
+        long userD;
 
         long swapId;
         long leaveCId;
 
         using (var dbSetup = CreateDbContext())
         {
+            var users = await EnsureTestReceptionistsAsync(dbSetup);
+            userB = users[0];
+            userC = users[1];
+            userD = users[2];
+
             // B and C on Morning Shift (07:00 - 13:00)
             var sB = new ReceptionistWorkSchedule { ReceptionistUserId = userB, WorkDate = targetDate, StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(13, 0), Status = "Scheduled", CreatedBy = 1, CreatedAt = DateTime.UtcNow };
             var sC = new ReceptionistWorkSchedule { ReceptionistUserId = userC, WorkDate = targetDate, StartTime = new TimeOnly(7, 0), EndTime = new TimeOnly(13, 0), Status = "Scheduled", CreatedBy = 1, CreatedAt = DateTime.UtcNow };
@@ -324,12 +375,16 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
         var targetDate = new DateOnly(2026, 11, 22);
         await CleanTestDataForDateRangeAsync(targetDate, targetDate);
 
-        long userB = 44;
-        long userC = 45;
+        long userB;
+        long userC;
         long leaveBId;
 
         using (var dbSetup = CreateDbContext())
         {
+            var users = await EnsureTestReceptionistsAsync(dbSetup);
+            userB = users[0];
+            userC = users[1];
+
             // User B has pending leave for whole day 2026-11-22
             var leaveB = new ReceptionistLeaveRequest
             {
@@ -415,10 +470,13 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
         var targetDate = new DateOnly(2026, 11, 23);
         await CleanTestDataForDateRangeAsync(targetDate, targetDate);
 
-        long userB = 44;
+        long userB;
 
         using (var dbSetup = CreateDbContext())
         {
+            var users = await EnsureTestReceptionistsAsync(dbSetup);
+            userB = users[0];
+
             // Seed schedule for B so they can apply
             dbSetup.ReceptionistWorkSchedules.Add(new ReceptionistWorkSchedule
             {
