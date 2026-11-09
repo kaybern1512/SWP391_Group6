@@ -1,4 +1,4 @@
-@using System.Security.Claims
+﻿@using System.Security.Claims
 @{
     var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "Patient";
     var fullName = User.FindFirst(ClaimTypes.Name)?.Value ?? "User";
@@ -51,11 +51,11 @@
             </a>
 
             <div class="nav-group-title">Khám & Chăm Sóc</div>
-            <a class="sidebar-link @(currentCtrl == "PatientAppointment" && currentAction == "Book" ? "active" : "")" asp-controller="PatientAppointment" asp-action="Book">
-            <a class="sidebar-link @(currentCtrl == "PatientAppointment" && currentAction == "Services" ? "active" : "")" asp-controller="PatientAppointment" asp-action="Services">
+                        <a class="sidebar-link @(currentCtrl == "PatientAppointment" && currentAction == "Services" ? "active" : "")" asp-controller="PatientAppointment" asp-action="Services">
                 <i class="bi bi-stars"></i>
                 <span>Dịch Vụ Nha Khoa</span>
             </a>
+            <a class="sidebar-link @(currentCtrl == "PatientAppointment" && currentAction == "Book" ? "active" : "")" asp-controller="PatientAppointment" asp-action="Book">
                 <i class="bi bi-calendar-plus"></i>
                 <span>Đặt Lịch Khám</span>
             </a>

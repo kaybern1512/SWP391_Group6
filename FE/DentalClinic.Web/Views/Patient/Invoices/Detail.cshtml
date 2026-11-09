@@ -1,4 +1,4 @@
-@model DentalClinic.Web.Models.ApiDtos.InvoiceDto
+﻿@model DentalClinic.Web.Models.ApiDtos.InvoiceDto
 @{
     ViewData["Title"] = $"Chi Tiết Hóa Đơn #{Model.InvoiceCode}";
 }
@@ -230,15 +230,15 @@
                         <div class="text-start bg-light p-3 rounded-3 small">
                             <div class="d-flex justify-content-between mb-1">
                                 <span class="text-muted">Ngân hàng:</span>
-                                <span class="fw-bold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultBankId</span>
+                                <span class="fw-bold">@DentalClinic.Web.Helpers.VietQrHelper.BankId</span>
                             </div>
                             <div class="d-flex justify-content-between mb-1">
                                 <span class="text-muted">Số tài khoản:</span>
-                                <span class="fw-bold font-monospace text-primary">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountNo</span>
+                                <span class="fw-bold font-monospace text-primary">@DentalClinic.Web.Helpers.VietQrHelper.AccountNo</span>
                             </div>
                             <div class="d-flex justify-content-between mb-1">
                                 <span class="text-muted">Chủ tài khoản:</span>
-                                <span class="fw-semibold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountName</span>
+                                <span class="fw-semibold">@DentalClinic.Web.Helpers.VietQrHelper.AccountName</span>
                             </div>
                             <div class="d-flex justify-content-between mb-1">
                                 <span class="text-muted">Số tiền:</span>
