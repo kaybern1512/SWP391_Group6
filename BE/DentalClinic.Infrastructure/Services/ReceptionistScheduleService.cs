@@ -618,6 +618,18 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         var startDate = new DateOnly(request.Year, request.Month, 1);
         var endDate = new DateOnly(request.Year, request.Month, daysInMonth);
 
+        var lockKeys = new List<string>();
+        for (int day = 1; day <= daysInMonth; day++)
+        {
+            var date = new DateOnly(request.Year, request.Month, day);
+            int dayOfWeek = (int)date.DayOfWeek == 0 ? 7 : (int)date.DayOfWeek;
+            if (request.DaysOfWeek.Contains(dayOfWeek))
+            {
+                lockKeys.Add(SqlAppLockHelper.ReceptionistCoverageDateKey(date));
+            }
+        }
+        using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
+
         var approvedLeaves = await _dbContext.ReceptionistLeaveRequestPeriods
             .AsNoTracking()
             .Include(p => p.LeaveRequest)

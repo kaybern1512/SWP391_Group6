@@ -56,7 +56,7 @@ BEGIN
         CONSTRAINT FK_ReceptionistWorkSchedules_UserAccounts_Creator FOREIGN KEY (CreatedBy)
             REFERENCES dbo.UserAccounts (UserId) ON DELETE NO ACTION,
         CONSTRAINT CK_ReceptionistWorkSchedules_Time CHECK (EndTime > StartTime),
-        CONSTRAINT CK_ReceptionistWorkSchedules_Status CHECK (Status IN ('Scheduled', 'Cancelled', 'Completed', 'Swapped'))
+        CONSTRAINT CK_ReceptionistWorkSchedules_Status CHECK (Status IN ('Scheduled', 'Cancelled', 'Completed', 'Swapped', 'AbsenceReported'))
     );
 
     CREATE NONCLUSTERED INDEX IX_ReceptionistWorkSchedules_WorkDate_Status

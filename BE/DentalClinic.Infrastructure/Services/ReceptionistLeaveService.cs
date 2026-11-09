@@ -42,53 +42,71 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
             return ApiResponse<ReceptionistLeaveRequestDto>.Fail("Lý do xin nghỉ phép là bắt buộc.");
         }
 
-        if (request.EndDate < request.StartDate)
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? tx = null;
+        if (_dbContext.Database.IsRelational())
         {
-            return ApiResponse<ReceptionistLeaveRequestDto>.Fail("Ngày kết thúc nghỉ phép phải lớn hơn hoặc bằng ngày bắt đầu.");
+            tx = await _dbContext.Database.BeginTransactionAsync(ct);
         }
 
-        if (request.StartTime.HasValue && request.EndTime.HasValue && request.EndTime.Value <= request.StartTime.Value)
+        var lockKeys = new List<string>
         {
-            return ApiResponse<ReceptionistLeaveRequestDto>.Fail("Giờ kết thúc nghỉ phép phải lớn hơn giờ bắt đầu.");
-        }
+            $"Lock_Receptionist_LeaveCreate_{receptionistUserId}"
+        };
+        using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
 
-        // Verify that receptionist has at least one scheduled shift on these dates
-        bool hasScheduledShift = await _dbContext.ReceptionistWorkSchedules
-            .AsNoTracking()
-            .AnyAsync(s => s.ReceptionistUserId == receptionistUserId &&
-                           s.WorkDate >= request.StartDate && s.WorkDate <= request.EndDate &&
-                           s.Status == "Scheduled", ct);
-
-        if (!hasScheduledShift)
+        try
         {
-            return ApiResponse<ReceptionistLeaveRequestDto>.Fail("Bạn không có ca làm việc nào được phân công trong khoảng thời gian xin nghỉ này.");
-        }
+            if (request.EndDate < request.StartDate)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<ReceptionistLeaveRequestDto>.Fail("Ngày kết thúc nghỉ phép phải lớn hơn hoặc bằng ngày bắt đầu.");
+            }
 
-        // Prevent duplicate pending or approved requests overlapping
-        bool duplicateExists;
-        if (request.StartTime.HasValue && request.EndTime.HasValue)
-        {
-            duplicateExists = await _dbContext.ReceptionistLeaveRequests
+            if (request.StartTime.HasValue && request.EndTime.HasValue && request.EndTime.Value <= request.StartTime.Value)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<ReceptionistLeaveRequestDto>.Fail("Giờ kết thúc nghỉ phép phải lớn hơn giờ bắt đầu.");
+            }
+
+            // Verify that receptionist has at least one scheduled shift on these dates
+            bool hasScheduledShift = await _dbContext.ReceptionistWorkSchedules
                 .AsNoTracking()
-                .AnyAsync(l => l.ReceptionistUserId == receptionistUserId &&
-                               (l.Status == "Pending" || l.Status == "Approved") &&
-                               l.StartDate <= request.EndDate && l.EndDate >= request.StartDate &&
-                               ((!l.StartTime.HasValue || !l.EndTime.HasValue) ||
-                                (l.StartTime.Value < request.EndTime.Value && l.EndTime.Value > request.StartTime.Value)), ct);
-        }
-        else
-        {
-            duplicateExists = await _dbContext.ReceptionistLeaveRequests
-                .AsNoTracking()
-                .AnyAsync(l => l.ReceptionistUserId == receptionistUserId &&
-                               (l.Status == "Pending" || l.Status == "Approved") &&
-                               l.StartDate <= request.EndDate && l.EndDate >= request.StartDate, ct);
-        }
+                .AnyAsync(s => s.ReceptionistUserId == receptionistUserId &&
+                               s.WorkDate >= request.StartDate && s.WorkDate <= request.EndDate &&
+                               s.Status == "Scheduled", ct);
 
-        if (duplicateExists)
-        {
-            return ApiResponse<ReceptionistLeaveRequestDto>.Fail("Bạn đã có đơn xin nghỉ phép đang chờ duyệt hoặc đã được phê duyệt trong khoảng thời gian này.");
-        }
+            if (!hasScheduledShift)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<ReceptionistLeaveRequestDto>.Fail("Bạn không có ca làm việc nào được phân công trong khoảng thời gian xin nghỉ này.");
+            }
+
+            // Prevent duplicate pending or approved requests overlapping
+            bool duplicateExists;
+            if (request.StartTime.HasValue && request.EndTime.HasValue)
+            {
+                duplicateExists = await _dbContext.ReceptionistLeaveRequests
+                    .AsNoTracking()
+                    .AnyAsync(l => l.ReceptionistUserId == receptionistUserId &&
+                                   (l.Status == "Pending" || l.Status == "Approved") &&
+                                   l.StartDate <= request.EndDate && l.EndDate >= request.StartDate &&
+                                   ((!l.StartTime.HasValue || !l.EndTime.HasValue) ||
+                                    (l.StartTime.Value < request.EndTime.Value && l.EndTime.Value > request.StartTime.Value)), ct);
+            }
+            else
+            {
+                duplicateExists = await _dbContext.ReceptionistLeaveRequests
+                    .AsNoTracking()
+                    .AnyAsync(l => l.ReceptionistUserId == receptionistUserId &&
+                                   (l.Status == "Pending" || l.Status == "Approved") &&
+                                   l.StartDate <= request.EndDate && l.EndDate >= request.StartDate, ct);
+            }
+
+            if (duplicateExists)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<ReceptionistLeaveRequestDto>.Fail("Bạn đã có đơn xin nghỉ phép đang chờ duyệt hoặc đã được phê duyệt trong khoảng thời gian này.");
+            }
 
         var leave = new ReceptionistLeaveRequest
         {
@@ -121,6 +139,7 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
 
         _dbContext.ReceptionistLeaveRequests.Add(leave);
         await _dbContext.SaveChangesAsync(ct);
+        if (tx != null) await tx.CommitAsync(ct);
 
         // Notify Admins
         var staffProfile = await _dbContext.StaffProfiles.FirstOrDefaultAsync(sp => sp.UserId == receptionistUserId, ct);
@@ -177,6 +196,12 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
         };
 
         return ApiResponse<ReceptionistLeaveRequestDto>.Ok(dto, "Gửi đơn xin nghỉ phép thành công. Đơn đang chờ Quản trị viên xét duyệt.");
+    }
+    catch
+    {
+        if (tx != null) await tx.RollbackAsync(ct);
+        throw;
+    }
     }
 
     public async Task<ApiResponse<bool>> WithdrawLeaveRequestAsync(
@@ -391,13 +416,13 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
             lockKeys.Add(SqlAppLockHelper.ReceptionistCoverageDateKey(date));
         }
 
-        using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
-
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? tx = null;
         if (_dbContext.Database.IsRelational())
         {
             tx = await _dbContext.Database.BeginTransactionAsync(ct);
         }
+
+        using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
 
         try
         {

@@ -302,9 +302,6 @@ public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
         AdminDecideShiftSwapRequest request,
         CancellationToken ct = default)
     {
-        var lockKeys = new List<string> { SqlAppLockHelper.ReceptionistSwapKey(swapRequestId) };
-        using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
-
         var swap = await _dbContext.ReceptionistShiftSwapRequests
             .Include(s => s.SourceSchedule)
             .Include(s => s.TargetSchedule)
@@ -319,6 +316,18 @@ public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
         {
             return ApiResponse<bool>.Fail($"Yêu cầu không ở trạng thái chờ Admin duyệt (trạng thái hiện tại: {swap.Status}).");
         }
+
+        var lockKeys = new List<string>
+        {
+            SqlAppLockHelper.ReceptionistSwapKey(swapRequestId),
+            SqlAppLockHelper.ReceptionistCoverageDateKey(swap.SourceSchedule.WorkDate)
+        };
+        if (swap.TargetSchedule != null && swap.TargetSchedule.WorkDate != swap.SourceSchedule.WorkDate)
+        {
+            lockKeys.Add(SqlAppLockHelper.ReceptionistCoverageDateKey(swap.TargetSchedule.WorkDate));
+        }
+
+        using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
 
         if (!request.Approve)
         {
@@ -364,6 +373,59 @@ public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
             {
                 if (tx != null) await tx.RollbackAsync(ct);
                 return ApiResponse<bool>.Fail("Ca trực nguồn đã bị thay đổi hoặc hủy.");
+            }
+
+            // Check if target receptionist has approved leave overlapping source schedule
+            bool targetHasLeave = await _dbContext.ReceptionistLeaveRequestPeriods
+                .AnyAsync(p => p.LeaveRequest.ReceptionistUserId == swap.TargetReceptionistUserId &&
+                               p.LeaveDate == swap.SourceSchedule.WorkDate &&
+                               p.Status == "Approved" &&
+                               (!p.StartTime.HasValue || (p.StartTime.Value < swap.SourceSchedule.EndTime && p.EndTime > swap.SourceSchedule.StartTime)), ct);
+            if (targetHasLeave)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<bool>.Fail("Không thể duyệt đổi ca vì lễ tân nhận ca đã có lịch nghỉ phép được phê duyệt trong khoảng thời gian này.");
+            }
+
+            // Check if target receptionist already has an overlapping active shift (other than target schedule)
+            bool targetHasOverlap = await _dbContext.ReceptionistWorkSchedules
+                .AnyAsync(s => s.ReceptionistUserId == swap.TargetReceptionistUserId &&
+                               s.WorkDate == swap.SourceSchedule.WorkDate &&
+                               s.Status == "Scheduled" &&
+                               s.ReceptionistScheduleId != (swap.TargetScheduleId ?? 0) &&
+                               s.StartTime < swap.SourceSchedule.EndTime && s.EndTime > swap.SourceSchedule.StartTime, ct);
+            if (targetHasOverlap)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<bool>.Fail("Không thể duyệt đổi ca vì lễ tân nhận ca đã có lịch trực trùng giờ.");
+            }
+
+            if (swap.TargetSchedule != null)
+            {
+                // Check if requesting receptionist has approved leave overlapping target schedule
+                bool reqHasLeave = await _dbContext.ReceptionistLeaveRequestPeriods
+                    .AnyAsync(p => p.LeaveRequest.ReceptionistUserId == swap.RequestingReceptionistUserId &&
+                                   p.LeaveDate == swap.TargetSchedule.WorkDate &&
+                                   p.Status == "Approved" &&
+                                   (!p.StartTime.HasValue || (p.StartTime.Value < swap.TargetSchedule.EndTime && p.EndTime > swap.TargetSchedule.StartTime)), ct);
+                if (reqHasLeave)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<bool>.Fail("Không thể duyệt đổi ca vì lễ tân yêu cầu đã có lịch nghỉ phép được phê duyệt trong khoảng thời gian này.");
+                }
+
+                // Check if requesting receptionist already has an overlapping active shift (other than source schedule)
+                bool reqHasOverlap = await _dbContext.ReceptionistWorkSchedules
+                    .AnyAsync(s => s.ReceptionistUserId == swap.RequestingReceptionistUserId &&
+                                   s.WorkDate == swap.TargetSchedule.WorkDate &&
+                                   s.Status == "Scheduled" &&
+                                   s.ReceptionistScheduleId != swap.SourceScheduleId &&
+                                   s.StartTime < swap.TargetSchedule.EndTime && s.EndTime > swap.TargetSchedule.StartTime, ct);
+                if (reqHasOverlap)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<bool>.Fail("Không thể duyệt đổi ca vì lễ tân yêu cầu đã có lịch trực trùng giờ.");
+                }
             }
 
             // Perform atomic swap

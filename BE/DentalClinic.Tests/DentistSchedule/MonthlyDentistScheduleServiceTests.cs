@@ -90,7 +90,7 @@ public class MonthlyDentistScheduleServiceTests
         });
 
         // Department 1 Work Schedule (Open 08:00 - 18:00 every day)
-        for (int dow = 0; dow <= 6; dow++)
+        for (int dow = 0; dow <= 7; dow++)
         {
             db.DepartmentWorkSchedules.Add(new DepartmentWorkSchedule
             {

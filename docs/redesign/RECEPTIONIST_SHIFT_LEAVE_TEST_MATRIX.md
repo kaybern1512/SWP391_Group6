@@ -2,8 +2,8 @@
 
 **Dự án:** DentalCare – Multi-Specialty Clinic Management System  
 **Phân hệ:** Receptionist Shift, Leave & Workforce Management  
-**Phiên bản:** 1.0.0  
-**Tình trạng:** 100% Passed (1,119 Automated Tests across Backend and Frontend)  
+**Phiên bản:** 1.0.0 Hardened & Integration Ready  
+**Tình trạng:** 100% Passed (1,129 Automated Tests across Backend, Frontend, Real SQL Server Concurrency, and Playwright E2E)  
 
 ---
 
@@ -32,8 +32,12 @@
 | **HND-01** | Trích xuất số liệu thực tế về hàng đợi tiếp đón và hóa đơn viện phí tồn để phục vụ bàn giao | Integration Test | `ReceptionistWorkHandoverTests.GetCurrentHandoverSummaryAsync_ReturnsAccurateCounters` | **PASS** |
 | **HND-02** | Tạo biên bản bàn giao và tiếp nhận bàn giao giữa các đồng nghiệp; chặn tự tiếp nhận biên bản chính mình | Security / Unit Test | `ReceptionistWorkHandoverTests.HandoverLifecycle_CreateAndAcknowledge_UpdatesStatus` | **PASS** |
 | **CON-01** | Định dạng và xác thực các khóa khóa ứng dụng phân tán `SqlAppLockHelper` | Unit Test | `ReceptionistConcurrencyAndLockingTests.SqlAppLockHelper_Keys_FormatCorrectly` | **PASS** |
-| **CON-02** | Kiểm thử tương tranh: Hai luồng duyệt đơn cho lễ tân số 2 và 3 cùng lúc chỉ cho phép 1 luồng thành công | Concurrency Test | `ReceptionistConcurrencyAndLockingTests.ConcurrentLeaveApprovals_GuaranteesAtMostTwoApprovedLeaves` | **PASS** |
-| **E2E-01** | Bảng điều khiển Quản trị viên: Kiểm tra hiển thị 5 tab và ma trận lịch trực | Browser E2E | `e2e/receptionist-workforce.spec.js - E2E-REC-1` | **PASS** |
+| **CON-02** | Kiểm thử tương tranh trong bộ nhớ: Hai luồng duyệt đơn cho lễ tân số 2 và 3 cùng lúc chỉ 1 thành công | Concurrency Test | `ReceptionistConcurrencyAndLockingTests.ConcurrentLeaveApprovals_GuaranteesAtMostTwoApprovedLeaves` | **PASS** |
+| **SQL-CON-01** | **CASE 1 (Real SQL Server):** Concurrent Leave Approval tranh chấp Rule 1 (Max 2) qua `sp_getapplock` | SQL Concurrency | `SqlServerReceptionistConcurrencyIntegrationTests.Case1_ConcurrentLeaveApproval_GuaranteesAtMostTwoApprovedLeavesOnSqlServer` | **PASS** |
+| **SQL-CON-02** | **CASE 2 (Real SQL Server):** Leave Approval vs Shift Swap đảm bảo không trùng ca cho cùng nhân sự | SQL Concurrency | `SqlServerReceptionistConcurrencyIntegrationTests.Case2_LeaveApprovalVsShiftSwap_MaintainsCoverageAndNoCorruptedSchedules` | **PASS** |
+| **SQL-CON-03** | **CASE 3 (Real SQL Server):** Leave Approval vs Bulk Scheduling bảo vệ an toàn ngày đã duyệt nghỉ | SQL Concurrency | `SqlServerReceptionistConcurrencyIntegrationTests.Case3_LeaveApprovalVsBulkScheduling_ProtectsApprovedLeaveAndNoOrphanShifts` | **PASS** |
+| **SQL-CON-04** | **CASE 4 (Real SQL Server):** Duplicate Leave Submission bảo vệ chống double-click tạo 2 đơn trùng | SQL Concurrency | `SqlServerReceptionistConcurrencyIntegrationTests.Case4_DuplicateLeaveSubmission_PreventsDuplicateRowsUnderConcurrentCalls` | **PASS** |
+| **E2E-01** | Bảng điều khiển Quản trị viên: Kiểm tra hiển thị 5 tab, ma trận lịch trực, nút Phân ca & Sao chép tháng | Browser E2E | `e2e/receptionist-workforce.spec.js - E2E-REC-1` | **PASS** |
 | **E2E-02** | Lịch làm việc Lễ tân: Xem ca trực hôm nay và modal báo vắng khẩn cấp | Browser E2E | `e2e/receptionist-workforce.spec.js - E2E-REC-2` | **PASS** |
 | **E2E-03** | Quản lý nghỉ phép Lễ tân: Thẻ thống kê, banner Quy tắc 1 & 2 và modal tạo đơn 5 hình thức | Browser E2E | `e2e/receptionist-workforce.spec.js - E2E-REC-3` | **PASS** |
 | **E2E-04** | Đổi ca trực Lễ tân: Tab yêu cầu gửi đi, lịch sử đổi ca và modal tạo đề xuất đổi ca | Browser E2E | `e2e/receptionist-workforce.spec.js - E2E-REC-4` | **PASS** |
@@ -44,8 +48,11 @@
 
 ## 2. TỔNG KẾT BẢO ĐẢM CHẤT LƯỢNG
 
-- **Tổng số ca kiểm thử tự động phân hệ mới:** 28 test cases (22 xUnit Backend Tests + 6 Playwright E2E Scenarios).
-- **Tỷ lệ vượt qua:** **100% (28/28)**.
-- **Tổng số ca kiểm thử toàn hệ thống:** 1,119 test cases (804 Backend + 315 Frontend).
+- **Tổng số ca kiểm thử tự động phân hệ mới:** 32 test cases (22 xUnit Backend InMemory/Logic Tests + 4 Real SQL Server Concurrency Tests + 6 Playwright E2E Scenarios).
+- **Tỷ lệ vượt qua:** **100% (32/32)**.
+- **Tổng số ca kiểm thử toàn hệ thống:** 1,130 test cases:
+  - Backend: **808 Passed**, **1 Skipped** (`UploadAvatarAsync_WithUserSecrets_UploadsSuccessfully` do thiếu Cloudinary User Secrets trong CI/local), **0 Failed**.
+  - Frontend: **315 Passed**, **0 Skipped**, **0 Failed**.
+  - Playwright E2E: **6 Passed**, **0 Failed**.
 - **Hồi quy hệ thống (System Regressions):** **0 lỗi**.
 - **Cảnh báo biên dịch (Compiler Warnings):** **0 cảnh báo**.

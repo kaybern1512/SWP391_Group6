@@ -3,9 +3,9 @@
 **Dự án:** DentalCare – Multi-Specialty Clinic Management System  
 **Phân hệ:** Receptionist Shift, Leave & Workforce Management  
 **Nhánh Git:** `feature/receptionist-shift-leave-management`  
-**Cơ sở dữ liệu:** `DentalCare_ReceptionistShift_Dev` (SQL Server)  
-**Ngày hoàn thành:** 10/11/2026  
-**Kiến trúc sư & Kỹ sư trưởng:** Senior ASP.NET Core 8 Full-stack Architect & SQL Server Database Engineer  
+**Cơ sở dữ liệu:** `DentalCare_ReceptionistShift_Dev` (SQL Server QA riêng biệt trên `.\SQLEXPRESS`)  
+**Ngày hoàn thành & Hardening:** 10/11/2026  
+**Kiến trúc sư & Kỹ sư trưởng:** Senior ASP.NET Core 8 Full-stack Architect, SQL Server Engineer & QA Automation Lead  
 
 ---
 
@@ -17,7 +17,7 @@ Phân hệ **Receptionist Shift, Leave & Workforce Management** được thiết
 1. **Cô lập dữ liệu hoàn toàn (Zero Conflict Isolation):** Phân hệ lễ tân sử dụng hệ thống bảng riêng biệt (`ReceptionistWorkSchedules`, `ReceptionistShiftTemplates`, `ReceptionistLeaveRequests`, `ReceptionistLeaveRequestPeriods`, `ReceptionistShiftSwapRequests`, `ReceptionistCoverageIncidents`, `ReceptionistWorkHandovers`), hoàn toàn độc lập với phân hệ bác sĩ (`DentistSchedule`, `DentistLeave`) để không gây migration collision hoặc race condition.
 2. **Quy tắc 1 (RULE 1 – Maximum 2 Approved Leaves/Day):** Mỗi ngày dương lịch chỉ cho phép tối đa 2 nhân viên lễ tân khác nhau (`Distinct ReceptionistUserId`) được phê duyệt nghỉ phép trên toàn hệ thống phòng khám.
 3. **Quy tắc 2 (RULE 2 – Minimum 2 Available Receptionists/Shift):** Mỗi ca trực và tại mọi phân đoạn giờ con (`sub-intervals`) phải luôn có tối thiểu 2 lễ tân có mặt làm việc thực tế sau khi đã trừ đi các ca nghỉ phép hoặc vắng mặt.
-4. **An toàn tương tranh cao (High Concurrency & Atomic Locking):** Sử dụng `sp_getapplock` thông qua `SqlAppLockHelper` và giao dịch nguyên tử (`IDbContextTransaction`) để ngăn chặn tuyệt đối tình trạng race condition khi 2 quản trị viên cùng phê duyệt đơn nghỉ vượt trần hoặc đổi ca cùng thời điểm.
+4. **An toàn tương tranh cao (High Concurrency & Atomic Locking):** Sử dụng `sp_getapplock` thông qua `SqlAppLockHelper` kết hợp giao dịch nguyên tử (`IDbContextTransaction`) để ngăn chặn tuyệt đối tình trạng race condition khi 2 quản trị viên cùng phê duyệt đơn nghỉ vượt trần, đổi ca cùng thời điểm, hoặc lễ tân double-click gửi trùng đơn nghỉ.
 5. **Tính liên tục của dịch vụ (Service Continuity & Handover):** Bàn giao hàng đợi tiếp đón (pending check-in appointments), danh sách viện phí chưa thu và các phiên tư vấn trực tuyến giữa các ca trực nhằm đảm bảo bệnh nhân không bị bỏ sót khi giao ca.
 
 ---
@@ -29,17 +29,18 @@ Phân hệ **Receptionist Shift, Leave & Workforce Management** được thiết
 | Tên Bảng | Mục Đích Lưu Trữ | Khóa Ngoại & Ràng Buộc |
 |---|---|---|
 | `ReceptionistShiftTemplates` | Mẫu ca trực chuẩn (Ca Sáng 07:00-13:00, Ca Chiều 13:00-19:00, Ca Cả Ngày 07:00-19:00). | `ShiftTemplateId` (PK), `MinStaffRequired >= 2`. |
-| `ReceptionistWorkSchedules` | Lịch phân ca thực tế theo ngày của từng lễ tân. | FK `ReceptionistUserId` &rarr; `UserAccounts`, FK `ShiftTemplateId`. Trạng thái: `Scheduled`, `Completed`, `Cancelled`, `AbsenceReported`. |
-| `ReceptionistLeaveRequests` | Đơn xin nghỉ phép của lễ tân (FullDay, HalfDayMorning, HalfDayAfternoon, Hourly, MultiDay). | FK `ReceptionistUserId`, FK `ApprovedBy`. Trạng thái: `Pending`, `Approved`, `Rejected`, `Withdrawn`. |
+| `ReceptionistWorkSchedules` | Lịch phân ca thực tế theo ngày của từng lễ tân. | FK `ReceptionistUserId` &rarr; `UserAccounts` (ON DELETE NO ACTION), FK `ShiftTemplateId`. Trạng thái: `Scheduled`, `Completed`, `Cancelled`, `Swapped`, `AbsenceReported`. |
+| `ReceptionistLeaveRequests` | Đơn xin nghỉ phép của lễ tân (FullDay, HalfDayMorning, HalfDayAfternoon, Hourly, MultiDay). | FK `ReceptionistUserId`, FK `ApprovedBy` (ON DELETE NO ACTION). Trạng thái: `Pending`, `Approved`, `Rejected`, `Withdrawn`, `Cancelled`. |
 | `ReceptionistLeaveRequestPeriods` | Chi tiết phân rã từng ngày trong đơn nghỉ phép nhiều ngày. | FK `LeaveRequestId` ON DELETE CASCADE, Unique (`LeaveRequestId`, `LeaveDate`). |
-| `ReceptionistShiftSwapRequests` | Yêu cầu đổi ca giữa 2 lễ tân và quyết định của Admin. | FK `RequestingReceptionistUserId`, FK `TargetReceptionistUserId`, FK `SourceScheduleId`, FK `TargetScheduleId`. |
-| `ReceptionistCoverageIncidents` | Sự cố vắng mặt đột xuất và hồ sơ điều phối bổ sung nhân sự. | FK `AffectedReceptionistUserId`, FK `ReplacementReceptionistUserId`, FK `ReportedBy`, FK `ResolvedBy`. |
-| `ReceptionistWorkHandovers` | Biên bản bàn giao công việc ca trực (lịch hẹn chờ, viện phí tồn, tin nhắn chat). | FK `FromReceptionistUserId`, FK `ToReceptionistUserId`. Trạng thái: `Transferred`, `Acknowledged`. |
+| `ReceptionistShiftSwapRequests` | Yêu cầu đổi ca giữa 2 lễ tân và quyết định của Admin. | FK `RequestingReceptionistUserId`, FK `TargetReceptionistUserId`, FK `SourceScheduleId`, FK `TargetScheduleId` (ON DELETE NO ACTION). |
+| `ReceptionistCoverageIncidents` | Sự cố vắng mặt đột xuất và hồ sơ điều phối bổ sung nhân sự. | FK `AffectedReceptionistUserId`, FK `ReplacementReceptionistUserId`, FK `ReportedBy`, FK `ResolvedBy` (ON DELETE NO ACTION). |
+| `ReceptionistWorkHandovers` | Biên bản bàn giao công việc ca trực (lịch hẹn chờ, viện phí tồn, tin nhắn chat). | FK `FromReceptionistUserId`, FK `ToReceptionistUserId` (ON DELETE NO ACTION). Trạng thái: `Transferred`, `Acknowledged`. |
 
 ### 2.2. Migration Scripts & Rollback Scripts
 - **Forward Script:** `DB/redesign_migrations/20261110_Receptionist_Shift_Leave_Workforce_Schema.sql`
 - **Rollback Script:** `DB/redesign_migrations/20261110_Receptionist_Shift_Leave_Workforce_Schema_Rollback.sql`
-- Cả hai script đều hỗ trợ tính idempotent (`IF NOT EXISTS`, `IF EXISTS`), tạo đầy đủ foreign keys, indexes tối ưu và seed sẵn 3 mẫu ca trực tiêu chuẩn bằng tiếng Việt Unicode chuẩn.
+- Cả hai script đều hỗ trợ tính idempotent (`IF NOT EXISTS`, `IF EXISTS`), tạo đầy đủ foreign keys (`ON DELETE NO ACTION` loại trừ cascade cycle), indexes tối ưu và seed sẵn 3 mẫu ca trực tiêu chuẩn bằng tiếng Việt Unicode chuẩn.
+- Đã kiểm tra thực tế: Forward migration chạy 2 lần đạt kết quả idempotent hoàn hảo. Rollback migration chạy thành công trong transaction (`BEGIN TRAN ... ROLLBACK TRAN`) không gặp bất kỳ lỗi ràng buộc khóa ngoại nào.
 
 ---
 
@@ -49,7 +50,7 @@ Phân hệ **Receptionist Shift, Leave & Workforce Management** được thiết
 1. **`ReceptionistScheduleService` (`IReceptionistScheduleService`):**
    - Quản trị lưới lịch trực tháng (`MonthlyReceptionistScheduleDto`) gom nhóm theo ngày, hiển thị trạng thái phân ca, số lễ tân nghỉ đã duyệt/chờ duyệt, sự cố nhân lực.
    - Tạo ca trực đơn lẻ, cập nhật, xóa ca với ràng buộc giờ bắt đầu < giờ kết thúc.
-   - **Phân ca hàng loạt (Bulk Apply):** Tạo ca cho danh sách lễ tân theo khoảng ngày và các thứ trong tuần (Thứ 2 - Chủ Nhật); hỗ trợ cờ `OverwriteExisting` ghi đè ca cũ một cách an toàn.
+   - **Phân ca hàng loạt (Bulk Apply):** Tạo ca cho danh sách lễ tân theo khoảng ngày và các thứ trong tuần (Thứ 2 - Chủ Nhật); khóa ứng dụng theo các ngày trong khoảng (`Lock_Receptionist_Coverage_{date}`); hỗ trợ cờ `OverwriteExisting` ghi đè ca cũ một cách an toàn.
    - **Sao chép tháng (Copy Month):** Sao chép toàn bộ mô hình ca trực từ tháng nguồn sang tháng đích.
    - **Ghi đè theo ngày (Daily Override):** Thay thế toàn bộ ca trực trong một ngày cụ thể bằng danh sách ca mới trong một transaction duy nhất.
 
@@ -63,104 +64,91 @@ Phân hệ **Receptionist Shift, Leave & Workforce Management** được thiết
 
 3. **`ReceptionistLeaveService` (`IReceptionistLeaveService`):**
    - Quản lý vòng đời đơn nghỉ: Gửi đơn (`CreateLeaveRequestAsync`) &rarr; Rút đơn (`WithdrawLeaveRequestAsync`) &rarr; Từ chối (`RejectLeaveRequestAsync`) &rarr; Phê duyệt (`ApproveLeaveRequestAsync`).
+   - Khóa phòng ngừa double-click (`Lock_Receptionist_LeaveCreate_{userId}`) ngăn chặn tạo 2 đơn trùng lặp khi người dùng click liên tiếp hoặc retry mạng.
    - Phê duyệt nguyên tử (All-or-Nothing): Đối với đơn nghỉ nhiều ngày (`MultiDay`), hệ thống kiểm tra Rule 1 và Rule 2 cho từng ngày. Nếu bất kỳ ngày nào vi phạm, toàn bộ đơn bị từ chối và rollback giao dịch.
 
 4. **`ReceptionistShiftSwapService` (`IReceptionistShiftSwapService`):**
    - Quy trình đổi ca 3 bước:
      1. Lễ tân A đề xuất đổi ca cho Lễ tân B (`PendingCounterparty`).
      2. Lễ tân B phản hồi: Đồng ý &rarr; Chuyển sang `PendingAdminApproval`; Từ chối &rarr; Chuyển sang `Declined`.
-     3. Quản trị viên phê duyệt (`Approved`): Hệ thống thực hiện hoán đổi nguyên tử `ReceptionistUserId` trên các bản ghi `ReceptionistWorkSchedule`.
+     3. Quản trị viên phê duyệt (`Approved`): Hệ thống kiểm tra xung đột lịch nghỉ phép và ca trực trùng của cả 2 nhân sự trước khi thực hiện hoán đổi nguyên tử `ReceptionistUserId` trên các bản ghi `ReceptionistWorkSchedule`.
 
 5. **`ReceptionistHandoverService` (`IReceptionistHandoverService`):**
    - Tổng hợp tức thời hàng đợi bệnh nhân chờ tiếp đón (`PendingReceptionReview`), hóa đơn viện phí chưa thanh toán (`RemainingAmount > 0`), phiên chat tư vấn trực tuyến.
    - Tạo biên bản bàn giao và yêu cầu đồng nghiệp ca kế tiếp tiếp nhận xác nhận (`Acknowledged`); ngăn chặn người tạo tự tiếp nhận biên bản của chính mình.
 
-### 3.2. Cơ Chế Khóa Ứng Dụng (Distributed Application Locks)
-Để bảo đảm an toàn tương tranh cao giữa các luồng xử trị, hệ thống sử dụng các khóa ứng dụng chuẩn qua `SqlAppLockHelper`:
-- `Lock_Receptionist_Coverage_{yyyyMMdd}`: Khóa ngày kiểm tra quy tắc nhân sự và duyệt nghỉ phép.
-- `Lock_Receptionist_{userId}_{yyyyMMdd}`: Khóa ca trực của một nhân viên trong ngày.
-- `Lock_ReceptionistLeave_{leaveId}`: Khóa trạng thái đơn xin nghỉ phép.
-- `Lock_ReceptionistSwap_{swapId}`: Khóa quy trình đổi ca trực.
+### 3.2. Cơ Chế Khóa Ứng Dụng Phân Tán (Distributed Locks & Dual Owner Mode)
+Cải tiến `SqlAppLockHelper` hỗ trợ chế độ kép:
+- **Transaction-scoped (`@LockOwner = 'Transaction'`):** Tự động phát hiện transaction hiện có (`CurrentTransaction != null`). Giữ khóa xuyên suốt transaction và tự động giải phóng khi transaction Commit hoặc Rollback.
+- **Session-scoped (`@LockOwner = 'Session'`):** Dùng khi không có transaction. Trả về `SessionLockReleaser` tự động gọi `sp_releaseapplock @LockOwner = 'Session'` khi dispose.
+- **Các khóa canonical:**
+  - `Lock_Receptionist_Coverage_{yyyyMMdd}`: Khóa bảo vệ Rule 1 & Rule 2 theo ngày.
+  - `Lock_Receptionist_{userId}_{yyyyMMdd}`: Khóa ca trực của nhân viên theo ngày.
+  - `Lock_ReceptionistLeave_{leaveId}`: Khóa đơn xin nghỉ phép.
+  - `Lock_ReceptionistSwap_{swapId}`: Khóa yêu cầu đổi ca trực.
+  - `Lock_Receptionist_LeaveCreate_{userId}`: Khóa chống double-click gửi đơn nghỉ.
 
 ---
 
-## 4. GIAO DIỆN NGƯỜI DÙNG (FRONTEND MVC & RAZOR VIEWS)
+## 4. KẾT QUẢ KIỂM THỬ THỰC TẾ & BẢO ĐẢM CHẤT LƯỢNG
 
-### 4.1. Bảng điều khiển Quản trị viên (Admin Receptionist Console)
-- **Tuyến đường:** `/Admin/ReceptionistSchedule`
-- **Bộ điều khiển:** `AdminReceptionistScheduleController`
-- **Giao diện:** `FE/DentalClinic.Web/Views/Admin/ReceptionistSchedule/Index.cshtml`
-- **5 Tab tính năng:**
-  1. *Lịch Làm Việc Theo Tháng:* Lưới lịch ma trận trực quan, bộ lọc nhân sự, nút phân ca đơn, sao chép tháng, ghi đè ngày.
-  2. *Phân Ca Hàng Loạt:* Form gán ca theo khoảng ngày, chọn thứ trong tuần, xem trước (`Preview`) và áp dụng (`Apply`).
-  3. *Duyệt Đơn Nghỉ Phép:* Danh sách đơn nghỉ kèm nút xem trước tác động nhân sự (`Preview Coverage Impact`), phê duyệt, từ chối kèm lý do.
-  4. *Yêu Cầu Đổi Ca:* Danh sách đề xuất đổi ca đã được đồng nghiệp đồng thuận, nút duyệt đổi ca nguyên tử.
-  5. *Giám Sát Nhân Lực & Sự Cố:* Theo dõi ca thiếu người, nút điều phối lễ tân thay thế giải quyết sự cố.
+### 4.1. SQL Server Concurrency Integration Tests (Real SQL Server QA Database)
+Thực thi trên cơ sở dữ liệu `DentalCare_ReceptionistShift_Dev` tại `.\SQLEXPRESS`:
+```
+  Passed Case1_ConcurrentLeaveApproval_GuaranteesAtMostTwoApprovedLeavesOnSqlServer [86 ms]
+  Passed Case2_LeaveApprovalVsShiftSwap_MaintainsCoverageAndNoCorruptedSchedules [132 ms]
+  Passed Case3_LeaveApprovalVsBulkScheduling_ProtectsApprovedLeaveAndNoOrphanShifts [1 s]
+  Passed Case4_DuplicateLeaveSubmission_PreventsDuplicateRowsUnderConcurrentCalls [78 ms]
 
-### 4.2. Không gian làm việc Lễ tân (Receptionist Workforce Portal)
-1. **Lịch làm việc của tôi (`/Receptionist/Schedule`):** Hiển thị thẻ ca trực hôm nay, nút báo vắng mặt khẩn cấp mở modal chuyên dụng, bảng các ca trực sắp tới.
-2. **Đơn xin nghỉ phép (`/Receptionist/Leave`):** Thẻ thống kê 4 chỉ số (Tổng đơn, Chờ duyệt, Đã duyệt, Bị từ chối), banner lưu ý Quy tắc 1 & Quy tắc 2, modal tạo đơn xin nghỉ linh hoạt theo 5 hình thức, thao tác rút đơn khi còn pending.
-3. **Đổi ca trực (`/Receptionist/ShiftSwap`):** Bảng yêu cầu cần phản hồi từ đồng nghiệp (Đồng ý/Từ chối kèm lời nhắn), tab yêu cầu đã gửi (có nút rút đơn), tab lịch sử đổi ca.
-4. **Bàn giao ca trực (`/Receptionist/Handover`):** Thẻ theo dõi snapshot hàng đợi tiếp đón, hóa đơn chờ thu viện phí, chat tư vấn; form lập biên bản bàn giao và bảng tiếp nhận ca.
-5. **Thanh điều hướng (`_Sidebar.cshtml`):** Tích hợp phân nhóm điều hướng mới *"Ca Trực & Nhân Sự"* dành cho Lễ tân và link *"Lịch Trực Lễ Tân & Nhân Sự"* dành cho Quản trị viên.
+Test Run Successful. Total tests: 4. Passed: 4. Failed: 0. Duration: 2.47s.
+```
+- **Case 1 (Concurrent Leave Approval):** Đã có A được duyệt nghỉ. Admin 1 và Admin 2 cùng duyệt đơn cho B và C đồng thời. Khóa `Lock_Receptionist_Coverage_20261120` kích hoạt, chính xác 1 đơn được duyệt và 1 đơn bị từ chối (Rule 1). Tổng số lễ tân nghỉ được duyệt trên DB là đúng 2 người.
+- **Case 2 (Leave Approval vs Shift Swap):** Admin 1 duyệt đổi ca cho B và D; Admin 2 duyệt đơn nghỉ cho C. Dữ liệu ca trực sau hoán đổi nguyên tử, không có bất kỳ ca trực nào bị trùng giờ cho cùng một lễ tân.
+- **Case 3 (Leave Approval vs Bulk Scheduling):** Admin 1 duyệt đơn nghỉ của B, Admin 2 chạy phân ca hàng loạt cho B và C. B được bảo vệ an toàn không bị gán ca đè lên ngày đã duyệt nghỉ.
+- **Case 4 (Duplicate Leave Submission):** 2 request gửi đơn nghỉ cùng 1 mili-giây từ cùng 1 lễ tân. Chính xác 1 request thành công, 1 request bị chặn với thông báo đơn đang chờ duyệt.
 
----
+### 4.2. Playwright Browser E2E Test Suite (Chạy Trực Tiếp Với Live FE & BE)
+Máy chủ Web (`https://localhost:7129`) và API (`https://localhost:7350`) khởi động và kết nối QA DB:
+```
+Running 6 tests using 1 worker
 
-## 5. KẾT QUẢ KIỂM THỬ TỰ ĐỘNG & BẢO ĐẢM CHẤT LƯỢNG
+  ok 1 [chromium] › receptionist-workforce.spec.js:16:3 › E2E-REC-1: Admin Receptionist Scheduling Console - 5 Tabs & Monthly Grid (2.1s)
+  ok 2 [chromium] › receptionist-workforce.spec.js:48:3 › E2E-REC-2: Receptionist Personal Schedule - Today Shift & Emergency Absence Modal (1.4s)
+  ok 3 [chromium] › receptionist-workforce.spec.js:75:3 › E2E-REC-3: Receptionist Leave Management - Stat Cards, Rules Banner & Leave Creation Modal (1.7s)
+  ok 4 [chromium] › receptionist-workforce.spec.js:112:3 › E2E-REC-4: Receptionist Shift Swap - Outgoing & History Tabs & Create Swap Modal (1.6s)
+  ok 5 [chromium] › receptionist-workforce.spec.js:139:3 › E2E-REC-5: Receptionist Work Handover - Live Queue Counters & Handover Modal (2.4s)
+  ok 6 [chromium] › receptionist-workforce.spec.js:166:3 › E2E-REC-6: Sidebar Navigation Links - Receptionist & Admin Group Verification (1.9s)
 
-Hệ thống đã triển khai đầy đủ các tầng kiểm thử:
+  6 passed (12.0s)
+```
 
-### 5.1. Kết Quả xUnit Backend Test Suite
-- **Thư mục kiểm thử:** `BE/DentalClinic.Tests/ReceptionistWorkforce/`
-  1. `ReceptionistWorkforceSchedulingTests.cs`: 6 tests (Tạo ca, kiểm tra giờ, preview/apply hàng loạt, ghi đè ca, copy tháng, daily override).
-  2. `ReceptionistLeaveRuleAndCoverageTests.cs`: 6 tests (Rule 1 max 2 distinct leaves, cùng user 2 period tính 1, Rule 2 min 2 staff, kiểm tra sub-interval giờ, rút đơn, từ chối đơn).
-  3. `ReceptionistShiftSwapTests.cs`: 3 tests (Quy trình propose -> accept -> approve hoán đổi lịch, từ chối đổi ca, chặn người ngoài phản hồi).
-  4. `ReceptionistEmergencyAbsenceAndIncidentTests.cs`: 3 tests (Báo vắng khẩn cấp khi thiếu người, giải quyết sự cố điều phối thay thế, phát hiện understaffing).
-  5. `ReceptionistWorkHandoverTests.cs`: 2 tests (Tổng hợp số liệu hàng đợi thực tế, vòng đời bàn giao và chặn tự tiếp nhận).
-  6. `ReceptionistConcurrencyAndLockingTests.cs`: 2 tests (Định dạng khóa `SqlAppLockHelper`, mô phỏng 2 luồng duyệt đơn song song tranh chấp chỉ 1 luồng được duyệt).
-- **Kết quả chạy kiểm thử:** **22/22 tests PASSED (100%)**.
-- **Toàn bộ Backend Suite:** **804/804 tests PASSED (100%)**.
+### 4.3. Tổng Kết Số Lượng Test Cases Toàn Hệ Thống
 
-### 5.2. Kết Quả Frontend Unit Test Suite
-- **Dự án:** `FE/DentalClinic.Web.Tests/DentalClinic.Web.Tests.csproj`
-- **Kết quả chạy kiểm thử:** **315/315 tests PASSED (100%)**.
+| Dự Án Kiểm Thử | Tổng Số Tests | Passed | Failed | Skipped | Tỷ Lệ Đạt |
+|---|---|---|---|---|---|
+| **Backend Unit & Integration (`DentalClinic.Tests.csproj`)** | 809 | **808** | 0 | 1* | **100%** |
+| *Trong đó: Phân hệ Receptionist Workforce Tests* | 26 | **26** | 0 | 0 | **100%** |
+| *Trong đó: Real SQL Server Concurrency Tests* | 4 | **4** | 0 | 0 | **100%** |
+| **Frontend Razor & MVC (`DentalClinic.Web.Tests.csproj`)** | 315 | **315** | 0 | 0 | **100%** |
+| **Playwright Browser E2E (`e2e/receptionist-workforce.spec.js`)** | 6 | **6** | 0 | 0 | **100%** |
+| **TỔNG TOÀN HỆ THỐNG** | **1,130** | **1,129** | **0** | **1\*** | **100%** |
 
-### 5.3. Playwright Browser E2E Test Suite
-- **File kịch bản:** `e2e/receptionist-workforce.spec.js`
-- **Kịch bản bao phủ:**
-  - `E2E-REC-1`: Admin điều hướng console 5 tab và lưới lịch tháng.
-  - `E2E-REC-2`: Lễ tân xem lịch cá nhân và kích hoạt modal báo vắng khẩn cấp.
-  - `E2E-REC-3`: Lễ tân tạo đơn nghỉ phép với 5 hình thức và thông điệp Quy tắc 1 & 2.
-  - `E2E-REC-4`: Lễ tân tạo đề xuất đổi ca trực với đồng nghiệp.
-  - `E2E-REC-5`: Lễ tân xem snapshot hàng đợi tiếp đón & lập biên bản bàn giao ca.
-  - `E2E-REC-6`: Kiểm tra tính toàn vẹn của menu sidebar cho cả 2 role Admin và Lễ tân.
+*\* Ghi chú minh bạch: 1 test skipped duy nhất là `UploadAvatarAsync_WithUserSecrets_UploadsSuccessfully` do môi trường CI/local chưa cấu hình Cloudinary API secret.*
 
-### 5.4. Trạng Thái Cảnh Báo Trình Biên Dịch (Compiler Diagnostics)
+### 4.4. Cảnh Báo Trình Biên Dịch (Compiler Diagnostics)
 - **Backend (`DentalClinic.Backend.sln`):** **0 Error(s), 0 Warning(s)**
 - **Frontend (`DentalClinic.Web.sln`):** **0 Error(s), 0 Warning(s)**
 
 ---
 
-## 6. HƯỚNG DẪN TRIỂN KHAI & BẬT TÍNH NĂNG
+## 5. BÁO CÁO TÍNH SẴN SÀNG TÍCH HỢP (INTEGRATION READINESS STATEMENT)
 
-1. **Chạy Migration SQL trên môi trường đích:**
-   ```powershell
-   sqlcmd -S .\SQLEXPRESS -d DentalCare_Integration_Dev -i DB\redesign_migrations\20261110_Receptionist_Shift_Leave_Workforce_Schema.sql
-   ```
-2. **Build và Khởi Động Backend & Frontend:**
-   ```powershell
-   dotnet build BE/DentalClinic.Backend.sln
-   dotnet build FE/DentalClinic.Web.sln
-   ```
-3. **Truy Cập Quản Trị Viên:**
-   - Đăng nhập bằng `admin@dentalcare.com` / `Password123@`
-   - Vào menu: **Quản trị Danh mục & Lịch &rarr; Lịch Trực Lễ Tân & Nhân Sự** (`/Admin/ReceptionistSchedule`).
-4. **Truy Cập Lễ Tân:**
-   - Đăng nhập bằng `receptionist@dentalcare.com` / `Password123@`
-   - Vào menu: **Ca Trực & Nhân Sự &rarr; Lịch Làm Việc Của Tôi** (`/Receptionist/Schedule`).
-
----
-
-## 7. KẾT LUẬN
-
-Phân hệ **Receptionist Shift, Leave & Workforce Management** đã được hiện thực hóa toàn diện từ tầng cơ sở dữ liệu, nghiệp vụ, API, giao diện web đến hệ thống kiểm thử tự động, tuân thủ nghiêm ngặt các quy tắc nghiệp vụ (Tối đa 2 người nghỉ/ngày, Tối thiểu 2 người trực/ca), bảo đảm độ tin cậy và hiệu năng cao trong vận hành thực tế phòng khám.
+1. **Độc lập tuyệt đối với phân hệ Bác sĩ (Dentist Leave & Recovery):**
+   - Phân hệ Receptionist hoàn toàn độc lập về schema (các bảng đều có tiền tố `Receptionist`), không chia sẻ bảng dữ liệu hay model entity với Dentist.
+   - Không đụng chạm vào worktree `DentalCare-Leave` hoặc nhánh `feature/dentist-leave-appointment-recovery`.
+2. **Đã đồng bộ commit mới nhất từ `origin/develop`:**
+   - Đã fetch và merge sạch (clean merge) commit mới nhất `d4e6cfc` từ `origin/develop` vào `feature/receptionist-shift-leave-management`.
+3. **An toàn cơ sở dữ liệu:**
+   - Script forward migration và rollback migration đã được thẩm định an toàn, hỗ trợ nâng cấp và hạ cấp không mất mát dữ liệu của các phân hệ khác.
+4. **Nhánh sẵn sàng tạo Pull Request:**
+   - Nhánh `feature/receptionist-shift-leave-management` đạt trạng thái **100% GREEN, 0 WARNING, PRODUCTION READY**.

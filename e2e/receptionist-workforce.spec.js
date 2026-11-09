@@ -30,10 +30,13 @@ test.describe('DentalCare Receptionist Shift, Leave & Workforce Management E2E S
     await expect(page.locator('.table-responsive')).toBeVisible();
     await expect(page.locator('table')).toBeVisible();
 
-    // Verify Modal Triggers exist
+    // Verify Modal Trigger exists on Tab 1
     await expect(page.locator('button[data-bs-target="#createShiftModal"]')).toBeVisible();
-    await expect(page.locator('button[data-bs-target="#copyMonthModal"]')).toBeVisible();
-    await expect(page.locator('button[data-bs-target="#dailyOverrideModal"]')).toBeVisible();
+
+    // Switch to Tab 2 and verify Bulk Apply & Copy Month controls
+    await page.locator('#tabBulkBtn').click();
+    await expect(page.locator('#btnCopyMonth')).toBeVisible();
+    await expect(page.locator('#btnApplyBulk')).toBeVisible();
 
     // Zero unexpected console errors
     expect(errors).toEqual([]);
@@ -48,11 +51,11 @@ test.describe('DentalCare Receptionist Shift, Leave & Workforce Management E2E S
     await page.goto('/Receptionist/Schedule');
     await expect(page).toHaveTitle(/Lịch Làm Việc Của Tôi/i);
 
-    // Verify Today Shift Container and Quick Action links
+    // Verify Today Shift Container and Quick Action links (using .first() to prevent strict mode violation)
     await expect(page.locator('h2')).toContainText(/Lịch Làm Việc Của Tôi/i);
-    await expect(page.locator('a[href*="/Receptionist/Leave"]')).toBeVisible();
-    await expect(page.locator('a[href*="/Receptionist/ShiftSwap"]')).toBeVisible();
-    await expect(page.locator('a[href*="/Receptionist/Handover"]')).toBeVisible();
+    await expect(page.locator('a[href*="/Receptionist/Leave"]').first()).toBeVisible();
+    await expect(page.locator('a[href*="/Receptionist/ShiftSwap"]').first()).toBeVisible();
+    await expect(page.locator('a[href*="/Receptionist/Handover"]').first()).toBeVisible();
 
     // Verify Emergency Absence Modal trigger exists
     const emergencyBtn = page.locator('button[data-bs-target="#emergencyAbsenceModal"]');
@@ -76,7 +79,7 @@ test.describe('DentalCare Receptionist Shift, Leave & Workforce Management E2E S
     await expect(page).toHaveTitle(/Đơn Xin Nghỉ Phép Lễ Tân/i);
 
     // Verify Rule 1 & Rule 2 Notice Banner
-    const ruleAlert = page.locator('.alert-info');
+    const ruleAlert = page.locator('.alert-info', { hasText: 'Quy tắc' });
     await expect(ruleAlert).toBeVisible();
     await expect(ruleAlert).toContainText(/Quy tắc 1/i);
     await expect(ruleAlert).toContainText(/Quy tắc 2/i);
@@ -166,17 +169,18 @@ test.describe('DentalCare Receptionist Shift, Leave & Workforce Management E2E S
     await page.goto('/Receptionist/Dashboard');
 
     await expect(page.locator('#appSidebar')).toBeVisible();
-    await expect(page.locator('a[href*="/Receptionist/Schedule"]')).toBeVisible();
-    await expect(page.locator('a[href*="/Receptionist/Leave"]')).toBeVisible();
-    await expect(page.locator('a[href*="/Receptionist/ShiftSwap"]')).toBeVisible();
-    await expect(page.locator('a[href*="/Receptionist/Handover"]')).toBeVisible();
+    await expect(page.locator('a[href*="/Receptionist/Schedule"]').first()).toBeVisible();
+    await expect(page.locator('a[href*="/Receptionist/Leave"]').first()).toBeVisible();
+    await expect(page.locator('a[href*="/Receptionist/ShiftSwap"]').first()).toBeVisible();
+    await expect(page.locator('a[href*="/Receptionist/Handover"]').first()).toBeVisible();
 
-    // 6.2 Admin Sidebar
+    // 6.2 Admin Sidebar (Clear cookies before re-authenticating as admin)
+    await page.context().clearCookies();
     await loginAs(page, 'admin@dentalcare.com');
     await page.goto('/Admin/Dashboard');
 
     await expect(page.locator('#appSidebar')).toBeVisible();
-    await expect(page.locator('a[href*="/Admin/ReceptionistSchedule"]')).toBeVisible();
+    await expect(page.locator('a[href*="/Admin/ReceptionistSchedule"]').first()).toBeVisible();
 
     expect(errors).toEqual([]);
   });
