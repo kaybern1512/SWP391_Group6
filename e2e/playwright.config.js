@@ -13,13 +13,13 @@ module.exports = defineConfig({
     baseURL: process.env.BASE_URL || 'https://localhost:7129',
     ignoreHTTPSErrors: true,
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
-    trace: 'on-first-retry',
+    video: 'off',
+    trace: 'off',
   },
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     },
   ],
 });

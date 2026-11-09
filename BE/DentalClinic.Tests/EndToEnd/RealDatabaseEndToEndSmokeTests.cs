@@ -36,14 +36,14 @@ public class RealDatabaseEndToEndSmokeTests
         }
     }
 
-    private static async Task<DateTime> GetValidTestWorkDateAsync(DentalClinicDbContext db, long dentistUserId, int offsetDays = 2, int hour = 10, int requiredDurationHours = 2)
+    private static async Task<DateTime> GetValidTestWorkDateAsync(DentalClinicDbContext db, long dentistUserId, int offsetDays = 24, int hour = 10, int requiredDurationHours = 2)
     {
         var minDate = DateOnly.FromDateTime(DateTime.Today).AddDays(offsetDays);
         var shifts = await db.DentistWorkSchedules
             .AsNoTracking()
             .Where(ws => ws.DentistUserId == dentistUserId && ws.WorkDate >= minDate && ws.Status == "Scheduled")
             .OrderBy(ws => ws.WorkDate)
-            .Take(30)
+            .Take(120)
             .ToListAsync();
 
         foreach (var shift in shifts)
@@ -108,7 +108,7 @@ public class RealDatabaseEndToEndSmokeTests
         long roomId = 1; // ROOM-101 (Shared)
         long chairId = 1; // First chair in ROOM-101
 
-        var testDate = (await GetValidTestWorkDateAsync(db, dentistUserId, 7, 9));
+        var testDate = (await GetValidTestWorkDateAsync(db, dentistUserId, 24, 9));
 
         // Step 1: Patient creates appointment
         var createReq = new CreateAppointmentRequest
@@ -243,7 +243,7 @@ public class RealDatabaseEndToEndSmokeTests
         long roomId = 4; // ROOM-102 (Shared)
         long chairId = 7; // Chair CHAIR-102-A in ROOM-102
 
-        var slotTime = (await GetValidTestWorkDateAsync(db, dentistUserId, 8, 14));
+        var slotTime = (await GetValidTestWorkDateAsync(db, dentistUserId, 25, 14));
 
         // Step 1: Receptionist creates walk-in appointment
         var walkInReq = new CreateReceptionistAppointmentRequest
@@ -306,7 +306,7 @@ public class RealDatabaseEndToEndSmokeTests
         var mockApptLogger = new Mock<ILogger<AppointmentService>>();
         var apptService = new AppointmentService(db, mockNotification.Object, mockApptLogger.Object);
 
-        var slotStart = (await GetValidTestWorkDateAsync(db, 3, 9, 9, 4));
+        var slotStart = (await GetValidTestWorkDateAsync(db, 3, 26, 9, 4));
         var slotEnd = slotStart.AddMinutes(45);
 
         // PART 1: Shared Room (ROOM-101, IsExclusive=false in Dept 1)
@@ -450,7 +450,7 @@ public class RealDatabaseEndToEndSmokeTests
     public async Task ScenarioD_Concurrency_LockProtectionAndUniqueQueueNumbers_Enforced()
     {
         DateTime slotStart;
-        using (var dateDb = CreateDbContext()) { slotStart = (await GetValidTestWorkDateAsync(dateDb, 3, 10, 8)); }
+        using (var dateDb = CreateDbContext()) { slotStart = (await GetValidTestWorkDateAsync(dateDb, 3, 27, 8)); }
         var slotEnd = slotStart.AddMinutes(30);
 
         // PART 1: Parallel Confirmations for the SAME Dentist
@@ -528,7 +528,7 @@ public class RealDatabaseEndToEndSmokeTests
         using (var setupDb = CreateDbContext())
         {
             if (!await IsDatabaseAvailableAsync(setupDb)) return;
-            testQueueDate = (await GetValidTestWorkDateAsync(setupDb, 3, 11, 9));
+            testQueueDate = (await GetValidTestWorkDateAsync(setupDb, 3, 28, 9));
             for (int i = 0; i < 4; i++)
             {
                 var q = new Appointment
@@ -636,7 +636,7 @@ public class RealDatabaseEndToEndSmokeTests
         long roomId = 1;         // ROOM-101
         long chairId = 2;        // CHAIR-101-B
 
-        var testDate = (await GetValidTestWorkDateAsync(db, dentistUserId, 12, 9));
+        var testDate = (await GetValidTestWorkDateAsync(db, dentistUserId, 24, 9));
 
         // Step 1: Patient books root canal service in Department 1
         var createReq = new CreateAppointmentRequest

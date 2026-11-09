@@ -154,4 +154,24 @@ public class FourRoleRbacAuthorizationRegressionTests
         Assert.NotNull(authAttr);
         Assert.Equal(UserRole.SystemAdministrator, authAttr.Roles);
     }
+
+    // ================================================================================================
+    // RULE 6: Medicine Dispensation Ownership (Dentist/Admin directly dispense, Receptionist/Patient Forbidden)
+    // ================================================================================================
+    [Fact]
+    public void Rule6_MedicineController_DispenseMedicine_MustBeDentistAndAdminOnly_NeverReceptionistOrPatient()
+    {
+        var method = typeof(MedicineController).GetMethod(nameof(MedicineController.DispenseMedicine));
+        Assert.NotNull(method);
+
+        var authAttr = method.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(authAttr);
+        Assert.NotNull(authAttr.Roles);
+
+        var roles = authAttr.Roles.Split(',', StringSplitOptions.TrimEntries);
+        Assert.Contains(UserRole.Dentist, roles);
+        Assert.Contains(UserRole.SystemAdministrator, roles);
+        Assert.DoesNotContain(UserRole.Receptionist, roles);
+        Assert.DoesNotContain(UserRole.Patient, roles);
+    }
 }

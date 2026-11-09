@@ -49,14 +49,14 @@ public class Stage4FinalSystemAcceptanceE2ETests
         }
     }
 
-    private static async Task<DateTime> GetAvailableSlotForDentistAsync(DentalClinicDbContext db, long dentistUserId, int offsetDays = 20, int defaultHour = 9)
+    private static async Task<DateTime> GetAvailableSlotForDentistAsync(DentalClinicDbContext db, long dentistUserId, int offsetDays = 24, int defaultHour = 9)
     {
         var minDate = DateOnly.FromDateTime(DateTime.Today).AddDays(offsetDays);
         var shifts = await db.DentistWorkSchedules
             .AsNoTracking()
             .Where(ws => ws.DentistUserId == dentistUserId && ws.WorkDate >= minDate && ws.Status == "Scheduled")
             .OrderBy(ws => ws.WorkDate)
-            .Take(30)
+            .Take(120)
             .ToListAsync();
 
         foreach (var shift in shifts)
@@ -168,7 +168,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
         long roomId = 1;
         long targetChair = 2; // CHAIR-101-B
 
-        var slotTime = await GetAvailableSlotForDentistAsync(db, dentist1, offsetDays: 21, defaultHour: 11);
+        var slotTime = await GetAvailableSlotForDentistAsync(db, dentist1, offsetDays: 25, defaultHour: 11);
 
         var task1 = Task.Run(async () =>
         {

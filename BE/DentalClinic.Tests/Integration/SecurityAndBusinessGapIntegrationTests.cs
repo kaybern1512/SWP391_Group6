@@ -1,4 +1,4 @@
-﻿using MedicineEntity = DentalClinic.Infrastructure.Persistence.Entities.Medicine;
+using MedicineEntity = DentalClinic.Infrastructure.Persistence.Entities.Medicine;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -808,5 +808,29 @@ public class SecurityAndBusinessGapIntegrationTests
         Assert.NotNull(updatedFollowUp);
         Assert.Equal(res.Data.AppointmentId, updatedFollowUp!.AppointmentId);
         Assert.Equal("Scheduled", updatedFollowUp.Status);
+    }
+
+    [Fact]
+    public async Task DispenseMedicine_WhenCalledByReceptionist_ThrowsUnauthorizedAccessException_EnforcingOwnership()
+    {
+        var db = CreateDbContext("DispenseMedicine_Receptionist_Forbidden");
+        await SeedBaseDataAsync(db, DateTime.Today.AddDays(1));
+
+        var service = new MedicineService(db);
+
+        var req = new CreateMedicineDispensationRequest
+        {
+            PrescriptionId = 1,
+            Items = new List<DispenseItemInput>
+            {
+                new() { PrescriptionItemId = 1, MedicineId = 1, MedicineBatchId = 1, Quantity = 2 }
+            }
+        };
+
+        // When Receptionist attempts to dispense medicine, must be rejected with UnauthorizedAccessException
+        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.DispenseMedicineAsync(req, dentistUserId: 201, userRole: "Receptionist"));
+
+        Assert.Contains("Chỉ Bác sĩ điều trị hoặc Quản trị viên", ex.Message);
     }
 }

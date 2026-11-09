@@ -246,8 +246,13 @@
                         @if (day.IsCurrentMonth)
                         {
                             <button type="button"
-                                    class="btn btn-sm btn-outline-secondary py-0 px-1 w-100 mt-auto text-xs"
-                                    onclick="openDailyOverrideModal('@day.Date.ToString("yyyy-MM-dd")', @(day.IsOnLeave ? "true" : "false"), '@(Html.Raw(day.LeaveReason?.Replace("'", "\\'") ?? ""))', @day.ConfirmedAppointmentsCount, '@(Html.Raw(System.Text.Json.JsonSerializer.Serialize(day.Shifts.Select(sh => new { startTime = sh.StartTime.ToString("HH:mm"), endTime = sh.EndTime.ToString("HH:mm"), note = sh.Note ?? "" }))))')">
+                                    class="btn btn-sm btn-outline-secondary py-0 px-1 w-100 mt-auto text-xs btn-daily-override"
+                                    data-date="@day.Date.ToString("yyyy-MM-dd")"
+                                    data-on-leave="@(day.IsOnLeave ? "true" : "false")"
+                                    data-leave-reason="@(day.LeaveReason ?? "")"
+                                    data-appt-count="@day.ConfirmedAppointmentsCount"
+                                    data-shifts='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(day.Shifts.Select(sh => new { startTime = sh.StartTime.ToString("HH:mm"), endTime = sh.EndTime.ToString("HH:mm"), note = sh.Note ?? "" })))'
+                                    onclick="handleDailyOverrideClick(this)">
                                 <i class="bi bi-pencil-square me-1"></i>Sửa ca ngày
                             </button>
                         }
@@ -957,6 +962,16 @@
     }
 
     // Daily Override Modal Logic
+    
+    function handleDailyOverrideClick(btn) {
+        const dateStr = btn.getAttribute('data-date');
+        const isOnLeave = btn.getAttribute('data-on-leave') === 'true';
+        const leaveReason = btn.getAttribute('data-leave-reason');
+        const apptCount = parseInt(btn.getAttribute('data-appt-count') || '0', 10);
+        const shiftsJson = btn.getAttribute('data-shifts');
+        openDailyOverrideModal(dateStr, isOnLeave, leaveReason, apptCount, shiftsJson);
+    }
+
     function openDailyOverrideModal(dateStr, isOnLeave, leaveReason, apptCount, shiftsJson) {
         document.getElementById('overrideDate').value = dateStr;
         document.getElementById('overrideDateDisplay').value = dateStr;

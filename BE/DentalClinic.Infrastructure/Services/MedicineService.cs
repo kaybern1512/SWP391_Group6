@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -615,6 +615,11 @@ public class MedicineService : IMedicineService
     {
         if (request.Items == null || !request.Items.Any())
             throw new ArgumentException("Danh sách thuốc yêu cầu cấp phát không được để trống.", nameof(request.Items));
+
+        if (userRole == "Receptionist" || userRole == "Patient")
+        {
+            throw new UnauthorizedAccessException("Chỉ Bác sĩ điều trị hoặc Quản trị viên mới có quyền xuất cấp thuốc từ kho.");
+        }
 
         var prescription = await _context.Prescriptions
             .Include(p => p.TreatmentSession)
