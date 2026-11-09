@@ -1,4 +1,4 @@
--- ============================================================================
+﻿-- ============================================================================
 -- DENTALCARE - RECEPTIONIST SHIFT, LEAVE & WORKFORCE MANAGEMENT MIGRATION
 -- Migration Date: 2026-11-10
 -- Target Database: DentalCare_ReceptionistShift_Dev (or current tenant DB)
