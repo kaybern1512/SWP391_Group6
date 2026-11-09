@@ -31,6 +31,7 @@ public class VisitFeedbackDto
 public class CreateFeedbackRequest
 {
     public long AppointmentId { get; set; }
+    public long? DentistUserId { get; set; }
     public byte DentistRating { get; set; } // 1 - 5
     public byte ClinicRating { get; set; }  // 1 - 5
     public string? Comment { get; set; }

@@ -1,7 +1,7 @@
 @model DentalClinic.Web.ViewModels.Appointments.PatientRescheduleViewModel
 @{
     ViewData["Title"] = $"Dời Lịch Khám #{Model.AppointmentCode} - Nha Khoa DentalCare";
-    var minDate = DateTime.Today.AddDays(1).ToString("yyyy-MM-dd");
+    var minDate = DentalClinic.Web.Controllers.Patient.PatientAppointmentController.GetClinicToday().ToString("yyyy-MM-dd");
 }
 
 <div class="container py-4">
@@ -80,7 +80,7 @@
             </h5>
         </div>
         <div class="card-body p-4">
-            <form asp-action="Reschedule" asp-route-id="@Model.AppointmentId" method="post" id="rescheduleForm">
+            <form asp-action="Reschedule" asp-route-id="@Model.AppointmentId" method="post" id="rescheduleForm" onsubmit="return validateRescheduleSubmit(event)">
                 @Html.AntiForgeryToken()
                 <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-4" role="alert"></div>
 
@@ -256,7 +256,15 @@
                     return;
                 }
 
-                slots.forEach(slot => {
+                const nowTime = new Date();
+                const validSlots = (slots || []).filter(slot => new Date(slot.startTime) > nowTime);
+
+                if (validSlots.length === 0) {
+                    noSlots.classList.remove('d-none');
+                    return;
+                }
+
+                validSlots.forEach(slot => {
                     const col = document.createElement('div');
                     col.className = 'col-6 col-sm-4 col-md-3 col-lg-2';
                     const start = new Date(slot.startTime);
@@ -303,6 +311,22 @@
             document.getElementById('btnSubmitReschedule').disabled = false;
             const validationErr = document.getElementById('slotValidationError');
             if (validationErr) validationErr.innerText = '';
+        }
+
+        function validateRescheduleSubmit(e) {
+            const startVal = document.getElementById('hiddenNewScheduledStart').value;
+            if (!startVal) {
+                alert('Vui lòng chọn khung giờ khám mới.');
+                if (e) e.preventDefault();
+                return false;
+            }
+            if (new Date(startVal) <= new Date()) {
+                alert('Khung giờ khám mới đã trôi qua. Vui lòng chọn lại khung giờ hợp lệ.');
+                if (e) e.preventDefault();
+                onFilterChange();
+                return false;
+            }
+            return true;
         }
 
         // Auto load slots on page load

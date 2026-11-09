@@ -9,15 +9,15 @@ var builder = WebApplication.CreateBuilder(args);
 // Add MVC with Views
 builder.Services.AddControllersWithViews();
 
-// Configure Data Protection isolated for Admin
+// Configure Data Protection isolated for DentalCare Integration
 builder.Services.AddDataProtection()
-    .SetApplicationName("DentalCare.Admin");
+    .SetApplicationName("DentalCare.Integration");
 
 // Configure Antiforgery Header for AJAX requests
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "RequestVerificationToken";
-    options.Cookie.Name = ".DentalCare.Admin.Antiforgery";
+    options.Cookie.Name = ".DentalCare.Integration.Antiforgery";
 });
 
 // Support full Unicode range (Vietnamese, etc.) without HTML-entity encoding
@@ -32,11 +32,11 @@ builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromHours(2);
+    options.Cookie.Name = ".DentalCare.Integration.Session";
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     options.Cookie.SameSite = SameSiteMode.Lax;
-    options.Cookie.Name = ".DentalCare.Admin.Session";
 });
 
 // Authentication: Cookie Authentication + Google External Login
@@ -48,7 +48,7 @@ var authBuilder = builder.Services.AddAuthentication(options =>
 })
 .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
 {
-    options.Cookie.Name = ".DentalCare.Admin.Auth";
+    options.Cookie.Name = ".DentalCare.Integration.Auth";
     options.LoginPath = "/Account/Login";
     options.LogoutPath = "/Account/Logout";
     options.AccessDeniedPath = "/Account/AccessDenied";
@@ -105,7 +105,7 @@ builder.Services.AddScoped<IAuthCookieService, AuthCookieService>();
 builder.Services.AddTransient<ApiAuthorizationHandler>();
 
 // Configure Base API URL
-var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7351";
+var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7350";
 
 HttpMessageHandler CreatePrimaryHttpHandler()
 {

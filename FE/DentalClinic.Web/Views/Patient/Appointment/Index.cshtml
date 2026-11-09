@@ -54,9 +54,7 @@
                 <a asp-action="Index" asp-route-status="PendingReceptionReview" class="btn btn-sm @(Model.SelectedStatus == "PendingReceptionReview" ? "btn-warning text-dark" : "btn-light")">
                     Chờ Lễ Tân
                 </a>
-                <a asp-action="Index" asp-route-status="PendingDepartmentReview" class="btn btn-sm @(Model.SelectedStatus == "PendingDepartmentReview" ? "btn-info text-dark" : "btn-light")">
-                    Chờ Trưởng Khoa
-                </a>
+
                 <a asp-action="Index" asp-route-status="AwaitingPatientResponse" class="btn btn-sm @(Model.SelectedStatus == "AwaitingPatientResponse" ? "btn-primary" : "btn-light")">
                     Cần bạn phản hồi
                 </a>

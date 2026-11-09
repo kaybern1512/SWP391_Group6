@@ -12,4 +12,5 @@ public class SupportWidgetViewModel
     public string DefaultConversationId { get; set; } = string.Empty;
     public string CurrentController { get; set; } = string.Empty;
     public string CurrentAction { get; set; } = string.Empty;
+    public string ApiBaseUrl { get; set; } = "https://localhost:7353";
 }

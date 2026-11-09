@@ -11,10 +11,14 @@ namespace DentalClinic.Web.ViewComponents;
 public class SupportWidgetViewComponent : ViewComponent
 {
     private readonly ISupportApiService _supportApiService;
+    private readonly Microsoft.Extensions.Configuration.IConfiguration? _configuration;
 
-    public SupportWidgetViewComponent(ISupportApiService supportApiService)
+    public SupportWidgetViewComponent(
+        ISupportApiService supportApiService,
+        Microsoft.Extensions.Configuration.IConfiguration? configuration = null)
     {
         _supportApiService = supportApiService;
+        _configuration = configuration;
     }
 
     public async Task<IViewComponentResult> InvokeAsync()
@@ -52,7 +56,8 @@ public class SupportWidgetViewComponent : ViewComponent
             UserId = userId,
             DefaultConversationId = defaultConvId,
             CurrentController = currentCtrl,
-            CurrentAction = currentAction
+            CurrentAction = currentAction,
+            ApiBaseUrl = _configuration?["ApiSettings:BaseUrl"] ?? "https://localhost:7353"
         };
 
         return View("~/Views/Shared/Components/SupportWidget/Default.cshtml", vm);

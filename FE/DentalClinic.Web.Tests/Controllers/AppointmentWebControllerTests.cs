@@ -1,3 +1,4 @@
+using DentalClinic.Web.ViewModels.Feedback;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
@@ -372,10 +373,15 @@ public class AppointmentWebControllerTests
     [Fact]
     public async Task Patient_GetSlots_ValidDate_ReturnsJsonResult()
     {
-        _apiMock.Setup(x => x.GetAvailableSlotsAsync(1, 10, new DateOnly(2026, 10, 15), null))
+        var futureDate = PatientAppointmentController.GetClinicToday().AddDays(3);
+        var dateStr = futureDate.ToString("yyyy-MM-dd");
+        var startTime = futureDate.ToDateTime(new TimeOnly(9, 0));
+        var endTime = futureDate.ToDateTime(new TimeOnly(9, 30));
+
+        _apiMock.Setup(x => x.GetAvailableSlotsAsync(1, 10, futureDate, null))
             .ReturnsAsync(ApiResult<List<AvailableSlotDto>>.Success(new List<AvailableSlotDto>
             {
-                new() { StartTime = new DateTime(2026, 10, 15, 9, 0, 0), EndTime = new DateTime(2026, 10, 15, 9, 30, 0) }
+                new() { StartTime = startTime, EndTime = endTime }
             }));
 
         var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
@@ -383,11 +389,56 @@ public class AppointmentWebControllerTests
             ControllerContext = CreateContextWithUser(101, "Patient")
         };
 
-        var result = await controller.GetSlots(1, 10, "2026-10-15", null);
+        var result = await controller.GetSlots(1, 10, dateStr, null);
 
         var json = result.Should().BeOfType<JsonResult>().Subject;
         var list = json.Value.Should().BeAssignableTo<IEnumerable<AvailableSlotDto>>().Subject;
         list.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Patient_GetSlots_PastDate_ReturnsEmptyList()
+    {
+        var pastDate = PatientAppointmentController.GetClinicToday().AddDays(-2);
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.GetSlots(1, 10, pastDate.ToString("yyyy-MM-dd"), null);
+
+        var json = result.Should().BeOfType<JsonResult>().Subject;
+        var list = json.Value.Should().BeAssignableTo<IEnumerable<AvailableSlotDto>>().Subject;
+        list.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Patient_Book_PastScheduledStart_ReturnsModelError()
+    {
+        var model = new PatientBookViewModel
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = PatientAppointmentController.GetClinicNow().AddHours(-3),
+            ReasonForVisit = "Đau nhức răng cần khám gấp"
+        };
+
+        _apiMock.Setup(x => x.GetBookingEligibilityAsync())
+            .ReturnsAsync(ApiResult<BookingEligibilityDto>.Success(new BookingEligibilityDto { IsEligible = true }));
+        _apiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(new List<DepartmentDto>()));
+        _apiMock.Setup(x => x.GetServicesAsync(0))
+            .ReturnsAsync(ApiResult<List<DepartmentServiceDto>>.Success(new List<DepartmentServiceDto>()));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Book(model);
+
+        controller.ModelState.IsValid.Should().BeFalse();
+        controller.ModelState.ContainsKey("ScheduledStart").Should().BeTrue();
     }
 
     [Fact]
@@ -661,5 +712,121 @@ public class AppointmentWebControllerTests
         var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
         redirect.ActionName.Should().Be("Requests");
         controller.TempData["SuccessMessage"].Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Patient_Feedback_Get_CompletedAppointment_ReturnsViewWithForm()
+    {
+        _apiMock.Setup(x => x.GetAppointmentDetailAsync(10))
+            .ReturnsAsync(ApiResult<AppointmentDto>.Success(new AppointmentDto
+            {
+                AppointmentId = 10,
+                AppointmentCode = "APP-10",
+                Status = "Completed",
+                AssignedDentistName = "BS Nguyễn Văn A"
+            }));
+        _feedbackApiMock.Setup(x => x.GetFeedbackByAppointmentIdAsync(10))
+            .ReturnsAsync(ApiResult<VisitFeedbackDto?>.Success(null));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Feedback(10);
+
+        var view = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = view.Model.Should().BeOfType<PatientFeedbackFormViewModel>().Subject;
+        vm.AppointmentId.Should().Be(10);
+        vm.IsAlreadySubmitted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Patient_Feedback_Get_NotCompletedAppointment_RedirectsToDetail()
+    {
+        _apiMock.Setup(x => x.GetAppointmentDetailAsync(10))
+            .ReturnsAsync(ApiResult<AppointmentDto>.Success(new AppointmentDto
+            {
+                AppointmentId = 10,
+                AppointmentCode = "APP-10",
+                Status = "Confirmed"
+            }));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient"),
+            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
+        };
+
+        var result = await controller.Feedback(10);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Detail");
+        controller.TempData["ErrorMessage"]!.ToString().Should().Contain("đã hoàn thành");
+    }
+
+    [Fact]
+    public async Task Patient_Feedback_Post_Success_RedirectsToDetailWithSuccessMessage()
+    {
+        _feedbackApiMock.Setup(x => x.CreateFeedbackAsync(It.IsAny<CreateFeedbackRequest>()))
+            .ReturnsAsync(ApiResult<VisitFeedbackDto>.Success(new VisitFeedbackDto { FeedbackId = 1 }));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient"),
+            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
+        };
+
+        var model = new PatientFeedbackFormViewModel
+        {
+            AppointmentId = 10,
+            DentistRating = 5,
+            ClinicRating = 5,
+            Comment = "Rất hài lòng!"
+        };
+
+        var result = await controller.SubmitFeedback(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Detail");
+        controller.TempData["SuccessMessage"].Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Patient_Withdraw_Post_Success_RedirectsToDetail()
+    {
+        _apiMock.Setup(x => x.PatientWithdrawAsync(10, It.IsAny<string?>()))
+            .ReturnsAsync(ApiResult.Success("Đã rút yêu cầu đặt lịch thành công"));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient"),
+            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
+        };
+
+        var result = await controller.Withdraw(10, "Bận việc đột xuất");
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Detail");
+        controller.TempData["SuccessMessage"].Should().Be("Đã rút yêu cầu đặt lịch thành công");
+    }
+
+    [Fact]
+    public async Task Patient_AcceptProposal_Success_RedirectsToDetail()
+    {
+        _apiMock.Setup(x => x.AcceptProposalAsync(10))
+            .ReturnsAsync(ApiResult.Success("Đã xác nhận phương án điều chỉnh"));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient"),
+            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
+        };
+
+        var result = await controller.AcceptProposal(10);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Detail");
+        controller.TempData["SuccessMessage"]!.ToString().Should().Contain("Đã đồng ý phương án đề xuất");
     }
 }

@@ -36,6 +36,7 @@ public class CreatePrescriptionFormModel
 public class PatientPrescriptionIndexViewModel
 {
     public List<PrescriptionDto> Prescriptions { get; set; } = new();
+    public Dictionary<long, PrescriptionDispensationStatusDto> DispensationStatusMap { get; set; } = new();
 }
 
 public class PrescriptionPrintViewModel

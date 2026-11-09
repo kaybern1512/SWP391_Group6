@@ -37,6 +37,16 @@ public class PatientInvoiceController : Controller
             return RedirectToAction(nameof(Index));
         }
 
+        var userIdStr = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (long.TryParse(userIdStr, out var currentUserId) && currentUserId > 0 && result.Data.PatientUserId > 0)
+        {
+            if (result.Data.PatientUserId != currentUserId)
+            {
+                if (TempData != null) TempData["ErrorMessage"] = "Bạn không có quyền truy cập hóa đơn này.";
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
         return View("~/Views/Patient/Invoices/Detail.cshtml", result.Data);
     }
 
@@ -48,6 +58,16 @@ public class PatientInvoiceController : Controller
         {
             TempData["ErrorMessage"] = result.Message ?? "Không tìm thấy thông tin hóa đơn.";
             return RedirectToAction(nameof(Index));
+        }
+
+        var userIdStr = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (long.TryParse(userIdStr, out var currentUserId) && currentUserId > 0 && result.Data.PatientUserId > 0)
+        {
+            if (result.Data.PatientUserId != currentUserId)
+            {
+                if (TempData != null) TempData["ErrorMessage"] = "Bạn không có quyền in phiếu thu này.";
+                return RedirectToAction(nameof(Index));
+            }
         }
 
         return View("~/Views/Receptionist/Billing/Print.cshtml", result.Data);
