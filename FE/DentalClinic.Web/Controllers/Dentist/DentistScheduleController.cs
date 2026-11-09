@@ -1,4 +1,6 @@
-using System;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using DentalClinic.Web.Models.ApiDtos;
@@ -16,15 +18,18 @@ public class DentistScheduleController : Controller
 {
     private readonly IDentistScheduleApiService _scheduleApi;
     private readonly IFeedbackApiService _feedbackApi;
+    private readonly IDentistLeaveApiService? _leaveApi;
     private readonly IAppointmentApiService? _appointmentApi;
 
     public DentistScheduleController(
         IDentistScheduleApiService scheduleApi,
         IFeedbackApiService feedbackApi,
+        IDentistLeaveApiService? leaveApi = null,
         IAppointmentApiService? appointmentApi = null)
     {
         _scheduleApi = scheduleApi;
         _feedbackApi = feedbackApi;
+        _leaveApi = leaveApi;
         _appointmentApi = appointmentApi;
     }
 
@@ -36,7 +41,7 @@ public class DentistScheduleController : Controller
     }
 
     // ==========================================
-    // WORK SCHEDULE
+    // WORK SCHEDULE & LEAVE REQUESTS
     // ==========================================
 
     [HttpGet("Schedule")]
@@ -87,6 +92,16 @@ public class DentistScheduleController : Controller
             }
         }
 
+        var myLeaves = new List<DentistLeaveRequestDto>();
+        if (_leaveApi != null)
+        {
+            var leavesResult = await _leaveApi.GetMyLeaveRequestsAsync();
+            if (leavesResult.IsSuccess && leavesResult.Data != null)
+            {
+                myLeaves = leavesResult.Data;
+            }
+        }
+
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var calendarDays = new List<DentistCalendarDayDto>();
         for (var d = gridStartDate; d <= gridEndDate; d = d.AddDays(1))
@@ -94,12 +109,18 @@ public class DentistScheduleController : Controller
             var dayShifts = schedules.Where(s => s.WorkDate == d).ToList();
             var dayAppts = appointments.Where(a => a.ScheduledStart.HasValue && DateOnly.FromDateTime(a.ScheduledStart.Value.Date) == d).ToList();
 
+            var leaveOnDay = myLeaves.FirstOrDefault(l => (l.Status == "Approved" || l.Status == "Pending") &&
+                l.StartDate <= d && l.EndDate >= d);
+
             calendarDays.Add(new DentistCalendarDayDto
             {
                 Date = d,
                 IsCurrentMonth = d.Month == curMonth && d.Year == curYear,
                 IsToday = d == today,
                 IsPast = d < today,
+                IsOnLeave = leaveOnDay != null,
+                LeaveReason = leaveOnDay?.Reason,
+                LeaveType = leaveOnDay?.LeaveTypeDisplay ?? leaveOnDay?.LeaveType,
                 Shifts = dayShifts,
                 Appointments = dayAppts
             });
@@ -123,10 +144,57 @@ public class DentistScheduleController : Controller
             Schedules = schedules,
             Appointments = appointments,
             CalendarDays = calendarDays,
-            DepartmentOptions = deptOptions
+            DepartmentOptions = deptOptions,
+            LeaveRequests = myLeaves
         };
 
         return View("~/Views/Dentist/Schedule/Index.cshtml", vm);
+    }
+
+    [HttpPost("SubmitLeaveRequest")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SubmitLeaveRequest(CreateDentistLeaveRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            TempData["ErrorMessage"] = "Vui lòng nhập lý do xin nghỉ phép.";
+            return RedirectToAction(nameof(Schedule));
+        }
+
+        if (request.EndDate < request.StartDate || (request.EndDate == request.StartDate && request.EndTime.HasValue && request.StartTime.HasValue && request.EndTime <= request.StartTime))
+        {
+            TempData["ErrorMessage"] = "Thời gian kết thúc nghỉ phải sau thời gian bắt đầu.";
+            return RedirectToAction(nameof(Schedule));
+        }
+
+        var result = await _leaveApi.SubmitLeaveRequestAsync(request);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Gửi đơn xin nghỉ phép thành công. Vui lòng chờ Quản trị viên xét duyệt.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể gửi đơn xin nghỉ phép.";
+        }
+
+        return RedirectToAction(nameof(Schedule));
+    }
+
+    [HttpPost("WithdrawLeaveRequest/{id:long}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> WithdrawLeaveRequest(long id)
+    {
+        var result = await _leaveApi.WithdrawLeaveRequestAsync(id);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Rút đơn xin nghỉ phép thành công.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể rút đơn xin nghỉ.";
+        }
+
+        return RedirectToAction(nameof(Schedule));
     }
 
     // ==========================================

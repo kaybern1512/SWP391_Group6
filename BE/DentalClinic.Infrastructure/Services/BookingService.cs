@@ -147,7 +147,7 @@ public class BookingService : IBookingService
         int dow = targetDate.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)targetDate.DayOfWeek;
         var deptSchedules = await _dbContext.DepartmentWorkSchedules
             .AsNoTracking()
-            .Where(ds => ds.DepartmentId == query.DepartmentId && ds.DayOfWeek == dow && ds.IsActive)
+            .Where(ds => ds.DepartmentId == query.DepartmentId && (ds.DayOfWeek == dow || (dow == 7 && ds.DayOfWeek == 0)) && ds.IsActive)
             .ToListAsync(ct);
 
         if (!deptSchedules.Any())

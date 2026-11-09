@@ -132,10 +132,27 @@
                 <span>Tư Vấn Trực Tuyến (Live Chat)</span>
             </a>
 
-            <div class="nav-group-title">Chấm Công & Ca Trực</div>
+            <div class="nav-group-title">Ca Trực & Chấm Công</div>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistSchedule" ? "active" : "")" asp-controller="ReceptionistSchedule" asp-action="Index">
+                <i class="bi bi-calendar-check"></i>
+                <span>Lịch Làm Việc Của Tôi</span>
+            </a>
             <a class="sidebar-link @(currentCtrl == "AttendanceWeb" ? "active" : "")" asp-controller="AttendanceWeb" asp-action="Index">
                 <i class="bi bi-clock-history"></i>
                 <span>Chấm Công Ca Trực</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistLeave" ? "active" : "")" asp-controller="ReceptionistLeave" asp-action="Index">
+                <i class="bi bi-calendar2-x"></i>
+                <span>Đơn Xin Nghỉ Phép</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistShiftSwap" ? "active" : "")" asp-controller="ReceptionistShiftSwap" asp-action="Index">
+                <i class="bi bi-arrow-left-right"></i>
+                <span>Đổi Ca Trực</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistHandover" ? "active" : "")" asp-controller="ReceptionistHandover" asp-action="Index">
+                <i class="bi bi-arrow-repeat"></i>
+                <span>Bàn Giao Ca Trực</span>
+            </a>
             </a>
         }
         else if (role == "Dentist")
@@ -214,6 +231,10 @@
             <a class="sidebar-link @(currentCtrl == "AdminDentistSchedule" ? "active" : "")" asp-controller="AdminDentistSchedule" asp-action="Index">
                 <i class="bi bi-calendar-week"></i>
                 <span>Bác Sĩ & Lịch Làm Việc</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "AdminReceptionistSchedule" ? "active" : "")" asp-controller="AdminReceptionistSchedule" asp-action="Index">
+                <i class="bi bi-calendar-range"></i>
+                <span>Lịch Trực Lễ Tân & Nhân Sự</span>
             </a>
             <a class="sidebar-link @(currentCtrl == "AdminRoomChair" ? "active" : "")" asp-controller="AdminRoomChair" asp-action="Index">
                 <i class="bi bi-door-open"></i>
