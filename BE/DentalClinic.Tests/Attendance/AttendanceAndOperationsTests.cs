@@ -1273,5 +1273,99 @@ public class AttendanceAndOperationsTests
         Assert.Contains("chốt sổ", res.Message);
     }
 
+    [Fact]
+    public void PeriodClosureStatus_Helper_CorrectlyIdentifiesLockedAndFinalized()
+    {
+        Assert.True(PeriodClosureStatus.IsLocked(PeriodClosureStatus.Locked));
+        Assert.True(PeriodClosureStatus.IsLocked(PeriodClosureStatus.Finalized));
+        Assert.True(PeriodClosureStatus.IsLocked("locked"));
+        Assert.True(PeriodClosureStatus.IsLocked("finalized"));
+
+        Assert.False(PeriodClosureStatus.IsLocked(PeriodClosureStatus.Open));
+        Assert.False(PeriodClosureStatus.IsLocked(PeriodClosureStatus.Reopened));
+        Assert.False(PeriodClosureStatus.IsLocked(null));
+        Assert.False(PeriodClosureStatus.IsLocked(string.Empty));
+    }
+
+    [Fact]
+    public async Task MonthlyClosureGuard_ModifyingReceptionistScheduleInFinalizedPeriod_IsBlocked()
+    {
+        using var db = CreateDbContext(nameof(MonthlyClosureGuard_ModifyingReceptionistScheduleInFinalizedPeriod_IsBlocked));
+        await SeedBasicStaffDataAsync(db);
+
+        // Finalize period 2026-10 with Status = Finalized
+        db.AttendancePeriodClosures.Add(new AttendancePeriodClosure
+        {
+            ClosureId = 993,
+            Year = 2026,
+            Month = 10,
+            Status = PeriodClosureStatus.Finalized,
+            FinalizedByUserId = 1,
+            FinalizedAtUtc = DateTime.UtcNow,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var mockCoverage = new Mock<IReceptionistCoverageService>();
+        var mockAudit = new Mock<IAuditLogService>();
+        var scheduleService = new ReceptionistScheduleService(db, mockCoverage.Object, mockAudit.Object);
+
+        var request = new CreateReceptionistScheduleRequest
+        {
+            ReceptionistUserId = 20,
+            WorkDate = new DateOnly(2026, 10, 15),
+            StartTime = new TimeOnly(8, 0),
+            EndTime = new TimeOnly(17, 0)
+        };
+
+        var res = await scheduleService.CreateScheduleAsync(request, 1);
+        Assert.False(res.Success);
+        Assert.Contains("đã được chốt sổ", res.Message);
+    }
+
+    [Fact]
+    public async Task MonthlyClosureGuard_ApprovingDentistLeaveInFinalizedPeriod_IsBlocked()
+    {
+        using var db = CreateDbContext(nameof(MonthlyClosureGuard_ApprovingDentistLeaveInFinalizedPeriod_IsBlocked));
+        await SeedBasicStaffDataAsync(db);
+
+        // Finalize period 2026-10 with Status = Finalized
+        db.AttendancePeriodClosures.Add(new AttendancePeriodClosure
+        {
+            ClosureId = 994,
+            Year = 2026,
+            Month = 10,
+            Status = PeriodClosureStatus.Finalized,
+            FinalizedByUserId = 1,
+            FinalizedAtUtc = DateTime.UtcNow,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+
+        // Add pending leave for dentist on 2026-10-12
+        var leave = new DentistLeaveRequest
+        {
+            LeaveRequestId = 882,
+            DentistUserId = 10,
+            LeaveType = "Annual",
+            StartDate = new DateOnly(2026, 10, 12),
+            EndDate = new DateOnly(2026, 10, 12),
+            Status = DentistLeaveStatus.Pending,
+            Reason = "Nghỉ phép thường niên",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DentistLeaveRequests.Add(leave);
+        await db.SaveChangesAsync();
+
+        var mockReminder = new Mock<IAppointmentReminderService>();
+        var mockEmail = new Mock<IEmailService>();
+        var mockNotify = new Mock<INotificationService>();
+        var mockConfig = new Mock<Microsoft.Extensions.Configuration.IConfiguration>();
+        var leaveService = new DentistLeaveService(db, mockReminder.Object, mockEmail.Object, mockNotify.Object, mockConfig.Object, NullLogger<DentistLeaveService>.Instance);
+
+        var res = await leaveService.ApproveLeaveRequestAsync(882, 1);
+        Assert.False(res.Success);
+        Assert.Contains("chốt sổ", res.Message);
+    }
+
     #endregion
 }

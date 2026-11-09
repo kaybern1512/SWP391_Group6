@@ -22,11 +22,13 @@
 - Tích hợp Git Develop mới nhất (62e6b17):     Hoàn tất (Clean Merge 323ef2f)
 - Database QA chuyên biệt:                     DentalCare_AdminOperations_Dev (59 tables)
 - Schema Invariants & Foreign Keys:            35/35 FKs, Check Constraints aligned
-- Cross-Module Period-Closure Guards:          Đã khóa 6/6 workforce & scheduling services
+- Cross-Module Period-Closure Guards:          Đã bảo vệ toàn diện (Locked & Finalized)
+- Schema Missing Safety Guard:                 Ném InvalidOperationException bảo vệ Prod/Staging
 - Real Database UAT Scenarios (UAT-01..05):    5 / 5 PASSED (100%)
-- Backend Regression Test Suite:               861 Passed, 1 Skipped, 0 Failed (862 tests)
+- Backend Regression Test Suite:               864 Passed, 1 Skipped, 0 Failed (865 tests)
 - Frontend Regression Test Suite:              323 Passed, 0 Failed (323 tests)
-- Playwright Real Browser E2E Specs:           27 Passed, 0 Failed (4 test suites)
+- Playwright Real Browser E2E Specs:           27 Passed, 0 Failed (4 test suites - 27 scenarios)
+- Grand Total Distinct Automated Tests:        1.215 Unique Tests (1.214 Passed, 1 Skipped, 0 Failed)
 - Patient Portal Isolation:                    100% Nguyên vẹn (Không can thiệp)
 - Database chung & Database phân hệ khác:      100% Nguyên vẹn (Không chạm vào)
 ================================================================================
@@ -70,25 +72,28 @@ Thực hiện kiểm tra trực tiếp trên SQL Server `localhost\SQLEXPRESS` �
 
 Khi một kỳ công tháng $M$ đã được Quản trị viên đóng sổ (`Status == "Locked"` hoặc `Status == "Finalized"`), toàn bộ các nghiệp vụ tác động hồi tố lên dữ liệu của tháng $M$ phải bị chặn tuyệt đối.
 
-### Cơ Chế Kỹ Thuật: `DentalClinicDbContext.IsPeriodLockedAsync`
-Để triệt tiêu lỗi `Invalid object name 'AttendancePeriodClosures'` khi chạy test trên các database cũ chưa migrate bảng này, phương thức helper được bổ sung trực tiếp vào `DentalClinicDbContext`:
+### Cơ Chế Kỹ Thuật: `DentalClinicDbContext.IsPeriodLockedAsync` & Domain Alignment
+Phương thức helper được nâng cấp để nhận diện đầy đủ cả hai trạng thái chốt sổ (`Locked` và `Finalized`) theo domain hiện hành:
 ```csharp
 public virtual async Task<bool> IsPeriodLockedAsync(int year, int month, CancellationToken ct = default)
 {
-    if (Database.IsSqlServer())
+    await EnsureAttendanceSchemaCheckedAsync(ct);
+
+    if (Database.IsSqlServer() && _attendancePeriodClosuresTableExists == false)
     {
-        if (!_attendancePeriodClosuresTableExists.HasValue)
-        {
-            _attendancePeriodClosuresTableExists = await Database
-                .SqlQueryRaw<int>("SELECT 1 AS [Value] WHERE OBJECT_ID(N'AttendancePeriodClosures', N'U') IS NOT NULL")
-                .AnyAsync(ct);
-        }
-        if (!_attendancePeriodClosuresTableExists.Value) return false;
+        return false;
     }
+
     return await AttendancePeriodClosures
-        .AnyAsync(p => p.Year == year && p.Month == month && p.Status == PeriodClosureStatus.Locked, ct);
+        .AnyAsync(p => p.Year == year && p.Month == month &&
+                       (p.Status == PeriodClosureStatus.Locked || p.Status == PeriodClosureStatus.Finalized), ct);
 }
 ```
+
+### Bảo Vệ An Toàn Schema (Requirement 5 Invariant):
+`EnsureAttendanceSchemaCheckedAsync` kiểm tra sự tồn tại của bảng `AttendancePeriodClosures`.
+- **Tại môi trường Production / Staging / Feature:** Không được âm thầm coi kỳ công là mở (`return false`). Nếu thiếu bảng trong schema, hàm sẽ ném `InvalidOperationException` ngay lập tức để yêu cầu áp dụng migration bảo vệ dữ liệu kế toán.
+- **Tại các database test legacy có tên cụ thể:** `DentalCare_Integration_Dev`, `DentalCare_Combined_Leave_QA`, `DentalClinic_Concurrency_QA_*` được phép bypass an toàn để không làm gãy suite kiểm thử cũ.
 
 ### Các Service Được Bảo Vệ:
 1. **`ReceptionistScheduleService`:**
@@ -121,9 +126,9 @@ Bộ test `AdminOperationsRealDatabaseUatTests.cs` thực thi trực tiếp trê
 |---|---|---|---|---|
 | **UAT-01** | Xuất bản ca trực lễ tân -> Chấm công vào -> Chấm công ra -> Ghi nhận giờ làm | Lễ tân `UserId = 2` trên ca `Ca Cả Ngày` hôm nay. Quẹt vào (`ClockIn`) và quẹt ra (`ClockOut`). | Bản ghi `StaffAttendanceRecords` được tạo với `ClockInTimeUtc`, `ClockOutTimeUtc`, trạng thái `OnTime` và ghi nhận $\ge 2$ sự kiện kiểm toán trong `StaffAttendanceEvents`. | **PASSED** |
 | **UAT-02** | Đổi ca trực Lễ tân -> Admin duyệt -> Điểm danh nhận diện người nhận ca | Đổi ca từ Lễ tân `UserId = 2` sang `UserId = 44`. Đối tác đồng ý, Admin duyệt. | `CompositeStaffShiftProvider` phân giải ngay ca trực cho Lễ tân 44 theo thời gian thực và gỡ bỏ ca khỏi Lễ tân 2. | **PASSED** |
-| **UAT-03** | Đơn nghỉ phép đã duyệt -> Chặn quẹt thẻ trong khoảng thời gian nghỉ | Lễ tân `UserId = 45` có ca trực và đơn nghỉ phép cả ngày đã được phê duyệt. Thử quẹt thẻ vào ca. | Hệ thống từ chối quẹt thẻ với thông báo: `Ca làm việc này đã có đơn nghỉ phép được phê duyệt. Bạn không cần và không thể chấm công vào.` | **PASSED** |
+| **UAT-03** | Đơn nghỉ phép đã duyệt -> Chặn quẹt thẻ trong khoảng nghỉ, cho phép ngoài khoảng | Lễ tân `UserId = 45`. Kiểm tra: (1) Đơn nghỉ cả ngày chặn quẹt thẻ. (2) Đơn nghỉ một phần (`Hourly`) đang diễn ra chặn quẹt thẻ kèm thông báo chi tiết. (3) Đơn nghỉ một phần trong tương lai cho phép quẹt thẻ vào/ra bình thường. | Phân biệt chính xác giữa khoảng thời gian nghỉ phép và khoảng thời gian trực làm việc thực tế. | **PASSED** |
 | **UAT-04** | Bác sĩ nghỉ phép -> Tạo gián đoạn lịch hẹn -> Dashboard hiển thị KPI | Bác sĩ `UserId = 3` nộp đơn nghỉ phép. Admin duyệt đơn qua `DentistLeaveService`. | Đơn chuyển sang `Approved`, hệ thống tạo gián đoạn. Dashboard cập nhật chính xác KPI và không báo vắng mặt sai lệch. | **PASSED** |
-| **UAT-05** | Chốt sổ kỳ công tháng -> Chặn sửa lịch & duyệt nghỉ -> Mở lại có lý do | Chốt sổ kỳ công tháng 03/2026 (`Status = Locked`). Thử tạo ca lễ tân và duyệt đơn nghỉ bác sĩ -> Bị chặn. Mở lại với lý do $\ge 10$ ký tự -> Mở khóa thành công (`Status = Reopened`). | Dữ liệu kỳ công được bảo vệ bất biến. Thao tác mở lại được lưu vết `ReopenedByUserId`, `ReopenedAtUtc` và `AuditLogs`. | **PASSED** |
+| **UAT-05** | Chốt sổ kỳ công tháng -> Chặn khi Locked & Finalized -> Mở lại khi Reopened | Kiểm thử cả 2 trạng thái khóa: `Locked` và `Finalized` đều chặn tạo ca lễ tân và duyệt đơn nghỉ bác sĩ với thông báo `chốt sổ`. Khi mở lại (`Reopened`) có lý do $\ge 10$ ký tự, mở khóa thành công và cho phép phân ca bình thường. | Dữ liệu kỳ công được bảo vệ bất biến ở cả hai trạng thái. Thao tác mở lại được lưu vết `ReopenedByUserId`, `ReopenedAtUtc` và `AuditLogs`. | **PASSED** |
 
 ---
 
@@ -132,8 +137,9 @@ Bộ test `AdminOperationsRealDatabaseUatTests.cs` thực thi trực tiếp trê
 ### A. Backend Test Suite (`DentalClinic.Tests.csproj`):
 ```
 Test run for DentalClinic.Tests.dll (.NETCoreApp,Version=v8.0)
-Passed! - Failed: 0, Passed: 861, Skipped: 1, Total: 862, Duration: 19 s
+Passed! - Failed: 0, Passed: 864, Skipped: 1, Total: 865, Duration: 19 s
 (1 skipped: CloudinaryImageStorageServiceTests.UploadAvatarAsync_WithUserSecrets)
+* Ghi chú: Đã bao gồm trọn vẹn 5 kịch bản Real SQL Server UAT (UAT-01 đến UAT-05).
 ```
 
 ### B. Frontend Test Suite (`DentalClinic.Web.Tests.csproj`):
@@ -144,24 +150,43 @@ Passed! - Failed: 0, Passed: 323, Skipped: 0, Total: 323, Duration: 20 s
 
 ### C. Playwright Real Browser E2E Suites (Chromium):
 Chạy trực tiếp trên Web Frontend `https://localhost:7135` và Backend API `https://localhost:7355`:
-1. `admin-workforce-operations.spec.js` (9/9 passed in 13.3s):
-   - `ADMIN-ATT-01`: Dentist clock-in & clock-out flow
-   - `ADMIN-ATT-02`: Receptionist clock-in & clock-out flow
-   - `ADMIN-ATT-03`: Late punch & grace period calculation
-   - `ADMIN-ATT-04`: Duplicate punch rejection
-   - `ADMIN-ATT-05`: Admin monthly reconciliation view & CSV export
-   - `ADMIN-ATT-06`: Admin period finalize (locking) & reopen with mandatory reason
-   - `ADMIN-ATT-07`: Staff adjustment request submission & admin review
-   - `ADMIN-ATT-08`: Operations dashboard receptionist shortage & absent dentist alerts
-   - `ADMIN-ATT-09`: Doctor leave & disruption integration widget on admin dashboard
-2. `login-auth-flow.spec.js` (6/6 passed in 6.3s):
-   - `AUTH-01` to `AUTH-06`: Login buttons & multi-role authorization flow.
-3. `receptionist-workforce.spec.js` (6/6 passed in 11.0s):
+1. `doctor-leave-recovery.spec.js` (6/6 passed in 15.1s):
+```
+  ok 1 [chromium] › doctor-leave-recovery.spec.js:19:3 › E2E-LEAVE-01: Dentist submits leave request and views status on personal schedule (3.6s)
+  ok 2 [chromium] › doctor-leave-recovery.spec.js:53:3 › E2E-LEAVE-02: Admin navigates to leave requests tab and views impact analysis modal (2.9s)
+  ok 3 [chromium] › doctor-leave-recovery.spec.js:87:3 › E2E-LEAVE-03: Flow A - Patient selects alternative dentist and verifies schedule update (2.6s)
+  ok 4 [chromium] › doctor-leave-recovery.spec.js:123:3 › E2E-LEAVE-04: Flow B - Patient reschedules disrupted appointment to new date/time slot (1.6s)
+  ok 5 [chromium] › doctor-leave-recovery.spec.js:153:3 › E2E-LEAVE-05: Concurrency & Security - Action token invalidation & IDOR protection (1.8s)
+  ok 6 [chromium] › doctor-leave-recovery.spec.js:167:3 › E2E-LEAVE-06: Receptionist navigates to disruption coordination and verifies controls (1.7s)
+
+  6 passed (15.1s)
+```
+2. `admin-workforce-operations.spec.js` (9/9 passed in 13.3s):
+   - `ADMIN-ATT-01`: Dentist clock-in & clock-out flow (1.1s)
+   - `ADMIN-ATT-02`: Receptionist clock-in & clock-out flow (1.5s)
+   - `ADMIN-ATT-03`: Late punch & grace period calculation (1.4s)
+   - `ADMIN-ATT-04`: Duplicate punch rejection (908ms)
+   - `ADMIN-ATT-05`: Admin monthly reconciliation view & CSV export (1.3s)
+   - `ADMIN-ATT-06`: Admin period finalize (locking) & reopen with mandatory reason (1.7s)
+   - `ADMIN-ATT-07`: Staff adjustment request submission & admin review (2.2s)
+   - `ADMIN-ATT-08`: Operations dashboard receptionist shortage & absent dentist alerts (1.2s)
+   - `ADMIN-ATT-09`: Doctor leave & disruption integration widget on admin dashboard (1.2s)
+3. `login-auth-flow.spec.js` (6/6 passed in 6.3s):
+   - `AUTH-01` to `AUTH-06`: Multi-role login & authorization flows.
+4. `receptionist-workforce.spec.js` (6/6 passed in 11.0s):
    - `E2E-REC-1` to `E2E-REC-6`: 5 tabs scheduling, leave, swap, handover, sidebar.
-4. `doctor-leave-recovery.spec.js` (6/6 passed in 11.4s):
-   - `E2E-LEAVE-01` to `E2E-LEAVE-06`: Doctor leave request, disruption recovery flows A & B, IDOR security.
 
 **Tổng kết E2E:** **27/27 kịch bản Passed 100% (0 Failed)**.
+
+### D. Bảng Đối Soát Tổng Số Kiểm Thử Tự Động (Reconciled Metrics):
+```
+  Backend Assembly (DentalClinic.Tests.dll):       865 tests (864 passed, 1 skipped)
+  Frontend Assembly (DentalClinic.Web.Tests.dll):   323 tests (323 passed, 0 skipped)
+  Playwright Real Browser E2E Specs:               27 tests (27 passed, 0 skipped)
+  ----------------------------------------------------------------------------------
+  TỔNG SỐ TEST ĐỘC LẬP THỰC TẾ (DISTINCT TOTAL):    1.215 unique tests
+  KẾT QUẢ:                                         1.214 passed, 1 skipped, 0 failed (100% SUCCESS)
+```
 
 ---
 
@@ -174,8 +199,8 @@ Chạy trực tiếp trên Web Frontend `https://localhost:7135` và Backend API
 | **Code Preservation** | Giữ nguyên code Receptionist Workforce & Doctor Leave | 100% code 2 phân hệ và các test liên quan đều nguyên vẹn | **ĐẠT** |
 | **Patient Portal Isolation** | Không sửa bất kỳ file nào thuộc Patient Portal | Thư mục `D:/SWP391/DentalCare-Patient` và các file Patient không bị chạm | **ĐẠT** |
 | **Database Isolation** | Chỉ sử dụng `DentalCare_AdminOperations_Dev` | Không chạm vào `DentalClinicManagementDB` hay `DentalCare_Integration_Dev` | **ĐẠT** |
-| **Test Quality Invariant** | 0 test fail, không xóa / skip test ép pass | **861 BE passed**, **323 FE passed**, **27 E2E passed**, 0 failed | **ĐẠT** |
-| **Cross-Module Invariant** | Khóa sổ kỳ công chặn mọi thay đổi lịch & nghỉ phép | Đã áp dụng guard cho 6 services và kiểm chứng UAT-05 thành công | **ĐẠT** |
+| **Test Quality Invariant** | 0 test fail, không xóa / skip test ép pass | **864 BE passed**, **323 FE passed**, **27 E2E passed**, 0 failed | **ĐẠT** |
+| **Cross-Module Invariant** | Khóa sổ kỳ công chặn mọi thay đổi lịch & nghỉ phép | Đã áp dụng guard cho 6 services và kiểm chứng UAT-05 thành công trên cả Locked & Finalized | **ĐẠT** |
 
 ---
 

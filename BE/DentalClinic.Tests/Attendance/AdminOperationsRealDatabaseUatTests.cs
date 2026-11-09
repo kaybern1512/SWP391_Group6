@@ -219,10 +219,25 @@ public class AdminOperationsRealDatabaseUatTests
         if (!await IsDatabaseAvailableAsync()) return;
 
         using var db = CreateRealDbContext();
-        var today = DateOnly.FromDateTime(ClinicTimeHelper.ToClinicTime(DateTime.UtcNow));
+        var nowClinic = ClinicTimeHelper.ToClinicTime(DateTime.UtcNow);
+        var today = DateOnly.FromDateTime(nowClinic);
+        var currentTime = TimeOnly.FromDateTime(nowClinic);
         long receptionistUserId = 45; // receptionist3@dentalcare.com
 
-        // 1. Create schedule for today
+        // 1. Clean previous data
+        var oldRecords = await db.StaffAttendanceRecords
+            .Where(r => r.UserId == receptionistUserId && r.WorkDate == today)
+            .ToListAsync();
+        if (oldRecords.Count > 0)
+        {
+            var oldRecordIds = oldRecords.Select(r => r.AttendanceId).ToList();
+            var oldEvents = await db.StaffAttendanceEvents
+                .Where(e => oldRecordIds.Contains(e.AttendanceId))
+                .ToListAsync();
+            db.StaffAttendanceEvents.RemoveRange(oldEvents);
+            db.StaffAttendanceRecords.RemoveRange(oldRecords);
+        }
+
         var oldSchedules = await db.ReceptionistWorkSchedules
             .Where(s => s.ReceptionistUserId == receptionistUserId && s.WorkDate == today)
             .ToListAsync();
@@ -239,13 +254,14 @@ public class AdminOperationsRealDatabaseUatTests
         db.ReceptionistLeaveRequests.RemoveRange(oldLeaves);
         await db.SaveChangesAsync();
 
+        // Create an all-day shift covering today (00:00 to 23:59)
         var schedule = new ReceptionistWorkSchedule
         {
             ReceptionistUserId = receptionistUserId,
             ShiftTemplateId = 3,
             WorkDate = today,
-            StartTime = new TimeOnly(7, 0),
-            EndTime = new TimeOnly(19, 0),
+            StartTime = new TimeOnly(0, 0),
+            EndTime = new TimeOnly(23, 59),
             Status = "Scheduled",
             IsPublished = true,
             CreatedBy = 1,
@@ -254,28 +270,28 @@ public class AdminOperationsRealDatabaseUatTests
         db.ReceptionistWorkSchedules.Add(schedule);
 
         // 2. Add approved full-day leave
-        var leave = new ReceptionistLeaveRequest
+        var fullDayLeave = new ReceptionistLeaveRequest
         {
             ReceptionistUserId = receptionistUserId,
             LeaveType = "FullDay",
             StartDate = today,
             EndDate = today,
-            Reason = "UAT-03 Nghỉ phép việc cá nhân có việc gia đình",
+            Reason = "UAT-03 Nghỉ phép cả ngày việc gia đình",
             Status = "Approved",
             ApprovedBy = 1,
             ApprovedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow
         };
-        db.ReceptionistLeaveRequests.Add(leave);
+        db.ReceptionistLeaveRequests.Add(fullDayLeave);
         db.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod
         {
-            LeaveRequest = leave,
+            LeaveRequest = fullDayLeave,
             LeaveDate = today,
             Status = "Approved"
         });
         await db.SaveChangesAsync();
 
-        // 3. Attempt clock-in -> Must be blocked
+        // 3. Attempt clock-in during FullDay leave -> Must be blocked
         var dentistProvider = new DentistShiftProvider(db);
         var receptionistProvider = new ReceptionistShiftProvider(db);
         var resolver = new CompositeStaffShiftProvider(dentistProvider, receptionistProvider);
@@ -284,12 +300,95 @@ public class AdminOperationsRealDatabaseUatTests
         var clockInReq = new ClockInRequest
         {
             ShiftIdentifier = $"RECEP_SCHED_{schedule.ReceptionistScheduleId}",
-            Note = "Thử chấm công khi đang nghỉ phép"
+            Note = "Thử chấm công khi đang nghỉ phép cả ngày"
         };
-        var res = await attendanceService.ClockInAsync(receptionistUserId, UserRole.Receptionist, clockInReq);
+        var resFull = await attendanceService.ClockInAsync(receptionistUserId, UserRole.Receptionist, clockInReq);
+        Assert.False(resFull.Success);
+        Assert.Contains("nghỉ phép", resFull.Message);
 
-        Assert.False(res.Success);
-        Assert.Contains("nghỉ phép", res.Message);
+        // 4. Test Partial-Day Leave:
+        // Remove FullDay leave
+        db.ReceptionistLeaveRequestPeriods.RemoveRange(fullDayLeave.Periods);
+        db.ReceptionistLeaveRequests.Remove(fullDayLeave);
+        await db.SaveChangesAsync();
+
+        // Subcase 4A: Partial leave that covers current time -> Clock-in MUST BE BLOCKED
+        var currentLeaveStart = currentTime.AddMinutes(-15);
+        var currentLeaveEnd = currentTime.AddMinutes(45);
+        var partialLeaveCurrent = new ReceptionistLeaveRequest
+        {
+            ReceptionistUserId = receptionistUserId,
+            LeaveType = "Hourly",
+            StartDate = today,
+            EndDate = today,
+            StartTime = currentLeaveStart,
+            EndTime = currentLeaveEnd,
+            Reason = "UAT-03 Khám sức khỏe định kỳ",
+            Status = "Approved",
+            ApprovedBy = 1,
+            ApprovedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.ReceptionistLeaveRequests.Add(partialLeaveCurrent);
+        db.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod
+        {
+            LeaveRequest = partialLeaveCurrent,
+            LeaveDate = today,
+            StartTime = currentLeaveStart,
+            EndTime = currentLeaveEnd,
+            Status = "Approved"
+        });
+        await db.SaveChangesAsync();
+
+        var resPartialInside = await attendanceService.ClockInAsync(receptionistUserId, UserRole.Receptionist, clockInReq);
+        Assert.False(resPartialInside.Success, "Clock-in during partial leave interval must be blocked.");
+        Assert.Contains("nghỉ phép một phần", resPartialInside.Message);
+
+        // Subcase 4B: Partial leave OUTSIDE current time -> Clock-in MUST SUCCEED (not blocked outside leave window)
+        db.ReceptionistLeaveRequestPeriods.RemoveRange(partialLeaveCurrent.Periods);
+        db.ReceptionistLeaveRequests.Remove(partialLeaveCurrent);
+        await db.SaveChangesAsync();
+
+        // Leave is placed 2 hours into the future
+        var futureLeaveStart = currentTime.AddHours(2);
+        var futureLeaveEnd = currentTime.AddHours(5);
+        var partialLeaveFuture = new ReceptionistLeaveRequest
+        {
+            ReceptionistUserId = receptionistUserId,
+            LeaveType = "Hourly",
+            StartDate = today,
+            EndDate = today,
+            StartTime = futureLeaveStart,
+            EndTime = futureLeaveEnd,
+            Reason = "UAT-03 Đi việc riêng buổi chiều",
+            Status = "Approved",
+            ApprovedBy = 1,
+            ApprovedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.ReceptionistLeaveRequests.Add(partialLeaveFuture);
+        db.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod
+        {
+            LeaveRequest = partialLeaveFuture,
+            LeaveDate = today,
+            StartTime = futureLeaveStart,
+            EndTime = futureLeaveEnd,
+            Status = "Approved"
+        });
+        await db.SaveChangesAsync();
+
+        var resPartialOutside = await attendanceService.ClockInAsync(receptionistUserId, UserRole.Receptionist, clockInReq);
+        Assert.True(resPartialOutside.Success, $"Clock-in outside partial leave window must be allowed: {resPartialOutside.Message}");
+        Assert.NotNull(resPartialOutside.Data!.ClockInTimeUtc);
+
+        // Also test Clock-out succeeds
+        var clockOutReq = new ClockOutRequest
+        {
+            ShiftIdentifier = $"RECEP_SCHED_{schedule.ReceptionistScheduleId}",
+            Note = "Tan ca bình thường ngoài giờ nghỉ phép"
+        };
+        var resOut = await attendanceService.ClockOutAsync(receptionistUserId, UserRole.Receptionist, clockOutReq);
+        Assert.True(resOut.Success, $"Clock-out outside leave window must succeed: {resOut.Message}");
     }
 
     [Fact]
@@ -354,7 +453,16 @@ public class AdminOperationsRealDatabaseUatTests
         int testMonth = 3; // Past month to allow finalization
         var testDate = new DateOnly(testYear, testMonth, 15);
 
-        // 1. Clean previous closure for 2026-03
+        // 1. Clean previous closure & test schedules for 2026-03
+        var oldSchedules = await db.ReceptionistWorkSchedules
+            .Where(s => s.WorkDate == testDate)
+            .ToListAsync();
+        if (oldSchedules.Count > 0)
+        {
+            db.ReceptionistWorkSchedules.RemoveRange(oldSchedules);
+            await db.SaveChangesAsync();
+        }
+
         var oldClosure = await db.AttendancePeriodClosures
             .FirstOrDefaultAsync(c => c.Year == testYear && c.Month == testMonth);
         if (oldClosure != null)
@@ -368,12 +476,17 @@ public class AdminOperationsRealDatabaseUatTests
         var resolver = new CompositeStaffShiftProvider(dentistProvider, receptionistProvider);
         var workforceReport = new WorkforceReportService(db, resolver, NullLogger<WorkforceReportService>.Instance);
 
-        // 2. Finalize period -> Status = Locked
+        // -------------------------------------------------------------
+        // CASE A: Status = Locked (Đã chốt sổ)
+        // -------------------------------------------------------------
         var finRes = await workforceReport.FinalizePeriodAsync(testYear, testMonth, 1);
         Assert.True(finRes.Success, $"Finalize failed: {finRes.Message}");
         Assert.Equal(PeriodClosureStatus.Locked, finRes.Data!.Status);
 
-        // 3. Test Invariant 1: Modifying Receptionist Schedule in locked period is BLOCKED
+        // Verify IsPeriodLockedAsync recognizes Locked
+        Assert.True(await db.IsPeriodLockedAsync(testDate), "IsPeriodLockedAsync must return TRUE when Locked.");
+        Assert.True(await db.IsPeriodLockedAsync(testYear, testMonth), "IsPeriodLockedAsync(year, month) must return TRUE when Locked.");
+
         var mockAudit = new Mock<IAuditLogService>();
         var mockCoverage = new Mock<IReceptionistCoverageService>();
         var receptionistScheduleService = new ReceptionistScheduleService(db, mockCoverage.Object, mockAudit.Object);
@@ -385,18 +498,18 @@ public class AdminOperationsRealDatabaseUatTests
             StartTime = new TimeOnly(7, 0),
             EndTime = new TimeOnly(13, 0)
         };
-        var shiftRes = await receptionistScheduleService.CreateScheduleAsync(createShiftReq, 1);
-        Assert.False(shiftRes.Success, "Creating schedule in locked period MUST fail.");
-        Assert.Contains("chốt sổ", shiftRes.Message);
+        var shiftResLocked = await receptionistScheduleService.CreateScheduleAsync(createShiftReq, 1);
+        Assert.False(shiftResLocked.Success, "Creating schedule in Locked period MUST fail.");
+        Assert.Contains("chốt sổ", shiftResLocked.Message);
 
-        // 4. Test Invariant 2: Approving Dentist Leave in locked period is BLOCKED
+        // Test Dentist Leave approval blocked when Locked
         var pendingLeave = new DentistLeaveRequest
         {
             DentistUserId = 3,
             LeaveType = "Annual",
             StartDate = testDate,
             EndDate = testDate,
-            Reason = "UAT-05 Đơn nghỉ trong tháng đã chốt",
+            Reason = "UAT-05 Đơn nghỉ trong tháng đã chốt sổ",
             Status = DentistLeaveStatus.Pending,
             CreatedAt = DateTime.UtcNow
         };
@@ -409,17 +522,39 @@ public class AdminOperationsRealDatabaseUatTests
         var mockConfig = new Mock<IConfiguration>();
         var dentistLeaveService = new DentistLeaveService(db, mockReminder.Object, mockEmail.Object, mockNotify.Object, mockConfig.Object, NullLogger<DentistLeaveService>.Instance);
 
-        var leaveApproveRes = await dentistLeaveService.ApproveLeaveRequestAsync(pendingLeave.LeaveRequestId, 1);
-        Assert.False(leaveApproveRes.Success, "Approving dentist leave in locked period MUST fail.");
-        Assert.Contains("chốt sổ", leaveApproveRes.Message);
+        var leaveApproveLocked = await dentistLeaveService.ApproveLeaveRequestAsync(pendingLeave.LeaveRequestId, 1);
+        Assert.False(leaveApproveLocked.Success, "Approving dentist leave in Locked period MUST fail.");
+        Assert.Contains("chốt sổ", leaveApproveLocked.Message);
 
-        // 5. Reopen period with valid audit reason (> 10 chars)
+        // -------------------------------------------------------------
+        // CASE B: Status = Finalized (Đã hoàn tất chốt kỳ công)
+        // -------------------------------------------------------------
+        var closureRecord = await db.AttendancePeriodClosures.FirstOrDefaultAsync(c => c.Year == testYear && c.Month == testMonth);
+        Assert.NotNull(closureRecord);
+        closureRecord.Status = PeriodClosureStatus.Finalized;
+        await db.SaveChangesAsync();
+
+        // Verify IsPeriodLockedAsync recognizes Finalized
+        Assert.True(await db.IsPeriodLockedAsync(testDate), "IsPeriodLockedAsync must return TRUE when Finalized.");
+        Assert.True(await db.IsPeriodLockedAsync(testYear, testMonth), "IsPeriodLockedAsync(year, month) must return TRUE when Finalized.");
+
+        var shiftResFinalized = await receptionistScheduleService.CreateScheduleAsync(createShiftReq, 1);
+        Assert.False(shiftResFinalized.Success, "Creating schedule in Finalized period MUST fail.");
+        Assert.Contains("chốt sổ", shiftResFinalized.Message);
+
+        var leaveApproveFinalized = await dentistLeaveService.ApproveLeaveRequestAsync(pendingLeave.LeaveRequestId, 1);
+        Assert.False(leaveApproveFinalized.Success, "Approving dentist leave in Finalized period MUST fail.");
+        Assert.Contains("chốt sổ", leaveApproveFinalized.Message);
+
+        // -------------------------------------------------------------
+        // CASE C: Reopen period with valid audit reason (> 10 chars)
+        // -------------------------------------------------------------
         var reopenReason = "UAT-05 Mở lại kỳ công để đối soát phát sinh giờ trực bù theo yêu cầu Ban Giám Đốc";
         var reopenRes = await workforceReport.ReopenPeriodAsync(testYear, testMonth, reopenReason, 1);
         Assert.True(reopenRes.Success, $"Reopen failed: {reopenRes.Message}");
         Assert.Equal(PeriodClosureStatus.Reopened, reopenRes.Data!.Status);
 
-        // 6. Verify period is now unlocked in SQL Server
+        // Verify period is now UNLOCKED in SQL Server
         using var dbVerify = CreateRealDbContext();
         var closureInDb = await dbVerify.AttendancePeriodClosures
             .FirstOrDefaultAsync(c => c.Year == testYear && c.Month == testMonth);
@@ -427,5 +562,21 @@ public class AdminOperationsRealDatabaseUatTests
         Assert.Equal(PeriodClosureStatus.Reopened, closureInDb.Status);
         Assert.NotNull(closureInDb.ReopenedByUserId);
         Assert.NotNull(closureInDb.ReopenedAtUtc);
+
+        Assert.False(await dbVerify.IsPeriodLockedAsync(testDate), "IsPeriodLockedAsync must return FALSE when Reopened.");
+        Assert.False(await dbVerify.IsPeriodLockedAsync(testYear, testMonth), "IsPeriodLockedAsync(year, month) must return FALSE when Reopened.");
+
+        // Modifying schedule in Reopened period is now ALLOWED
+        var receptionistScheduleServiceReopen = new ReceptionistScheduleService(dbVerify, mockCoverage.Object, mockAudit.Object);
+        var shiftResReopened = await receptionistScheduleServiceReopen.CreateScheduleAsync(createShiftReq, 1);
+        Assert.True(shiftResReopened.Success, $"Creating schedule in Reopened period MUST succeed: {shiftResReopened.Message}");
+        Assert.NotNull(shiftResReopened.Data);
+
+        // Clean up created schedule & leave
+        var createdSchedule = await dbVerify.ReceptionistWorkSchedules.FindAsync(shiftResReopened.Data.ReceptionistScheduleId);
+        if (createdSchedule != null) dbVerify.ReceptionistWorkSchedules.Remove(createdSchedule);
+        var leaveToClean = await dbVerify.DentistLeaveRequests.FindAsync(pendingLeave.LeaveRequestId);
+        if (leaveToClean != null) dbVerify.DentistLeaveRequests.Remove(leaveToClean);
+        await dbVerify.SaveChangesAsync();
     }
 }
