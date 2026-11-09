@@ -4,10 +4,55 @@
 - **Target Role:** `Receptionist` (Lễ tân) & `SystemAdministrator` (Quản trị viên)
 - **Role Matrix:** Strictly 4 roles (`Patient`, `Receptionist`, `Dentist`, `SystemAdministrator`). No DepartmentManager, Pharmacist, or Cashier roles.
 - **Architectural Scope:** Receptionist serves as the central operational coordinator for online booking intake, resource allocation (Dentist, Room, Chair), proposal negotiation, walk-in registration, check-in queue numbering, billing/payment processing, patient live support chat, and clinic blog authoring.
+- **Patient Compatibility Baseline:** Aligned with Patient Branch Final QA commit `3a14848`.
 
 ---
 
-## 2. Appointment Booking & Coordination Lifecycle
+## 2. Canonical Timezone & Booking Clock Authority (P0 Integration)
+
+- **Clinic TimeZone:** Strictly canonical `Asia/Ho_Chi_Minh` (UTC+7, Vietnam Standard Time, fallback to Windows `SE Asia Standard Time`).
+- **Clock Authority Helper:** `ClinicTimeHelper` (`DentalClinic.Domain.Common.ClinicTimeHelper`):
+  - `ClinicTimeHelper.Now`: Wall-clock DateTime at the clinic converted from `DateTime.UtcNow`. Eliminates all skew on UTC-based servers/containers.
+  - `ClinicTimeHelper.Today`: Midnight of the current clinic day.
+  - `ClinicTimeHelper.ToClinicTime(dt)`: Normalizes UTC, Local, and Unspecified DateTimes to clinic local time.
+- **Past Booking & Reschedule Lockdown:**
+  - Patient Booking: `requestedStart <= clinicNow` strictly rejected with 400 `"Thời gian khám không được nằm trong quá khứ."` (0 negative tolerance).
+  - Patient Rescheduling: `newStart <= clinicNow` strictly rejected with 400 `"Thời gian khám mới không được nằm trong quá khứ."`.
+  - Receptionist Walk-in/Desk Booking: Small 10-minute administrative grace buffer allowed (`requestedStart < clinicNow.AddMinutes(-10)`).
+- **Advance Booking Lead Time (`MinLeadTimeHours`):**
+  - Checked against `clinicNow.AddHours(service.MinLeadTimeHours).AddMinutes(-1)` (1-minute CPU execution buffer).
+- **Service Duration & Slot Boundary Enforcement:**
+  - Duration is strictly database-driven from `DepartmentServices.DurationMinutes` (no generic 30-minute fallback for specialized services).
+  - Slot Step: `Math.Min(30, durationMinutes)` (or service duration when `< 30`).
+  - Closing Time Boundary: `currentSlotStart.AddMinutes(durationMinutes) <= schedEnd`. Slots ending after closing time (e.g. 17:00) are never emitted.
+  - Exclusive Room Availability: When `service.RequiresExclusiveRoom == true`, a slot is only available if at least one active exclusive room in the department has zero conflicting appointments.
+
+---
+
+## 3. Department & Service DTO Specification (Phase 0 Attributes)
+
+`DepartmentServiceDto` guarantees the following Phase 0 contract required by Patient commit `3a14848`:
+
+```csharp
+public class DepartmentServiceDto
+{
+    public long DepartmentServiceId { get; set; }
+    public long DepartmentId { get; set; }
+    public string ServiceName { get; set; } = null!;
+    public string? Description { get; set; }
+    public int? DurationMinutes { get; set; }
+    public decimal Price { get; set; }
+    public string ServiceType { get; set; } = "Treatment";
+    public bool RequiresExclusiveRoom { get; set; }
+    public bool RequiresConsultationFirst { get; set; }
+    public int MinLeadTimeHours { get; set; } = 2;
+    public string? BookingInstructions { get; set; }
+}
+```
+
+---
+
+## 4. Appointment Booking & Coordination Lifecycle
 
 ```
 [Patient / Walk-in Booking]
@@ -35,9 +80,32 @@
 
 ---
 
-## 3. Detailed API Endpoints
+## 5. Detailed API Endpoints
 
-### 3.1. Booking Requests & Review
+### 5.1. Booking Availability & Service Catalog
+- **`GET /api/booking/departments/{departmentId}/services`**
+  - **Auth:** Public / All Authenticated Users.
+  - **Response:** `ApiResponse<List<DepartmentServiceDto>>` (Includes all 5 Phase 0 attributes).
+
+- **`POST /api/booking/available-slots`**
+  - **Request Body (`AvailableSlotsQuery`):**
+    ```json
+    {
+      "departmentId": 1,
+      "serviceId": 2,
+      "date": "2026-11-20T00:00:00",
+      "dentistUserId": null
+    }
+    ```
+  - **Response:** `ApiResponse<List<AvailableSlotDto>>`
+  - **Behavior:**
+    - Rejects past date with 400 `"Không thể đặt lịch trong quá khứ."`.
+    - Omits slots in the past on today (`SlotStart <= clinicNow.AddMinutes(15)`).
+    - Omits slots violating `MinLeadTimeHours`.
+    - Omits slots ending after shift closing time (`SlotStart + Duration > ShiftEnd`).
+    - Excludes slots when exclusive room is fully occupied (for `RequiresExclusiveRoom = true`).
+
+### 5.2. Booking Requests & Review
 - **`GET /api/receptionist/appointments/requests`**
   - **Auth:** `[Authorize(Roles = "Receptionist,SystemAdministrator")]`
   - **Response:** `ApiResponse<List<AppointmentDto>>`
@@ -56,7 +124,7 @@
   - **Response:** `ApiResponse<List<AvailableDentistDto>>`
   - **Description:** Returns dentists in the requested department scheduled to work on the appointment date.
 
-### 3.2. Resource Allocation & Confirmation
+### 5.3. Resource Allocation & Confirmation
 - **`POST /api/receptionist/appointments/{id}/confirm`** (alias: `/api/department/appointments/{id}/confirm`)
   - **Auth:** `[Authorize(Roles = "Receptionist,DepartmentManager,SystemAdministrator")]`
   - **Request Body (`ManagerConfirmRequest`):**
@@ -80,7 +148,7 @@
     7. **QueueNumber Policy:** `QueueNumber` is **NOT** issued at this step. It remains `null` until physical check-in.
   - **Transition:** `PendingReceptionReview` -> `Confirmed`.
 
-### 3.3. Change Proposal Negotiation
+### 5.4. Change Proposal Negotiation
 - **`POST /api/receptionist/appointments/{id}/propose-change`**
   - **Auth:** `[Authorize(Roles = "Receptionist,DepartmentManager,SystemAdministrator")]`
   - **Request Body (`ManagerProposeChangeRequest`):**
@@ -97,7 +165,7 @@
     - Accept: Status -> `PendingReceptionReview` (or auto-confirm if resources locked).
     - Reject: Status -> `PendingReceptionReview` with rejection note for receptionist adjustment.
 
-### 3.4. Walk-in Registration & Direct Booking
+### 5.5. Walk-in Registration & Direct Booking
 - **`POST /api/receptionist/appointments/walk-in`**
   - **Auth:** `[Authorize(Roles = "Receptionist,SystemAdministrator")]`
   - **Request Body (`CreateReceptionistAppointmentRequest`):**
@@ -119,7 +187,7 @@
       Validates resources, shifts, room/chair constraints, acquires concurrency locks, and directly sets status to `Confirmed`.
     - Otherwise sets status to `PendingReceptionReview` for coordination.
 
-### 3.5. Receptionist Check-in & Monotonic Queue Numbering
+### 5.6. Receptionist Check-in & Monotonic Queue Numbering
 - **`POST /api/receptionist/appointments/{id}/checkin`**
   - **Auth:** `[Authorize(Roles = "Receptionist,SystemAdministrator")]`
   - **Concurrency & Transaction Safety:**
@@ -131,7 +199,7 @@
     - Guarantees strict monotonic sequence without collision under parallel check-ins.
   - **Transition:** `Confirmed` -> `CheckedIn`. Sets `CheckedInAt = UtcNow`.
 
-### 3.6. No-Show & Cancellation
+### 5.7. No-Show & Cancellation
 - **`POST /api/receptionist/appointments/{id}/no-show`**
   - **Auth:** `[Authorize(Roles = "Receptionist,SystemAdministrator")]`
   - **Behavior:** Marks status `NoShow`. Adds strike to patient account (WF-03).
@@ -141,7 +209,7 @@
 
 ---
 
-## 4. Billing & Concurrency Contracts
+## 6. Billing & Concurrency Contracts
 
 - **`POST /api/receptionist/billing/invoices`**
   - **Auth:** `[Authorize(Roles = "Receptionist,SystemAdministrator")]`
@@ -156,7 +224,7 @@
 
 ---
 
-## 5. Blog Authoring Contract (WF-20)
+## 7. Blog Authoring Contract (WF-20)
 
 - **Author Roles:** `Receptionist`, `Dentist`, `SystemAdministrator`.
 - **Endpoints:**
@@ -174,7 +242,7 @@
 
 ---
 
-## 6. Live Chat & Real-Time Support Contract
+## 8. Live Chat & Real-Time Support Contract
 
 - **SignalR Hub:** `/hubs/supportHub`
 - **Dynamic Configuration:** FE dynamically reads `ApiSettings:BaseUrl` from appsettings (no static port hardcoding).
@@ -182,7 +250,7 @@
 
 ---
 
-## 7. Handoff Guidelines for Anti 3 (Dentist) and Anti 4 (Patient)
+## 9. Handoff Guidelines for Anti 3 (Dentist) and Anti 4 (Patient)
 
 1. **For Anti 3 (Dentist):**
    - Dentist picks up appointments at `CheckedIn` status with an assigned `DentalChairId`, `RoomId`, and `QueueNumber`.

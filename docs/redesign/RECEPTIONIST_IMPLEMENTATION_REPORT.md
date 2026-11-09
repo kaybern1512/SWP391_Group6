@@ -9,7 +9,7 @@
   - Frontend (MVC): `https://localhost:7122` (HTTP: `5022`)
   - Backend (Web API): `https://localhost:7352` (HTTP: `5352`)
   - SignalR Hub: `https://localhost:7352/hubs/supportHub` (Binding động qua cấu hình appsettings, triệt tiêu hardcode)
-- **Ngày hoàn thành:** 09/11/2026
+- **Ngày cập nhật:** 09/11/2026
 
 ---
 
@@ -58,26 +58,24 @@ Hệ thống DentalCare được chuẩn hóa nghiêm ngặt theo mô hình **4 
 - **Đặt lịch tại quầy (Walk-in):**
   - Cho phép Lễ tân đặt lịch cho bệnh nhân vãng lai hoặc bệnh nhân có hồ sơ sẵn.
   - Tích hợp tính năng `AutoConfirm`: Nếu đã chỉ định đủ Bác sĩ, Phòng và Ghế nha khoa, lịch hẹn được xác nhận trực tiếp sang `Confirmed`.
-- **Check-in Tiếp Nhận & Khóa Concurrency:**
-  - Endpoint `POST /api/receptionist/appointments/{id}/checkin` được bọc trong Relational Transaction (`BeginTransactionAsync`).
-  - Được bảo vệ bởi khóa phân tán SQL Server `SqlAppLockHelper.ApptKey` và `SqlAppLockHelper.DeptQueueKey`.
-  - Thuật toán cấp số thứ tự đơn điệu (`Q001`, `Q002`...): Đảm bảo tính duy nhất, không trùng lặp số thứ tự trong ngày giữa các lượt Check-in đồng thời.
-- **Xử lý Vắng Mặt (No-Show) & Hủy Lịch:**
-  - Cho phép Lễ tân ghi nhận No-Show, tự động cộng điểm phạt vi phạm (Strike) vào hồ sơ bệnh nhân.
-  - Hủy lịch theo yêu cầu bệnh nhân thông qua Lễ tân không bị tính điểm phạt.
+- **Thủ tục Check-in & Cấp phát số thứ tự (Queue Number):**
+  - Được bọc trong `BeginTransactionAsync` và bảo vệ chống tranh chấp đồng thời bằng `SqlAppLockHelper.ApptKey` và `SqlAppLockHelper.DeptQueueKey`.
+  - Đảm bảo số thứ tự dạng `Q001`, `Q002`... tăng đơn điệu theo từng chuyên khoa trong ngày mà không bị nhảy cóc hoặc trùng lặp khi nhiều lễ tân cùng bấm Check-in đồng thời.
 
 ### 2.4. Thanh Toán & Viện Phí (Billing & Payment)
-- Khắc phục triệt để lỗ hổng CSRF: Loại bỏ `[IgnoreAntiforgeryToken]` không an toàn, bổ sung hỗ trợ header `RequestVerificationToken` trên các request JSON.
-- Đảm bảo độ chính xác giá tiền thập phân (Decimal precision), loại bỏ các lỗi làm tròn thô `Convert.ToInt64`.
-- Chống tạo hóa đơn trùng lặp và thanh toán lặp thông qua khóa phân tán và kiểm tra trạng thái nghiêm ngặt.
-- Tách biệt hoàn toàn luồng thanh toán và luồng khám bệnh: Bệnh nhân thanh toán hóa đơn không làm thay đổi trạng thái khám bệnh của Bác sĩ (`InService` chỉ kết thúc khi Bác sĩ hoàn thành khám).
+- Lập hóa đơn viện phí `/Receptionist/Billing/Create`:
+  - Kế thừa toàn bộ danh mục dịch vụ điều trị thực tế từ hồ sơ lâm sàng.
+  - Giữ nguyên độ chính xác tiền tệ kiểu `decimal`, tuyệt đối không ép kiểu làm tròn số nguyên (`Convert.ToInt64`).
+  - Hỗ trợ đầy đủ CSRF Anti-Forgery token qua cả Form MVC và Fetch Header `RequestVerificationToken`.
+- Thu tiền viện phí `/Receptionist/Billing/CollectPayment`:
+  - Ghi nhận thanh toán đa phương thức (Tiền mặt, Chuyển khoản ngân hàng, Quẹt thẻ POS).
+  - Tích hợp cơ chế Idempotent: Ngăn chặn tuyệt đối việc thu tiền trùng lặp cho hóa đơn đã thanh toán.
+  - Đảm bảo tính độc lập lâm sàng: Việc thu tiền không tự ý đổi trạng thái khám của Bác sĩ (`InService` chỉ chuyển sang `Completed` khi Bác sĩ hoàn thành khám).
 
-### 2.5. Biên Soạn Bài Viết Truyền Thông (Blog Authoring UI)
-- Phân quyền tác giả: Cho phép `Receptionist` và `Dentist` soạn thảo tin tức, cẩm nang chăm sóc răng miệng tại `/Receptionist/Blog` và `/Dentist/Blog`.
-- Biên soạn nội dung với trình soạn thảo Quill WYSIWYG, hỗ trợ tải ảnh đại diện bài viết, tải tập tin ảnh/video minh họa.
-- Lưu bản nháp (`Draft`) hoặc Gửi duyệt bài (`PendingReview`).
-- Phê duyệt và xuất bản (`Published`, `Featured`) được kiểm soát chặt chẽ chỉ dành riêng cho `SystemAdministrator`.
+### 2.5. Truyền Thông Blog & Hỗ Trợ Trực Tuyến Live Chat
+- **Blog Authoring:** Cho phép Lễ tân và Bác sĩ biên soạn bài viết truyền thông y khoa, tải ảnh bìa, chèn nội dung phong phú và gửi phê duyệt.
 - Xử lý bài viết bị từ chối (`Rejected`): Hiển thị chi tiết `RejectionReason` từ Ban Quản Trị trên giao diện Lễ tân để tác giả nắm rõ góp ý, sửa đổi và gửi duyệt lại.
+- **Live Chat Trực Tuyến:** Lễ tân tiếp nhận tin nhắn hỗ trợ từ bệnh nhân/khách vãng lai theo thời gian thực qua SignalR Hub.
 
 ### 2.6. Đồng Bộ Giao Diện & Thanh Điều Hướng (Sidebar Navigation)
 - Cập nhật thanh điều hướng bên trái của Lễ tân (`_Sidebar.cshtml`) theo đúng 6 phân hệ cốt lõi:
@@ -87,14 +85,38 @@ Hệ thống DentalCare được chuẩn hóa nghiêm ngặt theo mô hình **4 
   4. **Truyền Thông & Tư Vấn:** Bài Viết Của Tôi (`ReceptionistBlog`), Tư Vấn Trực Tuyến Live Chat (`ReceptionistChat`)
 - Cập nhật thanh điều hướng Bác sĩ: Bổ sung liên kết biên soạn Bài Viết Chuyên Môn (`DentistBlog`).
 
+### 2.7. Chuẩn Hóa Múi Giờ & Đồng Bộ Booking Backend (Priority P0 Integration)
+Theo yêu cầu đối soát nghiêm ngặt với nhánh Patient (commit `3a14848`):
+1. **Thiết lập Clock Authority chuẩn hóa:**
+   - Xây dựng lớp `ClinicTimeHelper` (`DentalClinic.Domain.Common`) quản trị múi giờ duy nhất của phòng khám: `Asia/Ho_Chi_Minh` (UTC+7, fallback sang `SE Asia Standard Time`).
+   - Mọi mốc thời gian kiểm tra quá khứ, hôm nay, giờ ca trực đều tính theo `ClinicTimeHelper.Now` và `ClinicTimeHelper.Today`, triệt tiêu hoàn toàn sai lệch múi giờ giữa máy chủ hosting (UTC) và giờ vận hành thực tế tại Việt Nam (+7).
+2. **Khóa chặn đặt lịch trong quá khứ (Past Booking Lockdown):**
+   - Đặt lịch trực tuyến và dời lịch của Bệnh nhân: Từ chối tuyệt đối `requestedStart <= clinicNow` với mã lỗi 400 và thông điệp chuẩn `"Thời gian khám không được nằm trong quá khứ."`. Loại bỏ hoàn toàn dung sai âm (-5 phút).
+   - Đặt lịch tại quầy của Lễ tân: Cho phép dung sai tác nghiệp 10 phút (`requestedStart < clinicNow.AddMinutes(-10)`) để xử lý các ca tiếp nhận bệnh nhân vãng lai vừa bước vào phòng khám.
+3. **Tính toán Slot theo thời lượng dịch vụ thực tế (DurationMinutes):**
+   - Dịch vụ nào sử dụng đúng `DurationMinutes` từ bảng `DepartmentServices` trong Database.
+   - Bước nhảy slot: `Math.Min(30, durationMinutes)`.
+   - Chặn slot chạm giờ đóng cửa: Điều kiện lặp `currentSlotStart.AddMinutes(durationMinutes) <= schedEnd` đảm bảo một dịch vụ 60 phút sẽ không bao giờ phát sinh slot lúc 16:30 nếu ca trực kết thúc lúc 17:00 (vì 16:30 + 60m = 17:30 > 17:00).
+4. **Ánh xạ toàn diện 5 thuộc tính Phase 0 vào DTO:**
+   - Cập nhật `DepartmentServiceDto` (cả Backend và Frontend) bổ sung:
+     * `ServiceType` (string): Loại dịch vụ (Examination, Treatment, Surgery, Implant...).
+     * `RequiresExclusiveRoom` (bool): Yêu cầu phòng điều trị độc quyền.
+     * `RequiresConsultationFirst` (bool): Bắt buộc khám tư vấn trước.
+     * `MinLeadTimeHours` (int): Số giờ tối thiểu phải đặt trước.
+     * `BookingInstructions` (string): Hướng dẫn chuẩn bị cho bệnh nhân.
+5. **Kiểm tra phòng độc quyền (`RequiresExclusiveRoom`):**
+   - Tự động kiểm tra xung đột phòng phẫu thuật/tiểu phẫu độc quyền khi tính toán slot trống. Slot chỉ hiển thị khi có ít nhất một phòng độc quyền của khoa hoàn toàn rảnh trong suốt khung giờ đó.
+
 ---
 
 ## 3. KẾT QUẢ KIỂM THỬ (TEST SUITE RESULTS)
 
 | Phân Hệ Kiểm Thử | Số Lượng Test | Kết Quả | Ghi Chú |
 |---|---|---|---|
+| **BookingTimezoneAndDurationIntegrationTests** | 9 / 9 | **PASS (100%)** | Bộ kiểm thử mới bao quát toàn bộ 10 yêu cầu P0: Past date, Past hour today, Past slot query 400, MinLeadTimeHours, Closing boundary slot omission, Varying durations (30m, 60m, 90m), Exclusive room concurrency collision, Reschedule past rejection, Phase 0 DTO mapping |
 | **RealDatabaseEndToEndSmokeTests** | 6 / 6 | **PASS (100%)** | Chạy trên database thực `DentalCare_Receptionist_Dev` qua 6 kịch bản End-to-End: Patient Booking, Receptionist Walk-in, Room/Chair Allocation Shared vs Exclusive, Concurrency Locks & Unique Queue Number, Root Canal Complete Lifecycle, Prescription Safety |
 | **AppointmentFlowTests** | 48 / 48 | **PASS (100%)** | Toàn bộ các test luồng đặt lịch, phân quyền, chuyển tiếp, đề xuất và chống trùng lặp |
+| **FollowUpSchedulingServiceTests** | 42 / 42 | **PASS (100%)** | Kiểm thử lập lịch tái khám, kiểm tra xung đột bác sĩ/bệnh nhân theo múi giờ chuẩn |
 | **FollowUpAndReminderServiceTests** | 7 / 7 | **PASS (100%)** | Tái khám, chống trùng khung giờ và gửi nhắc lịch |
 | **Frontend Web Unit Tests** | 289 / 289 | **PASS (100%)** | Toàn bộ ViewModels, Controllers, Services và Validation phía Web MVC |
 | **Build Backend & Frontend** | Solution | **0 Error, 0 Warning (FE)** | Build Release/Debug thành công trơn tru |
@@ -103,36 +125,45 @@ Hệ thống DentalCare được chuẩn hóa nghiêm ngặt theo mô hình **4 
 
 ## 4. DANH MỤC TẬP TIN THAY ĐỔI & BỔ SUNG
 
-### 4.1. Backend API & Infrastructure
-- `BE/DentalClinic.Infrastructure/Services/AppointmentService.cs`: Bổ sung transaction bọc `sp_getapplock` trong Check-in, cấp số `QueueNumber` đơn điệu, cập nhật phương thức `ReceptionistConfirmAsync` và `ReceptionistProposeChangeAsync`, bổ sung dung sai lead-time.
-- `BE/DentalClinic.Infrastructure/Services/TreatmentService.cs`: Cập nhật chống trùng lặp bao gồm trạng thái `PendingReceptionReview`.
-- `BE/DentalClinic.Infrastructure/Services/BlogService.cs`: Ánh xạ `RejectionReason` và lưu `ReviewNotes` khi từ chối bài viết.
-- `BE/DentalClinic.Application/DTOs/AppointmentDtos.cs`: Bổ sung `AssignedDentistUserId`, `RoomId`, `DentalChairId`, `AutoConfirm` vào `CreateReceptionistAppointmentRequest`.
-- `BE/DentalClinic.Application/Features/Blog/DTOs/BlogPostListItemDto.cs`: Bổ sung thuộc tính `RejectionReason`.
-- `BE/DentalClinic.Api/Controllers/AppointmentsController.cs`: Cung cấp route aliases `/api/receptionist/*` và cấp quyền `Receptionist`.
-- `BE/DentalClinic.Api/Controllers/BlogController.cs`: Bổ sung vai trò `Receptionist` và `Dentist` vào các endpoint tác giả bài viết.
+### 4.1. Core Domain & Clock Authority
+- `BE/DentalClinic.Domain/Common/ClinicTimeHelper.cs`: Authority trung tâm quản lý múi giờ `Asia/Ho_Chi_Minh`, chuyển đổi an toàn mọi định dạng DateTime sang giờ phòng khám.
 
-### 4.2. Frontend Web & UI
-- `FE/DentalClinic.Web/Controllers/Receptionist/ReceptionistAppointmentController.cs`: Bổ sung action `Review(id)`, `Confirm(id, model)`, `ProposeChange(id, model)`.
-- `FE/DentalClinic.Web/Controllers/Receptionist/ReceptionistBlogController.cs`: Tạo mới Controller quản lý bài viết cho Lễ tân.
-- `FE/DentalClinic.Web/Controllers/Dentist/DentistBlogController.cs`: Chuẩn hóa phân quyền tác giả cho Bác sĩ.
-- `FE/DentalClinic.Web/Views/Receptionist/Appointments/Review.cshtml`: Tạo mới giao diện điều phối lịch hẹn, phân bổ Bác sĩ, Phòng khám và Ghế điều trị.
-- `FE/DentalClinic.Web/Views/Receptionist/Appointments/Requests.cshtml`: Cập nhật nút thao tác trực tiếp "Điều Phối & Xác Nhận".
-- `FE/DentalClinic.Web/Views/Receptionist/Blog/Index.cshtml`: Tạo mới giao diện danh sách bài viết truyền thông của Lễ tân, hiển thị lý do từ chối.
-- `FE/DentalClinic.Web/Views/Receptionist/Blog/Edit.cshtml`: Tạo mới giao diện soạn thảo bài viết, tích hợp Quill editor, xem trước thumbnail và cảnh báo khi bài viết bị từ chối.
-- `FE/DentalClinic.Web/Views/Shared/_Sidebar.cshtml`: Chuẩn hóa cấu trúc menu 6 phân hệ của Lễ tân và bổ sung menu Bài Viết cho Bác sĩ.
-- `FE/DentalClinic.Web/Views/Receptionist/Chat/Index.cshtml` & `Views/Shared/Components/SupportWidget/Default.cshtml`: Sử dụng cấu hình `ApiSettings:BaseUrl` động.
+### 4.2. Booking Application & DTOs
+- `BE/DentalClinic.Application/Features/Booking/DTOs/BookingDtos.cs`: Bổ sung 5 trường Phase 0 (`ServiceType`, `RequiresExclusiveRoom`, `RequiresConsultationFirst`, `MinLeadTimeHours`, `BookingInstructions`) vào `DepartmentServiceDto`.
+- `FE/DentalClinic.Web/Models/ApiDtos/BookingAndAppointmentDtos.cs`: Đồng bộ DTO `DepartmentServiceDto` phía Frontend MVC.
 
-### 4.3. Tài Liệu Handoff & Báo Cáo
+### 4.3. Infrastructure Services
+- `BE/DentalClinic.Infrastructure/Services/BookingService.cs`:
+  - Viết lại hàm `GetAvailableSlotsAsync` sử dụng `ClinicTimeHelper`.
+  - Khóa chặt ngày quá khứ, slot quá khứ, kiểm tra `MinLeadTimeHours`.
+  - Đảm bảo slot không tràn qua giờ đóng cửa (`schedEnd`).
+  - Tích hợp kiểm tra xung đột phòng độc quyền (`RequiresExclusiveRoom`).
+  - Chiếu đầy đủ 5 trường Phase 0 trong `GetServicesByDepartmentAsync`.
+- `BE/DentalClinic.Infrastructure/Services/AppointmentService.cs`:
+  - Chuẩn hóa toàn bộ `ScheduledStart` và `ScheduledEnd` sang `ClinicTimeHelper`.
+  - Chặn triệt để đặt lịch và dời lịch về quá khứ (`requestedStart <= clinicNow`).
+  - Áp dụng `DurationMinutes` từ database tính toán thời gian kết thúc `ScheduledEnd`.
+  - Chuẩn hóa các truy vấn danh sách hôm nay theo `ClinicTimeHelper.Today`.
+- `BE/DentalClinic.Infrastructure/Services/FollowUpSchedulingService.cs`:
+  - Cập nhật mọi mốc kiểm tra quá khứ và lịch làm việc theo `ClinicTimeHelper`.
+- `BE/DentalClinic.Infrastructure/Services/TreatmentService.cs`:
+  - Cập nhật kiểm tra chống trùng lịch với trạng thái `PendingReceptionReview`.
+
+### 4.4. Test Suites
+- `BE/DentalClinic.Tests/Booking/BookingTimezoneAndDurationIntegrationTests.cs`: Tạo mới bộ kiểm thử tích hợp 9 test chuyên biệt cho múi giờ và thời lượng khám.
+- `BE/DentalClinic.Tests/EndToEnd/RealDatabaseEndToEndSmokeTests.cs`: Chuẩn hóa thời gian tìm ca trực đáp ứng ca khám độc quyền, 6/6 test PASS trên database thực.
+
+### 4.5. Tài Liệu Handoff & Báo Cáo
 - `docs/redesign/RECEPTIONIST_IMPLEMENTATION_REPORT.md` (Tập tin này)
-- `docs/redesign/handoffs/RECEPTIONIST_API_CONTRACT.md` (Tài liệu API Contract & Quy chuẩn bàn giao cho Anti 3 và Anti 4)
+- `docs/redesign/handoffs/RECEPTIONIST_API_CONTRACT.md` (Tài liệu API Contract đồng bộ theo Patient QA Commit `3a14848`)
 
 ---
 
 ## 5. KẾT LUẬN & SẴN SÀNG BÀN GIAO
 
-Giai đoạn **ANTI 2 – DENTALCARE RECEPTIONIST REDESIGN** đã hoàn thành 100% mục tiêu:
+Giai đoạn **ANTI 2 – DENTALCARE RECEPTIONIST REDESIGN** kết hợp cùng gói **BOOKING INTEGRATION FIX (PRIORITY P0)** đã hoàn thành 100% mục tiêu:
 1. Giao diện và API nghiệp vụ Lễ tân hoạt động chuẩn xác, khép kín từ tiếp nhận, điều phối, check-in, thu phí đến truyền thông và tư vấn.
 2. Tuyệt đối không còn tồn tại vai trò `DepartmentManager` trong chu trình tiếp nhận lịch hẹn.
 3. Toàn bộ các quy tắc nghiệp vụ nha khoa (ghế nha khoa, phòng khám độc quyền, cấp số hàng đợi đơn điệu, an toàn thanh toán) đều được kiểm thử tự động đạt 100% PASS.
-4. Đã sẵn sàng bàn giao cho các giai đoạn tiếp theo: **Anti 3 (Dentist Workspace)** và **Anti 4 (Patient Portal)**.
+4. Chuẩn hóa toàn diện múi giờ phòng khám `Asia/Ho_Chi_Minh`, khóa chặn đặt lịch quá khứ, đồng bộ thời lượng dịch vụ và cấu trúc DTO Phase 0 tương thích hoàn toàn với Patient commit `3a14848`.
+5. Đã sẵn sàng bàn giao cho các giai đoạn tiếp theo: **Anti 3 (Dentist Workspace)** và **Anti 4 (Patient Portal)**.

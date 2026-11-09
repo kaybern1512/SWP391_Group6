@@ -36,7 +36,7 @@ public class RealDatabaseEndToEndSmokeTests
         }
     }
 
-    private static async Task<DateTime> GetValidTestWorkDateAsync(DentalClinicDbContext db, long dentistUserId, int offsetDays = 2, int hour = 10)
+    private static async Task<DateTime> GetValidTestWorkDateAsync(DentalClinicDbContext db, long dentistUserId, int offsetDays = 2, int hour = 10, int requiredDurationHours = 2)
     {
         var minDate = DateOnly.FromDateTime(DateTime.Today).AddDays(offsetDays);
         var shifts = await db.DentistWorkSchedules
@@ -53,7 +53,10 @@ public class RealDatabaseEndToEndSmokeTests
                 for (int m = 0; m < 60; m += 30)
                 {
                     var start = shift.WorkDate.ToDateTime(new TimeOnly(h, m));
-                    var end = start.AddHours(2);
+                    var end = start.AddHours(requiredDurationHours);
+
+                    if (TimeOnly.FromTimeSpan(end.TimeOfDay) > shift.EndTime)
+                        continue;
 
                     bool busy = await db.Appointments.AsNoTracking().AnyAsync(a =>
                         a.Status != AppointmentStatus.Cancelled &&
@@ -303,7 +306,7 @@ public class RealDatabaseEndToEndSmokeTests
         var mockApptLogger = new Mock<ILogger<AppointmentService>>();
         var apptService = new AppointmentService(db, mockNotification.Object, mockApptLogger.Object);
 
-        var slotStart = (await GetValidTestWorkDateAsync(db, 3, 9, 9));
+        var slotStart = (await GetValidTestWorkDateAsync(db, 3, 9, 9, 4));
         var slotEnd = slotStart.AddMinutes(45);
 
         // PART 1: Shared Room (ROOM-101, IsExclusive=false in Dept 1)

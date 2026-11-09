@@ -1,4 +1,5 @@
-﻿using System;
+﻿using DentalClinic.Domain.Common;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -101,13 +102,16 @@ public class AppointmentService : IAppointmentService
         }
 
         // 4. Validate Datetime & Lead Time
-        if (request.ScheduledStart < DateTime.Now.AddMinutes(-5))
+        var requestedStart = ClinicTimeHelper.ToClinicTime(request.ScheduledStart);
+        var clinicNow = ClinicTimeHelper.Now;
+
+        if (requestedStart <= clinicNow)
         {
             return ApiResponse<AppointmentDto>.Fail("Thời gian khám không được nằm trong quá khứ.");
         }
         if (service.MinLeadTimeHours > 0)
         {
-            if (request.ScheduledStart < DateTime.Now.AddHours(service.MinLeadTimeHours).AddMinutes(-1))
+            if (requestedStart < clinicNow.AddHours(service.MinLeadTimeHours).AddMinutes(-1))
             {
                 return ApiResponse<AppointmentDto>.Fail($"Dịch vụ '{service.ServiceName}' yêu cầu đặt lịch trước tối thiểu {service.MinLeadTimeHours} giờ.");
             }
@@ -133,7 +137,7 @@ public class AppointmentService : IAppointmentService
             .AsNoTracking()
             .AnyAsync(a => a.PatientUserId == patientUserId &&
                            a.RequestedServiceId == request.RequestedServiceId &&
-                           a.ScheduledStart == request.ScheduledStart &&
+                           a.ScheduledStart == requestedStart &&
                            (a.Status == AppointmentStatus.PendingReceptionReview ||
                             a.Status == AppointmentStatus.PendingDepartmentReview ||
                             a.Status == AppointmentStatus.Confirmed), ct);
@@ -147,7 +151,7 @@ public class AppointmentService : IAppointmentService
         var duration = service.DurationMinutes.HasValue && service.DurationMinutes.Value > 0
             ? service.DurationMinutes.Value
             : 30;
-        var scheduledEnd = request.ScheduledStart.AddMinutes(duration);
+        var scheduledEnd = requestedStart.AddMinutes(duration);
 
         // Generate Unique AppointmentCode (APP-yyyyMMdd-XXXXXX)
         var code = await GenerateUniqueAppointmentCodeAsync(ct);
@@ -163,7 +167,7 @@ public class AppointmentService : IAppointmentService
             AssignedDentistUserId = null, // NEVER assign at patient booking stage!
             RoomId = null,
             DentalChairId = null,
-            ScheduledStart = request.ScheduledStart,
+            ScheduledStart = requestedStart,
             ScheduledEnd = scheduledEnd,
             ReasonForVisit = string.IsNullOrWhiteSpace(request.ReasonForVisit) ? "Khám bệnh" : request.ReasonForVisit.Trim(),
             BookingSource = BookingSource.Patient,
@@ -432,7 +436,10 @@ public class AppointmentService : IAppointmentService
         }
 
         // 4. Validate Datetime
-        if (request.ScheduledStart < DateTime.Now.AddMinutes(-10))
+        var requestedStart = ClinicTimeHelper.ToClinicTime(request.ScheduledStart);
+        var clinicNow = ClinicTimeHelper.Now;
+
+        if (requestedStart < clinicNow.AddMinutes(-10))
         {
             return ApiResponse<AppointmentDto>.Fail("Thời gian khám không được nằm trong quá khứ.");
         }
@@ -461,7 +468,7 @@ public class AppointmentService : IAppointmentService
             .AsNoTracking()
             .AnyAsync(a => a.PatientUserId == request.PatientUserId &&
                            a.RequestedServiceId == request.RequestedServiceId &&
-                           a.ScheduledStart == request.ScheduledStart &&
+                           a.ScheduledStart == requestedStart &&
                            (a.Status == AppointmentStatus.PendingReceptionReview ||
                             a.Status == AppointmentStatus.PendingDepartmentReview ||
                             a.Status == AppointmentStatus.Confirmed), ct);
@@ -475,7 +482,7 @@ public class AppointmentService : IAppointmentService
         var duration = service.DurationMinutes.HasValue && service.DurationMinutes.Value > 0
             ? service.DurationMinutes.Value
             : 30;
-        var scheduledEnd = request.ScheduledStart.AddMinutes(duration);
+        var scheduledEnd = requestedStart.AddMinutes(duration);
 
         // Generate Unique AppointmentCode (APP-yyyyMMdd-XXXXXX)
         var code = await GenerateUniqueAppointmentCodeAsync(ct);
@@ -491,7 +498,7 @@ public class AppointmentService : IAppointmentService
             AssignedDentistUserId = (request.AssignedDentistUserId.HasValue && request.AssignedDentistUserId.Value > 0) ? request.AssignedDentistUserId.Value : null,
             RoomId = (request.RoomId.HasValue && request.RoomId.Value > 0) ? request.RoomId.Value : null,
             DentalChairId = (request.DentalChairId.HasValue && request.DentalChairId.Value > 0) ? request.DentalChairId.Value : null,
-            ScheduledStart = request.ScheduledStart,
+            ScheduledStart = requestedStart,
             ScheduledEnd = scheduledEnd,
             ReasonForVisit = string.IsNullOrWhiteSpace(request.ReasonForVisit) ? "Khám bệnh tại quầy" : request.ReasonForVisit.Trim(),
             BookingSource = BookingSource.Receptionist,
@@ -798,7 +805,7 @@ public class AppointmentService : IAppointmentService
                 return ApiResponse.Fail($"Chỉ có thể hủy lịch hẹn đang chờ duyệt hoặc đã được xác nhận (Hiện tại: {appointment.Status}).");
             }
 
-            var localNow = DateTime.Now;
+            var localNow = ClinicTimeHelper.Now;
             bool isLate = false;
             double hoursNotice = 0;
             if (appointment.ScheduledStart.HasValue)
@@ -924,8 +931,11 @@ public class AppointmentService : IAppointmentService
             return ApiResponse<AppointmentDto>.Fail("Vui lòng nhập lý do dời lịch hẹn.");
         }
 
+        var newStart = ClinicTimeHelper.ToClinicTime(request.NewScheduledStart);
+        var clinicNow = ClinicTimeHelper.Now;
+
         // Validate new schedule time
-        if (request.NewScheduledStart < DateTime.Now.AddMinutes(-5))
+        if (newStart <= clinicNow)
         {
             return ApiResponse<AppointmentDto>.Fail("Thời gian khám mới không được nằm trong quá khứ.");
         }
@@ -1007,9 +1017,18 @@ public class AppointmentService : IAppointmentService
                 }
             }
 
+            if (appointment.RequestedService != null && appointment.RequestedService.MinLeadTimeHours > 0)
+            {
+                if (newStart < clinicNow.AddHours(appointment.RequestedService.MinLeadTimeHours).AddMinutes(-1))
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<AppointmentDto>.Fail($"Dịch vụ '{appointment.RequestedService.ServiceName}' yêu cầu đặt lịch trước tối thiểu {appointment.RequestedService.MinLeadTimeHours} giờ.");
+                }
+            }
+
             var duration = appointment.RequestedService?.DurationMinutes ?? 30;
             if (duration <= 0) duration = 30;
-            var scheduledEnd = request.NewScheduledStart.AddMinutes(duration);
+            var scheduledEnd = newStart.AddMinutes(duration);
 
             newCode = await GenerateUniqueAppointmentCodeAsync(ct);
             var now = DateTime.UtcNow;
@@ -1069,7 +1088,7 @@ public class AppointmentService : IAppointmentService
                 AssignedDentistUserId = null,
                 RoomId = null,
                 DentalChairId = null,
-                ScheduledStart = request.NewScheduledStart,
+                ScheduledStart = newStart,
                 ScheduledEnd = scheduledEnd,
                 ReasonForVisit = $"{appointment.ReasonForVisit} (Dời từ lịch {appointment.AppointmentCode})",
                 BookingSource = BookingSource.Patient,
@@ -1538,7 +1557,7 @@ public class AppointmentService : IAppointmentService
         string? searchQuery = null,
         CancellationToken ct = default)
     {
-        var today = DateTime.Today;
+        var today = ClinicTimeHelper.Today;
         var query = _dbContext.Appointments
             .AsNoTracking()
             .Where(a => a.ScheduledStart != null &&
@@ -1595,7 +1614,7 @@ public class AppointmentService : IAppointmentService
 
         var isRelational = _dbContext.Database.IsRelational();
         var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
-        var targetDate = (appointment.ScheduledStart ?? DateTime.Today).Date;
+        var targetDate = (appointment.ScheduledStart ?? ClinicTimeHelper.Today).Date;
         IDisposable? lockScope = null;
         bool committed = false;
         try
@@ -2599,7 +2618,7 @@ public class AppointmentService : IAppointmentService
         long dentistUserId,
         CancellationToken ct = default)
     {
-        var today = DateTime.Today;
+        var today = ClinicTimeHelper.Today;
         var visibleStatuses = new[]
         {
             AppointmentStatus.Confirmed,
