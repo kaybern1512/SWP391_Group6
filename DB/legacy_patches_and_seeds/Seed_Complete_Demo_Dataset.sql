@@ -384,7 +384,7 @@ BEGIN TRY
             'APP-20261015-PK4', @Pat5Id, 4, 18,
             @Den4Id, NULL, NULL, NULL,
             '2026-10-16 15:00:00', '2026-10-16 15:45:00',
-            N'Khám răng sữa cho bé, bôi vecni Flour chống sâu răng toàn hàm', 'Patient',
+            N'Khám răng sữa cho bé, bôi vecni Fluor chống sâu răng toàn hàm', 'Patient',
             'PendingDepartmentReview', @Now, @Now
         );
     END;
