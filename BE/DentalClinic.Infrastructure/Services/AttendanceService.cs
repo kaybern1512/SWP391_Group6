@@ -113,8 +113,7 @@ public class AttendanceService : IAttendanceService
             var today = DateOnly.FromDateTime(clinicNow);
 
             // 1. Check if monthly period is finalized/locked
-            var isPeriodLocked = await _dbContext.AttendancePeriodClosures
-                .AnyAsync(p => p.Year == today.Year && p.Month == today.Month && p.Status == PeriodClosureStatus.Locked, ct);
+            var isPeriodLocked = await _dbContext.IsPeriodLockedAsync(today, ct);
 
             if (isPeriodLocked)
             {
@@ -275,8 +274,7 @@ public class AttendanceService : IAttendanceService
             }
 
             // Check if monthly period is locked
-            var isPeriodLocked = await _dbContext.AttendancePeriodClosures
-                .AnyAsync(p => p.Year == record.WorkDate.Year && p.Month == record.WorkDate.Month && p.Status == PeriodClosureStatus.Locked, ct);
+            var isPeriodLocked = await _dbContext.IsPeriodLockedAsync(record.WorkDate, ct);
 
             if (isPeriodLocked)
             {
@@ -390,8 +388,7 @@ public class AttendanceService : IAttendanceService
         }
 
         // Verify period not locked
-        var isPeriodLocked = await _dbContext.AttendancePeriodClosures
-            .AnyAsync(p => p.Year == record.WorkDate.Year && p.Month == record.WorkDate.Month && p.Status == PeriodClosureStatus.Locked, ct);
+        var isPeriodLocked = await _dbContext.IsPeriodLockedAsync(record.WorkDate, ct);
 
         if (isPeriodLocked)
         {
@@ -501,8 +498,7 @@ public class AttendanceService : IAttendanceService
             }
 
             // Verify period not locked
-            var isPeriodLocked = await _dbContext.AttendancePeriodClosures
-                .AnyAsync(p => p.Year == record.WorkDate.Year && p.Month == record.WorkDate.Month && p.Status == PeriodClosureStatus.Locked, ct);
+            var isPeriodLocked = await _dbContext.IsPeriodLockedAsync(record.WorkDate, ct);
 
             if (isPeriodLocked)
             {

@@ -188,13 +188,14 @@ erDiagram
 
 Hệ thống đã trải qua quy trình kiểm thử nghiêm ngặt tại workspace cô lập `D:\SWP391\DentalCare-Admin-Operations` với Database `DentalCare_AdminOperations_Dev`:
 
-### Thống kê Kết quả Test Suite:
+### Thống kê Kết quả Test Suite Toàn Diện (Post-Develop Sync & UAT):
 | Hạng mục kiểm thử | Công nghệ | Tổng số test | Passed | Skipped | Failed |
 |---|---|---|---|---|---|
-| **Backend Core & Services** | xUnit, Moq, EF Core In-Memory / SQL Express | **799** | **798** | 1 (Cloudinary Secrets) | **0** |
+| **Backend Core, Services & Integration** | xUnit, Moq, EF Core In-Memory / SQL Server Express | **862** | **861** | 1 (Cloudinary Secrets) | **0** |
 | **Frontend Web Controllers & Views** | xUnit, Moq, FluentAssertions, ASP.NET Core TestHost | **323** | **323** | 0 | **0** |
-| **Playwright Browser E2E** | Playwright Test (Chromium) | **8** | **8** | 0 | **0** |
-| **Tổng cộng** | | **1,130** | **1,129** | **1** | **0** |
+| **Real Database SQL Server UAT** | xUnit, SQL Server `DentalCare_AdminOperations_Dev` | **5** | **5** | 0 | **0** |
+| **Playwright Real Browser E2E** | Playwright Test (Chromium) | **27** | **27** | 0 | **0** |
+| **Tổng cộng** | | **1,217** | **1,216** | **1** | **0** |
 
 ---
 

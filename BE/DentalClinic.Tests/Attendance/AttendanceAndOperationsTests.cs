@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Features.Attendance.DTOs;
+using DentalClinic.Application.Features.DentistLeave.DTOs;
+using DentalClinic.Application.Features.ReceptionistWorkforce.DTOs;
 using DentalClinic.Domain.Common;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
@@ -12,6 +15,7 @@ using DentalClinic.Infrastructure.Services;
 using DentalClinic.Infrastructure.Services.StaffShiftProviders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Xunit;
 
 namespace DentalClinic.Tests.Attendance;
@@ -1187,6 +1191,86 @@ public class AttendanceAndOperationsTests
         Assert.Equal(1, res.Data.DoctorLeaveOperations.ActiveDisruptionsCount);
         Assert.Equal(1, res.Data.DoctorLeaveOperations.DisruptionsPendingPatientCount);
         Assert.Equal(1, res.Data.DoctorLeaveOperations.UrgentDisruptionsCount);
+    }
+
+    [Fact]
+    public async Task MonthlyClosureGuard_ModifyingReceptionistScheduleInLockedPeriod_IsBlocked()
+    {
+        using var db = CreateDbContext(nameof(MonthlyClosureGuard_ModifyingReceptionistScheduleInLockedPeriod_IsBlocked));
+        await SeedBasicStaffDataAsync(db);
+
+        // Lock period 2026-10
+        db.AttendancePeriodClosures.Add(new AttendancePeriodClosure
+        {
+            ClosureId = 991,
+            Year = 2026,
+            Month = 10,
+            Status = PeriodClosureStatus.Locked,
+            FinalizedByUserId = 1,
+            FinalizedAtUtc = DateTime.UtcNow,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var mockCoverage = new Mock<IReceptionistCoverageService>();
+        var mockAudit = new Mock<IAuditLogService>();
+        var scheduleService = new ReceptionistScheduleService(db, mockCoverage.Object, mockAudit.Object);
+
+        var request = new CreateReceptionistScheduleRequest
+        {
+            ReceptionistUserId = 20,
+            WorkDate = new DateOnly(2026, 10, 15),
+            StartTime = new TimeOnly(8, 0),
+            EndTime = new TimeOnly(17, 0)
+        };
+
+        var res = await scheduleService.CreateScheduleAsync(request, 1);
+        Assert.False(res.Success);
+        Assert.Contains("đã được chốt sổ", res.Message);
+    }
+
+    [Fact]
+    public async Task MonthlyClosureGuard_ApprovingDentistLeaveInLockedPeriod_IsBlocked()
+    {
+        using var db = CreateDbContext(nameof(MonthlyClosureGuard_ApprovingDentistLeaveInLockedPeriod_IsBlocked));
+        await SeedBasicStaffDataAsync(db);
+
+        // Lock period 2026-10
+        db.AttendancePeriodClosures.Add(new AttendancePeriodClosure
+        {
+            ClosureId = 992,
+            Year = 2026,
+            Month = 10,
+            Status = PeriodClosureStatus.Locked,
+            FinalizedByUserId = 1,
+            FinalizedAtUtc = DateTime.UtcNow,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+
+        // Add pending leave for dentist on 2026-10-12
+        var leave = new DentistLeaveRequest
+        {
+            LeaveRequestId = 881,
+            DentistUserId = 10,
+            LeaveType = "Annual",
+            StartDate = new DateOnly(2026, 10, 12),
+            EndDate = new DateOnly(2026, 10, 12),
+            Status = DentistLeaveStatus.Pending,
+            Reason = "Nghỉ việc cá nhân",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DentistLeaveRequests.Add(leave);
+        await db.SaveChangesAsync();
+
+        var mockReminder = new Mock<IAppointmentReminderService>();
+        var mockEmail = new Mock<IEmailService>();
+        var mockNotify = new Mock<INotificationService>();
+        var mockConfig = new Mock<Microsoft.Extensions.Configuration.IConfiguration>();
+        var leaveService = new DentistLeaveService(db, mockReminder.Object, mockEmail.Object, mockNotify.Object, mockConfig.Object, NullLogger<DentistLeaveService>.Instance);
+
+        var res = await leaveService.ApproveLeaveRequestAsync(881, 1);
+        Assert.False(res.Success);
+        Assert.Contains("chốt sổ", res.Message);
     }
 
     #endregion

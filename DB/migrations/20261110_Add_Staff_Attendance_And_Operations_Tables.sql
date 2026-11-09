@@ -62,7 +62,7 @@ BEGIN TRY
             CONSTRAINT [PK_StaffAttendanceRecords] PRIMARY KEY CLUSTERED ([AttendanceId] ASC),
             CONSTRAINT [FK_StaffAttendanceRecords_UserAccounts] FOREIGN KEY ([UserId]) REFERENCES [dbo].[UserAccounts] ([UserId]),
             CONSTRAINT [FK_StaffAttendanceRecords_FinalizedByUser] FOREIGN KEY ([FinalizedByUserId]) REFERENCES [dbo].[UserAccounts] ([UserId]),
-            CONSTRAINT [CK_StaffAttendanceRecords_Status] CHECK ([Status] IN ('NotStarted', 'ClockedIn', 'ClockedOut', 'MissingClockOut', 'NeedsReview', 'Verified', 'Corrected'))
+            CONSTRAINT [CK_StaffAttendanceRecords_Status] CHECK ([Status] IN ('NotStarted', 'ClockedIn', 'ClockedOut', 'MissingClockOut', 'NeedsReview', 'Verified', 'Corrected', 'OnTime', 'Late', 'EarlyDeparture', 'LateAndEarlyDeparture', 'ApprovedLeave', 'UnexpectedAbsence'))
         );
 
         CREATE UNIQUE NONCLUSTERED INDEX [IX_StaffAttendanceRecords_User_Date_Shift]
@@ -157,7 +157,7 @@ BEGIN TRY
             CONSTRAINT [PK_AttendancePeriodClosures] PRIMARY KEY CLUSTERED ([ClosureId] ASC),
             CONSTRAINT [FK_AttendancePeriodClosures_Finalizer] FOREIGN KEY ([FinalizedByUserId]) REFERENCES [dbo].[UserAccounts] ([UserId]),
             CONSTRAINT [FK_AttendancePeriodClosures_Reopener] FOREIGN KEY ([ReopenedByUserId]) REFERENCES [dbo].[UserAccounts] ([UserId]),
-            CONSTRAINT [CK_AttendancePeriodClosures_Status] CHECK ([Status] IN ('Open', 'Finalized', 'Reopened')),
+            CONSTRAINT [CK_AttendancePeriodClosures_Status] CHECK ([Status] IN ('Open', 'Finalized', 'Locked', 'Reopened')),
             CONSTRAINT [CK_AttendancePeriodClosures_Month] CHECK ([Month] BETWEEN 1 AND 12),
             CONSTRAINT [UQ_AttendancePeriodClosures_Year_Month] UNIQUE NONCLUSTERED ([Year] ASC, [Month] ASC)
         );

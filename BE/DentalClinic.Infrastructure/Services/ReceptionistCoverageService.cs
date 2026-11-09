@@ -10,6 +10,7 @@ using DentalClinic.Domain.Common;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using DentalClinic.Domain.Enums;
 
 namespace DentalClinic.Infrastructure.Services;
 
@@ -199,6 +200,12 @@ public class ReceptionistCoverageService : IReceptionistCoverageService
         };
 
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
+
+        bool isLockedPeriod = await _dbContext.IsPeriodLockedAsync(schedule.WorkDate, ct);
+        if (isLockedPeriod)
+        {
+            return ApiResponse<ReceptionistCoverageIncidentDto>.Fail($"Kỳ công tháng {schedule.WorkDate.Month:D2}/{schedule.WorkDate.Year} đã được chốt sổ. Không thể báo vắng mặt khẩn cấp hồi tố.");
+        }
 
         // Mark schedule status as AbsenceReported
         schedule.Status = "AbsenceReported";

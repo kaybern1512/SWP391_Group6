@@ -18,10 +18,24 @@
 | **ADMIN-ATT-08** | Giám sát vận hành thời gian thực: Thiếu lễ tân & Bác sĩ vắng mặt | Unit / Controller / E2E | `GetOperationsDashboardAsync_FlagsShortage_WhenReceptionistsLessThanTwo` / `AttendanceAndOperationsTests.cs`<br>`GetOperationsDashboardAsync_FlagsAlert_WhenDentistHasAppointments_AndNotPresent` / `AttendanceAndOperationsTests.cs`<br>`ADMIN-ATT-08` in `e2e/admin-workforce-operations.spec.js` | Dashboard cảnh báo đỏ nếu ca trực có $< 2$ lễ tân. Hiển thị cảnh báo nguy cấp khi bác sĩ có lịch hẹn khám nhưng chưa điểm danh. Hiển thị pipeline ca khám, viện phí và kho dược. | **PASS** |
 
 | **ADMIN-ATT-09** | Giám sát vận hành: Tích hợp phân hệ Nghỉ phép Bác sĩ & Gián đoạn lịch hẹn | Unit / Controller / E2E | `ClinicOperations_Dashboard_IntegratesDoctorLeaveAndDisruptionKpis` / `AttendanceAndOperationsTests.cs`<br>`ADMIN-ATT-09` in `e2e/admin-workforce-operations.spec.js` | Dashboard tích hợp đầy đủ KPI: đơn nghỉ phép bác sĩ chờ duyệt, số ca gián đoạn khẩn cấp (< 24h), ca chờ bệnh nhân phản hồi, ca chờ tiếp tân điều phối. | **PASS** |
+| **ADMIN-ATT-10** | Chặn điều chỉnh lịch trực Lễ tân trong kỳ công đã khóa sổ | Unit / Cross-Module Guard | `MonthlyClosureGuard_ModifyingReceptionistScheduleInLockedPeriod_IsBlocked` / `AttendanceAndOperationsTests.cs` | Từ chối tạo/sửa/xóa ca trực trong tháng đã chốt sổ với thông báo: `Kỳ công tháng MM/yyyy đã được chốt sổ. Không thể phân ca trực.` | **PASS** |
+| **ADMIN-ATT-11** | Chặn phê duyệt đơn nghỉ phép Bác sĩ hồi tố trong kỳ công đã khóa sổ | Unit / Cross-Module Guard | `MonthlyClosureGuard_ApprovingDentistLeaveInLockedPeriod_IsBlocked` / `AttendanceAndOperationsTests.cs` | Từ chối duyệt đơn nghỉ phép bác sĩ hồi tố vào tháng đã chốt sổ, yêu cầu Quản trị viên mở lại kỳ công trước khi thực hiện. | **PASS** |
 
 ---
 
-## 2. BẢNG TỔNG HỢP KIỂM THỬ TÁC ĐỘNG QUẢN TRỊ (ADMIN IMPACT ANALYSIS)
+## 2. MA TRẬN KIỂM THỬ UAT DATABASE THỰC TẾ (REAL SQL SERVER UAT SUITE)
+
+| Mã UAT | Kịch Bản Nghiệp Vụ Tích Hợp | File & Phương Thức Thực Thi | Dữ Liệu Thực Tế Trên `DentalCare_AdminOperations_Dev` | Kết Quả Nghiệm Thu | Trạng Thái |
+|---|---|---|---|---|---|
+| **UAT-01** | Xuất bản ca lễ tân -> ClockIn -> ClockOut -> Lưu vết sự kiện | `UAT01_ReceptionistShift_ClockIn_ClockOut_PersistsWorkedHoursAndEvents`<br>`AdminOperationsRealDatabaseUatTests.cs` | Lễ tân `UserId = 2` trên ca `ShiftTemplateId = 3` (Ca Cả Ngày). Xác minh `StaffAttendanceRecords` lưu đủ `ClockInTimeUtc`, `ClockOutTimeUtc`, $\ge 2$ sự kiện `StaffAttendanceEvents`. | Ghi nhận chính xác giờ công và lưu vết kiểm toán bất biến. | **PASS** |
+| **UAT-02** | Đổi ca trực Lễ tân -> Phê duyệt -> Provider phân giải ca mới | `UAT02_ShiftSwap_AttendanceProvider_ReflectsNewAssigneeInRealTime`<br>`AdminOperationsRealDatabaseUatTests.cs` | Chuyển ca từ Lễ tân `UserId = 2` sang `UserId = 44`. Admin duyệt swap. Provider `CompositeStaffShiftProvider` phân giải ngay ca trực cho người nhận và gỡ bỏ khỏi người chuyển. | Điểm danh phản ánh người trực thay thế theo thời gian thực. | **PASS** |
+| **UAT-03** | Đơn nghỉ phép đã duyệt -> Chặn quẹt thẻ trong khoảng thời gian nghỉ | `UAT03_ApprovedLeave_PartialOrFullDay_BlocksClockInDuringLeaveWindow`<br>`AdminOperationsRealDatabaseUatTests.cs` | Lễ tân `UserId = 45` có đơn nghỉ phép `Approved`. Quẹt thẻ vào ca bị từ chối kèm thông báo rõ ràng về đơn nghỉ phép đã duyệt. | Ngăn chặn gian lận chấm công khi đang nghỉ phép. | **PASS** |
+| **UAT-04** | Nghỉ phép Bác sĩ -> Tạo gián đoạn -> Dashboard cập nhật KPI | `UAT04_DentistLeave_DisruptionsAndClinicOperationsDashboardKpi`<br>`AdminOperationsRealDatabaseUatTests.cs` | Bác sĩ `UserId = 3` xin nghỉ -> Admin duyệt -> Tạo gián đoạn lịch hẹn -> Dashboard hiển thị chính xác KPI và không báo vắng mặt sai lệch. | Đồng bộ trạng thái nghỉ phép và gián đoạn vận hành. | **PASS** |
+| **UAT-05** | Chốt sổ tháng -> Chặn sửa lịch/nghỉ phép -> Mở lại với lý do kiểm toán | `UAT05_MonthlyClosureInvariant_LockAndReopenGuard`<br>`AdminOperationsRealDatabaseUatTests.cs` | Khóa sổ tháng 03/2026 -> Chặn tạo ca trực và duyệt nghỉ phép -> Mở lại với lý do $\ge 10$ ký tự -> Mở khóa thành công và ghi nhận kiểm toán. | Bảo toàn tính bất biến của kỳ công kế toán. | **PASS** |
+
+---
+
+## 3. BẢNG TỔNG HỢP KIỂM THỬ TÁC ĐỘNG QUẢN TRỊ (ADMIN IMPACT ANALYSIS)
 
 | Mã Phân Tích | Thao Tác Quản Trị Cần Đánh Giá | Tầng Kiểm Thử | Tên Phương Thức Test | Kết Quả Đánh Giá Tác Động | Trạng Thái |
 |---|---|---|---|---|---|
@@ -33,19 +47,19 @@
 
 ---
 
-## 3. THỐNG KÊ CHI TIẾT TỔNG SỐ TEST SUITE
+## 4. THỐNG KÊ CHI TIẾT TỔNG SỐ TEST SUITE
 
 ```
 ================================================================================
-TEST SUITE SUMMARY EXECUTION REPORT:
+FINAL VERIFICATION TEST SUITE EXECUTION SUMMARY:
 --------------------------------------------------------------------------------
 Backend Test Assembly:
   Target:     DentalClinic.Tests.dll (net8.0)
-  Discovered: 854 tests
-  Passed:     853 tests
+  Discovered: 862 tests
+  Passed:     861 tests
   Skipped:    1 test (CloudinaryImageStorageServiceTests.UploadAvatarAsync_WithUserSecrets)
   Failed:     0 tests
-  Duration:   18s
+  Duration:   19s
 
 Frontend Test Assembly:
   Target:     DentalClinic.Web.Tests.dll (net8.0)
@@ -55,24 +69,29 @@ Frontend Test Assembly:
   Failed:     0 tests
   Duration:   20s
 
-Playwright Real Browser E2E Specs:
-  Target:     e2e/admin-workforce-operations.spec.js
-  Tests:      9 real browser scenarios (ADMIN-ATT-01 to ADMIN-ATT-09)
-  Passed:     9 tests (100% PASS)
+Real SQL Server UAT Suite:
+  Target:     DentalClinic.Tests.Attendance.AdminOperationsRealDatabaseUatTests
+  Database:   DentalCare_AdminOperations_Dev
+  Tests:      5 real database integration scenarios (UAT-01 to UAT-05)
+  Passed:     5 tests
   Failed:     0 tests
-  Duration:   11.2s
+  Duration:   4s
 
-Receptionist Workforce E2E Specs:
-  Target:     e2e/receptionist-workforce.spec.js
-  Tests:      6 real browser scenarios (E2E-REC-1 to E2E-REC-6)
-  Passed:     6 tests (100% PASS)
+Playwright Real Browser E2E Specs (Chromium against FE:7135 & BE:7355):
+  Suites:     e2e/admin-workforce-operations.spec.js (9 tests)
+              e2e/login-auth-flow.spec.js (6 tests)
+              e2e/receptionist-workforce.spec.js (6 tests)
+              e2e/doctor-leave-recovery.spec.js (6 tests)
+  Total E2E:  27 scenarios
+  Passed:     27 tests
+  Failed:     0 tests
+  Duration:   ~42s
 
-Doctor Leave & Disruption E2E Specs:
-  Target:     e2e/doctor-leave-recovery.spec.js
-  Tests:      6 real browser scenarios (E2E-LEAVE-01 to E2E-LEAVE-06)
-  Passed:     6 tests (100% PASS)
 ================================================================================
-```=
-TOTAL AUTOMATED TESTS PASSING: 1,121 / 1,122 (0 FAILING)
+GRAND TOTAL AUTOMATED TESTS:
+  Total Executed: 1,217 tests
+  Passed:         1,216 tests
+  Skipped:        1 test (Cloudinary Secrets)
+  Failed:         0 tests (100% SUCCESS)
 ================================================================================
 ```

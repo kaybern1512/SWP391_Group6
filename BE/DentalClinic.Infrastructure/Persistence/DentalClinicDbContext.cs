@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,50 @@ public partial class DentalClinicDbContext : DbContext
         : base(options)
     {
     }
+
+    private bool? _attendancePeriodClosuresTableExists;
+
+    public virtual async Task<bool> IsPeriodLockedAsync(int year, int month, CancellationToken ct = default)
+    {
+        if (Database.IsSqlServer())
+        {
+            if (!_attendancePeriodClosuresTableExists.HasValue)
+            {
+                _attendancePeriodClosuresTableExists = await Database
+                    .SqlQueryRaw<int>("SELECT 1 AS [Value] WHERE OBJECT_ID(N'AttendancePeriodClosures', N'U') IS NOT NULL")
+                    .AnyAsync(ct);
+            }
+
+            if (!_attendancePeriodClosuresTableExists.Value) return false;
+        }
+
+        return await AttendancePeriodClosures
+            .AnyAsync(p => p.Year == year && p.Month == month && p.Status == PeriodClosureStatus.Locked, ct);
+    }
+
+    public virtual async Task<bool> IsPeriodLockedAsync(DateOnly date, CancellationToken ct = default)
+        => await IsPeriodLockedAsync(date.Year, date.Month, ct);
+
+    public virtual async Task<bool> IsPeriodLockedAsync(DateOnly startDate, DateOnly endDate, CancellationToken ct = default)
+    {
+        if (Database.IsSqlServer())
+        {
+            if (!_attendancePeriodClosuresTableExists.HasValue)
+            {
+                _attendancePeriodClosuresTableExists = await Database
+                    .SqlQueryRaw<int>("SELECT 1 AS [Value] WHERE OBJECT_ID(N'AttendancePeriodClosures', N'U') IS NOT NULL")
+                    .AnyAsync(ct);
+            }
+
+            if (!_attendancePeriodClosuresTableExists.Value) return false;
+        }
+
+        return await AttendancePeriodClosures
+            .AnyAsync(p => p.Status == PeriodClosureStatus.Locked &&
+                           ((p.Year == startDate.Year && p.Month == startDate.Month) ||
+                            (p.Year == endDate.Year && p.Month == endDate.Month)), ct);
+    }
+
 
     public virtual DbSet<Appointment> Appointments { get; set; }
     public virtual DbSet<AppointmentReminderJob> AppointmentReminderJobs { get; set; }
