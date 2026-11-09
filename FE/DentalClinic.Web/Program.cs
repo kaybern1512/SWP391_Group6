@@ -2,6 +2,7 @@ using DentalClinic.Web.Handlers;
 using DentalClinic.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,10 @@ builder.Services.AddSingleton<System.Text.Encodings.Web.HtmlEncoder>(
 
 // HttpContextAccessor
 builder.Services.AddHttpContextAccessor();
+
+// Isolated DataProtection for Patient Portal
+builder.Services.AddDataProtection()
+    .SetApplicationName("DentalCare_Patient");
 
 // Session configuration with distributed memory cache
 builder.Services.AddDistributedMemoryCache();

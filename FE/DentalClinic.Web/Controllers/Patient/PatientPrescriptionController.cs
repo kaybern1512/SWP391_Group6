@@ -14,19 +14,39 @@ namespace DentalClinic.Web.Controllers.Patient;
 public class PatientPrescriptionController : Controller
 {
     private readonly IPrescriptionApiService _prescriptionApi;
+    private readonly IMedicineApiService? _medicineApi;
 
-    public PatientPrescriptionController(IPrescriptionApiService prescriptionApi)
+    public PatientPrescriptionController(
+        IPrescriptionApiService prescriptionApi,
+        IMedicineApiService? medicineApi = null)
     {
         _prescriptionApi = prescriptionApi;
+        _medicineApi = medicineApi;
     }
 
     [HttpGet("")]
     public async Task<IActionResult> Index()
     {
         var result = await _prescriptionApi.GetMyPrescriptionsAsync();
+        var prescriptions = result.IsSuccess && result.Data != null ? result.Data : new List<PrescriptionDto>();
+
+        var statusMap = new Dictionary<long, PrescriptionDispensationStatusDto>();
+        if (_medicineApi != null)
+        {
+            foreach (var p in prescriptions)
+            {
+                var statusResult = await _medicineApi.GetPrescriptionDispensationStatusAsync(p.PrescriptionId);
+                if (statusResult.IsSuccess && statusResult.Data != null)
+                {
+                    statusMap[p.PrescriptionId] = statusResult.Data;
+                }
+            }
+        }
+
         var vm = new PatientPrescriptionIndexViewModel
         {
-            Prescriptions = result.IsSuccess && result.Data != null ? result.Data : new List<PrescriptionDto>()
+            Prescriptions = prescriptions,
+            DispensationStatusMap = statusMap
         };
 
         return View("~/Views/Patient/Prescriptions/Index.cshtml", vm);

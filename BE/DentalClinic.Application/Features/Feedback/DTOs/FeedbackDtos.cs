@@ -17,6 +17,8 @@ public class VisitFeedbackDto
     public byte DentistRating { get; set; }
     public byte ClinicRating { get; set; }
     public string? Comment { get; set; }
+    public string Status { get; set; } = "Approved";
+    public string? AdminResponse { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? AppointmentDate { get; set; }
     public string? ServiceName { get; set; }
@@ -25,6 +27,7 @@ public class VisitFeedbackDto
 public class CreateFeedbackRequest
 {
     public long AppointmentId { get; set; }
+    public long? DentistUserId { get; set; }
     public byte DentistRating { get; set; } // 1 - 5
     public byte ClinicRating { get; set; }  // 1 - 5
     public string? Comment { get; set; }

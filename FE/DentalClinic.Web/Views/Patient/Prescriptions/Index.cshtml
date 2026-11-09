@@ -12,18 +12,19 @@
                 <span class="badge bg-primary-subtle text-primary fw-medium px-2 py-1 fs-12">
                     <i class="bi bi-capsule me-1"></i> Bệnh nhân
                 </span>
-                <span class="badge bg-light text-muted fw-normal px-2 py-1 fs-12">Đơn Thuốc Điện Tử</span>
+                <span class="badge bg-light text-muted fw-normal px-2 py-1 fs-12">Đơn Thuốc Điện Tử & Cấp Phát</span>
             </div>
             <h1 class="h3 fw-bold text-slate-800 mb-0">Đơn Thuốc Của Tôi</h1>
-            <p class="text-muted small mb-0 mt-1">Xem lại danh sách các đơn thuốc được bác sĩ nha khoa kê sau buổi khám và in đơn thuốc khi cần</p>
+            <p class="text-muted small mb-0 mt-1">Phân biệt minh bạch giữa thuốc bác sĩ kê đơn và thuốc thực tế đã cấp phát từ quầy dược phòng khám</p>
         </div>
     </div>
 
-
-    <div class="alert alert-info py-2 px-3 small border-0 bg-info-subtle text-info-emphasis mb-4 rounded-3 d-flex align-items-center gap-2">
-        <i class="bi bi-info-circle-fill fs-5 text-info"></i>
+    <!-- Alert thông tin quy tắc cấp thuốc -->
+    <div class="alert alert-info py-3 px-3 small border-0 bg-info-subtle text-info-emphasis mb-4 rounded-3 d-flex align-items-start gap-2">
+        <i class="bi bi-shield-check fs-4 text-info flex-shrink-0 mt-1"></i>
         <div>
-            Đơn thuốc điện tử đã được bác sĩ ký số và đồng bộ vào hồ sơ bệnh án. Quý khách có thể xuất trình đơn thuốc tại quầy dược phòng khám hoặc bấm <strong>"In Đơn Thuốc"</strong> để mua tại các nhà thuốc đạt chuẩn GPP.
+            <strong>Quy tắc quản lý dược & viện phí:</strong>
+            Đơn thuốc điện tử đã được bác sĩ ký xác nhận. Thuốc chỉ được tính vào viện phí thanh toán khi đã thực tế cấp phát tại quầy dược phòng khám. Trường hợp đơn thuốc chưa cấp tại phòng khám, quý khách có thể bấm <strong>"In Đơn Thuốc"</strong> để mua tại các nhà thuốc đạt chuẩn GPP bên ngoài mà không mất chi phí tiền thuốc tại phòng khám.
         </div>
     </div>
 
@@ -32,7 +33,7 @@
         <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
             <h5 class="card-title fw-bold text-slate-800 mb-0 d-flex align-items-center gap-2">
                 <i class="bi bi-journal-medical text-primary"></i>
-                <span>Danh Sách Đơn Thuốc</span>
+                <span>Danh Sách Đơn Thuốc & Tình Trạng Nhận Thuốc</span>
                 <span class="badge bg-secondary-subtle text-secondary rounded-pill fs-12 ms-1">@Model.Prescriptions.Count đơn</span>
             </h5>
         </div>
@@ -40,12 +41,12 @@
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light text-muted fs-13 text-uppercase">
                     <tr>
-                        <th class="ps-4">Mã Đơn / Ca Khám</th>
-                        <th>Bác Sĩ Kê Đơn</th>
-                        <th>Ngày Kê</th>
-                        <th>Danh Mục Thuốc</th>
-                        <th>Lời Dặn Bác Sĩ</th>
-                        <th class="text-end pe-4">Thao Tác</th>
+                        <th class="ps-4" style="width: 14%;">Mã Đơn / Ca Khám</th>
+                        <th style="width: 16%;">Bác Sĩ Kê Đơn</th>
+                        <th style="width: 12%;">Ngày Kê</th>
+                        <th style="width: 25%;">Thuốc Bác Sĩ Kê (Liều lượng)</th>
+                        <th style="width: 21%;">Tình Trạng Cấp Thuốc Thực Tế</th>
+                        <th class="text-end pe-4" style="width: 12%;">Thao Tác</th>
                     </tr>
                 </thead>
                 <tbody class="fs-14">
@@ -53,10 +54,12 @@
                     {
                         foreach (var p in Model.Prescriptions)
                         {
+                            var dispStatus = Model.DispensationStatusMap.GetValueOrDefault(p.PrescriptionId);
+
                             <tr>
                                 <td class="ps-4">
                                     <div class="fw-bold text-primary">#RX-@p.PrescriptionId</div>
-                                    <div class="badge bg-light text-dark border small">Ca: @p.AppointmentCode</div>
+                                    <div class="badge bg-light text-dark border small mt-1">Ca: @p.AppointmentCode</div>
                                 </td>
                                 <td>
                                     <div class="fw-bold text-slate-800">@p.DentistName</div>
@@ -70,18 +73,75 @@
                                     <div class="d-flex flex-column gap-1">
                                         @foreach (var item in p.Items)
                                         {
-                                            <div class="small">
-                                                <strong>• @item.MedicationName</strong>
-                                                <span class="text-muted">(@(item.Dosage ?? "—") - @(item.Frequency ?? "Theo chỉ định"))</span>
+                                            <div class="small p-1 bg-light rounded mb-1">
+                                                <strong class="text-dark">• @item.MedicationName</strong>
+                                                <div class="text-muted small">
+                                                    Liều: @(item.Dosage ?? "—") &bull; @(item.Frequency ?? "Theo chỉ định") &bull; @(item.Duration ?? "")
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(item.Instructions))
+                                                {
+                                                    <div class="text-primary small fst-italic">HD: @item.Instructions</div>
+                                                }
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(p.GeneralInstructions))
+                                        {
+                                            <div class="small text-muted fst-italic mt-1">
+                                                <i class="bi bi-chat-left-text me-1"></i>Lời dặn: @p.GeneralInstructions
                                             </div>
                                         }
                                     </div>
                                 </td>
                                 <td>
-                                    <span class="text-muted small fst-italic">@(string.IsNullOrEmpty(p.GeneralInstructions) ? "Không có" : p.GeneralInstructions)</span>
+                                    @if (dispStatus != null && dispStatus.Status == "FullyDispensed")
+                                    {
+                                        <div class="p-2 bg-success-subtle text-success border border-success-subtle rounded-2">
+                                            <div class="fw-bold d-flex align-items-center gap-1 mb-1">
+                                                <i class="bi bi-check-circle-fill"></i> Đã cấp đủ tại phòng khám
+                                            </div>
+                                            <div class="small text-dark">
+                                                Đã nhận: <strong>@dispStatus.TotalUnitsDispensed</strong> đơn vị thuốc
+                                            </div>
+                                            @if (dispStatus.Dispensations.Any())
+                                            {
+                                                var firstDisp = dispStatus.Dispensations.First();
+                                                <div class="small text-muted mt-1">
+                                                    Cấp lúc: @firstDisp.DispensedAt.ToString("dd/MM/yyyy HH:mm")
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else if (dispStatus != null && dispStatus.Status == "PartiallyDispensed")
+                                    {
+                                        <div class="p-2 bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-2">
+                                            <div class="fw-bold d-flex align-items-center gap-1 mb-1">
+                                                <i class="bi bi-hourglass-split"></i> Đã cấp một phần
+                                            </div>
+                                            <div class="small text-dark">
+                                                Đã nhận: <strong>@dispStatus.TotalUnitsDispensed</strong> đơn vị thuốc
+                                            </div>
+                                            <div class="small text-danger mt-1">
+                                                Còn thiếu thuốc chưa nhận đủ tại quầy
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="p-2 bg-light text-secondary border rounded-2">
+                                            <div class="fw-bold d-flex align-items-center gap-1 mb-1 text-secondary">
+                                                <i class="bi bi-cart3"></i> Chưa nhận tại phòng khám
+                                            </div>
+                                            <div class="small text-muted">
+                                                Đơn thuốc điện tử để mua ngoài tại nhà thuốc GPP hoặc nhận tại quầy dược.
+                                            </div>
+                                            <div class="small text-success mt-1">
+                                                <i class="bi bi-check2"></i> Không phát sinh tiền thuốc trên hóa đơn
+                                            </div>
+                                        </div>
+                                    }
                                 </td>
                                 <td class="text-end pe-4">
-                                    <a asp-action="Print" asp-route-id="@p.PrescriptionId" class="btn btn-sm btn-outline-primary" target="_blank" title="Xem và in đơn thuốc">
+                                    <a asp-action="Print" asp-route-id="@p.PrescriptionId" class="btn btn-sm btn-outline-primary" target="_blank" title="Xem và in đơn thuốc điện tử">
                                         <i class="bi bi-printer me-1"></i> In Đơn Thuốc
                                     </a>
                                 </td>

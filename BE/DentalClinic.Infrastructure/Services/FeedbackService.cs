@@ -47,16 +47,31 @@ public class FeedbackService : IFeedbackService
             return ApiResponse<VisitFeedbackDto>.Fail("Không tìm thấy cuộc hẹn để đánh giá.");
         }
 
+        // 1. Chống IDOR: Chỉ bệnh nhân của ca khám mới được đánh giá
         if (appointment.PatientUserId != patientUserId)
         {
             return ApiResponse<VisitFeedbackDto>.Fail("Bạn chỉ có quyền đánh giá các ca khám của chính mình.");
         }
 
+        // 2. Chống đánh giá trước khi hoàn thành
         if (appointment.Status != AppointmentStatus.Completed)
         {
             return ApiResponse<VisitFeedbackDto>.Fail("Chỉ có thể gửi đánh giá sau khi ca khám đã hoàn thành.");
         }
 
+        // 3. Phải có bác sĩ phụ trách thực tế
+        if (!appointment.AssignedDentistUserId.HasValue)
+        {
+            return ApiResponse<VisitFeedbackDto>.Fail("Ca khám chưa được phân công bác sĩ phụ trách nên không thể gửi đánh giá.");
+        }
+
+        // 4. Nếu request gửi kèm DentistUserId, phải trùng khớp với bác sĩ phụ trách ca khám
+        if (request.DentistUserId.HasValue && request.DentistUserId.Value != appointment.AssignedDentistUserId.Value)
+        {
+            return ApiResponse<VisitFeedbackDto>.Fail("Bác sĩ được đánh giá không khớp với bác sĩ phụ trách ca khám.");
+        }
+
+        // 5. Chống đánh giá trùng lặp
         var existingFeedback = await _dbContext.VisitFeedbacks
             .AnyAsync(f => f.AppointmentId == request.AppointmentId, ct);
 
@@ -71,6 +86,9 @@ public class FeedbackService : IFeedbackService
             DentistRating = request.DentistRating,
             ClinicRating = request.ClinicRating,
             Comment = request.Comment?.Trim(),
+            DentistUserId = appointment.AssignedDentistUserId,
+            PatientUserId = appointment.PatientUserId,
+            Status = "Approved",
             CreatedAt = DateTime.UtcNow
         };
 
@@ -91,6 +109,8 @@ public class FeedbackService : IFeedbackService
             DentistRating = feedback.DentistRating,
             ClinicRating = feedback.ClinicRating,
             Comment = feedback.Comment,
+            Status = feedback.Status,
+            AdminResponse = feedback.AdminResponse,
             CreatedAt = feedback.CreatedAt,
             AppointmentDate = appointment.ScheduledStart,
             ServiceName = appointment.RequestedService?.ServiceName
@@ -125,15 +145,17 @@ public class FeedbackService : IFeedbackService
             FeedbackId = feedback.FeedbackId,
             AppointmentId = appt.AppointmentId,
             AppointmentCode = appt.AppointmentCode,
-            PatientUserId = appt.PatientUserId,
+            PatientUserId = feedback.PatientUserId ?? appt.PatientUserId,
             PatientName = appt.PatientUser.FullName,
-            DentistUserId = appt.AssignedDentistUserId,
+            DentistUserId = feedback.DentistUserId ?? appt.AssignedDentistUserId,
             DentistName = appt.AssignedDentistUser?.User.FullName,
             DepartmentId = appt.DepartmentId,
             DepartmentName = appt.Department?.Name,
             DentistRating = feedback.DentistRating,
             ClinicRating = feedback.ClinicRating,
             Comment = feedback.Comment,
+            Status = feedback.Status,
+            AdminResponse = feedback.AdminResponse,
             CreatedAt = feedback.CreatedAt,
             AppointmentDate = appt.ScheduledStart,
             ServiceName = appt.RequestedService?.ServiceName
@@ -162,7 +184,8 @@ public class FeedbackService : IFeedbackService
                 .ThenInclude(a => a.Department)
             .Include(f => f.Appointment)
                 .ThenInclude(a => a.RequestedService)
-            .Where(f => f.Appointment.AssignedDentistUserId == dentistUserId)
+            .Where(f => (f.DentistUserId == dentistUserId || f.Appointment.AssignedDentistUserId == dentistUserId)
+                     && (f.Status == "Approved" || string.IsNullOrEmpty(f.Status)))
             .OrderByDescending(f => f.CreatedAt)
             .ToListAsync(ct);
 
@@ -175,7 +198,7 @@ public class FeedbackService : IFeedbackService
             FeedbackId = f.FeedbackId,
             AppointmentId = f.Appointment.AppointmentId,
             AppointmentCode = f.Appointment.AppointmentCode,
-            PatientUserId = f.Appointment.PatientUserId,
+            PatientUserId = f.PatientUserId ?? f.Appointment.PatientUserId,
             PatientName = f.Appointment.PatientUser.FullName,
             DentistUserId = dentistUserId,
             DentistName = dentist.User.FullName,
@@ -184,6 +207,8 @@ public class FeedbackService : IFeedbackService
             DentistRating = f.DentistRating,
             ClinicRating = f.ClinicRating,
             Comment = f.Comment,
+            Status = f.Status,
+            AdminResponse = f.AdminResponse,
             CreatedAt = f.CreatedAt,
             AppointmentDate = f.Appointment.ScheduledStart,
             ServiceName = f.Appointment.RequestedService?.ServiceName
@@ -215,7 +240,7 @@ public class FeedbackService : IFeedbackService
                 .ThenInclude(a => a.Department)
             .Include(f => f.Appointment)
                 .ThenInclude(a => a.RequestedService)
-            .Where(f => f.Appointment.PatientUserId == patientUserId)
+            .Where(f => f.PatientUserId == patientUserId || f.Appointment.PatientUserId == patientUserId)
             .OrderByDescending(f => f.CreatedAt)
             .Select(f => new VisitFeedbackDto
             {
@@ -224,13 +249,15 @@ public class FeedbackService : IFeedbackService
                 AppointmentCode = f.Appointment.AppointmentCode,
                 PatientUserId = patientUserId,
                 PatientName = f.Appointment.PatientUser.FullName,
-                DentistUserId = f.Appointment.AssignedDentistUserId,
+                DentistUserId = f.DentistUserId ?? f.Appointment.AssignedDentistUserId,
                 DentistName = f.Appointment.AssignedDentistUser != null ? f.Appointment.AssignedDentistUser.User.FullName : null,
                 DepartmentId = f.Appointment.DepartmentId,
                 DepartmentName = f.Appointment.Department != null ? f.Appointment.Department.Name : null,
                 DentistRating = f.DentistRating,
                 ClinicRating = f.ClinicRating,
                 Comment = f.Comment,
+                Status = f.Status,
+                AdminResponse = f.AdminResponse,
                 CreatedAt = f.CreatedAt,
                 AppointmentDate = f.Appointment.ScheduledStart,
                 ServiceName = f.Appointment.RequestedService != null ? f.Appointment.RequestedService.ServiceName : null
@@ -262,7 +289,7 @@ public class FeedbackService : IFeedbackService
 
         if (request.DentistUserId.HasValue)
         {
-            query = query.Where(f => f.Appointment.AssignedDentistUserId == request.DentistUserId.Value);
+            query = query.Where(f => f.DentistUserId == request.DentistUserId.Value || f.Appointment.AssignedDentistUserId == request.DentistUserId.Value);
         }
 
         if (request.MinRating.HasValue)
@@ -296,15 +323,17 @@ public class FeedbackService : IFeedbackService
                 FeedbackId = f.FeedbackId,
                 AppointmentId = f.Appointment.AppointmentId,
                 AppointmentCode = f.Appointment.AppointmentCode,
-                PatientUserId = f.Appointment.PatientUserId,
+                PatientUserId = f.PatientUserId ?? f.Appointment.PatientUserId,
                 PatientName = f.Appointment.PatientUser.FullName,
-                DentistUserId = f.Appointment.AssignedDentistUserId,
+                DentistUserId = f.DentistUserId ?? f.Appointment.AssignedDentistUserId,
                 DentistName = f.Appointment.AssignedDentistUser != null ? f.Appointment.AssignedDentistUser.User.FullName : null,
                 DepartmentId = f.Appointment.DepartmentId,
                 DepartmentName = f.Appointment.Department != null ? f.Appointment.Department.Name : null,
                 DentistRating = f.DentistRating,
                 ClinicRating = f.ClinicRating,
                 Comment = f.Comment,
+                Status = f.Status,
+                AdminResponse = f.AdminResponse,
                 CreatedAt = f.CreatedAt,
                 AppointmentDate = f.Appointment.ScheduledStart,
                 ServiceName = f.Appointment.RequestedService != null ? f.Appointment.RequestedService.ServiceName : null
