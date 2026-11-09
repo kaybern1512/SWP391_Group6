@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -17,8 +18,8 @@ public interface IEmailService
         string departmentName,
         string dentistName,
         string roomName,
-        System.DateTime scheduledStart,
-        System.DateTime scheduledEnd,
+        DateTime scheduledStart,
+        DateTime scheduledEnd,
         CancellationToken ct = default);
 
     Task SendAppointmentReminderEmailAsync(
@@ -31,7 +32,25 @@ public interface IEmailService
         string departmentName,
         string dentistName,
         string roomName,
-        System.DateTime scheduledStart,
-        System.DateTime scheduledEnd,
+        DateTime scheduledStart,
+        DateTime scheduledEnd,
+        CancellationToken ct = default);
+
+    Task SendDoctorLeaveDisruptionEmailAsync(
+        string toEmail,
+        string patientName,
+        string appointmentCode,
+        DateTime scheduledStart,
+        string serviceName,
+        string actionUrl,
+        CancellationToken ct = default);
+
+    Task SendDoctorLeaveRecoveryConfirmationEmailAsync(
+        string toEmail,
+        string patientName,
+        string appointmentCode,
+        string resolutionSummary,
+        DateTime appointmentTime,
+        string dentistName,
         CancellationToken ct = default);
 }

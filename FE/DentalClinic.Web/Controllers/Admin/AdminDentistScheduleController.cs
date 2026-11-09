@@ -17,11 +17,16 @@ public class AdminDentistScheduleController : Controller
 {
     private readonly IAdminApiService _adminApi;
     private readonly IDentistScheduleApiService _scheduleApi;
+    private readonly IDentistLeaveApiService? _leaveApi;
 
-    public AdminDentistScheduleController(IAdminApiService adminApi, IDentistScheduleApiService scheduleApi)
+    public AdminDentistScheduleController(
+        IAdminApiService adminApi, 
+        IDentistScheduleApiService scheduleApi,
+        IDentistLeaveApiService? leaveApi = null)
     {
         _adminApi = adminApi;
         _scheduleApi = scheduleApi;
+        _leaveApi = leaveApi;
     }
 
     [HttpGet("")]
@@ -73,8 +78,11 @@ public class AdminDentistScheduleController : Controller
             DentistUserId = dentistUserId
         };
         var monthlyTask = _scheduleApi.GetMonthlyScheduleAsync(monthlyFilter);
+        var leaveTask = _leaveApi != null
+            ? _leaveApi.GetAllLeaveRequestsAsync(new DentistLeaveFilterRequest { DentistUserId = dentistUserId })
+            : Task.FromResult(DentalClinic.Web.Models.Api.ApiResult<List<DentistLeaveRequestDto>>.Success(new List<DentistLeaveRequestDto>()));
 
-        await Task.WhenAll(allocationsTask, deptsTask, dentistsTask, roomsTask, schedulesTask, availabilitiesTask, monthlyTask);
+        await Task.WhenAll(allocationsTask, deptsTask, dentistsTask, roomsTask, schedulesTask, availabilitiesTask, monthlyTask, leaveTask);
 
         var vm = new AdminDentistScheduleManageViewModel
         {
@@ -85,6 +93,7 @@ public class AdminDentistScheduleController : Controller
             Schedules = schedulesTask.Result.IsSuccess && schedulesTask.Result.Data != null ? schedulesTask.Result.Data : new(),
             Availabilities = availabilitiesTask.Result.IsSuccess && availabilitiesTask.Result.Data != null ? availabilitiesTask.Result.Data : new(),
             MonthlySchedule = monthlyTask.Result.IsSuccess && monthlyTask.Result.Data != null ? monthlyTask.Result.Data : null,
+            LeaveRequests = leaveTask.Result.IsSuccess && leaveTask.Result.Data != null ? leaveTask.Result.Data : new(),
             ActiveTab = tab,
             SelectedDepartmentId = departmentId,
             SelectedDentistId = dentistUserId,
@@ -264,5 +273,54 @@ public class AdminDentistScheduleController : Controller
         }
 
         return RedirectToAction(nameof(Index), new { tab = "availabilities", dentistUserId = returnDentistId });
+    }
+
+    // ==========================================
+    // DENTIST LEAVE APPROVAL & DISRUPTION IMPACT
+    // ==========================================
+
+    [HttpGet("LeaveImpact/{id:long}")]
+    public async Task<IActionResult> LeaveImpact(long id)
+    {
+        var result = await _leaveApi.GetLeaveImpactAnalysisAsync(id);
+        return Json(result);
+    }
+
+    [HttpPost("ApproveLeave/{id:long}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApproveLeave(long id, string? adminNotes)
+    {
+        var result = await _leaveApi.ApproveLeaveRequestAsync(id, new ApproveDentistLeaveRequest { AdminNotes = adminNotes });
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "PhÃª duyá»‡t Ä‘Æ¡n xin nghá»‰ phÃ©p thÃ nh cÃ´ng. Há»‡ thá»‘ng Ä‘Ã£ tá»± Ä‘á»™ng táº¡o sá»± cá»‘ giÃ¡n Ä‘oáº¡n vÃ  gá»­i thÃ´ng bÃ¡o khÃ´i phá»¥c lá»‹ch cho bá»‡nh nhÃ¢n.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "KhÃ´ng thá»ƒ phÃª duyá»‡t Ä‘Æ¡n nghá»‰ phÃ©p.";
+        }
+        return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+    }
+
+    [HttpPost("RejectLeave/{id:long}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RejectLeave(long id, string rejectionReason)
+    {
+        if (string.IsNullOrWhiteSpace(rejectionReason))
+        {
+            TempData["ErrorMessage"] = "Vui lÃ²ng nháº­p lÃ½ do tá»« chá»‘i Ä‘Æ¡n xin nghá»‰ phÃ©p.";
+            return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+        }
+
+        var result = await _leaveApi.RejectLeaveRequestAsync(id, new RejectDentistLeaveRequest { RejectionReason = rejectionReason });
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "ÄÃ£ tá»« chá»‘i Ä‘Æ¡n xin nghá»‰ phÃ©p.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "KhÃ´ng thá»ƒ tá»« chá»‘i Ä‘Æ¡n nghá»‰ phÃ©p.";
+        }
+        return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
     }
 }

@@ -1,4 +1,4 @@
-﻿using DentalClinic.Web.Handlers;
+using DentalClinic.Web.Handlers;
 using DentalClinic.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;

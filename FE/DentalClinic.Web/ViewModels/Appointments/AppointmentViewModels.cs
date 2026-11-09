@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using DentalClinic.Web.Models.ApiDtos;
 
 namespace DentalClinic.Web.ViewModels.Appointments;
@@ -18,4 +18,12 @@ public class AppointmentDetailViewModel
     public List<StatusHistoryDto> StatusHistories { get; set; } = new();
     public string CurrentUserRole { get; set; } = string.Empty;
     public long CurrentUserId { get; set; }
+    public AppointmentDisruptionDto? ActiveDisruption { get; set; }
+}
+
+public class PatientDisruptionViewModel
+{
+    public AppointmentDisruptionDto Disruption { get; set; } = new();
+    public List<AlternativeDentistDto> AlternativeDentists { get; set; } = new();
+    public AppointmentDto? Appointment { get; set; }
 }

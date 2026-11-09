@@ -19,6 +19,7 @@ public class PatientAppointmentController : Controller
 {
     private readonly IAppointmentApiService _appointmentApiService;
     private readonly IFeedbackApiService _feedbackApiService;
+    private readonly IAppointmentDisruptionApiService? _disruptionApi;
 
     public static readonly TimeZoneInfo ClinicTimeZone = ResolveClinicTimeZone();
 
@@ -53,10 +54,12 @@ public class PatientAppointmentController : Controller
 
     public PatientAppointmentController(
         IAppointmentApiService appointmentApiService,
-        IFeedbackApiService feedbackApiService)
+        IFeedbackApiService feedbackApiService,
+        IAppointmentDisruptionApiService? disruptionApi = null)
     {
         _appointmentApiService = appointmentApiService;
         _feedbackApiService = feedbackApiService;
+        _disruptionApi = disruptionApi;
     }
 
     [HttpGet("")]
@@ -565,5 +568,80 @@ public class PatientAppointmentController : Controller
         }
 
         return RedirectToAction(nameof(Detail), new { id = model.AppointmentId });
+    }
+
+    // ==========================================
+    // DOCTOR LEAVE DISRUPTION RECOVERY ACTIONS
+    // ==========================================
+
+    [HttpGet("Disruption/{id:long}")]
+    public async Task<IActionResult> Disruption(long id)
+    {
+        var disruptionResult = await _disruptionApi.GetDisruptionDetailAsync(id);
+        if (!disruptionResult.IsSuccess || disruptionResult.Data == null)
+        {
+            TempData["ErrorMessage"] = disruptionResult.Message ?? "KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin sá»± cá»‘ giÃ¡n Ä‘oáº¡n lá»‹ch háº¹n.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var disruption = disruptionResult.Data;
+        var altResult = await _disruptionApi.GetAvailableAlternativeDentistsAsync(id);
+        var alternatives = altResult.IsSuccess && altResult.Data != null ? altResult.Data : new List<AlternativeDentistDto>();
+
+        var apptResult = await _appointmentApiService.GetAppointmentDetailAsync(disruption.AppointmentId);
+        var appt = apptResult.IsSuccess ? apptResult.Data : null;
+
+        var vm = new PatientDisruptionViewModel
+        {
+            Disruption = disruption,
+            AlternativeDentists = alternatives,
+            Appointment = appt
+        };
+
+        return View("~/Views/Patient/Appointment/DisruptionDetail.cshtml", vm);
+    }
+
+    [HttpPost("Disruption/{id:long}/ChooseDentist")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ChooseAlternativeDentist(long id, [FromForm] long newDentistUserId, [FromForm] string? note)
+    {
+        var req = new PatientChooseNewDentistRequest
+        {
+            NewDentistUserId = newDentistUserId,
+            Note = note
+        };
+
+        var result = await _disruptionApi.PatientChooseNewDentistAsync(id, req);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "ÄÃ£ chuyá»ƒn Ä‘á»•i bÃ¡c sÄ© Ä‘iá»u trá»‹ thÃ nh cÃ´ng. Lá»‹ch háº¹n cá»§a báº¡n giá»¯ nguyÃªn ngÃ y giá» Ä‘Ã£ Ä‘áº·t!";
+            var apptId = result.Data?.AppointmentId ?? id;
+            return RedirectToAction(nameof(Detail), new { id = apptId });
+        }
+
+        TempData["ErrorMessage"] = result.Message ?? "KhÃ´ng thá»ƒ chá»n bÃ¡c sÄ© thay tháº¿.";
+        return RedirectToAction(nameof(Disruption), new { id });
+    }
+
+    [HttpPost("Disruption/{id:long}/Reschedule")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RescheduleDisruption(long id, [FromForm] DateTime newScheduledStart, [FromForm] string? reason)
+    {
+        var req = new PatientDisruptionRescheduleRequest
+        {
+            NewScheduledStart = newScheduledStart,
+            Reason = string.IsNullOrWhiteSpace(reason) ? "Bá»‡nh nhÃ¢n dá»i lá»‹ch do bÃ¡c sÄ© phá»¥ trÃ¡ch nghá»‰ phÃ©p" : reason
+        };
+
+        var result = await _disruptionApi.PatientRescheduleDisruptionAsync(id, req);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "ÄÃ£ dá»i lá»‹ch háº¹n khÃ¡m má»›i thÃ nh cÃ´ng! Há»‡ thá»‘ng Ä‘Ã£ gá»­i email xÃ¡c nháº­n Ä‘áº¿n báº¡n.";
+            var targetId = result.Data?.ResolvedAppointmentId ?? result.Data?.AppointmentId ?? id;
+            return RedirectToAction(nameof(Detail), new { id = targetId });
+        }
+
+        TempData["ErrorMessage"] = result.Message ?? "KhÃ´ng thá»ƒ dá»i lá»‹ch háº¹n.";
+        return RedirectToAction(nameof(Disruption), new { id });
     }
 }
