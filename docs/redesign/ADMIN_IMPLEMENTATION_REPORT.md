@@ -132,9 +132,9 @@ flowchart TD
     end
 
     subgraph Integration_Dependencies["Phụ thuộc Tích hợp (Cần bàn giao cho Anti 2, 3, 4)"]
-        D1["Anti 2 (Dentist): Sử dụng GET /api/Medicine/available-for-dentist để kê đơn"]
-        D2["Anti 3 (Receptionist): Sử dụng POST /api/Blog/posts (Draft / PendingReview)"]
-        D3["Anti 4 (Patient): Sử dụng POST /api/Feedback sau khi hoàn tất khám"]
+        D1["Anti 2 (Receptionist): Sử dụng POST /api/Blog/posts (Draft / PendingReview)"]
+        D2["Anti 3 (Patient): Sử dụng POST /api/Feedback sau khi hoàn tất khám"]
+        D3["Anti 4 (Dentist): Sử dụng GET /api/Medicine/available-for-dentist để kê đơn"]
         D4["Integration Team: Chạy Migration nới lỏng CHECK constraint CK_BlogPosts_Status"]
     end
 
@@ -144,9 +144,9 @@ flowchart TD
 | Hạng mục | Trạng thái | Ghi chú & Phụ thuộc |
 |---|---|---|
 | **Đã kiểm thử độc lập (Anti 1)** | **100% Đạt (47 BE tests + 289 FE tests)** | Chạy trực tiếp trên SQL Server `DentalCare_Admin_Dev` và in-memory. |
-| **Phụ thuộc Anti 2 (Dentist)** | *Chờ tích hợp* | Dentist FE/BE gọi `GET /api/Medicine/available-for-dentist` để kê đơn thuốc an toàn. |
-| **Phụ thuộc Anti 3 (Receptionist)** | *Chờ tích hợp* | Receptionist FE gọi `POST /api/Blog/posts` để lưu nháp/gửi duyệt bài viết. |
-| **Phụ thuộc Anti 4 (Patient)** | *Chờ tích hợp* | Patient FE gửi đánh giá bác sĩ qua `POST /api/Feedback`. |
+| **Phụ thuộc Anti 2 (Receptionist)** | *Chờ tích hợp* | Receptionist FE gọi `POST /api/Blog/posts` để lưu nháp/gửi duyệt bài viết. |
+| **Phụ thuộc Anti 3 (Patient)** | *Chờ tích hợp* | Patient FE gửi đánh giá bác sĩ qua `POST /api/Feedback`. |
+| **Phụ thuộc Anti 4 (Dentist)** | *Chờ tích hợp* | Dentist FE/BE gọi `GET /api/Medicine/available-for-dentist` để kê đơn thuốc an toàn. |
 | **Migrations cần bổ sung cho Team Tích hợp** | *Đã có script SQL* | Bổ sung giá trị `'Rejected'` vào `CK_BlogPosts_Status` khi triển khai production. |
 
 ---

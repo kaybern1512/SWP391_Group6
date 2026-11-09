@@ -425,4 +425,94 @@ public class AdminRedesignUnitTests
         Assert.Equal("Rejected", savedPost2!.Status);
         Assert.Equal("Phương pháp dùng chanh làm mòn men răng nghiêm trọng, phản khoa học.", savedPost2.RejectionReason);
     }
+
+    [Fact]
+    public async Task Blog_PostType_NormalizationAndFiltering_WorksSeamlesslyWithKnowledgeBlog()
+    {
+        // Arrange
+        using var db = CreateInMemoryDb(nameof(Blog_PostType_NormalizationAndFiltering_WorksSeamlesslyWithKnowledgeBlog));
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockStorage = new Mock<IMediaStorageService>();
+        var mockValidator = new Mock<IBlogMediaFileValidator>();
+        var mockLogger = new Mock<ILogger<BlogService>>();
+        var blogService = new BlogService(db, mockAudit.Object, mockStorage.Object, mockValidator.Object, mockLogger.Object);
+
+        var author = new UserAccount { UserId = 1, Role = UserRole.Receptionist, Status = AccountStatus.Active };
+        db.UserAccounts.Add(author);
+        var cat = new BlogCategory { CategoryId = 1, Name = "Nha Khoa", Slug = "nha-khoa" };
+        db.BlogCategories.Add(cat);
+        await db.SaveChangesAsync();
+
+        // 1. Post with KnowledgeBlog should be normalized to "Blog"
+        var createReq = new CreateBlogPostRequest
+        {
+            Title = "Kiến thức nha khoa số 1",
+            Content = "<p>Nội dung</p>",
+            CategoryId = 1,
+            PostType = "KnowledgeBlog",
+            Status = BlogPostStatus.PendingReview
+        };
+        var res1 = await blogService.CreatePostAsync(1, createReq);
+        Assert.True(res1.Success, res1.Message);
+        Assert.Equal("Blog", res1.Data!.PostType);
+
+        // Publish post 1
+        var pubRes1 = await blogService.ReviewPostAsync(res1.Data.BlogPostId, 1, new ReviewBlogPostRequest { Status = "Published" });
+        Assert.True(pubRes1.Success);
+
+        // 2. Post with ClinicNews
+        var newsReq = new CreateBlogPostRequest
+        {
+            Title = "Tin tức phòng khám DentalCare",
+            Content = "<p>Nội dung tin tức</p>",
+            CategoryId = 1,
+            PostType = "ClinicNews",
+            Status = BlogPostStatus.PendingReview
+        };
+        var res2 = await blogService.CreatePostAsync(1, newsReq);
+        Assert.True(res2.Success, res2.Message);
+        Assert.Equal("ClinicNews", res2.Data!.PostType);
+
+        // Publish post 2
+        var pubRes2 = await blogService.ReviewPostAsync(res2.Data.BlogPostId, 1, new ReviewBlogPostRequest { Status = "Published" });
+        Assert.True(pubRes2.Success);
+
+        // 3. Post with Announcement
+        var annReq = new CreateBlogPostRequest
+        {
+            Title = "Thông báo nghỉ lễ",
+            Content = "<p>Nội dung thông báo</p>",
+            CategoryId = 1,
+            PostType = "Announcement",
+            Status = BlogPostStatus.PendingReview
+        };
+        var res3 = await blogService.CreatePostAsync(1, annReq);
+        Assert.True(res3.Success, res3.Message);
+        Assert.Equal("Announcement", res3.Data!.PostType);
+
+        // Publish post 3
+        var pubRes3 = await blogService.ReviewPostAsync(res3.Data.BlogPostId, 1, new ReviewBlogPostRequest { Status = "Published" });
+        Assert.True(pubRes3.Success);
+
+        // Act & Assert 4: Querying by KnowledgeBlog returns Blog posts
+        var filterKnowledge = new BlogFilterRequest { PostType = "KnowledgeBlog" };
+        var listKnowledge = await blogService.GetPublicPostsAsync(filterKnowledge);
+        Assert.True(listKnowledge.Success);
+        Assert.Single(listKnowledge.Data!.Items);
+        Assert.Equal("Kiến thức nha khoa số 1", listKnowledge.Data.Items[0].Title);
+
+        // Act & Assert 5: Querying by ClinicNews returns ClinicNews posts
+        var filterNews = new BlogFilterRequest { PostType = "ClinicNews" };
+        var listNews = await blogService.GetPublicPostsAsync(filterNews);
+        Assert.True(listNews.Success);
+        Assert.Single(listNews.Data!.Items);
+        Assert.Equal("Tin tức phòng khám DentalCare", listNews.Data.Items[0].Title);
+
+        // Act & Assert 6: Querying by Announcement returns Announcement posts
+        var filterAnn = new BlogFilterRequest { PostType = "Announcement" };
+        var listAnn = await blogService.GetPublicPostsAsync(filterAnn);
+        Assert.True(listAnn.Success);
+        Assert.Single(listAnn.Data!.Items);
+        Assert.Equal("Thông báo nghỉ lễ", listAnn.Data.Items[0].Title);
+    }
 }

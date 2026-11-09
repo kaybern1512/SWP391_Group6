@@ -2,11 +2,11 @@
 ## DentalCare System Administrator Handoff Specification
 
 - **Module:** Anti 1 – SystemAdministrator
-- **Target Audience:** Integration Team, Anti 2 (Dentist), Anti 3 (Receptionist), Anti 4 (Patient)
+- **Target Audience:** Integration Team, Anti 2 (Receptionist), Anti 3 (Patient), Anti 4 (Dentist)
 - **Base URL:** `https://localhost:7351` (Backend API)
 - **Frontend URL:** `https://localhost:7121` (Web Portal)
 - **Authentication:** Bearer JWT Token hoặc Cookie `.DentalCare.Admin.Auth`
-- **Specification Version:** 1.1 (Phase 0 Redesign - Final QA Verified)
+- **Specification Version:** 1.2 (Final QA Hand-off - Role Mapping Corrected)
 
 ---
 
@@ -16,10 +16,10 @@
    - Chỉ gồm 4 roles hợp lệ: `Patient`, `Dentist`, `Receptionist`, `SystemAdministrator`.
    - Các role cũ `DepartmentManager` và `Pharmacist` đã bị loại bỏ hoàn toàn.
 2. **Quy tắc phối hợp giữa các Agent:**
-   - **Admin:** Sở hữu toàn bộ các endpoint quản trị cấu hình dịch vụ, bác sĩ, phòng/ghế, kho thuốc (độc quyền nhập/kiểm kê), duyệt bài viết/tin tức CMS, kiểm duyệt phản hồi bệnh nhân, và giám sát hệ thống.
-   - **Dentist (Anti 2):** Truy vấn danh mục thuốc khả dụng qua endpoint `GET /api/Medicine/available-for-dentist` để kê đơn. Admin không kê đơn thay bác sĩ.
-   - **Receptionist (Anti 3):** Viết bài nháp và gửi duyệt bài viết qua endpoint `POST /api/Blog/posts`. Receptionist không có quyền tự duyệt xuất bản (`Published`).
-   - **Patient (Anti 4):** Sở hữu việc gửi đánh giá bác sĩ sau khi hoàn tất khám. Admin chỉ kiểm duyệt ẩn/hiện và phản hồi, tuyệt đối không can thiệp số sao đánh giá.
+   - **Admin (Anti 1):** Sở hữu toàn bộ các endpoint quản trị cấu hình dịch vụ, bác sĩ, phòng/ghế, kho thuốc (độc quyền nhập/kiểm kê), duyệt bài viết/tin tức CMS, kiểm duyệt phản hồi bệnh nhân, và giám sát hệ thống.
+   - **Receptionist (Anti 2):** Viết bài nháp và gửi duyệt bài viết qua endpoint `POST /api/Blog/posts`. Receptionist không có quyền tự duyệt xuất bản (`Published`).
+   - **Patient (Anti 3):** Sở hữu việc gửi đánh giá bác sĩ sau khi hoàn tất khám. Admin chỉ kiểm duyệt ẩn/hiện và phản hồi, tuyệt đối không can thiệp số sao đánh giá.
+   - **Dentist (Anti 4):** Truy vấn danh mục thuốc khả dụng qua endpoint `GET /api/Medicine/available-for-dentist` để kê đơn. Admin không kê đơn thay bác sĩ.
 
 ---
 
@@ -184,7 +184,7 @@
 - **Role:** `SystemAdministrator`
 - **Mô tả:** Điều chỉnh tồn kho có lý do kiểm kê bắt buộc, ghi nhận vào `MedicineStockTransactions` loại `Adjustment`.
 
-### 7.4. Handoff Contract cho Bác sĩ (Anti 2 - Dentist Kê đơn)
+### 7.4. Handoff Contract cho Bác sĩ (Anti 4 - Dentist Kê đơn)
 - **Endpoint:** `GET /api/Medicine/available-for-dentist?searchTerm={term}`
 - **Role:** `Dentist`, `SystemAdministrator`
 - **Mục đích:** Cung cấp danh mục thuốc, các lô còn hạn dùng, giá bán và số lượng thực tế có thể kê đơn.

@@ -130,6 +130,12 @@ public class BlogService : IBlogService
                 query = query.Where(p => p.IsFeatured == request.IsFeatured.Value);
             }
 
+            if (!string.IsNullOrWhiteSpace(request.PostType))
+            {
+                var targetType = NormalizePostType(request.PostType);
+                query = query.Where(p => (p.PostType ?? "Blog") == targetType);
+            }
+
             var totalCount = await query.CountAsync(ct);
 
             var page = Math.Max(1, request.Page);
@@ -364,8 +370,7 @@ public class BlogService : IBlogService
                 ? BlogPostStatus.PendingReview
                 : BlogPostStatus.Draft;
 
-            var validPostTypes = new[] { "Blog", "ClinicNews", "Announcement" };
-            var postType = validPostTypes.Contains(request.PostType, StringComparer.OrdinalIgnoreCase) ? request.PostType : "Blog";
+            var postType = NormalizePostType(request.PostType);
 
             var post = new BlogPost
             {
@@ -460,11 +465,7 @@ public class BlogService : IBlogService
             post.VideoUrl = string.IsNullOrWhiteSpace(request.VideoUrl) ? null : request.VideoUrl.Trim();
             if (!string.IsNullOrWhiteSpace(request.PostType))
             {
-                var validPostTypes = new[] { "Blog", "ClinicNews", "Announcement" };
-                if (validPostTypes.Contains(request.PostType, StringComparer.OrdinalIgnoreCase))
-                {
-                    post.PostType = request.PostType;
-                }
+                post.PostType = NormalizePostType(request.PostType);
             }
             post.UpdatedAt = DateTime.UtcNow;
 
@@ -607,6 +608,12 @@ public class BlogService : IBlogService
             if (request.IsFeatured.HasValue)
             {
                 query = query.Where(p => p.IsFeatured == request.IsFeatured.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.PostType))
+            {
+                var targetType = NormalizePostType(request.PostType);
+                query = query.Where(p => (p.PostType ?? "Blog") == targetType);
             }
 
             if (!string.IsNullOrWhiteSpace(request.Keyword))
@@ -1074,6 +1081,34 @@ public class BlogService : IBlogService
         }
 
         return slug;
+    }
+
+    public static string NormalizePostType(string? postType)
+    {
+        if (string.IsNullOrWhiteSpace(postType))
+            return "Blog";
+
+        var trimmed = postType.Trim();
+        if (string.Equals(trimmed, "KnowledgeBlog", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, "Blog", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, "DentalKnowledge", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Blog";
+        }
+
+        if (string.Equals(trimmed, "ClinicNews", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, "News", StringComparison.OrdinalIgnoreCase))
+        {
+            return "ClinicNews";
+        }
+
+        if (string.Equals(trimmed, "Announcement", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, "ThongBao", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Announcement";
+        }
+
+        return "Blog";
     }
 
     private static BlogPostListItemDto MapToListItemDto(BlogPost post)
