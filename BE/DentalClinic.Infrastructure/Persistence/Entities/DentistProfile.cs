@@ -42,6 +42,10 @@ public partial class DentistProfile
     public virtual ICollection<TreatmentPlan> TreatmentPlans { get; set; } = new List<TreatmentPlan>();
 
     public virtual ICollection<TreatmentSession> TreatmentSessions { get; set; } = new List<TreatmentSession>();
+    public virtual ICollection<DiagnosticOrder> DiagnosticOrders { get; set; } = new List<DiagnosticOrder>();
+    public virtual ICollection<DiagnosticResult> DiagnosticResultsReviewed { get; set; } = new List<DiagnosticResult>();
+    public virtual ICollection<ClinicalConsultation> ClinicalConsultationsRequested { get; set; } = new List<ClinicalConsultation>();
+    public virtual ICollection<ClinicalConsultation> ClinicalConsultationsReceived { get; set; } = new List<ClinicalConsultation>();
 
     public virtual StaffProfile User { get; set; } = null!;
 }

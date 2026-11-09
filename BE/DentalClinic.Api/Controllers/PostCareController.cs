@@ -1,3 +1,4 @@
+using DentalClinic.Application.Features.ClinicalDiagnostics.DTOs;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading;

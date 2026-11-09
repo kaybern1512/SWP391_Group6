@@ -80,7 +80,6 @@ services.AddScoped<IReceptionistCoverageService, ReceptionistCoverageService>();
         services.AddScoped<IReceptionistLeaveService, ReceptionistLeaveService>();
         services.AddScoped<IReceptionistShiftSwapService, ReceptionistShiftSwapService>();
         services.AddScoped<IReceptionistHandoverService, ReceptionistHandoverService>();
-
         // Workforce Attendance & Operations Services
         services.AddScoped<DentistShiftProvider>();
         services.AddScoped<ReceptionistShiftProvider>();
@@ -89,6 +88,9 @@ services.AddScoped<IReceptionistCoverageService, ReceptionistCoverageService>();
         services.AddScoped<IWorkforceReportService, WorkforceReportService>();
         services.AddScoped<IClinicOperationsService, ClinicOperationsService>();
         services.AddScoped<IAdminImpactAnalysisService, AdminImpactAnalysisService>();
+
+        // Clinical Diagnostics & Imaging Services
+        services.AddScoped<IImagingService, ImagingService>();
         services.AddHostedService<AppointmentReminderBackgroundWorker>();
         services.AddHostedService<AppointmentDisruptionBackgroundWorker>();
 

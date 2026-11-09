@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -579,6 +579,36 @@ public class BillingService : IBillingService
                     Description = $"[Thuốc] {item.Medicine?.MedicineName ?? "Thuốc điều trị"} (Lô {item.MedicineBatch?.BatchNumber ?? "N/A"})",
                     Quantity = item.QuantityDispensed,
                     UnitPrice = item.UnitPriceSnapshot
+                });
+            }
+        }
+
+        // Load completed internal diagnostic imaging sessions for this appointment
+        var completedImagingOrders = await _dbContext.DiagnosticOrders
+            .AsNoTracking()
+            .Include(o => o.ImagingSessions)
+            .Where(o => o.AppointmentId == appt.AppointmentId && !o.IsExternal && o.Status == "Completed")
+            .ToListAsync(ct);
+
+        foreach (var order in completedImagingOrders)
+        {
+            var completedSession = order.ImagingSessions.FirstOrDefault(s => s.Status == "Completed");
+            if (completedSession != null)
+            {
+                var config = await _dbContext.ImagingServiceConfigs
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.DiagnosticType == order.DiagnosticType, ct);
+
+                var price = config?.Price ?? 0;
+                var serviceName = config?.ServiceName ?? $"Chụp X-quang {order.DiagnosticType}";
+
+                performedItems.Add(new BillingPreloadedItemDto
+                {
+                    PerformedServiceId = null,
+                    DepartmentServiceId = null,
+                    Description = $"[CĐHA] {serviceName}",
+                    Quantity = 1,
+                    UnitPrice = price
                 });
             }
         }

@@ -92,4 +92,9 @@ public partial class Appointment
     public virtual VisitFeedback? VisitFeedback { get; set; }
 
     public virtual TreatmentPlanItem? TreatmentPlanItem { get; set; }
+    public virtual ICollection<DiagnosticOrder> DiagnosticOrders { get; set; } = new List<DiagnosticOrder>();
+    public virtual ICollection<ImagingSession> ImagingSessions { get; set; } = new List<ImagingSession>();
+    public virtual ICollection<ClinicalConsultation> ClinicalConsultations { get; set; } = new List<ClinicalConsultation>();
+    public virtual ICollection<DepartmentReferral> IncomingReferrals { get; set; } = new List<DepartmentReferral>();
+    public virtual ICollection<DepartmentReferral> OutgoingReferrals { get; set; } = new List<DepartmentReferral>();
 }

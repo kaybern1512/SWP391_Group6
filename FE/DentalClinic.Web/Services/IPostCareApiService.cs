@@ -25,4 +25,7 @@ public interface IPostCareApiService
     Task<ApiResult<FollowUpProposalDto>> ResolveProposalAsync(ResolveProposalRequest request);
     Task<ApiResult<List<FollowUpReminderDto>>> GetReceptionistRemindersAsync(string? dateFilter = null, string? callStatus = null);
     Task<ApiResult<FollowUpReminderDto>> UpdateReminderCallStatusAsync(UpdateReminderCallStatusRequest request);
+
+    Task<ApiResult<DepartmentReferralDto>> ScheduleReferralDestinationAppointmentAsync(long referralId, ScheduleDestinationReferralRequest request);
+    Task<ApiResult<ReferralSourceSummaryDto>> GetReferralSourceSummaryAsync(long referralId);
 }

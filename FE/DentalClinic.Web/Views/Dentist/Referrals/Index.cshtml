@@ -46,6 +46,12 @@
                 }
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(Model.ActiveTab == "consultations" ? "active" : "") fw-semibold d-flex align-items-center" id="consultations-tab" data-bs-toggle="tab" data-bs-target="#consultations-content" type="button" role="tab">
+                <i class="bi bi-chat-heart me-2"></i>Hội Chẩn Lâm Sàng
+                <span class="badge bg-primary ms-2">@(Model.Consultations?.Count ?? 0)</span>
+            </button>
+        </li>
     </ul>
 
     <div class="tab-content" id="postCareTabsContent">
@@ -522,6 +528,221 @@
     </div>
 </div>
 
+
+        <!-- TAB 4: CLINICAL CONSULTATIONS -->
+        <div class="tab-pane fade @(Model.ActiveTab == "consultations" ? "show active" : "")" id="consultations-content" role="tabpanel">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                    <h5 class="card-title fw-bold mb-0 text-dark">
+                        <i class="bi bi-chat-heart me-2 text-primary"></i>Danh Sách Ý Kiến Hội Chẩn Lâm Sàng
+                    </h5>
+                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createConsultationModal">
+                        <i class="bi bi-plus-circle me-1"></i>Tạo Yêu Cầu Mới
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    @if (Model.Consultations == null || Model.Consultations.Count == 0)
+                    {
+                        <div class="text-center py-5">
+                            <i class="bi bi-chat-square-text display-4 text-muted mb-3 d-block"></i>
+                            <h6 class="fw-bold text-muted">Chưa có yêu cầu hội chẩn chuyên môn nào</h6>
+                            <p class="text-muted small">Bác sĩ có thể xin ý kiến hội chẩn từ các đồng nghiệp chuyên khoa khác cho ca khám phức tạp.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-4">Mã</th>
+                                        <th>Bệnh Nhân</th>
+                                        <th>Bác Sĩ Gửi / Nhận</th>
+                                        <th>Lý Do / Câu Hỏi Lâm Sàng</th>
+                                        <th>Mức Độ</th>
+                                        <th>Trạng Thái</th>
+                                        <th>Ý Kiến Chuyên Môn</th>
+                                        <th class="pe-4 text-end">Thao Tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var c in Model.Consultations)
+                                    {
+                                        <tr>
+                                            <td class="ps-4 fw-bold text-primary">#CON-@c.ConsultationId</td>
+                                            <td>
+                                                <div class="fw-bold text-dark">@c.PatientName</div>
+                                                <div class="small text-muted">@(c.PatientCode ?? "BN-" + c.PatientUserId)</div>
+                                            </td>
+                                            <td>
+                                                <div class="small text-muted">Từ: <span class="fw-bold text-dark">@c.RequestingDentistName</span></div>
+                                                <div class="small text-muted">Tới: <span class="fw-bold text-primary">@c.ConsultedDentistName</span></div>
+                                            </td>
+                                            <td>
+                                                <div class="fw-semibold text-dark">@c.ConsultationReason</div>
+                                                <div class="small text-muted text-truncate" style="max-width: 250px;">@c.ClinicalQuestion</div>
+                                            </td>
+                                            <td>
+                                                @if (c.Urgency == "Urgent")
+                                                {
+                                                    <span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>Khẩn</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-light text-dark border">Thường</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (c.Status == "Answered")
+                                                {
+                                                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Đã phản hồi</span>
+                                                }
+                                                else if (c.Status == "Requested")
+                                                {
+                                                    <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Chờ ý kiến</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">@c.Status</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(c.DentistOpinion))
+                                                {
+                                                    <div class="small text-dark p-2 bg-light rounded border">
+                                                        <div class="fw-bold text-success"><i class="bi bi-quote me-1"></i>@c.DentistOpinion</div>
+                                                        @if (!string.IsNullOrEmpty(c.Recommendations))
+                                                        {
+                                                            <div class="text-muted mt-1 fst-italic">Khuyến nghị: @c.Recommendations</div>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small fst-italic">Chưa có phản hồi</span>
+                                                }
+                                            </td>
+                                            <td class="pe-4 text-end">
+                                                @if (c.Status == "Requested")
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="openRespondModal(@c.ConsultationId, '@c.PatientName', '@c.ClinicalQuestion')">
+                                                        <i class="bi bi-reply me-1"></i>Trả lời
+                                                    </button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+
+<!-- Modal Xin Ý Kiến Hội Chẩn -->
+<div class="modal fade" id="createConsultationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post" asp-action="CreateConsultation">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-chat-quote me-2"></i>Gửi Yêu Cầu Hội Chẩn Chuyên Môn</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Ca Khám Nguồn <span class="text-danger">*</span></label>
+                        <select name="SourceAppointmentId" class="form-select" required>
+                            <option value="">-- Chọn ca khám lâm sàng --</option>
+                            @foreach (var s in Model.RecentSessions)
+                            {
+                                <option value="@s.AppointmentId">Ca #@s.AppointmentId - @s.PatientName (@s.SessionDate.ToString("dd/MM/yyyy"))</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Bác Sĩ Cần Xin Ý Kiến <span class="text-danger">*</span></label>
+                        <select name="ConsultedDentistUserId" class="form-select" required>
+                            <option value="">-- Chọn bác sĩ đồng nghiệp --</option>
+                            @foreach (var d in Model.Departments)
+                            {
+                                <optgroup label="@d.Name">
+                                    <option value="10">Bác sĩ chuyên khoa (BS. Nguyễn Văn A)</option>
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Mức Độ Ưu Tiên</label>
+                        <select name="Urgency" class="form-select">
+                            <option value="Normal">Bình thường</option>
+                            <option value="Urgent">Khẩn cấp</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Lý Do Hội Chẩn <span class="text-danger">*</span></label>
+                        <input type="text" name="ConsultationReason" class="form-control" placeholder="Vd: Nghi ngờ gãy chân răng số 46..." required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Câu Hỏi Lâm Sàng & Đề Nghị <span class="text-danger">*</span></label>
+                        <textarea name="ClinicalQuestion" class="form-control" rows="3" placeholder="Chi tiết thắc mắc cần ý kiến chuyên môn của đồng nghiệp..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-send me-1"></i>Gửi Yêu Cầu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Trả Lời Ý Kiến Hội Chẩn -->
+<div class="modal fade" id="respondConsultationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form id="respondForm" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-reply me-2"></i>Đóng Góp Ý Kiến Chuyên Môn</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Bệnh Nhân</label>
+                        <input type="text" id="respondPatientName" class="form-control bg-light" readonly />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Câu Hỏi Lâm Sàng</label>
+                        <div id="respondClinicalQuestion" class="p-2 bg-light rounded border small"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Ý Kiến Chuyên Môn <span class="text-danger">*</span></label>
+                        <textarea name="DentistOpinion" class="form-control" rows="3" placeholder="Đánh giá lâm sàng và giải phẫu..." required></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Khuyến Nghị Điều Trị</label>
+                        <textarea name="Recommendations" class="form-control" rows="2" placeholder="Hướng xử trí, thuốc hoặc can thiệp đề xuất..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle me-1"></i>Gửi Ý Kiến</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         let approveModalInstance = null;
@@ -721,3 +942,10 @@
         }
     </script>
 }
+
+    function openRespondModal(consultationId, patientName, question) {
+        document.getElementById('respondForm').action = '/Dentist/Referrals/RespondConsultation/' + consultationId;
+        document.getElementById('respondPatientName').value = patientName;
+        document.getElementById('respondClinicalQuestion').innerText = question;
+        new bootstrap.Modal(document.getElementById('respondConsultationModal')).show();
+    }

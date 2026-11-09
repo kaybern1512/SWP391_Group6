@@ -1,0 +1,413 @@
+@model DentalClinic.Web.Models.ApiDtos.ImagingQueueSummaryDto
+@{
+    ViewData["Title"] = "Điều Phối Hàng Đợi Chụp X-Quang & Thiết Bị";
+    var equipments = ViewBag.Equipments as List<DentalClinic.Web.Models.ApiDtos.ImagingEquipmentDto> ?? new();
+    var configs = ViewBag.Configs as List<DentalClinic.Web.Models.ApiDtos.ImagingServiceConfigDto> ?? new();
+}
+
+<div class="container-fluid px-0">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-camera text-primary me-2"></i>Hàng Đợi Chụp X-Quang & Thiết Bị Chẩn Đoán
+            </h1>
+            <p class="text-muted mb-0">
+                Khu vực chẩn đoán hình ảnh kỹ thuật số &bull; Phòng: <span class="badge bg-primary fs-6">@Model.RoomCode - @Model.RoomName</span>
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#checkInModal">
+                <i class="bi bi-person-check-fill me-1"></i> Tiếp Nhận / Check-in Ca Chụp
+            </button>
+            <a href="@Url.Action("Index", "ReceptionistImagingQueue")" class="btn btn-outline-secondary shadow-sm">
+                <i class="bi bi-arrow-clockwise me-1"></i> Làm mới
+            </a>
+        </div>
+    </div>
+
+    <!-- Alert Messages -->
+    <partial name="_AlertMessage" />
+
+    <!-- Escalation / Delay Warning Banners -->
+    @if (Model.HasEscalationAlert)
+    {
+        <div class="alert alert-danger shadow-sm border-0 border-start border-4 border-danger d-flex align-items-center mb-4" role="alert">
+            <i class="bi bi-exclamation-octagon-fill fs-3 text-danger me-3"></i>
+            <div>
+                <h5 class="alert-heading fw-bold mb-1">CẢNH BÁO LEO THANG VẬN HÀNH (Chờ ≥ @Model.EscalationWaitMinutes phút)</h5>
+                <p class="mb-0">
+                    Thời gian chờ ước tính hiện tại là <strong>@Model.EstimatedNextWaitMinutes phút</strong>, đã vượt ngưỡng leo thang cho phép (@Model.EscalationWaitMinutes phút). Hàng đợi đang trong tình trạng quá tải nghiêm trọng. Vui lòng kiểm tra vận hành thiết bị hoặc báo cáo điều phối viên.
+                </p>
+            </div>
+        </div>
+    }
+    else if (Model.HasDelayWarning)
+    {
+        <div class="alert alert-warning shadow-sm border-0 border-start border-4 border-warning d-flex align-items-center mb-4" role="alert">
+            <i class="bi bi-exclamation-triangle-fill fs-3 text-warning me-3"></i>
+            <div>
+                <h5 class="alert-heading fw-bold mb-1">Cảnh Báo Chờ Đợi Vượt Mục Tiêu (Chờ ≥ @Model.TargetMaxWaitMinutes phút)</h5>
+                <p class="mb-0">
+                    Thời gian chờ ước tính hiện tại là <strong>@Model.EstimatedNextWaitMinutes phút</strong>, đã vượt mục tiêu chất lượng dịch vụ (@Model.TargetMaxWaitMinutes phút). Hãy ưu tiên chuẩn bị bệnh nhân tiếp theo.
+                </p>
+            </div>
+        </div>
+    }
+
+    <!-- KPI Summary Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 border-info">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Đang Chụp Trong Phòng</span>
+                            <h3 class="fw-bold mb-0 mt-1">@Model.CurrentInProgressCount / 1</h3>
+                        </div>
+                        <div class="rounded-circle bg-info bg-opacity-10 p-3 text-info">
+                            <i class="bi bi-play-circle fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 @(Model.CurrentWaitingCount >= Model.MaxWaitingPatients ? "border-danger" : "border-primary")">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Bệnh Nhân Đang Chờ</span>
+                            <h3 class="fw-bold mb-0 mt-1">@Model.CurrentWaitingCount / @Model.MaxWaitingPatients</h3>
+                        </div>
+                        <div class="rounded-circle @(Model.CurrentWaitingCount >= Model.MaxWaitingPatients ? "bg-danger bg-opacity-10 text-danger" : "bg-primary bg-opacity-10 text-primary") p-3">
+                            <i class="bi bi-people fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 @(Model.HasEscalationAlert ? "border-danger" : Model.HasDelayWarning ? "border-warning" : "border-success")">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">TG Chờ Ước Tính Ca Mới</span>
+                            <h3 class="fw-bold mb-0 mt-1">@Model.EstimatedNextWaitMinutes <span class="fs-6 text-muted fw-normal">phút</span></h3>
+                        </div>
+                        <div class="rounded-circle @(Model.HasEscalationAlert ? "bg-danger bg-opacity-10 text-danger" : Model.HasDelayWarning ? "bg-warning bg-opacity-10 text-warning" : "bg-success bg-opacity-10 text-success") p-3">
+                            <i class="bi bi-stopwatch fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 border-secondary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-semibold">Thiết Bị Khả Dụng</span>
+                            <h3 class="fw-bold mb-0 mt-1">@equipments.Count(e => e.IsActive && e.OperationalStatus == "Operational") / @equipments.Count</h3>
+                        </div>
+                        <div class="rounded-circle bg-secondary bg-opacity-10 p-3 text-secondary">
+                            <i class="bi bi-cpu fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Session Section -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <h5 class="card-title fw-bold mb-0 text-dark">
+                <i class="bi bi-record-circle-fill text-danger me-2"></i>Ca Chụp Đang Thực Hiện Trong Phòng
+            </h5>
+            <span class="badge bg-danger bg-opacity-10 text-danger px-3 py-2 fw-semibold">Độc Quyền 1 Bệnh Nhân</span>
+        </div>
+        <div class="card-body p-0">
+            @if (Model.ActiveSessions.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>STT Chụp</th>
+                                <th>Bệnh Nhân</th>
+                                <th>Mã BN</th>
+                                <th>Loại Chụp</th>
+                                <th>Thiết Bị</th>
+                                <th>Bắt Đầu Lúc</th>
+                                <th>Trạng Thái</th>
+                                <th class="text-end pe-4">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var s in Model.ActiveSessions)
+                            {
+                                <tr>
+                                    <td><span class="badge bg-primary fs-6">@(s.QueueNumber ?? "Chưa cấp")</span></td>
+                                    <td class="fw-semibold text-dark">@s.PatientName</td>
+                                    <td><span class="text-muted font-monospace">@(s.PatientCode ?? "-")</span></td>
+                                    <td><span class="badge bg-info text-dark">@s.DiagnosticType</span></td>
+                                    <td class="small">@s.EquipmentName</td>
+                                    <td>@s.ActualStartUtc?.ToLocalTime().ToString("HH:mm:ss")</td>
+                                    <td><span class="badge bg-warning text-dark">Đang Chụp</span></td>
+                                    <td class="text-end pe-4">
+                                        <div class="btn-group btn-group-sm">
+                                            <form method="post" asp-action="Acquire" asp-route-sessionId="@s.ImagingSessionId" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-info" title="Xác nhận ảnh đã chụp xong">
+                                                    <i class="bi bi-camera me-1"></i> Ghi nhận ảnh
+                                                </button>
+                                            </form>
+                                            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#uploadModal-@s.ImagingSessionId" title="Tải ảnh và hoàn tất">
+                                                <i class="bi bi-cloud-arrow-up me-1"></i> Tải ảnh & Hoàn tất
+                                            </button>
+                                        </div>
+
+                                        <!-- Upload Result Modal -->
+                                        <div class="modal fade" id="uploadModal-@s.ImagingSessionId" tabindex="-1" aria-hidden="true">
+                                            <div class="modal-dialog modal-dialog-centered text-start">
+                                                <div class="modal-content">
+                                                    <form method="post" asp-action="Upload">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="DiagnosticOrderId" value="@s.DiagnosticOrderId" />
+                                                        <input type="hidden" name="ImagingSessionId" value="@s.ImagingSessionId" />
+                                                        <input type="hidden" name="EquipmentId" value="@s.EquipmentId" />
+                                                        <input type="hidden" name="SourceType" value="Internal" />
+                                                        <div class="modal-header">
+                                                            <h5 class="modal-title fw-bold">Tải Lên Kết Quả Chụp X-Quang</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            <div class="mb-3">
+                                                                <label class="form-label fw-semibold">Bệnh nhân</label>
+                                                                <p class="form-control-plaintext mb-0">@s.PatientName (@s.QueueNumber)</p>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label fw-semibold">Đường dẫn tệp hình ảnh (URL)</label>
+                                                                <input type="text" name="FileUrl" class="form-control" required placeholder="https://res.cloudinary.com/... hoặc /storage/xray/..." />
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label fw-semibold">Định dạng ảnh</label>
+                                                                <select name="ImageFormat" class="form-select">
+                                                                    <option value="JPEG">JPEG / JPG</option>
+                                                                    <option value="PNG">PNG</option>
+                                                                    <option value="DICOM">DICOM / DCM</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label fw-semibold">Ghi chú chụp phim ban đầu</label>
+                                                                <textarea name="Findings" class="form-control" rows="2" placeholder="Chất lượng phim rõ nét, góc chụp đúng chỉ định..."></textarea>
+                                                            </div>
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                                                            <button type="submit" class="btn btn-primary">Lưu kết quả & Đưa vào kho hình ảnh</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-door-open fs-1 text-secondary opacity-50 mb-2"></i>
+                    <p class="mb-0">Hiện không có ca nào đang chụp trong phòng. Phòng chụp sẵn sàng tiếp nhận ca tiếp theo.</p>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Waiting Queue Section -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <h5 class="card-title fw-bold mb-0 text-dark">
+                <i class="bi bi-clock-history text-primary me-2"></i>Hàng Đợi Chờ Chụp (@Model.WaitingQueue.Count / @Model.MaxWaitingPatients)
+            </h5>
+            <span class="badge @(Model.WaitingQueue.Count >= Model.MaxWaitingPatients ? "bg-danger" : "bg-primary") px-3 py-2">
+                @(Model.WaitingQueue.Count >= Model.MaxWaitingPatients ? "Hàng Đợi Đã Đầy" : "Còn Chỗ Tiếp Nhận")
+            </span>
+        </div>
+        <div class="card-body p-0">
+            @if (Model.WaitingQueue.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>STT Hàng Đợi</th>
+                                <th>Bệnh Nhân</th>
+                                <th>Mã BN</th>
+                                <th>Dịch Vụ Chụp</th>
+                                <th>Check-in Lúc</th>
+                                <th>TG Chờ Dự Kiến</th>
+                                <th>Mức Ưu Tiên</th>
+                                <th class="text-end pe-4">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var w in Model.WaitingQueue)
+                            {
+                                <tr>
+                                    <td><span class="badge bg-primary fs-6">@w.QueueNumber</span></td>
+                                    <td class="fw-semibold text-dark">@w.PatientName</td>
+                                    <td><span class="text-muted font-monospace">@(w.PatientCode ?? "-")</span></td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border">@w.DiagnosticType</span>
+                                        <small class="text-muted ms-1">(@w.SlotDurationMinutes phút)</small>
+                                    </td>
+                                    <td>@w.CheckInTimeUtc?.ToLocalTime().ToString("HH:mm:ss")</td>
+                                    <td>
+                                        <span class="fw-bold @(w.EstimatedWaitMinutes >= Model.EscalationWaitMinutes ? "text-danger" : w.EstimatedWaitMinutes >= Model.TargetMaxWaitMinutes ? "text-warning" : "text-success")">
+                                            @w.EstimatedWaitMinutes phút
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (w.Priority == "Urgent")
+                                        {
+                                            <span class="badge bg-danger"><i class="bi bi-lightning-fill"></i> Khẩn cấp</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Bình thường</span>
+                                        }
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <div class="btn-group btn-group-sm">
+                                            <form method="post" asp-action="Start" asp-route-sessionId="@w.ImagingSessionId" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-primary" title="Mời vào phòng và bắt đầu chụp" @(Model.ActiveSessions.Any() ? "disabled" : "")>
+                                                    <i class="bi bi-play-fill me-1"></i> Gọi vào chụp
+                                                </button>
+                                            </form>
+                                            <form method="post" asp-action="Cancel" asp-route-sessionId="@w.ImagingSessionId" class="d-inline ms-1" onsubmit="return confirm('Bạn có chắc chắn muốn hủy phiên chụp này?');">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="reason" value="Bệnh nhân yêu cầu hủy hoặc không có mặt" />
+                                                <button type="submit" class="btn btn-outline-danger" title="Hủy ca">
+                                                    <i class="bi bi-x-circle"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-cup-hot fs-1 text-secondary opacity-50 mb-2"></i>
+                    <p class="mb-0">Hàng đợi đang trống. Không có bệnh nhân nào đang chờ chụp X-quang.</p>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Equipment Status Overview -->
+    <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white py-3 border-0">
+            <h5 class="card-title fw-bold mb-0 text-dark">
+                <i class="bi bi-cpu text-secondary me-2"></i>Trạng Thái Thiết Bị & Khung Giờ Hoạt Động
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã Thiết Bị</th>
+                            <th>Tên Thiết Bị Chụp</th>
+                            <th>Phòng</th>
+                            <th>Loại Chụp Hỗ Trợ</th>
+                            <th>Khung Giờ Hoạt Động</th>
+                            <th>Trạng Thái Vận Hành</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var eq in equipments)
+                        {
+                            <tr>
+                                <td><span class="badge bg-secondary font-monospace">@eq.EquipmentCode</span></td>
+                                <td class="fw-semibold">@eq.EquipmentName</td>
+                                <td>@eq.RoomCode - @eq.RoomName</td>
+                                <td>
+                                    @foreach (var t in (eq.SupportedDiagnosticTypes ?? "").Split(','))
+                                    {
+                                        <span class="badge bg-light text-primary border me-1">@t.Trim()</span>
+                                    }
+                                </td>
+                                <td>@(eq.AvailableFrom?.ToString(@"hh\:mm") ?? "07:00") - @(eq.AvailableTo?.ToString(@"hh\:mm") ?? "21:00")</td>
+                                <td>
+                                    @if (eq.OperationalStatus == "Operational")
+                                    {
+                                        <span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i> Hoạt động tốt</span>
+                                    }
+                                    else if (eq.OperationalStatus == "Maintenance")
+                                    {
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-tools me-1"></i> Đang bảo trì</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger"><i class="bi bi-slash-circle-fill me-1"></i> Tạm dừng</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Check-in Modal -->
+<div class="modal fade" id="checkInModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" id="checkInForm">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Tiếp Nhận Ca Chụp Vào Hàng Đợi</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mã Phiên Chụp (Session ID)</label>
+                        <input type="number" id="inputSessionId" class="form-control" placeholder="Nhập Session ID được tạo khi đặt lịch..." required />
+                        <div class="form-text">Nhập Session ID của ca chụp đã được lên lịch để cấp số thứ tự XR-xxx.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="button" class="btn btn-primary" onclick="submitCheckIn()">Xác nhận Check-in</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function submitCheckIn() {
+        var sid = document.getElementById('inputSessionId').value;
+        if (!sid || sid <= 0) {
+            alert('Vui lòng nhập Session ID hợp lệ.');
+            return;
+        }
+        var form = document.getElementById('checkInForm');
+        form.action = '/Receptionist/ImagingQueue/CheckIn/' + sid;
+        form.submit();
+    }
+</script>

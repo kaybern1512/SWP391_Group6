@@ -291,6 +291,15 @@ builder.Services.AddHttpClient<IDentistLeaveApiService, DentistLeaveApiService>(
 .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
+// Clinical Diagnostics & Imaging API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IImagingApiService, ImagingApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 // Appointment Disruption API client with ApiAuthorizationHandler
 builder.Services.AddHttpClient<IAppointmentDisruptionApiService, AppointmentDisruptionApiService>(client =>
 {
