@@ -779,5 +779,415 @@ public class AttendanceAndOperationsTests
         Assert.Contains("Tạm khóa theo yêu cầu của bác sĩ", auditLog.NewValues);
     }
 
+    [Fact]
+    public async Task ReceptionistShiftProvider_RealShifts_ReadsFromWorkSchedules_NeverGeneratesMockShifts()
+    {
+        var db = CreateDbContext("ShiftProvider_RealShifts");
+        await SeedBasicStaffDataAsync(db);
+
+        var date = new DateOnly(2026, 11, 12);
+
+        // When no schedule exists, returns empty list
+        var (attendanceService, _, _, _) = CreateServices(db);
+        var dentistProvider = new DentistShiftProvider(db);
+        var recepProvider = new ReceptionistShiftProvider(db);
+
+        var noShifts = await recepProvider.GetShiftsForStaffAsync(20, date);
+        Assert.Empty(noShifts);
+
+        // Add real template & schedule
+        var template = new ReceptionistShiftTemplate
+        {
+            ShiftTemplateId = 1,
+            TemplateName = "Ca Sáng (07:00 - 13:00)",
+            StartTime = new TimeOnly(7, 0),
+            EndTime = new TimeOnly(13, 0),
+            MinStaffRequired = 2,
+            IsActive = true
+        };
+        db.ReceptionistShiftTemplates.Add(template);
+
+        db.ReceptionistWorkSchedules.Add(new ReceptionistWorkSchedule
+        {
+            ReceptionistScheduleId = 551,
+            ReceptionistUserId = 20,
+            ShiftTemplateId = 1,
+            WorkDate = date,
+            StartTime = new TimeOnly(7, 0),
+            EndTime = new TimeOnly(13, 0),
+            Status = "Scheduled",
+            IsPublished = true,
+            CreatedBy = 1
+        });
+        await db.SaveChangesAsync();
+
+        var shifts = await recepProvider.GetShiftsForStaffAsync(20, date);
+        Assert.Single(shifts);
+        Assert.Equal("RECEP_SCHED_551", shifts[0].ShiftIdentifier);
+        Assert.Equal(new TimeOnly(7, 0), shifts[0].StartTime);
+        Assert.Equal(new TimeOnly(13, 0), shifts[0].EndTime);
+        Assert.Equal("ReceptionistWorkSchedule", shifts[0].SourceScheduleType);
+    }
+
+    [Fact]
+    public async Task ReceptionistShiftProvider_ShiftSwap_ReflectsNewAssigneeInRealTime()
+    {
+        var db = CreateDbContext("ShiftProvider_SwapReflect");
+        await SeedBasicStaffDataAsync(db);
+
+        var date = new DateOnly(2026, 11, 15);
+        var recepProvider = new ReceptionistShiftProvider(db);
+
+        var schedule = new ReceptionistWorkSchedule
+        {
+            ReceptionistScheduleId = 601,
+            ReceptionistUserId = 20,
+            WorkDate = date,
+            StartTime = new TimeOnly(13, 0),
+            EndTime = new TimeOnly(19, 0),
+            Status = "Scheduled",
+            IsPublished = true,
+            CreatedBy = 1
+        };
+        db.ReceptionistWorkSchedules.Add(schedule);
+        await db.SaveChangesAsync();
+
+        // Initially assigned to Receptionist 20
+        var shifts20 = await recepProvider.GetShiftsForStaffAsync(20, date);
+        Assert.Single(shifts20);
+
+        var shifts21 = await recepProvider.GetShiftsForStaffAsync(21, date);
+        Assert.Empty(shifts21);
+
+        // Perform swap: reassign schedule to Receptionist 21
+        schedule.ReceptionistUserId = 21;
+        await db.SaveChangesAsync();
+
+        // Real-time reflection: now shifts20 is empty, shifts21 has the shift
+        shifts20 = await recepProvider.GetShiftsForStaffAsync(20, date);
+        Assert.Empty(shifts20);
+
+        shifts21 = await recepProvider.GetShiftsForStaffAsync(21, date);
+        Assert.Single(shifts21);
+        Assert.Equal("RECEP_SCHED_601", shifts21[0].ShiftIdentifier);
+    }
+
+    [Fact]
+    public async Task AttendanceCore_ApprovedLeave_FullDay_PreventsClockIn()
+    {
+        var db = CreateDbContext("Attendance_ApprovedLeave_FullDay");
+        await SeedBasicStaffDataAsync(db);
+
+        var date = ClinicTimeHelper.TodayDateOnly;
+
+        db.ReceptionistWorkSchedules.Add(new ReceptionistWorkSchedule
+        {
+            ReceptionistScheduleId = 101,
+            ReceptionistUserId = 20,
+            WorkDate = date,
+            StartTime = new TimeOnly(7, 0),
+            EndTime = new TimeOnly(13, 0),
+            Status = "Scheduled",
+            IsPublished = true,
+            CreatedBy = 1
+        });
+
+        var leave = new ReceptionistLeaveRequest
+        {
+            LeaveRequestId = 501,
+            ReceptionistUserId = 20,
+            LeaveType = "Annual",
+            StartDate = date,
+            EndDate = date,
+            Reason = "Nghỉ việc gia đình",
+            Status = "Approved",
+            ApprovedBy = 1,
+            ApprovedAt = DateTime.UtcNow
+        };
+        db.ReceptionistLeaveRequests.Add(leave);
+        db.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod
+        {
+            PeriodId = 1001,
+            LeaveRequestId = 501,
+            LeaveDate = date,
+            StartTime = null,
+            EndTime = null,
+            Status = "Approved"
+        });
+
+        await db.SaveChangesAsync();
+
+        var (attendanceService, _, _, _) = CreateServices(db);
+
+        var res = await attendanceService.ClockInAsync(20, UserRole.Receptionist, new ClockInRequest
+        {
+            ShiftIdentifier = "RECEP_SCHED_101",
+            IpAddress = "127.0.0.1"
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("nghỉ phép", res.Message);
+    }
+
+    [Fact]
+    public async Task AttendanceService_EmergencyAbsence_PreventsClockIn()
+    {
+        var db = CreateDbContext("Attendance_EmergencyAbsence");
+        await SeedBasicStaffDataAsync(db);
+
+        var date = ClinicTimeHelper.TodayDateOnly;
+
+        db.ReceptionistWorkSchedules.Add(new ReceptionistWorkSchedule
+        {
+            ReceptionistScheduleId = 102,
+            ReceptionistUserId = 20,
+            WorkDate = date,
+            StartTime = new TimeOnly(13, 0),
+            EndTime = new TimeOnly(19, 0),
+            Status = "Scheduled",
+            IsPublished = true,
+            CreatedBy = 1
+        });
+
+        db.ReceptionistCoverageIncidents.Add(new ReceptionistCoverageIncident
+        {
+            IncidentId = 301,
+            WorkDate = date,
+            ShiftStartTime = new TimeOnly(13, 0),
+            ShiftEndTime = new TimeOnly(19, 0),
+            AffectedReceptionistUserId = 20,
+            IncidentType = "EmergencyAbsence",
+            Reason = "Đau ốm đột xuất",
+            ReportedBy = 20,
+            Status = "Open"
+        });
+
+        await db.SaveChangesAsync();
+
+        var (attendanceService, _, _, _) = CreateServices(db);
+
+        var res = await attendanceService.ClockInAsync(20, UserRole.Receptionist, new ClockInRequest
+        {
+            ShiftIdentifier = "RECEP_SCHED_102",
+            IpAddress = "127.0.0.1"
+        });
+
+        Assert.False(res.Success);
+        Assert.Contains("vắng mặt khẩn cấp", res.Message);
+    }
+
+    [Fact]
+    public async Task WorkforceReport_TwoShiftsOnSameCalendarDay_CountsAsOneWorkedDay()
+    {
+        var db = CreateDbContext("Workforce_TwoShiftsSameDay");
+        await SeedBasicStaffDataAsync(db);
+
+        var date = new DateOnly(2026, 11, 4);
+
+        db.ReceptionistWorkSchedules.Add(new ReceptionistWorkSchedule
+        {
+            ReceptionistScheduleId = 201,
+            ReceptionistUserId = 20,
+            WorkDate = date,
+            StartTime = new TimeOnly(7, 0),
+            EndTime = new TimeOnly(13, 0),
+            Status = "Scheduled",
+            IsPublished = true,
+            CreatedBy = 1
+        });
+
+        db.ReceptionistWorkSchedules.Add(new ReceptionistWorkSchedule
+        {
+            ReceptionistScheduleId = 202,
+            ReceptionistUserId = 20,
+            WorkDate = date,
+            StartTime = new TimeOnly(13, 0),
+            EndTime = new TimeOnly(19, 0),
+            Status = "Scheduled",
+            IsPublished = true,
+            CreatedBy = 1
+        });
+
+        db.StaffAttendanceRecords.Add(new StaffAttendanceRecord
+        {
+            UserId = 20,
+            Role = UserRole.Receptionist,
+            WorkDate = date,
+            ShiftIdentifier = "RECEP_SCHED_201",
+            ScheduledStartTime = new TimeOnly(7, 0),
+            ScheduledEndTime = new TimeOnly(13, 0),
+            ClockInTimeUtc = new DateTime(2026, 11, 4, 0, 0, 0),
+            ClockOutTimeUtc = new DateTime(2026, 11, 4, 6, 0, 0),
+            ActualWorkedMinutes = 360,
+            Status = AttendanceStatus.OnTime
+        });
+
+        db.StaffAttendanceRecords.Add(new StaffAttendanceRecord
+        {
+            UserId = 20,
+            Role = UserRole.Receptionist,
+            WorkDate = date,
+            ShiftIdentifier = "RECEP_SCHED_202",
+            ScheduledStartTime = new TimeOnly(13, 0),
+            ScheduledEndTime = new TimeOnly(19, 0),
+            ClockInTimeUtc = new DateTime(2026, 11, 4, 6, 0, 0),
+            ClockOutTimeUtc = new DateTime(2026, 11, 4, 12, 0, 0),
+            ActualWorkedMinutes = 360,
+            Status = AttendanceStatus.OnTime
+        });
+
+        await db.SaveChangesAsync();
+
+        var (_, reportService, _, _) = CreateServices(db);
+
+        var res = await reportService.GetMonthlyReportAsync(2026, 11);
+        Assert.True(res.Success);
+
+        var report20 = res.Data!.StaffReports.First(r => r.UserId == 20);
+        Assert.Equal(2, report20.ScheduledShifts);
+        Assert.Equal(2, report20.CompletedShifts);
+        Assert.Equal(1, report20.WorkedDays); // Strictly 1 day, never 2!
+        Assert.Equal(12.0m, report20.ActualWorkedHours);
+        Assert.Equal(1.5m, report20.EquivalentStandardDays); // 12h / 8.0 = 1.5 days
+    }
+
+    [Fact]
+    public async Task WorkforceReport_FinalizePeriod_GuardAgainstPendingCorrectionsAndOngoingMonth()
+    {
+        var db = CreateDbContext("Workforce_Finalize_Guards");
+        await SeedBasicStaffDataAsync(db);
+
+        var today = ClinicTimeHelper.TodayDateOnly;
+
+        var (_, reportService, _, _) = CreateServices(db);
+
+        // Guard 1: Ongoing month cannot be finalized
+        var resOngoing = await reportService.FinalizePeriodAsync(today.Year, today.Month, 1);
+        Assert.False(resOngoing.Success);
+        Assert.Contains("vẫn đang diễn ra", resOngoing.Message);
+
+        // Guard 2: Past month with pending correction request
+        var pastMonth = today.AddMonths(-1);
+        db.StaffAttendanceCorrectionRequests.Add(new StaffAttendanceCorrectionRequest
+        {
+            CorrectionRequestId = 881,
+            AttendanceId = 1,
+            UserId = 20,
+            WorkDate = new DateOnly(pastMonth.Year, pastMonth.Month, 10),
+            RequestedClockInUtc = new DateTime(pastMonth.Year, pastMonth.Month, 10, 1, 0, 0),
+            RequestedClockOutUtc = new DateTime(pastMonth.Year, pastMonth.Month, 10, 9, 0, 0),
+            Reason = "Quên bấm nút kết thúc ca",
+            Explanation = "Giải trình quên chấm công",
+            Status = CorrectionRequestStatus.Pending,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var resPending = await reportService.FinalizePeriodAsync(pastMonth.Year, pastMonth.Month, 1);
+        Assert.False(resPending.Success);
+        Assert.Contains("yêu cầu điều chỉnh", resPending.Message);
+    }
+
+    [Fact]
+    public async Task WorkforceReport_ReopenPeriod_EnforcesMinimumReasonLengthAndLogsAudit()
+    {
+        var db = CreateDbContext("Workforce_Reopen_Rules");
+        await SeedBasicStaffDataAsync(db);
+
+        var today = ClinicTimeHelper.TodayDateOnly;
+        var pastMonth = today.AddMonths(-1);
+
+        db.AttendancePeriodClosures.Add(new AttendancePeriodClosure
+        {
+            ClosureId = 991,
+            Year = pastMonth.Year,
+            Month = pastMonth.Month,
+            Status = PeriodClosureStatus.Locked,
+            FinalizedByUserId = 1,
+            FinalizedAtUtc = DateTime.UtcNow,
+            SnapshotDataJson = "{}"
+        });
+        await db.SaveChangesAsync();
+
+        var (_, reportService, _, _) = CreateServices(db);
+
+        // Attempt with short reason
+        var resShort = await reportService.ReopenPeriodAsync(pastMonth.Year, pastMonth.Month, "Ngắn", 1);
+        Assert.False(resShort.Success);
+        Assert.Contains("tối thiểu 10 ký tự", resShort.Message);
+
+        // Valid reason
+        var resValid = await reportService.ReopenPeriodAsync(pastMonth.Year, pastMonth.Month, "Mở lại để bổ sung giải trình thiếu công của tiếp tân", 1);
+        Assert.True(resValid.Success);
+
+        var closureInDb = await db.AttendancePeriodClosures.FirstAsync(p => p.Year == pastMonth.Year && p.Month == pastMonth.Month);
+        Assert.Equal(PeriodClosureStatus.Reopened, closureInDb.Status);
+
+        var auditLog = await db.AuditLogs.FirstOrDefaultAsync(a => a.EntityName == "AttendancePeriodClosures");
+        Assert.NotNull(auditLog);
+        Assert.Contains("Mở lại để bổ sung giải trình thiếu công của tiếp tân", auditLog.NewValues);
+    }
+
+    [Fact]
+    public async Task ClinicOperations_Dashboard_IntegratesDoctorLeaveAndDisruptionKpis()
+    {
+        var db = CreateDbContext("Ops_DoctorLeave_Disruption_Kpis");
+        await SeedBasicStaffDataAsync(db);
+
+        var today = ClinicTimeHelper.TodayDateOnly;
+
+        db.DentistLeaveRequests.Add(new DentistLeaveRequest
+        {
+            LeaveRequestId = 771,
+            DentistUserId = 10,
+            LeaveType = "Personal",
+            StartDate = today.AddDays(1),
+            EndDate = today.AddDays(2),
+            Reason = "Bận việc gia đình",
+            Status = "Pending",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        var futureApptStart = DateTime.UtcNow.AddHours(12);
+        db.Appointments.Add(new Appointment
+        {
+            AppointmentId = 901,
+            AppointmentCode = "APT-901",
+            PatientUserId = 1,
+            DepartmentId = 1,
+            AssignedDentistUserId = 10,
+            ScheduledStart = futureApptStart,
+            ScheduledEnd = futureApptStart.AddMinutes(30),
+            Status = AppointmentStatus.Confirmed,
+            BookingSource = "Online",
+            ReasonForVisit = "Đau răng",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        db.AppointmentDisruptions.Add(new AppointmentDisruption
+        {
+            DisruptionId = 881,
+            AppointmentId = 901,
+            DentistLeaveRequestId = 771,
+            OriginalDentistUserId = 10,
+            Status = "PendingPatientAction",
+            OriginalScheduledStart = futureApptStart,
+            OriginalScheduledEnd = futureApptStart.AddMinutes(30),
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync();
+
+        var (_, _, opsService, _) = CreateServices(db);
+
+        var res = await opsService.GetOperationsDashboardAsync(today);
+        Assert.True(res.Success);
+        Assert.NotNull(res.Data);
+        Assert.Equal(1, res.Data.DoctorLeaveOperations.PendingDentistLeavesCount);
+        Assert.Equal(1, res.Data.DoctorLeaveOperations.ActiveDisruptionsCount);
+        Assert.Equal(1, res.Data.DoctorLeaveOperations.DisruptionsPendingPatientCount);
+        Assert.Equal(1, res.Data.DoctorLeaveOperations.UrgentDisruptionsCount);
+    }
+
     #endregion
 }

@@ -52,7 +52,21 @@ public class AttendanceService : IAttendanceService
                 AttendanceRecord = record != null ? MapToDto(record) : null
             };
 
-            if (record == null)
+            if (shift.IsApprovedLeave && !shift.LeaveStartTime.HasValue)
+            {
+                item.CanClockIn = false;
+                item.CanClockOut = false;
+                item.NextAllowedAction = "ApprovedLeave";
+                item.Message = $"Nghỉ phép ({shift.Note}).";
+            }
+            else if (shift.IsEmergencyAbsence)
+            {
+                item.CanClockIn = false;
+                item.CanClockOut = false;
+                item.NextAllowedAction = "EmergencyAbsence";
+                item.Message = $"Vắng mặt khẩn cấp ({shift.Note}).";
+            }
+            else if (record == null)
             {
                 item.CanClockIn = true;
                 item.CanClockOut = false;
@@ -113,6 +127,26 @@ public class AttendanceService : IAttendanceService
             if (shift == null)
             {
                 return ApiResponse<StaffAttendanceRecordDto>.Fail("Không tìm thấy ca làm việc hợp lệ trong ngày hôm nay.");
+            }
+
+            if (shift.IsApprovedLeave && !shift.LeaveStartTime.HasValue)
+            {
+                return ApiResponse<StaffAttendanceRecordDto>.Fail($"Ca làm việc này đã có đơn nghỉ phép được phê duyệt ({shift.Note}). Bạn không cần và không thể chấm công vào.");
+            }
+
+            if (shift.LeaveStartTime.HasValue && shift.LeaveEndTime.HasValue)
+            {
+                var lStartUtc = ClinicTimeHelper.ToUtc(today.ToDateTime(shift.LeaveStartTime.Value));
+                var lEndUtc = ClinicTimeHelper.ToUtc(today.ToDateTime(shift.LeaveEndTime.Value));
+                if (nowUtc >= lStartUtc && nowUtc <= lEndUtc)
+                {
+                    return ApiResponse<StaffAttendanceRecordDto>.Fail($"Khoảng thời gian này bạn đang trong thời gian nghỉ phép một phần đã được duyệt ({shift.LeaveStartTime:hh\\:mm} - {shift.LeaveEndTime:hh\\:mm}).");
+                }
+            }
+
+            if (shift.IsEmergencyAbsence)
+            {
+                return ApiResponse<StaffAttendanceRecordDto>.Fail($"Ca làm việc này đã được ghi nhận vắng mặt khẩn cấp ({shift.Note}).");
             }
 
             // 3. Check for existing attendance record

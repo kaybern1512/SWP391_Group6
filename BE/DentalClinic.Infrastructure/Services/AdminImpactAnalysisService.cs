@@ -82,6 +82,15 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
         }
         else if (user.Role == UserRole.Receptionist)
         {
+            futureShiftsCount = await _dbContext.ReceptionistWorkSchedules
+                .AsNoTracking()
+                .CountAsync(ws => ws.ReceptionistUserId == userId && ws.WorkDate >= today && ws.Status == "Scheduled", ct);
+
+            if (futureShiftsCount > 0)
+            {
+                warnings.Add($"Tiếp tân hiện có {futureShiftsCount} ca trực đã phân công từ ngày hôm nay trở đi. Cần bàn giao hoặc điều phối người trực thay thế trước khi khóa.");
+            }
+
             var remainingActiveCount = await _dbContext.UserAccounts
                 .AsNoTracking()
                 .CountAsync(u => u.Role == UserRole.Receptionist && u.Status == "Active" && u.UserId != userId, ct);
@@ -90,6 +99,29 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
             {
                 triggersShortage = true;
                 warnings.Add($"CẢNH BÁO NGUY HIỂM: Khóa tài khoản này sẽ làm số lượng tiếp tân hoạt động chỉ còn {remainingActiveCount} người (dưới 2 người tối thiểu), gây gián đoạn quy trình tiếp đón và trực quầy!");
+            }
+
+            // Check if upcoming assigned shifts will drop below 2 scheduled receptionists
+            var upcomingShifts = await _dbContext.ReceptionistWorkSchedules
+                .AsNoTracking()
+                .Where(ws => ws.ReceptionistUserId == userId && ws.WorkDate >= today && ws.Status == "Scheduled")
+                .Select(ws => new { ws.WorkDate, ws.ShiftTemplateId })
+                .Distinct()
+                .Take(10)
+                .ToListAsync(ct);
+
+            foreach (var shift in upcomingShifts)
+            {
+                var othersOnDuty = await _dbContext.ReceptionistWorkSchedules
+                    .AsNoTracking()
+                    .CountAsync(ws => ws.WorkDate == shift.WorkDate && ws.ShiftTemplateId == shift.ShiftTemplateId && ws.ReceptionistUserId != userId && ws.Status == "Scheduled", ct);
+
+                if (othersOnDuty < 2)
+                {
+                    triggersShortage = true;
+                    warnings.Add($"Ca trực ngày {shift.WorkDate:dd/MM/yyyy} chỉ còn {othersOnDuty} tiếp tân nếu nhân viên này bị khóa (yêu cầu tối thiểu: 2 tiếp tân).");
+                    break;
+                }
             }
         }
 

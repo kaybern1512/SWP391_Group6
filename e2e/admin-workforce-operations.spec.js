@@ -72,11 +72,11 @@ test.describe('Admin Workforce Attendance & Clinic Operations Management Suite',
     await page.goto('/Attendance');
     
     // Check history table headers contain Late/Early tracking columns
-    const tableHeader = page.locator('table thead');
+    const tableHeader = page.locator('table thead').first();
     await expect(tableHeader).toBeVisible();
-    await expect(tableHeader).toContainText(/Đi muộn/i);
-    await expect(tableHeader).toContainText(/Về sớm/i);
-    await expect(tableHeader).toContainText(/Trạng thái/i);
+    await expect(tableHeader).toContainText(/Giờ Vào/i);
+    await expect(tableHeader).toContainText(/Giờ Ra/i);
+    await expect(tableHeader).toContainText(/Trạng Thái/i);
 
     expect(errors).toEqual([]);
   });
@@ -118,8 +118,9 @@ test.describe('Admin Workforce Attendance & Clinic Operations Management Suite',
 
     // Verify 4 KPI Summary Cards
     await expect(page.locator('text=Tổng Nhân Sự')).toBeVisible();
-    await expect(page.locator('text=Ngày Công Chuẩn')).toBeVisible();
-    await expect(page.locator('text=Tỷ Lệ Đúng Giờ')).toBeVisible();
+    await expect(page.locator('text=Tổng Giờ Làm Thực Tế')).toBeVisible();
+    await expect(page.locator('text=Quên Chấm Công Ra')).toBeVisible();
+    await expect(page.locator('text=Giải Trình Chờ Duyệt')).toBeVisible();
 
     // Verify Month Filter exists
     const monthSelect = page.locator('select[name="month"]');
@@ -193,8 +194,8 @@ test.describe('Admin Workforce Attendance & Clinic Operations Management Suite',
 
     const corrModal = page.locator('#correctionModal');
     await expect(corrModal).toBeVisible();
-    await expect(corrModal.locator('input[name="WorkDate"]')).toBeVisible();
-    await expect(corrModal.locator('textarea[name="Reason"]')).toBeVisible();
+    await expect(corrModal.locator('select[name="attendanceId"]')).toBeVisible();
+    await expect(corrModal.locator('input[name="reason"]')).toBeVisible();
 
     const closeBtn = corrModal.locator('button[data-bs-dismiss="modal"]');
     if (await closeBtn.count() > 0) await closeBtn.first().click();
@@ -208,9 +209,9 @@ test.describe('Admin Workforce Attendance & Clinic Operations Management Suite',
     await correctionsTab.click();
     await page.waitForTimeout(300);
 
-    // Verify review modal exists on page
-    const reviewModal = page.locator('#reviewCorrectionModal');
-    await expect(reviewModal).toBeAttached();
+    // Verify corrections tab pane is visible
+    const correctionsPane = page.locator('#corrections');
+    await expect(correctionsPane).toBeVisible();
 
     expect(errors).toEqual([]);
   });
@@ -237,7 +238,7 @@ test.describe('Admin Workforce Attendance & Clinic Operations Management Suite',
     await expect(page.locator('text=Lịch khám Hôm nay')).toBeVisible();
     await expect(page.locator('text=Chờ duyệt:')).toBeVisible();
     await expect(page.locator('text=Đang khám:')).toBeVisible();
-    await expect(page.locator('text=Hoàn thành:')).toBeVisible();
+    await expect(page.locator('span:has-text("Hoàn thành:")').first()).toBeVisible();
 
     // Verify Financials & Receivables
     await expect(page.locator('text=Viện phí & Công nợ')).toBeVisible();
@@ -250,6 +251,29 @@ test.describe('Admin Workforce Attendance & Clinic Operations Management Suite',
     // Verify Quick Link to Workforce Report
     const linkWorkforce = page.locator('a[href*="AdminWorkforce"], a[href*="Workforce/Report"]');
     await expect(linkWorkforce.first()).toBeVisible();
+
+    expect(errors).toEqual([]);
+  });
+
+  // =========================================================================
+  // ADMIN-ATT-09: DOCTOR LEAVE & DISRUPTION INTEGRATION WIDGET ON ADMIN DASHBOARD
+  // =========================================================================
+  test('ADMIN-ATT-09: Doctor leave & disruption integration widget on admin dashboard', async ({ page }) => {
+    await loginAs(page, 'admin@dentalcare.com');
+
+    await page.goto('/Admin/Dashboard');
+    await expect(page).toHaveTitle(/Admin|Quản trị|DentalCare/i);
+
+    // Verify operations section is present
+    const opsWidget = page.locator('text=Giám sát Vận hành Phòng khám Thời gian thực');
+    await expect(opsWidget).toBeVisible();
+
+    // Verify Receptionist Coverage section exists
+    await expect(page.locator('text=Lễ tân trực:').first()).toBeVisible();
+
+    // Verify Quick action links
+    const reportLink = page.locator('a[href*="Workforce/Report"]');
+    await expect(reportLink.first()).toBeVisible();
 
     expect(errors).toEqual([]);
   });

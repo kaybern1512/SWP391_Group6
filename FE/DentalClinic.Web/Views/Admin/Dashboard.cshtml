@@ -291,6 +291,22 @@
                     </div>
                 </div>
 
+                @if (ops.DoctorLeaveOperations != null && (ops.DoctorLeaveOperations.ActiveDisruptionsCount > 0 || ops.DoctorLeaveOperations.PendingDentistLeavesCount > 0))
+                {
+                    <div class="mt-3 p-3 bg-warning-subtle border border-warning rounded">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold text-dark"><i class="bi bi-calendar-x-fill text-warning me-1"></i> Theo dõi Nghỉ phép Bác sĩ & Gián đoạn Lịch hẹn:</span>
+                            <span class="badge @(ops.DoctorLeaveOperations.UrgentDisruptionsCount > 0 ? "bg-danger text-white" : "bg-warning text-dark")">Khẩn cấp: @ops.DoctorLeaveOperations.UrgentDisruptionsCount</span>
+                        </div>
+                        <div class="row g-2 small text-secondary">
+                            <div class="col-sm-6 col-md-3">Đơn nghỉ phép chờ duyệt: <strong class="text-dark">@ops.DoctorLeaveOperations.PendingDentistLeavesCount</strong></div>
+                            <div class="col-sm-6 col-md-3">Tổng ca gián đoạn: <strong class="text-dark">@ops.DoctorLeaveOperations.ActiveDisruptionsCount</strong></div>
+                            <div class="col-sm-6 col-md-3">Chờ bệnh nhân phản hồi: <strong class="text-dark">@ops.DoctorLeaveOperations.DisruptionsPendingPatientCount</strong></div>
+                            <div class="col-sm-6 col-md-3">Chờ lễ tân điều phối: <strong class="text-danger">@ops.DoctorLeaveOperations.DisruptionsPendingReceptionistCount</strong></div>
+                        </div>
+                    </div>
+                }
+
                 @if (ops.DentistStatuses != null && ops.DentistStatuses.Any(d => d.HasAlert))
                 {
                     <div class="mt-3 p-2 bg-danger-subtle border border-danger-subtle rounded text-danger small">

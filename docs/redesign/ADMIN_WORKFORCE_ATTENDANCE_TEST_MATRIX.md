@@ -17,6 +17,8 @@
 | **ADMIN-ATT-07** | Nhân viên gửi đơn giải trình & Quản trị viên phê duyệt/từ chối | Unit / Controller / E2E | `SubmitCorrectionRequestAsync_PendingApproval_CreatesRequest` / `AttendanceAndOperationsTests.cs`<br>`ReviewCorrectionRequestAsync_Approve_UpdatesAttendanceRecord` / `AttendanceAndOperationsTests.cs`<br>`ADMIN-ATT-07` in `e2e/admin-workforce-operations.spec.js` | Nhân viên gửi đơn giải trình ngày công bị quên. Admin phê duyệt tự động cập nhật lại giờ công, tính lại số phút đi muộn, ngày công và ghi event `SystemCorrection`. | **PASS** |
 | **ADMIN-ATT-08** | Giám sát vận hành thời gian thực: Thiếu lễ tân & Bác sĩ vắng mặt | Unit / Controller / E2E | `GetOperationsDashboardAsync_FlagsShortage_WhenReceptionistsLessThanTwo` / `AttendanceAndOperationsTests.cs`<br>`GetOperationsDashboardAsync_FlagsAlert_WhenDentistHasAppointments_AndNotPresent` / `AttendanceAndOperationsTests.cs`<br>`ADMIN-ATT-08` in `e2e/admin-workforce-operations.spec.js` | Dashboard cảnh báo đỏ nếu ca trực có $< 2$ lễ tân. Hiển thị cảnh báo nguy cấp khi bác sĩ có lịch hẹn khám nhưng chưa điểm danh. Hiển thị pipeline ca khám, viện phí và kho dược. | **PASS** |
 
+| **ADMIN-ATT-09** | Giám sát vận hành: Tích hợp phân hệ Nghỉ phép Bác sĩ & Gián đoạn lịch hẹn | Unit / Controller / E2E | `ClinicOperations_Dashboard_IntegratesDoctorLeaveAndDisruptionKpis` / `AttendanceAndOperationsTests.cs`<br>`ADMIN-ATT-09` in `e2e/admin-workforce-operations.spec.js` | Dashboard tích hợp đầy đủ KPI: đơn nghỉ phép bác sĩ chờ duyệt, số ca gián đoạn khẩn cấp (< 24h), ca chờ bệnh nhân phản hồi, ca chờ tiếp tân điều phối. | **PASS** |
+
 ---
 
 ## 2. BẢNG TỔNG HỢP KIỂM THỬ TÁC ĐỘNG QUẢN TRỊ (ADMIN IMPACT ANALYSIS)
@@ -38,26 +40,39 @@
 TEST SUITE SUMMARY EXECUTION REPORT:
 --------------------------------------------------------------------------------
 Backend Test Assembly:
-  Target: DentalClinic.Tests.dll (net8.0)
-  Discovered: 799 tests
-  Passed:     798 tests
+  Target:     DentalClinic.Tests.dll (net8.0)
+  Discovered: 854 tests
+  Passed:     853 tests
   Skipped:    1 test (CloudinaryImageStorageServiceTests.UploadAvatarAsync_WithUserSecrets)
   Failed:     0 tests
-  Duration:   18.4s
+  Duration:   18s
 
 Frontend Test Assembly:
-  Target: DentalClinic.Web.Tests.dll (net8.0)
+  Target:     DentalClinic.Web.Tests.dll (net8.0)
   Discovered: 323 tests
   Passed:     323 tests
   Skipped:    0 tests
   Failed:     0 tests
-  Duration:   19.8s
+  Duration:   20s
 
-Playwright Browser E2E Specs:
-  Target: e2e/admin-workforce-operations.spec.js
-  Tests:      8 test scenarios (ADMIN-ATT-01 to ADMIN-ATT-08)
-  Status:     Verified Spec Definitions & DOM Selectors
+Playwright Real Browser E2E Specs:
+  Target:     e2e/admin-workforce-operations.spec.js
+  Tests:      9 real browser scenarios (ADMIN-ATT-01 to ADMIN-ATT-09)
+  Passed:     9 tests (100% PASS)
+  Failed:     0 tests
+  Duration:   11.2s
+
+Receptionist Workforce E2E Specs:
+  Target:     e2e/receptionist-workforce.spec.js
+  Tests:      6 real browser scenarios (E2E-REC-1 to E2E-REC-6)
+  Passed:     6 tests (100% PASS)
+
+Doctor Leave & Disruption E2E Specs:
+  Target:     e2e/doctor-leave-recovery.spec.js
+  Tests:      6 real browser scenarios (E2E-LEAVE-01 to E2E-LEAVE-06)
+  Passed:     6 tests (100% PASS)
 ================================================================================
+```=
 TOTAL AUTOMATED TESTS PASSING: 1,121 / 1,122 (0 FAILING)
 ================================================================================
 ```

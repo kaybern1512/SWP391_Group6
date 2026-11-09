@@ -19,6 +19,14 @@ public class StaffShiftDto
     public string? DepartmentName { get; set; }
     public string Status { get; set; } = "Scheduled";
     public string? Note { get; set; }
+    public long? SourceScheduleId { get; set; }
+    public string? SourceScheduleType { get; set; }
+    public bool IsApprovedLeave { get; set; }
+    public string? LeaveType { get; set; }
+    public decimal LeaveHours { get; set; }
+    public TimeOnly? LeaveStartTime { get; set; }
+    public TimeOnly? LeaveEndTime { get; set; }
+    public bool IsEmergencyAbsence { get; set; }
 }
 
 public class StaffAttendanceRecordDto
@@ -46,6 +54,7 @@ public class StaffAttendanceRecordDto
     public string Status { get; set; } = AttendanceStatus.NotStarted;
     public string StatusName => AttendanceStatus.GetDisplayName(Status);
     public bool IsApprovedLeave { get; set; }
+    public string? LeaveType { get; set; }
     public decimal LeaveHours { get; set; }
     public string? LeaveReason { get; set; }
     public bool IsMissingClockOut => Status == AttendanceStatus.MissingClockOut;
@@ -167,7 +176,9 @@ public class WorkforceStaffMonthlyReportDto
     public int WorkedDays { get; set; }
     public int CompletedShifts { get; set; }
     public decimal ActualWorkedHours { get; set; }
-    public decimal EquivalentStandardDays { get; set; } // ActualWorkedHours / 8.0
+    public decimal VerifiedWorkedHours { get => ActualWorkedHours; set => ActualWorkedHours = value; }
+    public decimal EquivalentStandardDays { get; set; }
+    public decimal EquivalentWorkDays { get => EquivalentStandardDays; set => EquivalentStandardDays = value; }
     public int ApprovedLeaveDays { get; set; }
     public decimal ApprovedLeaveHours { get; set; }
     public int UnexpectedAbsenceDays { get; set; }

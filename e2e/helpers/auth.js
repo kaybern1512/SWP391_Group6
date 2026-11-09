@@ -7,6 +7,7 @@
  * @param {string} password
  */
 async function loginAs(page, email, password = 'Password123@') {
+  await page.context().clearCookies();
   await page.goto('/Account/Login');
   await page.waitForLoadState('domcontentloaded');
 

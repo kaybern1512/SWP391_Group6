@@ -13,16 +13,24 @@ public class ClinicOperationsDashboardDto
     public FinancialOperationsDto FinancialOperations { get; set; } = new();
     public MedicineInventoryAlertDto MedicineInventory { get; set; } = new();
     public List<ClinicOperationalAlertDto> ActiveAlerts { get; set; } = new();
+    public DoctorLeaveDisruptionOperationsDto DoctorLeaveOperations { get; set; } = new();
 }
 
 public class WorkforceKpiDto
 {
     public int ScheduledDentistsCount { get; set; }
     public int PresentDentistsCount { get; set; }
+    public int ClockedInDentistsCount { get; set; }
+    public int VerifiedPresentDentistsCount { get; set; }
+    public int ApprovedLeaveDentistsCount { get; set; }
     public int ScheduledReceptionistsCount { get; set; }
     public int PresentReceptionistsCount { get; set; }
+    public int ClockedInReceptionistsCount { get; set; }
+    public int VerifiedPresentReceptionistsCount { get; set; }
+    public int ApprovedLeaveReceptionistsCount { get; set; }
     public int OnLeaveStaffCount { get; set; }
     public int MissingPunchCount { get; set; }
+    public int UnresolvedCoverageIncidentsCount { get; set; }
 }
 
 public class ReceptionistCoverageDto
@@ -33,6 +41,9 @@ public class ReceptionistCoverageDto
     public TimeOnly EndTime { get; set; }
     public int ScheduledCount { get; set; }
     public int PresentCount { get; set; }
+    public int ClockedInCount { get; set; }
+    public int VerifiedPresentCount { get; set; }
+    public int ApprovedLeaveCount { get; set; }
     public bool HasShortage => PresentCount < 2;
     public string StatusText => HasShortage
         ? $"Thiếu nhân sự ({PresentCount}/2 tối thiểu)"
@@ -148,4 +159,14 @@ public class PriceChangeImpactDto
     public decimal NewPrice { get; set; }
     public int PastInvoicesCount { get; set; }
     public string Message { get; set; } = string.Empty;
+}
+
+public class DoctorLeaveDisruptionOperationsDto
+{
+    public int PendingDentistLeavesCount { get; set; }
+    public int ApprovedDentistLeavesTodayCount { get; set; }
+    public int ActiveDisruptionsCount { get; set; }
+    public int DisruptionsPendingPatientCount { get; set; }
+    public int DisruptionsPendingReceptionistCount { get; set; }
+    public int UrgentDisruptionsCount { get; set; }
 }

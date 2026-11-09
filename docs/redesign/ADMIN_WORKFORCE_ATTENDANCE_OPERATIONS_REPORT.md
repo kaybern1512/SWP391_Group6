@@ -12,16 +12,20 @@ Hệ thống **Admin Workforce Attendance & Clinic Operations Management** đư�
 1. **Quản lý Chấm công & Điểm danh Nhân viên (Staff Attendance Tracking):**
    - Phân biệt độc lập 100% giữa điểm danh nhân viên (`StaffAttendanceRecords`) với việc check-in của bệnh nhân (`Appointments`), bắt đầu ca khám của bác sĩ, hoặc đăng nhập tài khoản.
    - Hỗ trợ cả 2 vai trò nhân sự chính: Bác sĩ (`Dentist`) và Lễ tân (`Receptionist`).
-2. **Chiến lược Phân rã Ca làm việc (Shift Resolution Architecture):**
-   - Sử dụng kiến trúc trừu tượng `IStaffShiftProvider` & `IStaffShiftResolver`. Bác sĩ lấy ca từ `DentistWorkSchedules` và Lịch phân ca tháng, Lễ tân áp dụng ca hành chính chuẩn (Ca Sáng: 07:30 - 12:00, Ca Chiều: 13:00 - 17:30).
-   - Đảm bảo an toàn không phụ thuộc hay làm hỏng các nhánh tính năng song song (`feature/dentist-leave-appointment-recovery`, `feature/receptionist-shift-leave-management`).
+2. **Chiến lược Phân rã Ca làm việc Thực tế (Real Shift Resolution Architecture):**
+   - Đã đồng bộ và tích hợp 100% với hệ thống ca trực thực tế:
+     + Lễ tân: Đọc từ `ReceptionistWorkSchedules` (`IsPublished = true`), phản ánh lịch đổi ca (`ShiftSwapRequests`), đơn nghỉ phép cả ngày/nửa ca (`ReceptionistLeaveRequestPeriods`), và sự cố vắng mặt khẩn cấp (`ReceptionistCoverageIncidents`). Triệt tiêu hoàn toàn mock ca cứng.
+     + Bác sĩ: Đọc từ `DentistWorkSchedules`, tích hợp với hệ thống nghỉ phép bác sĩ (`DentistLeaveRequests`) và gián đoạn lịch hẹn (`AppointmentDisruptions`).
 3. **Chống Gian lận & Kiểm soát Xung đột Đồng thời (Anti-Fraud & Concurrency Control):**
    - Cơ chế khóa phân tán cấp ứng dụng `SqlAppLockHelper.AttendancePunchKey(userId)` và `SqlAppLockHelper.AttendancePeriodKey(year, month)` triệt tiêu hoàn toàn race condition khi điểm danh cùng giây hoặc đóng sổ kỳ công.
    - Nhận diện sự kiện điểm danh theo luồng bất biến `StaffAttendanceEvents` (Audit Trail) kết hợp snapshot trạng thái tổng hợp trên `StaffAttendanceRecords`.
-4. **Đối soát & Đóng sổ Kỳ công (Monthly Reconciliation & Period Closure):**
-   - Bảng tổng hợp đối soát tự động tính toán số ca phân công, số ca thực tế, tổng giờ làm, số phút đi muộn / về sớm và số ngày công quy đổi chuẩn (1 công = 8 giờ làm việc thực tế).
-   - Cơ chế chốt sổ bất biến: Khi chốt sổ, toàn bộ số liệu được đóng băng vào trường `SnapshotDataJson` của `AttendancePeriodClosures`, chuyển trạng thái `IsLocked = true`. Bất kỳ nỗ lực sửa đổi hay chấm công bù trong kỳ đã đóng đều bị chặn ở tầng Domain.
-   - Khi mở lại kỳ công (`Reopen`), bắt buộc nhập lý do nghiệp vụ và được ghi vết kiểm toán chi tiết.
+4. **Đối soát & Đóng sổ Kỳ công (Monthly Reconciliation & Period Closure Hardening):**
+   - Bảng tổng hợp đối soát tự động tính toán số ca phân công, số ca hoàn thành, số ngày đi làm thực tế (`WorkedDays`: tính theo ngày lịch duy nhất có phát sinh giờ làm thực tế, 1 người làm 2 ca/ngày vẫn tính 1 ngày đi làm), tổng giờ làm thực tế (sau khi loại bỏ trùng lặp thời gian giữa các ca), số ngày công chuẩn quy đổi (1 công = 8.0h).
+   - Kiểm soát chặt chẽ quy trình chốt sổ:
+     + Chặn chốt sổ nếu còn đơn giải trình điều chỉnh công (`StaffAttendanceCorrectionRequests`) chưa được phê duyệt.
+     + Chặn chốt sổ nếu kỳ công vẫn đang diễn ra trong tháng hiện tại hoặc tương lai.
+     + Đóng băng dữ liệu bất biến bằng JSON Snapshot trong `AttendancePeriodClosures`, đánh dấu `IsFinalized = true`.
+     + Mở lại kỳ công bắt buộc lý do $\ge 10$ ký tự và lưu vết `AuditLogs`.
 5. **Giám sát Vận hành Thời gian thực (Real-time Operations Monitoring):**
    - Giám sát độ phủ lễ tân: Tự động cảnh báo đỏ nếu một ca trực có ít hơn 2 lễ tân có mặt (`PresentCount < 2`).
    - Cảnh báo bác sĩ vắng mặt: Phát hiện các ca trực bác sĩ có lịch hẹn bệnh nhân hôm nay nhưng chưa thực hiện điểm danh.
