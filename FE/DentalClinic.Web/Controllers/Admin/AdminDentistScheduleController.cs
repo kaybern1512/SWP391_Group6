@@ -26,14 +26,21 @@ public class AdminDentistScheduleController : Controller
     [HttpGet("")]
     [HttpGet("Index")]
     public async Task<IActionResult> Index(
-        string tab = "allocations",
+        string tab = "monthly",
         long? departmentId = null,
         long? dentistUserId = null,
+        int? year = null,
+        int? month = null,
         string? fromDate = null,
         string? toDate = null)
     {
-        DateOnly? parsedFrom = DateOnly.TryParse(fromDate, out var f) ? f : DateOnly.FromDateTime(DateTime.Today);
-        DateOnly? parsedTo = DateOnly.TryParse(toDate, out var t) ? t : DateOnly.FromDateTime(DateTime.Today.AddDays(14));
+        int targetYear = year ?? DateTime.Today.Year;
+        int targetMonth = month ?? DateTime.Today.Month;
+        if (targetMonth < 1) { targetMonth = 12; targetYear--; }
+        if (targetMonth > 12) { targetMonth = 1; targetYear++; }
+
+        DateOnly? parsedFrom = DateOnly.TryParse(fromDate, out var f) ? f : new DateOnly(targetYear, targetMonth, 1);
+        DateOnly? parsedTo = DateOnly.TryParse(toDate, out var t) ? t : new DateOnly(targetYear, targetMonth, DateTime.DaysInMonth(targetYear, targetMonth));
 
         var allocationsTask = _adminApi.GetDentistAllocationsAsync(departmentId);
         var deptsTask = _adminApi.GetDepartmentsAsync();
@@ -57,7 +64,16 @@ public class AdminDentistScheduleController : Controller
         };
         var availabilitiesTask = _scheduleApi.GetAvailabilitiesAsync(availabilityFilter);
 
-        await Task.WhenAll(allocationsTask, deptsTask, dentistsTask, roomsTask, schedulesTask, availabilitiesTask);
+        var monthlyFilter = new MonthlyDentistScheduleFilterRequest
+        {
+            Year = targetYear,
+            Month = targetMonth,
+            DepartmentId = departmentId,
+            DentistUserId = dentistUserId
+        };
+        var monthlyTask = _scheduleApi.GetMonthlyScheduleAsync(monthlyFilter);
+
+        await Task.WhenAll(allocationsTask, deptsTask, dentistsTask, roomsTask, schedulesTask, availabilitiesTask, monthlyTask);
 
         var vm = new AdminDentistScheduleManageViewModel
         {
@@ -67,15 +83,85 @@ public class AdminDentistScheduleController : Controller
             Rooms = roomsTask.Result.IsSuccess && roomsTask.Result.Data != null ? roomsTask.Result.Data : new(),
             Schedules = schedulesTask.Result.IsSuccess && schedulesTask.Result.Data != null ? schedulesTask.Result.Data : new(),
             Availabilities = availabilitiesTask.Result.IsSuccess && availabilitiesTask.Result.Data != null ? availabilitiesTask.Result.Data : new(),
+            MonthlySchedule = monthlyTask.Result.IsSuccess && monthlyTask.Result.Data != null ? monthlyTask.Result.Data : null,
             ActiveTab = tab,
             SelectedDepartmentId = departmentId,
             SelectedDentistId = dentistUserId,
+            SelectedYear = targetYear,
+            SelectedMonth = targetMonth,
             FromDate = parsedFrom,
             ToDate = parsedTo
         };
 
         return View("~/Views/Admin/DentistSchedule/Index.cshtml", vm);
     }
+
+    [HttpGet("Monthly")]
+    public Task<IActionResult> Monthly(
+        long? departmentId = null,
+        long? dentistUserId = null,
+        int? year = null,
+        int? month = null)
+    {
+        return Index("monthly", departmentId, dentistUserId, year, month);
+    }
+
+    // ==========================================
+    // BULK & MONTHLY AJAX ENDPOINTS
+    // ==========================================
+
+    [HttpPost("BulkPreview")]
+    public async Task<IActionResult> BulkPreview([FromBody] BulkScheduleAssignmentRequest request)
+    {
+        var result = await _scheduleApi.BulkPreviewScheduleAsync(request);
+        return Json(result);
+    }
+
+    [HttpPost("BulkApply")]
+    public async Task<IActionResult> BulkApply([FromBody] BulkScheduleApplyRequest request)
+    {
+        var result = await _scheduleApi.BulkApplyScheduleAsync(request);
+        return Json(result);
+    }
+
+    [HttpPost("CopyMonthPreview")]
+    public async Task<IActionResult> CopyMonthPreview([FromBody] CopyMonthScheduleRequest request)
+    {
+        var result = await _scheduleApi.CopyMonthPreviewScheduleAsync(request);
+        return Json(result);
+    }
+
+    [HttpPost("CopyMonthApply")]
+    public async Task<IActionResult> CopyMonthApply([FromBody] CopyMonthScheduleRequest request)
+    {
+        var result = await _scheduleApi.CopyMonthApplyScheduleAsync(request);
+        return Json(result);
+    }
+
+    [HttpGet("AffectedAppointments")]
+    public async Task<IActionResult> AffectedAppointments(long dentistUserId, string workDate, string startTime, string endTime)
+    {
+        if (!DateOnly.TryParse(workDate, out var parsedDate) ||
+            !TimeOnly.TryParse(startTime, out var parsedStart) ||
+            !TimeOnly.TryParse(endTime, out var parsedEnd))
+        {
+            return Json(new { success = false, message = "Tham số ngày giờ không hợp lệ." });
+        }
+
+        var result = await _scheduleApi.GetAffectedAppointmentsAsync(dentistUserId, parsedDate, parsedStart, parsedEnd);
+        return Json(result);
+    }
+
+    [HttpPost("DailyOverride")]
+    public async Task<IActionResult> DailyOverride([FromBody] DailyScheduleOverrideRequest request)
+    {
+        var result = await _scheduleApi.DailyOverrideScheduleAsync(request);
+        return Json(result);
+    }
+
+    // ==========================================
+    // ALLOCATION & EXISTING ENDPOINTS
+    // ==========================================
 
     [HttpPost("AssignDepartment")]
     [ValidateAntiForgeryToken]

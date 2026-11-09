@@ -32,6 +32,11 @@ public class DentistScheduleController : ControllerBase
         return long.TryParse(idStr, out var id) ? id : 0;
     }
 
+    private string GetCurrentUserRole()
+    {
+        return User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+    }
+
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponse<List<DentistWorkScheduleDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSchedules([FromQuery] DentistScheduleFilterRequest request, CancellationToken ct)
@@ -50,7 +55,7 @@ public class DentistScheduleController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("{id}")]
+    [HttpGet("{id:long}")]
     [ProducesResponseType(typeof(ApiResponse<DentistWorkScheduleDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetScheduleById(long id, CancellationToken ct)
     {
@@ -76,7 +81,7 @@ public class DentistScheduleController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPut("{id}")]
+    [HttpPut("{id:long}")]
     [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<DentistWorkScheduleDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateSchedule(long id, [FromBody] UpdateDentistScheduleRequest request, CancellationToken ct)
@@ -90,13 +95,117 @@ public class DentistScheduleController : ControllerBase
         return Ok(result);
     }
 
-    [HttpPut("{id}/cancel")]
+    [HttpPut("{id:long}/cancel")]
     [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> CancelSchedule(long id, CancellationToken ct)
     {
         var currentUserId = GetCurrentUserId();
         var result = await _scheduleService.CancelScheduleAsync(id, currentUserId, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    // ==========================================
+    // MONTHLY & BULK SCHEDULING ENDPOINTS
+    // ==========================================
+
+    [HttpGet("monthly")]
+    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.Dentist},{UserRole.Receptionist},{UserRole.DepartmentManager}")]
+    [ProducesResponseType(typeof(ApiResponse<MonthlyDentistScheduleDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMonthlySchedule([FromQuery] MonthlyDentistScheduleFilterRequest request, CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        var role = GetCurrentUserRole();
+
+        // If logged in as Dentist, force DentistUserId to current user unless SystemAdmin / Receptionist
+        if (role == UserRole.Dentist && (!request.DentistUserId.HasValue || request.DentistUserId <= 0))
+        {
+            request.DentistUserId = currentUserId;
+        }
+
+        var result = await _scheduleService.GetMonthlyScheduleAsync(request, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("bulk-preview")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<BulkSchedulePreviewResultDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> PreviewBulkSchedule([FromBody] BulkScheduleAssignmentRequest request, CancellationToken ct)
+    {
+        var result = await _scheduleService.PreviewBulkScheduleAsync(request, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("bulk-apply")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<BulkScheduleApplyResultDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ApplyBulkSchedule([FromBody] BulkScheduleApplyRequest request, CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        var result = await _scheduleService.ApplyBulkScheduleAsync(request, currentUserId, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("copy-month-preview")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<CopyMonthSchedulePreviewDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> PreviewCopyMonthSchedule([FromBody] CopyMonthScheduleRequest request, CancellationToken ct)
+    {
+        var result = await _scheduleService.PreviewCopyMonthScheduleAsync(request, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("copy-month-apply")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<BulkScheduleApplyResultDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ApplyCopyMonthSchedule([FromBody] CopyMonthScheduleRequest request, CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        var result = await _scheduleService.ApplyCopyMonthScheduleAsync(request, currentUserId, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpGet("affected-appointments")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<List<AffectedAppointmentDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAffectedAppointments(
+        [FromQuery] long dentistUserId,
+        [FromQuery] DateOnly workDate,
+        [FromQuery] TimeOnly? newStart,
+        [FromQuery] TimeOnly? newEnd,
+        CancellationToken ct)
+    {
+        var result = await _scheduleService.GetAffectedAppointmentsAsync(dentistUserId, workDate, newStart, newEnd, ct);
+        return Ok(result);
+    }
+
+    [HttpPut("daily-override")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ApplyDailyOverride([FromBody] DailyScheduleOverrideRequest request, CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        var result = await _scheduleService.ApplyDailyOverrideAsync(request, currentUserId, ct);
         if (!result.Success)
         {
             return BadRequest(result);

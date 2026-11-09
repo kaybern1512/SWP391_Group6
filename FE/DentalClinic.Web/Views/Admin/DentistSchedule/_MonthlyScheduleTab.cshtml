@@ -1,0 +1,1085 @@
+@model AdminDentistScheduleManageViewModel
+@{
+    var schedule = Model.MonthlySchedule;
+    var currentYear = Model.SelectedYear;
+    var currentMonth = Model.SelectedMonth;
+    var prevMonth = currentMonth == 1 ? 12 : currentMonth - 1;
+    var prevYear = currentMonth == 1 ? currentYear - 1 : currentYear;
+    var nextMonth = currentMonth == 12 ? 1 : currentMonth + 1;
+    var nextYear = currentMonth == 12 ? currentYear + 1 : currentYear;
+    var today = DateOnly.FromDateTime(DateTime.Today);
+}
+
+<!-- Filters Bar -->
+<div class="card-dc mb-4">
+    <div class="card-dc-body p-3">
+        <form asp-controller="AdminDentistSchedule" asp-action="Index" method="get" class="row g-2 align-items-end">
+            <input type="hidden" name="tab" value="monthly" />
+
+            <!-- Month Navigator -->
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted mb-1">Tháng & Năm</label>
+                <div class="input-group input-group-sm">
+                    <a asp-controller="AdminDentistSchedule" asp-action="Index"
+                       asp-route-tab="monthly"
+                       asp-route-year="@prevYear"
+                       asp-route-month="@prevMonth"
+                       asp-route-departmentId="@Model.SelectedDepartmentId"
+                       asp-route-dentistUserId="@Model.SelectedDentistId"
+                       class="btn btn-outline-secondary" title="Tháng trước">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                    <select name="month" class="form-select form-select-sm text-center fw-bold" onchange="this.form.submit()">
+                        @for (int m = 1; m <= 12; m++)
+                        {
+                            <option value="@m" selected="@(currentMonth == m)">Tháng @m</option>
+                        }
+                    </select>
+                    <select name="year" class="form-select form-select-sm text-center fw-bold" onchange="this.form.submit()">
+                        @for (int y = DateTime.Today.Year - 1; y <= DateTime.Today.Year + 2; y++)
+                        {
+                            <option value="@y" selected="@(currentYear == y)">@y</option>
+                        }
+                    </select>
+                    <a asp-controller="AdminDentistSchedule" asp-action="Index"
+                       asp-route-tab="monthly"
+                       asp-route-year="@nextYear"
+                       asp-route-month="@nextMonth"
+                       asp-route-departmentId="@Model.SelectedDepartmentId"
+                       asp-route-dentistUserId="@Model.SelectedDentistId"
+                       class="btn btn-outline-secondary" title="Tháng sau">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Department Filter -->
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted mb-1">Chuyên khoa</label>
+                <select name="departmentId" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">-- Tất cả chuyên khoa --</option>
+                    @foreach (var d in Model.Departments)
+                    {
+                        <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Dentist Filter -->
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted mb-1">Bác sĩ nha khoa</label>
+                <select name="dentistUserId" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">-- Tất cả bác sĩ --</option>
+                    @foreach (var d in Model.Dentists)
+                    {
+                        <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName @(!string.IsNullOrEmpty(d.Code) ? $"({d.Code})" : "")</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-sm btn-dc-primary flex-grow-1">
+                    <i class="bi bi-funnel me-1"></i>Lọc
+                </button>
+                <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="monthly" class="btn btn-sm btn-outline-secondary" title="Đặt lại về mặc định">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+@if (schedule != null)
+{
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card-dc border-start border-4 border-primary">
+                <div class="card-dc-body p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="text-muted small fw-semibold">Tổng ngày trực</span>
+                        <span class="badge bg-primary-subtle text-primary rounded-pill"><i class="bi bi-calendar-check"></i></span>
+                    </div>
+                    <div class="fs-4 fw-bold text-dark">@schedule.TotalWorkingDays <span class="fs-6 fw-normal text-muted">ngày</span></div>
+                    <div class="text-xs text-muted">Trong tháng @schedule.Month/@schedule.Year</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card-dc border-start border-4 border-info">
+                <div class="card-dc-body p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="text-muted small fw-semibold">Tổng giờ làm việc</span>
+                        <span class="badge bg-info-subtle text-info rounded-pill"><i class="bi bi-clock-history"></i></span>
+                    </div>
+                    <div class="fs-4 fw-bold text-dark">@schedule.TotalWorkingHours <span class="fs-6 fw-normal text-muted">giờ</span></div>
+                    <div class="text-xs text-muted">Ca trực phân công hợp lệ</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card-dc border-start border-4 border-warning">
+                <div class="card-dc-body p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="text-muted small fw-semibold">Nghỉ phép / Vắng</span>
+                        <span class="badge bg-warning-subtle text-warning rounded-pill"><i class="bi bi-person-x"></i></span>
+                    </div>
+                    <div class="fs-4 fw-bold text-dark">@schedule.TotalOffDays <span class="fs-6 fw-normal text-muted">ngày</span></div>
+                    <div class="text-xs text-muted">Đã ghi nhận vắng mặt</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card-dc border-start border-4 border-success">
+                <div class="card-dc-body p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="text-muted small fw-semibold">Lịch hẹn đã chốt</span>
+                        <span class="badge bg-success-subtle text-success rounded-pill"><i class="bi bi-calendar2-heart"></i></span>
+                    </div>
+                    <div class="fs-4 fw-bold text-dark">@schedule.TotalConfirmedAppointments <span class="fs-6 fw-normal text-muted">lịch hẹn</span></div>
+                    <div class="text-xs text-muted">Bệnh nhân đã đặt khám</div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Monthly Calendar Grid -->
+<div class="card-dc mb-4 shadow-sm">
+    <div class="card-dc-header py-3 d-flex justify-content-between align-items-center bg-white border-bottom">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-calendar3 text-primary fs-5"></i>
+            <span class="fw-bold fs-6">Lịch Phân Công Trực Tháng @currentMonth/@currentYear</span>
+            @if (Model.SelectedDentistId.HasValue && schedule?.DentistName != null)
+            {
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-2">
+                    <i class="bi bi-person-fill me-1"></i>@schedule.DentistName
+                </span>
+            }
+            @if (Model.SelectedDepartmentId.HasValue && schedule?.DepartmentName != null)
+            {
+                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle ms-1">
+                    <i class="bi bi-building me-1"></i>@schedule.DepartmentName
+                </span>
+            }
+        </div>
+        <div class="d-flex gap-2">
+            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1"><i class="bi bi-circle-fill me-1" style="font-size: 8px;"></i>Đang mở đặt hẹn</span>
+            <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1"><i class="bi bi-circle-fill me-1" style="font-size: 8px;"></i>Nghỉ phép/Bận</span>
+        </div>
+    </div>
+    <div class="card-dc-body p-0">
+        <!-- Day Names Header (7 Columns) -->
+        <div class="row g-0 text-center fw-semibold text-muted border-bottom py-2 bg-light small">
+            <div class="col">Thứ Hai</div>
+            <div class="col">Thứ Ba</div>
+            <div class="col">Thứ Tư</div>
+            <div class="col">Thứ Năm</div>
+            <div class="col">Thứ Sáu</div>
+            <div class="col text-primary">Thứ Bảy</div>
+            <div class="col text-danger">Chủ Nhật</div>
+        </div>
+
+        @if (schedule != null && schedule.Days.Count > 0)
+        {
+            <!-- Grid Days -->
+            <div class="row g-0">
+                @for (int i = 0; i < schedule.Days.Count; i++)
+                {
+                    var day = schedule.Days[i];
+                    bool isToday = day.Date == today;
+                    string dayCardClass = !day.IsCurrentMonth
+                        ? "bg-light text-muted opacity-50"
+                        : (isToday ? "bg-primary-subtle bg-opacity-25 border-primary border-2" : "bg-white");
+
+                    <div class="col-12 col-md border-bottom border-end p-2 d-flex flex-column @dayCardClass" style="min-height: 140px; min-width: 14.28%;">
+                        <!-- Day Header -->
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-bold @(day.IsWeekend ? (day.DayOfWeek == 7 ? "text-danger" : "text-primary") : "text-dark")" style="font-size: 0.95rem;">
+                                @day.Date.Day
+                            </span>
+                            @if (isToday)
+                            {
+                                <span class="badge bg-primary text-white" style="font-size: 9px;">Hôm nay</span>
+                            }
+                            @if (day.ConfirmedAppointmentsCount > 0)
+                            {
+                                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 9px;" title="@day.ConfirmedAppointmentsCount lịch hẹn đã xác nhận">
+                                    <i class="bi bi-person-check-fill me-1"></i>@day.ConfirmedAppointmentsCount
+                                </span>
+                            }
+                        </div>
+
+                        <!-- Leave Status -->
+                        @if (day.IsOnLeave)
+                        {
+                            <div class="badge bg-warning-subtle text-warning border border-warning-subtle text-wrap text-start p-1 mb-1" style="font-size: 10px;">
+                                <i class="bi bi-slash-circle me-1"></i>Nghỉ: @(string.IsNullOrWhiteSpace(day.LeaveReason) ? "Nghỉ phép" : day.LeaveReason)
+                            </div>
+                        }
+
+                        <!-- Shifts List -->
+                        <div class="shifts-container flex-grow-1 overflow-auto mb-1" style="max-height: 110px;">
+                            @if (day.Shifts.Count > 0)
+                            {
+                                @foreach (var s in day.Shifts)
+                                {
+                                    <div class="shift-pill p-1 px-2 rounded mb-1 border d-flex justify-content-between align-items-center @(s.Status == "Scheduled" ? "bg-white border-primary-subtle" : "bg-light text-muted")" style="font-size: 11px;">
+                                        <div class="d-flex align-items-center text-truncate">
+                                            <i class="bi bi-clock-fill text-primary me-1" style="font-size: 10px;"></i>
+                                            <strong>@s.StartTime.ToString("HH:mm")-@s.EndTime.ToString("HH:mm")</strong>
+                                        </div>
+                                        <span class="badge bg-light text-secondary border ms-1" style="font-size: 9px;">@s.DepartmentName</span>
+                                    </div>
+                                }
+                            }
+                            else if (!day.IsOnLeave && day.IsCurrentMonth)
+                            {
+                                <div class="text-center text-muted py-2" style="font-size: 11px;">
+                                    <span class="fst-italic opacity-75">Chưa phân ca</span>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Action Button -->
+                        @if (day.IsCurrentMonth)
+                        {
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary py-0 px-1 w-100 mt-auto text-xs"
+                                    onclick="openDailyOverrideModal('@day.Date.ToString("yyyy-MM-dd")', @(day.IsOnLeave ? "true" : "false"), '@(Html.Raw(day.LeaveReason?.Replace("'", "\\'") ?? ""))', @day.ConfirmedAppointmentsCount, '@(Html.Raw(System.Text.Json.JsonSerializer.Serialize(day.Shifts.Select(sh => new { startTime = sh.StartTime.ToString("HH:mm"), endTime = sh.EndTime.ToString("HH:mm"), note = sh.Note ?? "" }))))')">
+                                <i class="bi bi-pencil-square me-1"></i>Sửa ca ngày
+                            </button>
+                        }
+                    </div>
+
+                    @* Break rows every 7 days on desktop *@
+                    @if ((i + 1) % 7 == 0 && (i + 1) < schedule.Days.Count)
+                    {
+                        @:</div><div class="row g-0">
+                    }
+                }
+            </div>
+        }
+        else
+        {
+            <div class="p-5 text-center text-muted">
+                <i class="bi bi-calendar-x fs-1 text-secondary opacity-50 mb-2"></i>
+                <div class="fw-semibold">Không tìm thấy dữ liệu phân công lịch trực cho tháng này.</div>
+                <p class="small text-muted mb-3">Hãy chọn bác sĩ / chuyên khoa hoặc bấm nút <strong>Phân công hàng loạt</strong> để tạo ca trực nhanh.</p>
+                <button type="button" class="btn btn-dc-primary btn-sm" data-bs-toggle="modal" data-bs-target="#bulkScheduleModal">
+                    <i class="bi bi-calendar-plus me-1"></i>Tạo Phân Công Ngay
+                </button>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- MODAL 1: BULK SCHEDULE ASSIGNMENT -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="bulkScheduleModal" tabindex="-1" aria-labelledby="bulkScheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title font-heading" id="bulkScheduleModalLabel">
+                    <i class="bi bi-calendar-plus text-primary me-2"></i>Phân Công Lịch Trực Hàng Loạt
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="bulkScheduleForm">
+                    <!-- Step 1: Doctor & Department -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Chuyên khoa <span class="text-danger">*</span></label>
+                            <select id="bulkDepartmentId" class="form-select" required>
+                                <option value="">-- Chọn chuyên khoa --</option>
+                                @foreach (var d in Model.Departments)
+                                {
+                                    <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Bác sĩ áp dụng <span class="text-danger">*</span></label>
+                            <select id="bulkDentistIds" class="form-select" multiple size="4" required>
+                                @foreach (var d in Model.Dentists)
+                                {
+                                    <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName @(!string.IsNullOrEmpty(d.Code) ? $"({d.Code})" : "")</option>
+                                }
+                            </select>
+                            <div class="form-text text-xs">Giữ phím Ctrl (hoặc Cmd) để chọn nhiều bác sĩ cùng lúc.</div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Date Range -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Từ ngày <span class="text-danger">*</span></label>
+                            <input type="date" id="bulkFromDate" class="form-control" value="@(new DateOnly(currentYear, currentMonth, 1).ToString("yyyy-MM-dd"))" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Đến ngày <span class="text-danger">*</span></label>
+                            <input type="date" id="bulkToDate" class="form-control" value="@(new DateOnly(currentYear, currentMonth, DateTime.DaysInMonth(currentYear, currentMonth)).ToString("yyyy-MM-dd"))" required />
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Days of Week Selection -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small mb-2">Các ngày trong tuần áp dụng <span class="text-danger">*</span></label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow1" value="1" checked>
+                                <label class="form-check-label" for="dow1">Thứ 2</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow2" value="2" checked>
+                                <label class="form-check-label" for="dow2">Thứ 3</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow3" value="3" checked>
+                                <label class="form-check-label" for="dow3">Thứ 4</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow4" value="4" checked>
+                                <label class="form-check-label" for="dow4">Thứ 5</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow5" value="5" checked>
+                                <label class="form-check-label" for="dow5">Thứ 6</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow6" value="6">
+                                <label class="form-check-label text-primary" for="dow6">Thứ 7</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow7" value="7">
+                                <label class="form-check-label text-danger" for="dow7">Chủ Nhật</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Shifts Configuration -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-semibold small mb-0">Cấu hình ca trực hàng ngày <span class="text-danger">*</span></label>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="setBulkPreset('morning')">Ca Sáng (8h-12h)</button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="setBulkPreset('afternoon')">Ca Chiều (13h30-17h30)</button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="setBulkPreset('fullday')">Cả Ngày</button>
+                            </div>
+                        </div>
+                        <div id="bulkShiftsContainer" class="border rounded p-2 bg-light">
+                            <!-- Dynamic shift rows -->
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="addBulkShiftRow('08:00', '12:00', 'Ca Sáng')">
+                            <i class="bi bi-plus-circle me-1"></i>Thêm ca trực
+                        </button>
+                    </div>
+
+                    <!-- Step 5: Options -->
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="bulkOverwrite">
+                        <label class="form-check-label small" for="bulkOverwrite">
+                            Ghi đè ca trực cũ nếu chưa có lịch hẹn của bệnh nhân
+                        </label>
+                    </div>
+
+                    <!-- Preview Section -->
+                    <div id="bulkPreviewSection" class="mt-3 p-3 border rounded bg-white" style="display: none;">
+                        <h6 class="fw-bold d-flex align-items-center justify-content-between">
+                            <span><i class="bi bi-shield-check text-success me-2"></i>Kết quả kiểm tra trước (Preview)</span>
+                            <span id="bulkPreviewBadge" class="badge bg-secondary">0 ca</span>
+                        </h6>
+                        <div class="row g-2 mb-2 text-center text-xs">
+                            <div class="col"><span class="badge bg-success-subtle text-success w-100 py-1" id="statValid">0 Hợp lệ</span></div>
+                            <div class="col"><span class="badge bg-warning-subtle text-warning w-100 py-1" id="statDuplicate">0 Đã có sẵn</span></div>
+                            <div class="col"><span class="badge bg-danger-subtle text-danger w-100 py-1" id="statConflict">0 Xung đột/Lịch hẹn</span></div>
+                            <div class="col"><span class="badge bg-secondary-subtle text-secondary w-100 py-1" id="statLeave">0 Trùng nghỉ phép</span></div>
+                        </div>
+                        <div class="table-responsive" style="max-height: 180px; overflow-y: auto;">
+                            <table class="table table-sm table-bordered text-xs mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Bác sĩ</th>
+                                        <th>Ngày</th>
+                                        <th>Giờ</th>
+                                        <th>Trạng thái</th>
+                                        <th>Ghi chú</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bulkPreviewTableBody">
+                                    <!-- Items will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-outline-primary" id="btnBulkPreview" onclick="handleBulkPreview()">
+                    <i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột (Preview)
+                </button>
+                <button type="button" class="btn btn-dc-primary" id="btnBulkApply" onclick="handleBulkApply()" disabled>
+                    <i class="bi bi-check2-circle me-1"></i>Áp Dụng Phân Công
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- MODAL 2: COPY SCHEDULE FROM PREVIOUS MONTH -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="copyMonthModal" tabindex="-1" aria-labelledby="copyMonthModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title font-heading" id="copyMonthModalLabel">
+                    <i class="bi bi-copy text-primary me-2"></i>Sao Chép Lịch Trực Từ Tháng Trước
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="copyMonthForm">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6 border-end">
+                            <label class="form-label fw-bold text-muted small">THÁNG NGUỒN (SAO CHÉP TỪ)</label>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label small">Tháng</label>
+                                    <select id="copySourceMonth" class="form-select form-select-sm">
+                                        @for (int m = 1; m <= 12; m++)
+                                        {
+                                            <option value="@m" selected="@(prevMonth == m)">Tháng @m</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Năm</label>
+                                    <select id="copySourceYear" class="form-select form-select-sm">
+                                        @for (int y = DateTime.Today.Year - 1; y <= DateTime.Today.Year + 2; y++)
+                                        {
+                                            <option value="@y" selected="@(prevYear == y)">@y</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold text-primary small">THÁNG ĐÍCH (ÁP DỤNG ĐẾN)</label>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label small">Tháng</label>
+                                    <select id="copyTargetMonth" class="form-select form-select-sm" disabled>
+                                        <option value="@currentMonth" selected>Tháng @currentMonth</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Năm</label>
+                                    <select id="copyTargetYear" class="form-select form-select-sm" disabled>
+                                        <option value="@currentYear" selected>@currentYear</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Lọc theo chuyên khoa</label>
+                            <select id="copyDepartmentId" class="form-select form-select-sm">
+                                <option value="">-- Tất cả chuyên khoa --</option>
+                                @foreach (var d in Model.Departments)
+                                {
+                                    <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Lọc theo bác sĩ</label>
+                            <select id="copyDentistId" class="form-select form-select-sm">
+                                <option value="">-- Tất cả bác sĩ --</option>
+                                @foreach (var d in Model.Dentists)
+                                {
+                                    <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName @(!string.IsNullOrEmpty(d.Code) ? $"({d.Code})" : "")</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold mb-1">Phương thức sao chép</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="copyMode" id="copyModePattern" value="DayOfWeekPattern" checked>
+                            <label class="form-check-label small" for="copyModePattern">
+                                <strong>Theo thứ trong tuần (Day of Week pattern):</strong> Phân bổ các ca Thứ 2 tháng trước sang Thứ 2 tháng này, đảm bảo nhịp trực tuần đều đặn (Khuyên dùng).
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="copyMode" id="copyModeExact" value="ExactDayMatch">
+                            <label class="form-check-label small" for="copyModeExact">
+                                <strong>Trùng ngày chính xác (Exact day):</strong> Ngày 1 sang ngày 1, ngày 15 sang ngày 15 (Bỏ qua ngày thừa nếu tháng khác số ngày).
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="copyExcludeLeaves" checked>
+                                <label class="form-check-label small" for="copyExcludeLeaves">
+                                    Bỏ qua các ngày bác sĩ đã đăng ký nghỉ phép trong tháng mới
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="copySkipConflicts" checked>
+                                <label class="form-check-label small" for="copySkipConflicts">
+                                    Tự động bỏ qua các ca bị trùng lặp hoặc xung đột
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Preview Section -->
+                    <div id="copyPreviewSection" class="p-3 border rounded bg-white" style="display: none;">
+                        <h6 class="fw-bold d-flex align-items-center justify-content-between mb-2">
+                            <span><i class="bi bi-info-circle text-info me-2"></i>Xem trước kết quả sao chép</span>
+                            <span id="copyPreviewBadge" class="badge bg-secondary">0 ca</span>
+                        </h6>
+                        <div class="alert alert-info py-2 small mb-2" id="copyPreviewSummary">
+                            Đang nạp thông tin...
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-outline-primary" id="btnCopyPreview" onclick="handleCopyPreview()">
+                    <i class="bi bi-eye me-1"></i>Kiểm Tra (Preview)
+                </button>
+                <button type="button" class="btn btn-dc-primary" id="btnCopyApply" onclick="handleCopyApply()" disabled>
+                    <i class="bi bi-copy me-1"></i>Thực Hiện Sao Chép
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- MODAL 3: DAILY SCHEDULE OVERRIDE & APPOINTMENT GUARD -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="dailyOverrideModal" tabindex="-1" aria-labelledby="dailyOverrideModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title font-heading" id="dailyOverrideModalLabel">
+                    <i class="bi bi-pencil-square text-primary me-2"></i>Chỉnh Sửa Ca Trực Riêng Lẻ Trong Ngày
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="dailyOverrideForm">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-muted">Ngày làm việc</label>
+                        <input type="text" id="overrideDateDisplay" class="form-control fw-bold bg-light" readonly />
+                        <input type="hidden" id="overrideDate" />
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Bác sĩ <span class="text-danger">*</span></label>
+                            <select id="overrideDentistId" class="form-select form-select-sm" required>
+                                @foreach (var d in Model.Dentists)
+                                {
+                                    <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Chuyên khoa <span class="text-danger">*</span></label>
+                            <select id="overrideDepartmentId" class="form-select form-select-sm" required>
+                                @foreach (var d in Model.Departments)
+                                {
+                                    <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Appointment Guard Warning Banner -->
+                    <div id="appointmentGuardAlert" class="alert alert-warning py-2 small mb-3" style="display: none;">
+                        <i class="bi bi-shield-exclamation me-1 fw-bold"></i>
+                        <strong>CẢNH BÁO APPOINTMENT GUARD:</strong> Ngày này đang có <strong id="guardApptCount">0</strong> lịch hẹn đã xác nhận. Mọi thay đổi hoặc gỡ ca sẽ được kiểm tra an toàn để không làm mồ côi lịch hẹn bệnh nhân!
+                    </div>
+
+                    <!-- Toggle Day Off -->
+                    <div class="card p-3 mb-3 border-warning bg-warning-subtle bg-opacity-25">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="overrideIsDayOff" onchange="toggleDayOffSection()">
+                            <label class="form-check-label fw-bold text-dark" for="overrideIsDayOff">
+                                Đánh dấu nghỉ phép / Không nhận khám ngày này
+                            </label>
+                        </div>
+                        <div id="dayOffReasonGroup" class="mt-2" style="display: none;">
+                            <label class="form-label small text-muted">Lý do nghỉ phép / vắng mặt <span class="text-danger">*</span></label>
+                            <input type="text" id="overrideLeaveReason" class="form-control form-control-sm" placeholder="VD: Nghỉ phép cá nhân, đi công tác, bận việc đột xuất..." />
+                        </div>
+                    </div>
+
+                    <!-- Shifts Editor -->
+                    <div id="shiftsEditorGroup">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label small fw-semibold mb-0">Các ca trực trong ngày</label>
+                            <button type="button" class="btn btn-xs btn-outline-primary" onclick="addOverrideShiftRow('08:00', '12:00', '')">
+                                <i class="bi bi-plus-lg me-1"></i>Thêm ca
+                            </button>
+                        </div>
+                        <div id="overrideShiftsContainer" class="border rounded p-2 bg-light mb-3">
+                            <!-- Dynamic shift rows -->
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-dc-primary" id="btnSaveOverride" onclick="handleSaveOverride()">
+                    <i class="bi bi-save me-1"></i>Lưu Thay Đổi Ca Trực
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- JAVASCRIPT LOGIC -->
+<!-- ========================================================================= -->
+<script>
+    // Shift row management for Bulk
+    function addBulkShiftRow(start = '08:00', end = '12:00', note = '') {
+        const container = document.getElementById('bulkShiftsContainer');
+        const row = document.createElement('div');
+        row.className = 'row g-2 align-items-center mb-2 bulk-shift-row';
+        row.innerHTML = `
+            <div class="col-4">
+                <input type="time" class="form-control form-control-sm shift-start" value="${start}" required />
+            </div>
+            <div class="col-4">
+                <input type="time" class="form-control form-control-sm shift-end" value="${end}" required />
+            </div>
+            <div class="col-3">
+                <input type="text" class="form-control form-control-sm shift-note" value="${note}" placeholder="Ghi chú" />
+            </div>
+            <div class="col-1 text-center">
+                <button type="button" class="btn btn-link text-danger p-0" onclick="this.closest('.bulk-shift-row').remove()">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(row);
+    }
+
+    function setBulkPreset(preset) {
+        const container = document.getElementById('bulkShiftsContainer');
+        container.innerHTML = '';
+        if (preset === 'morning') {
+            addBulkShiftRow('08:00', '12:00', 'Ca Sáng');
+        } else if (preset === 'afternoon') {
+            addBulkShiftRow('13:30', '17:30', 'Ca Chiều');
+        } else if (preset === 'fullday') {
+            addBulkShiftRow('08:00', '12:00', 'Ca Sáng');
+            addBulkShiftRow('13:30', '17:30', 'Ca Chiều');
+        }
+    }
+
+    // Initialize bulk shift rows on load
+    document.addEventListener('DOMContentLoaded', function () {
+        setBulkPreset('fullday');
+    });
+
+    // Bulk Preview AJAX
+    async function handleBulkPreview() {
+        const deptId = document.getElementById('bulkDepartmentId').value;
+        const dentistSelect = document.getElementById('bulkDentistIds');
+        const dentistIds = Array.from(dentistSelect.selectedOptions).map(opt => parseInt(opt.value));
+        const fromDate = document.getElementById('bulkFromDate').value;
+        const toDate = document.getElementById('bulkToDate').value;
+        const overwrite = document.getElementById('bulkOverwrite').checked;
+
+        const dowCheckboxes = document.querySelectorAll('.bulk-dow:checked');
+        const daysOfWeek = Array.from(dowCheckboxes).map(cb => parseInt(cb.value));
+
+        if (!deptId) { alert('Vui lòng chọn Chuyên khoa.'); return; }
+        if (dentistIds.length === 0) { alert('Vui lòng chọn ít nhất một Bác sĩ.'); return; }
+        if (!fromDate || !toDate) { alert('Vui lòng nhập khoảng ngày.'); return; }
+        if (daysOfWeek.length === 0) { alert('Vui lòng chọn ít nhất một ngày trong tuần.'); return; }
+
+        const shiftRows = document.querySelectorAll('.bulk-shift-row');
+        const shifts = [];
+        shiftRows.forEach(row => {
+            const s = row.querySelector('.shift-start').value;
+            const e = row.querySelector('.shift-end').value;
+            const n = row.querySelector('.shift-note').value;
+            if (s && e) shifts.push({ startTime: s, endTime: e, note: n });
+        });
+
+        if (shifts.length === 0) { alert('Vui lòng cấu hình ít nhất một ca trực.'); return; }
+
+        const payload = {
+            departmentId: parseInt(deptId),
+            dentistUserIds: dentistIds,
+            fromDate: fromDate,
+            toDate: toDate,
+            daysOfWeek: daysOfWeek,
+            shifts: shifts,
+            overwriteExisting: overwrite
+        };
+
+        const btnPreview = document.getElementById('btnBulkPreview');
+        btnPreview.disabled = true;
+        btnPreview.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang kiểm tra...';
+
+        try {
+            const resp = await fetch('/Admin/DentistSchedule/BulkPreview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+
+            if (res.isSuccess && res.data) {
+                const data = res.data;
+                document.getElementById('bulkPreviewSection').style.display = 'block';
+                document.getElementById('bulkPreviewBadge').innerText = `${data.totalProposedShifts} ca đề xuất`;
+                document.getElementById('statValid').innerText = `${data.validShiftsCount} Hợp lệ`;
+                document.getElementById('statDuplicate').innerText = `${data.duplicateShiftsCount} Đã có`;
+                document.getElementById('statConflict').innerText = `${data.overlapShiftsCount + data.appointmentConflictCount} Xung đột`;
+                document.getElementById('statLeave').innerText = `${data.leaveConflictCount} Trùng nghỉ`;
+
+                const tbody = document.getElementById('bulkPreviewTableBody');
+                tbody.innerHTML = '';
+                data.items.slice(0, 50).forEach(item => {
+                    const tr = document.createElement('tr');
+                    const badgeClass = item.status === 'Valid' ? 'bg-success-subtle text-success' : (item.status === 'Duplicate' ? 'bg-warning-subtle text-warning' : 'bg-danger-subtle text-danger');
+                    tr.innerHTML = `
+                        <td>${item.dentistName}</td>
+                        <td>${item.workDate}</td>
+                        <td>${item.startTime} - ${item.endTime}</td>
+                        <td><span class="badge ${badgeClass}">${item.status}</span></td>
+                        <td>${item.message || ''}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                document.getElementById('btnBulkApply').disabled = false;
+            } else {
+                alert(res.message || 'Lỗi khi kiểm tra lịch.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối máy chủ.');
+        } finally {
+            btnPreview.disabled = false;
+            btnPreview.innerHTML = '<i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột (Preview)';
+        }
+    }
+
+    // Bulk Apply AJAX
+    async function handleBulkApply() {
+        const deptId = document.getElementById('bulkDepartmentId').value;
+        const dentistSelect = document.getElementById('bulkDentistIds');
+        const dentistIds = Array.from(dentistSelect.selectedOptions).map(opt => parseInt(opt.value));
+        const fromDate = document.getElementById('bulkFromDate').value;
+        const toDate = document.getElementById('bulkToDate').value;
+        const overwrite = document.getElementById('bulkOverwrite').checked;
+
+        const dowCheckboxes = document.querySelectorAll('.bulk-dow:checked');
+        const daysOfWeek = Array.from(dowCheckboxes).map(cb => parseInt(cb.value));
+
+        const shiftRows = document.querySelectorAll('.bulk-shift-row');
+        const shifts = [];
+        shiftRows.forEach(row => {
+            const s = row.querySelector('.shift-start').value;
+            const e = row.querySelector('.shift-end').value;
+            const n = row.querySelector('.shift-note').value;
+            if (s && e) shifts.push({ startTime: s, endTime: e, note: n });
+        });
+
+        const payload = {
+            departmentId: parseInt(deptId),
+            dentistUserIds: dentistIds,
+            fromDate: fromDate,
+            toDate: toDate,
+            daysOfWeek: daysOfWeek,
+            shifts: shifts,
+            overwriteExisting: overwrite,
+            skipConflicts: true
+        };
+
+        const btnApply = document.getElementById('btnBulkApply');
+        btnApply.disabled = true;
+        btnApply.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang lưu...';
+
+        try {
+            const resp = await fetch('/Admin/DentistSchedule/BulkApply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+
+            if (res.isSuccess && res.data) {
+                alert(`Hoàn thành! Đã tạo ${res.data.createdCount} ca trực mới, bỏ qua ${res.data.skippedCount} ca xung đột.`);
+                window.location.reload();
+            } else {
+                alert(res.message || 'Không thể áp dụng phân công.');
+                btnApply.disabled = false;
+                btnApply.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Áp Dụng Phân Công';
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối máy chủ.');
+            btnApply.disabled = false;
+            btnApply.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Áp Dụng Phân Công';
+        }
+    }
+
+    // Copy Month AJAX
+    async function handleCopyPreview() {
+        const sourceMonth = parseInt(document.getElementById('copySourceMonth').value);
+        const sourceYear = parseInt(document.getElementById('copySourceYear').value);
+        const targetMonth = parseInt(document.getElementById('copyTargetMonth').value);
+        const targetYear = parseInt(document.getElementById('copyTargetYear').value);
+        const deptId = document.getElementById('copyDepartmentId').value;
+        const dentistId = document.getElementById('copyDentistId').value;
+        const mode = document.querySelector('input[name="copyMode"]:checked').value;
+        const excludeLeaves = document.getElementById('copyExcludeLeaves').checked;
+        const skipConflicts = document.getElementById('copySkipConflicts').checked;
+
+        const payload = {
+            sourceYear: sourceYear,
+            sourceMonth: sourceMonth,
+            targetYear: targetYear,
+            targetMonth: targetMonth,
+            departmentId: deptId ? parseInt(deptId) : null,
+            dentistUserId: dentistId ? parseInt(dentistId) : null,
+            mode: mode,
+            excludeLeaves: excludeLeaves,
+            skipConflicts: skipConflicts
+        };
+
+        const btnPreview = document.getElementById('btnCopyPreview');
+        btnPreview.disabled = true;
+        btnPreview.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang nạp...';
+
+        try {
+            const resp = await fetch('/Admin/DentistSchedule/CopyMonthPreview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+
+            if (res.isSuccess && res.data) {
+                const data = res.data;
+                document.getElementById('copyPreviewSection').style.display = 'block';
+                document.getElementById('copyPreviewBadge').innerText = `${data.proposedShiftsCount} ca đề xuất`;
+                document.getElementById('copyPreviewSummary').innerHTML = `
+                    Từ tháng <strong>${sourceMonth}/${sourceYear}</strong> tìm thấy <strong>${data.sourceShiftsCount}</strong> ca trực gốc.<br/>
+                    Sẽ sao chép sang tháng <strong>${targetMonth}/${targetYear}</strong>: <strong>${data.validCount}</strong> ca hợp lệ, <strong>${data.conflictCount}</strong> ca xung đột/trùng lặp.
+                `;
+                document.getElementById('btnCopyApply').disabled = false;
+            } else {
+                alert(res.message || 'Lỗi khi kiểm tra sao chép.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối máy chủ.');
+        } finally {
+            btnPreview.disabled = false;
+            btnPreview.innerHTML = '<i class="bi bi-eye me-1"></i>Kiểm Tra (Preview)';
+        }
+    }
+
+    async function handleCopyApply() {
+        const sourceMonth = parseInt(document.getElementById('copySourceMonth').value);
+        const sourceYear = parseInt(document.getElementById('copySourceYear').value);
+        const targetMonth = parseInt(document.getElementById('copyTargetMonth').value);
+        const targetYear = parseInt(document.getElementById('copyTargetYear').value);
+        const deptId = document.getElementById('copyDepartmentId').value;
+        const dentistId = document.getElementById('copyDentistId').value;
+        const mode = document.querySelector('input[name="copyMode"]:checked').value;
+        const excludeLeaves = document.getElementById('copyExcludeLeaves').checked;
+        const skipConflicts = document.getElementById('copySkipConflicts').checked;
+
+        const payload = {
+            sourceYear: sourceYear,
+            sourceMonth: sourceMonth,
+            targetYear: targetYear,
+            targetMonth: targetMonth,
+            departmentId: deptId ? parseInt(deptId) : null,
+            dentistUserId: dentistId ? parseInt(dentistId) : null,
+            mode: mode,
+            excludeLeaves: excludeLeaves,
+            skipConflicts: skipConflicts
+        };
+
+        const btnApply = document.getElementById('btnCopyApply');
+        btnApply.disabled = true;
+        btnApply.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang sao chép...';
+
+        try {
+            const resp = await fetch('/Admin/DentistSchedule/CopyMonthApply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+
+            if (res.isSuccess && res.data) {
+                alert(`Hoàn thành! Đã sao chép thành công ${res.data.createdCount} ca trực sang tháng ${targetMonth}/${targetYear}.`);
+                window.location.reload();
+            } else {
+                alert(res.message || 'Không thể sao chép lịch.');
+                btnApply.disabled = false;
+                btnApply.innerHTML = '<i class="bi bi-copy me-1"></i>Thực Hiện Sao Chép';
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối máy chủ.');
+            btnApply.disabled = false;
+            btnApply.innerHTML = '<i class="bi bi-copy me-1"></i>Thực Hiện Sao Chép';
+        }
+    }
+
+    // Daily Override Modal Logic
+    function openDailyOverrideModal(dateStr, isOnLeave, leaveReason, apptCount, shiftsJson) {
+        document.getElementById('overrideDate').value = dateStr;
+        document.getElementById('overrideDateDisplay').value = dateStr;
+
+        const isDayOffCb = document.getElementById('overrideIsDayOff');
+        isDayOffCb.checked = isOnLeave;
+        document.getElementById('overrideLeaveReason').value = leaveReason || '';
+        toggleDayOffSection();
+
+        const guardAlert = document.getElementById('appointmentGuardAlert');
+        if (apptCount > 0) {
+            guardAlert.style.display = 'block';
+            document.getElementById('guardApptCount').innerText = apptCount;
+        } else {
+            guardAlert.style.display = 'none';
+        }
+
+        const container = document.getElementById('overrideShiftsContainer');
+        container.innerHTML = '';
+
+        try {
+            const shifts = typeof shiftsJson === 'string' ? JSON.parse(shiftsJson) : shiftsJson;
+            if (shifts && shifts.length > 0) {
+                shifts.forEach(s => addOverrideShiftRow(s.startTime || '08:00', s.endTime || '12:00', s.note || ''));
+            } else if (!isOnLeave) {
+                addOverrideShiftRow('08:00', '12:00', 'Ca Sáng');
+                addOverrideShiftRow('13:30', '17:30', 'Ca Chiều');
+            }
+        } catch (e) {
+            console.error(e);
+            addOverrideShiftRow('08:00', '12:00', '');
+        }
+
+        const modal = new bootstrap.Modal(document.getElementById('dailyOverrideModal'));
+        modal.show();
+    }
+
+    function toggleDayOffSection() {
+        const isDayOff = document.getElementById('overrideIsDayOff').checked;
+        document.getElementById('dayOffReasonGroup').style.display = isDayOff ? 'block' : 'none';
+        document.getElementById('shiftsEditorGroup').style.display = isDayOff ? 'none' : 'block';
+    }
+
+    function addOverrideShiftRow(start = '08:00', end = '12:00', note = '') {
+        const container = document.getElementById('overrideShiftsContainer');
+        const row = document.createElement('div');
+        row.className = 'row g-2 align-items-center mb-2 override-shift-row';
+        row.innerHTML = `
+            <div class="col-4">
+                <input type="time" class="form-control form-control-sm override-shift-start" value="${start}" required />
+            </div>
+            <div class="col-4">
+                <input type="time" class="form-control form-control-sm override-shift-end" value="${end}" required />
+            </div>
+            <div class="col-3">
+                <input type="text" class="form-control form-control-sm override-shift-note" value="${note}" placeholder="Ghi chú" />
+            </div>
+            <div class="col-1 text-center">
+                <button type="button" class="btn btn-link text-danger p-0" onclick="this.closest('.override-shift-row').remove()">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(row);
+    }
+
+    async function handleSaveOverride() {
+        const dateStr = document.getElementById('overrideDate').value;
+        const dentistId = parseInt(document.getElementById('overrideDentistId').value);
+        const deptId = parseInt(document.getElementById('overrideDepartmentId').value);
+        const isDayOff = document.getElementById('overrideIsDayOff').checked;
+        const leaveReason = document.getElementById('overrideLeaveReason').value;
+
+        if (!dentistId || !deptId || !dateStr) {
+            alert('Thông tin không đầy đủ.');
+            return;
+        }
+
+        const shifts = [];
+        if (!isDayOff) {
+            const rows = document.querySelectorAll('.override-shift-row');
+            rows.forEach(r => {
+                const s = r.querySelector('.override-shift-start').value;
+                const e = r.querySelector('.override-shift-end').value;
+                const n = r.querySelector('.override-shift-note').value;
+                if (s && e) shifts.push({ startTime: s, endTime: e, note: n });
+            });
+        }
+
+        const payload = {
+            dentistUserId: dentistId,
+            departmentId: deptId,
+            workDate: dateStr,
+            isDayOff: isDayOff,
+            leaveReason: leaveReason,
+            shifts: shifts
+        };
+
+        const btnSave = document.getElementById('btnSaveOverride');
+        btnSave.disabled = true;
+        btnSave.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang lưu...';
+
+        try {
+            const resp = await fetch('/Admin/DentistSchedule/DailyOverride', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+
+            if (res.isSuccess) {
+                alert('Đã cập nhật ca trực ngày thành công!');
+                window.location.reload();
+            } else {
+                alert(res.message || 'Không thể lưu ca trực.');
+                btnSave.disabled = false;
+                btnSave.innerHTML = '<i class="bi bi-save me-1"></i>Lưu Thay Đổi Ca Trực';
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối máy chủ.');
+            btnSave.disabled = false;
+            btnSave.innerHTML = '<i class="bi bi-save me-1"></i>Lưu Thay Đổi Ca Trực';
+        }
+    }
+</script>

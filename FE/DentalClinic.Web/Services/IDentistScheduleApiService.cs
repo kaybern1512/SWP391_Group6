@@ -22,4 +22,13 @@ public interface IDentistScheduleApiService
     Task<ApiResult<DentistAvailabilityDto>> CreateAvailabilityAsync(CreateDentistAvailabilityRequest request);
     Task<ApiResult<DentistAvailabilityDto>> UpdateAvailabilityAsync(long id, UpdateDentistAvailabilityRequest request);
     Task<ApiResult> DeleteAvailabilityAsync(long id);
+
+    // Monthly & Bulk Scheduling
+    Task<ApiResult<MonthlyDentistScheduleDto>> GetMonthlyScheduleAsync(MonthlyDentistScheduleFilterRequest request);
+    Task<ApiResult<BulkSchedulePreviewResultDto>> BulkPreviewScheduleAsync(BulkScheduleAssignmentRequest request);
+    Task<ApiResult<BulkScheduleApplyResultDto>> BulkApplyScheduleAsync(BulkScheduleApplyRequest request);
+    Task<ApiResult<CopyMonthSchedulePreviewDto>> CopyMonthPreviewScheduleAsync(CopyMonthScheduleRequest request);
+    Task<ApiResult<BulkScheduleApplyResultDto>> CopyMonthApplyScheduleAsync(CopyMonthScheduleRequest request);
+    Task<ApiResult<List<AffectedAppointmentDto>>> GetAffectedAppointmentsAsync(long dentistUserId, DateOnly workDate, TimeOnly startTime, TimeOnly endTime);
+    Task<ApiResult> DailyOverrideScheduleAsync(DailyScheduleOverrideRequest request);
 }
