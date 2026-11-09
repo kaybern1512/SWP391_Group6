@@ -6,6 +6,7 @@ public class BlogFilterRequest
     public int? CategoryId { get; set; }
     public string? Keyword { get; set; }
     public string? Status { get; set; }
+    public string? PostType { get; set; }
     public long? AuthorUserId { get; set; }
     public bool? IsFeatured { get; set; }
     public int Page { get; set; } = 1;

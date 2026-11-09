@@ -35,6 +35,7 @@ public class BlogApiService : IBlogApiService
         if (request.CategoryId.HasValue && request.CategoryId.Value > 0) queryParams.Add($"categoryId={request.CategoryId.Value}");
         if (!string.IsNullOrWhiteSpace(request.Keyword)) queryParams.Add($"keyword={Uri.EscapeDataString(request.Keyword)}");
         if (request.IsFeatured.HasValue) queryParams.Add($"isFeatured={request.IsFeatured.Value}");
+        if (!string.IsNullOrWhiteSpace(request.PostType)) queryParams.Add($"postType={Uri.EscapeDataString(request.PostType)}");
         queryParams.Add($"page={Math.Max(1, request.Page)}");
         queryParams.Add($"pageSize={(request.PageSize > 0 ? request.PageSize : 9)}");
 
@@ -67,6 +68,7 @@ public class BlogApiService : IBlogApiService
     {
         var queryParams = new List<string>();
         if (!string.IsNullOrWhiteSpace(request.Status)) queryParams.Add($"status={Uri.EscapeDataString(request.Status)}");
+        if (!string.IsNullOrWhiteSpace(request.PostType)) queryParams.Add($"postType={Uri.EscapeDataString(request.PostType)}");
         if (request.CategoryId.HasValue && request.CategoryId.Value > 0) queryParams.Add($"categoryId={request.CategoryId.Value}");
         if (!string.IsNullOrWhiteSpace(request.Keyword)) queryParams.Add($"keyword={Uri.EscapeDataString(request.Keyword)}");
         queryParams.Add($"page={Math.Max(1, request.Page)}");
@@ -158,6 +160,7 @@ public class BlogApiService : IBlogApiService
     {
         var queryParams = new List<string>();
         if (!string.IsNullOrWhiteSpace(request.Status)) queryParams.Add($"status={Uri.EscapeDataString(request.Status)}");
+        if (!string.IsNullOrWhiteSpace(request.PostType)) queryParams.Add($"postType={Uri.EscapeDataString(request.PostType)}");
         if (request.CategoryId.HasValue && request.CategoryId.Value > 0) queryParams.Add($"categoryId={request.CategoryId.Value}");
         if (request.AuthorUserId.HasValue && request.AuthorUserId.Value > 0) queryParams.Add($"authorUserId={request.AuthorUserId.Value}");
         if (request.IsFeatured.HasValue) queryParams.Add($"isFeatured={request.IsFeatured.Value}");

@@ -77,6 +77,12 @@
                                             <td>
                                                 <div class="fw-bold text-dark">@rm.RoomCode</div>
                                                 <div class="text-muted small">ID: @rm.RoomId</div>
+@if (rm.IsExclusive)
+{
+    <span class="badge bg-danger-subtle text-danger border border-danger-subtle small mt-1">
+        <i class="bi bi-shield-lock me-1"></i>Vô trùng độc quyền
+    </span>
+}
                                             </td>
                                             <td>
                                                 <span class="fw-semibold">@(string.IsNullOrEmpty(rm.RoomName) ? "Phòng " + rm.RoomCode : rm.RoomName)</span>
@@ -127,7 +133,8 @@
                                                         data-code="@rm.RoomCode"
                                                         data-name="@rm.RoomName"
                                                         data-departmentid="@(rm.DepartmentId?.ToString() ?? "")"
-                                                        data-status="@rm.Status">
+                                                        data-status="@rm.Status"
+                                                        data-exclusive="@(rm.IsExclusive ? "true" : "false")">
                                                     <i class="bi bi-pencil-square"></i> Sửa
                                                 </button>
                                                 <!-- Dropdown đổi nhanh trạng thái -->
@@ -538,6 +545,7 @@
                     document.getElementById('editRoomName').value = this.dataset.name || '';
                     document.getElementById('editRoomDepartmentId').value = this.dataset.departmentid || '';
                     document.getElementById('editRoomStatus').value = this.dataset.status || 'Active';
+                    document.getElementById('editRoomIsExclusive').checked = (this.dataset.exclusive === 'true');
                     editRoomModal.show();
                 });
             });

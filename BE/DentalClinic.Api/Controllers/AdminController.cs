@@ -366,4 +366,45 @@ public class AdminController : ControllerBase
         if (!result.Success) return BadRequest(result);
         return Ok(result);
     }
+
+    // ==========================================
+    // STAFF ACCOUNT MANAGEMENT
+    // ==========================================
+
+    [HttpPost("users/staff")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<AdminUserDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<AdminUserDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CreateStaffAccount([FromBody] CreateStaffRequest request, CancellationToken ct)
+    {
+        var adminId = GetCurrentUserId();
+        var result = await _adminService.CreateStaffAccountAsync(request, adminId, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpPut("users/staff/{userId:long}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<AdminUserDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<AdminUserDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateStaffAccount(long userId, [FromBody] UpdateStaffRequest request, CancellationToken ct)
+    {
+        var adminId = GetCurrentUserId();
+        var result = await _adminService.UpdateStaffAccountAsync(userId, request, adminId, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    // ==========================================
+    // SYSTEM & DATABASE VERIFICATION
+    // ==========================================
+
+    [HttpGet("system/db-info")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<DatabaseInfoDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDatabaseInfo(CancellationToken ct)
+    {
+        var result = await _adminService.GetDatabaseInfoAsync(ct);
+        return Ok(result);
+    }
 }

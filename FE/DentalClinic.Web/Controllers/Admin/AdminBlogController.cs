@@ -54,6 +54,34 @@ public class AdminBlogController : Controller
         return View("~/Views/Admin/Blog/Index.cshtml", vm);
     }
 
+    [HttpPost("CreatePost")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreatePost([FromForm] CreateBlogPostRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Content))
+        {
+            TempData["ErrorMessage"] = "Tiêu đề và nội dung bài viết không được để trống.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.PostType))
+        {
+            request.PostType = "ClinicNews";
+        }
+
+        var result = await _blogApi.CreatePostAsync(request);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đăng tin tức / thông báo phòng khám thành công!";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể đăng bài viết.";
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
     [HttpPost("Review/{id}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Review(long id, [FromForm] ReviewBlogPostRequest request)

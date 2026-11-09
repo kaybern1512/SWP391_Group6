@@ -68,6 +68,17 @@ public class ServiceFormModel
     public decimal Price { get; set; }
 
     public string Status { get; set; } = "Active";
+
+    public string ServiceType { get; set; } = "Treatment";
+
+    public bool RequiresExclusiveRoom { get; set; } = false;
+
+    public bool RequiresConsultationFirst { get; set; } = false;
+
+    public int? MinLeadTimeHours { get; set; } = 0;
+
+    [StringLength(1000, ErrorMessage = "Hướng dẫn chuẩn bị không quá 1000 ký tự")]
+    public string? BookingInstructions { get; set; }
 }
 
 public class RoomChairManageViewModel
@@ -95,6 +106,8 @@ public class RoomFormModel
     public long? DepartmentId { get; set; }
 
     public string Status { get; set; } = "Active";
+
+    public bool IsExclusive { get; set; } = false;
 }
 
 public class ChairFormModel
@@ -128,6 +141,7 @@ public class UserManageViewModel
     public List<AdminUserDto> Users { get; set; } = new();
     public string? RoleFilter { get; set; }
     public string? SearchKeyword { get; set; }
+    public List<AdminDepartmentDto> Departments { get; set; } = new();
 }
 
 public class AdminReportsViewModel
@@ -135,4 +149,33 @@ public class AdminReportsViewModel
     public int SelectedYear { get; set; } = DateTime.UtcNow.Year;
     public RevenueReportDto RevenueReport { get; set; } = new();
     public AppointmentReportDto AppointmentReport { get; set; } = new();
+}
+
+public class AdminDentistScheduleManageViewModel
+{
+    public List<DentistDepartmentAllocationDto> Allocations { get; set; } = new();
+    public List<DentistWorkScheduleDto> Schedules { get; set; } = new();
+    public List<DentistAvailabilityDto> Availabilities { get; set; } = new();
+    public List<AdminUserDto> Dentists { get; set; } = new();
+    public List<AdminDepartmentDto> Departments { get; set; } = new();
+    public List<AdminRoomDto> Rooms { get; set; } = new();
+    public string ActiveTab { get; set; } = "allocations";
+    public long? SelectedDepartmentId { get; set; }
+    public long? SelectedDentistId { get; set; }
+    public DateOnly? FromDate { get; set; }
+    public DateOnly? ToDate { get; set; }
+}
+
+public class AdminFeedbackManageViewModel
+{
+    public FeedbackPagedResultDto PagedFeedbacks { get; set; } = new();
+    public List<AdminUserDto> Dentists { get; set; } = new();
+    public List<AdminDepartmentDto> Departments { get; set; } = new();
+    public string? CurrentStatus { get; set; }
+    public long? SelectedDentistId { get; set; }
+    public long? SelectedDepartmentId { get; set; }
+    public int? MinRating { get; set; }
+    public string? SearchKeyword { get; set; }
+    public int CurrentPage { get; set; } = 1;
+    public int CurrentPageSize { get; set; } = 15;
 }

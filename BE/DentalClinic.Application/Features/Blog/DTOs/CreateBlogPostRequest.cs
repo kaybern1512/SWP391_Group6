@@ -9,7 +9,8 @@ public class CreateBlogPostRequest
     public string? ThumbnailUrl { get; set; }
     public string? VideoUrl { get; set; }
     /// <summary>
-    /// Initial status: "Draft" or "PendingReview"
+    /// Initial status: "Draft" or "PendingReview" (Admin may set "Published")
     /// </summary>
     public string Status { get; set; } = "Draft";
+    public string PostType { get; set; } = "Blog"; // Blog, ClinicNews, Announcement
 }

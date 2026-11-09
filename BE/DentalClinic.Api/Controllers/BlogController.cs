@@ -98,7 +98,7 @@ public class BlogController : ControllerBase
     // ==========================================
 
     [HttpGet("my-posts")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<BlogPostPagedResultDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyPosts([FromQuery] BlogFilterRequest request, CancellationToken ct)
     {
@@ -113,7 +113,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpGet("posts/id/{id}")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status404NotFound)]
@@ -129,7 +129,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpPost("posts")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreatePost([FromBody] CreateBlogPostRequest request, CancellationToken ct)
@@ -138,6 +138,13 @@ public class BlogController : ControllerBase
         if (currentUserId <= 0)
         {
             return Unauthorized(ApiResponse<BlogPostDto>.Fail("Không xác định được danh tính người dùng."));
+        }
+
+        // Enforce: Receptionist can only save Draft or submit for review (PendingReview)
+        if (User.IsInRole(UserRole.Receptionist))
+        {
+            request.Status = string.Equals(request.Status, "PendingReview", StringComparison.OrdinalIgnoreCase) ? "PendingReview" : "Draft";
+            request.PostType = "Blog";
         }
 
         var result = await _blogService.CreatePostAsync(currentUserId, request, ct);
@@ -149,7 +156,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpPut("posts/{id}")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status403Forbidden)]
@@ -161,6 +168,11 @@ public class BlogController : ControllerBase
             return Unauthorized(ApiResponse<BlogPostDto>.Fail("Không xác định được danh tính người dùng."));
         }
 
+        if (User.IsInRole(UserRole.Receptionist) && request.Status == "Published")
+        {
+            request.Status = "PendingReview";
+        }
+
         var result = await _blogService.UpdatePostAsync(id, currentUserId, IsAdmin(), request, ct);
         if (!result.Success)
         {
@@ -170,7 +182,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpDelete("posts/{id}")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status403Forbidden)]
@@ -191,7 +203,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpPost("upload-thumbnail")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
@@ -227,7 +239,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpPost("media")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(52_428_800)]
     [RequestFormLimits(MultipartBodyLengthLimit = 52_428_800)]
@@ -256,7 +268,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpDelete("media/{mediaId}")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status403Forbidden)]

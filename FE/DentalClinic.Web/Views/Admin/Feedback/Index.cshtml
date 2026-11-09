@@ -1,0 +1,414 @@
+@model AdminFeedbackManageViewModel
+@{
+    ViewData["Title"] = "Quản lý Đánh giá Bác sĩ & Dịch vụ";
+    var feedbacks = Model.PagedFeedbacks.Items;
+    var totalCount = Model.PagedFeedbacks.TotalCount;
+    var pageSize = Model.PagedFeedbacks.PageSize > 0 ? Model.PagedFeedbacks.PageSize : 15;
+    var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+    var currentPage = Model.CurrentPage;
+}
+
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-controller="AdminDashboard" asp-action="Dashboard" class="text-decoration-none text-muted small">
+                    <i class="bi bi-chevron-left"></i> Tổng quan
+                </a>
+                <span class="text-muted small">&bull;</span>
+                <span class="badge-dc badge-role-systemadministrator">Chất lượng phục vụ</span>
+            </div>
+            <h1 class="page-title">Quản Lý Đánh Giá Bác Sĩ & Trải Nghiệm Khách Hàng</h1>
+            <p class="page-subtitle">Kiểm duyệt phản hồi của bệnh nhân sau khám, ẩn/hiện công khai và gửi phản hồi chăm sóc khách hàng</p>
+        </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-3">
+            <div class="card-dc p-3 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted small fw-semibold">Tổng Đánh Giá</span>
+                    <i class="bi bi-chat-heart text-primary fs-4"></i>
+                </div>
+                <div class="fs-3 fw-bold text-dark">@totalCount</div>
+                <div class="small text-muted mt-1">Từ bệnh nhân sau khi hoàn tất khám</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card-dc p-3 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted small fw-semibold">Điểm Bác Sĩ TB</span>
+                    <i class="bi bi-star-fill text-warning fs-4"></i>
+                </div>
+                <div class="fs-3 fw-bold text-dark">
+                    @Model.PagedFeedbacks.OverallDentistRating.ToString("0.0") <span class="fs-6 text-muted">/ 5.0</span>
+                </div>
+                <div class="small text-warning mt-1">
+                    @for (int i = 1; i <= 5; i++)
+                    {
+                        if (i <= Math.Round(Model.PagedFeedbacks.OverallDentistRating))
+                        {
+                            <i class="bi bi-star-fill"></i>
+                        }
+                        else
+                        {
+                            <i class="bi bi-star"></i>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card-dc p-3 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted small fw-semibold">Điểm Phòng Khám TB</span>
+                    <i class="bi bi-building-check text-success fs-4"></i>
+                </div>
+                <div class="fs-3 fw-bold text-dark">
+                    @Model.PagedFeedbacks.OverallClinicRating.ToString("0.0") <span class="fs-6 text-muted">/ 5.0</span>
+                </div>
+                <div class="small text-muted mt-1">Cơ sở vật chất & đón tiếp</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="card-dc p-3 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-muted small fw-semibold">Tình Trạng Kiểm Duyệt</span>
+                    <i class="bi bi-shield-check text-info fs-4"></i>
+                </div>
+                <div class="d-flex align-items-center gap-2 mt-1">
+                    <span class="badge bg-success-subtle text-success border">@Model.PagedFeedbacks.ApprovedCount đã duyệt</span>
+                    <span class="badge bg-danger-subtle text-danger border">@Model.PagedFeedbacks.HiddenCount bị ẩn</span>
+                </div>
+                <div class="small text-muted mt-2">Bảo toàn trung thực số sao bệnh nhân</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div class="card-dc mb-4">
+        <div class="card-dc-body p-3">
+            <form asp-controller="AdminFeedback" asp-action="Index" method="get" class="row g-2 align-items-center">
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Trạng thái duyệt</label>
+                    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- Tất cả --</option>
+                        <option value="Approved" selected="@(Model.CurrentStatus == "Approved")">✅ Đã duyệt hiển thị (Approved)</option>
+                        <option value="Hidden" selected="@(Model.CurrentStatus == "Hidden")">🔒 Đang bị ẩn (Hidden)</option>
+                        <option value="Pending" selected="@(Model.CurrentStatus == "Pending")">⏳ Chờ duyệt (Pending)</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">Bác sĩ nha khoa</label>
+                    <select name="dentistUserId" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- Tất cả bác sĩ --</option>
+                        @foreach (var d in Model.Dentists)
+                        {
+                            <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Số sao tối thiểu</label>
+                    <select name="minRating" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- Mọi mức sao --</option>
+                        <option value="5" selected="@(Model.MinRating == 5)">5 ⭐ Xuất sắc</option>
+                        <option value="4" selected="@(Model.MinRating == 4)">4 ⭐ Trở lên</option>
+                        <option value="3" selected="@(Model.MinRating == 3)">3 ⭐ Trở lên</option>
+                        <option value="2" selected="@(Model.MinRating == 2)">2 ⭐ Trở lên</option>
+                        <option value="1" selected="@(Model.MinRating == 1)">1 ⭐ Tất cả</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">Tìm kiếm nội dung</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" name="search" class="form-control" placeholder="Tên bệnh nhân, phản hồi..." value="@Model.SearchKeyword" />
+                    </div>
+                </div>
+                <div class="col-md-2 d-flex align-items-end gap-1 pt-3">
+                    <button type="submit" class="btn btn-sm btn-dc-primary"><i class="bi bi-filter"></i> Lọc</button>
+                    <a asp-controller="AdminFeedback" asp-action="Index" class="btn btn-sm btn-outline-secondary">Đặt lại</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Feedbacks Table -->
+    <div class="card-dc">
+        <div class="card-dc-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-chat-square-quote text-teal"></i>
+                <span class="fw-bold">Danh sách Đánh Giá từ Bệnh Nhân (@totalCount)</span>
+            </div>
+        </div>
+        <div class="card-dc-body p-0">
+            <div class="table-responsive">
+                <table class="table-dc mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>Bệnh nhân & Lịch hẹn</th>
+                            <th>Bác sĩ & Khoa</th>
+                            <th class="text-center">Đánh giá Bác sĩ</th>
+                            <th class="text-center">Đánh giá Phòng khám</th>
+                            <th>Nội dung bình luận</th>
+                            <th>Trạng thái kiểm duyệt</th>
+                            <th class="text-end">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (feedbacks.Any())
+                        {
+                            int fIdx = (currentPage - 1) * pageSize + 1;
+                            foreach (var f in feedbacks)
+                            {
+                                <tr>
+                                    <td class="text-muted fw-bold">@(fIdx++)</td>
+                                    <td>
+                                        <div class="fw-semibold text-dark">@f.PatientName</div>
+                                        <div class="small text-muted">Mã hẹn: <span class="badge bg-light text-dark border">@f.AppointmentCode</span></div>
+                                        @if (!string.IsNullOrEmpty(f.ServiceName))
+                                        {
+                                            <div class="small text-primary mt-1"><i class="bi bi-check2 me-1"></i>@f.ServiceName</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark">@(string.IsNullOrEmpty(f.DentistName) ? "Phòng khám" : f.DentistName)</div>
+                                        @if (!string.IsNullOrEmpty(f.DepartmentName))
+                                        {
+                                            <span class="badge bg-primary-subtle text-primary border small">@f.DepartmentName</span>
+                                        }
+                                    </td>
+                                    <td class="text-center text-nowrap">
+                                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1 fs-6">
+                                            @f.DentistRating <i class="bi bi-star-fill"></i>
+                                        </span>
+                                    </td>
+                                    <td class="text-center text-nowrap">
+                                        <span class="badge bg-light text-dark border px-2 py-1">
+                                            @f.ClinicRating <i class="bi bi-star-fill text-warning"></i>
+                                        </span>
+                                    </td>
+                                    <td style="max-width: 320px;">
+                                        <div class="text-dark small">
+                                            @(string.IsNullOrEmpty(f.Comment) ? "— Không có nhận xét chi tiết —" : f.Comment)
+                                        </div>
+                                        <div class="small text-muted mt-1">@f.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                                        @if (!string.IsNullOrEmpty(f.AdminResponse))
+                                        {
+                                            <div class="alert alert-light border small p-2 mt-2 mb-0 rounded-3">
+                                                <div class="fw-bold text-teal mb-1">
+                                                    <i class="bi bi-reply-fill me-1"></i>Phản hồi từ phòng khám:
+                                                </div>
+                                                <div class="text-muted">@f.AdminResponse</div>
+                                                @if (!string.IsNullOrEmpty(f.AdminRespondedByName))
+                                                {
+                                                    <div class="text-end small text-muted fst-italic">Bởi: @f.AdminRespondedByName</div>
+                                                }
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(f.AdminNotes))
+                                        {
+                                            <div class="small text-danger mt-1">
+                                                <i class="bi bi-info-circle me-1"></i>Ghi chú Admin: @f.AdminNotes
+                                            </div>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (f.Status == "Approved")
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                <i class="bi bi-eye me-1"></i> Hiển thị (Approved)
+                                            </span>
+                                        }
+                                        else if (f.Status == "Hidden")
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                                <i class="bi bi-eye-slash me-1"></i> Bị ẩn (Hidden)
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+                                                <i class="bi bi-hourglass-split me-1"></i> Chờ duyệt
+                                            </span>
+                                        }
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary me-1 btn-mod-feedback"
+                                                data-id="@f.FeedbackId"
+                                                data-patient="@f.PatientName"
+                                                data-status="@f.Status"
+                                                data-notes="@f.AdminNotes">
+                                            <i class="bi bi-shield-check"></i> Kiểm duyệt
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary btn-resp-feedback"
+                                                data-id="@f.FeedbackId"
+                                                data-patient="@f.PatientName"
+                                                data-comment="@f.Comment"
+                                                data-currentresp="@f.AdminResponse">
+                                            <i class="bi bi-chat-left-text"></i> Phản hồi
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="bi bi-chat-square-quote fs-3 d-block mb-1"></i>
+                                    Không tìm thấy đánh giá nào phù hợp với điều kiện tìm kiếm.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            @if (totalPages > 1)
+            {
+                <div class="p-3 border-top d-flex justify-content-between align-items-center">
+                    <span class="small text-muted">Trang @currentPage / @totalPages (Tổng @totalCount đánh giá)</span>
+                    <ul class="pagination pagination-sm mb-0">
+                        @for (int p = 1; p <= totalPages; p++)
+                        {
+                            <li class="page-item @(p == currentPage ? "active" : "")">
+                                <a class="page-link" asp-controller="AdminFeedback" asp-action="Index"
+                                   asp-route-page="@p"
+                                   asp-route-status="@Model.CurrentStatus"
+                                   asp-route-dentistUserId="@Model.SelectedDentistId"
+                                   asp-route-minRating="@Model.MinRating"
+                                   asp-route-search="@Model.SearchKeyword">@p</a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Modal Kiểm Duyệt Đánh Giá (Ẩn / Hiện) -->
+<div class="modal fade" id="moderateFeedbackModal" tabindex="-1" aria-labelledby="modLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="moderateForm" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="returnStatus" value="@Model.CurrentStatus" />
+                <input type="hidden" name="returnPage" value="@currentPage" />
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="modLabel">
+                        <i class="bi bi-shield-check text-primary me-2"></i>Kiểm Duyệt Hiển Thị Đánh Giá
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">
+                        Thao tác kiểm duyệt đánh giá từ bệnh nhân <strong id="modPatientName"></strong>.
+                    </p>
+                    <div class="alert alert-info small py-2 mb-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Quy định bảo mật: Quản trị viên chỉ được phép duyệt hiển thị công khai hoặc ẩn đánh giá nếu vi phạm quy chuẩn ngôn từ; <strong>TUYỆT ĐỐI KHÔNG can thiệp sửa đổi số sao của bệnh nhân</strong>.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Quyết định hiển thị <span class="text-danger">*</span></label>
+                        <select name="Status" id="modStatus" class="form-select" required>
+                            <option value="Approved">Hiển thị công khai (Approved)</option>
+                            <option value="Hidden">Ẩn khỏi website phòng khám (Hidden)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lý do kiểm duyệt / Ghi chú quản trị</label>
+                        <textarea name="AdminNotes" id="modNotes" class="form-control" rows="3" placeholder="Ví dụ: Đánh giá hợp lệ / Chứa từ ngữ thô tục / Cần liên hệ hỗ trợ bệnh nhân..." maxlength="500"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Quyết Định</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Phản Hồi Chính Thức Từ Phòng Khám -->
+<div class="modal fade" id="respondFeedbackModal" tabindex="-1" aria-labelledby="respLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="respondForm" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="returnStatus" value="@Model.CurrentStatus" />
+                <input type="hidden" name="returnPage" value="@currentPage" />
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="respLabel">
+                        <i class="bi bi-reply-fill text-teal me-2"></i>Phản Hồi Chính Thức Từ Phòng Khám
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Bệnh nhân</label>
+                        <div class="fw-bold" id="respPatientName"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Nội dung nhận xét của bệnh nhân</label>
+                        <div class="p-2 bg-light rounded border text-muted small" id="respPatientComment"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Nội dung phản hồi công khai từ DentalCare <span class="text-danger">*</span></label>
+                        <textarea name="AdminResponse" id="respAdminText" class="form-control" rows="4" placeholder="Nhập lời cảm ơn hoặc giải trình hỗ trợ chu đáo từ phòng khám..." required maxlength="1000"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Gửi Phản Hồi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Moderate modal
+            const modModalEl = document.getElementById('moderateFeedbackModal');
+            if (modModalEl) {
+                const modModal = new bootstrap.Modal(modModalEl);
+                const modForm = document.getElementById('moderateForm');
+                document.querySelectorAll('.btn-mod-feedback').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        const id = this.dataset.id;
+                        modForm.action = '/Admin/Feedback/Moderate/' + id;
+                        document.getElementById('modPatientName').textContent = this.dataset.patient || '';
+                        document.getElementById('modStatus').value = this.dataset.status || 'Approved';
+                        document.getElementById('modNotes').value = this.dataset.notes || '';
+                        modModal.show();
+                    });
+                });
+            }
+
+            // Respond modal
+            const respModalEl = document.getElementById('respondFeedbackModal');
+            if (respModalEl) {
+                const respModal = new bootstrap.Modal(respModalEl);
+                const respForm = document.getElementById('respondForm');
+                document.querySelectorAll('.btn-resp-feedback').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        const id = this.dataset.id;
+                        respForm.action = '/Admin/Feedback/Respond/' + id;
+                        document.getElementById('respPatientName').textContent = this.dataset.patient || '';
+                        document.getElementById('respPatientComment').textContent = this.dataset.comment || '— Không có nhận xét —';
+                        document.getElementById('respAdminText').value = this.dataset.currentresp || '';
+                        respModal.show();
+                    });
+                });
+            }
+        });
+    </script>
+}

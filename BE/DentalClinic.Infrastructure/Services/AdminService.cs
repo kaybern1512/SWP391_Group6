@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -21,15 +21,18 @@ public class AdminService : IAdminService
     private readonly DentalClinicDbContext _dbContext;
     private readonly IAuditLogService _auditLogService;
     private readonly ILogger<AdminService> _logger;
+    private readonly IPasswordHasherService _passwordHasher;
 
     public AdminService(
         DentalClinicDbContext dbContext,
         IAuditLogService auditLogService,
-        ILogger<AdminService> logger)
+        ILogger<AdminService> logger,
+        IPasswordHasherService? passwordHasher = null)
     {
         _dbContext = dbContext;
         _auditLogService = auditLogService;
         _logger = logger;
+        _passwordHasher = passwordHasher ?? new PasswordHasherService();
     }
 
     // ==========================================
@@ -272,7 +275,12 @@ public class AdminService : IAdminService
             Description = s.Description,
             DurationMinutes = s.DurationMinutes,
             Price = s.Price,
-            Status = s.Status
+            Status = s.Status,
+            ServiceType = s.ServiceType ?? "Treatment",
+            RequiresExclusiveRoom = s.RequiresExclusiveRoom,
+            RequiresConsultationFirst = s.RequiresConsultationFirst,
+            MinLeadTimeHours = s.MinLeadTimeHours,
+            BookingInstructions = s.BookingInstructions
         }).ToList();
 
         return ApiResponse<List<AdminDepartmentServiceDto>>.Ok(dtos);
@@ -299,7 +307,12 @@ public class AdminService : IAdminService
             Description = s.Description,
             DurationMinutes = s.DurationMinutes,
             Price = s.Price,
-            Status = s.Status
+            Status = s.Status,
+            ServiceType = s.ServiceType ?? "Treatment",
+            RequiresExclusiveRoom = s.RequiresExclusiveRoom,
+            RequiresConsultationFirst = s.RequiresConsultationFirst,
+            MinLeadTimeHours = s.MinLeadTimeHours,
+            BookingInstructions = s.BookingInstructions
         };
 
         return ApiResponse<AdminDepartmentServiceDto>.Ok(dto);
@@ -334,6 +347,9 @@ public class AdminService : IAdminService
             return ApiResponse<AdminDepartmentServiceDto>.Fail($"Dịch vụ '{trimmedName}' đã tồn tại trong chuyên khoa này.");
         }
 
+        var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric", "Implant", "Orthodontics", "General", "Endodontics", "Periodontics", "Examination" };
+        var serviceType = validTypes.Contains(request.ServiceType, StringComparer.OrdinalIgnoreCase) ? request.ServiceType : "Treatment";
+
         var service = new DepartmentService
         {
             DepartmentId = request.DepartmentId,
@@ -341,7 +357,12 @@ public class AdminService : IAdminService
             Description = request.Description?.Trim(),
             DurationMinutes = request.DurationMinutes.HasValue && request.DurationMinutes.Value > 0 ? request.DurationMinutes.Value : 30,
             Price = request.Price,
-            Status = string.Equals(request.Status, "Inactive", StringComparison.OrdinalIgnoreCase) ? "Inactive" : "Active"
+            Status = string.Equals(request.Status, "Inactive", StringComparison.OrdinalIgnoreCase) ? "Inactive" : "Active",
+            ServiceType = serviceType,
+            RequiresExclusiveRoom = request.RequiresExclusiveRoom,
+            RequiresConsultationFirst = request.RequiresConsultationFirst,
+            MinLeadTimeHours = request.MinLeadTimeHours >= 0 ? request.MinLeadTimeHours : 2,
+            BookingInstructions = request.BookingInstructions?.Trim()
         };
 
         _dbContext.DepartmentServices.Add(service);
@@ -398,12 +419,21 @@ public class AdminService : IAdminService
 
         var oldValues = JsonSerializer.Serialize(new { service.ServiceName, service.DepartmentId, service.Price, service.Status });
 
+        var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric", "Implant", "Orthodontics", "General", "Endodontics", "Periodontics", "Examination" };
+        if (!string.IsNullOrWhiteSpace(request.ServiceType) && validTypes.Contains(request.ServiceType, StringComparer.OrdinalIgnoreCase))
+        {
+            service.ServiceType = request.ServiceType;
+        }
         service.DepartmentId = request.DepartmentId;
         service.ServiceName = trimmedName;
         service.Description = request.Description?.Trim();
         service.DurationMinutes = request.DurationMinutes.HasValue && request.DurationMinutes.Value > 0 ? request.DurationMinutes.Value : 30;
         service.Price = request.Price;
         service.Status = string.Equals(request.Status, "Inactive", StringComparison.OrdinalIgnoreCase) ? "Inactive" : "Active";
+        service.RequiresExclusiveRoom = request.RequiresExclusiveRoom;
+        service.RequiresConsultationFirst = request.RequiresConsultationFirst;
+        service.MinLeadTimeHours = request.MinLeadTimeHours >= 0 ? request.MinLeadTimeHours : 2;
+        service.BookingInstructions = request.BookingInstructions?.Trim();
 
         await _dbContext.SaveChangesAsync(ct);
 
@@ -469,6 +499,7 @@ public class AdminService : IAdminService
             DepartmentId = r.DepartmentId,
             DepartmentName = r.Department?.Name,
             Status = r.Status,
+            IsExclusive = r.IsExclusive,
             ChairsCount = r.DentalChairs.Count,
             ActiveChairsCount = r.DentalChairs.Count(c => c.Status == "Active")
         }).ToList();
@@ -497,6 +528,7 @@ public class AdminService : IAdminService
             DepartmentId = r.DepartmentId,
             DepartmentName = r.Department?.Name,
             Status = r.Status,
+            IsExclusive = r.IsExclusive,
             ChairsCount = r.DentalChairs.Count,
             ActiveChairsCount = r.DentalChairs.Count(c => c.Status == "Active")
         };
@@ -528,7 +560,8 @@ public class AdminService : IAdminService
             RoomCode = trimmedCode,
             RoomName = string.IsNullOrWhiteSpace(request.RoomName) ? $"Phòng {trimmedCode}" : request.RoomName.Trim(),
             DepartmentId = request.DepartmentId,
-            Status = status
+            Status = status,
+            IsExclusive = request.IsExclusive
         };
 
         _dbContext.Rooms.Add(room);
@@ -582,6 +615,7 @@ public class AdminService : IAdminService
             room.DepartmentId = request.DepartmentId.Value;
         }
         room.Status = status;
+        room.IsExclusive = request.IsExclusive;
 
         await _dbContext.SaveChangesAsync(ct);
 
@@ -1257,6 +1291,7 @@ public class AdminService : IAdminService
         var query = _dbContext.UserAccounts
             .AsNoTracking()
             .Include(u => u.StaffProfile)
+                .ThenInclude(sp => sp.DentistProfile)
             .Include(u => u.PatientProfile)
             .AsQueryable();
 
@@ -1290,6 +1325,7 @@ public class AdminService : IAdminService
             Code = u.StaffProfile?.EmployeeCode ?? u.PatientProfile?.PatientCode,
             Role = u.Role,
             Status = u.Status,
+            Specialty = u.StaffProfile?.DentistProfile?.Qualification,
             CreatedAt = u.CreatedAt,
             LastLoginAt = u.LastLoginAt
         }).ToList();
@@ -1493,5 +1529,230 @@ public class AdminService : IAdminService
             ct);
 
         return ApiResponse.Ok($"Đã cập nhật trạng thái phân bổ bác sĩ thành '{record.Status}'.");
+    }
+
+    // ==========================================
+    // USER MANAGEMENT EXTENSIONS
+    // ==========================================
+
+    public async Task<ApiResponse<AdminUserDto>> CreateStaffAccountAsync(CreateStaffRequest request, long adminUserId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email))
+            return ApiResponse<AdminUserDto>.Fail("Email không được để trống.");
+        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 6)
+            return ApiResponse<AdminUserDto>.Fail("Mật khẩu phải có tối thiểu 6 ký tự.");
+        if (string.IsNullOrWhiteSpace(request.FullName))
+            return ApiResponse<AdminUserDto>.Fail("Họ và tên không được để trống.");
+
+        var normalizedRole = request.Role?.Trim();
+        var allowedRoles = new[] { UserRole.Dentist, UserRole.Receptionist, UserRole.SystemAdministrator };
+        if (!allowedRoles.Contains(normalizedRole))
+        {
+            return ApiResponse<AdminUserDto>.Fail($"Vai trò '{normalizedRole}' không hợp lệ. Chỉ chấp nhận Dentist, Receptionist, SystemAdministrator.");
+        }
+
+        var trimmedEmail = request.Email.Trim().ToLower();
+        var emailExists = await _dbContext.UserAccounts.AnyAsync(u => u.Email != null && u.Email.ToLower() == trimmedEmail, ct);
+        if (emailExists)
+        {
+            return ApiResponse<AdminUserDto>.Fail($"Email '{trimmedEmail}' đã được đăng ký trong hệ thống.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+        {
+            var trimmedPhone = request.PhoneNumber.Trim();
+            var phoneExists = await _dbContext.UserAccounts.AnyAsync(u => u.PhoneNumber == trimmedPhone, ct);
+            if (phoneExists)
+            {
+                return ApiResponse<AdminUserDto>.Fail($"Số điện thoại '{trimmedPhone}' đã được sử dụng.");
+            }
+        }
+
+        var passwordHash = _passwordHasher.HashPassword(request.Password);
+        var user = new UserAccount
+        {
+            Email = trimmedEmail,
+            PasswordHash = passwordHash,
+            PhoneNumber = request.PhoneNumber?.Trim(),
+            Role = normalizedRole!,
+            Status = AccountStatus.Active,
+            CreatedAt = DateTime.UtcNow,
+            EmailVerifiedAt = DateTime.UtcNow
+        };
+
+        _dbContext.UserAccounts.Add(user);
+        await _dbContext.SaveChangesAsync(ct);
+
+        var prefix = normalizedRole switch
+        {
+            UserRole.Dentist => "DNT",
+            UserRole.Receptionist => "REC",
+            UserRole.SystemAdministrator => "ADM",
+            _ => "STF"
+        };
+        var empCode = string.IsNullOrWhiteSpace(request.StaffCode) ? $"{prefix}-{user.UserId:D4}" : request.StaffCode.Trim().ToUpper();
+
+        var staffProfile = new StaffProfile
+        {
+            UserId = user.UserId,
+            FullName = request.FullName.Trim(),
+            EmployeeCode = empCode,
+            EmploymentStatus = "Active",
+            CreatedAt = DateTime.UtcNow
+        };
+        _dbContext.StaffProfiles.Add(staffProfile);
+
+        if (normalizedRole == UserRole.Dentist)
+        {
+            var qualification = !string.IsNullOrWhiteSpace(request.Education) 
+                ? request.Education.Trim() 
+                : (!string.IsNullOrWhiteSpace(request.Specialty) ? request.Specialty.Trim() : "Bác sĩ Chuyên khoa Răng Hàm Mặt");
+            var licenseNum = !string.IsNullOrWhiteSpace(request.StaffCode) 
+                ? request.StaffCode.Trim() 
+                : $"LIC-{user.UserId:D4}";
+
+            var dentistProfile = new DentistProfile
+            {
+                UserId = user.UserId,
+                YearsOfExperience = request.ExperienceYears ?? 3,
+                Qualification = qualification,
+                LicenseNumber = licenseNum,
+                Biography = !string.IsNullOrWhiteSpace(request.Specialty)
+                    ? $"Bác sĩ chuyên khoa {request.Specialty.Trim()} tại phòng khám DentalCare."
+                    : "Bác sĩ chuyên khoa tại phòng khám DentalCare."
+            };
+            _dbContext.DentistProfiles.Add(dentistProfile);
+
+            if (request.DepartmentId.HasValue && request.DepartmentId.Value > 0)
+            {
+                var dept = await _dbContext.Departments.FindAsync(new object[] { request.DepartmentId.Value }, ct);
+                if (dept != null)
+                {
+                    var allocation = new DentistDepartment
+                    {
+                        DentistUserId = user.UserId,
+                        DepartmentId = dept.DepartmentId,
+                        Status = "Active",
+                        AssignedAt = DateTime.UtcNow
+                    };
+                    _dbContext.DentistDepartments.Add(allocation);
+                }
+            }
+        }
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        await _auditLogService.LogAsync(
+            adminUserId,
+            "CREATE_STAFF_ACCOUNT",
+            "UserAccount",
+            user.UserId.ToString(),
+            null,
+            JsonSerializer.Serialize(new { user.Email, user.Role, staffProfile.FullName, staffProfile.EmployeeCode }),
+            ct);
+
+        var resultDto = new AdminUserDto
+        {
+            UserId = user.UserId,
+            Email = user.Email,
+            PhoneNumber = user.PhoneNumber,
+            FullName = staffProfile.FullName,
+            Code = staffProfile.EmployeeCode,
+            Role = user.Role,
+            Status = user.Status,
+            Specialty = request.Specialty,
+            CreatedAt = user.CreatedAt
+        };
+
+        return ApiResponse<AdminUserDto>.Ok(resultDto, $"Tạo tài khoản {normalizedRole} '{user.Email}' thành công.");
+    }
+
+    public async Task<ApiResponse<AdminUserDto>> UpdateStaffAccountAsync(long userId, UpdateStaffRequest request, long adminUserId, CancellationToken ct = default)
+    {
+        var user = await _dbContext.UserAccounts
+            .Include(u => u.StaffProfile)
+                .ThenInclude(sp => sp.DentistProfile)
+            .FirstOrDefaultAsync(u => u.UserId == userId, ct);
+
+        if (user == null || user.StaffProfile == null)
+        {
+            return ApiResponse<AdminUserDto>.Fail("Không tìm thấy nhân viên.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.FullName))
+        {
+            return ApiResponse<AdminUserDto>.Fail("Họ và tên không được để trống.");
+        }
+
+        var oldValues = JsonSerializer.Serialize(new { user.StaffProfile.FullName, user.PhoneNumber, user.Status });
+
+        user.StaffProfile.FullName = request.FullName.Trim();
+        user.PhoneNumber = request.PhoneNumber?.Trim();
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            user.Status = request.Status.Trim();
+        }
+        if (user.StaffProfile.DentistProfile != null && !string.IsNullOrWhiteSpace(request.Specialty))
+        {
+            user.StaffProfile.DentistProfile.Qualification = request.Specialty.Trim();
+        }
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        var newValues = JsonSerializer.Serialize(new { user.StaffProfile.FullName, user.PhoneNumber, user.Status });
+
+        await _auditLogService.LogAsync(
+            adminUserId,
+            "UPDATE_STAFF_ACCOUNT",
+            "StaffProfile",
+            user.UserId.ToString(),
+            oldValues,
+            newValues,
+            ct);
+
+        var resultDto = new AdminUserDto
+        {
+            UserId = user.UserId,
+            Email = user.Email,
+            PhoneNumber = user.PhoneNumber,
+            FullName = user.StaffProfile.FullName,
+            Code = user.StaffProfile.EmployeeCode,
+            Role = user.Role,
+            Status = user.Status,
+            Specialty = user.StaffProfile.DentistProfile?.Qualification,
+            CreatedAt = user.CreatedAt,
+            LastLoginAt = user.LastLoginAt
+        };
+
+        return ApiResponse<AdminUserDto>.Ok(resultDto, "Cập nhật thông tin nhân viên thành công.");
+    }
+
+    // ==========================================
+    // SYSTEM & DATABASE INFO
+    // ==========================================
+
+    public async Task<ApiResponse<DatabaseInfoDto>> GetDatabaseInfoAsync(CancellationToken ct = default)
+    {
+        var dbConn = _dbContext.Database.GetDbConnection();
+        var dbName = dbConn.Database;
+        var serverName = dbConn.DataSource;
+
+        var totalUsers = await _dbContext.UserAccounts.CountAsync(ct);
+        var totalServices = await _dbContext.DepartmentServices.CountAsync(ct);
+        var totalAppointments = await _dbContext.Appointments.CountAsync(ct);
+
+        var dto = new DatabaseInfoDto
+        {
+            DatabaseName = dbName,
+            ServerName = serverName,
+            Status = "Connected",
+            ServerTime = DateTime.UtcNow,
+            TotalUsers = totalUsers,
+            TotalServices = totalServices,
+            TotalAppointments = totalAppointments
+        };
+
+        return ApiResponse<DatabaseInfoDto>.Ok(dto);
     }
 }

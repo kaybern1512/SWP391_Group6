@@ -9,4 +9,5 @@ public class UpdateBlogPostRequest
     public string? ThumbnailUrl { get; set; }
     public string? VideoUrl { get; set; }
     public string? Status { get; set; }
+    public string? PostType { get; set; }
 }

@@ -1,0 +1,580 @@
+@model AdminDentistScheduleManageViewModel
+@{
+    ViewData["Title"] = "Quản lý Bác Sĩ & Lịch Làm Việc";
+}
+
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="page-header-dc">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <a asp-controller="AdminDashboard" asp-action="Dashboard" class="text-decoration-none text-muted small">
+                    <i class="bi bi-chevron-left"></i> Tổng quan
+                </a>
+                <span class="text-muted small">&bull;</span>
+                <span class="badge-dc badge-role-systemadministrator">Vận hành lâm sàng</span>
+            </div>
+            <h1 class="page-title">Quản Lý Phân Công Chuyên Khoa & Lịch Trực Bác Sĩ</h1>
+            <p class="page-subtitle">Phân bổ bác sĩ vào chuyên khoa, điều phối ca trực tuần và theo dõi trạng thái nghỉ phép/bận</p>
+        </div>
+        <div class="page-actions d-flex gap-2">
+            @if (Model.ActiveTab == "allocations")
+            {
+                <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#assignDentistModal">
+                    <i class="bi bi-person-plus me-1"></i> Phân Công Chuyên Khoa
+                </button>
+            }
+            else if (Model.ActiveTab == "schedules")
+            {
+                <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createScheduleModal">
+                    <i class="bi bi-calendar-plus me-1"></i> Thiết Lập Ca Trực Mới
+                </button>
+            }
+            else
+            {
+                <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createAvailabilityModal">
+                    <i class="bi bi-calendar-x me-1"></i> Ghi Nhận Nghỉ Phép / Bận
+                </button>
+            }
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-tabs-dc mb-4" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link @(Model.ActiveTab == "allocations" ? "active" : "")"
+               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="allocations">
+                <i class="bi bi-diagram-3 me-2"></i>Phân Công Chuyên Khoa (@Model.Allocations.Count)
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link @(Model.ActiveTab == "schedules" ? "active" : "")"
+               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="schedules">
+                <i class="bi bi-calendar-week me-2"></i>Lịch Trực Ca Tuần (@Model.Schedules.Count)
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link @(Model.ActiveTab == "availabilities" ? "active" : "")"
+               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="availabilities">
+                <i class="bi bi-calendar-range me-2"></i>Trạng Thái Nghỉ Phép & Bận (@Model.Availabilities.Count)
+            </a>
+        </li>
+    </ul>
+
+    <!-- TAB 1: ALLOCATIONS -->
+    @if (Model.ActiveTab == "allocations")
+    {
+        <!-- Filter -->
+        <div class="card-dc mb-4">
+            <div class="card-dc-body p-3">
+                <form asp-controller="AdminDentistSchedule" asp-action="Index" method="get" class="row g-2 align-items-center">
+                    <input type="hidden" name="tab" value="allocations" />
+                    <div class="col-md-5">
+                        <label class="form-label small fw-semibold text-muted mb-1">Lọc theo chuyên khoa</label>
+                        <select name="departmentId" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">-- Tất cả các chuyên khoa --</option>
+                            @foreach (var d in Model.Departments)
+                            {
+                                <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-auto d-flex align-items-end pt-3">
+                        <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="allocations" class="btn btn-sm btn-outline-secondary">
+                            Đặt lại
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Allocations Table -->
+        <div class="card-dc">
+            <div class="card-dc-header">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-people text-primary"></i>
+                    <span class="fw-bold">Danh sách Bác sĩ theo Chuyên khoa</span>
+                </div>
+            </div>
+            <div class="card-dc-body p-0">
+                <div class="table-responsive">
+                    <table class="table-dc mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">#</th>
+                                <th>Bác sĩ</th>
+                                <th>Chuyên khoa phân công</th>
+                                <th>Trình độ / Chuyên môn</th>
+                                <th>Trạng thái</th>
+                                <th>Ngày gán</th>
+                                <th class="text-end">Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.Allocations.Any())
+                            {
+                                int idx = 1;
+                                foreach (var a in Model.Allocations)
+                                {
+                                    <tr>
+                                        <td class="text-muted fw-bold">@(idx++)</td>
+                                        <td>
+                                            <div class="fw-semibold text-dark">@a.DentistName</div>
+                                            <div class="text-muted small">Mã: @(string.IsNullOrEmpty(a.DentistCode) ? $"UID-{a.DentistUserId}" : a.DentistCode)</div>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-primary-subtle text-primary border">@a.DepartmentName</span>
+                                        </td>
+                                        <td>
+                                            <span class="text-muted small">@(string.IsNullOrEmpty(a.Specialty) ? "Bác sĩ Nha khoa" : a.Specialty)</span>
+                                        </td>
+                                        <td>
+                                            @if (a.Status == "Active")
+                                            {
+                                                <span class="badge bg-success-subtle text-success border">Hoạt động</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary-subtle text-secondary border">Tạm dừng</span>
+                                            }
+                                        </td>
+                                        <td class="text-muted small">
+                                            @a.AssignedAt.ToString("dd/MM/yyyy")
+                                        </td>
+                                        <td class="text-end">
+                                            <form asp-controller="AdminDentistSchedule" asp-action="ToggleAllocation" asp-route-id="@a.DentistDepartmentId" method="post" class="d-inline" data-confirm="Bạn có chắc muốn thay đổi trạng thái phân công của bác sĩ này?">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm @(a.Status == "Active" ? "btn-outline-warning" : "btn-outline-success")">
+                                                    @(a.Status == "Active" ? "Tạm ngưng" : "Kích hoạt")
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="7" class="text-center py-4 text-muted">
+                                        Không tìm thấy dữ liệu phân công bác sĩ.
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- TAB 2: SCHEDULES -->
+    @if (Model.ActiveTab == "schedules")
+    {
+        <!-- Filter -->
+        <div class="card-dc mb-4">
+            <div class="card-dc-body p-3">
+                <form asp-controller="AdminDentistSchedule" asp-action="Index" method="get" class="row g-2 align-items-center">
+                    <input type="hidden" name="tab" value="schedules" />
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold text-muted mb-1">Bác sĩ</label>
+                        <select name="dentistUserId" class="form-select form-select-sm">
+                            <option value="">-- Tất cả bác sĩ --</option>
+                            @foreach (var d in Model.Dentists)
+                            {
+                                <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold text-muted mb-1">Chuyên khoa</label>
+                        <select name="departmentId" class="form-select form-select-sm">
+                            <option value="">-- Tất cả chuyên khoa --</option>
+                            @foreach (var d in Model.Departments)
+                            {
+                                <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">Từ ngày</label>
+                        <input type="date" name="fromDate" class="form-control form-control-sm" value="@(Model.FromDate?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">Đến ngày</label>
+                        <input type="date" name="toDate" class="form-control form-control-sm" value="@(Model.ToDate?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end gap-1 pt-3">
+                        <button type="submit" class="btn btn-sm btn-dc-primary"><i class="bi bi-filter"></i> Lọc</button>
+                        <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="schedules" class="btn btn-sm btn-outline-secondary">Đặt lại</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Schedules Table -->
+        <div class="card-dc">
+            <div class="card-dc-header">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-calendar3 text-teal"></i>
+                    <span class="fw-bold">Lịch Trực Ca Bác Sĩ</span>
+                </div>
+            </div>
+            <div class="card-dc-body p-0">
+                <div class="table-responsive">
+                    <table class="table-dc mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">#</th>
+                                <th>Ngày trực</th>
+                                <th>Bác sĩ trực</th>
+                                <th>Chuyên khoa</th>
+                                <th>Thời gian ca trực</th>
+                                <th>Ghi chú</th>
+                                <th>Trạng thái</th>
+                                <th class="text-end">Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.Schedules.Any())
+                            {
+                                int sIdx = 1;
+                                foreach (var s in Model.Schedules)
+                                {
+                                    <tr>
+                                        <td class="text-muted fw-bold">@(sIdx++)</td>
+                                        <td>
+                                            <div class="fw-bold text-dark">@s.WorkDate.ToString("dd/MM/yyyy")</div>
+                                            <div class="text-muted small">@s.WorkDate.DayOfWeek</div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold text-dark">@s.DentistName</div>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-light text-primary border">@s.DepartmentName</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-info-subtle text-info border">
+                                                <i class="bi bi-clock me-1"></i>@s.StartTime.ToString("HH:mm") - @s.EndTime.ToString("HH:mm")
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="text-muted small">@(string.IsNullOrEmpty(s.Note) ? "—" : s.Note)</span>
+                                        </td>
+                                        <td>
+                                            @if (s.Status == "Scheduled")
+                                            {
+                                                <span class="badge bg-success-subtle text-success border">Lên lịch (Scheduled)</span>
+                                            }
+                                            else if (s.Status == "Cancelled")
+                                            {
+                                                <span class="badge bg-danger-subtle text-danger border">Đã hủy (Cancelled)</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary-subtle text-secondary border">@s.Status</span>
+                                            }
+                                        </td>
+                                        <td class="text-end">
+                                            @if (s.Status == "Scheduled")
+                                            {
+                                                <form asp-controller="AdminDentistSchedule" asp-action="CancelSchedule" asp-route-id="@s.DentistScheduleId" method="post" class="d-inline" data-confirm="Bạn có chắc muốn hủy ca trực này của bác sĩ?">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="returnDentistId" value="@Model.SelectedDentistId" />
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                        <i class="bi bi-x-circle me-1"></i>Hủy ca
+                                                    </button>
+                                                </form>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="8" class="text-center py-4 text-muted">
+                                        Không tìm thấy ca trực làm việc nào trong khoảng thời gian đã chọn.
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- TAB 3: AVAILABILITIES -->
+    @if (Model.ActiveTab == "availabilities")
+    {
+        <!-- Filter -->
+        <div class="card-dc mb-4">
+            <div class="card-dc-body p-3">
+                <form asp-controller="AdminDentistSchedule" asp-action="Index" method="get" class="row g-2 align-items-center">
+                    <input type="hidden" name="tab" value="availabilities" />
+                    <div class="col-md-5">
+                        <label class="form-label small fw-semibold text-muted mb-1">Bác sĩ</label>
+                        <select name="dentistUserId" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">-- Tất cả bác sĩ --</option>
+                            @foreach (var d in Model.Dentists)
+                            {
+                                <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-auto d-flex align-items-end pt-3">
+                        <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="availabilities" class="btn btn-sm btn-outline-secondary">Đặt lại</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Availabilities Table -->
+        <div class="card-dc">
+            <div class="card-dc-header">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-clock-history text-warning"></i>
+                    <span class="fw-bold">Danh sách Đăng ký Nghỉ phép & Trạng thái Bận</span>
+                </div>
+            </div>
+            <div class="card-dc-body p-0">
+                <div class="table-responsive">
+                    <table class="table-dc mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">#</th>
+                                <th>Bác sĩ</th>
+                                <th>Loại trạng thái</th>
+                                <th>Từ thời điểm</th>
+                                <th>Đến thời điểm</th>
+                                <th>Lý do / Ghi chú</th>
+                                <th>Ngày ghi nhận</th>
+                                <th class="text-end">Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.Availabilities.Any())
+                            {
+                                int vIdx = 1;
+                                foreach (var v in Model.Availabilities)
+                                {
+                                    <tr>
+                                        <td class="text-muted fw-bold">@(vIdx++)</td>
+                                        <td>
+                                            <div class="fw-semibold text-dark">@v.DentistName</div>
+                                        </td>
+                                        <td>
+                                            @switch (v.AvailabilityStatus)
+                                            {
+                                                case "OnLeave":
+                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Nghỉ phép (OnLeave)</span>
+                                                    break;
+                                                case "Busy":
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Bận (Busy)</span>
+                                                    break;
+                                                case "Unavailable":
+                                                    <span class="badge bg-secondary-subtle text-secondary border">Không trực (Unavailable)</span>
+                                                    break;
+                                                default:
+                                                    <span class="badge bg-success-subtle text-success border">@v.AvailabilityStatus</span>
+                                                    break;
+                                            }
+                                        </td>
+                                        <td class="text-nowrap fw-semibold">
+                                            @v.StartDateTime.ToString("dd/MM/yyyy HH:mm")
+                                        </td>
+                                        <td class="text-nowrap fw-semibold">
+                                            @(v.EndDateTime.HasValue ? v.EndDateTime.Value.ToString("dd/MM/yyyy HH:mm") : "—")
+                                        </td>
+                                        <td>
+                                            <span class="text-muted small">@(string.IsNullOrEmpty(v.Reason) ? "—" : v.Reason)</span>
+                                        </td>
+                                        <td class="small text-muted">
+                                            @v.CreatedAt.ToString("dd/MM/yyyy")
+                                        </td>
+                                        <td class="text-end">
+                                            <form asp-controller="AdminDentistSchedule" asp-action="DeleteAvailability" asp-route-id="@v.AvailabilityId" method="post" class="d-inline" data-confirm="Bạn có chắc chắn muốn xóa bản ghi này?">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="returnDentistId" value="@Model.SelectedDentistId" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="8" class="text-center py-4 text-muted">
+                                        Không có ghi nhận nghỉ phép hoặc bận nào.
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Modal Phân công Bác sĩ vào Chuyên khoa -->
+<div class="modal fade" id="assignDentistModal" tabindex="-1" aria-labelledby="assignDentistLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="AdminDentistSchedule" asp-action="AssignDepartment" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="assignDentistLabel">
+                        <i class="bi bi-person-plus text-primary me-2"></i>Phân Công Bác Sĩ Vào Chuyên Khoa
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chọn Bác sĩ <span class="text-danger">*</span></label>
+                        <select name="DentistUserId" class="form-select" required>
+                            <option value="">-- Chọn bác sĩ nha khoa --</option>
+                            @foreach (var d in Model.Dentists)
+                            {
+                                <option value="@d.UserId">@d.FullName (@(d.Email ?? d.Code))</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chọn Chuyên khoa <span class="text-danger">*</span></label>
+                        <select name="DepartmentId" class="form-select" required>
+                            <option value="">-- Chọn chuyên khoa tiếp nhận --</option>
+                            @foreach (var dept in Model.Departments)
+                            {
+                                <option value="@dept.DepartmentId">@dept.Name</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Phân Công</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thiết lập Ca trực Mới -->
+<div class="modal fade" id="createScheduleModal" tabindex="-1" aria-labelledby="createScheduleLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="AdminDentistSchedule" asp-action="CreateSchedule" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="createScheduleLabel">
+                        <i class="bi bi-calendar-plus text-primary me-2"></i>Thiết Lập Ca Trực Làm Việc
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chọn Bác sĩ <span class="text-danger">*</span></label>
+                        <select name="DentistUserId" class="form-select" required>
+                            <option value="">-- Chọn bác sĩ nha khoa --</option>
+                            @foreach (var d in Model.Dentists)
+                            {
+                                <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chuyên khoa trực <span class="text-danger">*</span></label>
+                        <select name="DepartmentId" class="form-select" required>
+                            <option value="">-- Chọn chuyên khoa --</option>
+                            @foreach (var dept in Model.Departments)
+                            {
+                                <option value="@dept.DepartmentId" selected="@(Model.SelectedDepartmentId == dept.DepartmentId)">@dept.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ngày làm việc <span class="text-danger">*</span></label>
+                        <input type="date" name="WorkDate" class="form-control" value="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" required />
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Giờ bắt đầu <span class="text-danger">*</span></label>
+                            <input type="time" name="StartTime" class="form-control" value="08:00" required />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Giờ kết thúc <span class="text-danger">*</span></label>
+                            <input type="time" name="EndTime" class="form-control" value="12:00" required />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ghi chú ca trực</label>
+                        <input type="text" name="Note" class="form-control" placeholder="Ghi chú phân công ca sáng, ca chiều..." maxlength="200" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Lịch Trực</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ghi nhận Nghỉ phép / Bận -->
+<div class="modal fade" id="createAvailabilityModal" tabindex="-1" aria-labelledby="createAvailabilityLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="AdminDentistSchedule" asp-action="CreateAvailability" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="createAvailabilityLabel">
+                        <i class="bi bi-calendar-x text-warning me-2"></i>Ghi Nhận Nghỉ Phép / Bận
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Bác sĩ <span class="text-danger">*</span></label>
+                        <select name="DentistUserId" class="form-select" required>
+                            <option value="">-- Chọn bác sĩ nha khoa --</option>
+                            @foreach (var d in Model.Dentists)
+                            {
+                                <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trạng thái <span class="text-danger">*</span></label>
+                        <select name="AvailabilityStatus" class="form-select" required>
+                            <option value="OnLeave">Nghỉ phép theo đơn (OnLeave)</option>
+                            <option value="Busy">Bận việc đột xuất / Hội chẩn (Busy)</option>
+                            <option value="Unavailable">Không làm việc (Unavailable)</option>
+                        </select>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Thời điểm bắt đầu <span class="text-danger">*</span></label>
+                            <input type="datetime-local" name="StartDateTime" class="form-control" value="@DateTime.Today.AddDays(1).AddHours(8).ToString("yyyy-MM-ddTHH:mm")" required />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Thời điểm kết thúc <span class="text-danger">*</span></label>
+                            <input type="datetime-local" name="EndDateTime" class="form-control" value="@DateTime.Today.AddDays(1).AddHours(17).ToString("yyyy-MM-ddTHH:mm")" required />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lý do chi tiết</label>
+                        <textarea name="Reason" class="form-control" rows="2" placeholder="Ghi chú lý do nghỉ phép hoặc phê duyệt..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Nghỉ Phép</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

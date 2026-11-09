@@ -14,8 +14,8 @@
                 <span class="text-muted small">&bull;</span>
                 <span class="badge-dc badge-role-systemadministrator">Danh mục hệ thống</span>
             </div>
-            <h1 class="page-title">Quản lý Danh mục & Bảng giá Dịch vụ</h1>
-            <p class="page-subtitle">Quản lý danh mục dịch vụ theo từng chuyên khoa, thời lượng khám dự kiến và đơn giá niêm yết</p>
+            <h1 class="page-title">Quản lý Danh mục & Bảng giá Dịch vụ Nha khoa</h1>
+            <p class="page-subtitle">Quản lý 31+ dịch vụ theo chuyên khoa, cấu hình thời lượng riêng biệt, loại dịch vụ và yêu cầu phòng vô trùng</p>
         </div>
         <div class="page-actions">
             <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createServiceModal">
@@ -73,11 +73,11 @@
                     <thead>
                         <tr>
                             <th style="width: 50px;">#</th>
-                            <th>Tên Dịch vụ</th>
+                            <th>Tên Dịch vụ & Phân loại</th>
                             <th>Chuyên khoa</th>
-                            <th>Mô tả</th>
-                            <th class="text-center">Thời lượng</th>
+                            <th class="text-center">Thời lượng riêng</th>
                             <th class="text-end">Đơn giá niêm yết</th>
+                            <th>Yêu cầu lâm sàng</th>
                             <th>Trạng thái</th>
                             <th class="text-end">Hành động</th>
                         </tr>
@@ -92,23 +92,80 @@
                                     <td class="text-muted fw-bold">@(index++)</td>
                                     <td>
                                         <div class="fw-bold text-dark">@srv.ServiceName</div>
-                                        <div class="text-muted small">Mã: SRV-@srv.DepartmentServiceId</div>
+                                        <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                                            <span class="badge bg-light text-secondary border">Mã: SRV-@srv.DepartmentServiceId</span>
+                                            @switch (srv.ServiceType)
+                                            {
+                                                case "Consultation":
+                                                    <span class="badge bg-info-subtle text-info border border-info-subtle">
+                                                        <i class="bi bi-chat-square-text me-1"></i>Khám & Tư vấn
+                                                    </span>
+                                                    break;
+                                                case "Surgery":
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                                        <i class="bi bi-heart-pulse me-1"></i>Phẫu thuật
+                                                    </span>
+                                                    break;
+                                                case "Cosmetic":
+                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+                                                        <i class="bi bi-stars me-1"></i>Thẩm mỹ
+                                                    </span>
+                                                    break;
+                                                case "Pediatric":
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                                        <i class="bi bi-emoji-smile me-1"></i>Nha khoa trẻ em
+                                                    </span>
+                                                    break;
+                                                default:
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                        <i class="bi bi-tools me-1"></i>Điều trị
+                                                    </span>
+                                                    break;
+                                            }
+                                        </div>
+                                        @if (!string.IsNullOrEmpty(srv.Description))
+                                        {
+                                            <div class="text-muted small mt-1 text-truncate" style="max-width: 280px;" title="@srv.Description">
+                                                @srv.Description
+                                            </div>
+                                        }
                                     </td>
                                     <td>
                                         <span class="badge bg-light text-primary border">@srv.DepartmentName</span>
                                     </td>
-                                    <td style="max-width: 250px;">
-                                        <span class="text-muted small text-truncate d-inline-block" style="max-width: 240px;">
-                                            @(string.IsNullOrEmpty(srv.Description) ? "—" : srv.Description)
-                                        </span>
-                                    </td>
                                     <td class="text-center">
-                                        <span class="badge bg-secondary-subtle text-secondary">
-                                            <i class="bi bi-clock me-1"></i>@(srv.DurationMinutes.HasValue ? srv.DurationMinutes + " phút" : "30 phút")
+                                        <span class="badge bg-dark-subtle text-dark border px-2 py-1">
+                                            <i class="bi bi-clock me-1 text-primary"></i>@(srv.DurationMinutes.HasValue ? srv.DurationMinutes + " phút" : "30 phút")
                                         </span>
                                     </td>
                                     <td class="text-end fw-bold text-success">
                                         @srv.Price.ToString("N0") đ
+                                    </td>
+                                    <td>
+                                        <div class="d-flex flex-column gap-1">
+                                            @if (srv.RequiresExclusiveRoom)
+                                            {
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle small text-start">
+                                                    <i class="bi bi-shield-lock me-1"></i>Phòng vô trùng độc quyền
+                                                </span>
+                                            }
+                                            @if (srv.RequiresConsultationFirst)
+                                            {
+                                                <span class="badge bg-info-subtle text-info border border-info-subtle small text-start">
+                                                    <i class="bi bi-clipboard-check me-1"></i>Cần khám tư vấn trước
+                                                </span>
+                                            }
+                                            @if (srv.MinLeadTimeHours > 0)
+                                            {
+                                                <span class="badge bg-secondary-subtle text-secondary border small text-start">
+                                                    <i class="bi bi-hourglass-split me-1"></i>Đặt trước: @srv.MinLeadTimeHours giờ
+                                                </span>
+                                            }
+                                            @if (!srv.RequiresExclusiveRoom && !srv.RequiresConsultationFirst && srv.MinLeadTimeHours == 0)
+                                            {
+                                                <span class="text-muted small">Tiêu chuẩn</span>
+                                            }
+                                        </div>
                                     </td>
                                     <td>
                                         @if (srv.Status == "Active")
@@ -132,7 +189,12 @@
                                                 data-desc="@srv.Description"
                                                 data-duration="@srv.DurationMinutes"
                                                 data-price="@srv.Price"
-                                                data-status="@srv.Status">
+                                                data-status="@srv.Status"
+                                                data-servicetype="@srv.ServiceType"
+                                                data-exclusive="@(srv.RequiresExclusiveRoom ? "true" : "false")"
+                                                data-consultation="@(srv.RequiresConsultationFirst ? "true" : "false")"
+                                                data-leadtime="@srv.MinLeadTimeHours"
+                                                data-instructions="@srv.BookingInstructions">
                                             <i class="bi bi-pencil-square"></i> Sửa
                                         </button>
                                         <form asp-controller="AdminService" asp-action="ToggleStatus" asp-route-id="@srv.DepartmentServiceId" method="post" class="d-inline" data-confirm="Bạn có chắc chắn muốn thay đổi trạng thái dịch vụ này?">
@@ -164,7 +226,7 @@
 
 <!-- Modal Thêm Dịch vụ -->
 <div class="modal fade" id="createServiceModal" tabindex="-1" aria-labelledby="createServiceLabel" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form asp-controller="AdminService" asp-action="Create" method="post">
                 @Html.AntiForgeryToken()
@@ -175,42 +237,80 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Thuộc chuyên khoa <span class="text-danger">*</span></label>
-                        <select name="DepartmentId" class="form-select" required>
-                            <option value="">-- Chọn chuyên khoa --</option>
-                            @foreach (var dept in Model.Departments)
-                            {
-                                <option value="@dept.DepartmentId" selected="@(Model.SelectedDepartmentId == dept.DepartmentId)">
-                                    @dept.Name
-                                </option>
-                            }
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Tên dịch vụ <span class="text-danger">*</span></label>
-                        <input type="text" name="ServiceName" class="form-control" placeholder="Ví dụ: Cạo vôi răng, Nhổ răng khôn..." required maxlength="150" />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Mô tả dịch vụ</label>
-                        <textarea name="Description" class="form-control" rows="3" placeholder="Mô tả kỹ thuật, quy trình hoặc chỉ định..." maxlength="500"></textarea>
-                    </div>
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <label class="form-label fw-semibold">Thời lượng dự kiến (phút)</label>
-                            <input type="number" name="DurationMinutes" class="form-control" value="30" min="5" max="480" />
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Thuộc chuyên khoa <span class="text-danger">*</span></label>
+                            <select name="DepartmentId" class="form-select" required>
+                                <option value="">-- Chọn chuyên khoa --</option>
+                                @foreach (var dept in Model.Departments)
+                                {
+                                    <option value="@dept.DepartmentId" selected="@(Model.SelectedDepartmentId == dept.DepartmentId)">
+                                        @dept.Name
+                                    </option>
+                                }
+                            </select>
                         </div>
-                        <div class="col-6">
-                            <label class="form-label fw-semibold">Đơn giá (VNĐ) <span class="text-danger">*</span></label>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Loại hình dịch vụ <span class="text-danger">*</span></label>
+                            <select name="ServiceType" class="form-select" required>
+                                <option value="Treatment" selected>Điều trị nha khoa (Treatment)</option>
+                                <option value="Consultation">Khám & Tư vấn (Consultation)</option>
+                                <option value="Surgery">Phẫu thuật / Tiểu phẫu (Surgery)</option>
+                                <option value="Cosmetic">Nha khoa Thẩm mỹ (Cosmetic)</option>
+                                <option value="Pediatric">Nha khoa Trẻ em (Pediatric)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold">Tên dịch vụ <span class="text-danger">*</span></label>
+                            <input type="text" name="ServiceName" class="form-control" placeholder="Ví dụ: Lấy cao răng, Điều trị tủy răng, Cấy ghép Implant..." required maxlength="150" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Trạng thái</label>
+                            <select name="Status" class="form-select">
+                                <option value="Active">Đang hoạt động (Active)</option>
+                                <option value="Inactive">Tạm dừng (Inactive)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Thời lượng riêng cho slot đặt lịch (phút) <span class="text-danger">*</span></label>
+                            <input type="number" name="DurationMinutes" class="form-control" value="30" min="5" max="480" required />
+                            <div class="form-text small">Thời lượng riêng từng dịch vụ, KHÔNG ép chung vào thời lượng khám thông thường.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Đơn giá niêm yết (VNĐ) <span class="text-danger">*</span></label>
                             <input type="number" name="Price" class="form-control" placeholder="0" min="0" step="1000" required />
                         </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Trạng thái</label>
-                        <select name="Status" class="form-select">
-                            <option value="Active">Đang hoạt động (Active)</option>
-                            <option value="Inactive">Tạm dừng (Inactive)</option>
-                        </select>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Mô tả dịch vụ</label>
+                            <textarea name="Description" class="form-control" rows="2" placeholder="Mô tả kỹ thuật, quy trình hoặc chỉ định chuyên môn..." maxlength="500"></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light border-0 p-3 rounded-3 h-100">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" name="RequiresExclusiveRoom" value="true" id="createReqRoom" />
+                                    <label class="form-check-label fw-semibold" for="createReqRoom">Yêu cầu phòng vô trùng độc quyền</label>
+                                </div>
+                                <div class="small text-muted">Áp dụng cho phẫu thuật Implant, nhổ răng khôn phức tạp cần phòng cách ly riêng.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light border-0 p-3 rounded-3 h-100">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" name="RequiresConsultationFirst" value="true" id="createReqConsult" />
+                                    <label class="form-check-label fw-semibold" for="createReqConsult">Bắt buộc khám tư vấn trước</label>
+                                </div>
+                                <div class="small text-muted">Bệnh nhân cần khám tổng quát hoặc chụp phim X-Quang trước khi thực hiện dịch vụ này.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Thời gian đặt trước tối thiểu (giờ)</label>
+                            <input type="number" name="MinLeadTimeHours" class="form-control" value="0" min="0" max="168" />
+                            <div class="form-text small">Ví dụ: Phẫu thuật cần chuẩn bị vật tư trước 24 giờ.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Hướng dẫn chuẩn bị cho bệnh nhân</label>
+                            <textarea name="BookingInstructions" class="form-control" rows="2" placeholder="Ví dụ: Nhịn ăn trước phẫu thuật 4 tiếng, mang theo phim chụp..." maxlength="1000"></textarea>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -224,51 +324,87 @@
 
 <!-- Modal Sửa Dịch vụ -->
 <div class="modal fade" id="editServiceModal" tabindex="-1" aria-labelledby="editServiceLabel" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form asp-controller="AdminService" asp-action="Edit" method="post">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="DepartmentServiceId" id="editSrvId" />
                 <div class="modal-header">
                     <h5 class="modal-title font-heading" id="editServiceLabel">
-                        <i class="bi bi-pencil-square text-teal me-2"></i>Chỉnh Sửa Dịch Vụ
+                        <i class="bi bi-pencil-square text-teal me-2"></i>Chỉnh Sửa Dịch Vụ Nha Khoa
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Thuộc chuyên khoa <span class="text-danger">*</span></label>
-                        <select name="DepartmentId" id="editSrvDeptId" class="form-select" required>
-                            @foreach (var dept in Model.Departments)
-                            {
-                                <option value="@dept.DepartmentId">@dept.Name</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Tên dịch vụ <span class="text-danger">*</span></label>
-                        <input type="text" name="ServiceName" id="editSrvName" class="form-control" required maxlength="150" />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Mô tả dịch vụ</label>
-                        <textarea name="Description" id="editSrvDesc" class="form-control" rows="3" maxlength="500"></textarea>
-                    </div>
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <label class="form-label fw-semibold">Thời lượng dự kiến (phút)</label>
-                            <input type="number" name="DurationMinutes" id="editSrvDuration" class="form-control" min="5" max="480" />
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Thuộc chuyên khoa <span class="text-danger">*</span></label>
+                            <select name="DepartmentId" id="editSrvDeptId" class="form-select" required>
+                                @foreach (var dept in Model.Departments)
+                                {
+                                    <option value="@dept.DepartmentId">@dept.Name</option>
+                                }
+                            </select>
                         </div>
-                        <div class="col-6">
-                            <label class="form-label fw-semibold">Đơn giá (VNĐ) <span class="text-danger">*</span></label>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Loại hình dịch vụ <span class="text-danger">*</span></label>
+                            <select name="ServiceType" id="editSrvType" class="form-select" required>
+                                <option value="Treatment">Điều trị nha khoa (Treatment)</option>
+                                <option value="Consultation">Khám & Tư vấn (Consultation)</option>
+                                <option value="Surgery">Phẫu thuật / Tiểu phẫu (Surgery)</option>
+                                <option value="Cosmetic">Nha khoa Thẩm mỹ (Cosmetic)</option>
+                                <option value="Pediatric">Nha khoa Trẻ em (Pediatric)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold">Tên dịch vụ <span class="text-danger">*</span></label>
+                            <input type="text" name="ServiceName" id="editSrvName" class="form-control" required maxlength="150" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Trạng thái</label>
+                            <select name="Status" id="editSrvStatus" class="form-select">
+                                <option value="Active">Đang hoạt động (Active)</option>
+                                <option value="Inactive">Tạm dừng (Inactive)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Thời lượng riêng cho slot đặt lịch (phút) <span class="text-danger">*</span></label>
+                            <input type="number" name="DurationMinutes" id="editSrvDuration" class="form-control" min="5" max="480" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Đơn giá niêm yết (VNĐ) <span class="text-danger">*</span></label>
                             <input type="number" name="Price" id="editSrvPrice" class="form-control" min="0" step="1000" required />
                         </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Trạng thái</label>
-                        <select name="Status" id="editSrvStatus" class="form-select">
-                            <option value="Active">Đang hoạt động (Active)</option>
-                            <option value="Inactive">Tạm dừng (Inactive)</option>
-                        </select>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Mô tả dịch vụ</label>
+                            <textarea name="Description" id="editSrvDesc" class="form-control" rows="2" maxlength="500"></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light border-0 p-3 rounded-3 h-100">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" name="RequiresExclusiveRoom" value="true" id="editReqRoom" />
+                                    <label class="form-check-label fw-semibold" for="editReqRoom">Yêu cầu phòng vô trùng độc quyền</label>
+                                </div>
+                                <div class="small text-muted">Áp dụng cho phẫu thuật Implant, nhổ răng khôn phức tạp.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light border-0 p-3 rounded-3 h-100">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" name="RequiresConsultationFirst" value="true" id="editReqConsult" />
+                                    <label class="form-check-label fw-semibold" for="editReqConsult">Bắt buộc khám tư vấn trước</label>
+                                </div>
+                                <div class="small text-muted">Bệnh nhân cần khám tư vấn trước khi làm thủ thuật.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Thời gian đặt trước tối thiểu (giờ)</label>
+                            <input type="number" name="MinLeadTimeHours" id="editSrvLeadTime" class="form-control" min="0" max="168" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Hướng dẫn chuẩn bị cho bệnh nhân</label>
+                            <textarea name="BookingInstructions" id="editSrvInstructions" class="form-control" rows="2" maxlength="1000"></textarea>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -283,19 +419,27 @@
 @section Scripts {
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const editModal = new bootstrap.Modal(document.getElementById('editServiceModal'));
-            document.querySelectorAll('.btn-edit-srv').forEach(btn => {
-                btn.addEventListener('click', function () {
-                    document.getElementById('editSrvId').value = this.dataset.id;
-                    document.getElementById('editSrvDeptId').value = this.dataset.deptid;
-                    document.getElementById('editSrvName').value = this.dataset.name;
-                    document.getElementById('editSrvDesc').value = this.dataset.desc || '';
-                    document.getElementById('editSrvDuration').value = this.dataset.duration || 30;
-                    document.getElementById('editSrvPrice').value = this.dataset.price;
-                    document.getElementById('editSrvStatus').value = this.dataset.status || 'Active';
-                    editModal.show();
+            const editModalEl = document.getElementById('editServiceModal');
+            if (editModalEl) {
+                const editModal = new bootstrap.Modal(editModalEl);
+                document.querySelectorAll('.btn-edit-srv').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        document.getElementById('editSrvId').value = this.dataset.id;
+                        document.getElementById('editSrvDeptId').value = this.dataset.deptid;
+                        document.getElementById('editSrvName').value = this.dataset.name;
+                        document.getElementById('editSrvDesc').value = this.dataset.desc || '';
+                        document.getElementById('editSrvDuration').value = this.dataset.duration || 30;
+                        document.getElementById('editSrvPrice').value = this.dataset.price;
+                        document.getElementById('editSrvStatus').value = this.dataset.status || 'Active';
+                        document.getElementById('editSrvType').value = this.dataset.servicetype || 'Treatment';
+                        document.getElementById('editReqRoom').checked = (this.dataset.exclusive === 'true');
+                        document.getElementById('editReqConsult').checked = (this.dataset.consultation === 'true');
+                        document.getElementById('editSrvLeadTime').value = this.dataset.leadtime || 0;
+                        document.getElementById('editSrvInstructions').value = this.dataset.instructions || '';
+                        editModal.show();
+                    });
                 });
-            });
+            }
         });
     </script>
 }
