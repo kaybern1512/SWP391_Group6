@@ -1,3 +1,4 @@
+using DentalClinic.Infrastructure.Services.StaffShiftProviders;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Validation;
 using DentalClinic.Infrastructure.Persistence;
@@ -72,6 +73,14 @@ public static class DependencyInjection
         services.AddScoped<IBlogService, BlogService>();
         services.AddScoped<IAppointmentReminderService, AppointmentReminderService>();
         services.AddScoped<IMedicineService, MedicineService>();
+        // Workforce Attendance & Operations Services
+        services.AddScoped<DentistShiftProvider>();
+        services.AddScoped<ReceptionistShiftProvider>();
+        services.AddScoped<IStaffShiftResolver, CompositeStaffShiftProvider>();
+        services.AddScoped<IAttendanceService, AttendanceService>();
+        services.AddScoped<IWorkforceReportService, WorkforceReportService>();
+        services.AddScoped<IClinicOperationsService, ClinicOperationsService>();
+        services.AddScoped<IAdminImpactAnalysisService, AdminImpactAnalysisService>();
         services.AddHostedService<AppointmentReminderBackgroundWorker>();
 
         return services;
