@@ -847,4 +847,276 @@ public class DentistSubsystemComprehensiveTests
         Assert.True(dispStatus.HasDispensation);
         Assert.Equal(6, dispStatus.TotalUnitsDispensed);
     }
+
+    // =========================================================================
+    // FINAL STABILIZATION TESTS (ANTI 4 DENTIST HARDENING & ZERO-DEFECT QA)
+    // =========================================================================
+
+    [Fact]
+    public async Task Test15_StartAndComplete_WhenCheckedIn_WithoutStarting_IsStrictlyBlocked()
+    {
+        var db = CreateDbContext("Test15_CheckedIn_CannotComplete");
+        long patientId = 101, dentistId = 201, deptId = 1, chairId = 10;
+        var appt = CreateTestAppointment(patientId, dentistId, deptId, chairId: chairId, status: AppointmentStatus.CheckedIn);
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var apptService = new AppointmentService(db, _notificationServiceMock.Object, NullLogger<AppointmentService>.Instance);
+
+        // Doctor attempts to Complete directly from CheckedIn without Starting
+        var completeRes = await apptService.DentistCompleteAppointmentAsync(appt.AppointmentId, dentistId, "Cố tình hoàn tất bỏ qua bước khám");
+        Assert.False(completeRes.Success);
+        Assert.Contains("Bắt đầu khám", completeRes.Message);
+        Assert.Contains("InService", completeRes.Message);
+
+        // Appointment status remains CheckedIn
+        var unchangedAppt = await db.Appointments.FindAsync(appt.AppointmentId);
+        Assert.Equal(AppointmentStatus.CheckedIn, unchangedAppt!.Status);
+    }
+
+    [Fact]
+    public async Task Test16_MedicineDispensation_IdorSecurity_PatientCannotAccessOtherPatientDispensations()
+    {
+        var db = CreateDbContext("Test16_Medicine_IDOR_Patient");
+        long patientA = 101, patientB = 102, dentistId = 201, deptId = 1;
+
+        var apptA = CreateTestAppointment(patientA, dentistId, deptId, status: AppointmentStatus.InService);
+        db.Appointments.Add(apptA);
+        await db.SaveChangesAsync();
+
+        var sessionA = new TreatmentSession
+        {
+            AppointmentId = apptA.AppointmentId,
+            DentistUserId = dentistId,
+            SessionDate = DateTime.UtcNow,
+            TreatmentPlanItemId = 1
+        };
+        db.TreatmentSessions.Add(sessionA);
+        await db.SaveChangesAsync();
+
+        var prescA = new Prescription
+        {
+            TreatmentSessionId = sessionA.TreatmentSessionId,
+            IssuedAt = DateTime.UtcNow,
+            PrescriptionItems = new List<PrescriptionItem>
+            {
+                new() { MedicationName = "Paracetamol 500mg" }
+            }
+        };
+        db.Prescriptions.Add(prescA);
+        await db.SaveChangesAsync();
+
+        var medicineService = new MedicineService(db);
+
+        // Patient B attempts IDOR on Patient A's appointment dispensations
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(async () =>
+        {
+            await medicineService.GetDispensationsByAppointmentIdAsync(apptA.AppointmentId, requestingUserId: patientB, requestingUserRole: "Patient");
+        });
+
+        // Patient B attempts IDOR on Patient A's prescription status
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(async () =>
+        {
+            await medicineService.GetPrescriptionDispensationStatusAsync(prescA.PrescriptionId, requestingUserId: patientB, requestingUserRole: "Patient");
+        });
+
+        // Patient A querying own prescription status succeeds
+        var statusA = await medicineService.GetPrescriptionDispensationStatusAsync(prescA.PrescriptionId, requestingUserId: patientA, requestingUserRole: "Patient");
+        Assert.NotNull(statusA);
+        Assert.Equal("NotDispensed", statusA.Status);
+    }
+
+    [Fact]
+    public async Task Test17_MedicineDispensation_IdorSecurity_UnassignedDentistCannotDispense()
+    {
+        var db = CreateDbContext(nameof(Test17_MedicineDispensation_IdorSecurity_UnassignedDentistCannotDispense));
+        var (patientId, assignedDentistId, unauthorizedDentistId, deptId, chairId, serviceId) = await SeedBaseEntitiesAsync(db);
+
+        var appt = CreateTestAppointment(patientId, assignedDentistId, deptId, serviceId, chairId, AppointmentStatus.InService);
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var prescService = new PrescriptionService(db, NullLogger<PrescriptionService>.Instance);
+        var prescRes = await prescService.CreatePrescriptionAsync(assignedDentistId, new CreatePrescriptionRequest
+        {
+            AppointmentId = appt.AppointmentId,
+            Items = new List<CreatePrescriptionItemInput>
+            {
+                new() { MedicationName = "Test Med" }
+            }
+        });
+        Assert.True(prescRes.Success, prescRes.Message);
+        var presc = await db.Prescriptions.FindAsync(prescRes.Data!.PrescriptionId);
+
+        var med = new MedicineEntity { MedicineCode = "MED-TEST-17", MedicineName = "Test Med", Unit = "Viên", UnitPrice = 1000m, Status = "Active" };
+        db.Medicines.Add(med);
+        await db.SaveChangesAsync();
+
+        var batch = new MedicineBatch { MedicineId = med.MedicineId, BatchNumber = "B17", ExpiryDate = DateOnly.FromDateTime(DateTime.Today.AddYears(1)), QuantityAvailable = 10, Status = "Available" };
+        db.MedicineBatches.Add(batch);
+        await db.SaveChangesAsync();
+
+        var medicineService = new MedicineService(db);
+
+        // Unauthorized Dentist attempts to dispense medicine
+        var dispReq = new CreateMedicineDispensationRequest
+        {
+            PrescriptionId = presc.PrescriptionId,
+            Items = new List<DispenseItemInput>
+            {
+                new() { MedicineId = med.MedicineId, MedicineBatchId = batch.MedicineBatchId, Quantity = 2 }
+            }
+        };
+
+        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(async () =>
+        {
+            await medicineService.DispenseMedicineAsync(dispReq, dentistUserId: unauthorizedDentistId, userRole: "Dentist");
+        });
+        Assert.Contains("không phụ trách", ex.Message);
+    }
+
+    [Fact]
+    public async Task Test18_TreatmentPlan_DirectCareContainer_UsesCompletedStatus_CompliantWithSqlServerCheckConstraint()
+    {
+        var db = CreateDbContext("Test18_DirectCare_CheckConstraint");
+        long patientId = 101, dentistId = 201, deptId = 1;
+
+        var appt = CreateTestAppointment(patientId, dentistId, deptId, status: AppointmentStatus.InService);
+        db.Appointments.Add(appt);
+
+        var svc = new DepartmentService { DepartmentId = deptId, ServiceName = "Trám răng Composite", Price = 200000m, Status = "Active" };
+        db.DepartmentServices.Add(svc);
+        await db.SaveChangesAsync();
+
+        var treatmentService = new TreatmentService(db);
+
+        // Dentist performs service on walk-in / single-visit appointment without prior multi-phase plan
+        var addRes = await treatmentService.AddPerformedServiceToAppointmentAsync(appt.AppointmentId, dentistId, new AddPerformedServiceToAppointmentRequest
+        {
+            DepartmentServiceId = svc.DepartmentServiceId,
+            Quantity = 1,
+            UnitPrice = 200000m
+        });
+        Assert.True(addRes.Success);
+
+        // CRITICAL: The auto-generated direct care plan MUST have Status == 'Completed'
+        // SQL Server CHECK constraint: [Status] IN ('Cancelled', 'Completed', 'InProgress', 'Planned')
+        var containerPlan = await db.TreatmentPlans.Include(tp => tp.TreatmentPlanItems).FirstOrDefaultAsync(tp => tp.PatientUserId == patientId);
+        Assert.NotNull(containerPlan);
+        Assert.Equal("Completed", containerPlan.Status);
+        Assert.NotEqual("DirectCare", containerPlan.Status); // Never insert 'DirectCare' as Status!
+        Assert.NotEqual("Active", containerPlan.Status);     // Never insert 'Active' as Status!
+
+        // Note prefix contains [DirectCare] tag
+        Assert.True(containerPlan.TreatmentPlanItems.Any(i => i.Note != null && i.Note.StartsWith("[DirectCare]")));
+
+        // Long-term patient treatment plan list must exclude direct-care single visit containers
+        var patientPlansRes = await treatmentService.GetPatientTreatmentPlansAsync(patientId);
+        Assert.True(patientPlansRes.Success);
+        Assert.Empty(patientPlansRes.Data!); // Filtered out of long-term plan list
+    }
+
+    [Fact]
+    public async Task Test19_TreatmentPlan_ExplicitLinking_WithTreatmentPlanItemId_ValidatesPatientOwnership()
+    {
+        var db = CreateDbContext("Test19_Explicit_Linking");
+        long patientA = 101, patientB = 102, dentistId = 201, deptId = 1;
+
+        var apptA = CreateTestAppointment(patientA, dentistId, deptId, status: AppointmentStatus.InService);
+        db.Appointments.Add(apptA);
+
+        var planB = new TreatmentPlan { PatientUserId = patientB, DepartmentId = deptId, CreatedByDentistUserId = dentistId, Status = "InProgress" };
+        db.TreatmentPlans.Add(planB);
+        await db.SaveChangesAsync();
+
+        var planItemB = new TreatmentPlanItem { TreatmentPlanId = planB.TreatmentPlanId, DepartmentServiceId = 1, SequenceNo = 1, Status = "Planned" };
+        db.TreatmentPlanItems.Add(planItemB);
+
+        var svc = new DepartmentService { DepartmentId = deptId, ServiceName = "Điều trị tủy", Price = 500000m, Status = "Active" };
+        db.DepartmentServices.Add(svc);
+        await db.SaveChangesAsync();
+
+        var treatmentService = new TreatmentService(db);
+
+        // Attempting to link Patient A's appointment with Patient B's TreatmentPlanItem
+        var rejectRes = await treatmentService.AddPerformedServiceToAppointmentAsync(apptA.AppointmentId, dentistId, new AddPerformedServiceToAppointmentRequest
+        {
+            DepartmentServiceId = svc.DepartmentServiceId,
+            TreatmentPlanItemId = planItemB.TreatmentPlanItemId
+        });
+        Assert.False(rejectRes.Success);
+        Assert.Contains("không thuộc về bệnh nhân", rejectRes.Message);
+    }
+
+    [Fact]
+    public async Task Test20_MedicineDispensation_PrescriptionStatusCalculation_AccuratelyReturnsAllThreeStatuses()
+    {
+        var db = CreateDbContext(nameof(Test20_MedicineDispensation_PrescriptionStatusCalculation_AccuratelyReturnsAllThreeStatuses));
+        var (patientId, dentistId, _, deptId, chairId, serviceId) = await SeedBaseEntitiesAsync(db);
+
+        var appt = CreateTestAppointment(patientId, dentistId, deptId, serviceId, chairId, AppointmentStatus.InService);
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var prescService20 = new PrescriptionService(db, NullLogger<PrescriptionService>.Instance);
+        var prescRes20 = await prescService20.CreatePrescriptionAsync(dentistId, new CreatePrescriptionRequest
+        {
+            AppointmentId = appt.AppointmentId,
+            Items = new List<CreatePrescriptionItemInput>
+            {
+                new() { MedicationName = "Amoxicillin 500mg" },
+                new() { MedicationName = "Paracetamol 500mg" }
+            }
+        });
+        Assert.True(prescRes20.Success, prescRes20.Message);
+        var presc = await db.Prescriptions.Include(p => p.PrescriptionItems).FirstOrDefaultAsync(p => p.PrescriptionId == prescRes20.Data!.PrescriptionId);
+
+        var med1 = new MedicineEntity { MedicineCode = "M1", MedicineName = "Amoxicillin", Unit = "Viên", UnitPrice = 2000m, Status = "Active" };
+        var med2 = new MedicineEntity { MedicineCode = "M2", MedicineName = "Paracetamol", Unit = "Viên", UnitPrice = 1000m, Status = "Active" };
+        db.Medicines.AddRange(med1, med2);
+        await db.SaveChangesAsync();
+
+        var b1 = new MedicineBatch { MedicineId = med1.MedicineId, BatchNumber = "B1", ExpiryDate = DateOnly.FromDateTime(DateTime.Today.AddYears(1)), QuantityAvailable = 20, Status = "Available" };
+        var b2 = new MedicineBatch { MedicineId = med2.MedicineId, BatchNumber = "B2", ExpiryDate = DateOnly.FromDateTime(DateTime.Today.AddYears(1)), QuantityAvailable = 20, Status = "Available" };
+        db.MedicineBatches.AddRange(b1, b2);
+        await db.SaveChangesAsync();
+
+        var medicineService = new MedicineService(db);
+
+        // State 1: Zero dispensations -> "NotDispensed"
+        var status1 = await medicineService.GetPrescriptionDispensationStatusAsync(presc.PrescriptionId);
+        Assert.Equal("NotDispensed", status1.Status);
+        Assert.False(status1.HasDispensation);
+
+        // Dispense item 1 only
+        var prescItems = presc.PrescriptionItems.ToList();
+        await medicineService.DispenseMedicineAsync(new CreateMedicineDispensationRequest
+        {
+            PrescriptionId = presc.PrescriptionId,
+            Items = new List<DispenseItemInput>
+            {
+                new() { PrescriptionItemId = prescItems[0].PrescriptionItemId, MedicineId = med1.MedicineId, MedicineBatchId = b1.MedicineBatchId, Quantity = 10 }
+            }
+        }, dentistId);
+
+        // State 2: Some items dispensed -> "PartiallyDispensed"
+        var status2 = await medicineService.GetPrescriptionDispensationStatusAsync(presc.PrescriptionId);
+        Assert.Equal("PartiallyDispensed", status2.Status);
+        Assert.True(status2.HasDispensation);
+
+        // Dispense item 2 as well
+        await medicineService.DispenseMedicineAsync(new CreateMedicineDispensationRequest
+        {
+            PrescriptionId = presc.PrescriptionId,
+            Items = new List<DispenseItemInput>
+            {
+                new() { PrescriptionItemId = prescItems[1].PrescriptionItemId, MedicineId = med2.MedicineId, MedicineBatchId = b2.MedicineBatchId, Quantity = 5 }
+            }
+        }, dentistId);
+
+        // State 3: All items dispensed -> "FullyDispensed"
+        var status3 = await medicineService.GetPrescriptionDispensationStatusAsync(presc.PrescriptionId);
+        Assert.Equal("FullyDispensed", status3.Status);
+        Assert.Equal(15, status3.TotalUnitsDispensed);
+    }
 }

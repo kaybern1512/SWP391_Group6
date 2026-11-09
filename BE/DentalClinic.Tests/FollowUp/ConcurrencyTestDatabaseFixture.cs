@@ -18,6 +18,7 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
 
     private const string BackupRelativePath = @"DB\DentalClinicManagementDB.bak";
     private const string MigrationRelativePath = @"DB\migrations\20261104_Update_FollowUpSchedules_Status_CheckConstraint.sql";
+    private const string Phase0MigrationRelativePath = @"DB\redesign_migrations\20261109_Phase0_Database_Standardization_4Roles.sql";
 
     public async Task InitializeAsync()
     {
@@ -79,36 +80,10 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // 4. Apply FollowUp CHECK constraint migration if exists
-        if (File.Exists(migrationPath))
-        {
-            var migrationSql = await File.ReadAllTextAsync(migrationPath);
-            // Remove 'USE DentalClinicManagementDB' if present
-            migrationSql = System.Text.RegularExpressions.Regex.Replace(
-                migrationSql,
-                @"USE\s+\[?DentalClinicManagementDB\]?;?",
-                $"USE [{DatabaseName}];",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-            var batches = System.Text.RegularExpressions.Regex.Split(
-                migrationSql,
-                @"^\s*GO\s*$",
-                System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-            await using var dbConn = new SqlConnection(ConnectionString);
-            await dbConn.OpenAsync();
-
-            foreach (var batch in batches)
-            {
-                var trimmed = batch.Trim();
-                if (string.IsNullOrWhiteSpace(trimmed)) continue;
-
-                await using var batchCmd = dbConn.CreateCommand();
-                batchCmd.CommandText = trimmed;
-                // Any migration failure must fail test setup explicitly
-                await batchCmd.ExecuteNonQueryAsync();
-            }
-        }
+        // 4. Apply FollowUp CHECK constraint and Phase 0 migrations
+        await ApplyMigrationFileAsync(migrationPath, DatabaseName, ConnectionString);
+        var phase0Path = Path.Combine(repoRoot, Phase0MigrationRelativePath);
+        await ApplyMigrationFileAsync(phase0Path, DatabaseName, ConnectionString);
     }
 
     public async Task DisposeAsync()
@@ -170,6 +145,35 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
         return new DentalClinicDbContext(builder.Options);
     }
 
+    private static async Task ApplyMigrationFileAsync(string filePath, string databaseName, string connectionString)
+    {
+        if (!File.Exists(filePath)) return;
+        var migrationSql = await File.ReadAllTextAsync(filePath);
+        migrationSql = System.Text.RegularExpressions.Regex.Replace(
+            migrationSql,
+            @"USE\s+\[?DentalClinicManagementDB\]?;?",
+            $"USE [{databaseName}];",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        var batches = System.Text.RegularExpressions.Regex.Split(
+            migrationSql,
+            @"^\s*GO\s*$",
+            System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        await using var dbConn = new SqlConnection(connectionString);
+        await dbConn.OpenAsync();
+
+        foreach (var batch in batches)
+        {
+            var trimmed = batch.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed)) continue;
+
+            await using var batchCmd = dbConn.CreateCommand();
+            batchCmd.CommandText = trimmed;
+            await batchCmd.ExecuteNonQueryAsync();
+        }
+    }
+
     private static string FindRepoRoot(string startDir)
     {
         var dir = new DirectoryInfo(startDir);
@@ -182,7 +186,7 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
             }
             dir = dir.Parent;
         }
-        return @"D:\SWP\SWP391_Group6";
+        return @"D:\SWP391\DentalCare-Dentist";
     }
 }
 

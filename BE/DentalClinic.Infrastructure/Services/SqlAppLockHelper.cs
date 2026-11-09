@@ -51,6 +51,9 @@ public static class SqlAppLockHelper
     /// <summary>Lock key for a medicine batch to prevent concurrent over-dispensation.</summary>
     public static string MedicineBatchKey(long batchId) => $"Lock_MedicineBatch_{batchId}";
 
+    /// <summary>Lock key for a prescription entity during dispensing operations.</summary>
+    public static string PrescriptionKey(long prescriptionId) => $"Lock_Prescription_{prescriptionId}";
+
     #endregion
 
     /// <summary>

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -22,7 +22,7 @@ public class RealDatabaseEndToEndSmokeTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? "Server=DESKTOP-1TUBGEU\\SQLEXPRESS;Database=DentalClinic_Disposable_PreDeployClone;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? ".\\SQLEXPRESS"};Database=DentalClinic_Disposable_PreDeployClone;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private static async Task<bool> IsDatabaseAvailableAsync(DentalClinicDbContext db)
     {
@@ -42,6 +42,26 @@ public class RealDatabaseEndToEndSmokeTests
             .UseSqlServer(ConnectionString)
             .Options;
         return new DentalClinicDbContext(options);
+    }
+
+    private static async Task EnsureDentistShiftAsync(DentalClinicDbContext db, long dentistUserId, long departmentId, DateTime testDate)
+    {
+        var dateOnly = DateOnly.FromDateTime(testDate);
+        var existing = await db.DentistWorkSchedules
+            .FirstOrDefaultAsync(s => s.DentistUserId == dentistUserId && s.WorkDate == dateOnly && s.DepartmentId == departmentId);
+        if (existing == null)
+        {
+            db.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistUserId = dentistUserId,
+                DepartmentId = departmentId,
+                WorkDate = dateOnly,
+                StartTime = new TimeOnly(7, 0),
+                EndTime = new TimeOnly(20, 0),
+                Status = "Scheduled"
+            });
+            await db.SaveChangesAsync();
+        }
     }
 
     [Fact]
@@ -67,6 +87,7 @@ public class RealDatabaseEndToEndSmokeTests
         long chairId = 1; // First chair in ROOM-101
 
         var testDate = DateTime.Today.AddDays(300 + Random.Shared.Next(1, 50)).AddHours(9); // Next week 09:00
+        await EnsureDentistShiftAsync(db, dentistUserId, departmentId, testDate);
 
         // Step 1: Patient creates appointment
         var createReq = new CreateAppointmentRequest
@@ -202,6 +223,7 @@ public class RealDatabaseEndToEndSmokeTests
         long chairId = 7; // Chair CHAIR-102-A in ROOM-102
 
         var slotTime = DateTime.Today.AddDays(400 + Random.Shared.Next(1, 50)).AddHours(14); // Next week afternoon
+        await EnsureDentistShiftAsync(db, dentistUserId, departmentId, slotTime);
 
         // Step 1: Receptionist creates walk-in appointment
         var walkInReq = new CreateReceptionistAppointmentRequest
@@ -264,7 +286,7 @@ public class RealDatabaseEndToEndSmokeTests
         var mockApptLogger = new Mock<ILogger<AppointmentService>>();
         var apptService = new AppointmentService(db, mockNotification.Object, mockApptLogger.Object);
 
-        var slotStart = DateTime.Today.AddDays(500 + Random.Shared.Next(1, 50)).AddHours(10);
+        var slotStart = DateTime.Today.AddDays(5000 + Random.Shared.Next(1, 50000)).AddHours(10);
         var slotEnd = slotStart.AddMinutes(45);
 
         // PART 1: Shared Room (ROOM-101, IsExclusive=false in Dept 1)
@@ -297,6 +319,9 @@ public class RealDatabaseEndToEndSmokeTests
         db.Appointments.AddRange(appt1, appt2);
         await db.SaveChangesAsync();
 
+        await EnsureDentistShiftAsync(db, 3, 1, slotStart);
+        await EnsureDentistShiftAsync(db, 6, 1, slotStart);
+        await EnsureDentistShiftAsync(db, 46, 1, slotStart);
         // Manager 10 confirms Appt1 on Chair 1
         var conf1 = await apptService.ManagerConfirmAsync(appt1.AppointmentId, 10, new ManagerConfirmRequest
         {
@@ -349,6 +374,8 @@ public class RealDatabaseEndToEndSmokeTests
 
         // PART 3: Exclusive Room (ROOM-202, IsExclusive=true in Dept 3, Chair 13, Manager 4)
         var slotExStart = slotStart.AddHours(3);
+        await EnsureDentistShiftAsync(db, 3, 3, slotExStart);
+        await EnsureDentistShiftAsync(db, 6, 3, slotExStart);
         var slotExEnd = slotExStart.AddMinutes(45);
 
         var apptEx1 = new Appointment
@@ -443,6 +470,7 @@ public class RealDatabaseEndToEndSmokeTests
             setupDb.Appointments.AddRange(a1, a2);
             await setupDb.SaveChangesAsync();
 
+            await EnsureDentistShiftAsync(setupDb, 3, 1, slotStart);
             var task1 = Task.Run(async () =>
             {
                 using var db1 = CreateDbContext();
@@ -503,6 +531,8 @@ public class RealDatabaseEndToEndSmokeTests
                 qAppts.Add(q);
                 setupDb.Appointments.Add(q);
             }
+            await EnsureDentistShiftAsync(setupDb, 3, 1, testQueueDate);
+            await EnsureDentistShiftAsync(setupDb, 6, 1, testQueueDate);
             await setupDb.SaveChangesAsync();
         }
 
@@ -593,6 +623,7 @@ public class RealDatabaseEndToEndSmokeTests
         long chairId = 2;        // CHAIR-101-B
 
         var testDate = DateTime.Today.AddDays(3000 + Random.Shared.Next(1, 50000)).AddHours(Random.Shared.Next(8, 16));
+        await EnsureDentistShiftAsync(db, dentistUserId, departmentId, testDate);
 
         // Step 1: Patient books root canal service in Department 1
         var createReq = new CreateAppointmentRequest

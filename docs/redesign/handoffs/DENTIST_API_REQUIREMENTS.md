@@ -1,11 +1,11 @@
 # DENTALCARE 4-ROLE ARCHITECTURE: DENTIST SUBSYSTEM API CONTRACTS & REQUIREMENTS
 
-**Branch:** `feature/dentist-redesign` | **Commit:** `679a82737fe19655e55fbd3468613bf792008fad`  
+**Branch:** `feature/dentist-redesign` | **Commit:** `31a47f1fe933d486108c2c5e68043160c2b5b7c9` | **Target Architecture:** 4-Role DentalCare Subsystem Model  
 **Backend:** `https://localhost:7354` | **Frontend:** `https://localhost:7124` | **Database:** `DentalCare_Dentist_Dev`  
 
 ## 1. Overview & Architectural Boundaries
 
-Under the DentalCare **4-Role Architecture** (`Patient`, `Receptionist`, `Dentist`, `SystemAdministrator`), the legacy roles `DepartmentManager`, `Pharmacist`, and `Cashier` have been decommissioned.
+Under the DentalCare **4-Role Architecture** (`Patient`, `Receptionist`, `Dentist`, `SystemAdministrator`), legacy roles `DepartmentManager`, `Pharmacist`, and `Cashier` have been decommissioned.
 
 As the owner of the **Dentist Subsystem**, this document establishes the precise API contracts, lifecycle transitions, and cross-subsystem handoffs connecting the Dentist with Receptionist (Booking & Billing), Admin (Inventory), and Patient.
 
@@ -38,10 +38,11 @@ flowchart LR
 | `InService` | Clinical modifications | Assigned Dentist | `InService` | Recording ClinicalEntry, Odontogram, PerformedServices, Prescriptions, Dispensing. |
 | `InService` | `POST /api/appointments/{id}/dentist/complete` | Assigned Dentist | `Completed` | Sets `CompletedAt = UtcNow`. Handoff to Billing. |
 
-### 2.2 Security & Access Control
-- Dentists **cannot** start appointments that are `Confirmed`, `PendingReceptionReview`, or `Cancelled`. Check-in by Receptionist is mandatory.
-- Dentists **cannot** start or modify appointments assigned to a different dentist.
-- Dentists **cannot** modify clinical entries or performed services of completed appointments without controlled audit logs.
+### 2.2 Security & Strict Validation Rules
+- **Mandatory Start Before Complete:** Bác sĩ bắt buộc phải chuyển trạng thái ca khám sang `InService` trước khi hoàn tất. Tuyệt đối **không cho phép bypass** từ `CheckedIn` thẳng sang `Completed`. Nếu gọi `/dentist/complete` khi trạng thái không phải `InService`, hệ thống trả về `400 Bad Request` ("Chỉ có thể hoàn tất ca khám khi đang ở trạng thái 'InService'... Bác sĩ cần bấm 'Bắt đầu khám' trước").
+- **Check-in Enforced:** Bác sĩ không thể bắt đầu khám các ca đang ở trạng thái `Confirmed`, `PendingReceptionReview`, hoặc `Cancelled`. Check-in bởi Lễ tân là tiền đề bắt buộc.
+- **Dentist Ownership:** Bác sĩ không thể bắt đầu hoặc sửa đổi ca khám được phân công cho bác sĩ khác.
+- **Audit Logging:** Trạng thái chuyển đổi được ghi lại chi tiết trong `AppointmentStatusHistories` và phát thông báo SignalR/In-app đến bệnh nhân.
 
 ---
 
@@ -84,14 +85,17 @@ appointment.TreatmentSessions.SelectMany(ts => ts.PerformedServices)
 ```json
 {
   "departmentServiceId": 50,
+  "treatmentPlanItemId": 402,
+  "treatmentPlanId": 12,
   "quantity": 2,
   "unitPrice": 350000.0,
   "note": "Trám 2 răng hàm 46 và 47"
 }
 ```
-- **Rules:**
-  - Appointment must be `InService`.
-  - Automatically links or provisions an appointment-specific `TreatmentSession`.
+- **Rules & Explicit Linking:**
+  - `treatmentPlanItemId` (optional): Khi chỉ định giai đoạn cụ thể, backend xác minh giai đoạn này thuộc đúng bệnh nhân của ca khám (`planItem.TreatmentPlan.PatientUserId == appointment.PatientUserId`). Nếu không trùng khớp, trả về lỗi từ chối ngay.
+  - `treatmentPlanId` (optional): Tự động liên kết với giai đoạn chưa hoàn thành tương ứng trong phác đồ của bệnh nhân.
+  - **Single-Visit Isolation (Direct Care):** Nếu không gắn phác đồ dài hạn, hệ thống tạo bản ghi vùng chứa cách ly với `Status = 'Completed'` và ghi chú prefix `[DirectCare]`, đảm bảo tuân thủ 100% SQL Server CHECK constraint: `[Status] IN ('Cancelled', 'Completed', 'InProgress', 'Planned')`.
   - Snapshots current catalog price if `unitPrice` is omitted or zero.
 
 #### `DELETE /api/treatments/performed-services/{performedServiceId}`
@@ -109,17 +113,15 @@ In DentalCare's 4-role model, **there is no Pharmacist**. The Dentist directly p
 - Stock is deducted **only upon Dispense confirmation**, not upon prescription creation.
 - Partial dispensing is supported (e.g. prescribed 10 tablets, doctor dispenses 6).
 
-### 4.2 Concurrency & Transaction Isolation
-To prevent negative stock and race conditions between multiple chairside dentists dispensing from the same lot:
-1. `SqlAppLockHelper.MedicineBatchKey(batchId)` obtains an application lock:
-   ```sql
-   EXEC sp_getapplock @Resource = 'Lock_MedicineBatch_{id}', @LockMode = 'Exclusive', @LockOwner = 'Transaction'
-   ```
-2. Validates `QuantityAvailable >= request.Quantity` and `ExpiryDate > Today`.
-3. Creates `MedicineDispensation` and `MedicineDispensationItem` with unit price snapshot.
-4. Decrements `MedicineBatch.QuantityAvailable`.
-5. Logs `MedicineStockTransaction` (`TransactionType = 'Dispense'`).
-6. All steps execute within a single atomic database transaction.
+### 4.2 Anti-IDOR Security & Concurrency Protection
+1. **Access Control:**
+   - **Patient:** Can only query dispensations belonging to their own prescriptions/appointments (`pu.UserId == CurrentUser.Id`). Attempting to read another patient's dispensation returns `403 Forbidden`.
+   - **Dentist:** Can only query/dispense for appointments where they are the assigned doctor or treating doctor.
+2. **Distributed App Lock:**
+   - Obtains exclusive application locks on `PrescriptionKey(prescriptionId)` and `MedicineBatchKey(batchId)` via `sp_getapplock` within an atomic transaction.
+3. **Lot Quality Gate:**
+   - Rejects batches where `ExpiryDate <= DateOnly.FromDateTime(DateTime.Today)`.
+   - Rejects quantities where `Quantity > batch.QuantityAvailable` (negative stock prevented).
 
 ### 4.3 Endpoints
 
@@ -140,27 +142,43 @@ To prevent negative stock and race conditions between multiple chairside dentist
   ]
 }
 ```
+
+#### `GET /api/medicines/dispensations/prescription/{prescriptionId}`
+- **Role:** `Patient`, `Dentist`, `Receptionist`
+- **Security:** Verifies patient ownership / doctor assignment.
 - **Response:**
 ```json
 {
-  "dispensationId": 99,
-  "prescriptionId": 801,
-  "dispensedByUserId": 201,
-  "dispensedAt": "2026-11-09T08:45:00Z",
-  "totalAmount": 30000.0,
-  "status": "Dispensed",
-  "items": [
+  "success": true,
+  "data": [
     {
-      "dispensationItemId": 150,
-      "medicineId": 14,
-      "medicineBatchId": 22,
-      "quantityDispensed": 6,
-      "unitPriceSnapshot": 5000.0,
-      "lineTotal": 30000.0
+      "dispensationId": 99,
+      "prescriptionId": 801,
+      "dispensedByDentistName": "BS. Trần Văn Khám",
+      "dispensedAt": "2026-11-09T08:45:00Z",
+      "status": "Dispensed",
+      "totalAmount": 30000.0,
+      "items": [
+        {
+          "medicineName": "Amoxicillin 500mg",
+          "batchNumber": "LOT-2026-001",
+          "quantityDispensed": 6,
+          "unit": "Viên",
+          "unitPriceSnapshot": 5000.0,
+          "lineTotal": 30000.0
+        }
+      ]
     }
   ]
 }
 ```
+
+#### `GET /api/medicines/prescriptions/{prescriptionId}/dispensation-status`
+- **Role:** `Patient`, `Dentist`, `Receptionist`
+- **Contract with Patient Portal:** Returns the canonical 3 dispensation states:
+  - `"NotDispensed"`: Chưa có lượt cấp phát nào.
+  - `"PartiallyDispensed"`: Đã cấp phát một phần số lượng hoặc một phần danh mục thuốc.
+  - `"FullyDispensed"`: Toàn bộ danh mục thuốc trong đơn đã được cấp đủ.
 
 ---
 
@@ -169,7 +187,6 @@ To prevent negative stock and race conditions between multiple chairside dentist
 ### 5.1 Business Rules
 - Dentist agrees with patient on next treatment phase and timing.
 - Dentist triggers "Create Follow-up" from the active Treatment Plan or Appointment console.
-- **Rule:** The dentist does NOT directly book a confirmed slot or lock clinic chairs bypassing concurrency controls.
 - **Contract:** Creates an appointment in `AppointmentStatus.PendingReceptionReview`.
 - **Rule:** TreatmentSession is **not** created when booking a future follow-up. Sessions are strictly created when the appointment occurs.
 - Receptionist receives real-time notification (`type: 'FollowUpRequested'`) to review, allocate optimal room/chair, and confirm.
@@ -192,11 +209,11 @@ To prevent negative stock and race conditions between multiple chairside dentist
 ## 6. Intra-Clinic Referrals (No Department Manager)
 
 ### 6.1 Business Rules
-- If patient requires another specialty (e.g. general dentist refers complex impacted wisdom tooth to Oral & Maxillofacial Surgery):
+- If patient requires another specialty:
   - Dentist specifies target department and clinical rationale.
   - No Department Manager approval required (role removed).
   - Referral status is set to `Pending`.
-  - Notification sent to `Receptionist` pool so receptionists can proactively contact patient and schedule the cross-specialty appointment upon consent.
+  - Notification sent to `Receptionist` pool so receptionists can contact patient and schedule cross-specialty appointments.
 
 ### 6.2 Endpoint
 #### `POST /api/post-care/referrals`
@@ -223,28 +240,38 @@ To prevent negative stock and race conditions between multiple chairside dentist
 ### 7.2 Endpoint
 #### `GET /api/feedbacks/my-summary`
 - **Role:** `Dentist`
-- **Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "dentistUserId": 201,
-    "dentistName": "BS. Trần Văn Khám",
-    "totalFeedbacks": 48,
-    "averageDentistRating": 4.9,
-    "averageClinicRating": 4.8,
-    "recentFeedbacks": [
-      {
-        "feedbackId": 312,
-        "appointmentId": 105,
-        "appointmentCode": "APT-20261109-001",
-        "patientName": "Nguyễn Văn A",
-        "dentistRating": 5,
-        "clinicRating": 5,
-        "comment": "Bác sĩ làm rất êm, giải thích phác đồ tỉ mỉ và tận tâm!",
-        "createdAt": "2026-11-09T09:30:00Z"
-      }
-    ]
-  }
-}
+- **Response:** Returns aggregated average dentist rating, average clinic rating, feedback count, and recent comment history.
+
+---
+
+## 8. Database Migration Recommendation for Integration Team
+
+### 8.1 Schema Gap Analysis
+Currently, appointments created for follow-up treatment phases do not have a direct foreign key column referencing `TreatmentPlanItems` in the `Appointments` table schema.
+
+### 8.2 Proposed Relational Migration
+The Integration Lead should apply the following non-breaking migration across all environments:
+
+```sql
+-- 1. Add TreatmentPlanItemId nullable foreign key column to Appointments
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns 
+    WHERE object_id = OBJECT_ID('Appointments') AND name = 'TreatmentPlanItemId'
+)
+BEGIN
+    ALTER TABLE Appointments ADD TreatmentPlanItemId BIGINT NULL;
+    
+    ALTER TABLE Appointments ADD CONSTRAINT FK_Appointments_TreatmentPlanItems_TreatmentPlanItemId
+        FOREIGN KEY (TreatmentPlanItemId) REFERENCES TreatmentPlanItems(TreatmentPlanItemId)
+        ON DELETE NO ACTION;
+        
+    CREATE NONCLUSTERED INDEX IX_Appointments_TreatmentPlanItemId 
+        ON Appointments(TreatmentPlanItemId) 
+        WHERE TreatmentPlanItemId IS NOT NULL;
+END
+GO
 ```
+
+### 8.3 Data Preservation & Transition Strategy
+- For existing legacy appointments, the backward-compatible regex parser for `appointment.ReasonForVisit` (`[Tái khám phác đồ #{id}]`) will remain in place as a secondary fallback.
+- Newly scheduled follow-ups and chairside performed service records will populate `Appointments.TreatmentPlanItemId` explicitly, achieving full relational integrity.

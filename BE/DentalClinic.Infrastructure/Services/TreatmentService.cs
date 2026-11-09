@@ -52,7 +52,7 @@ public class TreatmentService : ITreatmentService
         }
         else
         {
-            query = query.Where(tp => tp.Status != "DirectCare");
+            query = query.Where(tp => !tp.TreatmentPlanItems.Any(tpi => tpi.Note != null && tpi.Note.StartsWith("[DirectCare]")));
         }
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -144,7 +144,7 @@ public class TreatmentService : ITreatmentService
             PatientUserId = request.PatientUserId,
             DepartmentId = deptId,
             CreatedByDentistUserId = dentistUserId,
-            Status = !string.IsNullOrWhiteSpace(request.Status) ? request.Status : "Active",
+            Status = !string.IsNullOrWhiteSpace(request.Status) ? request.Status : "Planned",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             EstimatedTotal = 0
@@ -405,7 +405,7 @@ public class TreatmentService : ITreatmentService
             }
             else if (item.TreatmentPlan.Status == "Draft")
             {
-                item.TreatmentPlan.Status = "Active";
+                item.TreatmentPlan.Status = "InProgress";
             }
 
             await _dbContext.SaveChangesAsync(ct);
@@ -486,7 +486,7 @@ public class TreatmentService : ITreatmentService
         var summary = new TreatmentProgressSummaryDto
         {
             TotalPlans = dtoList.Count,
-            ActivePlans = dtoList.Count(p => p.Status == "Active"),
+            ActivePlans = dtoList.Count(p => p.Status == "InProgress" || p.Status == "Planned" || p.Status == "Active"),
             CompletedPlans = dtoList.Count(p => p.Status == "Completed"),
             PendingPhases = dtoList.Sum(p => p.Items.Count(i => i.Status != "Completed")),
             Plans = dtoList
@@ -544,7 +544,7 @@ public class TreatmentService : ITreatmentService
                 .ThenInclude(tpi => tpi.TreatmentSessions)
                     .ThenInclude(ts => ts.PerformedServices)
                         .ThenInclude(ps => ps.DepartmentService)
-            .Where(tp => tp.PatientUserId == patientUserId && tp.Status != "DirectCare")
+            .Where(tp => tp.PatientUserId == patientUserId && !tp.TreatmentPlanItems.Any(tpi => tpi.Note != null && tpi.Note.StartsWith("[DirectCare]")))
             .OrderByDescending(tp => tp.CreatedAt)
             .ThenBy(tp => tp.TreatmentPlanId)
             .ToListAsync(ct);
@@ -1059,9 +1059,46 @@ public class TreatmentService : ITreatmentService
             var deptId = appointment.DepartmentId ?? service.DepartmentId;
             var appointmentNote = $"Đợt khám {appointment.AppointmentCode}";
 
-            // 1. Kiểm tra xem ca khám có được sinh ra từ một phác đồ cụ thể nào không
             TreatmentPlanItem? item = null;
-            if (!string.IsNullOrEmpty(appointment.ReasonForVisit) && appointment.ReasonForVisit.Contains("[Tái khám phác đồ #"))
+
+            // 1. Explicit linking: TreatmentPlanItemId provided in request
+            if (request.TreatmentPlanItemId.HasValue && request.TreatmentPlanItemId.Value > 0)
+            {
+                var planItem = await _dbContext.TreatmentPlanItems
+                    .Include(tpi => tpi.TreatmentPlan)
+                    .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanItemId == request.TreatmentPlanItemId.Value, ct);
+
+                if (planItem == null)
+                {
+                    return ApiResponse<PerformedServiceDto>.Fail($"Không tìm thấy giai đoạn điều trị #{request.TreatmentPlanItemId.Value}.");
+                }
+
+                if (planItem.TreatmentPlan.PatientUserId != appointment.PatientUserId)
+                {
+                    return ApiResponse<PerformedServiceDto>.Fail("Giai đoạn phác đồ được chỉ định không thuộc về bệnh nhân của ca khám này.");
+                }
+
+                item = planItem;
+            }
+            // 2. Explicit linking: TreatmentPlanId provided in request
+            else if (request.TreatmentPlanId.HasValue && request.TreatmentPlanId.Value > 0)
+            {
+                var linkedPlan = await _dbContext.TreatmentPlans
+                    .Include(tp => tp.TreatmentPlanItems)
+                    .FirstOrDefaultAsync(tp => tp.TreatmentPlanId == request.TreatmentPlanId.Value && tp.PatientUserId == appointment.PatientUserId, ct);
+
+                if (linkedPlan == null)
+                {
+                    return ApiResponse<PerformedServiceDto>.Fail($"Không tìm thấy phác đồ điều trị #{request.TreatmentPlanId.Value} của bệnh nhân.");
+                }
+
+                item = linkedPlan.TreatmentPlanItems
+                    .FirstOrDefault(tpi => tpi.DepartmentServiceId == request.DepartmentServiceId && tpi.Status != "Completed")
+                    ?? linkedPlan.TreatmentPlanItems.FirstOrDefault(tpi => tpi.Status != "Completed")
+                    ?? linkedPlan.TreatmentPlanItems.FirstOrDefault();
+            }
+            // 3. Fallback backward-compatibility: parse ReasonForVisit if explicitly tagged
+            else if (!string.IsNullOrEmpty(appointment.ReasonForVisit) && appointment.ReasonForVisit.Contains("[Tái khám phác đồ #"))
             {
                 var match = System.Text.RegularExpressions.Regex.Match(appointment.ReasonForVisit, @"\[Tái khám phác đồ #(\d+)\]");
                 if (match.Success && long.TryParse(match.Groups[1].Value, out var parsedPlanId))
@@ -1080,15 +1117,16 @@ public class TreatmentService : ITreatmentService
                 }
             }
 
-            // 2. Nếu ca khám vãng lai / đơn lẻ không gắn phác đồ dài hạn, dùng bản ghi DirectCare để cách ly,
-            // tránh tạo phác đồ giả mạo và không làm bẩn danh sách phác đồ điều trị của bệnh nhân
+            // 4. Nếu ca khám vãng lai / đơn lẻ không gắn phác đồ dài hạn, dùng bản ghi DirectCare để cách ly,
+            // Sử dụng Status = 'Completed' và Note prefix [DirectCare] để tuyệt đối tuân thủ SQL Server CHECK constraint
             if (item == null)
             {
+                var directCareTag = $"[DirectCare] Đợt khám {appointment.AppointmentCode}";
                 var plan = await _dbContext.TreatmentPlans
                     .FirstOrDefaultAsync(tp => tp.PatientUserId == appointment.PatientUserId &&
                                                tp.DepartmentId == deptId &&
-                                               tp.Status == "DirectCare" &&
-                                               tp.TreatmentPlanItems.Any(tpi => tpi.Note == appointmentNote), ct);
+                                               tp.Status == "Completed" &&
+                                               tp.TreatmentPlanItems.Any(tpi => tpi.Note == directCareTag), ct);
 
                 if (plan == null)
                 {
@@ -1097,15 +1135,16 @@ public class TreatmentService : ITreatmentService
                         PatientUserId = appointment.PatientUserId,
                         DepartmentId = deptId,
                         CreatedByDentistUserId = dentistUserId,
-                        Status = "DirectCare",
-                        CreatedAt = DateTime.UtcNow
+                        Status = "Completed",
+                                                CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
                     };
                     _dbContext.TreatmentPlans.Add(plan);
                     await _dbContext.SaveChangesAsync(ct);
                 }
 
                 item = await _dbContext.TreatmentPlanItems
-                    .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId && tpi.Note == appointmentNote, ct);
+                    .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId && tpi.Note == directCareTag, ct);
 
                 if (item == null)
                 {
@@ -1121,7 +1160,7 @@ public class TreatmentService : ITreatmentService
                         SequenceNo = maxSeq + 1,
                         Status = "Completed",
                         AssignedDentistUserId = dentistUserId,
-                        Note = appointmentNote
+                        Note = directCareTag
                     };
                     _dbContext.TreatmentPlanItems.Add(item);
                     await _dbContext.SaveChangesAsync(ct);

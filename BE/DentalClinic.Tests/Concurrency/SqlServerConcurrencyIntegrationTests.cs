@@ -120,6 +120,29 @@ public class SqlServerConcurrencyIntegrationTests
         };
         db.DepartmentServices.Add(svc);
         await db.SaveChangesAsync();
+        // 9. Dentist Shifts
+        var testWorkDate = DateOnly.FromDateTime(DateTime.Today.AddDays(3));
+        db.DentistWorkSchedules.AddRange(
+            new DentistWorkSchedule
+            {
+                DentistUserId = dentistUser1.UserId,
+                DepartmentId = dept.DepartmentId,
+                WorkDate = testWorkDate,
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(18, 0),
+                Status = "Scheduled"
+            },
+            new DentistWorkSchedule
+            {
+                DentistUserId = dentistUser2.UserId,
+                DepartmentId = dept.DepartmentId,
+                WorkDate = testWorkDate,
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(18, 0),
+                Status = "Scheduled"
+            }
+        );
+        await db.SaveChangesAsync();
 
         return (dept.DepartmentId, mgrUser.UserId, dentistUser1.UserId, dentistUser2.UserId, sharedRoom.RoomId, chair1.DentalChairId, chair2.DentalChairId, patientUser1.UserId, patientUser2.UserId, svc.DepartmentServiceId);
     }

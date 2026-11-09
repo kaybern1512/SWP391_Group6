@@ -29,6 +29,12 @@ public class MedicineController : ControllerBase
         return long.TryParse(idStr, out var id) ? id : 0;
     }
 
+    private string? GetCurrentUserRole()
+    {
+        return User.FindFirst(ClaimTypes.Role)?.Value
+            ?? User.FindFirst("role")?.Value;
+    }
+
     [HttpGet]
     [Authorize(Roles = "SystemAdministrator,Dentist")]
     [ProducesResponseType(typeof(ApiResponse<List<MedicineDto>>), StatusCodes.Status200OK)]
@@ -195,17 +201,24 @@ public class MedicineController : ControllerBase
     [Authorize(Roles = "Dentist,SystemAdministrator")]
     [ProducesResponseType(typeof(ApiResponse<MedicineDispensationDto>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DispenseMedicine([FromBody] CreateMedicineDispensationRequest request)
     {
         try
         {
             var dentistUserId = GetCurrentUserId();
-            var result = await _medicineService.DispenseMedicineAsync(request, dentistUserId);
+            var role = GetCurrentUserRole();
+            var result = await _medicineService.DispenseMedicineAsync(request, dentistUserId, role);
             return StatusCode(StatusCodes.Status201Created, ApiResponse<MedicineDispensationDto>.Ok(result, "Cấp thuốc từ kho thành công, đã trừ tồn kho và ghi nhật ký kiểm toán."));
         }
         catch (KeyNotFoundException ex)
         {
             return NotFound(ApiResponse<object>.Fail(ex.Message));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<object>.Fail(ex.Message));
         }
         catch (Exception ex)
         {
@@ -216,19 +229,56 @@ public class MedicineController : ControllerBase
     [HttpGet("dispensations/appointment/{appointmentId:long}")]
     [Authorize]
     [ProducesResponseType(typeof(ApiResponse<List<MedicineDispensationDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetDispensationsByAppointment(long appointmentId)
     {
-        var list = await _medicineService.GetDispensationsByAppointmentIdAsync(appointmentId);
-        return Ok(ApiResponse<List<MedicineDispensationDto>>.Ok(list));
+        try
+        {
+            var userId = GetCurrentUserId();
+            var role = GetCurrentUserRole();
+            var list = await _medicineService.GetDispensationsByAppointmentIdAsync(appointmentId, userId, role);
+            return Ok(ApiResponse<List<MedicineDispensationDto>>.Ok(list));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ApiResponse<object>.Fail(ex.Message));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<object>.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<object>.Fail(ex.Message));
+        }
     }
 
     [HttpGet("dispensations/prescription/{prescriptionId:long}")]
     [Authorize]
     [ProducesResponseType(typeof(ApiResponse<PrescriptionDispensationStatusDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPrescriptionDispensationStatus(long prescriptionId)
     {
-        var status = await _medicineService.GetPrescriptionDispensationStatusAsync(prescriptionId);
-        return Ok(ApiResponse<PrescriptionDispensationStatusDto>.Ok(status));
+        try
+        {
+            var userId = GetCurrentUserId();
+            var role = GetCurrentUserRole();
+            var status = await _medicineService.GetPrescriptionDispensationStatusAsync(prescriptionId, userId, role);
+            return Ok(ApiResponse<PrescriptionDispensationStatusDto>.Ok(status));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ApiResponse<object>.Fail(ex.Message));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<object>.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<object>.Fail(ex.Message));
+        }
     }
-
 }

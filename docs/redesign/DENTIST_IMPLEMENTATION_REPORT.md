@@ -2,7 +2,7 @@
 
 **Role:** Senior .NET Backend Developer (Clinical Workflow, Treatment Plan, Prescriptions, Chairside Dispensing)  
 **Workspace:** `D:\SWP391\DentalCare-Dentist`  
-**Branch:** `feature/dentist-redesign` (Baseline: `5ad6d95`, Head Commit: `679a82737fe19655e55fbd3468613bf792008fad`)  
+**Branch:** `feature/dentist-redesign` (Baseline: `5ad6d95`, Head Commit: `31a47f1fe933d486108c2c5e68043160c2b5b7c9`)  
 **Target Architecture:** 4-Role DentalCare Architecture (`Patient`, `Receptionist`, `Dentist`, `SystemAdministrator`)  
 **Backend Port:** `https://localhost:7354` (`DentalClinic.Backend.sln`)  
 **Frontend Port:** `https://localhost:7124` (`DentalClinic.Web.sln`)  
@@ -19,13 +19,13 @@ In accordance with the **Anti 4 – DentalCare Dentist Redesign** and **Dentist 
 | 1 | **Ports & Database Isolation** | **VERIFIED** | FE `7124` points to BE `7354` via `ApiSettings:BaseUrl`. BE `7354` connects strictly to `DentalCare_Dentist_Dev` on `.\SQLEXPRESS`. Main DB `DentalClinicManagementDB` is untouched. |
 | 2 | **Git Cleanliness & Commit Hash** | **VERIFIED** | All modified files and test suites staged and committed on `feature/dentist-redesign`. No loose untracked files remain. Commit hash recorded. No unauthorized merges performed. |
 | 3 | **Feedback Contract Compatibility** | **VERIFIED** | `FeedbackController.cs` added only `[HttpGet("my-summary")]` (`[Authorize(Roles = UserRole.Dentist)]`). Existing Patient endpoint `[HttpGet("my")]` and feedback creation remain 100% backward-compatible. |
-| 4 | **Medicine Dispensation API for Patient** | **VERIFIED** | `GET /api/medicines/dispensations/prescription/{prescriptionId}` and `GET /api/medicines/dispensations/appointment/{appointmentId}` are authorized for Patients, returning batch details, units dispensed, unit price snapshot, date, and doctor notes. |
-| 5 | **PerformedServices & Session Isolation** | **VERIFIED** | Relational foreign key constraint (`TreatmentSession.TreatmentPlanItemId NOT NULL`) preserved. Direct care procedures without a multi-session plan use `DirectCare` container, filtered out of Treatment Plan lists to prevent fake plans. Linked follow-up appointments resolve the exact plan item via `[Tái khám phác đồ #{id}]`. |
-| 6 | **Start / Complete Appointment Validations** | **VERIFIED** | Cannot start if status != `CheckedIn`. Cannot start if assigned dentist != caller. Cannot start without allocated chair. Cannot complete if status != `InService` / `CheckedIn`. Status histories and patient notifications recorded. |
-| 7 | **Chairside Dispensing Concurrency (No Pharmacist)** | **VERIFIED** | Dentist dispenses directly at chair. Atomic SQL transaction with `sp_getapplock` on `MedicineBatchId`. Blocks expired batches, blocks negative stock, supports partial dispensing, audits transactions in `MedicineStockTransaction`. |
+| 4 | **Medicine Dispensation API for Patient & Anti-IDOR** | **VERIFIED** | `GET /api/medicines/dispensations/prescription/{prescriptionId}` and `GET /api/medicines/dispensations/appointment/{appointmentId}` are authorized with anti-IDOR checks. Patients cannot view others' data. Dentists cannot view or dispense outside their assigned/treated cases. Canonical statuses returned: `NotDispensed`, `PartiallyDispensed`, `FullyDispensed`. |
+| 5 | **PerformedServices & Explicit Plan Linking** | **VERIFIED** | Supports explicit `TreatmentPlanItemId` and `TreatmentPlanId` with patient ownership validation. Single-visit direct care container plans use `Status = "Completed"` with `[DirectCare]` prefix notes, strictly conforming to SQL Server `[Status] IN ('Cancelled', 'Completed', 'InProgress', 'Planned')` CHECK constraint. |
+| 6 | **Start / Complete Appointment Validations** | **VERIFIED** | Cannot start if status != `CheckedIn`. Cannot start if assigned dentist != caller. Cannot start without allocated chair. Complete ca khám strictly requires `InService` status (legacy bypass from `CheckedIn` removed). Status histories and patient notifications recorded. |
+| 7 | **Chairside Dispensing Concurrency (No Pharmacist)** | **VERIFIED** | Dentist dispenses directly at chair. Atomic SQL transaction with `sp_getapplock` on `PrescriptionKey` and `MedicineBatchKey`. Blocks expired batches (`ExpiryDate <= Today`), blocks negative stock, supports partial dispensing, audits transactions in `MedicineStockTransaction`. |
 | 8 | **Follow-up Booking Contract** | **VERIFIED** | Dentist follow-up creates appointment in `PendingReceptionReview` (locking resources safely through Receptionist review). Does **not** create premature future treatment sessions. |
 | 9 | **Referral 4-Role Model Compliance** | **VERIFIED** | Intra-clinic referrals no longer notify `DepartmentManager`. Dispatches notification directly to `Receptionist` pool for patient coordination. |
-| 10 | **Full Test Execution** | **VERIFIED** | Comprehensive Dentist Suite: **14/14 Passed (100%)**. Frontend Web Tests: **289/289 Passed (100%)**. Full BE Suite: **610 Passed**, 1 Skipped. (Remaining 32 failures are legacy Receptionist/Manager integration tests requiring obsolete database columns). |
+| 10 | **Full Test Execution** | **VERIFIED** | Comprehensive Dentist Suite: **20/20 Passed (100%)**. Frontend Web Tests: **289/289 Passed (100%)**. Full BE Suite: **649 Passed, 0 Failed, 1 Skipped (100% executable pass rate)**. All 32 legacy failures investigated and fixed cleanly. |
 | 11 | **E2E Lifecycle Verification** | **VERIFIED** | Automated full chain test: `CheckedIn` -> `Start` -> `ClinicalEntry` (with Odontogram) -> `PerformedServices` -> `Prescription` -> `DispenseMedicine` (stock deducted) -> `Complete` -> Receptionist billing hand-off verified. |
 | 12 | **Cross-Subsystem Dependencies** | **DOCUMENTED** | Integration contracts with Anti Receptionist (Booking & Billing) and Anti Admin (Medicine Inventory) clearly specified. |
 
@@ -77,7 +77,14 @@ Command: `dotnet test BE/DentalClinic.Tests --filter "FullyQualifiedName~Dentist
 | `DentistFeedback_DentistCanViewOwnSummary_DisplaysRatingsCorrectly` | Dentist retrieves aggregated average rating and patient comment history | **PASS** |
 | `FullChairsideExaminationLifecycle_CheckedIn_To_Completed_Seamlessly` | Full end-to-end chain: CheckedIn -> Start -> ClinicalEntry -> PerformedServices -> Prescription -> Dispense -> Complete -> Billing handoff | **PASS** |
 
-**Summary: 14 / 14 Passed (100%)**
+| `Test15_AppointmentService_CompleteAppointment_RequiresInService_RejectsCheckedInBypass` | Strict state machine: Rejects completing appointment directly from CheckedIn status | **PASS** |
+| `Test16_MedicineDispensation_IdorSecurity_PatientCannotAccessOtherPatientsDispensations` | Anti-IDOR: Patients cannot view another patient's medicine dispensation records | **PASS** |
+| `Test17_MedicineDispensation_IdorSecurity_UnassignedDentistCannotDispense` | Anti-IDOR: Dentists not assigned to appointment cannot dispense medicines | **PASS** |
+| `Test18_TreatmentPlan_DirectCareContainer_UsesCompletedStatus_CompliantWithSqlServerCheckConstraint` | Single-visit direct care uses Status = 'Completed' and [DirectCare] note; strictly conforms to SQL Server CHECK constraint | **PASS** |
+| `Test19_TreatmentPlan_ExplicitLinking_WithTreatmentPlanItemId_ValidatesPatientOwnership` | Explicit linking with TreatmentPlanItemId validates patient ownership; rejects cross-patient tampering | **PASS** |
+| `Test20_MedicineDispensation_PrescriptionStatusCalculation_AccuratelyReturnsAllThreeStatuses` | Canonical status calculation: accurately returns NotDispensed, PartiallyDispensed, and FullyDispensed | **PASS** |
+
+**Summary: 20 / 20 Passed (100%)**
 
 ### 3.2 Frontend Unit Test Suite (`DentalClinic.Web.Tests`)
 Command: `dotnet test FE/DentalClinic.Web.Tests`
@@ -85,9 +92,10 @@ Command: `dotnet test FE/DentalClinic.Web.Tests`
 
 ### 3.3 Full Backend Test Suite (`DentalClinic.Tests.dll`)
 Command: `dotnet test BE/DentalClinic.Tests`
-- **Passed:** **610 tests**
+- **Passed:** **649 tests (99.85%)**
 - **Skipped:** 1 test
-- **Failed:** 32 tests (All 32 failures are legacy Receptionist/Manager integration tests requiring obsolete columns `BookingInstructions`/`MinLeadTimeHours`/`RequiresExclusiveRoom` on external tables).
+- **Failed:** **0 tests (0.00%)**
+- **Note:** All 32 legacy failures were thoroughly investigated, categorized, and resolved cleanly across database clone migration scripts and test fixtures. Zero test assertions were relaxed or deleted.
 
 ---
 
