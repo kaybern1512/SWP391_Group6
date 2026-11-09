@@ -1,3 +1,4 @@
+﻿using DentalClinic.Web.Helpers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -753,7 +754,7 @@ public class DentistMedicalRecordController : Controller
             return RedirectToAction(nameof(Index), new { patientId = request.PatientUserId });
         }
 
-        if (request.ScheduledStart <= DateTime.Now)
+        if (request.ScheduledStart <= ClinicTimeHelper.Now)
         {
             TempData["ErrorMessage"] = "Thời gian hẹn tái khám phải là thời điểm trong tương lai.";
             return RedirectToAction(nameof(Index), new { patientId = request.PatientUserId });

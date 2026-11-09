@@ -1,4 +1,5 @@
-﻿using System;
+﻿using DentalClinic.Web.Helpers;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -191,7 +192,7 @@ public class ReceptionistAppointmentController : Controller
         }
 
         var appt = apptResult.Data;
-        var start = appt.ScheduledStart ?? DateTime.Today.AddHours(8);
+        var start = appt.ScheduledStart ?? ClinicTimeHelper.Today.AddHours(8);
         var end = appt.ScheduledEnd ?? start.AddMinutes(appt.DurationMinutes ?? 30);
 
         var dentistsResult = await _appointmentApiService.GetAvailableDentistsForAppointmentAsync(id);

@@ -1,3 +1,4 @@
+﻿using DentalClinic.Web.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -39,7 +40,7 @@ public class ReceptionistFollowUpController : Controller
         var allResult = await _postCareApi.GetReceptionistRemindersAsync(null, null);
         var allReminders = allResult.Data ?? reminders;
 
-        var today = DateTime.Today;
+        var today = ClinicTimeHelper.Today;
         var tomorrow = today.AddDays(1);
 
         ViewBag.ActiveTab = tab ?? "due";
@@ -146,7 +147,7 @@ public class ReceptionistFollowUpController : Controller
             return RedirectToAction(nameof(Index), new { tab, dateFilter, callStatus });
         }
 
-        if (newDate <= DateTime.Today)
+        if (newDate <= ClinicTimeHelper.Today)
         {
             TempData["ErrorMessage"] = "Ngày dời hẹn phải từ ngày mai trở đi.";
             return RedirectToAction(nameof(Index), new { tab, dateFilter, callStatus });

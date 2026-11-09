@@ -1,3 +1,4 @@
+﻿using DentalClinic.Web.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -95,7 +96,7 @@ public class DentistReferralController : Controller
             return RedirectToAction(nameof(Index), new { tab = "followups" });
         }
 
-        if (request.RecommendedDate <= DateTime.Today)
+        if (request.RecommendedDate <= ClinicTimeHelper.Today)
         {
             TempData["ErrorMessage"] = "Ngày hẹn tái khám phải từ ngày mai trở đi.";
             return RedirectToAction(nameof(Index), new { tab = "followups" });

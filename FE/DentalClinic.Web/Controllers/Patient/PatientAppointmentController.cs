@@ -1,3 +1,4 @@
+﻿using DentalClinic.Web.Helpers;
 using System;
 using System.Linq;
 using System.Security.Claims;
@@ -377,7 +378,7 @@ public class PatientAppointmentController : Controller
             CurrentScheduledStart = appt.ScheduledStart,
             CurrentDentistName = appt.AssignedDentistName ?? appt.RequestedDentistName,
             NewRequestedDentistUserId = appt.RequestedDentistUserId,
-            NewAppointmentDate = DateTime.Today.AddDays(1).ToString("yyyy-MM-dd"),
+            NewAppointmentDate = ClinicTimeHelper.Today.AddDays(1).ToString("yyyy-MM-dd"),
             Dentists = dentistsResult.Data ?? new(),
             Eligibility = eligibilityResult?.Data
         };

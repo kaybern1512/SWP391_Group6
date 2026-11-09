@@ -1,3 +1,4 @@
+﻿using DentalClinic.Web.Helpers;
 using System.Threading.Tasks;
 using DentalClinic.Web.Services;
 using DentalClinic.Web.ViewModels.Appointments;
@@ -21,7 +22,7 @@ public class DentistAppointmentController : Controller
     [HttpGet("Today")]
     public async Task<IActionResult> Today([FromQuery] string? date = null)
     {
-        var targetDate = System.DateOnly.FromDateTime(System.DateTime.Today);
+        var targetDate = ClinicTimeHelper.TodayDateOnly;
         if (!string.IsNullOrWhiteSpace(date) && System.DateOnly.TryParse(date, out var parsed))
         {
             targetDate = parsed;

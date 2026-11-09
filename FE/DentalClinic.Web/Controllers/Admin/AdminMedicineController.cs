@@ -1,3 +1,4 @@
+﻿using DentalClinic.Web.Helpers;
 using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -54,7 +55,7 @@ public class AdminMedicineController : Controller
             NewBatch = new ImportMedicineBatchRequest
             {
                 MedicineId = id,
-                ExpiryDate = DateOnly.FromDateTime(DateTime.Today.AddMonths(12))
+                ExpiryDate = ClinicTimeHelper.TodayDateOnly.AddMonths(12)
             },
             Adjustment = new StockAdjustmentRequest()
         };

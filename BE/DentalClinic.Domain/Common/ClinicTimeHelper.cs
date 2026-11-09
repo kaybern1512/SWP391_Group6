@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace DentalClinic.Domain.Common;
 
@@ -71,5 +71,26 @@ public static class ClinicTimeHelper
 
         // DateTimeKind.Unspecified: Represents user-entered clinic local wall-clock time
         return dt;
+    }
+
+    /// <summary>
+    /// Converts a clinic local DateTime (or Unspecified clinic wall-clock time) to UTC.
+    /// Used when calculating absolute instants (e.g. background job schedules or audit timestamps).
+    /// </summary>
+    public static DateTime ToUtc(DateTime dt)
+    {
+        if (dt.Kind == DateTimeKind.Utc)
+        {
+            return dt;
+        }
+
+        if (dt.Kind == DateTimeKind.Local)
+        {
+            var clinicDt = TimeZoneInfo.ConvertTime(dt, TimeZoneInfo.Local, ClinicTimeZone);
+            return TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(clinicDt, DateTimeKind.Unspecified), ClinicTimeZone);
+        }
+
+        // DateTimeKind.Unspecified: Represents clinic local wall-clock time
+        return TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(dt, DateTimeKind.Unspecified), ClinicTimeZone);
     }
 }

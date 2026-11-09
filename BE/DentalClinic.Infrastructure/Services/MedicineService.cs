@@ -1,3 +1,4 @@
+﻿using DentalClinic.Domain.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -40,7 +41,7 @@ public class MedicineService : IMedicineService
             query = query.Where(m => m.Status == filter.Status);
         }
 
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        var today = ClinicTimeHelper.TodayDateOnly;
         var nearExpiryThreshold = today.AddDays(60);
 
         var list = await query
@@ -82,7 +83,7 @@ public class MedicineService : IMedicineService
 
     public async Task<MedicineDetailDto?> GetMedicineByIdAsync(long id)
     {
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        var today = ClinicTimeHelper.TodayDateOnly;
         var nearExpiryThreshold = today.AddDays(60);
 
         var medicine = await _context.Medicines
@@ -251,7 +252,7 @@ public class MedicineService : IMedicineService
 
         await _context.SaveChangesAsync();
 
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        var today = ClinicTimeHelper.TodayDateOnly;
         return new MedicineDto
         {
             MedicineId = medicine.MedicineId,
@@ -324,7 +325,7 @@ public class MedicineService : IMedicineService
         if (request.CostPrice < 0)
             throw new ArgumentException("Giá vốn nhập không được âm.", nameof(request.CostPrice));
 
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        var today = ClinicTimeHelper.TodayDateOnly;
         if (request.ExpiryDate <= today)
             throw new ArgumentException("Hạn sử dụng của lô thuốc phải ở tương lai.", nameof(request.ExpiryDate));
 
@@ -516,7 +517,7 @@ public class MedicineService : IMedicineService
 
     public async Task<MedicineInventorySummaryDto> GetInventorySummaryAsync()
     {
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        var today = ClinicTimeHelper.TodayDateOnly;
         var nearExpiryThreshold = today.AddDays(60);
 
         var medicines = await _context.Medicines
@@ -565,7 +566,7 @@ public class MedicineService : IMedicineService
 
     public async Task<List<MedicineDto>> GetAvailableMedicinesForDentistAsync(string? searchTerm)
     {
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        var today = ClinicTimeHelper.TodayDateOnly;
 
         var query = _context.Medicines
             .Include(m => m.MedicineBatches)
@@ -671,7 +672,7 @@ public class MedicineService : IMedicineService
             _context.MedicineDispensations.Add(dispensation);
             await _context.SaveChangesAsync(ct);
 
-            var today = DateOnly.FromDateTime(DateTime.Today);
+            var today = ClinicTimeHelper.TodayDateOnly;
             decimal totalAmount = 0;
             var dispensedItemDtos = new List<MedicineDispensationItemDto>();
             var currentRequestPrescriptionAllocations = new Dictionary<long, int>();

@@ -1,3 +1,4 @@
+﻿using DentalClinic.Web.Helpers;
 using System;
 using System.Threading.Tasks;
 using DentalClinic.Web.Models.ApiDtos;
@@ -42,7 +43,7 @@ public class DepartmentAppointmentController : Controller
         }
 
         var appt = apptResult.Data;
-        var start = appt.ScheduledStart ?? DateTime.Today.AddHours(8);
+        var start = appt.ScheduledStart ?? ClinicTimeHelper.Today.AddHours(8);
         var end = appt.ScheduledEnd ?? start.AddMinutes(appt.DurationMinutes ?? 30);
 
         var dentistsResult = await _appointmentApiService.GetAvailableDentistsForAppointmentAsync(id);

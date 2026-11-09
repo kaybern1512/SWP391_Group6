@@ -1,3 +1,4 @@
+﻿using DentalClinic.Domain.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -797,8 +798,8 @@ public class DentistScheduleService : IDentistScheduleService
 
     public async Task<ApiResponse<MonthlyDentistScheduleDto>> GetMonthlyScheduleAsync(MonthlyDentistScheduleFilterRequest request, CancellationToken ct = default)
     {
-        if (request.Year < 2000 || request.Year > 2100) request.Year = DateTime.Today.Year;
-        if (request.Month < 1 || request.Month > 12) request.Month = DateTime.Today.Month;
+        if (request.Year < 2000 || request.Year > 2100) request.Year = ClinicTimeHelper.Today.Year;
+        if (request.Month < 1 || request.Month > 12) request.Month = ClinicTimeHelper.Today.Month;
 
         var firstDayOfMonth = new DateOnly(request.Year, request.Month, 1);
         var daysInMonth = DateTime.DaysInMonth(request.Year, request.Month);

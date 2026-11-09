@@ -1,3 +1,4 @@
+﻿using DentalClinic.Web.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -34,8 +35,8 @@ public class AdminDentistScheduleController : Controller
         string? fromDate = null,
         string? toDate = null)
     {
-        int targetYear = year ?? DateTime.Today.Year;
-        int targetMonth = month ?? DateTime.Today.Month;
+        int targetYear = year ?? ClinicTimeHelper.Today.Year;
+        int targetMonth = month ?? ClinicTimeHelper.Today.Month;
         if (targetMonth < 1) { targetMonth = 12; targetYear--; }
         if (targetMonth > 12) { targetMonth = 1; targetYear++; }
 
