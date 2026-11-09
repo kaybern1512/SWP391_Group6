@@ -82,6 +82,7 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
         }
 
         // 4. Apply FollowUp CHECK constraint, Phase 0 and Relational migrations
+        var migrationPath = Path.Combine(repoRoot, MigrationRelativePath);
         await ApplyMigrationFileAsync(migrationPath, DatabaseName, ConnectionString);
         var phase0Path = Path.Combine(repoRoot, Phase0MigrationRelativePath);
         await ApplyMigrationFileAsync(phase0Path, DatabaseName, ConnectionString);
