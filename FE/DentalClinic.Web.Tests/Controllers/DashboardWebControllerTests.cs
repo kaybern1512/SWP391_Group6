@@ -114,7 +114,7 @@ public class DashboardWebControllerTests
     }
 
     [Fact]
-    public void ReceptionistDashboard_ShouldReturnConsolidatedPatientRegistry_AndValidRoutes()
+    public async Task ReceptionistDashboard_ShouldReturnConsolidatedPatientRegistry_AndValidRoutes()
     {
         // Arrange
         var controller = new ReceptionistDashboardController
@@ -123,7 +123,7 @@ public class DashboardWebControllerTests
         };
 
         // Act
-        var result = controller.Dashboard();
+        var result = await controller.Dashboard();
 
         // Assert
         var viewResult = result.Should().BeOfType<ViewResult>().Subject;

@@ -17,6 +17,7 @@ public class ReceptionistTodayCheckInViewModel
 {
     public List<AppointmentDto> ConfirmedAppointments { get; set; } = new();
     public string? SearchQuery { get; set; }
+    public string? StatusFilter { get; set; }
 }
 
 public class DepartmentRequestsViewModel
