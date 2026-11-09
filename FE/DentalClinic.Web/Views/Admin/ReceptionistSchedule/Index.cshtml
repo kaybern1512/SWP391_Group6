@@ -1,0 +1,905 @@
+@using DentalClinic.Web.Models.ApiDtos
+@using DentalClinic.Web.Helpers
+@{
+    ViewData["Title"] = "Quản Lý Lịch Trực Lễ Tân & Nghỉ Phép";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    string activeTab = ViewBag.ActiveTab ?? "monthly";
+    int year = ViewBag.Year;
+    int month = ViewBag.Month;
+    long? filterReceptionistId = ViewBag.ReceptionistUserId;
+
+    var monthlyData = ViewBag.MonthlyData as MonthlyReceptionistScheduleDto;
+    var leaves = ViewBag.Leaves as List<ReceptionistLeaveRequestDto> ?? new();
+    var swaps = ViewBag.Swaps as List<ReceptionistShiftSwapRequestDto> ?? new();
+    var incidents = ViewBag.Incidents as List<ReceptionistCoverageIncidentDto> ?? new();
+    var templates = ViewBag.Templates as List<ReceptionistShiftTemplateDto> ?? new();
+    var receptionists = ViewBag.Receptionists as List<AdminUserDto> ?? new();
+
+    int prevMonth = month - 1;
+    int prevYear = year;
+    if (prevMonth < 1) { prevMonth = 12; prevYear--; }
+
+    int nextMonth = month + 1;
+    int nextYear = year;
+    if (nextMonth > 12) { nextMonth = 1; nextYear++; }
+}
+
+<div class="container-fluid py-3">
+    <!-- Header & Navigation -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h2 class="h4 fw-bold text-dark mb-1">
+                <i class="bi bi-people-fill text-primary me-2"></i>Quản Lý Lịch Trực Lễ Tân & Nghỉ Phép
+            </h2>
+            <p class="text-muted small mb-0">Phân công ca trực, phê duyệt nghỉ phép (Rule 1 & 2), điều phối đổi ca và xử lý thiếu nhân lực</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = activeTab, year = prevYear, month = prevMonth, receptionistUserId = filterReceptionistId })" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-chevron-left"></i> Tháng @prevMonth/@prevYear
+            </a>
+            <span class="fw-bold px-2 text-primary">Tháng @month/@year</span>
+            <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = activeTab, year = nextYear, month = nextMonth, receptionistUserId = filterReceptionistId })" class="btn btn-outline-secondary btn-sm">
+                Tháng @nextMonth/@nextYear <i class="bi bi-chevron-right"></i>
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Stat Highlights -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+                <div class="d-flex align-items-center">
+                    <div class="bg-primary-subtle text-primary p-3 rounded-circle me-3">
+                        <i class="bi bi-calendar-week fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Tổng ca trực tháng</div>
+                        <div class="fs-4 fw-bold text-dark">@(monthlyData?.Days.Sum(d => d.Shifts.Count) ?? 0)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+                <div class="d-flex align-items-center">
+                    <div class="bg-warning-subtle text-warning p-3 rounded-circle me-3">
+                        <i class="bi bi-hourglass-split fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Đơn nghỉ chờ duyệt</div>
+                        <div class="fs-4 fw-bold text-dark">@leaves.Count(l => l.Status == "Pending")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+                <div class="d-flex align-items-center">
+                    <div class="bg-info-subtle text-info p-3 rounded-circle me-3">
+                        <i class="bi bi-arrow-left-right fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Đổi ca chờ Admin duyệt</div>
+                        <div class="fs-4 fw-bold text-dark">@swaps.Count(s => s.Status == "PendingAdminApproval")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+                <div class="d-flex align-items-center">
+                    <div class="bg-danger-subtle text-danger p-3 rounded-circle me-3">
+                        <i class="bi bi-shield-exclamation fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Sự cố thiếu nhân sự</div>
+                        <div class="fs-4 fw-bold text-danger">@incidents.Count(i => i.Status == "Open")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Navigation Tabs -->
+    <ul class="nav nav-pills mb-4 gap-2 bg-white p-2 rounded-3 shadow-sm border" id="receptionistWorkforceTabs">
+        <li class="nav-item">
+            <a class="nav-link @(activeTab == "monthly" ? "active" : "")" href="@Url.Action("Index", new { tab = "monthly", year, month, receptionistUserId = filterReceptionistId })" id="tabMonthlyBtn">
+                <i class="bi bi-calendar-month me-1"></i> 1. Lịch Trực Theo Tháng
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link @(activeTab == "bulk" ? "active" : "")" href="@Url.Action("Index", new { tab = "bulk", year, month })" id="tabBulkBtn">
+                <i class="bi bi-calendar-plus me-1"></i> 2. Phân Ca & Sao Chép Tháng
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link @(activeTab == "leaves" ? "active" : "")" href="@Url.Action("Index", new { tab = "leaves", year, month })" id="tabLeavesBtn">
+                <i class="bi bi-calendar2-x me-1"></i> 3. Đơn Xin Nghỉ Phép (@leaves.Count(l => l.Status == "Pending"))
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link @(activeTab == "swaps" ? "active" : "")" href="@Url.Action("Index", new { tab = "swaps", year, month })" id="tabSwapsBtn">
+                <i class="bi bi-arrow-left-right me-1"></i> 4. Yêu Cầu Đổi Ca (@swaps.Count(s => s.Status == "PendingAdminApproval"))
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link @(activeTab == "incidents" ? "active" : "")" href="@Url.Action("Index", new { tab = "incidents", year, month })" id="tabIncidentsBtn">
+                <i class="bi bi-exclamation-octagon me-1"></i> 5. Giám Sát Nhân Lực & Sự Cố (@incidents.Count(i => i.Status == "Open"))
+            </a>
+        </li>
+    </ul>
+
+    <!-- Tab 1: Monthly Calendar Grid -->
+    @if (activeTab == "monthly")
+    {
+        <div class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-3">
+                    <h5 class="mb-0 fw-bold">Lưới Lịch Làm Việc Tháng @month/@year</h5>
+                    <form method="get" class="d-inline-flex gap-2 align-items-center">
+                        <input type="hidden" name="tab" value="monthly" />
+                        <input type="hidden" name="year" value="@year" />
+                        <input type="hidden" name="month" value="@month" />
+                        <select name="receptionistUserId" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">-- Tất cả lễ tân --</option>
+                            @foreach (var r in receptionists)
+                            {
+                                <option value="@r.UserId" selected="@(filterReceptionistId == r.UserId)">@r.FullName (@r.Email)</option>
+                            }
+                        </select>
+                    </form>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createShiftModal" id="openCreateShiftBtn">
+                        <i class="bi bi-plus-lg me-1"></i> Thêm Ca Trực
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-bordered mb-0 align-middle text-center" style="min-width: 1000px;">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 14.28%;">Thứ 2</th>
+                                <th style="width: 14.28%;">Thứ 3</th>
+                                <th style="width: 14.28%;">Thứ 4</th>
+                                <th style="width: 14.28%;">Thứ 5</th>
+                                <th style="width: 14.28%;">Thứ 6</th>
+                                <th style="width: 14.28%;">Thứ 7</th>
+                                <th style="width: 14.28%;">Chủ Nhật</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (monthlyData != null && monthlyData.Days.Any())
+                            {
+                                int firstDayDow = (int)monthlyData.Days.First().Date.DayOfWeek;
+                                int offset = firstDayDow == 0 ? 6 : firstDayDow - 1; // 0=Mon, 6=Sun
+                                int totalCells = offset + monthlyData.Days.Count;
+                                int rows = (int)Math.Ceiling((double)totalCells / 7);
+
+                                int dayIndex = 0;
+                                for (int r = 0; r < rows; r++)
+                                {
+                                    <tr>
+                                        @for (int c = 0; c < 7; c++)
+                                        {
+                                            int cellIndex = r * 7 + c;
+                                            if (cellIndex < offset || dayIndex >= monthlyData.Days.Count)
+                                            {
+                                                <td class="bg-light text-muted p-2" style="height: 120px;"></td>
+                                            }
+                                            else
+                                            {
+                                                var day = monthlyData.Days[dayIndex];
+                                                dayIndex++;
+                                                bool isToday = day.Date == ClinicTimeHelper.TodayDateOnly;
+                                                <td class="p-2 align-top text-start @(isToday ? "border-primary bg-primary-subtle bg-opacity-10" : "") @(day.HasCoverageShortage ? "bg-danger-subtle bg-opacity-25" : "")" style="height: 130px; font-size: 0.82rem;">
+                                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                                        <span class="badge @(isToday ? "bg-primary" : "bg-secondary") rounded-pill">@day.Date.Day</span>
+                                                        @if (day.HasCoverageShortage)
+                                                        {
+                                                            <span class="badge bg-danger" title="Ca trực dưới 2 người!">Thiếu người</span>
+                                                        }
+                                                        else if (day.DistinctApprovedLeaveCount > 0)
+                                                        {
+                                                            <span class="badge bg-warning text-dark" title="@day.DistinctApprovedLeaveCount lễ tân nghỉ">@day.DistinctApprovedLeaveCount nghỉ</span>
+                                                        }
+                                                    </div>
+
+                                                    <!-- Shifts -->
+                                                    <div class="d-flex flex-column gap-1">
+                                                        @foreach (var s in day.Shifts.Take(3))
+                                                        {
+                                                            <div class="p-1 rounded border bg-white shadow-xs d-flex justify-content-between align-items-center">
+                                                                <span class="text-truncate fw-semibold" style="max-width: 90px;" title="@s.ReceptionistName">
+                                                                    <i class="bi bi-person text-primary"></i> @s.ReceptionistName
+                                                                </span>
+                                                                <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">@s.StartTime.ToString("HH:mm")-@s.EndTime.ToString("HH:mm")</span>
+                                                            </div>
+                                                        }
+                                                        @if (day.Shifts.Count > 3)
+                                                        {
+                                                            <div class="text-muted small text-center">+@(day.Shifts.Count - 3) ca khác</div>
+                                                        }
+                                                    </div>
+                                                </td>
+                                            }
+                                        }
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Tab 2: Bulk Scheduling & Copy Month -->
+    @if (activeTab == "bulk")
+    {
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-header bg-white py-3">
+                        <h5 class="mb-0 fw-bold text-primary"><i class="bi bi-calendar-plus me-2"></i>Phân Ca Hàng Loạt Theo Tháng</h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <form method="post" action="@Url.Action("BulkApply")" id="bulkScheduleForm">
+                            <input type="hidden" name="Year" value="@year" />
+                            <input type="hidden" name="Month" value="@month" />
+
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Ca Mẫu (Shift Template)</label>
+                                <select name="ShiftTemplateId" class="form-select" required id="bulkTemplateSelect">
+                                    @foreach (var t in templates)
+                                    {
+                                        <option value="@t.ShiftTemplateId">@t.TemplateName (@t.StartTime.ToString("HH:mm") - @t.EndTime.ToString("HH:mm"))</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Chọn Lễ Tân Trực Ca</label>
+                                <div class="row g-2 border rounded p-2 bg-light">
+                                    @foreach (var r in receptionists)
+                                    {
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input class="form-check-input bulk-staff-check" type="checkbox" name="ReceptionistUserIds" value="@r.UserId" id="staff_@r.UserId">
+                                                <label class="form-check-label small fw-medium" for="staff_@r.UserId">
+                                                    @r.FullName (@r.Email)
+                                                </label>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Các Ngày Trong Tuần Áp Dụng</label>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    @{
+                                        string[] dows = { "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật" };
+                                        for (int i = 1; i <= 7; i++)
+                                        {
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input bulk-dow-check" type="checkbox" name="DaysOfWeek" value="@i" id="dow_@i" checked>
+                                                <label class="form-check-label" for="dow_@i">@dows[i - 1]</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="form-check mb-4">
+                                <input class="form-check-input" type="checkbox" name="OverwriteExisting" value="true" id="overwriteCheck">
+                                <label class="form-check-label text-muted" for="overwriteCheck">
+                                    Ghi đè ca trực đã có sẵn trên những ngày này
+                                </label>
+                            </div>
+
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-outline-primary" id="btnPreviewBulk">
+                                    <i class="bi bi-eye me-1"></i> Xem Trước (Preview)
+                                </button>
+                                <button type="submit" class="btn btn-primary" id="btnApplyBulk">
+                                    <i class="bi bi-check-lg me-1"></i> Áp Dụng Lịch Tháng (Apply)
+                                </button>
+                            </div>
+                        </form>
+
+                        <div id="bulkPreviewResult" class="mt-4 d-none">
+                            <div class="alert alert-info">
+                                <h6 class="fw-bold mb-2"><i class="bi bi-info-circle me-1"></i> Kết Quả Xem Trước:</h6>
+                                <p class="mb-1" id="previewProposedCount"></p>
+                                <p class="mb-1" id="previewConflictCount"></p>
+                                <div id="previewWarnings" class="small text-danger"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Copy Month Column -->
+            <div class="col-lg-5">
+                <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-header bg-white py-3">
+                        <h5 class="mb-0 fw-bold text-success"><i class="bi bi-files me-2"></i>Sao Chép Lịch Từ Tháng Khác</h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <form method="post" action="@Url.Action("CopyMonth")">
+                            <input type="hidden" name="TargetYear" value="@year" />
+                            <input type="hidden" name="TargetMonth" value="@month" />
+
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Tháng Nguồn (Cần sao chép)</label>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <select name="SourceMonth" class="form-select">
+                                            @for (int m = 1; m <= 12; m++)
+                                            {
+                                                <option value="@m" selected="@(m == prevMonth)">Tháng @m</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="number" name="SourceYear" value="@prevYear" class="form-control" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label fw-semibold">Tháng Đích</label>
+                                <input type="text" class="form-control bg-light" value="Tháng @month / @year" readonly />
+                            </div>
+
+                            <div class="form-check mb-4">
+                                <input class="form-check-input" type="checkbox" name="OverwriteExisting" value="true" id="copyOverwrite">
+                                <label class="form-check-label text-muted" for="copyOverwrite">
+                                    Ghi đè ca trực đã có trong tháng đích
+                                </label>
+                            </div>
+
+                            <button type="submit" class="btn btn-success w-100" id="btnCopyMonth">
+                                <i class="bi bi-copy me-1"></i> Thực Hiện Sao Chép
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Tab 3: Leave Requests -->
+    @if (activeTab == "leaves")
+    {
+        <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar2-x text-warning me-2"></i>Danh Sách Đơn Xin Nghỉ Phép</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="leaveRequestsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Lễ Tân</th>
+                                <th>Loại Nghỉ</th>
+                                <th>Thời Gian</th>
+                                <th>Lý Do</th>
+                                <th>Ngày Gửi</th>
+                                <th>Trạng Thái</th>
+                                <th class="text-end">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!leaves.Any())
+                            {
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">Chưa có đơn xin nghỉ phép nào.</td>
+                                </tr>
+                            }
+                            @foreach (var l in leaves)
+                            {
+                                <tr>
+                                    <td>
+                                        <span class="fw-semibold">@l.ReceptionistName</span>
+                                        <div class="small text-muted">@l.EmployeeCode</div>
+                                    </td>
+                                    <td><span class="badge bg-secondary">@l.LeaveType</span></td>
+                                    <td>
+                                        <div>@l.StartDate.ToString("dd/MM/yyyy") - @l.EndDate.ToString("dd/MM/yyyy")</div>
+                                        @if (l.StartTime.HasValue && l.EndTime.HasValue)
+                                        {
+                                            <small class="text-muted">(@l.StartTime.Value.ToString("HH:mm") - @l.EndTime.Value.ToString("HH:mm"))</small>
+                                        }
+                                    </td>
+                                    <td>@l.Reason</td>
+                                    <td>@l.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td>
+                                        @if (l.Status == "Pending")
+                                        {
+                                            <span class="badge bg-warning text-dark">Chờ Duyệt</span>
+                                        }
+                                        else if (l.Status == "Approved")
+                                        {
+                                            <span class="badge bg-success">Đã Duyệt</span>
+                                        }
+                                        else if (l.Status == "Rejected")
+                                        {
+                                            <span class="badge bg-danger">Đã Từ Chối</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">@l.Status</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        @if (l.Status == "Pending")
+                                        {
+                                            <button class="btn btn-outline-info btn-sm btn-preview-impact me-1" data-leave-id="@l.LeaveRequestId" title="Xem trước tác động nhân sự">
+                                                <i class="bi bi-shield-check"></i> Kiểm Tra
+                                            </button>
+                                            <form method="post" action="@Url.Action("ApproveLeave", new { leaveId = l.LeaveRequestId })" class="d-inline">
+                                                <button type="submit" class="btn btn-success btn-sm btn-approve-leave me-1" onclick="return confirm('Bạn có chắc chắn muốn duyệt đơn nghỉ này?');">
+                                                    <i class="bi bi-check-lg"></i> Duyệt
+                                                </button>
+                                            </form>
+                                            <button class="btn btn-outline-danger btn-sm btn-reject-modal" data-leave-id="@l.LeaveRequestId" data-bs-toggle="modal" data-bs-target="#rejectLeaveModal">
+                                                <i class="bi bi-x-lg"></i> Từ Chối
+                                            </button>
+                                        }
+                                        else if (l.Status == "Approved")
+                                        {
+                                            <form method="post" action="@Url.Action("CancelLeave", new { leaveId = l.LeaveRequestId })" class="d-inline">
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm" onclick="return confirm('Hủy lịch nghỉ phép đã duyệt này?');">
+                                                    Hủy Nghỉ
+                                                </button>
+                                            </form>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Tab 4: Shift Swaps -->
+    @if (activeTab == "swaps")
+    {
+        <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-left-right text-info me-2"></i>Yêu Cầu Hoán Đổi Ca Trực</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="shiftSwapsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Người Đề Xuất</th>
+                                <th>Đồng Nghiệp Nhận</th>
+                                <th>Ca Đề Xuất</th>
+                                <th>Ca Đối Ứng</th>
+                                <th>Lý Do</th>
+                                <th>Trạng Thái</th>
+                                <th class="text-end">Quyết Định Admin</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!swaps.Any())
+                            {
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">Chưa có yêu cầu đổi ca nào.</td>
+                                </tr>
+                            }
+                            @foreach (var s in swaps)
+                            {
+                                <tr>
+                                    <td><span class="fw-semibold">@s.RequestingReceptionistName</span></td>
+                                    <td><span class="fw-semibold">@s.TargetReceptionistName</span></td>
+                                    <td>
+                                        <div>@s.SourceWorkDate.ToString("dd/MM/yyyy")</div>
+                                        <small class="text-muted">@s.SourceStartTime.ToString("HH:mm") - @s.SourceEndTime.ToString("HH:mm")</small>
+                                    </td>
+                                    <td>
+                                        @if (s.TargetWorkDate.HasValue)
+                                        {
+                                            <div>@s.TargetWorkDate.Value.ToString("dd/MM/yyyy")</div>
+                                            <small class="text-muted">@s.TargetStartTime?.ToString("HH:mm") - @s.TargetEndTime?.ToString("HH:mm")</small>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">Chuyển hẳn 1 chiều</span>
+                                        }
+                                    </td>
+                                    <td>@s.Reason</td>
+                                    <td>
+                                        @if (s.Status == "PendingCounterparty")
+                                        {
+                                            <span class="badge bg-secondary">Chờ Đồng Nghiệp Nhận</span>
+                                        }
+                                        else if (s.Status == "PendingAdminApproval")
+                                        {
+                                            <span class="badge bg-warning text-dark">Chờ Admin Duyệt</span>
+                                        }
+                                        else if (s.Status == "Approved")
+                                        {
+                                            <span class="badge bg-success">Đã Đổi Ca</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">@s.Status</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        @if (s.Status == "PendingAdminApproval")
+                                        {
+                                            <form method="post" action="@Url.Action("DecideSwap", new { swapId = s.SwapRequestId })" class="d-inline">
+                                                <input type="hidden" name="approve" value="true" />
+                                                <button type="submit" class="btn btn-success btn-sm me-1 btn-approve-swap" onclick="return confirm('Xác nhận duyệt đổi ca trực này?');">
+                                                    <i class="bi bi-check-lg"></i> Duyệt Đổi Ca
+                                                </button>
+                                            </form>
+                                            <form method="post" action="@Url.Action("DecideSwap", new { swapId = s.SwapRequestId })" class="d-inline">
+                                                <input type="hidden" name="approve" value="false" />
+                                                <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Từ chối đổi ca?');">
+                                                    <i class="bi bi-x-lg"></i> Từ Chối
+                                                </button>
+                                            </form>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Tab 5: Coverage Incidents -->
+    @if (activeTab == "incidents")
+    {
+        <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-shield-exclamation text-danger me-2"></i>Giám Sát Nhân Lực & Sự Cố Thiếu Người</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="coverageIncidentsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Ngày & Khung Giờ</th>
+                                <th>Nhân Sự Bị Ảnh Hưởng</th>
+                                <th>Số Người Trực (Hiện/Yêu Cầu)</th>
+                                <th>Thiếu Hụt</th>
+                                <th>Lý Do Vắng Mặt</th>
+                                <th>Trạng Thái</th>
+                                <th class="text-end">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!incidents.Any())
+                            {
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">Không có sự cố thiếu nhân sự nào.</td>
+                                </tr>
+                            }
+                            @foreach (var i in incidents)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">@i.WorkDate.ToString("dd/MM/yyyy")</div>
+                                        <small class="text-muted">@i.ShiftStartTime.ToString("HH:mm") - @i.ShiftEndTime.ToString("HH:mm")</small>
+                                    </td>
+                                    <td>@(i.AffectedReceptionistName ?? "Vắng khẩn cấp")</td>
+                                    <td>
+                                        <span class="badge @(i.AvailableStaffCount < i.RequiredMinimumCount ? "bg-danger" : "bg-success")">
+                                            @i.AvailableStaffCount / @i.RequiredMinimumCount người
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (i.ShortageCount > 0)
+                                        {
+                                            <span class="badge bg-danger">Thiếu @i.ShortageCount người</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success">Đủ</span>
+                                        }
+                                    </td>
+                                    <td>@i.Reason</td>
+                                    <td>
+                                        <span class="badge @(i.Status == "Open" ? "bg-danger" : "bg-success")">@i.Status</span>
+                                    </td>
+                                    <td class="text-end">
+                                        @if (i.Status == "Open")
+                                        {
+                                            <button class="btn btn-primary btn-sm btn-resolve-incident" data-incident-id="@i.IncidentId" data-bs-toggle="modal" data-bs-target="#resolveIncidentModal">
+                                                <i class="bi bi-person-plus"></i> Điều Phối Bổ Sung
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <small class="text-muted">Đã xử lý: @i.ReplacementReceptionistName</small>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Modal: Thêm Ca Trực Đơn Lẻ -->
+<div class="modal fade" id="createShiftModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="@Url.Action("CreateSchedule")">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Phân Công Ca Trực Lễ Tân</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lễ Tân</label>
+                        <select name="ReceptionistUserId" class="form-select" required>
+                            @foreach (var r in receptionists)
+                            {
+                                <option value="@r.UserId">@r.FullName (@r.Email)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ngày Làm Việc</label>
+                        <input type="date" name="WorkDate" class="form-control" value="@ClinicTimeHelper.Today.ToString("yyyy-MM-dd")" required />
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Giờ Bắt Đầu</label>
+                            <input type="time" name="StartTime" class="form-control" value="07:00" required />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Giờ Kết Thúc</label>
+                            <input type="time" name="EndTime" class="form-control" value="13:00" required />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ghi Chú</label>
+                        <input type="text" name="Notes" class="form-control" placeholder="Tùy chọn..." />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary" id="btnSubmitCreateShift">Lưu Ca Trực</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Kiểm Tra Tác Động Nghỉ Phép (Rule 1 & Rule 2) -->
+<div class="modal fade" id="impactModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold"><i class="bi bi-shield-check text-primary me-2"></i>Kiểm Tra Quy Chuẩn Nhân Sự (Rule 1 & Rule 2)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="impactModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <div class="mt-2 text-muted">Đang tính toán nhân sự các ca...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Từ Chối Đơn Nghỉ -->
+<div class="modal fade" id="rejectLeaveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" id="rejectLeaveForm">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-danger">Từ Chối Đơn Xin Nghỉ Phép</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lý Do Từ Chối (Bắt buộc)</label>
+                        <textarea name="reason" class="form-control" rows="3" required placeholder="Nhập lý do từ chối đơn..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-danger">Xác Nhận Từ Chối</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Giải Quyết Sự Cố Thiếu Người -->
+<div class="modal fade" id="resolveIncidentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" id="resolveIncidentForm">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-primary">Điều Phối Nhân Sự Thay Thế</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chọn Lễ Tân Trực Thay</label>
+                        <select name="ReplacementReceptionistUserId" class="form-select">
+                            <option value="">-- Không phân người thay (chỉ ghi nhận) --</option>
+                            @foreach (var r in receptionists)
+                            {
+                                <option value="@r.UserId">@r.FullName (@r.Email)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Phương Án Xử Lý & Ghi Chú</label>
+                        <textarea name="ResolutionNotes" class="form-control" rows="3" required placeholder="Nhập phương án điều phối xử lý..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary" id="btnConfirmResolveIncident">Lưu Phương Án</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Bulk Preview
+        const btnPreview = document.getElementById('btnPreviewBulk');
+        if (btnPreview) {
+            btnPreview.addEventListener('click', async function () {
+                const staffChecks = document.querySelectorAll('.bulk-staff-check:checked');
+                const dowChecks = document.querySelectorAll('.bulk-dow-check:checked');
+                const templateId = document.getElementById('bulkTemplateSelect').value;
+                const overwrite = document.getElementById('overwriteCheck').checked;
+
+                const staffIds = Array.from(staffChecks).map(c => parseInt(c.value));
+                const dows = Array.from(dowChecks).map(c => parseInt(c.value));
+
+                if (staffIds.length === 0) {
+                    alert('Vui lòng chọn ít nhất 1 lễ tân.');
+                    return;
+                }
+
+                const res = await fetch('@Url.Action("BulkPreview")', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        year: @year,
+                        month: @month,
+                        receptionistUserIds: staffIds,
+                        daysOfWeek: dows,
+                        shiftTemplateId: parseInt(templateId),
+                        overwriteExisting: overwrite
+                    })
+                });
+
+                const json = await res.json();
+                const container = document.getElementById('bulkPreviewResult');
+                container.classList.remove('d-none');
+
+                if (json.isSuccess && json.data) {
+                    document.getElementById('previewProposedCount').textContent = `Dự kiến tạo: ${json.data.proposedShiftsCount} ca trực. (Ghi đè: ${json.data.overwrittenShiftsCount})`;
+                    document.getElementById('previewConflictCount').textContent = `Xung đột đơn nghỉ phép: ${json.data.conflictWithLeaveCount} ca (sẽ được bỏ qua).`;
+                    const warnDiv = document.getElementById('previewWarnings');
+                    warnDiv.innerHTML = json.data.warnings.map(w => `<div>• ${w}</div>`).join('');
+                }
+            });
+        }
+
+        // Leave Impact Preview
+        document.querySelectorAll('.btn-preview-impact').forEach(btn => {
+            btn.addEventListener('click', async function () {
+                const leaveId = this.dataset.leaveId;
+                const modal = new bootstrap.Modal(document.getElementById('impactModal'));
+                modal.show();
+
+                const res = await fetch('@Url.Action("GetLeaveImpact", "AdminReceptionistSchedule")/' + leaveId);
+                const json = await res.json();
+                const body = document.getElementById('impactModalBody');
+
+                if (json.isSuccess && json.data) {
+                    const data = json.data;
+                    let html = `<div class="mb-3">
+                        <h6 class="fw-bold ${data.canApprove ? 'text-success' : 'text-danger'}">
+                            <i class="bi ${data.canApprove ? 'bi-check-circle-fill' : 'bi-x-circle-fill'} me-1"></i>
+                            Đánh giá: ${data.canApprove ? 'ĐỦ ĐIỀU KIỆN PHÊ DUYỆT' : 'KHÔNG ĐỦ ĐIỀU KIỆN PHÊ DUYỆT'}
+                        </h6>
+                    </div>`;
+
+                    if (data.validationMessages && data.validationMessages.length > 0) {
+                        html += `<div class="alert alert-danger py-2 small">
+                            ${data.validationMessages.map(m => `<div>• ${m}</div>`).join('')}
+                        </div>`;
+                    }
+
+                    html += `<table class="table table-sm table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Ngày</th>
+                                <th>Số người đã nghỉ</th>
+                                <th>Sau khi duyệt</th>
+                                <th>Quy tắc 1 (Max 2)</th>
+                                <th>Quy tắc 2 (Min 2/ca)</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+                    data.dailyImpacts.forEach(di => {
+                        const rule1Ok = !di.exceedsMaxLeavesPerDay;
+                        const understaffed = di.shiftCoverages.filter(s => s.isUnderstaffed);
+                        const rule2Ok = understaffed.length === 0;
+
+                        html += `<tr>
+                            <td>${di.date}</td>
+                            <td>${di.currentApprovedLeavesCount} người</td>
+                            <td>${di.postApprovalLeavesCount} người</td>
+                            <td><span class="badge ${rule1Ok ? 'bg-success' : 'bg-danger'}">${rule1Ok ? 'Hợp lệ' : 'Vi phạm (>2)'}</span></td>
+                            <td><span class="badge ${rule2Ok ? 'bg-success' : 'bg-danger'}">${rule2Ok ? 'Đủ người' : 'Thiếu người'}</span></td>
+                        </tr>`;
+                    });
+
+                    html += `</tbody></table>`;
+                    body.innerHTML = html;
+                } else {
+                    body.innerHTML = `<div class="alert alert-danger">Không thể kiểm tra tác động: ${json.message || 'Lỗi hệ thống'}</div>`;
+                }
+            });
+        });
+
+        // Reject Leave Modal
+        document.querySelectorAll('.btn-reject-modal').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const leaveId = this.dataset.leaveId;
+                document.getElementById('rejectLeaveForm').action = '@Url.Action("RejectLeave", "AdminReceptionistSchedule")/' + leaveId;
+            });
+        });
+
+        // Resolve Incident Modal
+        document.querySelectorAll('.btn-resolve-incident').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const incidentId = this.dataset.incidentId;
+                document.getElementById('resolveIncidentForm').action = '@Url.Action("ResolveIncident", "AdminReceptionistSchedule")/' + incidentId;
+            });
+        });
+    });
+</script>
+}
