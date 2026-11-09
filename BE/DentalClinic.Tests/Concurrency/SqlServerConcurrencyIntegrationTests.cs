@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
@@ -119,6 +119,34 @@ public class SqlServerConcurrencyIntegrationTests
             Status = "Active"
         };
         db.DepartmentServices.Add(svc);
+        await db.SaveChangesAsync();
+
+        // 9. Dentist Work Schedules
+        var startDate = DateOnly.FromDateTime(DateTime.Today);
+        for (int i = 0; i <= 7; i++)
+        {
+            var workDate = startDate.AddDays(i);
+            db.DentistWorkSchedules.AddRange(
+                new DentistWorkSchedule
+                {
+                    DentistUserId = dentistUser1.UserId,
+                    DepartmentId = dept.DepartmentId,
+                    WorkDate = workDate,
+                    StartTime = new TimeOnly(8, 0),
+                    EndTime = new TimeOnly(18, 0),
+                    Status = "Scheduled"
+                },
+                new DentistWorkSchedule
+                {
+                    DentistUserId = dentistUser2.UserId,
+                    DepartmentId = dept.DepartmentId,
+                    WorkDate = workDate,
+                    StartTime = new TimeOnly(8, 0),
+                    EndTime = new TimeOnly(18, 0),
+                    Status = "Scheduled"
+                }
+            );
+        }
         await db.SaveChangesAsync();
 
         return (dept.DepartmentId, mgrUser.UserId, dentistUser1.UserId, dentistUser2.UserId, sharedRoom.RoomId, chair1.DentalChairId, chair2.DentalChairId, patientUser1.UserId, patientUser2.UserId, svc.DepartmentServiceId);

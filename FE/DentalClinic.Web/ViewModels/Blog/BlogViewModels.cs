@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using DentalClinic.Web.Models.ApiDtos;
 
@@ -57,6 +57,7 @@ public class DentistBlogEditViewModel
 
     [Display(Name = "Trạng thái lưu")]
     public string Status { get; set; } = "Draft";
+    public string? RejectionReason { get; set; }
 
     public List<BlogCategoryDto> Categories { get; set; } = new();
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -178,6 +178,106 @@ public class ReceptionistAppointmentController : Controller
             model.Patients = pList.Data ?? new();
         }
         return View("~/Views/Receptionist/Appointments/Create.cshtml", model);
+    }
+
+    [HttpGet("Review/{id:long}")]
+    public async Task<IActionResult> Review(long id)
+    {
+        var apptResult = await _appointmentApiService.GetAppointmentDetailAsync(id);
+        if (!apptResult.IsSuccess || apptResult.Data == null)
+        {
+            TempData["ErrorMessage"] = apptResult.Message ?? "Không tìm thấy lịch hẹn.";
+            return RedirectToAction(nameof(Requests));
+        }
+
+        var appt = apptResult.Data;
+        var start = appt.ScheduledStart ?? DateTime.Today.AddHours(8);
+        var end = appt.ScheduledEnd ?? start.AddMinutes(appt.DurationMinutes ?? 30);
+
+        var dentistsResult = await _appointmentApiService.GetAvailableDentistsForAppointmentAsync(id);
+        var resourcesResult = await _appointmentApiService.GetAvailableResourcesAsync(appt.DepartmentId, start, end);
+
+        var rooms = resourcesResult.Data?.Rooms ?? new();
+        var chairs = resourcesResult.Data?.Chairs ?? new();
+        var selectedRoomId = appt.RoomId ?? (rooms.Count > 0 ? rooms[0].RoomId : 0);
+        var selectedChairId = appt.DentalChairId;
+
+        var vm = new DepartmentReviewViewModel
+        {
+            Appointment = appt,
+            Dentists = dentistsResult.Data ?? new(),
+            Rooms = rooms,
+            Chairs = chairs,
+            RoomId = selectedRoomId,
+            DentalChairId = selectedChairId,
+            AssignedDentistUserId = appt.RequestedDentistUserId ?? (dentistsResult.Data?.Count > 0 ? dentistsResult.Data[0].DentistUserId : 0),
+            ScheduledStart = start,
+            ScheduledEnd = end,
+            ProposedStart = start,
+            ProposedEnd = end
+        };
+
+        return View("~/Views/Receptionist/Appointments/Review.cshtml", vm);
+    }
+
+    [HttpPost("Confirm/{id:long}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Confirm(long id, [FromForm] DepartmentReviewViewModel model)
+    {
+        if (model.AssignedDentistUserId <= 0 || model.RoomId <= 0 || !model.DentalChairId.HasValue || model.DentalChairId.Value <= 0)
+        {
+            TempData["ErrorMessage"] = "Vui lòng chọn đầy đủ Bác sĩ, Phòng khám và Ghế nha khoa điều trị.";
+            return RedirectToAction(nameof(Review), new { id });
+        }
+
+        var request = new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = model.AssignedDentistUserId,
+            RoomId = model.RoomId,
+            DentalChairId = model.DentalChairId.Value,
+            ScheduledStart = model.ScheduledStart,
+            ScheduledEnd = model.ScheduledEnd,
+            Note = model.AssignmentNote
+        };
+
+        var result = await _appointmentApiService.ManagerConfirmAsync(id, request);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đã điều phối và xác nhận lịch hẹn thành công! Số thứ tự hàng đợi (QueueNumber) sẽ được cấp tự động khi bệnh nhân đến Check-in.";
+            return RedirectToAction(nameof(Requests));
+        }
+
+        TempData["ErrorMessage"] = result.Message ?? "Không thể xác nhận lịch hẹn.";
+        return RedirectToAction(nameof(Review), new { id });
+    }
+
+    [HttpPost("ProposeChange/{id:long}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ProposeChange(long id, [FromForm] DepartmentReviewViewModel model)
+    {
+        if (string.IsNullOrWhiteSpace(model.ProposalReason))
+        {
+            TempData["ErrorMessage"] = "Vui lòng nhập lý do đề xuất thay đổi lịch hẹn.";
+            return RedirectToAction(nameof(Review), new { id });
+        }
+
+        var request = new ManagerProposeChangeRequest
+        {
+            ProposedDentistUserId = model.ProposedDentistUserId > 0 ? model.ProposedDentistUserId : null,
+            ProposedStart = model.ProposedStart,
+            ProposedEnd = model.ProposedEnd,
+            Reason = model.ProposalReason.Trim()
+        };
+
+        var result = await _appointmentApiService.ManagerProposeChangeAsync(id, request);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đã gửi đề xuất điều chỉnh lịch sang cho bệnh nhân phản hồi.";
+            return RedirectToAction(nameof(Requests));
+        }
+
+        TempData["ErrorMessage"] = result.Message ?? "Không thể gửi đề xuất thay đổi.";
+        return RedirectToAction(nameof(Review), new { id });
     }
 
     [HttpPost("Forward/{id:long}")]

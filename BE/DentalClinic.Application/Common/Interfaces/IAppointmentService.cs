@@ -33,6 +33,8 @@ public interface IAppointmentService
     Task<ApiResponse> ReceptionistCheckInAsync(long appointmentId, long staffUserId, string? note, CancellationToken ct = default);
     Task<ApiResponse> ReceptionistMarkNoShowAsync(long appointmentId, long staffUserId, string? note = null, CancellationToken ct = default);
     Task<ApiResponse> StaffCancelAppointmentAsync(long appointmentId, long staffUserId, string reason, CancellationToken ct = default);
+    Task<ApiResponse<AppointmentDto>> ReceptionistConfirmAsync(long appointmentId, long receptionistUserId, ManagerConfirmRequest request, CancellationToken ct = default);
+    Task<ApiResponse> ReceptionistProposeChangeAsync(long appointmentId, long receptionistUserId, ManagerProposeChangeRequest request, CancellationToken ct = default);
 
     // Department Manager Operations
     Task<ApiResponse<List<AppointmentDto>>> GetDepartmentRequestsAsync(long managerUserId, CancellationToken ct = default);

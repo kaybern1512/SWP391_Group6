@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using DentalClinic.Web.Models.ApiDtos;
@@ -57,7 +57,7 @@ public class SupportWidgetViewComponent : ViewComponent
             DefaultConversationId = defaultConvId,
             CurrentController = currentCtrl,
             CurrentAction = currentAction,
-            ApiBaseUrl = _configuration?["ApiSettings:BaseUrl"] ?? "https://localhost:7353"
+            ApiBaseUrl = _configuration?["ApiSettings:BaseUrl"] ?? "https://localhost:7350"
         };
 
         return View("~/Views/Shared/Components/SupportWidget/Default.cshtml", vm);

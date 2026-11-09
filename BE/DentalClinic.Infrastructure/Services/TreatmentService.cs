@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -807,7 +807,7 @@ public class TreatmentService : ITreatmentService
             var hasDuplicate = await _dbContext.Appointments.AnyAsync(a =>
                 a.PatientUserId == plan.PatientUserId &&
                 a.DepartmentId == plan.DepartmentId &&
-                (a.Status == AppointmentStatus.PendingDepartmentReview || a.Status == AppointmentStatus.Confirmed) &&
+                (a.Status == AppointmentStatus.PendingReceptionReview || a.Status == AppointmentStatus.PendingDepartmentReview || a.Status == AppointmentStatus.Confirmed) &&
                 a.ScheduledStart.HasValue &&
                 ((a.ScheduledStart.Value >= windowStart && a.ScheduledStart.Value <= windowEnd) ||
                  (a.ScheduledStart.Value < proposedEnd && a.ScheduledEnd > request.ScheduledStart)), ct);
@@ -847,7 +847,7 @@ public class TreatmentService : ITreatmentService
                 ScheduledEnd = proposedEnd,
                 ReasonForVisit = $"[Tái khám phác đồ #{plan.TreatmentPlanId}] {request.Reason.Trim()}",
                 BookingSource = BookingSource.Receptionist,
-                Status = AppointmentStatus.PendingDepartmentReview, // Đi thẳng PendingDepartmentReview (WF-11 điều 04)
+                Status = AppointmentStatus.PendingReceptionReview, // Chuyển hàng đợi Receptionist điều phối (4 roles)
                 CreatedByUserId = dentistUserId,
                 CreatedAt = DateTime.UtcNow
             };
@@ -880,7 +880,7 @@ public class TreatmentService : ITreatmentService
             {
                 AppointmentId = appt.AppointmentId,
                 OldStatus = null,
-                NewStatus = AppointmentStatus.PendingDepartmentReview,
+                NewStatus = AppointmentStatus.PendingReceptionReview,
                 ChangedByUserId = dentistUserId,
                 Note = $"Bác sĩ chỉ định tái khám từ phác đồ #{plan.TreatmentPlanId}",
                 ChangedAt = DateTime.UtcNow

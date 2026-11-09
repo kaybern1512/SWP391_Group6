@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Application.Features.Booking.DTOs;
@@ -22,6 +22,11 @@ public class DepartmentServiceDto
     public string? Description { get; set; }
     public int? DurationMinutes { get; set; }
     public decimal Price { get; set; }
+    public string ServiceType { get; set; } = "Treatment";
+    public bool RequiresExclusiveRoom { get; set; }
+    public bool RequiresConsultationFirst { get; set; }
+    public int MinLeadTimeHours { get; set; } = 2;
+    public string? BookingInstructions { get; set; }
 }
 
 public class DentistOptionDto

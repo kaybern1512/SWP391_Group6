@@ -1,4 +1,4 @@
-@using System.Security.Claims
+﻿@using System.Security.Claims
 @{
     var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "Patient";
     var fullName = User.FindFirst(ClaimTypes.Name)?.Value ?? "User";
@@ -103,9 +103,9 @@
                 <i class="bi bi-calendar-plus"></i>
                 <span>Đặt Lịch Hẹn Tại Quầy</span>
             </a>
-            <a class="sidebar-link @(currentCtrl == "ReceptionistAppointment" && currentAction == "Requests" ? "active" : "")" asp-controller="ReceptionistAppointment" asp-action="Requests">
+            <a class="sidebar-link @(currentCtrl == "ReceptionistAppointment" && (currentAction == "Requests" || currentAction == "Review") ? "active" : "")" asp-controller="ReceptionistAppointment" asp-action="Requests">
                 <i class="bi bi-calendar-check"></i>
-                <span>Yêu Cầu Đặt Lịch Hẹn</span>
+                <span>Điều Phối & Phê Duyệt Lịch</span>
             </a>
 
             <div class="nav-group-title">Hồ Sơ & Viện Phí</div>
@@ -122,7 +122,11 @@
                 <span>Theo Dõi Tái Khám</span>
             </a>
 
-            <div class="nav-group-title">Tư Vấn & Hỗ Trợ</div>
+            <div class="nav-group-title">Truyền Thông & Tư Vấn</div>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistBlog" ? "active" : "")" asp-controller="ReceptionistBlog" asp-action="Index">
+                <i class="bi bi-journal-richtext"></i>
+                <span>Bài Viết Của Tôi</span>
+            </a>
             <a class="sidebar-link @(currentCtrl == "ReceptionistChat" ? "active" : "")" asp-controller="ReceptionistChat" asp-action="Index">
                 <i class="bi bi-chat-dots"></i>
                 <span>Tư Vấn Trực Tuyến (Live Chat)</span>
@@ -175,6 +179,8 @@
                 <i class="bi bi-star"></i>
                 <span>Đánh Giá Từ Bệnh Nhân</span>
             </a>
+
+
         }
         else if (role == "SystemAdministrator")
         {

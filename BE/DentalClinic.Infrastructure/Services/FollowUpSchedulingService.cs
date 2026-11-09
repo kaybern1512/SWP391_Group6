@@ -1,3 +1,4 @@
+﻿using DentalClinic.Domain.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -62,7 +63,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         }
 
         // 2. Validate future time & minimum booking buffer (30 minutes)
-        var now = DateTime.Now;
+        var now = ClinicTimeHelper.Now;
         if (start <= now)
         {
             return SchedulingValidationResult.Fail(
@@ -235,7 +236,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                          (a.AssignedDentistUserId == null && a.RequestedDentistUserId == dentistUserId)))
             .ToListAsync(ct);
 
-        var now = DateTime.Now;
+        var now = ClinicTimeHelper.Now;
         var minValidTime = now.AddMinutes(30);
 
         foreach (var sched in dentistSchedules)
@@ -715,7 +716,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                 return ApiResponse<FollowUpProposalDto>.Fail($"Không thể yêu cầu đổi lịch cho cuộc hẹn ở trạng thái '{appointment.Status}'.");
             }
 
-            if (appointment.ScheduledStart <= DateTime.Now)
+            if (appointment.ScheduledStart <= ClinicTimeHelper.Now)
             {
                 return ApiResponse<FollowUpProposalDto>.Fail("Không thể yêu cầu đổi lịch cho cuộc hẹn đã diễn ra hoặc trong quá khứ.");
             }
@@ -730,7 +731,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         }
 
         // Validate proposed times
-        var now = DateTime.Now;
+        var now = ClinicTimeHelper.Now;
         if (request.ProposedStart <= now.AddMinutes(30))
         {
             return ApiResponse<FollowUpProposalDto>.Fail("Thời gian đề xuất phải cách thời điểm hiện tại ít nhất 30 phút.");
@@ -776,7 +777,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                     return ApiResponse<FollowUpProposalDto>.Fail($"Không thể yêu cầu đổi lịch cho cuộc hẹn ở trạng thái '{freshAppt.Status}'.");
                 }
 
-                if (freshAppt.ScheduledStart <= DateTime.Now)
+                if (freshAppt.ScheduledStart <= ClinicTimeHelper.Now)
                 {
                     if (tx != null) await tx.RollbackAsync(ct);
                     return ApiResponse<FollowUpProposalDto>.Fail("Không thể yêu cầu đổi lịch cho cuộc hẹn đã diễn ra hoặc trong quá khứ.");
@@ -1099,7 +1100,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         IDisposable? lockScope = null;
         try
         {
-            var propDate = proposal.ProposedStart?.Date ?? DateTime.Today;
+            var propDate = proposal.ProposedStart?.Date ?? ClinicTimeHelper.Today;
             var currDate = proposal.Appointment.ScheduledStart?.Date ?? propDate;
             var lockKeys = new List<string>
             {
@@ -1212,7 +1213,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             var proposedStart = freshProposal.ProposedStart.Value;
             var proposedEnd = freshProposal.ProposedEnd.Value;
 
-            if (proposedStart <= DateTime.Now)
+            if (proposedStart <= ClinicTimeHelper.Now)
             {
                 if (tx != null) await tx.RollbackAsync(ct);
                 return ApiResponse<FollowUpProposalDto>.Fail("Khung giờ đề xuất đã qua hoặc ở quá khứ. Không thể phê duyệt.");
@@ -1417,7 +1418,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             sessionLookup = sessions.ToDictionary(s => s.TreatmentSessionId);
         }
 
-        var today = DateTime.Today;
+        var today = ClinicTimeHelper.Today;
         var tomorrow = today.AddDays(1);
 
         if (!string.IsNullOrWhiteSpace(dateFilter))

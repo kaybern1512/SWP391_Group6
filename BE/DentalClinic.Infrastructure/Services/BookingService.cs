@@ -6,8 +6,10 @@ using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.Booking.DTOs;
+using DentalClinic.Domain.Common;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
+using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -67,7 +69,12 @@ public class BookingService : IBookingService
                 ServiceName = s.ServiceName,
                 Description = s.Description,
                 DurationMinutes = s.DurationMinutes,
-                Price = s.Price
+                Price = s.Price,
+                ServiceType = s.ServiceType,
+                RequiresExclusiveRoom = s.RequiresExclusiveRoom,
+                RequiresConsultationFirst = s.RequiresConsultationFirst,
+                MinLeadTimeHours = s.MinLeadTimeHours,
+                BookingInstructions = s.BookingInstructions
             })
             .ToListAsync(ct);
 
@@ -101,8 +108,11 @@ public class BookingService : IBookingService
 
     public async Task<ApiResponse<List<AvailableSlotDto>>> GetAvailableSlotsAsync(AvailableSlotsQuery query, CancellationToken ct = default)
     {
-        var targetDate = query.Date.Date;
-        if (targetDate < DateTime.Today)
+        var clinicNow = ClinicTimeHelper.Now;
+        var clinicToday = clinicNow.Date;
+        var targetDate = ClinicTimeHelper.ToClinicTime(query.Date).Date;
+
+        if (targetDate < clinicToday)
         {
             return ApiResponse<List<AvailableSlotDto>>.Fail("Không thể đặt lịch trong quá khứ.");
         }
@@ -145,8 +155,33 @@ public class BookingService : IBookingService
             return ApiResponse<List<AvailableSlotDto>>.Ok(new List<AvailableSlotDto>(), "Chuyên khoa không làm việc vào ngày đã chọn.");
         }
 
-        var slotStepMinutes = 30; // Step between slots
+        var slotStepMinutes = (durationMinutes > 0 && durationMinutes < 30) ? durationMinutes : 30;
         var availableSlots = new List<AvailableSlotDto>();
+
+        // Preload exclusive rooms if service requires an exclusive room (Requirement 8)
+        List<long> exclusiveRoomIds = new();
+        if (service.RequiresExclusiveRoom)
+        {
+            exclusiveRoomIds = await _dbContext.Rooms
+                .AsNoTracking()
+                .Where(r => r.DepartmentId == query.DepartmentId && r.IsExclusive && r.Status == "Active")
+                .Select(r => r.RoomId)
+                .ToListAsync(ct);
+
+            if (!exclusiveRoomIds.Any())
+            {
+                return ApiResponse<List<AvailableSlotDto>>.Ok(availableSlots, "Chuyên khoa hiện không có phòng điều trị chuyên dụng khả dụng.");
+            }
+        }
+
+        var occupiedStatuses = new[]
+        {
+            AppointmentStatus.Confirmed,
+            AppointmentStatus.CheckedIn,
+            AppointmentStatus.Waiting,
+            AppointmentStatus.Called,
+            AppointmentStatus.InService
+        };
 
         // 4. Case A: Specific Dentist selected
         if (query.DentistUserId.HasValue)
@@ -199,15 +234,6 @@ public class BookingService : IBookingService
                 .ToListAsync(ct);
 
             // Existing active appointments for dentist on target date
-            var occupiedStatuses = new[]
-            {
-                AppointmentStatus.Confirmed,
-                AppointmentStatus.CheckedIn,
-                AppointmentStatus.Waiting,
-                AppointmentStatus.Called,
-                AppointmentStatus.InService
-            };
-
             var existingAppointments = await _dbContext.Appointments
                 .AsNoTracking()
                 .Where(a => a.ScheduledStart != null &&
@@ -218,18 +244,38 @@ public class BookingService : IBookingService
                              (a.AssignedDentistUserId == null && a.RequestedDentistUserId == dentistId)))
                 .ToListAsync(ct);
 
+            var existingRoomAppointments = service.RequiresExclusiveRoom
+                ? await _dbContext.Appointments
+                    .AsNoTracking()
+                    .Where(a => a.ScheduledStart != null &&
+                                a.ScheduledEnd != null &&
+                                a.ScheduledStart.Value.Date == targetDate &&
+                                occupiedStatuses.Contains(a.Status) &&
+                                a.RoomId != null &&
+                                exclusiveRoomIds.Contains(a.RoomId.Value))
+                    .ToListAsync(ct)
+                : new List<Appointment>();
+
             // Generate slots within dentist schedule intervals
             foreach (var sched in dentistSchedules)
             {
                 var currentSlotStart = targetDate.Add(sched.StartTime.ToTimeSpan());
                 var schedEnd = targetDate.Add(sched.EndTime.ToTimeSpan());
 
+                // Condition strictly ensures slot does not exceed closing time
                 while (currentSlotStart.AddMinutes(durationMinutes) <= schedEnd)
                 {
                     var currentSlotEnd = currentSlotStart.AddMinutes(durationMinutes);
 
                     // Skip past slots if target date is today
-                    if (targetDate == DateTime.Today && currentSlotStart <= DateTime.Now.AddMinutes(15))
+                    if (targetDate == clinicToday && currentSlotStart <= clinicNow.AddMinutes(15))
+                    {
+                        currentSlotStart = currentSlotStart.AddMinutes(slotStepMinutes);
+                        continue;
+                    }
+
+                    // Enforce MinLeadTimeHours
+                    if (service.MinLeadTimeHours > 0 && currentSlotStart < clinicNow.AddHours(service.MinLeadTimeHours))
                     {
                         currentSlotStart = currentSlotStart.AddMinutes(slotStepMinutes);
                         continue;
@@ -247,7 +293,18 @@ public class BookingService : IBookingService
                             a.ScheduledStart!.Value < currentSlotEnd &&
                             a.ScheduledEnd!.Value > currentSlotStart);
 
-                        if (!hasConflict)
+                        bool roomConflict = false;
+                        if (service.RequiresExclusiveRoom)
+                        {
+                            bool anyRoomFree = exclusiveRoomIds.Any(rId =>
+                                !existingRoomAppointments.Any(ra =>
+                                    ra.RoomId == rId &&
+                                    ra.ScheduledStart!.Value < currentSlotEnd &&
+                                    ra.ScheduledEnd!.Value > currentSlotStart));
+                            if (!anyRoomFree) roomConflict = true;
+                        }
+
+                        if (!hasConflict && !roomConflict)
                         {
                             availableSlots.Add(new AvailableSlotDto
                             {
@@ -299,15 +356,6 @@ public class BookingService : IBookingService
                              (da.EndDateTime == null || da.EndDateTime > startOfDay))
                 .ToListAsync(ct);
 
-            var occupiedStatuses = new[]
-            {
-                AppointmentStatus.Confirmed,
-                AppointmentStatus.CheckedIn,
-                AppointmentStatus.Waiting,
-                AppointmentStatus.Called,
-                AppointmentStatus.InService
-            };
-
             var existingAppointments = await _dbContext.Appointments
                 .AsNoTracking()
                 .Where(a => a.ScheduledStart != null &&
@@ -318,64 +366,100 @@ public class BookingService : IBookingService
                             departmentDentistIds.Contains(a.AssignedDentistUserId.Value))
                 .ToListAsync(ct);
 
+            var existingRoomAppointments = service.RequiresExclusiveRoom
+                ? await _dbContext.Appointments
+                    .AsNoTracking()
+                    .Where(a => a.ScheduledStart != null &&
+                                a.ScheduledEnd != null &&
+                                a.ScheduledStart.Value.Date == targetDate &&
+                                occupiedStatuses.Contains(a.Status) &&
+                                a.RoomId != null &&
+                                exclusiveRoomIds.Contains(a.RoomId.Value))
+                    .ToListAsync(ct)
+                : new List<Appointment>();
+
             // Iterate through department working schedule blocks
             foreach (var deptSched in deptSchedules)
             {
                 var currentSlotStart = targetDate.Add(deptSched.StartTime.ToTimeSpan());
                 var schedEnd = targetDate.Add(deptSched.EndTime.ToTimeSpan());
 
+                // Condition strictly ensures slot does not exceed closing time
                 while (currentSlotStart.AddMinutes(durationMinutes) <= schedEnd)
                 {
                     var currentSlotEnd = currentSlotStart.AddMinutes(durationMinutes);
 
-                    if (targetDate == DateTime.Today && currentSlotStart <= DateTime.Now.AddMinutes(15))
+                    // Skip past slots if target date is today
+                    if (targetDate == clinicToday && currentSlotStart <= clinicNow.AddMinutes(15))
                     {
                         currentSlotStart = currentSlotStart.AddMinutes(slotStepMinutes);
                         continue;
                     }
 
-                    // Check if AT LEAST ONE dentist is scheduled and free for this slot
-                    bool hasAvailableDentist = false;
-                    foreach (var dId in departmentDentistIds)
+                    // Enforce MinLeadTimeHours
+                    if (service.MinLeadTimeHours > 0 && currentSlotStart < clinicNow.AddHours(service.MinLeadTimeHours))
                     {
-                        // Dentist must have work schedule covering this slot
-                        bool isDentistScheduled = dentistSchedules.Any(ws =>
-                            ws.DentistUserId == dId &&
-                            targetDate.Add(ws.StartTime.ToTimeSpan()) <= currentSlotStart &&
-                            targetDate.Add(ws.EndTime.ToTimeSpan()) >= currentSlotEnd);
-
-                        if (!isDentistScheduled) continue;
-
-                        // Dentist must not be unavailable
-                        bool isDentistUnavailable = unavailabilities.Any(u =>
-                            u.DentistUserId == dId &&
-                            u.StartDateTime < currentSlotEnd &&
-                            (u.EndDateTime == null || u.EndDateTime > currentSlotStart));
-
-                        if (isDentistUnavailable) continue;
-
-                        // Dentist must have no overlapping appointments
-                        bool hasConflict = existingAppointments.Any(a =>
-                            a.AssignedDentistUserId == dId &&
-                            a.ScheduledStart!.Value < currentSlotEnd &&
-                            a.ScheduledEnd!.Value > currentSlotStart);
-
-                        if (!hasConflict)
-                        {
-                            hasAvailableDentist = true;
-                            break;
-                        }
+                        currentSlotStart = currentSlotStart.AddMinutes(slotStepMinutes);
+                        continue;
                     }
 
-                    if (hasAvailableDentist)
+                    // Check exclusive room conflict
+                    bool roomConflict = false;
+                    if (service.RequiresExclusiveRoom)
                     {
-                        availableSlots.Add(new AvailableSlotDto
+                        bool anyRoomFree = exclusiveRoomIds.Any(rId =>
+                            !existingRoomAppointments.Any(ra =>
+                                ra.RoomId == rId &&
+                                ra.ScheduledStart!.Value < currentSlotEnd &&
+                                ra.ScheduledEnd!.Value > currentSlotStart));
+                        if (!anyRoomFree) roomConflict = true;
+                    }
+
+                    if (!roomConflict)
+                    {
+                        // Check if AT LEAST ONE dentist is scheduled and free for this slot
+                        bool hasAvailableDentist = false;
+                        foreach (var dId in departmentDentistIds)
                         {
-                            StartTime = currentSlotStart,
-                            EndTime = currentSlotEnd,
-                            DentistUserId = null,
-                            DentistName = "Bác sĩ bất kỳ khả dụng"
-                        });
+                            // Dentist must have work schedule covering this FULL slot up to currentSlotEnd
+                            bool isDentistScheduled = dentistSchedules.Any(ws =>
+                                ws.DentistUserId == dId &&
+                                targetDate.Add(ws.StartTime.ToTimeSpan()) <= currentSlotStart &&
+                                targetDate.Add(ws.EndTime.ToTimeSpan()) >= currentSlotEnd);
+
+                            if (!isDentistScheduled) continue;
+
+                            // Dentist must not be unavailable
+                            bool isDentistUnavailable = unavailabilities.Any(u =>
+                                u.DentistUserId == dId &&
+                                u.StartDateTime < currentSlotEnd &&
+                                (u.EndDateTime == null || u.EndDateTime > currentSlotStart));
+
+                            if (isDentistUnavailable) continue;
+
+                            // Dentist must have no overlapping appointments
+                            bool hasConflict = existingAppointments.Any(a =>
+                                a.AssignedDentistUserId == dId &&
+                                a.ScheduledStart!.Value < currentSlotEnd &&
+                                a.ScheduledEnd!.Value > currentSlotStart);
+
+                            if (!hasConflict)
+                            {
+                                hasAvailableDentist = true;
+                                break;
+                            }
+                        }
+
+                        if (hasAvailableDentist)
+                        {
+                            availableSlots.Add(new AvailableSlotDto
+                            {
+                                StartTime = currentSlotStart,
+                                EndTime = currentSlotEnd,
+                                DentistUserId = null,
+                                DentistName = "Bác sĩ bất kỳ khả dụng"
+                            });
+                        }
                     }
 
                     currentSlotStart = currentSlotStart.AddMinutes(slotStepMinutes);

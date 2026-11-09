@@ -1,4 +1,4 @@
-@model DentalClinic.Web.ViewModels.Appointments.ReceptionistRequestsViewModel
+﻿@model DentalClinic.Web.ViewModels.Appointments.ReceptionistRequestsViewModel
 @{
     ViewData["Title"] = "Tiếp nhận yêu cầu đặt lịch khám";
 }
@@ -141,9 +141,9 @@
                                 </td>
                                 <td class="text-end pe-3">
                                     <div class="btn-group">
-                                        <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#forwardModal-@req.AppointmentId">
-                                            <i class="bi bi-arrow-right-circle me-1"></i> Chuyển Trưởng Khoa
-                                        </button>
+                                        <a asp-action="Review" asp-route-id="@req.AppointmentId" class="btn btn-sm btn-primary">
+                                            <i class="bi bi-calendar-check me-1"></i> Điều Phối & Xác Nhận
+                                        </a>
                                         <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectModal-@req.AppointmentId">
                                             <i class="bi bi-x-circle"></i> Từ Chối
                                         </button>

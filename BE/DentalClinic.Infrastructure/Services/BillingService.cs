@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -556,24 +556,27 @@ public class BillingService : IBillingService
         }
 
         // Load dispensed medicines from pharmacy (WF-16 & WF-17)
+        var allowedDispenseStatuses = new[] { "Dispensed", "PartiallyDispensed" };
         var dispensations = await _dbContext.MedicineDispensations
             .AsNoTracking()
             .Include(d => d.DispensationItems)
                 .ThenInclude(i => i.Medicine)
             .Include(d => d.DispensationItems)
                 .ThenInclude(i => i.MedicineBatch)
-            .Where(d => d.AppointmentId == appt.AppointmentId && d.Status == "Dispensed")
+            .Where(d => d.AppointmentId == appt.AppointmentId && allowedDispenseStatuses.Contains(d.Status))
             .ToListAsync(ct);
 
         foreach (var disp in dispensations)
         {
             foreach (var item in disp.DispensationItems)
             {
+                if (item.QuantityDispensed <= 0) continue;
+
                 performedItems.Add(new BillingPreloadedItemDto
                 {
                     PerformedServiceId = null,
                     DepartmentServiceId = null,
-                    Description = $"[Thuốc] {item.Medicine.MedicineName} (Lô {item.MedicineBatch.BatchNumber})",
+                    Description = $"[Thuá»‘c] {item.Medicine?.MedicineName ?? "Thuá»‘c Ä‘iá»u trá»‹"} (LÃ´ {item.MedicineBatch?.BatchNumber ?? "N/A"})",
                     Quantity = item.QuantityDispensed,
                     UnitPrice = item.UnitPriceSnapshot
                 });

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -98,7 +98,7 @@ public class BlogController : ControllerBase
     // ==========================================
 
     [HttpGet("my-posts")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<BlogPostPagedResultDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyPosts([FromQuery] BlogFilterRequest request, CancellationToken ct)
     {
@@ -113,7 +113,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpGet("posts/id/{id}")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status404NotFound)]
@@ -129,7 +129,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpPost("posts")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreatePost([FromBody] CreateBlogPostRequest request, CancellationToken ct)
@@ -156,7 +156,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpPut("posts/{id}")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<BlogPostDto>), StatusCodes.Status403Forbidden)]
@@ -182,7 +182,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpDelete("posts/{id}")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status403Forbidden)]
@@ -203,7 +203,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpPost("upload-thumbnail")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
@@ -239,7 +239,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpPost("media")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(52_428_800)]
     [RequestFormLimits(MultipartBodyLengthLimit = 52_428_800)]
@@ -268,7 +268,7 @@ public class BlogController : ControllerBase
     }
 
     [HttpDelete("media/{mediaId}")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status403Forbidden)]
