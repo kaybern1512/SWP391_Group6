@@ -191,9 +191,9 @@ public class PatientAppointmentController : Controller
         }
 
         var clinicNow = GetClinicNow();
-        if (model.ScheduledStart.HasValue && model.ScheduledStart.Value <= clinicNow)
+        if (model.ScheduledStart.HasValue && model.ScheduledStart.Value <= clinicNow.AddMinutes(15))
         {
-            ModelState.AddModelError("ScheduledStart", "Thời gian khám không được nằm trong quá khứ. Vui lòng chọn khung giờ khám hợp lệ.");
+            ModelState.AddModelError("ScheduledStart", "Thời gian khám không được nằm trong quá khứ hoặc quá sát giờ hiện tại (cần đặt trước tối thiểu 15 phút). Vui lòng chọn khung giờ khám hợp lệ.");
         }
 
         if (!ModelState.IsValid)
@@ -251,8 +251,15 @@ public class PatientAppointmentController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        long.TryParse(userIdStr, out var currentUserId);
+        var userIdStr = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (long.TryParse(userIdStr, out var currentUserId) && currentUserId > 0 && result.Data.PatientUserId > 0)
+        {
+            if (result.Data.PatientUserId != currentUserId)
+            {
+                if (TempData != null) TempData["ErrorMessage"] = "Bạn không có quyền truy cập thông tin ca khám này.";
+                return RedirectToAction(nameof(Index));
+            }
+        }
 
         var vm = new AppointmentDetailViewModel
         {
@@ -270,6 +277,17 @@ public class PatientAppointmentController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Withdraw(long id, [FromForm] string? reason)
     {
+        var detailRes = await _appointmentApiService.GetAppointmentDetailAsync(id);
+        var userIdStr = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (detailRes?.IsSuccess == true && detailRes.Data != null && long.TryParse(userIdStr, out var currentUserId) && currentUserId > 0 && detailRes.Data.PatientUserId > 0)
+        {
+            if (detailRes.Data.PatientUserId != currentUserId)
+            {
+                if (TempData != null) TempData["ErrorMessage"] = "Bạn không có quyền thu hồi ca khám này.";
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
         var result = await _appointmentApiService.PatientWithdrawAsync(id, reason);
         if (result.IsSuccess)
         {
@@ -291,6 +309,17 @@ public class PatientAppointmentController : Controller
         {
             TempData["ErrorMessage"] = "Vui lòng nhập lý do hủy lịch hẹn.";
             return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var detailRes = await _appointmentApiService.GetAppointmentDetailAsync(id);
+        var userIdStr = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (detailRes?.IsSuccess == true && detailRes.Data != null && long.TryParse(userIdStr, out var currentUserId) && currentUserId > 0 && detailRes.Data.PatientUserId > 0)
+        {
+            if (detailRes.Data.PatientUserId != currentUserId)
+            {
+                if (TempData != null) TempData["ErrorMessage"] = "Bạn không có quyền hủy ca khám này.";
+                return RedirectToAction(nameof(Index));
+            }
         }
 
         var result = await _appointmentApiService.PatientCancelAsync(id, reason);
@@ -317,6 +346,16 @@ public class PatientAppointmentController : Controller
         }
 
         var appt = result.Data;
+        var userIdStr = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (long.TryParse(userIdStr, out var currentUserId) && currentUserId > 0 && appt.PatientUserId > 0)
+        {
+            if (appt.PatientUserId != currentUserId)
+            {
+                if (TempData != null) TempData["ErrorMessage"] = "Bạn không có quyền dời ca khám này.";
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
         var validStatuses = new[] { "PendingReceptionReview", "PendingDepartmentReview", "AwaitingPatientResponse", "Confirmed" };
         if (!validStatuses.Contains(appt.Status))
         {
@@ -360,9 +399,9 @@ public class PatientAppointmentController : Controller
         }
 
         var rescheduleClinicNow = GetClinicNow();
-        if (model.NewScheduledStart.HasValue && model.NewScheduledStart.Value <= rescheduleClinicNow)
+        if (model.NewScheduledStart.HasValue && model.NewScheduledStart.Value <= rescheduleClinicNow.AddMinutes(15))
         {
-            ModelState.AddModelError("NewScheduledStart", "Thời gian khám mới không được nằm trong quá khứ. Vui lòng chọn khung giờ khám hợp lệ.");
+            ModelState.AddModelError("NewScheduledStart", "Thời gian khám mới không được nằm trong quá khứ hoặc quá sát giờ hiện tại (cần đặt trước tối thiểu 15 phút). Vui lòng chọn khung giờ khám hợp lệ.");
         }
 
         if (!ModelState.IsValid)
@@ -459,6 +498,16 @@ public class PatientAppointmentController : Controller
         }
 
         var appt = apptResult.Data;
+        var userIdStr = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (long.TryParse(userIdStr, out var currentUserId) && currentUserId > 0 && appt.PatientUserId > 0)
+        {
+            if (appt.PatientUserId != currentUserId)
+            {
+                if (TempData != null) TempData["ErrorMessage"] = "Bạn chỉ có quyền đánh giá các ca khám của chính mình.";
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
         if (appt.Status != "Completed")
         {
             TempData["ErrorMessage"] = "Chỉ có thể đánh giá ca khám đã hoàn thành.";

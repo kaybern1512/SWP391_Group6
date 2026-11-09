@@ -22,9 +22,10 @@
 Toàn bộ 11 hạng mục kiểm tra theo yêu cầu kiểm thử bổ sung đã được hoàn thành 100%, trong đó mục **Ưu tiên P0: Tuyệt đối không cho đặt lịch trong quá khứ** đã được khóa chặt cả ở Frontend Razor/JavaScript lẫn Backend Controller BFF theo múi giờ chuẩn phòng khám `Asia/Ho_Chi_Minh` (UTC+7).
 
 ### Kết quả Test Suites tự động:
-- **Frontend Test Suite (`DentalClinic.Web.Tests`)**: **296 / 296 Passed (100% Green)**
-- **Backend Feedback Test Suite (`DentalClinic.Tests`)**: **8 / 8 Passed (100% Green)**
-- **Kiểm thử HTTP thực tế (Live API on Port 5353/7353)**: Hoàn tất kiểm thử thành công trên các endpoint `/api/booking/available-slots`, `/api/booking/services`, `/api/feedback`, `/api/medicines/dispensations/prescription/{id}`.
+- **Frontend Test Suite (`DentalClinic.Web.Tests`)**: **301 / 301 Passed (100% Green)**
+- **Backend Unit Test Suite (`DentalClinic.Tests`)**: **550 / 550 Passed (100% Green)**
+- **Bộ kiểm thử VietQR & IDOR mới**: Đã tích hợp `VietQrHelperTests` (kiểm tra tiền lẻ 189,500 đ, 200,500 đ, 99,999 đ không bị làm tròn sai) và kiểm thử an ninh IDOR trên tất cả các Controller.
+- **Kiểm thử HTTP thực tế (Live API on Port 5353/7353)**: Hoàn tất kiểm thử thành công trên các endpoint `/api/booking/available-slots` (400 Bad Request cho past dates), `/api/booking/services` (200 OK trả 31 dịch vụ thật), `/api/blog/posts` (200 OK), `/api/medicines/dispensations/prescription/{id}` (401 Unauthorized khi chưa đăng nhập).
 
 ---
 
@@ -189,7 +190,7 @@ Theo yêu cầu, toàn bộ các hạng mục được gắn nhãn theo đúng 5
 
 ## 5. KẾT LUẬN & ĐỀ NGHỊ
 
-1. Nhánh `feature/patient-redesign` của **Anti 3 (Patient)** đã đạt đầy đủ tất cả các tiêu chí nghiệm thu nghiêm ngặt, đặc biệt là tiêu chuẩn P0 chống đặt lịch quá khứ, bảo mật dữ liệu feedback và phân lập đơn thuốc - phát thuốc.
-2. Tất cả 296 bài kiểm thử Frontend và 8 bài kiểm thử Feedback Backend đều đạt 100% tỷ lệ vượt qua (0 lỗi).
-3. Toàn bộ các phát hiện và yêu cầu đối với các role liên quan (Anti 1 Admin, Anti 2 Receptionist, Anti 4 Dentist) đã được ghi chép chi tiết, rõ ràng trong tài liệu handoff.
+1. Nhánh `feature/patient-redesign` của **Anti 3 (Patient)** đã đạt đầy đủ tất cả các tiêu chí nghiệm thu nghiêm ngặt, đặc biệt là tiêu chuẩn P0 chống đặt lịch quá khứ, bảo mật dữ liệu feedback, kiểm soát IDOR trên toàn bộ các controller, và phân lập đơn thuốc - phát thuốc.
+2. Tất cả 301 bài kiểm thử Frontend và 550 bài kiểm thử Backend Unit Tests đều đạt 100% tỷ lệ vượt qua (0 lỗi).
+3. Toàn bộ các phát hiện và yêu cầu đối với các role liên quan (Anti 1 Admin, Anti 2 Receptionist, Anti 4 Dentist) đã được ghi chép chi tiết, rõ ràng trong tài liệu handoff `docs/redesign/handoffs/PATIENT_API_REQUIREMENTS.md` và `docs/redesign/PATIENT_FINAL_COMPLETION_REPORT.md`.
 4. Sẵn sàng commit và bảo lưu trên nhánh `feature/patient-redesign` theo đúng nguyên tắc không tự merge vào main/develop.

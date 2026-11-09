@@ -161,13 +161,13 @@ dotnet test BE/DentalClinic.Tests --filter "FullyQualifiedName~Feedback|FullyQua
 ```powershell
 dotnet test FE/DentalClinic.Web.Tests
 ```
-- **Total Tests Executed**: 294
-- **Passed**: 294
+- **Total Tests Executed**: 301
+- **Passed**: 301
 - **Failed**: 0
 - **Skipped**: 0
 - **Duration**: 21s
 
-*Key Patient Web Controller Tests Verified*:
+*Key Patient Web Controller & Helper Tests Verified*:
 - `Patient_Book_Get_ReturnsViewWithDepartments`
 - `Patient_Book_Post_Valid_RedirectsToSuccess`
 - `Patient_Feedback_Get_CompletedAppointment_ReturnsViewWithForm`
@@ -176,17 +176,20 @@ dotnet test FE/DentalClinic.Web.Tests
 - `Patient_Withdraw_Post_Success_RedirectsToDetail`
 - `Patient_AcceptProposal_Success_RedirectsToDetail`
 - `PatientPrescriptionController_Index_ReturnsViewWithPatientPrescriptions`
+- `VietQrHelperTests`: Exact odd amount preservation (189,500 đ, 200,500 đ, 99,999 đ) and transfer syntax `THANH TOAN <invoiceCode>`
 
 ---
 
-## 9. Deliverables & Git Status
+## 9. Deliverables, Production Readiness & Git Status
 
 - Work completed in branch: `feature/patient-redesign` in worktree `D:\SWP391\DentalCare-Patient`.
-- Artifacts generated:
-  - `docs/redesign/PATIENT_IMPLEMENTATION_REPORT.md` (this report)
-  - `docs/redesign/handoffs/PATIENT_API_REQUIREMENTS.md` (inter-role API hand-off specification)
-- **Zero changes made to production database `DentalClinicManagementDB`**.
-- Integration instructions prepared for subsequent consolidation.
+- Artifacts generated & maintained:
+  - `docs/redesign/PATIENT_FINAL_COMPLETION_REPORT.md` (Production readiness & 5-status verification matrix)
+  - `docs/redesign/PATIENT_FINAL_QA_REPORT.md` (Detailed QA & HTTP smoke test report)
+  - `docs/redesign/PATIENT_IMPLEMENTATION_REPORT.md` (This implementation report)
+  - `docs/redesign/handoffs/PATIENT_API_REQUIREMENTS.md` (Inter-role API hand-off specification)
+- **Zero changes made to production database `DentalClinicManagementDB`** (dedicated `DentalCare_Patient_Dev` used exclusively).
+- P0 past-date lockdown, IDOR security guards, status sanitation, and VietQR unit tests fully implemented and verified.
 
 ---
 *End of Report.*

@@ -62,6 +62,16 @@ public class PatientPrescriptionController : Controller
             return RedirectToAction(nameof(Index));
         }
 
+        var userIdStr = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (long.TryParse(userIdStr, out var currentUserId) && currentUserId > 0 && result.Data.PatientUserId > 0)
+        {
+            if (result.Data.PatientUserId != currentUserId)
+            {
+                if (TempData != null) TempData["ErrorMessage"] = "Bạn không có quyền truy cập đơn thuốc này.";
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
         var vm = new PrescriptionPrintViewModel
         {
             Prescription = result.Data

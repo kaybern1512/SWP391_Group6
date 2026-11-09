@@ -891,6 +891,15 @@
             document.getElementById('hiddenServiceId').value = id;
             document.getElementById('hiddenDepartmentId').value = deptId;
 
+            // Reset previous slot selection when service changes (Anti 3 Rule: Prevent submitting old slot after service change)
+            selectedSlot = null;
+            const hiddenScheduledStart = document.getElementById('hiddenScheduledStart');
+            if (hiddenScheduledStart) hiddenScheduledStart.value = '';
+            const btnNext3 = document.getElementById('btnNext3');
+            if (btnNext3) btnNext3.disabled = true;
+            const slotAlert = document.getElementById('slotSelectedAlert');
+            if (slotAlert) slotAlert.classList.add('d-none');
+
             // Highlight card
             document.querySelectorAll('#servicesGrid .service-card').forEach(c => c.classList.remove('active'));
             if (cardElem) cardElem.classList.add('active');
@@ -1385,7 +1394,30 @@
             // Ngăn chặn submit lặp kép
             const form = document.getElementById('bookingForm');
             if (form) {
-                form.addEventListener('submit', function () {
+                form.addEventListener('submit', function (e) {
+                    const startVal = document.getElementById('hiddenScheduledStart').value;
+                    if (!startVal) {
+                        e.preventDefault();
+                        if (window.toastWarning) {
+                            window.toastWarning('Vui lòng chọn khung giờ khám hợp lệ trước khi gửi yêu cầu.', 'Chưa Chọn Giờ');
+                        } else {
+                            alert('Vui lòng chọn khung giờ khám hợp lệ trước khi gửi yêu cầu.');
+                        }
+                        goToStep(3);
+                        return false;
+                    }
+                    const slotDate = new Date(startVal);
+                    const now = new Date();
+                    if (slotDate <= now) {
+                        e.preventDefault();
+                        if (window.toastWarning) {
+                            window.toastWarning('Khung giờ bạn đã chọn đã trôi qua do trang được mở quá lâu. Vui lòng chọn lại khung giờ mới.', 'Khung Giờ Hết Hạn');
+                        } else {
+                            alert('Khung giờ bạn đã chọn đã trôi qua. Vui lòng chọn lại khung giờ mới.');
+                        }
+                        goToStep(3);
+                        return false;
+                    }
                     const submitBtn = document.getElementById('btnSubmitBooking');
                     if (submitBtn) {
                         submitBtn.disabled = true;

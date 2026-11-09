@@ -194,9 +194,12 @@ To prevent financial discrepancies and confusion:
 | :--- | :--- | :--- |
 | Feedback Service Security & Phase 0 Columns | `DentalClinic.Tests (Backend)` | **8 / 8 Passed** |
 | Service Catalog & Booking Duration Slots | `DentalClinic.Tests (Backend)` | **59 / 59 Passed** |
+| Full Backend Unit Test Suite (Excl. External DB) | `DentalClinic.Tests (Backend)` | **550 / 550 Passed** |
 | Patient Booking Web Controllers & Lifecycle | `DentalClinic.Web.Tests (Frontend)` | **32 / 32 Passed** |
-| Full Frontend Unit & Integration Test Suite | `DentalClinic.Web.Tests (Frontend)` | **296 / 296 Passed** |
+| VietQR Exact Currency & Format Validation | `DentalClinic.Web.Tests (Frontend)` | **5 / 5 Passed** |
+| Full Frontend Unit & Controller Test Suite | `DentalClinic.Web.Tests (Frontend)` | **301 / 301 Passed** |
 | End-to-End Live HTTP Validation (Port 5353 / 7353) | Integration Smoke Tests | **100% Verified** |
+| Production Readiness Sign-off Matrix | `docs/redesign/PATIENT_FINAL_COMPLETION_REPORT.md` | **Fully Documented** |
 
 ---
 *End of Specification.*
