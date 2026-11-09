@@ -65,6 +65,20 @@ public class FeedbackController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("my-summary")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<DentistFeedbackSummaryDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyFeedbackSummary(CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _feedbackService.GetDentistFeedbackSummaryAsync(dentistUserId, ct);
+        if (!result.Success)
+        {
+            return NotFound(result);
+        }
+        return Ok(result);
+    }
+
     [HttpGet("my")]
     [Authorize(Roles = UserRole.Patient)]
     [ProducesResponseType(typeof(ApiResponse<List<VisitFeedbackDto>>), StatusCodes.Status200OK)]

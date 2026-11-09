@@ -41,6 +41,26 @@ public class DentistAppointmentController : Controller
         return View("~/Views/Dentist/Appointments/Today.cshtml", vm);
     }
 
+    /// <summary>
+    /// Section 3: Điều hướng trực tiếp vào Giao diện khám bệnh thống nhất cho Appointment
+    /// </summary>
+    [HttpGet("{id:long}")]
+    public async Task<IActionResult> Details(long id)
+    {
+        var apptDetail = await _appointmentApiService.GetAppointmentDetailAsync(id);
+        if (apptDetail?.Data?.PatientUserId > 0)
+        {
+            var isExam = apptDetail.Data.Status == "InService" || apptDetail.Data.Status == "CheckedIn";
+            return RedirectToAction("Index", "DentistMedicalRecord", new
+            {
+                patientId = apptDetail.Data.PatientUserId,
+                appointmentId = id,
+                isExamining = isExam
+            });
+        }
+        return RedirectToAction(nameof(Today));
+    }
+
     [HttpPost("{id:long}/Start")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Start(long id, [FromForm] string? date = null)

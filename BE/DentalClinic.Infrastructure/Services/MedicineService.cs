@@ -638,6 +638,13 @@ public class MedicineService : IMedicineService
         using var tx = await _context.Database.BeginTransactionAsync(ct);
         try
         {
+            // Acquire canonical application locks on all involved batches to prevent concurrent over-dispensation
+            var batchKeys = request.Items
+                .Where(i => i.MedicineBatchId > 0)
+                .Select(i => SqlAppLockHelper.MedicineBatchKey(i.MedicineBatchId))
+                .Distinct();
+            using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_context, batchKeys, timeoutMs: 5000, ct: ct);
+
             var dispensation = new MedicineDispensation
             {
                 PrescriptionId = prescription.PrescriptionId,

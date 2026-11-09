@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -20,34 +20,51 @@ public class DentistMedicalRecordController : Controller
     private readonly IMedicalRecordApiService _medicalRecordApi;
     private readonly IAppointmentApiService? _appointmentApiService;
     private readonly IPostCareApiService? _postCareApi;
+    private readonly ITreatmentApiService? _treatmentApi;
+    private readonly IPrescriptionApiService? _prescriptionApi;
+    private readonly IMedicineApiService? _medicineApi;
 
     [ActivatorUtilitiesConstructor]
     public DentistMedicalRecordController(
         IMedicalRecordApiService medicalRecordApi,
         IAppointmentApiService appointmentApiService,
-        IPostCareApiService postCareApi)
+        IPostCareApiService postCareApi,
+        ITreatmentApiService treatmentApi,
+        IPrescriptionApiService prescriptionApi,
+        IMedicineApiService medicineApi)
     {
         _medicalRecordApi = medicalRecordApi;
         _appointmentApiService = appointmentApiService;
         _postCareApi = postCareApi;
+        _treatmentApi = treatmentApi;
+        _prescriptionApi = prescriptionApi;
+        _medicineApi = medicineApi;
+    }
+
+    public DentistMedicalRecordController(
+        IMedicalRecordApiService medicalRecordApi,
+        IAppointmentApiService appointmentApiService,
+        IPostCareApiService postCareApi)
+        : this(medicalRecordApi, appointmentApiService, postCareApi, null!, null!, null!)
+    {
     }
 
     public DentistMedicalRecordController(
         IMedicalRecordApiService medicalRecordApi,
         IPostCareApiService postCareApi)
-        : this(medicalRecordApi, null!, postCareApi)
+        : this(medicalRecordApi, null!, postCareApi, null!, null!, null!)
     {
     }
 
     public DentistMedicalRecordController(
         IMedicalRecordApiService medicalRecordApi,
         IAppointmentApiService appointmentApiService)
-        : this(medicalRecordApi, appointmentApiService, null!)
+        : this(medicalRecordApi, appointmentApiService, null!, null!, null!, null!)
     {
     }
 
     public DentistMedicalRecordController(IMedicalRecordApiService medicalRecordApi)
-        : this(medicalRecordApi, null!, null!)
+        : this(medicalRecordApi, null!, null!, null!, null!, null!)
     {
     }
 
@@ -140,6 +157,60 @@ public class DentistMedicalRecordController : Controller
             }
         }
 
+        // Performed services for active appointment
+        var performedServices = new List<PerformedServiceDto>();
+        if (appointmentId.HasValue && appointmentId.Value > 0 && _treatmentApi != null)
+        {
+            var perfResult = await _treatmentApi.GetPerformedServicesByAppointmentAsync(appointmentId.Value);
+            if (perfResult.IsSuccess && perfResult.Data != null)
+            {
+                performedServices = perfResult.Data;
+            }
+        }
+
+        // Patient treatment plans
+        var patientPlans = new List<TreatmentPlanDto>();
+        if (targetPatientId.HasValue && _treatmentApi != null)
+        {
+            var plansResult = await _treatmentApi.GetDentistTreatmentPlansAsync(search: null);
+            if (plansResult.IsSuccess && plansResult.Data != null)
+            {
+                patientPlans = plansResult.Data.Where(p => p.PatientUserId == targetPatientId.Value).ToList();
+            }
+        }
+
+        // Active prescription and chairside dispensations
+        PrescriptionDto? activePrescription = null;
+        var dispensations = new List<MedicineDispensationDto>();
+        var availableMedicines = new List<MedicineDto>();
+
+        if (appointmentId.HasValue && appointmentId.Value > 0)
+        {
+            if (_prescriptionApi != null)
+            {
+                var presList = await _prescriptionApi.GetDentistPrescriptionsAsync();
+                if (presList.IsSuccess && presList.Data != null)
+                {
+                    activePrescription = presList.Data.FirstOrDefault(p => p.AppointmentId == appointmentId.Value);
+                }
+            }
+
+            if (_medicineApi != null)
+            {
+                var dispResult = await _medicineApi.GetDispensationsByAppointmentIdAsync(appointmentId.Value);
+                if (dispResult.IsSuccess && dispResult.Data != null)
+                {
+                    dispensations = dispResult.Data;
+                }
+
+                var medResult = await _medicineApi.GetAvailableForPrescriptionAsync();
+                if (medResult.IsSuccess && medResult.Data != null)
+                {
+                    availableMedicines = medResult.Data;
+                }
+            }
+        }
+
         var isCompleted = activeAppt != null && (activeAppt.Status == "Completed" || activeAppt.Status == "Cancelled");
         var isCurrentlyExamining = !isCompleted && (isExamining || (activeAppt != null && activeAppt.Status == "InService"));
 
@@ -155,6 +226,11 @@ public class DentistMedicalRecordController : Controller
             DepartmentServices = services,
             DepartmentDentists = dentists,
             AvailableChairs = chairs,
+            PerformedServices = performedServices,
+            PatientTreatmentPlans = patientPlans,
+            ActivePrescription = activePrescription,
+            Dispensations = dispensations,
+            AvailableMedicines = availableMedicines,
             NewEntryForm = new CreateClinicalEntryFormModel
             {
                 PatientUserId = targetPatientId ?? 0,
@@ -318,15 +394,35 @@ public class DentistMedicalRecordController : Controller
         long appointmentId,
         long patientUserId,
         long serviceId,
-        string? executionMode,
-        long? dentalChairId,
-        long? targetDentistUserId,
-        string? notes)
+        int quantity = 1,
+        decimal? unitPrice = null,
+        string? executionMode = null,
+        long? dentalChairId = null,
+        long? targetDentistUserId = null,
+        string? notes = null)
     {
         if (serviceId <= 0)
         {
-            TempData["ErrorMessage"] = "Vui lòng chọn dịch vụ muốn bổ sung / chuyển tiếp.";
+            TempData["ErrorMessage"] = "Vui lòng chọn dịch vụ muốn bổ sung / thực hiện.";
             return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+        }
+
+        // Section 6: Ghi nhận đúng PerformedServices thực tế tại ghế điều trị
+        if (_treatmentApi != null && appointmentId > 0)
+        {
+            var req = new AddPerformedServiceToAppointmentRequest
+            {
+                DepartmentServiceId = serviceId,
+                Quantity = quantity > 0 ? quantity : 1,
+                UnitPrice = unitPrice,
+                Note = notes
+            };
+            var addRes = await _treatmentApi.AddPerformedServiceToAppointmentAsync(appointmentId, req);
+            if (!addRes.IsSuccess)
+            {
+                TempData["ErrorMessage"] = addRes.Message ?? "Không thể ghi nhận dịch vụ đã thực hiện.";
+                return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+            }
         }
 
         // If doctor performs self and picked chair
@@ -345,10 +441,147 @@ public class DentistMedicalRecordController : Controller
         }
         else
         {
-            TempData["SuccessMessage"] = "Đã tiếp nhận bổ sung dịch vụ điều trị thành công! Bác sĩ có thể tiếp tục thực hiện ngay tại ghế.";
+            TempData["SuccessMessage"] = "Đã ghi nhận dịch vụ thực hiện tại ghế thành công! Dịch vụ đã được cập nhật vào danh mục thanh toán viện phí.";
         }
 
         return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+    }
+
+    [HttpPost("DeletePerformedService")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeletePerformedService(long performedServiceId, long appointmentId, long patientUserId)
+    {
+        if (_treatmentApi != null && performedServiceId > 0)
+        {
+            var res = await _treatmentApi.DeletePerformedServiceAsync(performedServiceId);
+            if (res.IsSuccess)
+            {
+                TempData["SuccessMessage"] = "Đã xóa dịch vụ thực hiện khỏi ca khám thành công.";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = res.Message ?? "Không thể xóa dịch vụ thực hiện.";
+            }
+        }
+        return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+    }
+
+    [HttpPost("CreatePrescriptionQuick")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreatePrescriptionQuick(
+        long appointmentId,
+        long patientUserId,
+        string? generalInstructions,
+        List<string> medicationNames,
+        List<string?> dosages,
+        List<string?> frequencies,
+        List<string?> durations,
+        List<string?> instructions)
+    {
+        if (_prescriptionApi == null || appointmentId <= 0)
+        {
+            TempData["ErrorMessage"] = "Dịch vụ kê đơn chưa sẵn sàng.";
+            return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+        }
+
+        var items = new List<CreatePrescriptionItemInput>();
+        if (medicationNames != null)
+        {
+            for (int i = 0; i < medicationNames.Count; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(medicationNames[i]))
+                {
+                    items.Add(new CreatePrescriptionItemInput
+                    {
+                        MedicationName = medicationNames[i].Trim(),
+                        Dosage = dosages != null && i < dosages.Count ? dosages[i]?.Trim() : null,
+                        Frequency = frequencies != null && i < frequencies.Count ? frequencies[i]?.Trim() : null,
+                        Duration = durations != null && i < durations.Count ? durations[i]?.Trim() : null,
+                        Instructions = instructions != null && i < instructions.Count ? instructions[i]?.Trim() : null
+                    });
+                }
+            }
+        }
+
+        if (!items.Any())
+        {
+            TempData["ErrorMessage"] = "Đơn thuốc phải có ít nhất một loại thuốc.";
+            return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+        }
+
+        var req = new CreatePrescriptionRequest
+        {
+            AppointmentId = appointmentId,
+            GeneralInstructions = generalInstructions,
+            Items = items
+        };
+
+        var presRes = await _prescriptionApi.CreatePrescriptionAsync(req);
+        if (presRes.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đã kê đơn thuốc điện tử thành công! Bác sĩ có thể cấp phát thuốc ngay tại ghế.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = presRes.Message ?? "Không thể tạo đơn thuốc.";
+        }
+
+        return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+    }
+
+    [HttpPost("DispenseMedicineQuick")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DispenseMedicineQuick(
+        long appointmentId,
+        long patientUserId,
+        long prescriptionId,
+        long medicineId,
+        long batchId,
+        int quantity,
+        long? prescriptionItemId = null,
+        string? notes = null)
+    {
+        if (_medicineApi == null || prescriptionId <= 0 || batchId <= 0 || quantity <= 0)
+        {
+            TempData["ErrorMessage"] = "Thông tin cấp phát thuốc không hợp lệ. Vui lòng chọn lô thuốc và nhập số lượng lớn hơn 0.";
+            return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+        }
+
+        var req = new CreateMedicineDispensationRequest
+        {
+            PrescriptionId = prescriptionId,
+            Notes = notes,
+            Items = new List<DispenseItemInput>
+            {
+                new DispenseItemInput
+                {
+                    PrescriptionItemId = prescriptionItemId,
+                    MedicineId = medicineId,
+                    MedicineBatchId = batchId,
+                    Quantity = quantity
+                }
+            }
+        };
+
+        var dispRes = await _medicineApi.DispenseMedicineAsync(req);
+        if (dispRes.IsSuccess)
+        {
+            TempData["SuccessMessage"] = $"Đã cấp phát {quantity} đơn vị thuốc cho bệnh nhân thành công! Kho dược nội bộ đã được cập nhật tự động.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = dispRes.Message ?? "Không thể cấp phát thuốc.";
+        }
+
+        return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+    }
+
+    [HttpGet("GetBatchesForMedicine")]
+    public async Task<IActionResult> GetBatchesForMedicine(long medicineId)
+    {
+        if (_medicineApi == null || medicineId <= 0) return Json(new { success = false, data = new List<object>() });
+        var result = await _medicineApi.GetBatchesAsync(medicineId);
+        return Json(new { success = result.IsSuccess, data = result.Data ?? new() });
     }
 
     private static string? NormalizeImagingType(string? type)

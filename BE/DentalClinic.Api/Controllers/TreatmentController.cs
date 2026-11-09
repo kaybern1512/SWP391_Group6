@@ -241,4 +241,41 @@ public class TreatmentController : ControllerBase
         if (!result.Success) return BadRequest(result);
         return Ok(result);
     }
+
+    // ==========================================
+    // PERFORMED SERVICES (CLINICAL ACTUAL PROCEDURES)
+    // ==========================================
+
+    [HttpGet("appointments/{appointmentId:long}/performed-services")]
+    [Authorize(Roles = "Dentist,Receptionist,SystemAdministrator")]
+    [ProducesResponseType(typeof(ApiResponse<List<PerformedServiceDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPerformedServicesByAppointment(long appointmentId, CancellationToken ct)
+    {
+        var result = await _treatmentService.GetPerformedServicesByAppointmentAsync(appointmentId, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("appointments/{appointmentId:long}/performed-services")]
+    [Authorize(Roles = "Dentist,SystemAdministrator")]
+    [ProducesResponseType(typeof(ApiResponse<PerformedServiceDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<PerformedServiceDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> AddPerformedServiceToAppointment(long appointmentId, [FromBody] AddPerformedServiceToAppointmentRequest request, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _treatmentService.AddPerformedServiceToAppointmentAsync(appointmentId, dentistUserId, request, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpDelete("performed-services/{performedServiceId:long}")]
+    [Authorize(Roles = "Dentist,SystemAdministrator")]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DeletePerformedService(long performedServiceId, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _treatmentService.DeletePerformedServiceAsync(performedServiceId, dentistUserId, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
 }

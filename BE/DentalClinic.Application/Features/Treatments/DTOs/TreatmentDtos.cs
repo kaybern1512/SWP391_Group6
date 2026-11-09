@@ -113,6 +113,14 @@ public class CreatePerformedServiceInput
     public decimal UnitPrice { get; set; }
 }
 
+public class AddPerformedServiceToAppointmentRequest
+{
+    public long DepartmentServiceId { get; set; }
+    public int Quantity { get; set; } = 1;
+    public decimal? UnitPrice { get; set; }
+    public string? Note { get; set; }
+}
+
 public class UpdateTreatmentPlanStatusRequest
 {
     public string Status { get; set; } = "Active";
@@ -172,7 +180,6 @@ public class TreatmentEligiblePhaseDto
     public long? AssociatedAppointmentId { get; set; }
     public string? AssociatedAppointmentCode { get; set; }
 }
-
 
 public class CreatePlanFollowUpAppointmentRequest
 {

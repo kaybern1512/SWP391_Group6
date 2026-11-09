@@ -121,6 +121,21 @@ public class TreatmentApiService : ITreatmentApiService
         return await SendPostAsync<CreatePlanFollowUpAppointmentRequest, AppointmentDto>($"/api/treatments/plans/{planId}/follow-up-appointment", request);
     }
 
+    public async Task<ApiResult<List<PerformedServiceDto>>> GetPerformedServicesByAppointmentAsync(long appointmentId)
+    {
+        return await SendGetAsync<List<PerformedServiceDto>>($"/api/treatments/appointments/{appointmentId}/performed-services");
+    }
+
+    public async Task<ApiResult<PerformedServiceDto>> AddPerformedServiceToAppointmentAsync(long appointmentId, AddPerformedServiceToAppointmentRequest request)
+    {
+        return await SendPostAsync<AddPerformedServiceToAppointmentRequest, PerformedServiceDto>($"/api/treatments/appointments/{appointmentId}/performed-services", request);
+    }
+
+    public async Task<ApiResult<bool>> DeletePerformedServiceAsync(long performedServiceId)
+    {
+        return await SendDeleteAsync<bool>($"/api/treatments/performed-services/{performedServiceId}");
+    }
+
     // ==========================================
     // HTTP HELPERS
     // ==========================================
@@ -220,6 +235,37 @@ public class TreatmentApiService : ITreatmentApiService
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Lỗi kết nối khi gọi PUT {Endpoint}", endpoint);
+            return ApiResult<TResponse>.Failure("Không thể kết nối đến máy chủ API.", statusCode: (int)HttpStatusCode.ServiceUnavailable);
+        }
+    }
+
+    private async Task<ApiResult<TResponse>> SendDeleteAsync<TResponse>(string endpoint)
+    {
+        try
+        {
+            var response = await _httpClient.DeleteAsync(endpoint);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var apiResponse = TryDeserialize<ApiResponse<TResponse>>(body);
+                if (apiResponse != null && apiResponse.Success)
+                {
+                    return ApiResult<TResponse>.Success(apiResponse.Data, apiResponse.Message, (int)response.StatusCode);
+                }
+                var direct = TryDeserialize<TResponse>(body);
+                if (direct != null)
+                {
+                    return ApiResult<TResponse>.Success(direct, null, (int)response.StatusCode);
+                }
+                return ApiResult<TResponse>.Success(default!, null, (int)response.StatusCode);
+            }
+
+            return ParseError<TResponse>(response.StatusCode, body);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Lỗi kết nối khi gọi DELETE {Endpoint}", endpoint);
             return ApiResult<TResponse>.Failure("Không thể kết nối đến máy chủ API.", statusCode: (int)HttpStatusCode.ServiceUnavailable);
         }
     }

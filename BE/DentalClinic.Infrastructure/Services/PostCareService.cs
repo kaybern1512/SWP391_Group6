@@ -98,30 +98,36 @@ public class PostCareService : IPostCareService
         _dbContext.DepartmentReferrals.Add(referral);
         await _dbContext.SaveChangesAsync(ct);
 
-        // Notify Department Manager of target department
-        if (toDept.ManagerUserId.HasValue && toDept.ManagerUserId.Value > 0)
+        // 4-Role Model: Notify Receptionists to assist patient with booking referral appointment
+        try
         {
-            try
+            var patientName = session.TreatmentPlanItem?.TreatmentPlan?.PatientUser?.FullName ?? "Bệnh nhân";
+            var dentistName = session.DentistUser?.User?.FullName ?? "Bác sĩ";
+            var currentDeptName = session.Appointment?.Department?.Name ?? session.TreatmentPlanItem?.TreatmentPlan?.Department?.Name ?? "Nha khoa";
+
+            var recUserIds = await _dbContext.UserAccounts
+                .Where(u => u.Role == "Receptionist")
+                .Select(u => u.UserId)
+                .ToListAsync(ct);
+
+            foreach (var recUserId in recUserIds)
             {
-                var patientName = session.TreatmentPlanItem.TreatmentPlan.PatientUser.FullName;
-                var dentistName = session.DentistUser.User.FullName;
-                var currentDeptName = session.Appointment.Department?.Name ?? session.TreatmentPlanItem.TreatmentPlan.Department.Name;
                 await _notificationService.CreateNotificationAsync(
-                    toDept.ManagerUserId.Value,
+                    recUserId,
                     session.AppointmentId,
                     "ReferralRequest",
-                    "Ca chuyển khoa mới cần duyệt",
-                    $"Bác sĩ {dentistName} ({currentDeptName}) vừa chuyển bệnh nhân {patientName} sang chuyên khoa {toDept.Name}. Lý do: {request.Reason.Trim()}.",
+                    "Ca chuyển khoa mới cần hỗ trợ đặt lịch",
+                    $"Bác sĩ {dentistName} ({currentDeptName}) chỉ định chuyển bệnh nhân {patientName} sang chuyên khoa {toDept.Name}. Lý do: {request.Reason.Trim()}.",
                     ct);
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Không thể gửi thông báo chuyển khoa cho Trưởng khoa {DeptName}", toDept.Name);
-            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Không thể gửi thông báo chuyển khoa cho Lễ tân");
         }
 
         var dto = await MapReferralToDtoAsync(referral.ReferralId, ct);
-        return ApiResponse<DepartmentReferralDto>.Ok(dto!, "Tạo yêu cầu chuyển chuyên khoa thành công.");
+        return ApiResponse<DepartmentReferralDto>.Ok(dto!, "Tạo yêu cầu chuyển chuyên khoa thành công. Đã thông báo cho Lễ tân để phối hợp đặt lịch.");
     }
 
     public async Task<ApiResponse<List<DepartmentReferralDto>>> GetDentistReferralsAsync(

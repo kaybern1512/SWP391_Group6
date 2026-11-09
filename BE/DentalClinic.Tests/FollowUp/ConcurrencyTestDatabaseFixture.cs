@@ -11,7 +11,7 @@ namespace DentalClinic.Tests.FollowUp;
 
 public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
 {
-    public string ServerName { get; } = ".\\SQL2025_DUC";
+    public string ServerName { get; } = Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? ".\\SQLEXPRESS";
     public string RunId { get; } = Guid.NewGuid().ToString("N")[..8];
     public string DatabaseName { get; private set; } = null!;
     public string ConnectionString { get; private set; } = null!;
