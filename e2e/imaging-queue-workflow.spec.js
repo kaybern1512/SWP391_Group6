@@ -1,10 +1,10 @@
-// @ts-check
+﻿// @ts-check
 const { test, expect } = require('@playwright/test');
 const { loginAs, capturePageErrors } = require('./helpers/auth');
 const https = require('https');
 const { execSync } = require('child_process');
 
-const API_BASE = 'https://localhost:7350';
+const API_BASE = process.env.API_BASE || 'https://localhost:7350';
 
 let sharedDiagnosticResultId = 0;
 
