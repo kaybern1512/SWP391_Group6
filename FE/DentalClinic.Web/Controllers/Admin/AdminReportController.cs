@@ -1,3 +1,4 @@
+﻿using DentalClinic.Web.Helpers;
 using System;
 using System.Threading.Tasks;
 using DentalClinic.Web.Models.ApiDtos;
@@ -30,7 +31,7 @@ public class AdminReportController : Controller
         [FromQuery] DateTime? toDate = null,
         [FromQuery] long? departmentId = null)
     {
-        var end = toDate ?? DateTime.Today;
+        var end = toDate ?? ClinicTimeHelper.Today;
         var start = fromDate ?? end.AddDays(-29);
 
         var reportTask = _reportApiService.GetRevenueReportAsync(start, end, departmentId);

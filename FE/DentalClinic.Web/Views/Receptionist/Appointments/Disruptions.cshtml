@@ -1,0 +1,360 @@
+@model List<DentalClinic.Web.Models.ApiDtos.AppointmentDisruptionDto>
+@{
+    ViewData["Title"] = "Điều Phối Lịch Hẹn Do Bác Sĩ Nghỉ Phép";
+    var urgentCount = Model.Count(d => d.IsUrgent && d.Status == "Active");
+    var activeCount = Model.Count(d => d.Status == "Active");
+    var resolvedCount = Model.Count(d => d.Status == "Resolved");
+}
+
+<div class="container-fluid px-4 py-4">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge bg-primary-subtle text-primary fw-medium px-2 py-1 fs-12">
+                    <i class="bi bi-person-workspace me-1"></i> Quầy Lễ Tân
+                </span>
+                <span class="badge bg-warning-subtle text-warning-emphasis fw-semibold px-2 py-1 fs-12">
+                    <i class="bi bi-shield-exclamation me-1"></i> Gián Đoạn Lịch Khám
+                </span>
+            </div>
+            <h1 class="h3 fw-bold text-slate-800 mb-0">Điều Phối & Khắc Phục Lịch Hẹn Bác Sĩ Nghỉ Phép</h1>
+            <p class="text-muted small mb-0 mt-1">Hỗ trợ bệnh nhân đổi bác sĩ, dời lịch hoặc xử lý khẩn cấp khi bác sĩ phụ trách có lịch nghỉ đột xuất</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="Requests" class="btn btn-outline-secondary d-flex align-items-center gap-2">
+                <i class="bi bi-inbox"></i>
+                <span>Yêu Cầu Đặt Lịch</span>
+            </a>
+            <a asp-action="TodayCheckIn" class="btn btn-outline-secondary d-flex align-items-center gap-2">
+                <i class="bi bi-person-check"></i>
+                <span>Check-in Hôm Nay</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-pills mb-4">
+        <li class="nav-item">
+            <a class="nav-link" asp-action="Requests">
+                <i class="bi bi-inbox me-1"></i> Yêu Cầu Đặt Lịch Tiếp Nhận
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" asp-action="TodayCheckIn">
+                <i class="bi bi-calendar-check me-1"></i> Check-in Hôm Nay
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link active bg-warning text-dark fw-semibold" asp-action="Disruptions">
+                <i class="bi bi-arrow-repeat me-1"></i> Điều Phối BS Nghỉ Phép
+                @if (urgentCount > 0)
+                {
+                    <span class="badge bg-danger ms-1">@urgentCount khẩn cấp</span>
+                }
+            </a>
+        </li>
+    </ul>
+
+    <!-- Quick Stat Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white border-start border-4 border-danger">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small fw-semibold">Ca Khẩn Cấp (Trong 24h / Check-in)</div>
+                        <div class="fs-4 fw-bold text-danger">@urgentCount ca</div>
+                    </div>
+                    <div class="bg-danger-subtle text-danger p-3 rounded-circle">
+                        <i class="bi bi-exclamation-octagon-fill fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white border-start border-4 border-warning">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small fw-semibold">Chờ Xử Lý / Bệnh Nhân Phản Hồi</div>
+                        <div class="fs-4 fw-bold text-warning">@activeCount ca</div>
+                    </div>
+                    <div class="bg-warning-subtle text-warning p-3 rounded-circle">
+                        <i class="bi bi-hourglass-split fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white border-start border-4 border-success">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small fw-semibold">Đã Điều Phối Hoàn Tất</div>
+                        <div class="fs-4 fw-bold text-success">@resolvedCount ca</div>
+                    </div>
+                    <div class="bg-success-subtle text-success p-3 rounded-circle">
+                        <i class="bi bi-check-circle-fill fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table of Disruptions -->
+    <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <h5 class="card-title fw-bold text-slate-800 mb-0 d-flex align-items-center gap-2">
+                <i class="bi bi-list-task text-primary"></i>
+                <span>Danh Sách Lịch Hẹn Bị Gián Đoạn</span>
+            </h5>
+            <span class="badge bg-secondary-subtle text-secondary rounded-pill">@Model.Count ca</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light text-muted fs-13 text-uppercase">
+                    <tr>
+                        <th class="ps-4">Mã Hẹn</th>
+                        <th>Bệnh Nhân & Liên Hệ</th>
+                        <th>Dịch Vụ Khám</th>
+                        <th>Giờ Khám Ban Đầu</th>
+                        <th>BS Nghỉ Phép</th>
+                        <th>Phản Hồi Bệnh Nhân</th>
+                        <th>Trạng Thái</th>
+                        <th class="text-end pe-4">Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model == null || !Model.Any())
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="bi bi-check-circle fs-1 text-success mb-2 d-block"></i>
+                                <span>Không có cuộc hẹn nào bị gián đoạn do bác sĩ nghỉ phép. Mọi lịch khám đang diễn ra bình thường!</span>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.OrderByDescending(d => d.IsUrgent).ThenByDescending(d => d.CreatedAt))
+                        {
+                            var rowClass = item.IsUrgent && item.Status == "Active" ? "table-danger-subtle" : "";
+                            <tr class="@rowClass">
+                                <td class="ps-4 fw-bold text-primary">
+                                    #@item.AppointmentCode
+                                    @if (item.IsUrgent && item.Status == "Active")
+                                    {
+                                        <span class="badge bg-danger ms-1">Gấp</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">@item.PatientName</div>
+                                    @if (!string.IsNullOrEmpty(item.PatientPhone))
+                                    {
+                                        <div class="small">
+                                            <a href="tel:@item.PatientPhone" class="text-decoration-none text-primary fw-medium">
+                                                <i class="bi bi-telephone-fill me-1"></i>@item.PatientPhone
+                                            </a>
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(item.PatientEmail))
+                                    {
+                                        <div class="small text-muted"><i class="bi bi-envelope me-1"></i>@item.PatientEmail</div>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="fw-medium text-dark">@item.ServiceName</div>
+                                    <div class="small text-secondary">@item.DepartmentName</div>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-slate-800">@item.ScheduledStart.ToString("HH:mm - dd/MM/yyyy")</div>
+                                </td>
+                                <td>
+                                    <div class="text-danger fw-semibold">
+                                        <i class="bi bi-person-dash me-1"></i>@item.OriginalDentistName
+                                    </div>
+                                    <div class="small text-muted">Đơn nghỉ #@item.DentistLeaveRequestId</div>
+                                </td>
+                                <td>
+                                    @if (item.PatientChoice == "ChooseNewDentist")
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                            <i class="bi bi-check2 me-1"></i>Đã chọn BS: @(item.NewDentistName ?? "Mới")
+                                        </span>
+                                    }
+                                    else if (item.PatientChoice == "Reschedule")
+                                    {
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle">
+                                            <i class="bi bi-calendar-event me-1"></i>Đã chọn dời lịch
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+                                            <i class="bi bi-clock me-1"></i>Chưa phản hồi
+                                        </span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (item.Status == "Active")
+                                    {
+                                        <span class="badge bg-warning text-dark border border-warning">Cần xử lý</span>
+                                    }
+                                    else if (item.Status == "Resolved")
+                                    {
+                                        <span class="badge bg-success">Đã giải quyết</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">@item.Status</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(item.StaffNotes))
+                                    {
+                                        <div class="small text-muted mt-1 text-truncate" style="max-width: 150px;" title="@item.StaffNotes">
+                                            <i class="bi bi-sticky me-1"></i>@item.StaffNotes
+                                        </div>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    @if (item.Status == "Active")
+                                    {
+                                        <button type="button" class="btn btn-sm btn-primary fw-medium" onclick="openResolveModal(@item.DisruptionId, '@Html.Raw(item.AppointmentCode)', '@Html.Raw(item.PatientName.Replace("'", "\\'"))', '@item.PatientPhone')">
+                                            <i class="bi bi-tools me-1"></i> Điều Phối
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-success small fw-semibold"><i class="bi bi-check-all"></i> Hoàn tất</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- MODAL: LỄ TÂN ĐIỀU PHỐI GIÁN ĐOẠN LỊCH HẸN -->
+<!-- ========================================== -->
+<div class="modal fade" id="resolveDisruptionModal" tabindex="-1" aria-labelledby="resolveDisruptionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form id="resolveDisruptionForm" method="post" action="">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-primary text-white py-3">
+                    <h5 class="modal-title fw-bold mb-0" id="resolveDisruptionModalLabel">
+                        <i class="bi bi-headset me-2"></i> Lễ Tân Điều Phối Lịch Hẹn Khám
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-light border p-3 mb-4 rounded-3">
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <div><strong>Lịch hẹn:</strong> <span id="modalApptCode" class="text-primary fw-bold"></span></div>
+                                <div><strong>Bệnh nhân:</strong> <span id="modalPatientName" class="fw-bold text-dark"></span></div>
+                            </div>
+                            <div class="col-md-6">
+                                <div><strong>Số điện thoại:</strong> <a id="modalPhoneLink" href="" class="fw-bold text-success"><i class="bi bi-telephone-fill me-1"></i><span id="modalPatientPhone"></span></a></div>
+                                <div class="small text-muted mt-1">Lễ tân nên gọi điện trực tiếp để tư vấn và chốt phương án với bệnh nhân.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-slate-800">Phương Án Xử Lý Điều Phối <span class="text-danger">*</span></label>
+                        <select name="resolutionType" id="resolutionTypeSelect" class="form-select form-select-lg fs-15" required onchange="onResolutionTypeChanged()">
+                            <option value="ChangeDoctor">1. Đổi sang Bác sĩ khác cùng chuyên khoa (Giữ nguyên giờ)</option>
+                            <option value="Reschedule">2. Dời sang ngày giờ khám mới</option>
+                            <option value="ManualStaffResolved">3. Đã liên hệ & xử lý thỏa thuận với bệnh nhân</option>
+                            <option value="Cancel">4. Hủy lịch hẹn (Hoàn trả tiền cọc / Không phạt bệnh nhân)</option>
+                        </select>
+                    </div>
+
+                    <!-- Change Doctor Section -->
+                    <div id="sectionChangeDoctor" class="mb-3 p-3 bg-light rounded-3 border">
+                        <label class="form-label fw-semibold text-dark">Chọn Bác Sĩ Thay Thế Cùng Chuyên Khoa <span class="text-danger">*</span></label>
+                        <select name="newDentistUserId" id="selectAlternativeDentist" class="form-select">
+                            <option value="">-- Đang tải danh sách bác sĩ rảnh... --</option>
+                        </select>
+                        <div class="form-text text-muted">Hệ thống lọc các bác sĩ cùng chuyên khoa không có lịch trùng trong khung giờ này.</div>
+                    </div>
+
+                    <!-- Reschedule Section -->
+                    <div id="sectionReschedule" class="mb-3 p-3 bg-light rounded-3 border d-none">
+                        <label class="form-label fw-semibold text-dark">Thời Gian Khám Mới Đã Thỏa Thuận Với Bệnh Nhân <span class="text-danger">*</span></label>
+                        <input type="datetime-local" name="newScheduledStart" id="inputNewScheduledStart" class="form-control" />
+                    </div>
+
+                    <!-- Staff Notes -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-slate-800">Biên Bản / Ghi Chú Xử Lý Của Lễ Tân <span class="text-danger">*</span></label>
+                        <textarea name="staffNotes" class="form-control" rows="3" required placeholder="Ghi rõ nội dung đã trao đổi qua điện thoại với bệnh nhân (ví dụ: đã gọi điện lúc 14h, BN đồng ý đổi BS Nguyễn Văn A khám đúng giờ)..."></textarea>
+                        <div class="form-text text-muted">Bắt buộc nhập để lưu vết kiểm toán và quản lý chất lượng dịch vụ phòng khám.</div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary fw-semibold">
+                        <i class="bi bi-check2-circle me-1"></i> Xác Nhận Điều Phối
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function onResolutionTypeChanged() {
+        const type = document.getElementById('resolutionTypeSelect').value;
+        const secDoctor = document.getElementById('sectionChangeDoctor');
+        const secReschedule = document.getElementById('sectionReschedule');
+
+        if (type === 'ChangeDoctor') {
+            secDoctor.classList.remove('d-none');
+            secReschedule.classList.add('d-none');
+        } else if (type === 'Reschedule') {
+            secDoctor.classList.add('d-none');
+            secReschedule.classList.remove('d-none');
+        } else {
+            secDoctor.classList.add('d-none');
+            secReschedule.classList.add('d-none');
+        }
+    }
+
+    async function openResolveModal(disruptionId, apptCode, patientName, patientPhone) {
+        document.getElementById('modalApptCode').textContent = '#' + apptCode;
+        document.getElementById('modalPatientName').textContent = patientName;
+        document.getElementById('modalPatientPhone').textContent = patientPhone || '—';
+        document.getElementById('modalPhoneLink').href = patientPhone ? 'tel:' + patientPhone : '#';
+        document.getElementById('resolveDisruptionForm').action = '/Receptionist/Appointments/ResolveDisruption/' + disruptionId;
+
+        // Reset fields
+        document.getElementById('resolutionTypeSelect').value = 'ChangeDoctor';
+        onResolutionTypeChanged();
+
+        const selectAlt = document.getElementById('selectAlternativeDentist');
+        selectAlt.innerHTML = '<option value="">-- Đang quét bác sĩ khả dụng... --</option>';
+
+        const modal = new bootstrap.Modal(document.getElementById('resolveDisruptionModal'));
+        modal.show();
+
+        try {
+            const resp = await fetch('/Receptionist/Appointments/DisruptionDetailJson/' + disruptionId);
+            const data = await resp.json();
+
+            if (data.success && data.alternatives && data.alternatives.length > 0) {
+                let options = '<option value="">-- Chọn bác sĩ tiếp nhận --</option>';
+                data.alternatives.forEach(d => {
+                    options += `<option value="${d.dentistUserId}">BS. ${d.fullName} (${d.specialization || d.departmentName})</option>`;
+                });
+                selectAlt.innerHTML = options;
+            } else {
+                selectAlt.innerHTML = '<option value="">-- Không có bác sĩ rảnh cùng khoa --</option>';
+            }
+        } catch (e) {
+            selectAlt.innerHTML = '<option value="">-- Lỗi tải danh sách bác sĩ --</option>';
+        }
+    }
+</script>

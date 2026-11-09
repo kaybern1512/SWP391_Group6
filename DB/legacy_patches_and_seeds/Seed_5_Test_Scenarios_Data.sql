@@ -151,7 +151,7 @@ BEGIN TRY
             NULL, NULL, NULL, NULL,
             CAST(CONVERT(VARCHAR(10), DATEADD(DAY, 1, @Today), 120) + ' 09:30:00' AS DATETIME2),
             CAST(CONVERT(VARCHAR(10), DATEADD(DAY, 1, @Today), 120) + ' 10:15:00' AS DATETIME2),
-            N'Bé 5 tuổi đau răng hàm dưới, có lỗ sâu đen, phụ huynh muốn khám răng sữa và bôi vecni Flour',
+            N'Bé 5 tuổi đau răng hàm dưới, có lỗ sâu đen, phụ huynh muốn khám răng sữa và bôi vecni Fluor',
             'Patient', 'PendingDepartmentReview', @Now, @Now
         );
     END;

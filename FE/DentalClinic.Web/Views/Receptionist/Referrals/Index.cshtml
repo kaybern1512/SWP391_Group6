@@ -1,0 +1,351 @@
+@model DentalClinic.Web.ViewModels.PostCare.ReceptionistReferralIndexViewModel
+@{
+    ViewData["Title"] = "Điều Phối Chuyển Chuyên Khoa";
+}
+
+<div class="container-fluid px-0">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-arrow-left-right me-2 text-primary"></i>Điều Phối Chuyển Chuyên Khoa Nội Bộ
+            </h1>
+            <p class="text-muted mb-0">Hỗ trợ bệnh nhân được bác sĩ chuyển khoa đặt lịch hẹn khám chuyên khoa đích, liên kết hồ sơ và hình ảnh chẩn đoán.</p>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Status Filters -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-2 d-flex flex-wrap gap-2 align-items-center">
+            <span class="text-muted small fw-bold px-2 text-uppercase">Bộ lọc trạng thái:</span>
+            <a asp-action="Index" asp-route-status="" class="btn btn-sm @(string.IsNullOrEmpty(Model.StatusFilter) ? "btn-primary" : "btn-outline-secondary")">
+                Tất Cả (@Model.Referrals.Count)
+            </a>
+            <a asp-action="Index" asp-route-status="Pending" class="btn btn-sm @(Model.StatusFilter == "Pending" ? "btn-warning text-dark fw-bold" : "btn-outline-warning text-dark")">
+                <i class="bi bi-clock me-1"></i>Chờ Điều Phối
+            </a>
+            <a asp-action="Index" asp-route-status="Scheduled" class="btn btn-sm @(Model.StatusFilter == "Scheduled" ? "btn-success" : "btn-outline-success")">
+                <i class="bi bi-calendar-check me-1"></i>Đã Đặt Lịch Đích
+            </a>
+            <a asp-action="Index" asp-route-status="Rejected" class="btn btn-sm @(Model.StatusFilter == "Rejected" ? "btn-danger" : "btn-outline-danger")">
+                <i class="bi bi-x-circle me-1"></i>Đã Từ Chối
+            </a>
+        </div>
+    </div>
+
+    <!-- Referrals Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-3 border-bottom">
+            <h5 class="card-title fw-bold mb-0 text-dark">
+                <i class="bi bi-list-columns me-2 text-primary"></i>Danh Sách Bệnh Nhân Chuyển Chuyên Khoa
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            @if (Model.Referrals == null || Model.Referrals.Count == 0)
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox display-4 text-muted mb-3 d-block"></i>
+                    <h6 class="fw-bold text-muted">Không có yêu cầu chuyển khoa nào phù hợp</h6>
+                    <p class="text-muted small">Khi bác sĩ điều trị chỉ định chuyển khoa cho bệnh nhân, thông tin sẽ xuất hiện ở đây để Lễ tân điều phối.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Mã Phiếu</th>
+                                <th>Bệnh Nhân</th>
+                                <th>Lộ Trình Chuyển Khoa</th>
+                                <th>Bác Sĩ Chỉ Định</th>
+                                <th>Lý Do Lâm Sàng</th>
+                                <th>Trạng Thái</th>
+                                <th>Lịch Khám Đích</th>
+                                <th class="pe-4 text-end">Hành Động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in Model.Referrals)
+                            {
+                                <tr>
+                                    <td class="ps-4 fw-bold text-primary">#REF-@r.ReferralId</td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@r.PatientName</div>
+                                        <div class="small text-muted">@(r.PatientCode ?? "BN-" + r.PatientUserId)</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border">@r.FromDepartmentName</span>
+                                        <i class="bi bi-arrow-right mx-1 text-primary"></i>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">@r.ToDepartmentName</span>
+                                        @if (r.Urgency == "Urgent")
+                                        {
+                                            <span class="badge bg-danger ms-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Khẩn</span>
+                                        }
+                                    </td>
+                                    <td>@r.ReferringDentistName</td>
+                                    <td>
+                                        <div class="text-truncate" style="max-width: 250px;" title="@r.Reason">@r.Reason</div>
+                                    </td>
+                                    <td>
+                                        @switch (r.Status)
+                                        {
+                                            case "Pending":
+                                                <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Chờ điều phối</span>
+                                                break;
+                                            case "Accepted":
+                                            case "Assigned":
+                                                <span class="badge bg-info text-dark"><i class="bi bi-person-check me-1"></i>Đã tiếp nhận</span>
+                                                break;
+                                            case "Scheduled":
+                                                <span class="badge bg-success"><i class="bi bi-calendar-check me-1"></i>Đã lên lịch</span>
+                                                break;
+                                            case "Rejected":
+                                                <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Từ chối</span>
+                                                break;
+                                            default:
+                                                <span class="badge bg-secondary">@r.Status</span>
+                                                break;
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (r.DestinationAppointmentId.HasValue)
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                <i class="bi bi-link-45deg me-1"></i>Lịch #@r.DestinationAppointmentId.Value
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">Chưa đặt</span>
+                                        }
+                                    </td>
+                                    <td class="pe-4 text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <button type="button" class="btn btn-outline-info" onclick="viewSourceSummary(@r.ReferralId)" title="Xem tóm tắt lâm sàng & X-quang">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            @if (r.Status == "Pending" || r.Status == "Accepted" || r.Status == "Assigned")
+                                            {
+                                                <button type="button" class="btn btn-primary" onclick="openScheduleModal(@r.ReferralId, @r.ToDepartmentId, '@r.ToDepartmentName', '@r.PatientName', @(r.AssignedDentistUserId ?? 0))" title="Điều phối lịch hẹn đích">
+                                                    <i class="bi bi-calendar-plus me-1"></i>Đặt lịch
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Modal Điều Phối Lịch Hẹn Đích -->
+<div class="modal fade" id="scheduleModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form id="scheduleForm" method="post" asp-action="Schedule">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-calendar-plus me-2"></i>Điều Phối Lịch Hẹn Chuyên Khoa Đích</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <input type="hidden" id="modalReferralId" name="ReferralId" />
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Bệnh Nhân</label>
+                        <input type="text" id="modalPatientName" class="form-control bg-light" readonly />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Khoa Tiếp Nhận</label>
+                        <input type="text" id="modalDepartmentName" class="form-control bg-light" readonly />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Bác Sĩ Tiếp Nhận <span class="text-danger">*</span></label>
+                        <select id="modalDentistId" name="AssignedDentistUserId" class="form-select" required>
+                            <option value="">-- Chọn bác sĩ chuyên khoa tiếp nhận --</option>
+                            @foreach (var d in Model.Dentists)
+                            {
+                                <option value="@d.DentistUserId" data-dept="@d.DepartmentId">@d.FullName - @(d.Specialization ?? "Bác sĩ chuyên khoa")</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label text-muted small fw-bold">Bắt Đầu <span class="text-danger">*</span></label>
+                            <input type="datetime-local" id="modalStart" name="ScheduledStart" class="form-control" required />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-muted small fw-bold">Kết Thúc <span class="text-danger">*</span></label>
+                            <input type="datetime-local" id="modalEnd" name="ScheduledEnd" class="form-control" required />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">Ghi Chú Phối Hợp</label>
+                        <textarea name="Notes" class="form-control" rows="2" placeholder="Dặn dò cho bệnh nhân và bác sĩ tiếp nhận..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check2-circle me-1"></i>Xác Nhận Đặt Lịch</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Xem Tóm Tắt & X-quang -->
+<div class="modal fade" id="sourceSummaryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-clipboard2-pulse me-2"></i>Tóm Tắt Hồ Sơ Gốc & Kết Quả X-quang</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4" id="sourceSummaryContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <div class="text-muted mt-2">Đang tải hồ sơ lâm sàng...</div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function openScheduleModal(referralId, deptId, deptName, patientName, assignedDentistId) {
+        document.getElementById('modalReferralId').value = referralId;
+        document.getElementById('modalPatientName').value = patientName;
+        document.getElementById('modalDepartmentName').value = deptName;
+        document.getElementById('scheduleForm').action = '/Receptionist/Referrals/Schedule/' + referralId;
+
+        // Filter dentists by department
+        const dentistSelect = document.getElementById('modalDentistId');
+        for (let i = 0; i < dentistSelect.options.length; i++) {
+            const opt = dentistSelect.options[i];
+            if (!opt.value) continue;
+            const optDept = opt.getAttribute('data-dept');
+            if (!deptId || optDept == deptId) {
+                opt.style.display = '';
+            } else {
+                opt.style.display = 'none';
+            }
+        }
+        if (assignedDentistId > 0) {
+            dentistSelect.value = assignedDentistId;
+        }
+
+        // Default tomorrow 09:00 -> 09:45
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(9, 0, 0, 0);
+        const tomorrowEnd = new Date(tomorrow);
+        tomorrowEnd.setMinutes(tomorrowEnd.getMinutes() + 45);
+
+        const formatIso = d => {
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        };
+        document.getElementById('modalStart').value = formatIso(tomorrow);
+        document.getElementById('modalEnd').value = formatIso(tomorrowEnd);
+
+        new bootstrap.Modal(document.getElementById('scheduleModal')).show();
+    }
+
+    async function viewSourceSummary(referralId) {
+        const modal = new bootstrap.Modal(document.getElementById('sourceSummaryModal'));
+        modal.show();
+        const content = document.getElementById('sourceSummaryContent');
+        content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div><div class="text-muted mt-2">Đang tải hồ sơ lâm sàng...</div></div>';
+
+        try {
+            const res = await fetch('/Receptionist/Referrals/SourceSummary/' + referralId);
+            if (!res.ok) throw new Error('Không thể tải tóm tắt hồ sơ.');
+            const data = await res.json();
+
+            let imagesHtml = '<p class="text-muted small">Không có hình ảnh X-quang liên kết trong ca khám gốc.</p>';
+            if (data.diagnosticImages && data.diagnosticImages.length > 0) {
+                imagesHtml = '<div class="row g-2">';
+                for (const img of data.diagnosticImages) {
+                    imagesHtml += `
+                        <div class="col-md-6">
+                            <div class="card border h-100 shadow-sm">
+                                <img src="${img.fileUrl}" class="card-img-top bg-black" style="max-height: 200px; object-fit: contain;" alt="X-ray Image" onerror="this.src='/images/placeholder-xray.png'">
+                                <div class="card-body p-2 small">
+                                    <div class="fw-bold text-dark">${img.equipmentName || 'Thiết bị chụp nội bộ'} (${img.imageFormat})</div>
+                                    <div class="text-muted">Nhận định: ${img.findings || 'Chưa ghi nhận'}</div>
+                                    <div class="text-muted">Bác sĩ đọc kết quả: ${img.reviewedByDentistName || 'Đang chờ duyệt'}</div>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+                imagesHtml += '</div>';
+            }
+
+            content.innerHTML = `
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <div class="small text-muted">Bệnh Nhân:</div>
+                        <div class="fw-bold">${data.patientName} (${data.patientCode || 'N/A'})</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="small text-muted">Bác Sĩ Chỉ Định:</div>
+                        <div class="fw-bold">${data.requestingDentistName}</div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <div class="small text-muted">Khoa Nguồn:</div>
+                        <div class="badge bg-light text-dark border">${data.fromDepartmentName}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="small text-muted">Khoa Nhận:</div>
+                        <div class="badge bg-primary">${data.toDepartmentName}</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="small text-muted fw-bold">Lý Do Chuyển Khoa:</div>
+                    <div class="p-2 bg-light rounded border small">${data.reason}</div>
+                </div>
+                ${data.clinicalInstructions ? `
+                <div class="mb-3">
+                    <div class="small text-muted fw-bold">Dặn Dò Lâm Sàng:</div>
+                    <div class="p-2 bg-light rounded border small">${data.clinicalInstructions}</div>
+                </div>` : ''}
+                <div class="mt-4">
+                    <h6 class="fw-bold text-dark mb-2"><i class="bi bi-images me-2 text-primary"></i>Hình Ảnh Chẩn Đoán X-quang Ca Gốc</h6>
+                    ${imagesHtml}
+                </div>
+            `;
+        } catch (err) {
+            content.innerHTML = `<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Lỗi tải dữ liệu: ${err.message}</div>`;
+        }
+    }
+</script>
+}

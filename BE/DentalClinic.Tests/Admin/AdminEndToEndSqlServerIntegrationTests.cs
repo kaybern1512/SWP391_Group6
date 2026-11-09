@@ -18,7 +18,9 @@ namespace DentalClinic.Tests.Admin;
 
 public class AdminEndToEndSqlServerIntegrationTests
 {
-    private const string ConnectionString = "Server=.\\SQLEXPRESS;Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
+    private static string ConnectionString =>
+        Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
 
     private static DentalClinicDbContext CreateRealDbContext()
     {

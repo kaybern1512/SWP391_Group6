@@ -13,8 +13,15 @@ test.describe('Patient Portal End-to-End Suite', () => {
     const passwordInput = page.locator('input[type="password"]');
     await expect(passwordInput).toBeVisible();
 
-    const submitBtn = page.locator('button[type="submit"]');
+    // Semantic button selector matching the account login submit button
+    const submitBtn = page.locator('#loginSubmitBtn');
+    await expect(submitBtn).toHaveCount(1);
     await expect(submitBtn).toBeVisible();
+
+    // Semantic role selector also matches without strict mode violation
+    const submitByRole = page.getByRole('button', { name: /Đăng Nhập/i });
+    await expect(submitByRole).toHaveCount(1);
+    await expect(submitByRole).toBeVisible();
   });
 
   test('UAT-03: Dental Service Catalog loads with service details', async ({ page }) => {
@@ -29,7 +36,7 @@ test.describe('Patient Portal End-to-End Suite', () => {
   });
 
   test('UAT-16: Medical News and Blog accessible publicly', async ({ page }) => {
-    await page.goto('/Blog');
+    await page.goto('/Home/Blog');
     await expect(page).toHaveTitle(/Tin tức|Blog|DentalCare/i);
   });
 });

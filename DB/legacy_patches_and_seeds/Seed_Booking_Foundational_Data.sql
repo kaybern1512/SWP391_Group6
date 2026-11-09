@@ -187,9 +187,9 @@ BEGIN TRY
     -- Dept 4: Nhi
     IF @DeptPediatricId IS NOT NULL
     BEGIN
-        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptPediatricId AND ServiceName = N'Khám nha khoa trẻ em & Bôi Flour ngừa sâu')
+        IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptPediatricId AND ServiceName = N'Khám nha khoa trẻ em & Bôi Fluor ngừa sâu')
             INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)
-            VALUES (@DeptPediatricId, N'Khám nha khoa trẻ em & Bôi Flour ngừa sâu', N'Chăm sóc răng miệng định kỳ và ngừa sâu răng cho trẻ.', 30, 150000, 'Active');
+            VALUES (@DeptPediatricId, N'Khám nha khoa trẻ em & Bôi Fluor ngừa sâu', N'Chăm sóc răng miệng định kỳ và ngừa sâu răng cho trẻ.', 30, 150000, 'Active');
 
         IF NOT EXISTS (SELECT 1 FROM DepartmentServices WHERE DepartmentId = @DeptPediatricId AND ServiceName = N'Trám răng sữa Composite Bio không đau')
             INSERT INTO DepartmentServices (DepartmentId, ServiceName, Description, DurationMinutes, Price, Status)

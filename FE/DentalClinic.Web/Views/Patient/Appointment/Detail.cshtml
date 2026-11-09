@@ -1,4 +1,4 @@
-@model DentalClinic.Web.ViewModels.Appointments.AppointmentDetailViewModel
+﻿@model DentalClinic.Web.ViewModels.Appointments.AppointmentDetailViewModel
 @{
     ViewData["Title"] = $"Chi tiết lịch hẹn {Model.Appointment.AppointmentCode}";
     var appt = Model.Appointment;
@@ -58,17 +58,38 @@
         </div>
     </div>
 
+        <!-- DOCTOR LEAVE DISRUPTION BANNER -->
+    @if (Model.ActiveDisruption != null && Model.ActiveDisruption.Status == "Active")
+    {
+        <div class="card border-warning shadow-sm mb-4 border-start border-5 border-warning">
+            <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-warning-subtle text-warning p-3 rounded-circle">
+                        <i class="bi bi-exclamation-triangle-fill fs-3"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-slate-800 mb-1">Lá»‹ch Háº¹n Cáº§n Äiá»u Phá»‘i - BÃ¡c SÄ© Xin Nghá»‰ PhÃ©p</h5>
+                        <p class="text-secondary mb-0">BÃ¡c sÄ© phá»¥ trÃ¡ch lá»‹ch khÃ¡m nÃ y Ä‘ang cÃ³ lá»‹ch nghá»‰ phÃ©p. Vui lÃ²ng chá»n Ä‘á»•i bÃ¡c sÄ© hoáº·c dá»i lá»‹ch khÃ¡m Ä‘á»ƒ chÃºng tÃ´i chuáº©n bá»‹ Ä‘Ã³n tiáº¿p tá»‘t nháº¥t.</p>
+                    </div>
+                </div>
+                <a asp-action="Disruption" asp-route-id="@Model.ActiveDisruption.DisruptionId" class="btn btn-warning text-dark fw-bold px-4 py-2">
+                    <i class="bi bi-arrow-repeat me-1"></i> Xá»­ LÃ½ Ngay
+                </a>
+            </div>
+        </div>
+    }
+
     <!-- PROPOSAL BANNER IF AWAITING PATIENT RESPONSE -->
     @if (appt.Status == "AwaitingPatientResponse" && Model.ActiveProposal != null)
     {
         var p = Model.ActiveProposal;
         <div class="card border-primary shadow-sm mb-4">
             <div class="card-header bg-primary text-white py-3 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-bell-fill me-2"></i>Đề Xuất Điều Chỉnh Lịch Hẹn Từ Trưởng Khoa</h5>
+                <h5 class="mb-0 fw-bold"><i class="bi bi-bell-fill me-2"></i>Đề Xuất Điều Chỉnh Lịch Hẹn Từ Phòng Khám</h5>
                 <span class="badge bg-white text-primary">Cần phản hồi</span>
             </div>
             <div class="card-body p-4">
-                <p class="text-dark mb-3">Do điều kiện phòng khám hoặc lịch khám của bác sĩ, Trưởng khoa đã đề xuất phương án điều chỉnh sau:</p>
+                <p class="text-dark mb-3">Do điều kiện phòng khám hoặc lịch khám của bác sĩ, phòng khám đã đề xuất phương án điều chỉnh sau:</p>
                 <div class="row g-3 mb-4">
                     <div class="col-md-4">
                         <div class="p-3 bg-light rounded">
@@ -91,7 +112,7 @@
                 </div>
 
                 <div class="d-flex gap-3 justify-content-end">
-                    <form asp-action="RejectProposal" asp-route-id="@appt.AppointmentId" method="post" data-confirm="Bạn có chắc chắn muốn từ chối đề xuất này? Lịch hẹn sẽ được gửi lại cho Trưởng khoa.">
+                    <form asp-action="RejectProposal" asp-route-id="@appt.AppointmentId" method="post" data-confirm="Bạn có chắc chắn muốn từ chối đề xuất này? Lịch hẹn sẽ được gửi lại cho phòng khám.">
                         @Html.AntiForgeryToken()
                         <button type="submit" class="btn btn-outline-danger px-4">
                             <i class="bi bi-x-circle me-1"></i> Từ chối đề xuất
@@ -140,11 +161,11 @@
 
                         <div class="col-md-6">
                             <label class="text-muted small">Bác sĩ mong muốn (Yêu cầu lúc đặt):</label>
-                            <div>@(appt.RequestedDentistName ?? "Bất kỳ bác sĩ khả dụng")</div>
+                            <div>@(appt.RequestedDentistName ?? "Để phòng khám phân công bác sĩ phù hợp")</div>
                         </div>
                         <div class="col-md-6">
                             <label class="text-muted small">Bác sĩ phụ trách chính thức:</label>
-                            <div class="fw-bold text-success fs-6">@(appt.AssignedDentistName ?? "(Chờ Trưởng khoa phân bổ)")</div>
+                            <div class="fw-bold text-success fs-6">@(appt.AssignedDentistName ?? "(Đang chờ phòng khám phân công bác sĩ)")</div>
                         </div>
 
                         <div class="col-md-6">

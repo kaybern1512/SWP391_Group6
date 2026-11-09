@@ -1488,6 +1488,7 @@ public class AppointmentFlowTests
         // Attempt Dentist Start directly from Confirmed without Check-in
         var startResult = await service.DentistStartAppointmentAsync(apptId, 401);
         Assert.False(startResult.Success);
+        Assert.NotNull(startResult.Message);
         Assert.Contains("check-in", startResult.Message.ToLowerInvariant());
     }
     [Fact]
@@ -2075,5 +2076,163 @@ public class AppointmentFlowTests
         // Must reject duplicate
         Assert.False(secondResult.Success);
         Assert.Contains("khung giờ này rồi", secondResult.Message ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task CreatePatientAppointmentAsync_ShiftPolicy_AllowsMaxTwoDifferentSessionsPerDay()
+    {
+        using var db = CreateDbContext(nameof(CreatePatientAppointmentAsync_ShiftPolicy_AllowsMaxTwoDifferentSessionsPerDay));
+        await SeedBasicDataAsync(db);
+
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var targetDate = DateTime.Today.AddDays(3);
+
+        // 1. First booking: Morning slot (09:00) -> SUCCESS
+        var morningRequest1 = new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = targetDate.AddHours(9),
+            ReasonForVisit = "Khám cạo vôi buổi sáng"
+        };
+        var res1 = await service.CreatePatientAppointmentAsync(101, morningRequest1);
+        Assert.True(res1.Success);
+
+        // 2. Second booking in same morning session (10:30) -> REJECTED
+        var morningRequest2 = new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = targetDate.AddHours(10).AddMinutes(30),
+            ReasonForVisit = "Thử đặt thêm buổi sáng nữa"
+        };
+        var res2 = await service.CreatePatientAppointmentAsync(101, morningRequest2);
+        Assert.False(res2.Success);
+        Assert.Contains("Buổi Sáng", res2.Message ?? string.Empty);
+
+        // 3. Second booking in different session: Afternoon (14:00) -> SUCCESS
+        var afternoonRequest = new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = targetDate.AddHours(14),
+            ReasonForVisit = "Khám trám răng buổi chiều"
+        };
+        var res3 = await service.CreatePatientAppointmentAsync(101, afternoonRequest);
+        Assert.True(res3.Success);
+
+        // 4. Third booking in same day -> REJECTED (max 2 per day)
+        var thirdRequest = new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = targetDate.AddHours(16),
+            ReasonForVisit = "Thử đặt ca thứ 3 trong ngày"
+        };
+        var res4 = await service.CreatePatientAppointmentAsync(101, thirdRequest);
+        Assert.False(res4.Success);
+        Assert.Contains("tối đa 2 lịch khám trong cùng một ngày", res4.Message ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task Test24_PatientBooks_WithServiceCombo_StoresStructuredComboIdAndCode_AndMapsDepartmentAndService()
+    {
+        using var db = CreateDbContext(nameof(Test24_PatientBooks_WithServiceCombo_StoresStructuredComboIdAndCode_AndMapsDepartmentAndService));
+        await SeedBasicDataAsync(db);
+
+        // Seed a ServiceCombo in DB
+        var combo = new ServiceCombo
+        {
+            ComboCode = "COMBO_CARE",
+            Title = "ChÄƒm SÃ³c & Vá»‡ Sinh Ná»¥ CÆ°á»i SÃ¡ng Khá»e",
+            Tagline = "LÃ m sáº¡ch máº£ng bÃ¡m, ngá»«a sÃ¢u rÄƒng",
+            DepartmentId = 1,
+            PrimaryServiceId = 10,
+            OriginalPrice = 450000,
+            ComboPrice = 350000,
+            DurationMinutes = 45,
+            Status = "Active"
+        };
+        db.ServiceCombos.Add(combo);
+        await db.SaveChangesAsync();
+
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var request = new CreateAppointmentRequest
+        {
+            ComboCode = "COMBO_CARE",
+            ComboId = combo.ComboId,
+            DepartmentId = 999, // Intentional mismatch to test automatic DB mapping enforcement
+            RequestedServiceId = 999,
+            RequestedDentistUserId = null,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ReasonForVisit = "ÄÄƒng kÃ½ gÃ³i chÄƒm sÃ³c rÄƒng miá»‡ng trá»n gÃ³i"
+        };
+
+        var result = await service.CreatePatientAppointmentAsync(101, request);
+
+        Assert.True(result.Success, result.Message);
+        Assert.NotNull(result.Data);
+        Assert.Equal("COMBO_CARE", result.Data.ComboCode);
+        Assert.Equal(combo.ComboId, result.Data.ComboId);
+        // DepartmentId and RequestedServiceId must be enforced from DB combo catalog
+        Assert.Equal(1, result.Data.DepartmentId);
+        Assert.Equal(10, result.Data.RequestedServiceId);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, result.Data.Status);
+        Assert.Null(result.Data.QueueNumber);
+
+        // Verify DB persistence: exactly 1 appointment created, 0 TreatmentPlans
+        var dbAppt = await db.Appointments.FirstOrDefaultAsync(a => a.AppointmentId == result.Data.AppointmentId);
+        Assert.NotNull(dbAppt);
+        Assert.Equal("COMBO_CARE", dbAppt.ComboCode);
+        Assert.Equal(combo.ComboId, dbAppt.ComboId);
+        Assert.Null(dbAppt.QueueNumber);
+
+        var totalAppointments = await db.Appointments.CountAsync(a => a.PatientUserId == 101);
+        Assert.Equal(1, totalAppointments);
+
+        var totalTreatmentPlans = await db.TreatmentPlans.CountAsync(tp => tp.PatientUserId == 101);
+        Assert.Equal(0, totalTreatmentPlans);
+    }
+
+    [Fact]
+    public async Task Test25_GetAvailableCombos_ReturnsActiveCombosFromDatabase()
+    {
+        using var db = CreateDbContext(nameof(Test25_GetAvailableCombos_ReturnsActiveCombosFromDatabase));
+        await SeedBasicDataAsync(db);
+
+        db.ServiceCombos.AddRange(
+            new ServiceCombo
+            {
+                ComboCode = "COMBO_CARE",
+                Title = "ChÄƒm SÃ³c & Vá»‡ Sinh Ná»¥ CÆ°á»i SÃ¡ng Khá»e",
+                DepartmentId = 1,
+                PrimaryServiceId = 10,
+                OriginalPrice = 450000,
+                ComboPrice = 350000,
+                DurationMinutes = 45,
+                Status = "Active"
+            },
+            new ServiceCombo
+            {
+                ComboCode = "COMBO_INACTIVE",
+                Title = "Combo Táº¡m Ngá»«ng",
+                DepartmentId = 1,
+                PrimaryServiceId = 10,
+                OriginalPrice = 500000,
+                ComboPrice = 400000,
+                DurationMinutes = 45,
+                Status = "Inactive"
+            }
+        );
+        await db.SaveChangesAsync();
+
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var result = await service.GetAvailableCombosAsync();
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Data);
+        Assert.Single(result.Data);
+        Assert.Equal("COMBO_CARE", result.Data[0].ComboCode);
+        Assert.Equal(350000, result.Data[0].ComboPrice);
     }
 }

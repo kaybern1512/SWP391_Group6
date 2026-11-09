@@ -38,7 +38,7 @@ BEGIN TRY
         END
 
         ALTER TABLE [dbo].[TreatmentPlans] WITH CHECK ADD CONSTRAINT [CK_TreatmentPlans_Status]
-            CHECK ([Status] IN ('Cancelled', 'Completed', 'InProgress', 'Planned', 'Active', 'Draft'));
+            CHECK ([Status] IN ('Cancelled', 'Completed', 'InProgress', 'In_Progress', 'Planned', 'Active', 'Draft'));
         PRINT '    Created constraint [CK_TreatmentPlans_Status] allowing Active and Draft.';
     END
 

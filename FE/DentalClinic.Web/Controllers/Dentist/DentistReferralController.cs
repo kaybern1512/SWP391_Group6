@@ -1,3 +1,4 @@
+﻿using DentalClinic.Web.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -16,15 +17,18 @@ public class DentistReferralController : Controller
     private readonly IPostCareApiService _postCareApi;
     private readonly IAppointmentApiService _appointmentApi;
     private readonly ITreatmentApiService _treatmentApi;
+    private readonly IImagingApiService _imagingApi;
 
     public DentistReferralController(
         IPostCareApiService postCareApi,
         IAppointmentApiService appointmentApi,
-        ITreatmentApiService treatmentApi)
+        ITreatmentApiService treatmentApi,
+        IImagingApiService imagingApi)
     {
         _postCareApi = postCareApi;
         _appointmentApi = appointmentApi;
         _treatmentApi = treatmentApi;
+        _imagingApi = imagingApi;
     }
 
     [HttpGet("")]
@@ -95,7 +99,7 @@ public class DentistReferralController : Controller
             return RedirectToAction(nameof(Index), new { tab = "followups" });
         }
 
-        if (request.RecommendedDate <= DateTime.Today)
+        if (request.RecommendedDate <= ClinicTimeHelper.Today)
         {
             TempData["ErrorMessage"] = "Ngày hẹn tái khám phải từ ngày mai trở đi.";
             return RedirectToAction(nameof(Index), new { tab = "followups" });
@@ -135,5 +139,62 @@ public class DentistReferralController : Controller
         }
 
         return Ok(new { success = true, message = result.Message ?? "Xử lý yêu cầu thành công.", data = result.Data });
+    }
+
+    [HttpPost("CreateConsultation")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateConsultation(CreateConsultationRequest request)
+    {
+        if (request.SourceAppointmentId <= 0 || request.ConsultedDentistUserId <= 0)
+        {
+            TempData["ErrorMessage"] = "Vui lòng chọn ca khám và bác sĩ cần xin ý kiến hội chẩn.";
+            return RedirectToAction(nameof(Index), new { tab = "consultations" });
+        }
+
+        var result = await _imagingApi.CreateConsultationAsync(request);
+        if (!result.IsSuccess)
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể gửi yêu cầu hội chẩn.";
+        }
+        else
+        {
+            TempData["SuccessMessage"] = "Gửi yêu cầu hội chẩn chuyên môn thành công.";
+        }
+
+        return RedirectToAction(nameof(Index), new { tab = "consultations" });
+    }
+
+    [HttpPost("RespondConsultation/{id:long}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RespondConsultation(long id, RespondConsultationRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.DentistOpinion))
+        {
+            TempData["ErrorMessage"] = "Vui lòng nhập ý kiến chuyên môn hội chẩn.";
+            return RedirectToAction(nameof(Index), new { tab = "consultations" });
+        }
+
+        var result = await _imagingApi.RespondConsultationAsync(id, request);
+        if (!result.IsSuccess)
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể gửi phản hồi hội chẩn.";
+        }
+        else
+        {
+            TempData["SuccessMessage"] = "Đã gửi ý kiến chuyên môn hội chẩn thành công.";
+        }
+
+        return RedirectToAction(nameof(Index), new { tab = "consultations" });
+    }
+
+    [HttpGet("SourceSummary/{id:long}")]
+    public async Task<IActionResult> SourceSummary(long id)
+    {
+        var result = await _postCareApi.GetReferralSourceSummaryAsync(id);
+        if (!result.IsSuccess || result.Data == null)
+        {
+            return NotFound(result.Message ?? "Không tìm thấy thông tin ca chuyển khoa.");
+        }
+        return Json(result.Data);
     }
 }

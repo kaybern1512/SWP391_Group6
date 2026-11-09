@@ -1310,6 +1310,7 @@ public class FollowUpSchedulingServiceTests
         var response = await service.ResolveProposalAsync(20, resolveReq);
 
         Assert.False(response.Success);
+        Assert.NotNull(response.Message);
         Assert.True(response.Message.Contains("trùng lịch") || response.Message.Contains("đã có cuộc hẹn") || response.Message.Contains("không còn khả dụng"));
     }
 

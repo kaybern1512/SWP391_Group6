@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -24,6 +24,10 @@ public partial class Appointment
     public long? DentalChairId { get; set; }
 
     public long? TreatmentPlanItemId { get; set; }
+
+    public string? ComboCode { get; set; }
+
+    public long? ComboId { get; set; }
 
     public DateTime? ScheduledStart { get; set; }
 
@@ -57,6 +61,10 @@ public partial class Appointment
 
     public virtual ICollection<AppointmentStatusHistory> AppointmentStatusHistories { get; set; } = new List<AppointmentStatusHistory>();
 
+    public virtual ICollection<AppointmentDisruption> AppointmentDisruptions { get; set; } = new List<AppointmentDisruption>();
+
+    public virtual ICollection<AppointmentDisruption> ResolvedAppointmentDisruptions { get; set; } = new List<AppointmentDisruption>();
+
     public virtual DentistProfile? AssignedDentistUser { get; set; }
 
     public virtual ICollection<ClinicalEntry> ClinicalEntries { get; set; } = new List<ClinicalEntry>();
@@ -88,4 +96,11 @@ public partial class Appointment
     public virtual VisitFeedback? VisitFeedback { get; set; }
 
     public virtual TreatmentPlanItem? TreatmentPlanItem { get; set; }
+    public virtual ICollection<DiagnosticOrder> DiagnosticOrders { get; set; } = new List<DiagnosticOrder>();
+    public virtual ICollection<ImagingSession> ImagingSessions { get; set; } = new List<ImagingSession>();
+    public virtual ICollection<ClinicalConsultation> ClinicalConsultations { get; set; } = new List<ClinicalConsultation>();
+    public virtual ICollection<DepartmentReferral> IncomingReferrals { get; set; } = new List<DepartmentReferral>();
+    public virtual ICollection<DepartmentReferral> OutgoingReferrals { get; set; } = new List<DepartmentReferral>();
+
+    public virtual ServiceCombo? Combo { get; set; }
 }

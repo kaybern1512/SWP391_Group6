@@ -1,9 +1,9 @@
--- =========================================================================================
+﻿-- =========================================================================================
 -- DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)
 -- MASTER CLEAN DATABASE SCHEMA (44 TABLES, VIEWS, STORED PROCEDURES)
 -- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
 -- Database Name: DentalClinicManagementDB
--- Generated: 2026-11-03 02:08:47
+-- Generated: 2026-11-09 23:24:39
 -- =========================================================================================
 
 -- =========================================================================================
@@ -392,6 +392,11 @@ CREATE TABLE [dbo].[DepartmentServices](
 	[DurationMinutes] [int] NULL,
 	[Price] [decimal](18, 2) NOT NULL,
 	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ServiceType] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[RequiresExclusiveRoom] [bit] NOT NULL,
+	[RequiresConsultationFirst] [bit] NOT NULL,
+	[MinLeadTimeHours] [int] NOT NULL,
+	[BookingInstructions] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 PRIMARY KEY CLUSTERED 
 (
 	[DepartmentServiceId] ASC
@@ -437,6 +442,7 @@ CREATE TABLE [dbo].[Appointments](
 	[CancellationReason] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[UpdatedAt] [datetime2](7) NULL,
 	[ScheduledDate]  AS (CONVERT([date],[ScheduledStart])) PERSISTED,
+	[TreatmentPlanItemId] [bigint] NULL,
 PRIMARY KEY CLUSTERED 
 (
 	[AppointmentId] ASC
@@ -557,12 +563,10 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_PADDING ON
-GO
 CREATE TABLE [dbo].[SupportChatMessages](
 	[MessageId] [bigint] IDENTITY(1,1) NOT NULL,
-	[ConversationId] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[SenderType] [varchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ConversationId] [nvarchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[SenderType] [nvarchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[SenderUserId] [bigint] NULL,
 	[SenderName] [nvarchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[MessageText] [nvarchar](2000) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -574,8 +578,6 @@ PRIMARY KEY CLUSTERED
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
-GO
-SET ANSI_PADDING OFF
 GO
 SET ANSI_NULLS ON
 GO
@@ -817,6 +819,7 @@ CREATE TABLE [dbo].[DepartmentReferrals](
 	[CreatedAt] [datetime2](7) NOT NULL,
 	[ReviewedAt] [datetime2](7) NULL,
 	[Urgency] [varchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ClinicalInstructions] [nvarchar](2000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 PRIMARY KEY CLUSTERED 
 (
 	[ReferralId] ASC
@@ -931,6 +934,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+SET ANSI_PADDING ON
+GO
 CREATE TABLE [dbo].[VisitFeedback](
 	[FeedbackId] [bigint] IDENTITY(1,1) NOT NULL,
 	[AppointmentId] [bigint] NOT NULL,
@@ -938,6 +943,13 @@ CREATE TABLE [dbo].[VisitFeedback](
 	[ClinicRating] [tinyint] NOT NULL,
 	[Comment] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[CreatedAt] [datetime2](7) NOT NULL,
+	[DentistUserId] [bigint] NULL,
+	[PatientUserId] [bigint] NULL,
+	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[AdminNotes] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[AdminRespondedByUserId] [bigint] NULL,
+	[AdminResponse] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[UpdatedAt] [datetime2](7) NULL,
 PRIMARY KEY CLUSTERED 
 (
 	[FeedbackId] ASC
@@ -948,6 +960,8 @@ UNIQUE NONCLUSTERED
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+SET ANSI_PADDING OFF
 GO
 SET ANSI_NULLS ON
 GO
@@ -1019,6 +1033,10 @@ CREATE TABLE [dbo].[BlogPosts](
 	[PublishedAt] [datetime2](7) NULL,
 	[CreatedAt] [datetime2](7) NOT NULL,
 	[UpdatedAt] [datetime2](7) NULL,
+	[PostType] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[RejectionReason] [nvarchar](1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[ApprovedByUserId] [bigint] NULL,
+	[ApprovedAt] [datetime2](7) NULL,
 	[EmbedVideoId]  AS (case when [VideoUrl] like '%youtube.com/embed/%' then substring([VideoUrl],charindex('/embed/',[VideoUrl])+(7),case when charindex('?',[VideoUrl],charindex('/embed/',[VideoUrl])+(7))>(0) then charindex('?',[VideoUrl],charindex('/embed/',[VideoUrl])+(7))-(charindex('/embed/',[VideoUrl])+(7)) else len([VideoUrl]) end) when [VideoUrl] like '%youtu.be/%' then substring([VideoUrl],charindex('youtu.be/',[VideoUrl])+(9),case when charindex('?',[VideoUrl],charindex('youtu.be/',[VideoUrl])+(9))>(0) then charindex('?',[VideoUrl],charindex('youtu.be/',[VideoUrl])+(9))-(charindex('youtu.be/',[VideoUrl])+(9)) else len([VideoUrl]) end) when [VideoUrl] like '%youtube.com/watch?v=%' then substring([VideoUrl],charindex('?v=',[VideoUrl])+(3),case when charindex('&',[VideoUrl],charindex('?v=',[VideoUrl])+(3))>(0) then charindex('&',[VideoUrl],charindex('?v=',[VideoUrl])+(3))-(charindex('?v=',[VideoUrl])+(3)) else len([VideoUrl]) end)  end) PERSISTED,
 	[ReadTimeMinutes]  AS (case when [Content] IS NULL OR len([Content])<(250) then (1) else (len([Content])-len(replace([Content],' ','')))/(250)+(1) end) PERSISTED,
  CONSTRAINT [PK_BlogPosts] PRIMARY KEY CLUSTERED 
@@ -1275,6 +1293,13 @@ CREATE NONCLUSTERED INDEX [IX_Appointments_Room_Start] ON [dbo].[Appointments]
 WHERE ([RoomId] IS NOT NULL)
 WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
+CREATE NONCLUSTERED INDEX [IX_Appointments_TreatmentPlanItemId] ON [dbo].[Appointments]
+(
+	[TreatmentPlanItemId] ASC
+)
+WHERE ([TreatmentPlanItemId] IS NOT NULL)
+WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
 SET ARITHABORT ON
 SET CONCAT_NULL_YIELDS_NULL ON
 SET QUOTED_IDENTIFIER ON
@@ -1337,7 +1362,7 @@ GO
 SET ANSI_PADDING ON
 
 GO
-CREATE NONCLUSTERED INDEX [IX_SupportChatMessages_Conv] ON [dbo].[SupportChatMessages]
+CREATE NONCLUSTERED INDEX [IX_SupportChatMessages_Conversation_SentAt] ON [dbo].[SupportChatMessages]
 (
 	[ConversationId] ASC,
 	[SentAt] ASC
@@ -1399,6 +1424,16 @@ CREATE NONCLUSTERED INDEX [IX_Payments_Invoice_Status] ON [dbo].[Payments]
 	[InvoiceId] ASC,
 	[Status] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+CREATE NONCLUSTERED INDEX [IX_VisitFeedback_Dentist_Status] ON [dbo].[VisitFeedback]
+(
+	[DentistUserId] ASC,
+	[Status] ASC
+)
+INCLUDE([DentistRating],[ClinicRating],[CreatedAt]) WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
 CREATE NONCLUSTERED INDEX [IX_AuditLogs_User_CreatedAt] ON [dbo].[AuditLogs]
 (
@@ -1541,6 +1576,14 @@ ALTER TABLE [dbo].[DentalChairs] ADD  DEFAULT ('Active') FOR [Status]
 GO
 ALTER TABLE [dbo].[DepartmentServices] ADD  DEFAULT ('Active') FOR [Status]
 GO
+ALTER TABLE [dbo].[DepartmentServices] ADD  CONSTRAINT [DF_DepartmentServices_ServiceType]  DEFAULT ('Treatment') FOR [ServiceType]
+GO
+ALTER TABLE [dbo].[DepartmentServices] ADD  CONSTRAINT [DF_DepartmentServices_RequiresExclusiveRoom]  DEFAULT ((0)) FOR [RequiresExclusiveRoom]
+GO
+ALTER TABLE [dbo].[DepartmentServices] ADD  CONSTRAINT [DF_DepartmentServices_RequiresConsultationFirst]  DEFAULT ((0)) FOR [RequiresConsultationFirst]
+GO
+ALTER TABLE [dbo].[DepartmentServices] ADD  CONSTRAINT [DF_DepartmentServices_MinLeadTimeHours]  DEFAULT ((2)) FOR [MinLeadTimeHours]
+GO
 ALTER TABLE [dbo].[Appointments] ADD  DEFAULT ('PendingReceptionReview') FOR [Status]
 GO
 ALTER TABLE [dbo].[Appointments] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
@@ -1603,6 +1646,8 @@ ALTER TABLE [dbo].[Payments] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
 GO
 ALTER TABLE [dbo].[VisitFeedback] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
 GO
+ALTER TABLE [dbo].[VisitFeedback] ADD  CONSTRAINT [DF_VisitFeedback_Status]  DEFAULT ('Approved') FOR [Status]
+GO
 ALTER TABLE [dbo].[AuditLogs] ADD  DEFAULT (sysdatetime()) FOR [CreatedAt]
 GO
 ALTER TABLE [dbo].[BlogCategories] ADD  CONSTRAINT [DF_BlogCategories_CreatedAt]  DEFAULT (sysdatetime()) FOR [CreatedAt]
@@ -1614,6 +1659,8 @@ GO
 ALTER TABLE [dbo].[BlogPosts] ADD  CONSTRAINT [DF_BlogPosts_ViewCount]  DEFAULT ((0)) FOR [ViewCount]
 GO
 ALTER TABLE [dbo].[BlogPosts] ADD  CONSTRAINT [DF_BlogPosts_CreatedAt]  DEFAULT (sysdatetime()) FOR [CreatedAt]
+GO
+ALTER TABLE [dbo].[BlogPosts] ADD  CONSTRAINT [DF_BlogPosts_PostType]  DEFAULT ('Blog') FOR [PostType]
 GO
 ALTER TABLE [dbo].[BlogPostMedia] ADD  CONSTRAINT [DF_BlogPostMedia_CreatedAt]  DEFAULT (sysdatetime()) FOR [CreatedAt]
 GO
@@ -1746,6 +1793,11 @@ REFERENCES [dbo].[DepartmentServices] ([DepartmentServiceId])
 GO
 ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [FK_Appointments_Service]
 GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD  CONSTRAINT [FK_Appointments_TreatmentPlanItems_TreatmentPlanItemId] FOREIGN KEY([TreatmentPlanItemId])
+REFERENCES [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId])
+GO
+ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [FK_Appointments_TreatmentPlanItems_TreatmentPlanItemId]
+GO
 ALTER TABLE [dbo].[AppointmentChangeProposals]  WITH CHECK ADD  CONSTRAINT [FK_AppointmentChangeProposals_Appointment] FOREIGN KEY([AppointmentId])
 REFERENCES [dbo].[Appointments] ([AppointmentId])
 GO
@@ -1794,6 +1846,7 @@ ALTER TABLE [dbo].[Notifications] CHECK CONSTRAINT [FK_Notifications_User]
 GO
 ALTER TABLE [dbo].[SupportChatMessages]  WITH CHECK ADD  CONSTRAINT [FK_SupportChatMessages_User] FOREIGN KEY([SenderUserId])
 REFERENCES [dbo].[UserAccounts] ([UserId])
+ON DELETE SET NULL
 GO
 ALTER TABLE [dbo].[SupportChatMessages] CHECK CONSTRAINT [FK_SupportChatMessages_User]
 GO
@@ -1957,15 +2010,35 @@ REFERENCES [dbo].[PatientProfiles] ([UserId])
 GO
 ALTER TABLE [dbo].[Payments] CHECK CONSTRAINT [FK_Payments_Patient]
 GO
+ALTER TABLE [dbo].[VisitFeedback]  WITH CHECK ADD  CONSTRAINT [FK_VisitFeedback_AdminRespondedBy] FOREIGN KEY([AdminRespondedByUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[VisitFeedback] CHECK CONSTRAINT [FK_VisitFeedback_AdminRespondedBy]
+GO
 ALTER TABLE [dbo].[VisitFeedback]  WITH CHECK ADD  CONSTRAINT [FK_VisitFeedback_Appointment] FOREIGN KEY([AppointmentId])
 REFERENCES [dbo].[Appointments] ([AppointmentId])
 GO
 ALTER TABLE [dbo].[VisitFeedback] CHECK CONSTRAINT [FK_VisitFeedback_Appointment]
 GO
+ALTER TABLE [dbo].[VisitFeedback]  WITH CHECK ADD  CONSTRAINT [FK_VisitFeedback_DentistUser] FOREIGN KEY([DentistUserId])
+REFERENCES [dbo].[DentistProfiles] ([UserId])
+GO
+ALTER TABLE [dbo].[VisitFeedback] CHECK CONSTRAINT [FK_VisitFeedback_DentistUser]
+GO
+ALTER TABLE [dbo].[VisitFeedback]  WITH CHECK ADD  CONSTRAINT [FK_VisitFeedback_PatientUser] FOREIGN KEY([PatientUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[VisitFeedback] CHECK CONSTRAINT [FK_VisitFeedback_PatientUser]
+GO
 ALTER TABLE [dbo].[AuditLogs]  WITH CHECK ADD  CONSTRAINT [FK_AuditLogs_User] FOREIGN KEY([UserId])
 REFERENCES [dbo].[UserAccounts] ([UserId])
 GO
 ALTER TABLE [dbo].[AuditLogs] CHECK CONSTRAINT [FK_AuditLogs_User]
+GO
+ALTER TABLE [dbo].[BlogPosts]  WITH CHECK ADD  CONSTRAINT [FK_BlogPosts_ApprovedByUser] FOREIGN KEY([ApprovedByUserId])
+REFERENCES [dbo].[UserAccounts] ([UserId])
+GO
+ALTER TABLE [dbo].[BlogPosts] CHECK CONSTRAINT [FK_BlogPosts_ApprovedByUser]
 GO
 ALTER TABLE [dbo].[BlogPosts]  WITH CHECK ADD  CONSTRAINT [FK_BlogPosts_BlogCategories] FOREIGN KEY([CategoryId])
 REFERENCES [dbo].[BlogCategories] ([CategoryId])
@@ -2057,7 +2130,9 @@ ALTER TABLE [dbo].[UserAccounts]  WITH CHECK ADD CHECK  (([FailedLoginCount]>=(0
 GO
 ALTER TABLE [dbo].[UserAccounts]  WITH CHECK ADD CHECK  (([Status]='Inactive' OR [Status]='Locked' OR [Status]='Active' OR [Status]='Unverified'))
 GO
-ALTER TABLE [dbo].[UserAccounts]  WITH CHECK ADD CHECK  (([Role]='SystemAdministrator' OR [Role]='DepartmentManager' OR [Role]='Dentist' OR [Role]='Receptionist' OR [Role]='Patient'))
+ALTER TABLE [dbo].[UserAccounts]  WITH CHECK ADD  CONSTRAINT [CK_UserAccounts_Role] CHECK  (([Role]='Patient' OR [Role]='Receptionist' OR [Role]='Dentist' OR [Role]='SystemAdministrator'))
+GO
+ALTER TABLE [dbo].[UserAccounts] CHECK CONSTRAINT [CK_UserAccounts_Role]
 GO
 ALTER TABLE [dbo].[PatientProfiles]  WITH CHECK ADD CHECK  (([Gender] IS NULL OR ([Gender]='Other' OR [Gender]='Female' OR [Gender]='Male')))
 GO
@@ -2117,15 +2192,17 @@ ALTER TABLE [dbo].[AppointmentChangeProposals] CHECK CONSTRAINT [CK_AppointmentC
 GO
 ALTER TABLE [dbo].[Notifications]  WITH CHECK ADD CHECK  (([Channel]='Email' OR [Channel]='InApp'))
 GO
-ALTER TABLE [dbo].[Notifications]  WITH CHECK ADD CHECK  (([DeliveryStatus]='Failed' OR [DeliveryStatus]='Sent' OR [DeliveryStatus]='Pending' OR [DeliveryStatus]='Read'))
+ALTER TABLE [dbo].[Notifications]  WITH CHECK ADD  CONSTRAINT [CK_Notifications_DeliveryStatus] CHECK  (([DeliveryStatus]='Read' OR [DeliveryStatus]='Failed' OR [DeliveryStatus]='Sent' OR [DeliveryStatus]='Pending'))
 GO
-ALTER TABLE [dbo].[TreatmentPlans]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Completed' OR [Status]='InProgress' OR [Status]='Planned'))
+ALTER TABLE [dbo].[Notifications] CHECK CONSTRAINT [CK_Notifications_DeliveryStatus]
 GO
 ALTER TABLE [dbo].[TreatmentPlans]  WITH CHECK ADD  CONSTRAINT [CK_TreatmentPlans_EstimatedTotal] CHECK  (([EstimatedTotal] IS NULL OR [EstimatedTotal]>=(0)))
 GO
 ALTER TABLE [dbo].[TreatmentPlans] CHECK CONSTRAINT [CK_TreatmentPlans_EstimatedTotal]
 GO
-ALTER TABLE [dbo].[TreatmentPlanItems]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Completed' OR [Status]='InProgress' OR [Status]='Planned'))
+ALTER TABLE [dbo].[TreatmentPlans]  WITH CHECK ADD  CONSTRAINT [CK_TreatmentPlans_Status] CHECK  (([Status]='Draft' OR [Status]='Active' OR [Status]='Planned' OR [Status]='In_Progress' OR [Status]='InProgress' OR [Status]='Completed' OR [Status]='Cancelled'))
+GO
+ALTER TABLE [dbo].[TreatmentPlans] CHECK CONSTRAINT [CK_TreatmentPlans_Status]
 GO
 ALTER TABLE [dbo].[TreatmentPlanItems]  WITH CHECK ADD  CONSTRAINT [CK_TreatmentPlanItems_Cost] CHECK  (([EstimatedCost] IS NULL OR [EstimatedCost]>=(0)))
 GO
@@ -2134,6 +2211,10 @@ GO
 ALTER TABLE [dbo].[TreatmentPlanItems]  WITH CHECK ADD  CONSTRAINT [CK_TreatmentPlanItems_Sequence] CHECK  (([SequenceNo]>(0)))
 GO
 ALTER TABLE [dbo].[TreatmentPlanItems] CHECK CONSTRAINT [CK_TreatmentPlanItems_Sequence]
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems]  WITH CHECK ADD  CONSTRAINT [CK_TreatmentPlanItems_Status] CHECK  (([Status]='Active' OR [Status]='Pending' OR [Status]='Planned' OR [Status]='InProgress' OR [Status]='Completed' OR [Status]='Cancelled'))
+GO
+ALTER TABLE [dbo].[TreatmentPlanItems] CHECK CONSTRAINT [CK_TreatmentPlanItems_Status]
 GO
 ALTER TABLE [dbo].[PerformedServices]  WITH CHECK ADD  CONSTRAINT [CK_PerformedServices_Quantity] CHECK  (([Quantity]>(0)))
 GO
@@ -2153,7 +2234,7 @@ ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [CK_Departme
 GO
 ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [CK_DepartmentReferrals_Urgency]
 GO
-ALTER TABLE [dbo].[FollowUpSchedules]  WITH CHECK ADD  CONSTRAINT [CK_FollowUpSchedules_Status] CHECK  (([Status]='Cancelled' OR [Status]='Completed' OR [Status]='Scheduled' OR [Status]='Pending' OR [Status]='Confirmed' OR [Status]='Proposed'))
+ALTER TABLE [dbo].[FollowUpSchedules]  WITH CHECK ADD  CONSTRAINT [CK_FollowUpSchedules_Status] CHECK  (([Status]='Proposed' OR [Status]='Cancelled' OR [Status]='Completed' OR [Status]='Scheduled' OR [Status]='Confirmed' OR [Status]='Pending'))
 GO
 ALTER TABLE [dbo].[FollowUpSchedules] CHECK CONSTRAINT [CK_FollowUpSchedules_Status]
 GO
@@ -2171,19 +2252,25 @@ ALTER TABLE [dbo].[InvoiceItems]  WITH CHECK ADD  CONSTRAINT [CK_InvoiceItems_Un
 GO
 ALTER TABLE [dbo].[InvoiceItems] CHECK CONSTRAINT [CK_InvoiceItems_UnitPrice]
 GO
-ALTER TABLE [dbo].[Payments]  WITH CHECK ADD CHECK  (([Method]='BankTransfer' OR [Method]='Online' OR [Method]='Cash' OR [Method]='CreditCard'))
-GO
 ALTER TABLE [dbo].[Payments]  WITH CHECK ADD CHECK  (([Status]='Cancelled' OR [Status]='Failed' OR [Status]='Successful' OR [Status]='Pending'))
 GO
 ALTER TABLE [dbo].[Payments]  WITH CHECK ADD  CONSTRAINT [CK_Payments_Amount] CHECK  (([Amount]>(0)))
 GO
 ALTER TABLE [dbo].[Payments] CHECK CONSTRAINT [CK_Payments_Amount]
 GO
+ALTER TABLE [dbo].[Payments]  WITH CHECK ADD  CONSTRAINT [CK_Payments_Method] CHECK  (([Method]='Online' OR [Method]='CreditCard' OR [Method]='BankTransfer' OR [Method]='Cash'))
+GO
+ALTER TABLE [dbo].[Payments] CHECK CONSTRAINT [CK_Payments_Method]
+GO
 ALTER TABLE [dbo].[VisitFeedback]  WITH CHECK ADD CHECK  (([ClinicRating]>=(1) AND [ClinicRating]<=(5)))
 GO
 ALTER TABLE [dbo].[VisitFeedback]  WITH CHECK ADD CHECK  (([DentistRating]>=(1) AND [DentistRating]<=(5)))
 GO
-ALTER TABLE [dbo].[BlogPosts]  WITH CHECK ADD  CONSTRAINT [CK_BlogPosts_Status] CHECK  (([Status]='Archived' OR [Status]='Published' OR [Status]='PendingReview' OR [Status]='Draft'))
+ALTER TABLE [dbo].[BlogPosts]  WITH CHECK ADD  CONSTRAINT [CK_BlogPosts_PostType] CHECK  (([PostType]='Announcement' OR [PostType]='ClinicNews' OR [PostType]='Blog'))
+GO
+ALTER TABLE [dbo].[BlogPosts] CHECK CONSTRAINT [CK_BlogPosts_PostType]
+GO
+ALTER TABLE [dbo].[BlogPosts]  WITH CHECK ADD  CONSTRAINT [CK_BlogPosts_Status] CHECK  (([Status]='Rejected' OR [Status]='Archived' OR [Status]='Published' OR [Status]='PendingReview' OR [Status]='Draft'))
 GO
 ALTER TABLE [dbo].[BlogPosts] CHECK CONSTRAINT [CK_BlogPosts_Status]
 GO
@@ -2255,8 +2342,6 @@ LEFT  JOIN dbo.StaffProfiles  sp ON sp.UserId     = bp.AuthorUserId
 LEFT  JOIN dbo.DentistProfiles dp ON dp.UserId    = bp.AuthorUserId
 WHERE bp.Status = 'Published';
 
-
-
 GO
 
 -- =========================================================================================
@@ -2277,8 +2362,6 @@ BEGIN
       AND CreatedAt < DATEADD(HOUR, -24, SYSDATETIME());
 END;
 
-
-
 GO
 SET ANSI_NULLS ON
 GO
@@ -2295,8 +2378,6 @@ BEGIN
     WHERE  Slug = @Slug
       AND  Status = 'Published';
 END;
-
-
 
 GO
 

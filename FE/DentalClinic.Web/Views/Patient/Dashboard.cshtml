@@ -1,6 +1,6 @@
-@model DashboardViewModel
+@model DentalClinic.Web.ViewModels.Dashboard.DashboardViewModel
 @{
-    ViewData["Title"] = "Cổng Bệnh Nhân";
+    ViewData["Title"] = "Cổng Bệnh Nhân - DentalCare";
 }
 
 <div class="container-fluid p-0">
@@ -18,8 +18,8 @@
             <p class="page-subtitle text-muted mb-0">Cổng chăm sóc sức khỏe răng miệng & hồ sơ điện tử DentalCare</p>
         </div>
         <div class="page-actions d-flex flex-wrap align-items-center gap-2">
-            <a asp-controller="Home" asp-action="Index" class="btn btn-outline-primary fw-semibold" title="Về trang chủ xem bảng giá và chuyên khoa">
-                <i class="bi bi-house-door me-1"></i> Trang Chủ & Bảng Giá
+            <a asp-controller="PatientAppointment" asp-action="Services" class="btn btn-outline-primary fw-semibold" title="Khám phá bảng giá dịch vụ và chuyên khoa">
+                <i class="bi bi-stars me-1"></i> Bảng Giá & Dịch Vụ
             </a>
             <a asp-controller="Profile" asp-action="Index" class="btn btn-dc-outline">
                 <i class="bi bi-person-circle me-1"></i> Hồ Sơ Của Tôi
@@ -29,6 +29,39 @@
             </a>
         </div>
     </div>
+
+    <!-- Real Operational Alerts (Nếu có viện phí cần đóng hoặc lịch chờ duyệt) -->
+    @if (Model.UnpaidInvoicesAmount > 0)
+    {
+        <div class="alert alert-warning border-warning shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-exclamation-circle-fill text-warning fs-3 me-3"></i>
+                <div>
+                    <h6 class="fw-bold mb-1 text-dark">Bạn có viện phí cần hoàn tất thanh toán</h6>
+                    <p class="mb-0 small text-muted">Tổng số tiền còn lại: <strong class="text-danger fs-6">@Model.UnpaidInvoicesAmount.ToString("N0") đ</strong>. Bạn có thể thanh toán tại quầy lễ tân hoặc quét mã VietQR trực tuyến.</p>
+                </div>
+            </div>
+            <a asp-controller="PatientInvoice" asp-action="Index" class="btn btn-warning btn-sm text-dark fw-bold px-3 py-2">
+                <i class="bi bi-qr-code me-1"></i> Xem Hóa Đơn & VietQR
+            </a>
+        </div>
+    }
+
+    @if (Model.NextFollowUp != null)
+    {
+        <div class="alert alert-info border-info shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-calendar-heart-fill text-info fs-3 me-3"></i>
+                <div>
+                    <h6 class="fw-bold mb-1 text-dark">Khuyến nghị tái khám từ Bác sĩ: <span class="text-primary">@Model.NextFollowUp.RecommendedDate.ToString("dd/MM/yyyy")</span></h6>
+                    <p class="mb-0 small text-muted">Lý do: <em>@Model.NextFollowUp.Reason</em> &bull; Bác sĩ đề xuất: <strong>@(Model.NextFollowUp.DentistName ?? "Bác sĩ phụ trách")</strong></p>
+                </div>
+            </div>
+            <a asp-controller="PatientAppointment" asp-action="Book" asp-route-dentistId="@Model.NextFollowUp.DentistUserId" asp-route-date="@Model.NextFollowUp.RecommendedDate.ToString("yyyy-MM-dd")" asp-route-reason="Tái khám theo lịch hẹn bác sĩ chỉ định" class="btn btn-primary btn-sm fw-bold px-3 py-2">
+                <i class="bi bi-calendar-check me-1"></i> Đặt Lịch Tái Khám
+            </a>
+        </div>
+    }
 
     <!-- Welcome & Quick Booking Banner -->
     <div class="card border-0 shadow-sm mb-4 text-white overflow-hidden" style="background: linear-gradient(135deg, #0d6efd 0%, #0aa2c0 100%); border-radius: 16px;">
@@ -40,13 +73,13 @@
                     </span>
                     <h2 class="fw-bold mb-2 text-white">Bạn Cần Khám Răng Hoặc Tư Vấn Chuyên Khoa?</h2>
                     <p class="mb-4 text-white-50 fs-6 lh-base" style="max-width: 650px;">
-                        Đặt lịch khám nhanh chóng chỉ trong 1 phút &bull; Lựa chọn bác sĩ chuyên khoa phù hợp &bull; Tiếp nhận khám đúng giờ không cần xếp hàng chờ đợi.
+                        Đặt lịch khám nhanh chóng chỉ trong 1 phút &bull; Tự chọn bác sĩ mong muốn hoặc để phòng khám phân công &bull; Khám đúng giờ không cần xếp hàng chờ đợi.
                     </p>
                     <div class="d-flex flex-wrap gap-2">
                         <a asp-controller="PatientAppointment" asp-action="Book" class="btn btn-light btn-lg text-primary fw-bold px-4 py-2 shadow-sm">
                             <i class="bi bi-calendar-check-fill me-1"></i> Đặt Lịch Khám Ngay
                         </a>
-                        <a href="/#pricing" class="btn btn-outline-light btn-lg fw-semibold px-4 py-2">
+                        <a asp-controller="PatientAppointment" asp-action="Services" class="btn btn-outline-light btn-lg fw-semibold px-4 py-2">
                             <i class="bi bi-tags-fill me-1"></i> Khám Phá Bảng Giá Dịch Vụ
                         </a>
                     </div>
@@ -63,7 +96,7 @@
                             <li><i class="bi bi-check2 text-white me-1"></i> Bảng giá niêm yết minh bạch</li>
                         </ul>
                         <div class="pt-2 border-top border-white border-opacity-25 text-white small">
-                            <i class="bi bi-telephone-fill me-1 text-warning"></i> Tổng đài: <strong>1900 1234</strong>
+                            <i class="bi bi-telephone-fill me-1 text-warning"></i> Tổng đài tư vấn: <strong>1900 1234</strong>
                         </div>
                     </div>
                 </div>
@@ -71,7 +104,7 @@
         </div>
     </div>
 
-    <!-- 4 Status Summary Cards (Thân thiện, không dùng ký hiệu gạch ngang gây hiểu lầm) -->
+    <!-- 4 Real Status Summary KPI Cards -->
     <div class="row g-3 mb-4">
         @foreach (var stat in Model.StatCards)
         {
@@ -87,7 +120,7 @@
                         <div class="stat-value fs-4 fw-bold text-dark mb-1">
                             @if (stat.Value == "--" || stat.Value == "Chưa có")
                             {
-                                <span class="badge bg-light text-secondary border fw-normal small px-2 py-1">Chưa có lịch hẹn</span>
+                                <span class="badge bg-light text-secondary border fw-normal small px-2 py-1">Chưa có dữ liệu</span>
                             }
                             else
                             {
@@ -103,22 +136,28 @@
         }
     </div>
 
-    <!-- Quick Action Cards Section (Dịch Vụ & Tiện Ích Dành Cho Bạn) -->
+    <!-- Quick Action Cards Section -->
     <div class="mb-4">
         <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
             <div>
                 <h5 class="font-heading fs-6 fw-bold text-dark mb-0">Dịch Vụ & Tiện Ích Dành Cho Bạn</h5>
                 <p class="text-muted small mb-0">Truy cập nhanh các chức năng thăm khám, hồ sơ sức khỏe và đơn thuốc điện tử</p>
             </div>
-            <a href="/#pricing" class="btn btn-sm btn-outline-primary fw-semibold">
-                <i class="bi bi-tags me-1"></i> Xem Bảng Giá Toàn Viện <i class="bi bi-arrow-right ms-1"></i>
+            <a asp-controller="PatientAppointment" asp-action="Services" class="btn btn-sm btn-outline-primary fw-semibold">
+                <i class="bi bi-tags me-1"></i> Xem Toàn Bộ Dịch Vụ <i class="bi bi-arrow-right ms-1"></i>
             </a>
         </div>
         <div class="row g-3">
             @foreach (var card in Model.Cards)
             {
-                <div class="col-md-6 col-lg-4 col-xl-2">
-                    <div class="card-quick-action text-center h-100 p-3 d-flex flex-column justify-content-between bg-white border rounded-3 shadow-sm transition-hover">
+                <div class="col-md-6 col-lg-4 col-xl-4">
+                    <div class="card-quick-action text-center h-100 p-3 d-flex flex-column justify-content-between bg-white border rounded-3 shadow-sm transition-hover position-relative">
+                        @if (!string.IsNullOrEmpty(card.BadgeText))
+                        {
+                            <span class="position-absolute top-0 end-0 badge bg-danger m-2 font-monospace" style="font-size: 0.65rem;">
+                                @card.BadgeText
+                            </span>
+                        }
                         <div>
                             <div class="quick-icon-box quick-icon-@card.ColorClass mx-auto mb-2" style="width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px;">
                                 <i class="bi @card.Icon fs-4"></i>
@@ -137,36 +176,128 @@
         </div>
     </div>
 
-    <!-- Two-Column Context Workspace -->
+    <!-- Two-Column Operational Context Workspace -->
     <div class="row g-4">
-        <!-- Upcoming Visits & Treatment Schedule -->
+        <!-- Upcoming Visits & Treatment Schedule (Left 8 Cols) -->
         <div class="col-lg-8">
             <div class="card-dc bg-white border rounded-3 shadow-sm mb-4">
                 <div class="card-dc-header p-3 border-bottom d-flex justify-content-between align-items-center">
                     <div class="d-flex align-items-center gap-2">
                         <i class="bi bi-calendar-event text-primary fs-5"></i>
-                        <span class="fw-bold text-dark">Lịch Khám Sắp Tới & Tiến Độ Điều Trị</span>
+                        <span class="fw-bold text-dark">Lịch Khám Sắp Tới & Tiến Trình Hoạt Động</span>
                     </div>
-                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Hồ Sơ Của Bạn</span>
+                    @if (Model.UpcomingAppointment != null)
+                    {
+                        <span class="badge bg-success">Đã Xác Nhận</span>
+                    }
+                    else if (Model.PendingAppointmentsCount > 0)
+                    {
+                        <span class="badge bg-warning text-dark">@Model.PendingAppointmentsCount Đang Chờ Duyệt</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Hồ Sơ Của Bạn</span>
+                    }
                 </div>
-                <div class="card-dc-body p-4 text-center">
-                    <div class="py-4">
-                        <div class="avatar-lg bg-light text-primary rounded-circle d-inline-flex align-items-center justify-content-center p-3 mb-3" style="width: 64px; height: 64px;">
-                            <i class="bi bi-calendar-check fs-2 text-primary"></i>
+                <div class="card-dc-body p-4">
+                    @if (Model.UpcomingAppointment != null)
+                    {
+                        var appt = Model.UpcomingAppointment;
+                        <div class="p-4 bg-light-subtle rounded-3 border border-primary-subtle mb-3">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                                <div>
+                                    <span class="badge bg-primary-subtle text-primary font-monospace mb-1">Mã: @appt.AppointmentCode</span>
+                                    <h4 class="fw-bold text-dark mb-1">@appt.ServiceName</h4>
+                                    <div class="text-muted small">
+                                        <i class="bi bi-hospital text-primary me-1"></i>Chuyên khoa: <strong>@appt.DepartmentName</strong>
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    @if (!string.IsNullOrEmpty(appt.QueueNumber))
+                                    {
+                                        <span class="badge bg-success fs-6 px-3 py-2 border border-success">
+                                            STT Khám: @appt.QueueNumber
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success px-3 py-2">
+                                            <i class="bi bi-check-circle me-1"></i>Đã Xác Nhận
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="row g-3 bg-white p-3 rounded-2 border mb-3 small">
+                                <div class="col-sm-6">
+                                    <div class="text-muted"><i class="bi bi-calendar-check text-primary me-1"></i>Thời gian khám:</div>
+                                    <div class="fw-bold text-primary fs-6">
+                                        @(appt.ScheduledStart?.ToString("dd/MM/yyyy HH:mm") ?? "Chưa xếp giờ")
+                                    </div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-muted"><i class="bi bi-person-badge text-success me-1"></i>Bác sĩ phụ trách:</div>
+                                    <div class="fw-bold text-dark fs-6">
+                                        @(string.IsNullOrWhiteSpace(appt.AssignedDentistName) ? (appt.RequestedDentistName ?? "Đang chờ phòng khám phân công bác sĩ") : appt.AssignedDentistName)
+                                    </div>
+                                </div>
+                                @if (!string.IsNullOrEmpty(appt.RoomName))
+                                {
+                                    <div class="col-sm-6">
+                                        <div class="text-muted"><i class="bi bi-door-open text-secondary me-1"></i>Phòng khám:</div>
+                                        <div class="fw-semibold text-dark">@appt.RoomName</div>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(appt.DentalChairName))
+                                {
+                                    <div class="col-sm-6">
+                                        <div class="text-muted"><i class="bi bi-hospital text-secondary me-1"></i>Ghế nha khoa:</div>
+                                        <div class="fw-semibold text-dark">Ghế @appt.DentalChairName</div>
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2 flex-wrap">
+                                <a asp-controller="PatientAppointment" asp-action="Detail" asp-route-id="@appt.AppointmentId" class="btn btn-primary btn-sm px-3">
+                                    <i class="bi bi-eye me-1"></i> Xem Chi Tiết
+                                </a>
+                                <a asp-controller="PatientAppointment" asp-action="Reschedule" asp-route-id="@appt.AppointmentId" class="btn btn-outline-warning text-dark btn-sm px-3">
+                                    <i class="bi bi-arrow-repeat me-1"></i> Dời Lịch
+                                </a>
+                            </div>
                         </div>
-                        <h6 class="fw-bold text-dark mb-2">Bạn Hiện Chưa Có Lịch Khám Sắp Tới</h6>
-                        <p class="text-muted small mb-4 mx-auto" style="max-width: 480px;">
-                            Khám và lấy cao răng định kỳ mỗi 6 tháng giúp phát hiện sớm sâu răng và bảo vệ hàm răng chắc khỏe. Hãy đặt lịch hẹn để bác sĩ chăm sóc bạn nhé!
-                        </p>
-                        <div class="d-flex justify-content-center flex-wrap gap-2">
-                            <a asp-controller="PatientAppointment" asp-action="Book" class="btn btn-dc-primary">
-                                <i class="bi bi-calendar-plus me-1"></i> Đặt Lịch Khám Ngay
-                            </a>
-                            <a href="/#pricing" class="btn btn-outline-secondary">
-                                <i class="bi bi-tags me-1"></i> Xem Bảng Giá Dịch Vụ
+                    }
+                    else if (Model.PendingAppointmentsCount > 0)
+                    {
+                        <div class="p-4 bg-warning-subtle rounded-3 border border-warning text-center mb-3">
+                            <i class="bi bi-hourglass-split text-warning fs-1 mb-2 d-block"></i>
+                            <h5 class="fw-bold text-dark mb-1">Bạn Có @Model.PendingAppointmentsCount Lịch Hẹn Đang Chờ Tiếp Nhận</h5>
+                            <p class="text-muted small mb-3">Lễ tân phòng khám đang kiểm tra tính khả dụng của bác sĩ và phòng ghế để xác nhận lịch cho bạn.</p>
+                            <a asp-controller="PatientAppointment" asp-action="Index" class="btn btn-warning text-dark fw-bold btn-sm px-4">
+                                <i class="bi bi-calendar3 me-1"></i> Xem Danh Sách Lịch Hẹn
                             </a>
                         </div>
-                    </div>
+                    }
+                    else
+                    {
+                        <div class="py-4 text-center">
+                            <div class="avatar-lg bg-light text-primary rounded-circle d-inline-flex align-items-center justify-content-center p-3 mb-3" style="width: 64px; height: 64px;">
+                                <i class="bi bi-calendar-check fs-2 text-primary"></i>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-2">Bạn Hiện Chưa Có Lịch Khám Sắp Tới</h6>
+                            <p class="text-muted small mb-4 mx-auto" style="max-width: 480px;">
+                                Khám và lấy cao răng định kỳ mỗi 6 tháng giúp phát hiện sớm sâu răng và bảo vệ hàm răng chắc khỏe. Hãy đặt lịch hẹn để bác sĩ chăm sóc bạn nhé!
+                            </p>
+                            <div class="d-flex justify-content-center flex-wrap gap-2">
+                                <a asp-controller="PatientAppointment" asp-action="Book" class="btn btn-dc-primary">
+                                    <i class="bi bi-calendar-plus me-1"></i> Đặt Lịch Khám Ngay
+                                </a>
+                                <a asp-controller="PatientAppointment" asp-action="Services" class="btn btn-outline-secondary">
+                                    <i class="bi bi-tags me-1"></i> Xem Bảng Giá Dịch Vụ
+                                </a>
+                            </div>
+                        </div>
+                    }
                 </div>
             </div>
 
@@ -199,49 +330,78 @@
             </div>
         </div>
 
-        <!-- Invoices & Billing Summary + Pricing & Contact -->
+        <!-- Invoices & Billing Summary + Pricing & Contact (Right 4 Cols) -->
         <div class="col-lg-4">
+            <!-- Active Treatment Plan Preview (nếu có) -->
+            @if (Model.ActiveTreatmentPlan != null)
+            {
+                var plan = Model.ActiveTreatmentPlan;
+                <div class="card-dc bg-white border rounded-3 shadow-sm mb-4 border-start border-4 border-info">
+                    <div class="card-dc-header p-3 border-bottom d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-diagram-3-fill text-info"></i>
+                            <span class="fw-bold text-dark">Phác Đồ Đang Điều Trị</span>
+                        </div>
+                        <span class="badge bg-info-subtle text-info">Tiến Độ @plan.ProgressPercentage%</span>
+                    </div>
+                    <div class="card-dc-body p-3">
+                        <h6 class="fw-bold text-dark mb-1">@plan.DepartmentName</h6>
+                        <div class="small text-muted mb-2">Bác sĩ: <strong>@plan.CreatedByDentistName</strong></div>
+                        <div class="progress mb-2" style="height: 8px;">
+                            <div class="progress-bar bg-info" style="width: @plan.ProgressPercentage%"></div>
+                        </div>
+                        <div class="d-flex justify-content-between small text-muted mb-3">
+                            <span>Giai đoạn: <strong>@plan.CompletedItemsCount / @plan.TotalItemsCount</strong></span>
+                            <span>@(plan.EstimatedTotal.HasValue ? plan.EstimatedTotal.Value.ToString("N0") + " đ" : "--")</span>
+                        </div>
+                        <a asp-controller="PatientTreatmentPlan" asp-action="Detail" asp-route-id="@plan.TreatmentPlanId" class="btn btn-outline-info btn-sm w-100 fw-semibold">
+                            <i class="bi bi-eye me-1"></i> Xem Chi Tiết Lộ Trình
+                        </a>
+                    </div>
+                </div>
+            }
+
             <!-- Quick Pricing Summary Card -->
             <div class="card-dc bg-white border rounded-3 shadow-sm mb-4">
                 <div class="card-dc-header p-3 border-bottom d-flex justify-content-between align-items-center">
                     <div class="d-flex align-items-center gap-2">
                         <i class="bi bi-tags-fill text-primary"></i>
-                        <span class="fw-bold text-dark">Dịch Vụ Phổ Biến & Bảng Giá</span>
+                        <span class="fw-bold text-dark">Dịch Vụ Phổ Biến</span>
                     </div>
-                    <span class="badge bg-success-subtle text-success">Ưu đãi</span>
+                    <span class="badge bg-success-subtle text-success">Niêm yết</span>
                 </div>
                 <div class="card-dc-body p-3">
                     <div class="list-group list-group-flush mb-3">
                         <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
                             <div>
-                                <div class="fw-semibold text-dark small">Cạo vôi răng & Đánh bóng</div>
-                                <div class="text-muted" style="font-size: 0.75rem;">Sóng siêu âm dịu nhẹ</div>
+                                <div class="fw-semibold text-dark small">Lấy cao răng & Đánh bóng</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Sóng siêu âm dịu nhẹ &bull; 45p</div>
                             </div>
-                            <span class="text-primary fw-bold small">Từ 150.000 đ</span>
+                            <span class="text-primary fw-bold small">250.000 đ</span>
                         </div>
                         <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
                             <div>
-                                <div class="fw-semibold text-dark small">Trám răng thẩm mỹ</div>
-                                <div class="text-muted" style="font-size: 0.75rem;">Composite thẩm mỹ cao cấp</div>
+                                <div class="fw-semibold text-dark small">Trám răng thẩm mỹ Composite</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Vật liệu cao cấp &bull; 45p</div>
                             </div>
-                            <span class="text-primary fw-bold small">Từ 250.000 đ</span>
+                            <span class="text-primary fw-bold small">400.000 đ</span>
                         </div>
                         <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
                             <div>
-                                <div class="fw-semibold text-dark small">Nhổ răng khôn Piezotome</div>
-                                <div class="text-muted" style="font-size: 0.75rem;">Công nghệ siêu âm không đau</div>
+                                <div class="fw-semibold text-dark small">Nhổ răng khôn mọc lệch</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Siêu âm Piezotome &bull; 60p</div>
                             </div>
-                            <span class="text-primary fw-bold small">Từ 1.000.000 đ</span>
+                            <span class="text-primary fw-bold small">1.800.000 đ</span>
                         </div>
                         <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
                             <div>
                                 <div class="fw-semibold text-dark small">Tẩy trắng răng Laser</div>
-                                <div class="text-muted" style="font-size: 0.75rem;">Sáng bật 2-3 tone tức thì</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Laser Whitening an toàn &bull; 60p</div>
                             </div>
-                            <span class="text-primary fw-bold small">Từ 1.800.000 đ</span>
+                            <span class="text-primary fw-bold small">2.000.000 đ</span>
                         </div>
                     </div>
-                    <a href="/#pricing" class="btn btn-outline-primary btn-sm w-100 fw-semibold">
+                    <a asp-controller="PatientAppointment" asp-action="Services" class="btn btn-outline-primary btn-sm w-100 fw-semibold">
                         <i class="bi bi-journal-text me-1"></i> Xem Toàn Bộ Bảng Giá
                     </a>
                 </div>
@@ -254,11 +414,25 @@
                     <span class="fw-bold text-dark">Hóa Đơn & Viện Phí</span>
                 </div>
                 <div class="card-dc-body p-4 text-center">
-                    <div class="avatar-sm bg-success-subtle text-success rounded-circle d-inline-flex align-items-center justify-content-center p-2 mb-2" style="width: 44px; height: 44px;">
-                        <i class="bi bi-check2-circle fs-4"></i>
-                    </div>
-                    <h6 class="fw-bold text-dark mb-1">Không Có Viện Phí Tồn Đọng</h6>
-                    <p class="text-muted small mb-0">Tất cả chi phí thăm khám nha khoa trước đây của bạn đã được quyết toán hoàn tất.</p>
+                    @if (Model.UnpaidInvoicesAmount > 0)
+                    {
+                        <div class="avatar-sm bg-warning-subtle text-warning rounded-circle d-inline-flex align-items-center justify-content-center p-2 mb-2" style="width: 44px; height: 44px;">
+                            <i class="bi bi-cash-stack fs-4"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Cần Thanh Toán: @Model.UnpaidInvoicesAmount.ToString("N0") đ</h6>
+                        <p class="text-muted small mb-3">Bạn có thể hoàn tất thanh toán dễ dàng qua quét mã VietQR tự động.</p>
+                        <a asp-controller="PatientInvoice" asp-action="Index" class="btn btn-warning text-dark btn-sm w-100 fw-bold">
+                            <i class="bi bi-receipt me-1"></i> Xem Hóa Đơn & QR
+                        </a>
+                    }
+                    else
+                    {
+                        <div class="avatar-sm bg-success-subtle text-success rounded-circle d-inline-flex align-items-center justify-content-center p-2 mb-2" style="width: 44px; height: 44px;">
+                            <i class="bi bi-check2-circle fs-4"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Không Có Viện Phí Tồn Đọng</h6>
+                        <p class="text-muted small mb-0">Tất cả chi phí thăm khám nha khoa trước đây của bạn đã được quyết toán hoàn tất.</p>
+                    }
                 </div>
             </div>
 
@@ -269,7 +443,7 @@
                         <i class="bi bi-hospital text-primary"></i>
                         <span class="fw-semibold text-dark small">Phòng Khám Nha Khoa DentalCare</span>
                     </div>
-                    <p class="text-muted small mb-3">Cần thay đổi lịch hẹn hoặc nhận tư vấn nha khoa khẩn cấp? Vui lòng liên hệ quầy tiếp đón lễ tân:</p>
+                    <p class="text-muted small mb-3">Cần hỗ trợ lịch khám khẩn cấp hoặc tư vấn dịch vụ? Vui lòng liên hệ quầy tiếp đón lễ tân:</p>
                     <a href="tel:19001234" class="btn btn-dc-outline btn-sm w-100 mb-2">
                         <i class="bi bi-telephone-fill me-1 text-primary"></i> Tổng Đài Hỗ Trợ: 1900 1234
                     </a>
@@ -281,4 +455,3 @@
         </div>
     </div>
 </div>
-

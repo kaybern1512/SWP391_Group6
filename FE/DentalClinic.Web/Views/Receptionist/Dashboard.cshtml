@@ -21,7 +21,7 @@
             <a asp-controller="ReceptionistPatient" asp-action="Index" class="btn btn-dc-outline">
                 <i class="bi bi-people me-1"></i> Sổ Quản Lý Bệnh Nhân
             </a>
-            <a asp-controller="ReceptionistBilling" asp-action="Index" class="btn btn-dc-outline text-success border-success-subtle">
+            <a asp-controller="ReceptionistBilling" asp-action="Index" asp-route-tab="billable" class="btn btn-dc-outline text-success border-success-subtle">
                 <i class="bi bi-receipt-cutoff me-1"></i> Thu Viện Phí & Hóa Đơn
             </a>
             <a asp-controller="ReceptionistAppointment" asp-action="TodayCheckIn" class="btn btn-dc-primary">
@@ -119,26 +119,130 @@
                 </div>
             </div>
 
-            <!-- Table Container with Empty State -->
-            <div class="table-responsive">
-                <table class="table-dc">
-                    <thead>
-                        <tr>
-                            <th>STT</th>
-                            <th>Họ Tên Bệnh Nhân</th>
-                            <th>Chuyên Khoa</th>
-                            <th>Bác Sĩ Phụ Trách</th>
-                            <th>Khung Giờ</th>
-                            <th>Trạng Thái</th>
-                            <th class="text-end">Thao Tác</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Khi kết nối API, các dòng sẽ render động. Hiển thị trạng thái rỗng khi chưa có: -->
-                    </tbody>
-                </table>
-            </div>
-            <partial name="_EmptyState" model="Model.EmptyState" />
+            @{
+                var todayAppts = ViewBag.TodayAppointments as List<DentalClinic.Web.Models.ApiDtos.AppointmentDto> ?? new();
+            }
+
+            @if (todayAppts.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 80px;" class="ps-3">STT</th>
+                                <th>Mã Hẹn</th>
+                                <th>Bệnh Nhân</th>
+                                <th>Chuyên Khoa & Dịch Vụ</th>
+                                <th>Bác Sĩ & Vị Trí</th>
+                                <th>Khung Giờ</th>
+                                <th>Tiến Trình</th>
+                                <th class="text-end pe-3">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var appt in todayAppts)
+                            {
+                                <tr>
+                                    <td class="ps-3">
+                                        @if (!string.IsNullOrEmpty(appt.QueueNumber))
+                                        {
+                                            <span class="badge bg-primary font-monospace px-2 py-1">@appt.QueueNumber</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">--</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="fw-bold font-monospace text-primary">@appt.AppointmentCode</span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark">@appt.PatientName</div>
+                                        <div class="text-muted small">@appt.PatientCode &bull; @(appt.PatientPhone ?? "N/A")</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">@appt.ServiceName</div>
+                                        <div class="text-muted small">@appt.DepartmentName</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark"><i class="bi bi-person me-1 text-primary"></i>@(appt.AssignedDentistName ?? "Chưa phân bổ")</div>
+                                        <div class="text-muted small"><i class="bi bi-geo-alt me-1 text-danger"></i>@(appt.RoomName ?? "--") &bull; Ghế @(appt.DentalChairName ?? "--")</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold text-success fs-6">
+                                            @(appt.ScheduledStart?.ToString("HH:mm") ?? "--") - @(appt.ScheduledEnd?.ToString("HH:mm") ?? "--")
+                                        </div>
+                                    </td>
+                                    <td>
+                                        @switch (appt.Status)
+                                        {
+                                            case "Confirmed":
+                                                <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">
+                                                    <i class="bi bi-clock me-1"></i>Chưa Check-in
+                                                </span>
+                                                break;
+                                            case "CheckedIn":
+                                            case "Waiting":
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                                    <i class="bi bi-check-all me-1"></i>Đã Check-in
+                                                </span>
+                                                break;
+                                            case "InService":
+                                                <span class="badge bg-warning-subtle text-dark border border-warning px-2 py-1 fw-semibold">
+                                                    <i class="bi bi-heart-pulse-fill text-danger me-1"></i>Đang Khám
+                                                </span>
+                                                break;
+                                            case "Completed":
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-bold">
+                                                    <i class="bi bi-check-circle-fill me-1"></i>Khám xong
+                                                </span>
+                                                break;
+                                            case "NoShow":
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
+                                                    <i class="bi bi-person-x me-1"></i>Vắng mặt
+                                                </span>
+                                                break;
+                                            default:
+                                                <span class="badge bg-secondary px-2 py-1">@appt.Status</span>
+                                                break;
+                                        }
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        @if (appt.Status == "Confirmed")
+                                        {
+                                            <a asp-controller="ReceptionistAppointment" asp-action="TodayCheckIn" class="btn btn-sm btn-primary shadow-sm fw-semibold">
+                                                <i class="bi bi-person-check me-1"></i>Check-in
+                                            </a>
+                                        }
+                                        else if (appt.Status == "Completed")
+                                        {
+                                            <a asp-controller="ReceptionistBilling" asp-action="Create" asp-route-appointmentId="@appt.AppointmentId" class="btn btn-sm btn-success fw-bold shadow-sm">
+                                                <i class="bi bi-receipt-cutoff me-1"></i>Xuất Hóa Đơn
+                                            </a>
+                                        }
+                                        else if (appt.Status == "InService")
+                                        {
+                                            <span class="badge bg-light text-muted border px-2 py-1 small">
+                                                <i class="bi bi-activity text-danger me-1"></i>Tại ghế khám
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <a asp-controller="ReceptionistAppointment" asp-action="TodayCheckIn" class="btn btn-sm btn-outline-secondary">
+                                                Xem
+                                            </a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <partial name="_EmptyState" model="Model.EmptyState" />
+            }
         </div>
     </div>
 </div>

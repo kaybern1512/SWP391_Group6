@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -25,6 +25,7 @@ public class PostCareWebControllerTests
     private readonly Mock<IAppointmentApiService> _apptApiMock = new();
     private readonly Mock<ITreatmentApiService> _treatmentApiMock = new();
     private readonly Mock<IAdminApiService> _adminApiMock = new();
+    private readonly Mock<IImagingApiService> _imagingApiMock = new();
 
     private static ControllerContext CreateContextWithUser(long userId, string role, string name = "User")
     {
@@ -59,7 +60,7 @@ public class PostCareWebControllerTests
         _apptApiMock.Setup(x => x.GetDepartmentsAsync()).ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(depts));
         _treatmentApiMock.Setup(x => x.GetDentistTreatmentSessionsAsync(null)).ReturnsAsync(ApiResult<List<TreatmentSessionDto>>.Success(sessions));
 
-        var controller = new DentistReferralController(_postCareApiMock.Object, _apptApiMock.Object, _treatmentApiMock.Object)
+        var controller = new DentistReferralController(_postCareApiMock.Object, _apptApiMock.Object, _treatmentApiMock.Object, _imagingApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(20, "Dentist", "BS Lê Hoàng"),
             TempData = CreateTempData()
@@ -82,7 +83,7 @@ public class PostCareWebControllerTests
 
         _postCareApiMock.Setup(x => x.CreateReferralAsync(req)).ReturnsAsync(ApiResult<DepartmentReferralDto>.Success(dto));
 
-        var controller = new DentistReferralController(_postCareApiMock.Object, _apptApiMock.Object, _treatmentApiMock.Object)
+        var controller = new DentistReferralController(_postCareApiMock.Object, _apptApiMock.Object, _treatmentApiMock.Object, _imagingApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(20, "Dentist"),
             TempData = CreateTempData()
@@ -103,7 +104,7 @@ public class PostCareWebControllerTests
 
         _postCareApiMock.Setup(x => x.CreateFollowUpAsync(req)).ReturnsAsync(ApiResult<FollowUpScheduleDto>.Success(dto));
 
-        var controller = new DentistReferralController(_postCareApiMock.Object, _apptApiMock.Object, _treatmentApiMock.Object)
+        var controller = new DentistReferralController(_postCareApiMock.Object, _apptApiMock.Object, _treatmentApiMock.Object, _imagingApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(20, "Dentist"),
             TempData = CreateTempData()
@@ -233,7 +234,7 @@ public class PostCareWebControllerTests
         _postCareApiMock.Setup(x => x.ResolveProposalAsync(req))
             .ReturnsAsync(ApiResult<FollowUpProposalDto>.Success(new FollowUpProposalDto { ProposalId = 101, Status = "Approved" }, "Đã duyệt"));
 
-        var controller = new DentistReferralController(_postCareApiMock.Object, _apptApiMock.Object, _treatmentApiMock.Object)
+        var controller = new DentistReferralController(_postCareApiMock.Object, _apptApiMock.Object, _treatmentApiMock.Object, _imagingApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(20, "Dentist", "BS Lê Hoàng"),
             TempData = CreateTempData()
@@ -249,7 +250,7 @@ public class PostCareWebControllerTests
     {
         var req = new ResolveProposalRequest { ProposalId = 101, IsApproved = false, RejectionReason = "" };
 
-        var controller = new DentistReferralController(_postCareApiMock.Object, _apptApiMock.Object, _treatmentApiMock.Object)
+        var controller = new DentistReferralController(_postCareApiMock.Object, _apptApiMock.Object, _treatmentApiMock.Object, _imagingApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(20, "Dentist", "BS Lê Hoàng"),
             TempData = CreateTempData()

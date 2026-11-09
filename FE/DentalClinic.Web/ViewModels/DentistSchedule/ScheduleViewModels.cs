@@ -86,6 +86,9 @@ public class DentistCalendarDayDto
     public bool IsCurrentMonth { get; set; }
     public bool IsToday { get; set; }
     public bool IsPast { get; set; }
+    public bool IsOnLeave { get; set; }
+    public string? LeaveReason { get; set; }
+    public string? LeaveType { get; set; }
     public List<DentistWorkScheduleDto> Shifts { get; set; } = new();
     public List<AppointmentDto> Appointments { get; set; } = new();
 }
@@ -102,6 +105,7 @@ public class DentistPersonalScheduleViewModel
     public List<AppointmentDto> Appointments { get; set; } = new();
     public List<DentistCalendarDayDto> CalendarDays { get; set; } = new();
     public List<string> DepartmentOptions { get; set; } = new();
+    public List<DentistLeaveRequestDto> LeaveRequests { get; set; } = new();
 }
 
 public class DentistAvailabilityViewModel

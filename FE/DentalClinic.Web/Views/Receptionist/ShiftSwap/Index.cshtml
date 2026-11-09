@@ -1,0 +1,422 @@
+@using DentalClinic.Web.Models.ApiDtos
+@{
+    ViewData["Title"] = "Đổi Ca Trực Lễ Tân";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentUserId = (long)ViewBag.CurrentUserId;
+    var incomingSwaps = ViewBag.IncomingSwaps as List<ReceptionistShiftSwapRequestDto> ?? new();
+    var outgoingSwaps = ViewBag.OutgoingSwaps as List<ReceptionistShiftSwapRequestDto> ?? new();
+    var historySwaps = ViewBag.HistorySwaps as List<ReceptionistShiftSwapRequestDto> ?? new();
+    var myShifts = ViewBag.MyShifts as List<ReceptionistWorkScheduleDto> ?? new();
+    var colleagues = ViewBag.Colleagues as List<AdminUserDto> ?? new();
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h2 class="h4 fw-bold text-dark mb-1">
+                <i class="bi bi-arrow-left-right text-info me-2"></i>Đổi Ca Trực
+            </h2>
+            <p class="text-muted small mb-0">Đề xuất đổi ca với đồng nghiệp, phản hồi yêu cầu đổi ca và theo dõi phê duyệt của Quản trị viên</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createSwapModal">
+                <i class="bi bi-plus-circle me-1"></i> Tạo Yêu Cầu Đổi Ca
+            </button>
+            <a href="@Url.Action("Index", "ReceptionistSchedule")" class="btn btn-outline-secondary">
+                <i class="bi bi-calendar-check me-1"></i> Xem Lịch Trực
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Incoming Swaps Needs Response -->
+    @if (incomingSwaps.Any())
+    {
+        <div class="card border-0 shadow-sm rounded-3 mb-4 border-start border-4 border-warning">
+            <div class="card-header bg-warning bg-opacity-10 py-3 border-0">
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-bell-fill text-warning me-2"></i>Yêu Cầu Đổi Ca Cần Phản Hồi (@incomingSwaps.Count)
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Người gửi đề xuất</th>
+                                <th>Ca trực của họ</th>
+                                <th>Đề xuất đổi với ca của bạn</th>
+                                <th>Lý do</th>
+                                <th>Ngày gửi</th>
+                                <th class="text-end">Phản hồi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var s in incomingSwaps)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold text-dark">@s.RequestingReceptionistName</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-primary">@s.SourceWorkDate.ToString("dd/MM/yyyy")</span>
+                                        <div class="small fw-semibold mt-1">@s.SourceStartTime.ToString(@"hh\:mm") - @s.SourceEndTime.ToString(@"hh\:mm")</div>
+                                    </td>
+                                    <td>
+                                        @if (s.TargetWorkDate.HasValue)
+                                        {
+                                            <span class="badge bg-info text-dark">@s.TargetWorkDate.Value.ToString("dd/MM/yyyy")</span>
+                                            <div class="small fw-semibold mt-1">
+                                                @(s.TargetStartTime.HasValue && s.TargetEndTime.HasValue ? $"{s.TargetStartTime.Value:hh\\:mm} - {s.TargetEndTime.Value:hh\\:mm}" : "Ca chỉ định")
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">Nhận ca thay (không đổi chéo)</span>
+                                        }
+                                    </td>
+                                    <td class="text-muted small" style="max-width: 250px;">
+                                        @s.Reason
+                                    </td>
+                                    <td class="text-muted small">
+                                        @s.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+                                    </td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-success me-1" onclick="openRespondModal(@s.SwapRequestId, true, '@s.RequestingReceptionistName')">
+                                            <i class="bi bi-check-lg me-1"></i>Đồng ý
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="openRespondModal(@s.SwapRequestId, false, '@s.RequestingReceptionistName')">
+                                            <i class="bi bi-x-lg me-1"></i>Từ chối
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Tabs for Outgoing and History -->
+    <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white border-0 pt-3">
+            <ul class="nav nav-tabs card-header-tabs" id="swapTabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active fw-bold" id="outgoing-tab" data-bs-toggle="tab" data-bs-target="#outgoing" type="button">
+                        <i class="bi bi-send me-1"></i>Yêu Cầu Tôi Đã Gửi (@outgoingSwaps.Count)
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link fw-bold" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button">
+                        <i class="bi bi-archive me-1"></i>Lịch Sử Đổi Ca (@historySwaps.Count)
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body p-0">
+            <div class="tab-content" id="swapTabsContent">
+                <!-- Outgoing Tab -->
+                <div class="tab-pane fade show active p-3" id="outgoing" role="tabpanel">
+                    @if (!outgoingSwaps.Any())
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary opacity-50"></i>
+                            Bạn chưa gửi yêu cầu đổi ca nào gần đây.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Mã số</th>
+                                        <th>Gửi tới đồng nghiệp</th>
+                                        <th>Ca của tôi</th>
+                                        <th>Ca muốn đổi</th>
+                                        <th>Lý do</th>
+                                        <th>Trạng thái</th>
+                                        <th>Ghi chú</th>
+                                        <th class="text-end">Thao tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var s in outgoingSwaps)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold text-secondary">#@s.SwapRequestId</td>
+                                            <td class="fw-semibold">@s.TargetReceptionistName</td>
+                                            <td>
+                                                <span class="badge bg-primary">@s.SourceWorkDate.ToString("dd/MM/yyyy")</span>
+                                                <div class="small fw-semibold mt-1">@s.SourceStartTime.ToString(@"hh\:mm") - @s.SourceEndTime.ToString(@"hh\:mm")</div>
+                                            </td>
+                                            <td>
+                                                @if (s.TargetWorkDate.HasValue)
+                                                {
+                                                    <span class="badge bg-info text-dark">@s.TargetWorkDate.Value.ToString("dd/MM/yyyy")</span>
+                                                    <div class="small fw-semibold mt-1">
+                                                        @(s.TargetStartTime.HasValue && s.TargetEndTime.HasValue ? $"{s.TargetStartTime.Value:hh\\:mm} - {s.TargetEndTime.Value:hh\\:mm}" : "Ca chỉ định")
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small">Nhờ trực giúp</span>
+                                                }
+                                            </td>
+                                            <td class="text-truncate" style="max-width: 180px;" title="@s.Reason">@s.Reason</td>
+                                            <td>
+                                                @if (s.Status == "PendingCounterparty")
+                                                {
+                                                    <span class="badge bg-warning text-dark"><i class="bi bi-hourglass me-1"></i>Chờ đồng nghiệp</span>
+                                                }
+                                                else if (s.Status == "PendingAdminApproval" || s.Status == "PendingAdmin")
+                                                {
+                                                    <span class="badge bg-info text-dark"><i class="bi bi-clock me-1"></i>Chờ Admin duyệt</span>
+                                                }
+                                                else if (s.Status == "Approved")
+                                                {
+                                                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Đã duyệt</span>
+                                                }
+                                                else if (s.Status == "Declined" || s.Status == "CounterpartyDeclined")
+                                                {
+                                                    <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Đồng nghiệp từ chối</span>
+                                                }
+                                                else if (s.Status == "Rejected" || s.Status == "AdminRejected")
+                                                {
+                                                    <span class="badge bg-danger"><i class="bi bi-slash-circle me-1"></i>Admin từ chối</span>
+                                                }
+                                                else if (s.Status == "Withdrawn")
+                                                {
+                                                    <span class="badge bg-secondary"><i class="bi bi-arrow-return-left me-1"></i>Đã rút</span>
+                                                }
+                                            </td>
+                                            <td class="small text-muted">
+                                                @(s.CounterpartyNote ?? s.AdminDecisionReason ?? "-")
+                                            </td>
+                                            <td class="text-end">
+                                                @if (s.Status == "PendingCounterparty" || s.Status == "PendingAdmin")
+                                                {
+                                                    <form method="post" action="@Url.Action("Withdraw", "ReceptionistShiftSwap", new { swapId = s.SwapRequestId })" onsubmit="return confirm('Bạn có chắc chắn muốn rút yêu cầu đổi ca này không?');" class="d-inline">
+                                                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                                                            <i class="bi bi-trash me-1"></i> Rút đơn
+                                                        </button>
+                                                    </form>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+
+                <!-- History Tab -->
+                <div class="tab-pane fade p-3" id="history" role="tabpanel">
+                    @if (!historySwaps.Any())
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-archive fs-1 d-block mb-2 text-secondary opacity-50"></i>
+                            Chưa có lịch sử đổi ca nào được ghi nhận.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Mã số</th>
+                                        <th>Người đề xuất</th>
+                                        <th>Đồng nghiệp</th>
+                                        <th>Ca ban đầu</th>
+                                        <th>Ca hoán đổi</th>
+                                        <th>Trạng thái cuối</th>
+                                        <th>Ghi chú</th>
+                                        <th>Thời gian</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var h in historySwaps)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold text-secondary">#@h.SwapRequestId</td>
+                                            <td class="fw-semibold">@h.RequestingReceptionistName</td>
+                                            <td class="fw-semibold">@h.TargetReceptionistName</td>
+                                            <td>
+                                                <span class="badge bg-primary">@h.SourceWorkDate.ToString("dd/MM/yyyy")</span>
+                                                <div class="small fw-semibold mt-1">@h.SourceStartTime.ToString(@"hh\:mm") - @h.SourceEndTime.ToString(@"hh\:mm")</div>
+                                            </td>
+                                            <td>
+                                                @if (h.TargetWorkDate.HasValue)
+                                                {
+                                                    <span class="badge bg-info text-dark">@h.TargetWorkDate.Value.ToString("dd/MM/yyyy")</span>
+                                                    <div class="small fw-semibold mt-1">
+                                                        @(h.TargetStartTime.HasValue && h.TargetEndTime.HasValue ? $"{h.TargetStartTime.Value:hh\\:mm} - {h.TargetEndTime.Value:hh\\:mm}" : "Ca chỉ định")
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small">Trực thay</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (h.Status == "Approved")
+                                                {
+                                                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Thành công</span>
+                                                }
+                                                else if (h.Status == "Declined" || h.Status == "CounterpartyDeclined")
+                                                {
+                                                    <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Từ chối</span>
+                                                }
+                                                else if (h.Status == "Rejected" || h.Status == "AdminRejected")
+                                                {
+                                                    <span class="badge bg-danger"><i class="bi bi-slash-circle me-1"></i>Admin không duyệt</span>
+                                                }
+                                                else if (h.Status == "Withdrawn")
+                                                {
+                                                    <span class="badge bg-secondary"><i class="bi bi-arrow-return-left me-1"></i>Đã rút</span>
+                                                }
+                                            </td>
+                                            <td class="small text-muted">
+                                                @(h.AdminDecisionReason ?? h.CounterpartyNote ?? "-")
+                                            </td>
+                                            <td class="small text-muted">@h.CreatedAt.ToString("dd/MM/yyyy")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Create Shift Swap -->
+<div class="modal fade" id="createSwapModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post" action="@Url.Action("Create", "ReceptionistShiftSwap")">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-arrow-left-right me-2"></i>Đề Xuất Đổi Ca Trực
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Chọn Ca Trực Của Bạn Cần Đổi <span class="text-danger">*</span></label>
+                        <select name="SourceScheduleId" class="form-select" required>
+                            <option value="">-- Chọn ca trực sắp tới của bạn --</option>
+                            @foreach (var s in myShifts.Where(x => x.Status == "Scheduled"))
+                            {
+                                <option value="@s.ReceptionistScheduleId">
+                                    @s.WorkDate.ToString("dd/MM/yyyy (ddd)") - @(s.ShiftTemplateName ?? "Ca trực") (@s.StartTime.ToString(@"hh\:mm") - @s.EndTime.ToString(@"hh\:mm"))
+                                </option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Đồng Nghiệp Bạn Muốn Đổi Ca <span class="text-danger">*</span></label>
+                        <select name="TargetReceptionistUserId" class="form-select" required>
+                            <option value="">-- Chọn đồng nghiệp lễ tân --</option>
+                            @foreach (var c in colleagues)
+                            {
+                                <option value="@c.UserId">@c.FullName (@c.Email)</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Lý Do Đổi Ca <span class="text-danger">*</span></label>
+                        <textarea name="Reason" class="form-control" rows="3" required placeholder="Nêu rõ lý do cần đổi ca để đồng nghiệp và Admin xem xét..."></textarea>
+                    </div>
+
+                    <div class="alert alert-info py-2 px-3 small mb-0">
+                        <i class="bi bi-info-circle me-1"></i>Quy trình: <strong>Đồng nghiệp đồng ý</strong> &rarr; <strong>Admin phê duyệt</strong> &rarr; Hệ thống tự động chuyển giao ca trực an toàn.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send me-1"></i> Gửi Yêu Cầu Đổi Ca
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Respond Swap -->
+<div class="modal fade" id="respondSwapModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form id="respondSwapForm" method="post" action="">
+                <input type="hidden" name="accept" id="respondAcceptInput" value="true" />
+                <div class="modal-header" id="respondModalHeader">
+                    <h5 class="modal-title fw-bold" id="respondModalTitle">Phản hồi yêu cầu đổi ca</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p id="respondModalPrompt" class="mb-3"></p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Ghi chú phản hồi (Tùy chọn):</label>
+                        <textarea name="note" class="form-control" rows="2" placeholder="Nhập lời nhắn gửi đến đồng nghiệp..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn" id="respondSubmitBtn">Xác nhận</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openRespondModal(swapId, accept, proposerName) {
+    const form = document.getElementById('respondSwapForm');
+    form.action = '/Receptionist/ShiftSwap/Respond/' + swapId;
+
+    document.getElementById('respondAcceptInput').value = accept ? 'true' : 'false';
+    const header = document.getElementById('respondModalHeader');
+    const title = document.getElementById('respondModalTitle');
+    const prompt = document.getElementById('respondModalPrompt');
+    const submitBtn = document.getElementById('respondSubmitBtn');
+
+    if (accept) {
+        header.className = 'modal-header bg-success text-white';
+        title.innerHTML = '<i class="bi bi-check-circle me-2"></i>Đồng Ý Đổi Ca';
+        prompt.innerHTML = `Bạn có chắc chắn muốn <strong>đồng ý</strong> đề xuất đổi ca trực của đồng nghiệp <strong>${proposerName}</strong>? Sau khi đồng ý, yêu cầu sẽ được chuyển tới Quản trị viên để hoàn tất phê duyệt.`;
+        submitBtn.className = 'btn btn-success';
+        submitBtn.innerText = 'Xác Nhận Đồng Ý';
+    } else {
+        header.className = 'modal-header bg-danger text-white';
+        title.innerHTML = '<i class="bi bi-x-circle me-2"></i>Từ Chối Đổi Ca';
+        prompt.innerHTML = `Bạn có chắc chắn muốn <strong>từ chối</strong> đề xuất đổi ca trực của đồng nghiệp <strong>${proposerName}</strong>?`;
+        submitBtn.className = 'btn btn-danger';
+        submitBtn.innerText = 'Xác Nhận Từ Chối';
+    }
+
+    new bootstrap.Modal(document.getElementById('respondSwapModal')).show();
+}
+</script>

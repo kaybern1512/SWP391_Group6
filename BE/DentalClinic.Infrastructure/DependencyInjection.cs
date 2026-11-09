@@ -1,3 +1,4 @@
+using DentalClinic.Infrastructure.Services.StaffShiftProviders;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Validation;
 using DentalClinic.Infrastructure.Persistence;
@@ -56,6 +57,8 @@ public static class DependencyInjection
         services.AddScoped<IAppointmentService, AppointmentService>();
         services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<IDentistScheduleService, DentistScheduleService>();
+        services.AddScoped<IDentistLeaveService, DentistLeaveService>();
+        services.AddScoped<IAppointmentDisruptionService, AppointmentDisruptionService>();
         services.AddScoped<IFeedbackService, FeedbackService>();
         services.AddScoped<IMedicalRecordService>(sp => new MedicalRecordService(
             sp.GetRequiredService<DentalClinicDbContext>(),
@@ -72,7 +75,24 @@ public static class DependencyInjection
         services.AddScoped<IBlogService, BlogService>();
         services.AddScoped<IAppointmentReminderService, AppointmentReminderService>();
         services.AddScoped<IMedicineService, MedicineService>();
+services.AddScoped<IReceptionistCoverageService, ReceptionistCoverageService>();
+        services.AddScoped<IReceptionistScheduleService, ReceptionistScheduleService>();
+        services.AddScoped<IReceptionistLeaveService, ReceptionistLeaveService>();
+        services.AddScoped<IReceptionistShiftSwapService, ReceptionistShiftSwapService>();
+        services.AddScoped<IReceptionistHandoverService, ReceptionistHandoverService>();
+        // Workforce Attendance & Operations Services
+        services.AddScoped<DentistShiftProvider>();
+        services.AddScoped<ReceptionistShiftProvider>();
+        services.AddScoped<IStaffShiftResolver, CompositeStaffShiftProvider>();
+        services.AddScoped<IAttendanceService, AttendanceService>();
+        services.AddScoped<IWorkforceReportService, WorkforceReportService>();
+        services.AddScoped<IClinicOperationsService, ClinicOperationsService>();
+        services.AddScoped<IAdminImpactAnalysisService, AdminImpactAnalysisService>();
+
+        // Clinical Diagnostics & Imaging Services
+        services.AddScoped<IImagingService, ImagingService>();
         services.AddHostedService<AppointmentReminderBackgroundWorker>();
+        services.AddHostedService<AppointmentDisruptionBackgroundWorker>();
 
         return services;
     }

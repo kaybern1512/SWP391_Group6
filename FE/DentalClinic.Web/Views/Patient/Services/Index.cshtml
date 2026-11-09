@@ -1,0 +1,192 @@
+@model DentalClinic.Web.ViewModels.Services.PatientServicesDiscoveryViewModel
+@{
+    ViewData["Title"] = "Danh Mục Dịch Vụ Nha Khoa - DentalCare";
+}
+
+<div class="container-fluid px-0">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-stars text-primary me-2"></i>Danh Mục Dịch Vụ & Bảng Giá Nha Khoa
+            </h1>
+            <p class="text-muted mb-0">Khám phá các dịch vụ nha khoa chuyên sâu, thời lượng chuẩn và đội ngũ bác sĩ phụ trách</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-controller="PatientAppointment" asp-action="Book" class="btn btn-primary px-3 py-2 shadow-sm fw-bold">
+                <i class="bi bi-calendar-plus me-1"></i> Đặt Lịch Khám Ngay
+            </a>
+            <a asp-controller="PatientDashboard" asp-action="Dashboard" class="btn btn-outline-secondary px-3 py-2">
+                <i class="bi bi-grid-1x2 me-1"></i> Về Cổng Bệnh Nhân
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-3">
+            <form method="get" asp-action="Services" class="row g-3 align-items-center">
+                <div class="col-md-5">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" name="search" value="@Model.SearchTerm" class="form-control border-start-0 ps-0" placeholder="Tìm theo tên dịch vụ hoặc mô tả (ví dụ: trám răng, nhổ răng, implant...)" />
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <select name="departmentId" class="form-select" onchange="this.form.submit()">
+                        <option value="">-- Tất cả chuyên khoa --</option>
+                        @foreach (var d in Model.Departments)
+                        {
+                            <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId ? "selected" : null)">
+                                @d.Name
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-fill fw-semibold">
+                        <i class="bi bi-funnel me-1"></i> Lọc Dịch Vụ
+                    </button>
+                    @if (Model.SelectedDepartmentId.HasValue || !string.IsNullOrWhiteSpace(Model.SearchTerm))
+                    {
+                        <a asp-action="Services" class="btn btn-outline-secondary" title="Đặt lại bộ lọc">
+                            <i class="bi bi-arrow-counterclockwise"></i>
+                        </a>
+                    }
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Department Pill Badges -->
+    <div class="d-flex flex-wrap gap-2 mb-4">
+        <a asp-action="Services" asp-route-search="@Model.SearchTerm" class="btn btn-sm @(!Model.SelectedDepartmentId.HasValue ? "btn-dark" : "btn-light border")">
+            Tất cả chuyên khoa (@Model.Services.Count)
+        </a>
+        @foreach (var dept in Model.Departments)
+        {
+            var isSelected = Model.SelectedDepartmentId == dept.DepartmentId;
+            var countInDept = Model.Services.Count(s => s.DepartmentId == dept.DepartmentId);
+            <a asp-action="Services" asp-route-departmentId="@dept.DepartmentId" asp-route-search="@Model.SearchTerm" class="btn btn-sm @(isSelected ? "btn-primary" : "btn-light border")">
+                @dept.Name (@countInDept)
+            </a>
+        }
+    </div>
+
+    <!-- Notice Card -->
+    <div class="alert alert-light border rounded-3 p-3 mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-info-circle-fill text-primary fs-4 me-3"></i>
+            <div class="small">
+                <strong>Chính sách niêm yết giá y khoa:</strong> Mức giá dưới đây là <strong>giá tham khảo niêm yết</strong> theo quy định chuyên môn. Sau khi bác sĩ thăm khám và đánh giá tình trạng răng thực tế, chi phí chính thức sẽ được thông báo rõ ràng trước khi điều trị.
+            </div>
+        </div>
+        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">Minh Bạch Viện Phí</span>
+    </div>
+
+    <!-- Services Grid -->
+    @if (Model.Services.Count == 0)
+    {
+        <div class="card border-0 shadow-sm text-center py-5">
+            <div class="card-body">
+                <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
+                    <i class="bi bi-search fs-2 text-muted"></i>
+                </div>
+                <h5 class="fw-bold text-dark">Không tìm thấy dịch vụ nào</h5>
+                <p class="text-muted mb-4">Không có dịch vụ nha khoa nào phù hợp với từ khóa hoặc chuyên khoa bạn chọn.</p>
+                <a asp-action="Services" class="btn btn-outline-primary px-4">
+                    <i class="bi bi-arrow-repeat me-1"></i> Xem tất cả dịch vụ
+                </a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @foreach (var svc in Model.Services)
+            {
+                var duration = svc.DurationMinutes.HasValue && svc.DurationMinutes.Value > 0 ? svc.DurationMinutes.Value : 30;
+                var priceStr = svc.Price.HasValue && svc.Price.Value > 0 ? svc.Price.Value.ToString("N0") + " đ" : "Miễn phí / BHYT";
+                var hasInstructions = !string.IsNullOrWhiteSpace(svc.BookingInstructions);
+                var doctors = Model.DentistsByDepartment.TryGetValue(svc.DepartmentId, out var docs) ? docs : new();
+
+                <div class="col-md-6 col-xl-4">
+                    <div class="card border-0 shadow-sm h-100 d-flex flex-column justify-content-between rounded-3 hover-shadow transition">
+                        <div class="card-body p-4">
+                            <!-- Category Badge & Duration -->
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle small text-truncate" style="max-width: 200px;">
+                                    <i class="bi bi-hospital me-1"></i>@(svc.DepartmentName ?? "Chuyên khoa")
+                                </span>
+                                <span class="badge bg-light text-secondary border small">
+                                    <i class="bi bi-clock me-1 text-primary"></i>@duration phút
+                                </span>
+                            </div>
+
+                            <!-- Title -->
+                            <h5 class="fw-bold text-dark mb-2 fs-5">@svc.ServiceName</h5>
+
+                            <!-- Description -->
+                            <p class="text-muted small mb-3" style="min-height: 40px;">
+                                @(string.IsNullOrWhiteSpace(svc.Description) ? "Khám và điều trị chuẩn y khoa với trang thiết bị vô trùng hiện đại." : svc.Description)
+                            </p>
+
+                            <!-- Instructions / Complexity -->
+                            @if (hasInstructions)
+                            {
+                                <div class="p-2 bg-info-subtle border border-info-subtle rounded small text-dark mb-3">
+                                    <i class="bi bi-info-circle-fill text-primary me-1"></i><strong>Hướng dẫn:</strong> @svc.BookingInstructions
+                                </div>
+                            }
+                            else if (svc.RequiresConsultationFirst == true)
+                            {
+                                <div class="p-2 bg-warning-subtle border border-warning-subtle rounded small text-dark mb-3">
+                                    <i class="bi bi-shield-check text-warning me-1"></i><strong>Lưu ý:</strong> Cần khám tư vấn chuyên sâu trước khi thực hiện.
+                                </div>
+                            }
+
+                            <!-- Doctors in this Department -->
+                            <div class="mb-3 pt-2 border-top">
+                                <div class="text-muted small fw-semibold mb-2">
+                                    <i class="bi bi-people me-1 text-primary"></i>Bác sĩ chuyên khoa phụ trách (@doctors.Count):
+                                </div>
+                                <div class="d-flex flex-wrap gap-1">
+                                    @if (doctors.Count == 0)
+                                    {
+                                        <span class="text-muted small fst-italic">Bác sĩ chuyên khoa tiếp nhận</span>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var doc in doctors.Take(3))
+                                        {
+                                            <span class="badge bg-light text-dark border small" title="@doc.Qualification - @doc.YearsOfExperience năm kinh nghiệm">
+                                                <i class="bi bi-person-badge text-success me-1"></i>@doc.FullName
+                                            </span>
+                                        }
+                                        @if (doctors.Count > 3)
+                                        {
+                                            <span class="badge bg-light text-muted border small">+@(doctors.Count - 3) BS khác</span>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card Footer -->
+                        <div class="card-footer bg-light p-3 border-top d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="text-muted small d-block" style="font-size: 0.72rem;">Giá niêm yết tham khảo:</span>
+                                <strong class="text-primary fs-5">@priceStr</strong>
+                            </div>
+                            <a asp-controller="PatientAppointment" asp-action="Book" asp-route-departmentId="@svc.DepartmentId" asp-route-serviceId="@svc.DepartmentServiceId" class="btn btn-primary btn-sm px-3 py-2 fw-bold shadow-sm">
+                                <i class="bi bi-calendar-plus me-1"></i> Đặt Lịch Ngay
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

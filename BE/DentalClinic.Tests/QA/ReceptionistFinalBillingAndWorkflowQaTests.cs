@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -94,8 +94,8 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
                 DepartmentScheduleId = d,
                 DepartmentId = 1,
                 DayOfWeek = d,
-                StartTime = new TimeOnly(6, 0),
-                EndTime = new TimeOnly(23, 0),
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59, 59),
                 IsActive = true
             });
         }
@@ -182,8 +182,8 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
                 DentistUserId = 301,
                 DepartmentId = 1,
                 WorkDate = today,
-                StartTime = new TimeOnly(6, 0),
-                EndTime = new TimeOnly(23, 0),
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59, 59),
                 Status = "Scheduled"
             },
             new DentistWorkSchedule
@@ -192,8 +192,8 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
                 DentistUserId = 301,
                 DepartmentId = 1,
                 WorkDate = today.AddDays(1),
-                StartTime = new TimeOnly(6, 0),
-                EndTime = new TimeOnly(23, 0),
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59, 59),
                 Status = "Scheduled"
             }
         );
@@ -562,6 +562,7 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
             Method = "Cash"
         });
         Assert.False(pay3.Success);
+        Assert.NotNull(pay3.Message);
         Assert.Contains("đã được thanh toán", pay3.Message.ToLowerInvariant());
     }
 
@@ -675,6 +676,13 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
 
         var apptService = new AppointmentService(db, _mockNotification.Object, _mockApptLogger.Object);
         var nowClinic = ClinicTimeHelper.Now;
+        var todayShift = await db.DentistWorkSchedules.FirstOrDefaultAsync(s => s.DentistUserId == dentistId && s.WorkDate == ClinicTimeHelper.TodayDateOnly);
+        if (todayShift != null)
+        {
+            todayShift.StartTime = new TimeOnly(0, 0);
+            todayShift.EndTime = new TimeOnly(23, 59, 59);
+            await db.SaveChangesAsync();
+        }
 
         var walkInRes = await apptService.CreateReceptionistAppointmentAsync(staffId, new CreateReceptionistAppointmentRequest
         {
@@ -684,7 +692,7 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
             AssignedDentistUserId = dentistId,
             RoomId = 10,
             DentalChairId = 101,
-            ScheduledStart = nowClinic.AddMinutes(5),
+            ScheduledStart = nowClinic.Hour >= 22 ? ClinicTimeHelper.Today.AddDays(1).AddHours(9) : nowClinic.AddMinutes(5),
             ReasonForVisit = "Bệnh nhân vãng lai đau răng khẩn cấp",
             AutoConfirm = true
         });
@@ -814,6 +822,7 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
         });
 
         Assert.False(confOverlap.Success);
+        Assert.NotNull(confOverlap.Message);
         Assert.Contains("lịch hẹn khác", confOverlap.Message.ToLowerInvariant());
     }
 
@@ -1068,6 +1077,7 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
             ScheduledEnd = tomorrow.AddHours(10).AddMinutes(30)
         });
         Assert.False(confB.Success);
+        Assert.NotNull(confB.Message);
         Assert.Contains("lịch hẹn khác", confB.Message.ToLowerInvariant());
     }
 

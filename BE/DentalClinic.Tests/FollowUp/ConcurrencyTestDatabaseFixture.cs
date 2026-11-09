@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data;
 using System.IO;
 using System.Threading.Tasks;
@@ -20,6 +20,13 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
     private const string MigrationRelativePath = @"DB\migrations\20261104_Update_FollowUpSchedules_Status_CheckConstraint.sql";
     private const string Phase0MigrationRelativePath = @"DB\redesign_migrations\20261109_Phase0_Database_Standardization_4Roles.sql";
     private const string AddTreatmentPlanItemMigrationRelativePath = @"DB\redesign_migrations\20261109_Add_TreatmentPlanItemId_To_Appointments.sql";
+    private const string UpdateTreatmentPlansMigrationRelativePath = @"DB\redesign_migrations\20261109_Update_TreatmentPlans_Status_CheckConstraint_Add_Active_Pending.sql";
+    private const string ImagingMigrationRelativePath = @"DB\redesign_migrations\20261110_Add_Imaging_Room_Equipment_And_Queue_Schema.sql";
+    private const string ConsultationAndReferralMigrationRelativePath = @"DB\redesign_migrations\20261110_Add_Clinical_Consultation_And_Referral_Linkage.sql";
+    private const string DoctorLeaveMigrationRelativePath = @"DB\redesign_migrations\20261109_Add_DoctorLeave_And_AppointmentDisruption.sql";
+    private const string ReceptionistShiftMigrationRelativePath = @"DB\redesign_migrations\20261110_Receptionist_Shift_Leave_Workforce_Schema.sql";
+    private const string StaffAttendanceMigrationRelativePath = @"DB\migrations\20261110_Add_Staff_Attendance_And_Operations_Tables.sql";
+    private const string ServiceCombosMigrationRelativePath = @"DB\20261110_Add_ServiceCombos_And_Appointment_Combo_Tracking.sql";
 
     public async Task InitializeAsync()
     {
@@ -46,7 +53,7 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = "SELECT CAST(ISNULL(SERVERPROPERTY('InstanceDefaultDataPath'), 'C:\\Program Files\\Microsoft SQL Server\\MSSQL16.SQLEXPRESS\\MSSQL\\DATA\\') AS VARCHAR(260));";
-            dataPath = (string)(await cmd.ExecuteScalarAsync() ?? @"C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\DATA\");
+            dataPath = (string)(await cmd.ExecuteScalarAsync() ?? @"C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER01\MSSQL\DATA\");
         }
 
         var mdfPath = Path.Combine(dataPath, $"{DatabaseName}.mdf");
@@ -88,6 +95,41 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
         await ApplyMigrationFileAsync(phase0Path, DatabaseName, ConnectionString);
         var addFkPath = Path.Combine(repoRoot, AddTreatmentPlanItemMigrationRelativePath);
         await ApplyMigrationFileAsync(addFkPath, DatabaseName, ConnectionString);
+        var updatePlanPath = Path.Combine(repoRoot, UpdateTreatmentPlansMigrationRelativePath);
+        if (File.Exists(updatePlanPath))
+        {
+            await ApplyMigrationFileAsync(updatePlanPath, DatabaseName, ConnectionString);
+        }
+        var imagingPath = Path.Combine(repoRoot, ImagingMigrationRelativePath);
+        if (File.Exists(imagingPath))
+        {
+            await ApplyMigrationFileAsync(imagingPath, DatabaseName, ConnectionString);
+        }
+        var consultPath = Path.Combine(repoRoot, ConsultationAndReferralMigrationRelativePath);
+        if (File.Exists(consultPath))
+        {
+            await ApplyMigrationFileAsync(consultPath, DatabaseName, ConnectionString);
+        }
+        var leavePath = Path.Combine(repoRoot, DoctorLeaveMigrationRelativePath);
+        if (File.Exists(leavePath))
+        {
+            await ApplyMigrationFileAsync(leavePath, DatabaseName, ConnectionString);
+        }
+        var recepPath = Path.Combine(repoRoot, ReceptionistShiftMigrationRelativePath);
+        if (File.Exists(recepPath))
+        {
+            await ApplyMigrationFileAsync(recepPath, DatabaseName, ConnectionString);
+        }
+        var attendancePath = Path.Combine(repoRoot, StaffAttendanceMigrationRelativePath);
+        if (File.Exists(attendancePath))
+        {
+            await ApplyMigrationFileAsync(attendancePath, DatabaseName, ConnectionString);
+        }
+        var comboPath = Path.Combine(repoRoot, ServiceCombosMigrationRelativePath);
+        if (File.Exists(comboPath))
+        {
+            await ApplyMigrationFileAsync(comboPath, DatabaseName, ConnectionString);
+        }
     }
 
     public async Task DisposeAsync()

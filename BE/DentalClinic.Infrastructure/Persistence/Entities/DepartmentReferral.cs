@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -8,6 +8,10 @@ public partial class DepartmentReferral
     public long ReferralId { get; set; }
 
     public long TreatmentSessionId { get; set; }
+
+    public long? SourceAppointmentId { get; set; }
+
+    public long? DestinationAppointmentId { get; set; }
 
     public long FromDepartmentId { get; set; }
 
@@ -36,4 +40,8 @@ public partial class DepartmentReferral
     public virtual Department ToDepartment { get; set; } = null!;
 
     public virtual TreatmentSession TreatmentSession { get; set; } = null!;
+
+    public virtual Appointment? SourceAppointment { get; set; }
+
+    public virtual Appointment? DestinationAppointment { get; set; }
 }
