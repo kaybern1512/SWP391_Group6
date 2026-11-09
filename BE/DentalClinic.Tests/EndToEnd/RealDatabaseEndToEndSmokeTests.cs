@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -22,7 +22,7 @@ public class RealDatabaseEndToEndSmokeTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? "Server=.\\SQLEXPRESS;Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private static async Task<bool> IsDatabaseAvailableAsync(DentalClinicDbContext db)
     {
@@ -436,7 +436,7 @@ public class RealDatabaseEndToEndSmokeTests
         // Second confirmation on ROOM-202 must be REJECTED because ROOM-202 is exclusive!
         var confEx2 = await apptService.ManagerConfirmAsync(apptEx2.AppointmentId, 4, new ManagerConfirmRequest
         {
-            AssignedDentistUserId = 6,
+            AssignedDentistUserId = 4,
             RoomId = 5,
             DentalChairId = 13,
             ScheduledStart = slotExStart,

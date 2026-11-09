@@ -8,6 +8,7 @@ using DentalClinic.Application.Features.Billing.DTOs;
 using DentalClinic.Application.Features.Prescriptions.DTOs;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
+using DentalClinic.Infrastructure.Persistence.Entities;
 using DentalClinic.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -21,9 +22,19 @@ public class CompleteServiceFlowIntegrationTests
 {
     private readonly ITestOutputHelper _output;
 
-    private static string ConnectionString =>
-        Environment.GetEnvironmentVariable("DENTAL_CLINIC_CONNECTION_STRING")
-        ?? "Server=localhost\\MSSQLSERVER01;Database=DentalClinicManagementDB;Trusted_Connection=True;TrustServerCertificate=True;";
+    private static string ConnectionString
+    {
+        get
+        {
+            var envConn = Environment.GetEnvironmentVariable("DENTAL_CLINIC_CONNECTION_STRING");
+            if (!string.IsNullOrWhiteSpace(envConn)) return envConn;
+
+            var server = Environment.GetEnvironmentVariable("TEST_SQL_SERVER")
+                         ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE")
+                         ?? ".\\MSSQLSERVER01";
+            return $"Server={server};Database=DentalClinicManagementDB;Trusted_Connection=True;TrustServerCertificate=True;";
+        }
+    }
 
     public CompleteServiceFlowIntegrationTests(ITestOutputHelper output)
     {
@@ -57,16 +68,43 @@ public class CompleteServiceFlowIntegrationTests
         var billingService = new BillingService(db, mockNotification.Object, mockBillingLogger.Object);
         var prescService = new PrescriptionService(db, mockPrescLogger.Object);
 
-        long patientUserId = 6;     // lehoangminh.test@dentalcare.com
-        long receptionistUserId = 3;// receptionist@dentalcare.com
-        long managerUserId = 17;    // manager1@dentalcare.com
-        long dentistUserId = 1;     // dentist1@dentalcare.com (TS. BS. Nguyễn Thị Phương Thảo)
+        var patientUser = await db.UserAccounts
+            .FirstOrDefaultAsync(u => u.Email == "lehoangminh.test@dentalcare.com" || (u.Role == UserRole.Patient && u.Status == "Active"));
+        long patientUserId = patientUser?.UserId ?? 5;
+
+        var receptionistUser = await db.UserAccounts
+            .FirstOrDefaultAsync(u => u.Email == "receptionist@dentalcare.com" || (u.Role == UserRole.Receptionist && u.Status == "Active"));
+        long receptionistUserId = receptionistUser?.UserId ?? 2;
+
+        var dentistUser = await db.UserAccounts
+            .FirstOrDefaultAsync(u => u.Email == "dentist@dentalcare.com" || (u.Role == UserRole.Dentist && u.Status == "Active"));
+        long dentistUserId = dentistUser?.UserId ?? 3;
+
         long departmentId = 1;      // Khoa Răng Tổng Quát
+        var dept = await db.Departments.FirstOrDefaultAsync(d => d.DepartmentId == departmentId);
+        long managerUserId = dept?.ManagerUserId ?? 10;
         long primaryServiceId = 1;  // Khám tổng quát & Tư vấn (100.000 đ)
         long extraService1Id = 2;   // Lấy cao răng & Đánh bóng (250.000 đ)
         long extraService2Id = 6;   // Tẩy trắng răng Laser Whitening (2.000.000 đ)
 
-        var testDate = DateTime.Today.AddDays(Random.Shared.Next(1, 15)).AddHours(9);
+        var testDate = DateTime.Today.AddDays(Random.Shared.Next(100, 500)).AddHours(9).AddMinutes(Random.Shared.Next(1, 50));
+
+        var workDate = DateOnly.FromDateTime(testDate);
+        var existingSchedule = await db.DentistWorkSchedules
+            .FirstOrDefaultAsync(s => s.DentistUserId == dentistUserId && s.WorkDate == workDate);
+        if (existingSchedule == null)
+        {
+            db.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistUserId = dentistUserId,
+                DepartmentId = departmentId,
+                WorkDate = workDate,
+                StartTime = new TimeOnly(7, 0, 0),
+                EndTime = new TimeOnly(20, 0, 0),
+                Status = "Scheduled"
+            });
+            await db.SaveChangesAsync();
+        }
 
         _output.WriteLine("======================================================================");
         _output.WriteLine("KHỞI CHẠY LUỒNG KHÁM HOÀN CHỈNH: DỊCH VỤ CHÍNH + DỊCH VỤ THÊM");

@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using DentalClinic.Web.Models.ApiDtos;
+
 namespace DentalClinic.Web.ViewModels.Dashboard;
 
 public class DashboardViewModel
@@ -8,7 +11,7 @@ public class DashboardViewModel
     public string? Code { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Subtitle { get; set; } = string.Empty;
-    
+
     // 4 KPI / Metric Stat Cards
     public List<StatCardItem> StatCards { get; set; } = new();
 
@@ -17,6 +20,15 @@ public class DashboardViewModel
 
     // Contextual Empty State for Workspaces
     public EmptyStateViewModel EmptyState { get; set; } = new();
+
+    // Real Patient Operational Data
+    public AppointmentDto? UpcomingAppointment { get; set; }
+    public int PendingAppointmentsCount { get; set; }
+    public int ConfirmedAppointmentsCount { get; set; }
+    public decimal UnpaidInvoicesAmount { get; set; }
+    public TreatmentPlanDto? ActiveTreatmentPlan { get; set; }
+    public FollowUpScheduleDto? NextFollowUp { get; set; }
+    public int UnreadNotificationCount { get; set; }
 }
 
 public class StatCardItem

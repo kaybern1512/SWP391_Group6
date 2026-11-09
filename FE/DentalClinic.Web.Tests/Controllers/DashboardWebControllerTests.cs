@@ -34,7 +34,7 @@ public class DashboardWebControllerTests
     }
 
     [Fact]
-    public void PatientDashboard_ShouldReturnLocalizedModel_AndValidCardRoutes()
+    public async Task PatientDashboard_ShouldReturnLocalizedModel_AndValidCardRoutes()
     {
         // Arrange
         var controller = new PatientDashboardController
@@ -43,7 +43,7 @@ public class DashboardWebControllerTests
         };
 
         // Act
-        var result = controller.Dashboard();
+        var result = await controller.Dashboard();
 
         // Assert
         var viewResult = result.Should().BeOfType<ViewResult>().Subject;

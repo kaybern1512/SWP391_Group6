@@ -35,6 +35,34 @@ public class FollowUpConcurrencyIntegrationTests
 
     private static async Task EnsureDoctorScheduleAsync(DentalClinicDbContext db, long doctorId, DateTime slotDate, long departmentId = 1)
     {
+        var dentistProfile = await db.DentistProfiles.FindAsync(doctorId);
+        if (dentistProfile == null)
+        {
+            var user = await db.UserAccounts.FindAsync(doctorId);
+            if (user == null)
+            {
+                user = new UserAccount { UserId = doctorId, Email = $"doctor{doctorId}@test.com", Role = UserRole.Dentist, Status = AccountStatus.Active };
+                db.UserAccounts.Add(user);
+                await db.SaveChangesAsync();
+            }
+            else if (user.Role != UserRole.Dentist)
+            {
+                user.Role = UserRole.Dentist;
+                await db.SaveChangesAsync();
+            }
+            var staff = await db.StaffProfiles.FindAsync(doctorId);
+            if (staff == null)
+            {
+                staff = new StaffProfile { UserId = doctorId, EmployeeCode = $"EMP-DOC-{doctorId}", FullName = $"Bác sĩ {doctorId}", EmploymentStatus = "Active" };
+                db.StaffProfiles.Add(staff);
+                await db.SaveChangesAsync();
+            }
+            db.DentistProfiles.Add(new DentistProfile { UserId = doctorId, LicenseNumber = $"LIC-{doctorId}", Qualification = "Bác sĩ điều trị", YearsOfExperience = 5 });
+            await db.SaveChangesAsync();
+        }
+
+        await EnsureDoctorDepartmentAsync(db, doctorId, departmentId);
+
         var targetDate = DateOnly.FromDateTime(slotDate.Date);
         var existing = await db.DentistWorkSchedules
             .Where(ws => ws.DentistUserId == doctorId && ws.WorkDate == targetDate && ws.DepartmentId == departmentId)
@@ -2478,6 +2506,19 @@ public class FollowUpConcurrencyIntegrationTests
 
         var leaveStart = DateTime.Today.AddDays(1);
         var leaveEnd = DateTime.Today.AddDays(90); // 90-day leave
+
+        var existingLeaveAppts = await setupDb.Appointments
+            .Where(a => (a.AssignedDentistUserId == doctorId || a.RequestedDentistUserId == doctorId) &&
+                        a.ScheduledStart >= leaveStart && a.ScheduledStart <= leaveEnd)
+            .ToListAsync();
+        if (existingLeaveAppts.Any())
+        {
+            foreach (var a in existingLeaveAppts)
+            {
+                a.Status = AppointmentStatus.Cancelled;
+            }
+            await setupDb.SaveChangesAsync();
+        }
 
         // Doctor registers 90-day leave
         using var leaveDb = _fixture.CreateDbContext();
