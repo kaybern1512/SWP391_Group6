@@ -102,5 +102,5 @@ public partial class Appointment
     public virtual ICollection<DepartmentReferral> IncomingReferrals { get; set; } = new List<DepartmentReferral>();
     public virtual ICollection<DepartmentReferral> OutgoingReferrals { get; set; } = new List<DepartmentReferral>();
 
-    public virtual ServiceCombo? Combo { get; set; };
+    public virtual ServiceCombo? Combo { get; set; }
 }

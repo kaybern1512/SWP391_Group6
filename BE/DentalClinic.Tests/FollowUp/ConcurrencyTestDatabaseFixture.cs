@@ -106,7 +106,6 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
         {
             await ApplyMigrationFileAsync(consultPath, DatabaseName, ConnectionString);
         }
-        }
     }
 
     public async Task DisposeAsync()
