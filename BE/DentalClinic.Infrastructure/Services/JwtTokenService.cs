@@ -22,7 +22,7 @@ public class JwtTokenService : IJwtTokenService
     public JwtTokenService(IConfiguration configuration)
     {
         _configuration = configuration;
-        _secret = configuration["JwtSettings:Secret"] ?? "DentalClinicVerySuperSecretKeyForJwtSigning_2026_SWP391_Group6!";
+        _secret = configuration["JwtSettings:Secret"] ?? "DentalClinicSuperSecretSecurityKey_GraduationProject_2026_SWP391_Group6#";
         _issuer = configuration["JwtSettings:Issuer"] ?? "DentalClinicApi";
         _audience = configuration["JwtSettings:Audience"] ?? "DentalClinicWeb";
         _expirationMinutes = int.TryParse(configuration["JwtSettings:ExpirationMinutes"], out var exp) ? exp : 60;

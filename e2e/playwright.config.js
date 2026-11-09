@@ -10,7 +10,7 @@ module.exports = defineConfig({
   fullyParallel: false,
   reporter: 'list',
   use: {
-    baseURL: process.env.BASE_URL || 'https://localhost:7120',
+    baseURL: process.env.BASE_URL || 'https://localhost:7129',
     ignoreHTTPSErrors: true,
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

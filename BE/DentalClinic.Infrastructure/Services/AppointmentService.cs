@@ -749,7 +749,7 @@ public class AppointmentService : IAppointmentService
                 .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
             if (linkedFollowUp != null && (linkedFollowUp.Status == "Pending" || linkedFollowUp.Status == "Scheduled" || linkedFollowUp.Status == "Proposed"))
             {
-                linkedFollowUp.Status = "Confirmed";
+                linkedFollowUp.Status = "Scheduled";
             }
 
             await _dbContext.SaveChangesAsync(ct);
@@ -1567,7 +1567,7 @@ public class AppointmentService : IAppointmentService
                 .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
             if (linkedFollowUp != null && (linkedFollowUp.Status == "Pending" || linkedFollowUp.Status == "Scheduled" || linkedFollowUp.Status == "Proposed"))
             {
-                linkedFollowUp.Status = "Confirmed";
+                linkedFollowUp.Status = "Scheduled";
             }
 
             await _dbContext.SaveChangesAsync(ct);
@@ -1607,7 +1607,7 @@ public class AppointmentService : IAppointmentService
                 .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
             if (linkedFollowUp != null && (linkedFollowUp.Status == "Pending" || linkedFollowUp.Status == "Scheduled" || linkedFollowUp.Status == "Proposed"))
             {
-                linkedFollowUp.Status = "Confirmed";
+                linkedFollowUp.Status = "Scheduled";
             }
 
             await _dbContext.SaveChangesAsync(ct);
@@ -1958,7 +1958,7 @@ public class AppointmentService : IAppointmentService
                 .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
             if (linkedFollowUp != null && (linkedFollowUp.Status == "Pending" || linkedFollowUp.Status == "Scheduled" || linkedFollowUp.Status == "Proposed"))
             {
-                linkedFollowUp.Status = "Confirmed";
+                linkedFollowUp.Status = "Scheduled";
             }
 
             await _dbContext.SaveChangesAsync(ct);
@@ -2724,7 +2724,7 @@ public class AppointmentService : IAppointmentService
                 .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
             if (linkedFollowUp != null && (linkedFollowUp.Status == "Pending" || linkedFollowUp.Status == "Scheduled" || linkedFollowUp.Status == "Proposed"))
             {
-                linkedFollowUp.Status = "Confirmed";
+                linkedFollowUp.Status = "Scheduled";
             }
 
             await _dbContext.SaveChangesAsync(ct);

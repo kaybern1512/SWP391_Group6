@@ -650,7 +650,7 @@ public class SecurityAndBusinessGapIntegrationTests
         // FollowUpSchedule must be synced to Confirmed
         var updatedFollowUp = await db.FollowUpSchedules.FindAsync(999L);
         Assert.NotNull(updatedFollowUp);
-        Assert.Equal("Confirmed", updatedFollowUp!.Status);
+        Assert.Equal("Scheduled", updatedFollowUp!.Status);
     }
 
     [Fact]
