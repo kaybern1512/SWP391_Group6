@@ -3276,6 +3276,10 @@ public class AppointmentService : IAppointmentService
 
                          a.Status == AppointmentStatus.Waiting ||
 
+                         a.Status == AppointmentStatus.InService ||
+
+                         a.Status == AppointmentStatus.Completed ||
+
                          a.Status == AppointmentStatus.NoShow));
 
         if (!string.IsNullOrWhiteSpace(searchQuery))

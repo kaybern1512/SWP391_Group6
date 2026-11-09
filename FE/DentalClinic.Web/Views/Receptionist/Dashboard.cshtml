@@ -21,7 +21,7 @@
             <a asp-controller="ReceptionistPatient" asp-action="Index" class="btn btn-dc-outline">
                 <i class="bi bi-people me-1"></i> Sổ Quản Lý Bệnh Nhân
             </a>
-            <a asp-controller="ReceptionistBilling" asp-action="Index" class="btn btn-dc-outline text-success border-success-subtle">
+            <a asp-controller="ReceptionistBilling" asp-action="Index" asp-route-tab="billable" class="btn btn-dc-outline text-success border-success-subtle">
                 <i class="bi bi-receipt-cutoff me-1"></i> Thu Viện Phí & Hóa Đơn
             </a>
             <a asp-controller="ReceptionistAppointment" asp-action="TodayCheckIn" class="btn btn-dc-primary">

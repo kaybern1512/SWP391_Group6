@@ -92,7 +92,7 @@ public class ReceptionistDashboardController : Controller
                     ColorClass = "success",
                     Description = "Lập hóa đơn ca khám hoàn thành, thu tiền mặt/chuyển khoản VietQR và in phiếu thu viện phí.",
                     ActionText = "Vào Thu Phí",
-                    ActionUrl = "/Receptionist/Billing"
+                    ActionUrl = "/Receptionist/Billing?tab=billable"
                 },
                 new()
                 {
