@@ -104,7 +104,14 @@ public class FollowUpAndReminderServiceTests
             AssignedDentistUserId = 301
         };
 
-        db.UserAccounts.AddRange(patientUser, managerUser, dentistUser);
+                var receptionistUser = new UserAccount
+        {
+            UserId = 401,
+            Email = "receptionist.followup@test.com",
+            Role = UserRole.Receptionist,
+            Status = AccountStatus.Active
+        };
+        db.UserAccounts.AddRange(patientUser, managerUser, dentistUser, receptionistUser);
         db.PatientProfiles.Add(patient);
         db.StaffProfiles.AddRange(managerStaff, dentistStaff);
         db.DentistProfiles.Add(dentist);
@@ -156,7 +163,7 @@ public class FollowUpAndReminderServiceTests
 
         // Verify notification to Department Manager (201)
         var mgrNotif = await db.Notifications
-            .FirstOrDefaultAsync(n => n.UserId == 201 && n.AppointmentId == appt.AppointmentId);
+            .FirstOrDefaultAsync(n => n.UserId == 401 && n.AppointmentId == appt.AppointmentId);
         Assert.NotNull(mgrNotif);
         Assert.Equal("FollowUpReviewRequired", mgrNotif.Type);
     }

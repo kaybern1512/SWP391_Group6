@@ -14,7 +14,7 @@ public class TreatmentPlanDto
     public string DepartmentName { get; set; } = string.Empty;
     public long CreatedByDentistUserId { get; set; }
     public string CreatedByDentistName { get; set; } = string.Empty;
-    public string Status { get; set; } = "Active";
+    public string Status { get; set; } = "InProgress";
     public decimal? EstimatedTotal { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -93,6 +93,8 @@ public class CreateTreatmentPlanItemInput
     public decimal? EstimatedCost { get; set; }
     public string Status { get; set; } = "Pending";
     public string? Note { get; set; }
+    public long? TreatmentPlanItemId { get; set; }
+    public long? TreatmentPlanId { get; set; }
 }
 
 public class CreateTreatmentSessionRequest
@@ -113,9 +115,19 @@ public class CreatePerformedServiceInput
     public decimal UnitPrice { get; set; }
 }
 
+public class AddPerformedServiceToAppointmentRequest
+{
+    public long DepartmentServiceId { get; set; }
+    public int Quantity { get; set; } = 1;
+    public decimal? UnitPrice { get; set; }
+    public string? Note { get; set; }
+    public long? TreatmentPlanItemId { get; set; }
+    public long? TreatmentPlanId { get; set; }
+}
+
 public class UpdateTreatmentPlanStatusRequest
 {
-    public string Status { get; set; } = "Active";
+    public string Status { get; set; } = "InProgress";
 }
 
 public class AssignPhaseDentistRequest
@@ -172,7 +184,6 @@ public class TreatmentEligiblePhaseDto
     public long? AssociatedAppointmentId { get; set; }
     public string? AssociatedAppointmentCode { get; set; }
 }
-
 
 public class CreatePlanFollowUpAppointmentRequest
 {

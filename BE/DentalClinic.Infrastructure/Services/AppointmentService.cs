@@ -2720,7 +2720,7 @@ public class AppointmentService : IAppointmentService
 
         if (!appointment.DentalChairId.HasValue || appointment.DentalChairId.Value <= 0)
         {
-            return ApiResponse.Fail("Ca khám chưa được phân bổ ghế điều trị hợp lệ. Vui lòng liên hệ Trưởng khoa hoặc gán ghế trước khi tiếp nhận.");
+            return ApiResponse.Fail("Ca khám chưa được phân bổ ghế điều trị hợp lệ. Vui lòng liên hệ Lễ tân hoặc gán ghế trước khi tiếp nhận.");
         }
 
         var oldStatus = appointment.Status;
@@ -2767,9 +2767,13 @@ public class AppointmentService : IAppointmentService
             return ApiResponse.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
         }
 
-        if (appointment.Status != AppointmentStatus.InService && appointment.Status != AppointmentStatus.CheckedIn)
+        if (appointment.Status != AppointmentStatus.InService)
         {
-            return ApiResponse.Fail($"Không thể hoàn thành ca khám ở trạng thái '{appointment.Status}'.");
+            if (appointment.Status == AppointmentStatus.CheckedIn)
+            {
+                return ApiResponse.Fail("Không thể hoàn thành ca khám khi chưa bắt đầu. Bác sĩ cần bấm 'Bắt đầu khám' (InService) trước khi hoàn tất.");
+            }
+            return ApiResponse.Fail($"Không thể hoàn thành ca khám ở trạng thái '{appointment.Status}'. Ca khám phải đang trong quá trình thực hiện (InService).");
         }
 
         var oldStatus = appointment.Status;

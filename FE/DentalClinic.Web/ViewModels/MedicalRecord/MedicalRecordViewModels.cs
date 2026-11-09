@@ -20,6 +20,17 @@ public class DentistMedicalRecordIndexViewModel
     public List<DepartmentServiceDto> DepartmentServices { get; set; } = new();
     public List<DentistOptionDto> DepartmentDentists { get; set; } = new();
     public List<DentalChairOptionDto> AvailableChairs { get; set; } = new();
+
+    // Performed Services at chair (WF-04)
+    public List<PerformedServiceDto> PerformedServices { get; set; } = new();
+
+    // Treatment Plans for this patient (WF-05)
+    public List<TreatmentPlanDto> PatientTreatmentPlans { get; set; } = new();
+
+    // Prescription & Medicine Dispensations for this visit (WF-06 & WF-16)
+    public PrescriptionDto? ActivePrescription { get; set; }
+    public List<MedicineDispensationDto> Dispensations { get; set; } = new();
+    public List<MedicineDto> AvailableMedicines { get; set; } = new();
 }
 
 public class CreateClinicalEntryFormModel

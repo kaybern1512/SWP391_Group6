@@ -20,7 +20,7 @@ public interface IMedicineService
     Task<List<MedicineDto>> GetAvailableMedicinesForDentistAsync(string? searchTerm);
 
     // Dispensation (WF-16)
-    Task<MedicineDispensationDto> DispenseMedicineAsync(CreateMedicineDispensationRequest request, long dentistUserId, CancellationToken ct = default);
-    Task<List<MedicineDispensationDto>> GetDispensationsByAppointmentIdAsync(long appointmentId, CancellationToken ct = default);
-    Task<PrescriptionDispensationStatusDto> GetPrescriptionDispensationStatusAsync(long prescriptionId, CancellationToken ct = default);
+    Task<MedicineDispensationDto> DispenseMedicineAsync(CreateMedicineDispensationRequest request, long dentistUserId, string? userRole = null, CancellationToken ct = default);
+    Task<List<MedicineDispensationDto>> GetDispensationsByAppointmentIdAsync(long appointmentId, long requestingUserId = 0, string? requestingUserRole = null, CancellationToken ct = default);
+    Task<PrescriptionDispensationStatusDto> GetPrescriptionDispensationStatusAsync(long prescriptionId, long requestingUserId = 0, string? requestingUserRole = null, CancellationToken ct = default);
 }

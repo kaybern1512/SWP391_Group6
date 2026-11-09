@@ -1,4 +1,4 @@
-﻿@using DentalClinic.Web.Models.ApiDtos
+@using DentalClinic.Web.Models.ApiDtos
 @model DentalClinic.Web.ViewModels.MedicalRecord.DentistMedicalRecordIndexViewModel
 @{
     ViewData["Title"] = "Hồ Sơ Bệnh Án & Sơ Đồ Răng (EMR)";
@@ -326,11 +326,20 @@
                                 <i class="bi bi-pencil-square me-1"></i> Ghi Nhận Khám & Răng
                             </button>
                             <button type="button" class="btn btn-warning text-dark btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAddAdditionalService">
-                                <i class="bi bi-plus-circle-fill me-1"></i> Thêm Dịch Vụ / Ghế Làm Tiếp
+                                <i class="bi bi-plus-circle-fill me-1"></i> Ghi Nhận Dịch Vụ Đã Làm
                             </button>
-                            <a asp-controller="DentistPrescription" asp-action="Index" asp-route-search="@record.PatientCode" class="btn btn-outline-success btn-sm bg-white shadow-sm" title="Kê đơn thuốc điện tử">
-                                <i class="bi bi-capsule me-1"></i> Kê Đơn Thuốc
-                            </a>
+                            @if (Model.ActivePrescription == null)
+                            {
+                                <button type="button" class="btn btn-outline-success btn-sm bg-white shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#modalQuickPrescription">
+                                    <i class="bi bi-capsule me-1"></i> Kê Đơn Thuốc Tại Ghế
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-success btn-sm text-white shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#modalDirectDispense">
+                                    <i class="bi bi-box-seam me-1"></i> Cấp Thuốc Trực Tiếp
+                                </button>
+                            }
                             <button type="button" class="btn btn-danger btn-sm fw-bold shadow-sm" onclick="openCompleteExamModal(@activeAppt.AppointmentId, '@(record.PatientName?.Replace("'", "\\'") ?? "")', '@activeAppt.AppointmentCode')">
                                 <i class="bi bi-check-circle-fill me-1"></i> Hoàn Thành Ca Khám
                             </button>
@@ -340,10 +349,346 @@
                             <span class="badge bg-success text-white px-3 py-2 fw-semibold fs-13 shadow-sm d-inline-flex align-items-center">
                                 <i class="bi bi-check-all fs-6 me-1"></i> Ca khám đã hoàn tất
                             </span>
-                            <a asp-controller="DentistPrescription" asp-action="Index" asp-route-search="@record.PatientCode" class="btn btn-outline-success btn-sm bg-white shadow-sm" title="Kê đơn thuốc điện tử">
-                                <i class="bi bi-capsule me-1"></i> Kê Đơn Thuốc
-                            </a>
+                            @if (Model.ActivePrescription != null)
+                            {
+                                <button type="button" class="btn btn-outline-success btn-sm bg-white shadow-sm" data-bs-toggle="modal" data-bs-target="#modalDirectDispense">
+                                    <i class="bi bi-box-seam me-1"></i> Xem Cấp Thuốc
+                                </button>
+                            }
                         }
+                    </div>
+                </div>
+            </div>
+
+            <!-- UNIFIED WORKSPACE SECTIONS FOR ACTIVE APPOINTMENT -->
+            <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white overflow-hidden">
+                <div class="card-header bg-white border-bottom py-3">
+                    <ul class="nav nav-pills card-header-pills" id="examWorkspaceTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active fw-semibold" id="tab-services-btn" data-bs-toggle="tab" data-bs-target="#tab-services" type="button" role="tab">
+                                <i class="bi bi-tools me-1 text-warning"></i> Dịch Vụ Thực Hiện Tại Ghế
+                                <span class="badge bg-primary text-white ms-1">@Model.PerformedServices.Count</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link fw-semibold" id="tab-prescription-btn" data-bs-toggle="tab" data-bs-target="#tab-prescription" type="button" role="tab">
+                                <i class="bi bi-capsule me-1 text-success"></i> Đơn Thuốc & Cấp Phát Tại Ghế
+                                @if (Model.ActivePrescription != null)
+                                {
+                                    <span class="badge bg-success text-white ms-1">Đã kê</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary ms-1">Chưa kê</span>
+                                }
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link fw-semibold" id="tab-plans-btn" data-bs-toggle="tab" data-bs-target="#tab-plans" type="button" role="tab">
+                                <i class="bi bi-diagram-3 me-1 text-info"></i> Phác Đồ Điều Trị
+                                <span class="badge bg-info-subtle text-info ms-1">@Model.PatientTreatmentPlans.Count</span>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body p-3">
+                    <div class="tab-content" id="examWorkspaceContent">
+                        <!-- TAB 1: PERFORMED SERVICES (Section 6) -->
+                        <div class="tab-pane fade show active" id="tab-services" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>
+                                    <h6 class="fw-bold text-slate-800 mb-0">Danh Sách Dịch Vụ & Thủ Thuật Thực Tế Đã Làm</h6>
+                                    <small class="text-muted">Căn cứ duy nhất để Lễ tân tính viện phí. Dịch vụ đặt trước (@activeAppt.ServiceName) chỉ là lý do đăng ký ban đầu.</small>
+                                </div>
+                                @if (isApptActive)
+                                {
+                                    <button type="button" class="btn btn-warning text-dark btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAddAdditionalService">
+                                        <i class="bi bi-plus-circle-fill me-1"></i> Thêm Dịch Vụ Thực Hiện
+                                    </button>
+                                }
+                            </div>
+
+                            @if (Model.PerformedServices.Any())
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="table-light small text-muted">
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Tên Dịch Vụ / Thủ Thuật</th>
+                                                <th class="text-center">Số Lượng</th>
+                                                <th class="text-end">Đơn Giá</th>
+                                                <th class="text-end">Thành Tiền</th>
+                                                <th class="text-center">Thao Tác</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @for (int i = 0; i < Model.PerformedServices.Count; i++)
+                                            {
+                                                var ps = Model.PerformedServices[i];
+                                                <tr>
+                                                    <td>@(i + 1)</td>
+                                                    <td class="fw-semibold text-dark">
+                                                        <i class="bi bi-check2-circle text-success me-1"></i>
+                                                        @ps.ServiceName
+                                                    </td>
+                                                    <td class="text-center">@ps.Quantity</td>
+                                                    <td class="text-end">@ps.UnitPrice.ToString("N0") đ</td>
+                                                    <td class="text-end fw-bold text-primary">@ps.Amount.ToString("N0") đ</td>
+                                                    <td class="text-center">
+                                                        @if (isApptActive)
+                                                        {
+                                                            <form asp-action="DeletePerformedService" method="post" class="d-inline" onsubmit="return confirm('Xác nhận xóa dịch vụ này khỏi ca khám?');">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="performedServiceId" value="@ps.PerformedServiceId" />
+                                                                <input type="hidden" name="appointmentId" value="@activeAppt.AppointmentId" />
+                                                                <input type="hidden" name="patientUserId" value="@record.PatientUserId" />
+                                                                <button type="submit" class="btn btn-xs btn-outline-danger" title="Xóa dịch vụ">
+                                                                    <i class="bi bi-trash"></i>
+                                                                </button>
+                                                            </form>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-secondary-subtle text-secondary small">Đã khóa</span>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                        <tfoot class="table-light">
+                                            <tr>
+                                                <td colspan="4" class="text-end fw-bold">Tổng chi phí thủ thuật thực hiện:</td>
+                                                <td class="text-end fw-bold text-danger fs-6">
+                                                    @Model.PerformedServices.Sum(ps => ps.Amount).ToString("N0") đ
+                                                </td>
+                                                <td></td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-center py-4 text-muted bg-light rounded-3">
+                                    <i class="bi bi-clipboard2-x fs-3 d-block text-secondary mb-2"></i>
+                                    <span>Chưa có dịch vụ thực tế nào được ghi nhận cho ca khám này.</span>
+                                    @if (isApptActive)
+                                    {
+                                        <div class="mt-2">
+                                            <button type="button" class="btn btn-warning text-dark btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#modalAddAdditionalService">
+                                                <i class="bi bi-plus-circle-fill me-1"></i> Ghi nhận ngay tại ghế
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <!-- TAB 2: PRESCRIPTION & CHAIRSIDE DISPENSING (Section 9 & 10) -->
+                        <div class="tab-pane fade" id="tab-prescription" role="tabpanel">
+                            <div class="alert alert-info py-2 px-3 small border-0 bg-info-subtle text-dark mb-3 d-flex align-items-center gap-2">
+                                <i class="bi bi-info-circle-fill text-info fs-5"></i>
+                                <div>
+                                    <strong>Quy trình cấp thuốc trực tiếp tại ghế:</strong> DentalCare không có Dược sĩ. Bác sĩ tự kê đơn, chọn lô thuốc còn hạn trong kho nội bộ, nhập số lượng thực tế cấp cho bệnh nhân và xác nhận bàn giao tại ghế.
+                                </div>
+                            </div>
+
+                            @if (Model.ActivePrescription != null)
+                            {
+                                <div class="row g-3">
+                                    <div class="col-lg-6">
+                                        <div class="card border rounded-3 p-3 h-100 bg-white">
+                                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                                <h6 class="fw-bold text-slate-800 mb-0">
+                                                    <i class="bi bi-file-earmark-medical text-primary me-1"></i> Đơn Thuốc Đã Kê (#@Model.ActivePrescription.PrescriptionId)
+                                                </h6>
+                                                <span class="text-muted small">@Model.ActivePrescription.IssuedAt.ToString("dd/MM/yyyy HH:mm")</span>
+                                            </div>
+
+                                            @if (!string.IsNullOrEmpty(Model.ActivePrescription.GeneralInstructions))
+                                            {
+                                                <div class="small text-muted mb-2 fst-italic">
+                                                    <strong>Lời dặn:</strong> @Model.ActivePrescription.GeneralInstructions
+                                                </div>
+                                            }
+
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-hover align-middle mb-0">
+                                                    <thead class="table-light small">
+                                                        <tr>
+                                                            <th>Tên thuốc</th>
+                                                            <th class="text-center">Số lượng</th>
+                                                            <th>Cách dùng</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach (var item in Model.ActivePrescription.Items)
+                                                        {
+                                                            <tr>
+                                                                <td class="fw-semibold">
+                                                                    @item.MedicationName
+                                                                    @if (!string.IsNullOrEmpty(item.Dosage))
+                                                                    {
+                                                                        <span class="text-muted small">(@item.Dosage)</span>
+                                                                    }
+                                                                </td>
+                                                                <td class="text-center">@(item.Frequency ?? "Theo chỉ định") @(item.Duration ?? "")</td>
+                                                                <td class="small text-muted">@(item.Instructions ?? "—")</td>
+                                                            </tr>
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            @if (isApptActive)
+                                            {
+                                                <div class="mt-3 text-end">
+                                                    <button type="button" class="btn btn-success btn-sm fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalDirectDispense">
+                                                        <i class="bi bi-box-seam me-1"></i> Cấp Thuốc Trực Tiếp Tại Ghế
+                                                    </button>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    <div class="col-lg-6">
+                                        <div class="card border rounded-3 p-3 h-100 bg-white">
+                                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                                <h6 class="fw-bold text-slate-800 mb-0">
+                                                    <i class="bi bi-clock-history text-success me-1"></i> Lịch Sử Thuốc Đã Thực Cấp Tại Ghế
+                                                </h6>
+                                                <span class="badge bg-success text-white">@Model.Dispensations.Count đợt cấp</span>
+                                            </div>
+
+                                            @if (Model.Dispensations.Any())
+                                            {
+                                                <div class="d-flex flex-column gap-2 overflow-auto" style="max-height: 280px;">
+                                                    @foreach (var disp in Model.Dispensations)
+                                                    {
+                                                        <div class="p-2 bg-light rounded border">
+                                                            <div class="d-flex justify-content-between small text-muted mb-1">
+                                                                <span>Phiếu #@disp.DispensationId &bull; @disp.DispensedAt.ToString("dd/MM/yyyy HH:mm")</span>
+                                                                <span class="badge bg-success-subtle text-success border">Đã trừ tồn</span>
+                                                            </div>
+                                                            <div class="d-flex flex-column gap-1">
+                                                                @foreach (var dItem in disp.Items)
+                                                                {
+                                                                    <div class="d-flex justify-content-between align-items-center small">
+                                                                        <span class="fw-semibold text-dark">
+                                                                            <i class="bi bi-capsule me-1 text-primary"></i>@dItem.MedicineName
+                                                                            <span class="text-muted">(Lô: @dItem.BatchNumber)</span>
+                                                                        </span>
+                                                                        <span class="badge bg-primary text-white">
+                                                                            @dItem.QuantityDispensed @dItem.Unit
+                                                                        </span>
+                                                                    </div>
+                                                                }
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="text-center py-4 text-muted small bg-light rounded">
+                                                    <i class="bi bi-box2 fs-3 d-block text-secondary mb-1"></i>
+                                                    Chưa có đợt cấp thuốc thực tế nào cho đơn thuốc này.
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-center py-4 text-muted bg-light rounded-3">
+                                    <i class="bi bi-capsule fs-3 d-block text-secondary mb-2"></i>
+                                    <span>Chưa có đơn thuốc nào cho ca khám này.</span>
+                                    @if (isApptActive)
+                                    {
+                                        <div class="mt-2">
+                                            <button type="button" class="btn btn-outline-success btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#modalQuickPrescription">
+                                                <i class="bi bi-plus-circle me-1"></i> Kê đơn thuốc tại ghế ngay
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <!-- TAB 3: TREATMENT PLANS (Section 7) -->
+                        <div class="tab-pane fade" id="tab-plans" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>
+                                    <h6 class="fw-bold text-slate-800 mb-0">Phác Đồ & Liệu Trình Điều Trị Nhiều Buổi</h6>
+                                    <small class="text-muted">Áp dụng cho điều trị tủy nhiều lần, chỉnh nha, implant, phục hình.</small>
+                                </div>
+                                <a asp-controller="DentistTreatmentPlan" asp-action="Index" class="btn btn-outline-primary btn-sm fw-semibold">
+                                    <i class="bi bi-box-arrow-up-right me-1"></i> Quản lý toàn bộ phác đồ
+                                </a>
+                            </div>
+
+                            @if (Model.PatientTreatmentPlans.Any())
+                            {
+                                <div class="d-flex flex-column gap-3">
+                                    @foreach (var plan in Model.PatientTreatmentPlans)
+                                    {
+                                        <div class="card border rounded-3 p-3 bg-white">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <span class="fw-bold text-dark fs-6">Phác Đồ #@plan.TreatmentPlanId</span>
+                                                    <span class="badge @(plan.Status == "Completed" ? "bg-success" : "bg-primary")">@plan.Status</span>
+                                                    <span class="badge bg-secondary-subtle text-secondary border">@plan.DepartmentName</span>
+                                                </div>
+                                                <div class="small text-muted">
+                                                    Tiến độ: <strong>@plan.CompletedItemsCount / @plan.TotalItemsCount giai đoạn</strong> (@plan.ProgressPercentage%)
+                                                </div>
+                                            </div>
+                                            <div class="progress mb-2" style="height: 6px;">
+                                                <div class="progress-bar bg-success" role="progressbar" style="width: @plan.ProgressPercentage%"></div>
+                                            </div>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-hover align-middle mb-0 small">
+                                                    <thead class="table-light text-muted">
+                                                        <tr>
+                                                            <th>Giai đoạn</th>
+                                                            <th>Dịch vụ</th>
+                                                            <th>Răng</th>
+                                                            <th>Bác sĩ</th>
+                                                            <th>Trạng thái</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach (var item in plan.Items)
+                                                        {
+                                                            <tr>
+                                                                <td>GĐ @item.SequenceNo</td>
+                                                                <td class="fw-semibold">@item.ServiceName</td>
+                                                                <td>@(string.IsNullOrEmpty(item.ToothNumber) ? "—" : $"R{item.ToothNumber}")</td>
+                                                                <td>@(item.AssignedDentistName ?? "Chưa phân công")</td>
+                                                                <td>
+                                                                    <span class="badge @(item.Status == "Completed" ? "bg-success" : item.Status == "InProgress" ? "bg-warning text-dark" : "bg-light text-muted border")">
+                                                                        @item.Status
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-center py-4 text-muted bg-light rounded-3">
+                                    <i class="bi bi-diagram-3 fs-3 d-block text-secondary mb-2"></i>
+                                    <span>Bệnh nhân chưa có phác đồ điều trị dài hạn nào.</span>
+                                </div>
+                            }
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1066,6 +1411,11 @@
                             </select>
                         </div>
 
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Số lượng thực hiện:</label>
+                            <input type="number" name="quantity" class="form-control" value="1" min="1" max="32" />
+                        </div>
+
                         <div class="mb-2">
                             <label class="form-label fw-semibold">Ghi chú & Chỉ định bổ sung:</label>
                             <textarea name="notes" class="form-control" rows="2" placeholder="Ví dụ: Bệnh nhân muốn cạo vôi răng và đánh bóng sau khi khám..."></textarea>
@@ -1074,7 +1424,166 @@
                     <div class="modal-footer bg-light">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
                         <button type="submit" class="btn btn-warning fw-semibold px-4">
-                            <i class="bi bi-check2-circle me-1"></i> Xác Nhận Chuyển Tiếp
+                            <i class="bi bi-check2-circle me-1"></i> Xác Nhận Ghi Nhận Dịch Vụ
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================================================== -->
+    <!-- MODAL: KÊ ĐƠN THUỐC NHANH TẠI GHẾ (PRESCRIPTION)     -->
+    <!-- ==================================================== -->
+    <div class="modal fade" id="modalQuickPrescription" tabindex="-1" aria-labelledby="modalQuickPrescriptionLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold" id="modalQuickPrescriptionLabel">
+                        <i class="bi bi-capsule me-2"></i>Kê Đơn Thuốc Điện Tử Tại Ghế
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form asp-action="CreatePrescriptionQuick" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="appointmentId" value="@(Model.ActiveAppointmentId ?? 0)" />
+                    <input type="hidden" name="patientUserId" value="@record.PatientUserId" />
+
+                    <div class="modal-body p-4">
+                        <div class="alert alert-light border mb-3 small d-flex justify-content-between align-items-center">
+                            <div>Bệnh nhân: <strong>@record.PatientName</strong> &bull; Ca khám: <strong>@(activeAppt?.AppointmentCode ?? "--")</strong></div>
+                            <span class="badge bg-success-subtle text-success border">Kê đơn trực tiếp</span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Lời dặn chung / Hướng dẫn uống thuốc:</label>
+                            <input type="text" name="generalInstructions" class="form-control" placeholder="Ví dụ: Uống sau ăn no, kiêng rượu bia, uống nhiều nước..." />
+                        </div>
+
+                        <div class="card border rounded-3 p-3 bg-light mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold text-dark mb-0"><i class="bi bi-capsule-pill text-success me-1"></i>Danh Mục Thuốc Kê Đơn:</label>
+                                <button type="button" class="btn btn-sm btn-outline-success" onclick="addMedicationRow()">
+                                    <i class="bi bi-plus-lg me-1"></i>Thêm Thuốc
+                                </button>
+                            </div>
+
+                            <div id="medicationRowsContainer" class="d-flex flex-column gap-2">
+                                <!-- Initial Medication Row -->
+                                <div class="row g-2 align-items-center bg-white p-2 rounded border med-row">
+                                    <div class="col-md-4">
+                                        <label class="small text-muted mb-1">Thuốc trong kho:</label>
+                                        <select class="form-select form-select-sm med-select" onchange="onMedSelectChange(this)">
+                                            <option value="">-- Chọn thuốc có sẵn --</option>
+                                            @foreach (var med in Model.AvailableMedicines)
+                                            {
+                                                <option value="@med.MedicineName" data-dosage="@(med.Concentration ?? "")" data-unit="@med.Unit">
+                                                    @med.MedicineName (@(med.Concentration ?? "")) - Tồn: @med.TotalAvailableStock @med.Unit
+                                                </option>
+                                            }
+                                        </select>
+                                        <input type="text" name="medicationNames[]" class="form-control form-control-sm mt-1 med-name-input" placeholder="Tên thuốc..." required />
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="small text-muted mb-1">Hàm lượng:</label>
+                                        <input type="text" name="dosages[]" class="form-control form-control-sm med-dosage-input" placeholder="500mg..." />
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="small text-muted mb-1">Tần suất:</label>
+                                        <input type="text" name="frequencies[]" class="form-control form-control-sm" value="2 lần/ngày (sau ăn)" required />
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="small text-muted mb-1">Thời gian:</label>
+                                        <input type="text" name="durations[]" class="form-control form-control-sm" value="5 ngày" />
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="small text-muted mb-1">Cách dùng:</label>
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" name="instructions[]" class="form-control" placeholder="Uống với nhiều nước..." />
+                                            <button type="button" class="btn btn-outline-danger" onclick="removeMedRow(this)" title="Xóa dòng">
+                                                <i class="bi bi-x-lg"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                        <button type="submit" class="btn btn-success px-4 fw-semibold">
+                            <i class="bi bi-save me-1"></i> Lưu Đơn Thuốc Điện Tử
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================================================== -->
+    <!-- MODAL: CẤP THUỐC TRỰC TIẾP TẠI GHẾ (DISPENSING)      -->
+    <!-- ==================================================== -->
+    <div class="modal fade" id="modalDirectDispense" tabindex="-1" aria-labelledby="modalDirectDispenseLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold" id="modalDirectDispenseLabel">
+                        <i class="bi bi-box-seam me-2"></i>Cấp Thuốc Trực Tiếp Tại Ghế
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form asp-action="DispenseMedicineQuick" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="appointmentId" value="@(Model.ActiveAppointmentId ?? 0)" />
+                    <input type="hidden" name="patientUserId" value="@record.PatientUserId" />
+                    <input type="hidden" name="prescriptionId" value="@(Model.ActivePrescription?.PrescriptionId ?? 0)" />
+                    <input type="hidden" id="dispenseMedicineIdHidden" name="medicineId" value="0" />
+
+                    <div class="modal-body p-4">
+                        <div class="alert alert-warning py-2 px-3 small border-0 bg-warning-subtle text-dark mb-3">
+                            <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
+                            DentalCare không có Dược sĩ. Bác sĩ tự chọn lô thuốc còn hạn và cấp phát cho bệnh nhân. Hệ thống tự động trừ tồn kho (FEFO) và chống xuất âm.
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">1. Chọn thuốc cần cấp phát: <span class="text-danger">*</span></label>
+                            <select id="dispenseMedicineSelect" class="form-select" onchange="loadBatchesForSelectedMed(this)" required>
+                                <option value="">-- Chọn thuốc trong danh mục kho --</option>
+                                @foreach (var med in Model.AvailableMedicines)
+                                {
+                                    <option value="@med.MedicineId" data-stock="@med.TotalAvailableStock" data-unit="@med.Unit">
+                                        @med.MedicineName (@(med.Concentration ?? "")) - Khả dụng: @med.TotalAvailableStock @med.Unit
+                                    </option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">2. Chọn Lô thuốc còn hạn (FEFO): <span class="text-danger">*</span></label>
+                            <select id="dispenseBatchSelect" name="batchId" class="form-select" required onchange="onBatchSelected(this)">
+                                <option value="">-- Vui lòng chọn thuốc trước --</option>
+                            </select>
+                            <div class="form-text small text-muted" id="batchStockInfo"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">3. Số lượng thực tế bàn giao cho bệnh nhân: <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="number" id="dispenseQuantityInput" name="quantity" class="form-control" value="6" min="1" max="100" required />
+                                <span class="input-group-text" id="dispenseUnitText">Viên</span>
+                            </div>
+                            <div class="form-text small text-muted">Nếu kê 10 viên và cấp 6 viên, hệ thống chỉ trừ đúng 6 viên trong kho.</div>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label fw-semibold">Ghi chú cấp phát (tùy chọn):</label>
+                            <input type="text" name="notes" class="form-control" placeholder="Ghi chú bàn giao tại ghế..." />
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                        <button type="submit" class="btn btn-success px-4 fw-semibold">
+                            <i class="bi bi-box-seam me-1"></i> Xác Nhận Cấp & Trừ Kho
                         </button>
                     </div>
                 </form>
@@ -2102,6 +2611,114 @@
             }
 
             return true;
+        }
+
+        // ==========================================
+        // QUICK PRESCRIPTION & DISPENSING JS HELPERS
+        // ==========================================
+        function addMedicationRow() {
+            const container = document.getElementById('medicationRowsContainer');
+            if (!container) return;
+            const firstRow = container.querySelector('.med-row');
+            if (!firstRow) return;
+            const newRow = firstRow.cloneNode(true);
+            newRow.querySelectorAll('input').forEach(input => {
+                if (input.classList.contains('med-unit-input')) input.value = 'Viên';
+                else if (input.type === 'number') input.value = '10';
+                else input.value = '';
+            });
+            const select = newRow.querySelector('.med-select');
+            if (select) select.selectedIndex = 0;
+            container.appendChild(newRow);
+        }
+
+        function removeMedRow(btn) {
+            const rows = document.querySelectorAll('.med-row');
+            if (rows.length > 1) {
+                const row = btn.closest('.med-row');
+                if (row) row.remove();
+            } else {
+                alert('Đơn thuốc phải có ít nhất một loại thuốc.');
+            }
+        }
+
+        function onMedSelectChange(select) {
+            const row = select.closest('.med-row');
+            if (!row) return;
+            const nameInput = row.querySelector('.med-name-input');
+            const dosageInput = row.querySelector('.med-dosage-input');
+            const unitInput = row.querySelector('.med-unit-input');
+            const opt = select.options[select.selectedIndex];
+            if (opt && opt.value) {
+                if (nameInput) nameInput.value = opt.value;
+                if (dosageInput && opt.dataset.dosage) dosageInput.value = opt.dataset.dosage;
+                if (unitInput && opt.dataset.unit) unitInput.value = opt.dataset.unit;
+            }
+        }
+
+        async function loadBatchesForSelectedMed(select) {
+            const medId = select.value;
+            const batchSelect = document.getElementById('dispenseBatchSelect');
+            const stockInfo = document.getElementById('batchStockInfo');
+            const unitText = document.getElementById('dispenseUnitText');
+            const medHidden = document.getElementById('dispenseMedicineIdHidden');
+            if (medHidden) medHidden.value = medId || '0';
+            if (!batchSelect) return;
+
+            batchSelect.innerHTML = '<option value="">Đang tải danh sách lô thuốc...</option>';
+            if (stockInfo) stockInfo.textContent = '';
+
+            const selectedOpt = select.options[select.selectedIndex];
+            if (unitText && selectedOpt && selectedOpt.dataset.unit) {
+                unitText.textContent = selectedOpt.dataset.unit;
+            }
+
+            if (!medId) {
+                batchSelect.innerHTML = '<option value="">-- Vui lòng chọn thuốc trước --</option>';
+                return;
+            }
+
+            try {
+                const resp = await fetch(`/Dentist/MedicalRecords/GetBatchesForMedicine?medicineId=${medId}`);
+                const res = await resp.json();
+                if (res.success && res.data && res.data.length > 0) {
+                    batchSelect.innerHTML = '<option value="">-- Chọn lô thuốc hợp lệ (FEFO) --</option>';
+                    const today = new Date().toISOString().split('T')[0];
+                    let hasValid = false;
+                    res.data.forEach(b => {
+                        const isExpired = b.expiryDate <= today;
+                        const isAvailable = b.status === 'Available' && b.quantityAvailable > 0 && !isExpired;
+                        if (isAvailable) hasValid = true;
+                        const opt = document.createElement('option');
+                        opt.value = b.medicineBatchId;
+                        opt.textContent = `Lô ${b.batchNumber} - HSD: ${b.expiryDate} (Tồn: ${b.quantityAvailable}) ${isExpired ? '[Hết hạn]' : ''}`;
+                        opt.dataset.available = b.quantityAvailable;
+                        opt.disabled = !isAvailable;
+                        batchSelect.appendChild(opt);
+                    });
+                    if (!hasValid) {
+                        batchSelect.innerHTML = '<option value="">Tất cả các lô đã hết hạn hoặc hết tồn kho</option>';
+                    }
+                } else {
+                    batchSelect.innerHTML = '<option value="">Không có lô thuốc nào trong kho</option>';
+                }
+            } catch (e) {
+                batchSelect.innerHTML = '<option value="">Lỗi tải dữ liệu lô thuốc</option>';
+            }
+        }
+
+        function onBatchSelected(select) {
+            const opt = select.options[select.selectedIndex];
+            const stockInfo = document.getElementById('batchStockInfo');
+            const qtyInput = document.getElementById('dispenseQuantityInput');
+            if (opt && opt.dataset.available) {
+                const avail = parseInt(opt.dataset.available, 10);
+                if (stockInfo) stockInfo.textContent = `Số lượng khả dụng của lô này: ${avail} đơn vị.`;
+                if (qtyInput) {
+                    qtyInput.max = avail;
+                    if (parseInt(qtyInput.value, 10) > avail) qtyInput.value = avail;
+                }
+            }
         }
     </script>
 }

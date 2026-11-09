@@ -18,6 +18,10 @@ public interface ITreatmentApiService
     Task<ApiResult<TreatmentSessionDto>> CreateTreatmentSessionAsync(CreateTreatmentSessionRequest request);
     Task<ApiResult<List<TreatmentEligiblePhaseDto>>> GetEligiblePhasesAsync();
 
+    Task<ApiResult<List<PerformedServiceDto>>> GetPerformedServicesByAppointmentAsync(long appointmentId);
+    Task<ApiResult<PerformedServiceDto>> AddPerformedServiceToAppointmentAsync(long appointmentId, AddPerformedServiceToAppointmentRequest request);
+    Task<ApiResult<bool>> DeletePerformedServiceAsync(long performedServiceId);
+
     Task<ApiResult<TreatmentProgressSummaryDto>> GetDepartmentTreatmentProgressAsync(long? departmentId = null, string? search = null);
     Task<ApiResult<bool>> AssignPhaseDentistAsync(long itemId, long dentistUserId);
 

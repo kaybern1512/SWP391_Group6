@@ -611,7 +611,7 @@ public class MedicineService : IMedicineService
     // DISPENSATION METHODS (WF-16 & WF-17)
     // ==========================================
 
-    public async Task<MedicineDispensationDto> DispenseMedicineAsync(CreateMedicineDispensationRequest request, long dentistUserId, CancellationToken ct = default)
+    public async Task<MedicineDispensationDto> DispenseMedicineAsync(CreateMedicineDispensationRequest request, long dentistUserId, string? userRole = null, CancellationToken ct = default)
     {
         if (request.Items == null || !request.Items.Any())
             throw new ArgumentException("Danh sách thuốc yêu cầu cấp phát không được để trống.", nameof(request.Items));
@@ -631,6 +631,11 @@ public class MedicineService : IMedicineService
         if (appointment == null)
             throw new InvalidOperationException("Đơn thuốc không liên kết với buổi khám / ca khám hợp lệ.");
 
+        if (userRole == "Dentist" && appointment.AssignedDentistUserId != dentistUserId && prescription.TreatmentSession?.DentistUserId != dentistUserId)
+        {
+            throw new UnauthorizedAccessException("Bác sĩ không phụ trách ca khám này, không có quyền xuất cấp thuốc.");
+        }
+
         var nonBillableStatuses = new[] { "Cancelled", "Withdrawn", "Rejected", "NoShow" };
         if (nonBillableStatuses.Contains(appointment.Status))
             throw new InvalidOperationException($"Ca khám đang ở trạng thái '{appointment.Status}', không thể thực hiện cấp phát thuốc.");
@@ -638,6 +643,14 @@ public class MedicineService : IMedicineService
         using var tx = await _context.Database.BeginTransactionAsync(ct);
         try
         {
+            // Acquire canonical application locks on all involved batches to prevent concurrent over-dispensation
+            var batchKeys = request.Items
+                .Where(i => i.MedicineBatchId > 0)
+                .Select(i => SqlAppLockHelper.MedicineBatchKey(i.MedicineBatchId))
+                .Distinct();
+            var lockKeys = batchKeys.Append(SqlAppLockHelper.PrescriptionKey(prescription.PrescriptionId));
+            using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_context, lockKeys, timeoutMs: 5000, ct: ct);
+
             var dispensation = new MedicineDispensation
             {
                 PrescriptionId = prescription.PrescriptionId,
@@ -661,6 +674,15 @@ public class MedicineService : IMedicineService
             {
                 if (item.Quantity <= 0)
                     throw new ArgumentException("Số lượng thuốc cấp phát phải lớn hơn 0.");
+
+                if (item.PrescriptionItemId.HasValue && item.PrescriptionItemId.Value > 0)
+                {
+                    var prescItem = prescription.PrescriptionItems.FirstOrDefault(pi => pi.PrescriptionItemId == item.PrescriptionItemId.Value);
+                    if (prescItem == null)
+                    {
+                        throw new KeyNotFoundException($"Mục thuốc #{item.PrescriptionItemId.Value} không thuộc đơn thuốc #{prescription.PrescriptionId}.");
+                    }
+                }
 
                 var batch = await _context.MedicineBatches
                     .Include(b => b.Medicine)
@@ -761,8 +783,27 @@ public class MedicineService : IMedicineService
         }
     }
 
-    public async Task<List<MedicineDispensationDto>> GetDispensationsByAppointmentIdAsync(long appointmentId, CancellationToken ct = default)
+    public async Task<List<MedicineDispensationDto>> GetDispensationsByAppointmentIdAsync(long appointmentId, long requestingUserId = 0, string? requestingUserRole = null, CancellationToken ct = default)
     {
+        var appointment = await _context.Appointments.AsNoTracking().FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+        if (appointment == null)
+            throw new KeyNotFoundException($"Không tìm thấy lịch hẹn với ID {appointmentId}.");
+
+        if (!string.IsNullOrEmpty(requestingUserRole))
+        {
+            if (requestingUserRole == "Patient" && appointment.PatientUserId != requestingUserId)
+            {
+                throw new UnauthorizedAccessException("Bệnh nhân không có quyền truy cập thông tin cấp thuốc của người khác.");
+            }
+            if (requestingUserRole == "Dentist" && appointment.AssignedDentistUserId != requestingUserId)
+            {
+                var isTreatingDentist = await _context.TreatmentSessions.AnyAsync(s => s.AppointmentId == appointmentId && s.DentistUserId == requestingUserId, ct);
+                if (!isTreatingDentist)
+                {
+                    throw new UnauthorizedAccessException("Bác sĩ không phụ trách ca khám này, không có quyền truy cập danh sách cấp thuốc.");
+                }
+            }
+        }
         var dispensations = await _context.MedicineDispensations
             .Include(d => d.Appointment)
             .Include(d => d.PatientUser)
@@ -806,8 +847,29 @@ public class MedicineService : IMedicineService
         }).ToList();
     }
 
-    public async Task<PrescriptionDispensationStatusDto> GetPrescriptionDispensationStatusAsync(long prescriptionId, CancellationToken ct = default)
+    public async Task<PrescriptionDispensationStatusDto> GetPrescriptionDispensationStatusAsync(long prescriptionId, long requestingUserId = 0, string? requestingUserRole = null, CancellationToken ct = default)
     {
+        var prescription = await _context.Prescriptions
+            .Include(p => p.PrescriptionItems)
+            .Include(p => p.TreatmentSession)
+                .ThenInclude(s => s.Appointment)
+            .FirstOrDefaultAsync(p => p.PrescriptionId == prescriptionId, ct);
+
+        if (prescription == null)
+            throw new KeyNotFoundException($"Không tìm thấy đơn thuốc với ID {prescriptionId}.");
+
+        var appointment = prescription.TreatmentSession?.Appointment;
+        if (appointment != null && !string.IsNullOrEmpty(requestingUserRole))
+        {
+            if (requestingUserRole == "Patient" && appointment.PatientUserId != requestingUserId)
+            {
+                throw new UnauthorizedAccessException("Bệnh nhân không có quyền tra cứu đơn cấp phát của người khác.");
+            }
+            if (requestingUserRole == "Dentist" && appointment.AssignedDentistUserId != requestingUserId && prescription.TreatmentSession?.DentistUserId != requestingUserId)
+            {
+                throw new UnauthorizedAccessException("Bác sĩ không phụ trách đơn thuốc này, không có quyền tra cứu trạng thái cấp phát.");
+            }
+        }
         var dispensations = await _context.MedicineDispensations
             .Include(d => d.Appointment)
             .Include(d => d.PatientUser)
@@ -821,12 +883,42 @@ public class MedicineService : IMedicineService
 
         var totalUnits = dispensations.SelectMany(d => d.DispensationItems).Sum(i => i.QuantityDispensed);
 
+        string status;
+        if (!dispensations.Any() || totalUnits == 0)
+        {
+            status = "NotDispensed";
+        }
+        else
+        {
+            var prescribedItemIds = prescription.PrescriptionItems.Select(pi => pi.PrescriptionItemId).ToHashSet();
+            if (prescribedItemIds.Count > 0)
+            {
+                var dispensedItemIds = dispensations
+                    .SelectMany(d => d.DispensationItems)
+                    .Where(i => i.PrescriptionItemId.HasValue)
+                    .Select(i => i.PrescriptionItemId!.Value)
+                    .ToHashSet();
+
+                if (prescribedItemIds.All(id => dispensedItemIds.Contains(id)))
+                {
+                    status = "FullyDispensed";
+                }
+                else
+                {
+                    status = "PartiallyDispensed";
+                }
+            }
+            else
+            {
+                status = "FullyDispensed";
+            }
+        }
         return new PrescriptionDispensationStatusDto
         {
             PrescriptionId = prescriptionId,
             HasDispensation = dispensations.Any(),
             TotalUnitsDispensed = totalUnits,
-            Status = !dispensations.Any() ? "NotDispensed" : "PartiallyDispensed",
+            Status = status,
             Dispensations = dispensations.Select(d => new MedicineDispensationDto
             {
                 DispensationId = d.DispensationId,

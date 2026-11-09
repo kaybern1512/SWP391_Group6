@@ -71,7 +71,7 @@ public class PostCareController : ControllerBase
     }
 
     [HttpGet("referrals/department")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<List<DepartmentReferralDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDepartmentReferrals([FromQuery] string? status, CancellationToken ct)
     {
@@ -81,7 +81,7 @@ public class PostCareController : ControllerBase
     }
 
     [HttpPost("referrals/{id:long}/review")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<DepartmentReferralDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<DepartmentReferralDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ReviewReferral(long id, [FromBody] ReviewReferralRequest request, CancellationToken ct)

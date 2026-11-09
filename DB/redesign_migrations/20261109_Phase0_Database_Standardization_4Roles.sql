@@ -37,7 +37,7 @@ BEGIN TRY
     PRINT '>>> [1/5] Migrating DepartmentManager accounts to Dentist profiles...';
 
     -- 1.1 Insert DentistProfiles for DepartmentManager doctors if not already present
-    IF NOT EXISTS (SELECT 1 FROM [dbo].[DentistProfiles] WHERE [UserId] = 4)
+    IF EXISTS (SELECT 1 FROM [dbo].[StaffProfiles] WHERE [UserId] = 4) AND NOT EXISTS (SELECT 1 FROM [dbo].[DentistProfiles] WHERE [UserId] = 4)
     BEGIN
         INSERT INTO [dbo].[DentistProfiles] ([UserId], [LicenseNumber], [Qualification], [YearsOfExperience], [Biography])
         VALUES (4, N'LIC-VN-2026-MGR1', N'Tiến sĩ Răng Hàm Mặt, ĐHYD TP.HCM', 15, 
@@ -45,7 +45,7 @@ BEGIN TRY
         PRINT '    Inserted DentistProfile for UserId = 4 (TS.BS Vũ Đình Trọng)';
     END
 
-    IF NOT EXISTS (SELECT 1 FROM [dbo].[DentistProfiles] WHERE [UserId] = 10)
+    IF EXISTS (SELECT 1 FROM [dbo].[StaffProfiles] WHERE [UserId] = 10) AND NOT EXISTS (SELECT 1 FROM [dbo].[DentistProfiles] WHERE [UserId] = 10)
     BEGIN
         INSERT INTO [dbo].[DentistProfiles] ([UserId], [LicenseNumber], [Qualification], [YearsOfExperience], [Biography])
         VALUES (10, N'LIC-VN-2026-MGR3', N'Bác sĩ CKII Răng Hàm Mặt', 18, 
@@ -53,7 +53,7 @@ BEGIN TRY
         PRINT '    Inserted DentistProfile for UserId = 10 (BS.CKII Nguyễn Văn Bình)';
     END
 
-    IF NOT EXISTS (SELECT 1 FROM [dbo].[DentistProfiles] WHERE [UserId] = 11)
+    IF EXISTS (SELECT 1 FROM [dbo].[StaffProfiles] WHERE [UserId] = 11) AND NOT EXISTS (SELECT 1 FROM [dbo].[DentistProfiles] WHERE [UserId] = 11)
     BEGIN
         INSERT INTO [dbo].[DentistProfiles] ([UserId], [LicenseNumber], [Qualification], [YearsOfExperience], [Biography])
         VALUES (11, N'LIC-VN-2026-MGR2', N'Thạc sĩ Chỉnh nha Thẩm mỹ', 12, 
@@ -61,7 +61,7 @@ BEGIN TRY
         PRINT '    Inserted DentistProfile for UserId = 11 (ThS.BS Lê Thị Lan Hương)';
     END
 
-    IF NOT EXISTS (SELECT 1 FROM [dbo].[DentistProfiles] WHERE [UserId] = 12)
+    IF EXISTS (SELECT 1 FROM [dbo].[StaffProfiles] WHERE [UserId] = 12) AND NOT EXISTS (SELECT 1 FROM [dbo].[DentistProfiles] WHERE [UserId] = 12)
     BEGIN
         INSERT INTO [dbo].[DentistProfiles] ([UserId], [LicenseNumber], [Qualification], [YearsOfExperience], [Biography])
         VALUES (12, N'LIC-VN-2026-MGR4', N'Thạc sĩ Nha khoa Trẻ em', 10, 
@@ -70,22 +70,22 @@ BEGIN TRY
     END
 
     -- 1.2 Link them to their respective Departments in DentistDepartments if not already present
-    IF NOT EXISTS (SELECT 1 FROM [dbo].[DentistDepartments] WHERE [DentistUserId] = 4 AND [DepartmentId] = 3)
+    IF EXISTS (SELECT 1 FROM [dbo].[DentistProfiles] WHERE [UserId] = 4) AND NOT EXISTS (SELECT 1 FROM [dbo].[DentistDepartments] WHERE [DentistUserId] = 4 AND [DepartmentId] = 3)
     BEGIN
         INSERT INTO [dbo].[DentistDepartments] ([DentistUserId], [DepartmentId], [Status], [AssignedAt])
         VALUES (4, 3, 'Active', SYSUTCDATETIME());
     END
-    IF NOT EXISTS (SELECT 1 FROM [dbo].[DentistDepartments] WHERE [DentistUserId] = 10 AND [DepartmentId] = 1)
+    IF EXISTS (SELECT 1 FROM [dbo].[DentistProfiles] WHERE [UserId] = 10) AND NOT EXISTS (SELECT 1 FROM [dbo].[DentistDepartments] WHERE [DentistUserId] = 10 AND [DepartmentId] = 1)
     BEGIN
         INSERT INTO [dbo].[DentistDepartments] ([DentistUserId], [DepartmentId], [Status], [AssignedAt])
         VALUES (10, 1, 'Active', SYSUTCDATETIME());
     END
-    IF NOT EXISTS (SELECT 1 FROM [dbo].[DentistDepartments] WHERE [DentistUserId] = 11 AND [DepartmentId] = 2)
+    IF EXISTS (SELECT 1 FROM [dbo].[DentistProfiles] WHERE [UserId] = 11) AND NOT EXISTS (SELECT 1 FROM [dbo].[DentistDepartments] WHERE [DentistUserId] = 11 AND [DepartmentId] = 2)
     BEGIN
         INSERT INTO [dbo].[DentistDepartments] ([DentistUserId], [DepartmentId], [Status], [AssignedAt])
         VALUES (11, 2, 'Active', SYSUTCDATETIME());
     END
-    IF NOT EXISTS (SELECT 1 FROM [dbo].[DentistDepartments] WHERE [DentistUserId] = 12 AND [DepartmentId] = 4)
+    IF EXISTS (SELECT 1 FROM [dbo].[DentistProfiles] WHERE [UserId] = 12) AND NOT EXISTS (SELECT 1 FROM [dbo].[DentistDepartments] WHERE [DentistUserId] = 12 AND [DepartmentId] = 4)
     BEGIN
         INSERT INTO [dbo].[DentistDepartments] ([DentistUserId], [DepartmentId], [Status], [AssignedAt])
         VALUES (12, 4, 'Active', SYSUTCDATETIME());

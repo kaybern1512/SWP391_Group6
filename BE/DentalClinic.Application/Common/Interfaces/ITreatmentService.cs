@@ -19,6 +19,11 @@ public interface ITreatmentService
     Task<ApiResponse<List<TreatmentSessionDto>>> GetDentistTreatmentSessionsAsync(long dentistId, string? search, CancellationToken ct = default);
     Task<ApiResponse<TreatmentSessionDto>> CreateTreatmentSessionAsync(long dentistUserId, CreateTreatmentSessionRequest request, CancellationToken ct = default);
 
+    // Performed services for appointment clinical workflow
+    Task<ApiResponse<List<PerformedServiceDto>>> GetPerformedServicesByAppointmentAsync(long appointmentId, CancellationToken ct = default);
+    Task<ApiResponse<PerformedServiceDto>> AddPerformedServiceToAppointmentAsync(long appointmentId, long dentistUserId, AddPerformedServiceToAppointmentRequest request, CancellationToken ct = default);
+    Task<ApiResponse<bool>> DeletePerformedServiceAsync(long performedServiceId, long dentistUserId, CancellationToken ct = default);
+
     Task<ApiResponse<TreatmentProgressSummaryDto>> GetDepartmentTreatmentProgressAsync(long managerUserId, long? departmentId, string? search, CancellationToken ct = default);
     Task<ApiResponse<bool>> AssignPhaseDentistAsync(long itemId, long managerUserId, long dentistUserId, CancellationToken ct = default);
 
