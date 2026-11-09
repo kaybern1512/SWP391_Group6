@@ -15,22 +15,45 @@ public partial class DentalClinicDbContext : DbContext
 
     private bool? _attendancePeriodClosuresTableExists;
 
+    private async Task EnsureAttendanceSchemaCheckedAsync(CancellationToken ct)
+    {
+        if (!Database.IsSqlServer()) return;
+
+        if (!_attendancePeriodClosuresTableExists.HasValue)
+        {
+            _attendancePeriodClosuresTableExists = await Database
+                .SqlQueryRaw<int>("SELECT 1 AS [Value] WHERE OBJECT_ID(N'AttendancePeriodClosures', N'U') IS NOT NULL")
+                .AnyAsync(ct);
+
+            if (!_attendancePeriodClosuresTableExists.Value)
+            {
+                var dbName = Database.GetDbConnection().Database ?? string.Empty;
+                bool isKnownLegacyTestDb = dbName.Equals("DentalCare_Integration_Dev", StringComparison.OrdinalIgnoreCase)
+                    || dbName.Equals("DentalCare_Combined_Leave_QA", StringComparison.OrdinalIgnoreCase)
+                    || dbName.StartsWith("DentalClinic_Concurrency_QA", StringComparison.OrdinalIgnoreCase);
+
+                if (!isKnownLegacyTestDb)
+                {
+                    throw new InvalidOperationException(
+                        $"Bảng 'AttendancePeriodClosures' không tồn tại trong cơ sở dữ liệu '{dbName}'. " +
+                        "Cần áp dụng migration '20261110_Add_Staff_Attendance_And_Operations_Tables.sql' để đảm bảo an toàn bảo vệ kỳ công tại môi trường này.");
+                }
+            }
+        }
+    }
+
     public virtual async Task<bool> IsPeriodLockedAsync(int year, int month, CancellationToken ct = default)
     {
-        if (Database.IsSqlServer())
-        {
-            if (!_attendancePeriodClosuresTableExists.HasValue)
-            {
-                _attendancePeriodClosuresTableExists = await Database
-                    .SqlQueryRaw<int>("SELECT 1 AS [Value] WHERE OBJECT_ID(N'AttendancePeriodClosures', N'U') IS NOT NULL")
-                    .AnyAsync(ct);
-            }
+        await EnsureAttendanceSchemaCheckedAsync(ct);
 
-            if (!_attendancePeriodClosuresTableExists.Value) return false;
+        if (Database.IsSqlServer() && _attendancePeriodClosuresTableExists == false)
+        {
+            return false;
         }
 
         return await AttendancePeriodClosures
-            .AnyAsync(p => p.Year == year && p.Month == month && p.Status == PeriodClosureStatus.Locked, ct);
+            .AnyAsync(p => p.Year == year && p.Month == month &&
+                           (p.Status == PeriodClosureStatus.Locked || p.Status == PeriodClosureStatus.Finalized), ct);
     }
 
     public virtual async Task<bool> IsPeriodLockedAsync(DateOnly date, CancellationToken ct = default)
@@ -38,20 +61,15 @@ public partial class DentalClinicDbContext : DbContext
 
     public virtual async Task<bool> IsPeriodLockedAsync(DateOnly startDate, DateOnly endDate, CancellationToken ct = default)
     {
-        if (Database.IsSqlServer())
-        {
-            if (!_attendancePeriodClosuresTableExists.HasValue)
-            {
-                _attendancePeriodClosuresTableExists = await Database
-                    .SqlQueryRaw<int>("SELECT 1 AS [Value] WHERE OBJECT_ID(N'AttendancePeriodClosures', N'U') IS NOT NULL")
-                    .AnyAsync(ct);
-            }
+        await EnsureAttendanceSchemaCheckedAsync(ct);
 
-            if (!_attendancePeriodClosuresTableExists.Value) return false;
+        if (Database.IsSqlServer() && _attendancePeriodClosuresTableExists == false)
+        {
+            return false;
         }
 
         return await AttendancePeriodClosures
-            .AnyAsync(p => p.Status == PeriodClosureStatus.Locked &&
+            .AnyAsync(p => (p.Status == PeriodClosureStatus.Locked || p.Status == PeriodClosureStatus.Finalized) &&
                            ((p.Year == startDate.Year && p.Month == startDate.Month) ||
                             (p.Year == endDate.Year && p.Month == endDate.Month)), ct);
     }

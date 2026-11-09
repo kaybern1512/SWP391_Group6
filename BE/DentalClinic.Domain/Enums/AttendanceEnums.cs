@@ -65,13 +65,19 @@ public static class PeriodClosureStatus
 {
     public const string Open = "Open";
     public const string Locked = "Locked";
+    public const string Finalized = "Finalized";
     public const string Reopened = "Reopened";
 
     public static string GetDisplayName(string status) => status switch
     {
         Open => "Đang mở",
         Locked => "Đã chốt sổ",
+        Finalized => "Đã chốt sổ",
         Reopened => "Mở lại",
         _ => status
     };
+
+    public static bool IsLocked(string? status) =>
+        string.Equals(status, Locked, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, Finalized, StringComparison.OrdinalIgnoreCase);
 }

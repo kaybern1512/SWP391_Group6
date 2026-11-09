@@ -45,7 +45,7 @@ public class WorkforceReportService : IWorkforceReportService
                 .ThenInclude(u => u!.StaffProfile)
             .FirstOrDefaultAsync(c => c.Year == year && c.Month == month, ct);
 
-        bool isLocked = closure != null && closure.Status == PeriodClosureStatus.Locked;
+        bool isLocked = closure != null && PeriodClosureStatus.IsLocked(closure.Status);
 
         // Fetch policy for standard working hours
         var policy = await _dbContext.AttendancePolicies.AsNoTracking().FirstOrDefaultAsync(ct)
@@ -272,7 +272,7 @@ public class WorkforceReportService : IWorkforceReportService
         var existingClosure = await _dbContext.AttendancePeriodClosures
             .FirstOrDefaultAsync(c => c.Year == year && c.Month == month, ct);
 
-        if (existingClosure != null && existingClosure.Status == PeriodClosureStatus.Locked)
+        if (existingClosure != null && PeriodClosureStatus.IsLocked(existingClosure.Status))
         {
             return ApiResponse<AttendancePeriodClosureDto>.Fail($"Kỳ công tháng {month:D2}/{year} đã được chốt sổ trước đó.");
         }
@@ -370,7 +370,7 @@ public class WorkforceReportService : IWorkforceReportService
         var closure = await _dbContext.AttendancePeriodClosures
             .FirstOrDefaultAsync(c => c.Year == year && c.Month == month, ct);
 
-        if (closure == null || closure.Status != PeriodClosureStatus.Locked)
+        if (closure == null || !PeriodClosureStatus.IsLocked(closure.Status))
         {
             return ApiResponse<AttendancePeriodClosureDto>.Fail($"Kỳ công tháng {month:D2}/{year} chưa được chốt hoặc đã được mở lại.");
         }

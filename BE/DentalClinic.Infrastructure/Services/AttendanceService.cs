@@ -104,7 +104,7 @@ public class AttendanceService : IAttendanceService
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, new[] { SqlAppLockHelper.AttendancePunchKey(userId) }, 10000, ct);
 
         var isRelational = _dbContext.Database.IsRelational();
-        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        using var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
 
         try
         {
@@ -239,7 +239,7 @@ public class AttendanceService : IAttendanceService
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, new[] { SqlAppLockHelper.AttendancePunchKey(userId) }, 10000, ct);
 
         var isRelational = _dbContext.Database.IsRelational();
-        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        using var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
 
         try
         {
@@ -471,7 +471,7 @@ public class AttendanceService : IAttendanceService
     public async Task<ApiResponse<AttendanceCorrectionRequestDto>> ReviewCorrectionRequestAsync(long correctionRequestId, long adminUserId, ReviewAttendanceCorrectionRequest request, CancellationToken ct = default)
     {
         var isRelational = _dbContext.Database.IsRelational();
-        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        using var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
 
         try
         {
