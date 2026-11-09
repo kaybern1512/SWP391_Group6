@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
@@ -211,6 +212,8 @@ public class DentistLeaveService : IDentistLeaveService
 
     public async Task<ApiResponse<DentistLeaveRequestDto>> GetLeaveRequestDetailAsync(
         long leaveRequestId,
+        long? currentUserId = null,
+        string? currentRole = null,
         CancellationToken ct = default)
     {
         var leave = await _dbContext.DentistLeaveRequests
@@ -223,6 +226,12 @@ public class DentistLeaveService : IDentistLeaveService
 
         if (leave == null)
             return ApiResponse<DentistLeaveRequestDto>.Fail("Không tìm thấy đơn xin nghỉ phép.");
+
+        if (currentRole == UserRole.Dentist && currentUserId.HasValue && leave.DentistUserId != currentUserId.Value)
+            return ApiResponse<DentistLeaveRequestDto>.Fail("Bạn không có quyền xem đơn xin nghỉ phép của bác sĩ khác.");
+
+        if (currentRole == UserRole.Patient)
+            return ApiResponse<DentistLeaveRequestDto>.Fail("Bạn không có quyền truy cập thông tin đơn nghỉ phép của bác sĩ.");
 
         var dto = MapToDto(leave, leave.DentistUser);
         return ApiResponse<DentistLeaveRequestDto>.Ok(dto);
@@ -380,6 +389,13 @@ public class DentistLeaveService : IDentistLeaveService
         ApproveDentistLeaveRequest? request = null,
         CancellationToken ct = default)
     {
+        var adminUser = await _dbContext.UserAccounts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.UserId == adminUserId && u.Role == UserRole.SystemAdministrator && u.Status == AccountStatus.Active, ct);
+
+        if (adminUser == null)
+            return ApiResponse<DentistLeaveRequestDto>.Fail("Chỉ Quản trị viên hệ thống (System Administrator) mới có quyền phê duyệt đơn nghỉ phép.");
+
         var leave = await _dbContext.DentistLeaveRequests
             .Include(l => l.DentistUser).ThenInclude(d => d.User)
             .Include(l => l.DentistUser).ThenInclude(d => d.DentistDepartments).ThenInclude(dd => dd.Department)
@@ -476,6 +492,11 @@ public class DentistLeaveService : IDentistLeaveService
 
             foreach (var appt in affectedAppts)
             {
+                var alreadyDisrupted = await _dbContext.AppointmentDisruptions
+                    .AnyAsync(d => d.AppointmentId == appt.AppointmentId && d.DentistLeaveRequestId == leave.LeaveRequestId, ct);
+                if (alreadyDisrupted)
+                    continue;
+
                 if (appt.Status == AppointmentStatus.CheckedIn ||
                     appt.Status == AppointmentStatus.Waiting ||
                     appt.Status == AppointmentStatus.Called)
@@ -490,6 +511,8 @@ public class DentistLeaveService : IDentistLeaveService
                         OriginalScheduledEnd = appt.ScheduledEnd ?? appt.ScheduledStart.Value.AddMinutes(30),
                         Status = AppointmentDisruptionStatus.NeedsStaffAction,
                         StaffNotes = "Bệnh nhân đã đến phòng khám khi bác sĩ được duyệt nghỉ. Lễ tân cần điều phối trực tiếp.",
+                        EmailDeliveryStatus = DisruptionEmailStatus.Skipped,
+                        EmailRetryCount = 0,
                         CreatedAt = now
                     };
                     _dbContext.AppointmentDisruptions.Add(disruption);
@@ -507,8 +530,15 @@ public class DentistLeaveService : IDentistLeaveService
                 }
                 else if (appt.Status == AppointmentStatus.Confirmed)
                 {
-                    // Patient needs to choose alternative
-                    var actionToken = Guid.NewGuid().ToString("N");
+                    // Generate cryptographically secure ActionToken
+                    byte[] tokenBytes = new byte[32];
+                    RandomNumberGenerator.Fill(tokenBytes);
+                    var actionToken = Convert.ToHexString(tokenBytes).ToLowerInvariant();
+
+                    var maxExpiry = now.AddDays(7);
+                    var apptStart = appt.ScheduledStart!.Value;
+                    var tokenExpiry = apptStart > now.AddHours(24) && apptStart < maxExpiry ? apptStart : maxExpiry;
+
                     var disruption = new AppointmentDisruption
                     {
                         AppointmentId = appt.AppointmentId,
@@ -518,8 +548,9 @@ public class DentistLeaveService : IDentistLeaveService
                         OriginalScheduledEnd = appt.ScheduledEnd ?? appt.ScheduledStart.Value.AddMinutes(30),
                         Status = AppointmentDisruptionStatus.PendingPatientChoice,
                         EmailDeliveryStatus = DisruptionEmailStatus.Pending,
+                        EmailRetryCount = 0,
                         ActionToken = actionToken,
-                        TokenExpiresAt = appt.ScheduledStart!.Value,
+                        TokenExpiresAt = tokenExpiry,
                         CreatedAt = now
                     };
                     _dbContext.AppointmentDisruptions.Add(disruption);
@@ -610,6 +641,7 @@ public class DentistLeaveService : IDentistLeaveService
             {
                 _logger.LogWarning(emEx, "Failed to send disruption email for appointment {AppointmentCode}", item.Appointment.AppointmentCode);
                 item.Disruption.EmailDeliveryStatus = DisruptionEmailStatus.Failed;
+                item.Disruption.EmailRetryCount++;
                 item.Disruption.EmailFailureReason = emEx.Message;
             }
         }
@@ -651,6 +683,13 @@ public class DentistLeaveService : IDentistLeaveService
     {
         if (request == null || string.IsNullOrWhiteSpace(request.RejectionReason))
             return ApiResponse<DentistLeaveRequestDto>.Fail("Vui lòng cung cấp lý do từ chối đơn xin nghỉ phép.");
+
+        var adminUser = await _dbContext.UserAccounts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.UserId == adminUserId && u.Role == UserRole.SystemAdministrator && u.Status == AccountStatus.Active, ct);
+
+        if (adminUser == null)
+            return ApiResponse<DentistLeaveRequestDto>.Fail("Chỉ Quản trị viên hệ thống (System Administrator) mới có quyền từ chối đơn nghỉ phép.");
 
         var leave = await _dbContext.DentistLeaveRequests
             .Include(l => l.DentistUser).ThenInclude(d => d.User)

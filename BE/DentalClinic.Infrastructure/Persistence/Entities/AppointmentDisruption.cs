@@ -36,6 +36,8 @@ public partial class AppointmentDisruption
 
     public string? EmailFailureReason { get; set; }
 
+    public int EmailRetryCount { get; set; } = 0;
+
     public string? ActionToken { get; set; }
 
     public DateTime? TokenExpiresAt { get; set; }

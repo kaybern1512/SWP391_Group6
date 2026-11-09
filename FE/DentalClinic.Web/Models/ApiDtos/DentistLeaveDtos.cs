@@ -135,6 +135,7 @@ public class AppointmentDisruptionDto
     public DateTime? EmailSentAt { get; set; }
     public string? EmailDeliveryStatus { get; set; }
     public string? ActionToken { get; set; }
+    public int EmailRetryCount { get; set; }
     public bool IsUrgent { get; set; }
     public DateTime CreatedAt { get; set; }
 }
@@ -143,12 +144,14 @@ public class PatientChooseNewDentistRequest
 {
     public long NewDentistUserId { get; set; }
     public string? Note { get; set; }
+    public string? ActionToken { get; set; }
 }
 
 public class PatientDisruptionRescheduleRequest
 {
     public DateTime NewScheduledStart { get; set; }
     public string Reason { get; set; } = string.Empty;
+    public string? ActionToken { get; set; }
 }
 
 public class ReceptionistResolveDisruptionRequest

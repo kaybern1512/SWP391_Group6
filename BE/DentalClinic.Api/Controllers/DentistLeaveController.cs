@@ -78,10 +78,13 @@ public class DentistLeaveController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager},{UserRole.Dentist},{UserRole.Receptionist}")]
     [ProducesResponseType(typeof(ApiResponse<DentistLeaveRequestDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLeaveRequestDetail(long id, CancellationToken ct)
     {
-        var result = await _leaveService.GetLeaveRequestDetailAsync(id, ct);
+        var currentUserId = GetCurrentUserId();
+        var currentRole = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+        var result = await _leaveService.GetLeaveRequestDetailAsync(id, currentUserId, currentRole, ct);
         if (!result.Success)
             return NotFound(result);
 

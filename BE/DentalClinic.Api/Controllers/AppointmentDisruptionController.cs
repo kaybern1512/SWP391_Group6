@@ -48,12 +48,13 @@ public class AppointmentDisruptionController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [Authorize(Roles = $"{UserRole.Patient},{UserRole.Dentist},{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<AppointmentDisruptionDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetDisruptionDetail(long id, CancellationToken ct)
+    public async Task<IActionResult> GetDisruptionDetail(long id, [FromQuery] string? token, CancellationToken ct)
     {
         var currentUserId = GetCurrentUserId();
         var currentRole = GetCurrentUserRole();
-        var result = await _disruptionService.GetDisruptionDetailAsync(id, currentUserId, currentRole, ct);
+        var result = await _disruptionService.GetDisruptionDetailAsync(id, currentUserId, currentRole, token, ct);
         if (!result.Success)
             return NotFound(result);
 
@@ -61,6 +62,7 @@ public class AppointmentDisruptionController : ControllerBase
     }
 
     [HttpGet("by-appointment/{appointmentId}")]
+    [Authorize(Roles = $"{UserRole.Patient},{UserRole.Dentist},{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
     [ProducesResponseType(typeof(ApiResponse<AppointmentDisruptionDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDisruptionByAppointmentId(long appointmentId, CancellationToken ct)
     {

@@ -27,9 +27,12 @@ public class AppointmentDisruptionApiService : IAppointmentDisruptionApiService
         return await SendGetAsync<List<AppointmentDisruptionDto>>("/api/AppointmentDisruption/my");
     }
 
-    public async Task<ApiResult<AppointmentDisruptionDto>> GetDisruptionDetailAsync(long disruptionId)
+    public async Task<ApiResult<AppointmentDisruptionDto>> GetDisruptionDetailAsync(long disruptionId, string? token = null)
     {
-        return await SendGetAsync<AppointmentDisruptionDto>($"/api/AppointmentDisruption/{disruptionId}");
+        var url = $"/api/AppointmentDisruption/{disruptionId}";
+        if (!string.IsNullOrWhiteSpace(token))
+            url += $"?token={Uri.EscapeDataString(token)}";
+        return await SendGetAsync<AppointmentDisruptionDto>(url);
     }
 
     public async Task<ApiResult<AppointmentDisruptionDto>> GetDisruptionByAppointmentIdAsync(long appointmentId)

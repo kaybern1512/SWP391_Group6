@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using DentalClinic.Web.Models.ApiDtos;
 
 namespace DentalClinic.Web.ViewModels.Appointments;
@@ -26,4 +26,5 @@ public class PatientDisruptionViewModel
     public AppointmentDisruptionDto Disruption { get; set; } = new();
     public List<AlternativeDentistDto> AlternativeDentists { get; set; } = new();
     public AppointmentDto? Appointment { get; set; }
+    public string? ActionToken { get; set; }
 }

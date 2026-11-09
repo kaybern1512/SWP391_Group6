@@ -8,7 +8,7 @@ namespace DentalClinic.Web.Services;
 public interface IAppointmentDisruptionApiService
 {
     Task<ApiResult<List<AppointmentDisruptionDto>>> GetMyPendingDisruptionsAsync();
-    Task<ApiResult<AppointmentDisruptionDto>> GetDisruptionDetailAsync(long disruptionId);
+    Task<ApiResult<AppointmentDisruptionDto>> GetDisruptionDetailAsync(long disruptionId, string? token = null);
     Task<ApiResult<AppointmentDisruptionDto>> GetDisruptionByAppointmentIdAsync(long appointmentId);
     Task<ApiResult<List<AlternativeDentistDto>>> GetAvailableAlternativeDentistsAsync(long disruptionId);
     Task<ApiResult<AppointmentDisruptionDto>> PatientChooseNewDentistAsync(long disruptionId, PatientChooseNewDentistRequest request);

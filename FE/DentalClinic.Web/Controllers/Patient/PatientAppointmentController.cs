@@ -1,4 +1,4 @@
-﻿using DentalClinic.Web.Helpers;
+using DentalClinic.Web.Helpers;
 using System;
 using System.Linq;
 using System.Security.Claims;
@@ -573,14 +573,16 @@ public class PatientAppointmentController : Controller
     // ==========================================
     // DOCTOR LEAVE DISRUPTION RECOVERY ACTIONS
     // ==========================================
+    // DOCTOR LEAVE DISRUPTION RECOVERY ACTIONS
+    // ==========================================
 
     [HttpGet("Disruption/{id:long}")]
-    public async Task<IActionResult> Disruption(long id)
+    public async Task<IActionResult> Disruption(long id, [FromQuery] string? token)
     {
-        var disruptionResult = await _disruptionApi.GetDisruptionDetailAsync(id);
+        var disruptionResult = await _disruptionApi.GetDisruptionDetailAsync(id, token);
         if (!disruptionResult.IsSuccess || disruptionResult.Data == null)
         {
-            TempData["ErrorMessage"] = disruptionResult.Message ?? "KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin sá»± cá»‘ giÃ¡n Ä‘oáº¡n lá»‹ch háº¹n.";
+            TempData["ErrorMessage"] = disruptionResult.Message ?? "KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin sá»± cá»‘ giÃ¡n Ä‘oáº¡n lá»‹ch háº¹n hoáº·c liÃªn káº¿t Ä‘Ã£ háº¿t hiá»‡u lá»±c.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -595,7 +597,8 @@ public class PatientAppointmentController : Controller
         {
             Disruption = disruption,
             AlternativeDentists = alternatives,
-            Appointment = appt
+            Appointment = appt,
+            ActionToken = token ?? disruption.ActionToken
         };
 
         return View("~/Views/Patient/Appointment/DisruptionDetail.cshtml", vm);
@@ -603,12 +606,13 @@ public class PatientAppointmentController : Controller
 
     [HttpPost("Disruption/{id:long}/ChooseDentist")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ChooseAlternativeDentist(long id, [FromForm] long newDentistUserId, [FromForm] string? note)
+    public async Task<IActionResult> ChooseAlternativeDentist(long id, [FromForm] long newDentistUserId, [FromForm] string? note, [FromForm] string? actionToken)
     {
         var req = new PatientChooseNewDentistRequest
         {
             NewDentistUserId = newDentistUserId,
-            Note = note
+            Note = note,
+            ActionToken = actionToken
         };
 
         var result = await _disruptionApi.PatientChooseNewDentistAsync(id, req);
@@ -620,17 +624,18 @@ public class PatientAppointmentController : Controller
         }
 
         TempData["ErrorMessage"] = result.Message ?? "KhÃ´ng thá»ƒ chá»n bÃ¡c sÄ© thay tháº¿.";
-        return RedirectToAction(nameof(Disruption), new { id });
+        return RedirectToAction(nameof(Disruption), new { id, token = actionToken });
     }
 
     [HttpPost("Disruption/{id:long}/Reschedule")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> RescheduleDisruption(long id, [FromForm] DateTime newScheduledStart, [FromForm] string? reason)
+    public async Task<IActionResult> RescheduleDisruption(long id, [FromForm] DateTime newScheduledStart, [FromForm] string? reason, [FromForm] string? actionToken)
     {
         var req = new PatientDisruptionRescheduleRequest
         {
             NewScheduledStart = newScheduledStart,
-            Reason = string.IsNullOrWhiteSpace(reason) ? "Bá»‡nh nhÃ¢n dá»i lá»‹ch do bÃ¡c sÄ© phá»¥ trÃ¡ch nghá»‰ phÃ©p" : reason
+            Reason = string.IsNullOrWhiteSpace(reason) ? "Bá»‡nh nhÃ¢n dá»i lá»‹ch do bÃ¡c sÄ© phá»¥ trÃ¡ch nghá»‰ phÃ©p" : reason,
+            ActionToken = actionToken
         };
 
         var result = await _disruptionApi.PatientRescheduleDisruptionAsync(id, req);
@@ -642,6 +647,6 @@ public class PatientAppointmentController : Controller
         }
 
         TempData["ErrorMessage"] = result.Message ?? "KhÃ´ng thá»ƒ dá»i lá»‹ch háº¹n.";
-        return RedirectToAction(nameof(Disruption), new { id });
+        return RedirectToAction(nameof(Disruption), new { id, token = actionToken });
     }
 }

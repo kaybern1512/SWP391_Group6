@@ -65,6 +65,7 @@ BEGIN
         [EmailSentAt] DATETIME2 NULL,
         [EmailDeliveryStatus] VARCHAR(30) NULL CONSTRAINT [DF_AppointmentDisruptions_EmailStatus] DEFAULT ('Pending'),
         [EmailFailureReason] NVARCHAR(500) NULL,
+        [EmailRetryCount] INT NOT NULL CONSTRAINT [DF_AppointmentDisruptions_EmailRetryCount] DEFAULT (0),
         [ActionToken] NVARCHAR(100) NULL,
         [TokenExpiresAt] DATETIME2 NULL,
         [CreatedAt] DATETIME2 NOT NULL CONSTRAINT [DF_AppointmentDisruptions_CreatedAt] DEFAULT (SYSUTCDATETIME()),
@@ -89,6 +90,9 @@ BEGIN
     CREATE NONCLUSTERED INDEX [IX_AppointmentDisruptions_LeaveRequestId] 
         ON [dbo].[AppointmentDisruptions] ([DentistLeaveRequestId]);
 
+    CREATE UNIQUE NONCLUSTERED INDEX [UQ_AppointmentDisruptions_Appt_Leave] 
+        ON [dbo].[AppointmentDisruptions] ([AppointmentId], [DentistLeaveRequestId]);
+
     CREATE NONCLUSTERED INDEX [IX_AppointmentDisruptions_ActionToken] 
         ON [dbo].[AppointmentDisruptions] ([ActionToken]) WHERE [ActionToken] IS NOT NULL;
 
@@ -96,6 +100,20 @@ BEGIN
 END
 ELSE
 BEGIN
-    PRINT 'AppointmentDisruptions table already exists.';
+    PRINT 'AppointmentDisruptions table already exists. Applying schema upgrade if needed...';
+
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.AppointmentDisruptions') AND name = 'EmailRetryCount')
+    BEGIN
+        ALTER TABLE [dbo].[AppointmentDisruptions] 
+            ADD [EmailRetryCount] INT NOT NULL CONSTRAINT [DF_AppointmentDisruptions_EmailRetryCount] DEFAULT (0);
+        PRINT 'Added EmailRetryCount column.';
+    END
+
+    IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'UQ_AppointmentDisruptions_Appt_Leave' AND object_id = OBJECT_ID('dbo.AppointmentDisruptions'))
+    BEGIN
+        CREATE UNIQUE NONCLUSTERED INDEX [UQ_AppointmentDisruptions_Appt_Leave] 
+            ON [dbo].[AppointmentDisruptions] ([AppointmentId], [DentistLeaveRequestId]);
+        PRINT 'Created UQ_AppointmentDisruptions_Appt_Leave unique index.';
+    END
 END
 GO

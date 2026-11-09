@@ -105,6 +105,7 @@
                                         <form asp-action="ChooseAlternativeDentist" asp-route-id="@d.DisruptionId" method="post" onsubmit="return confirm('Xác nhận chọn Bác sĩ @alt.FullName phụ trách lịch khám của bạn?');">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="newDentistUserId" value="@alt.DentistUserId" />
+                                            <input type="hidden" name="actionToken" value="@Model.ActionToken" />
                                             <button type="submit" class="btn btn-outline-primary btn-sm fw-semibold px-3 py-2">
                                                 <i class="bi bi-check2 me-1"></i> Chọn Bác Sĩ Này
                                             </button>
@@ -116,7 +117,7 @@
                     }
                     <div class="mt-auto pt-3 border-top text-muted small">
                         <i class="bi bi-info-circle me-1"></i>
-                        Hệ thống sẽ cập nhật bác sĩ phụ trách ngay lập tức và giữ nguyên số thứ tự phòng khám của Quý khách.
+                        Hệ thống sẽ cập nhật bác sĩ phụ trách ngay lập tức. Số thứ tự khám tại phòng khám sẽ được cấp tự động theo ngày khi Quý khách đến làm thủ tục Check-in.
                     </div>
                 </div>
             </div>
@@ -136,11 +137,12 @@
 
                     <form asp-action="RescheduleDisruption" asp-route-id="@d.DisruptionId" method="post" class="flex-grow-1 d-flex flex-column" onsubmit="return confirm('Xác nhận dời lịch hẹn khám sang thời gian đã chọn?');">
                         @Html.AntiForgeryToken()
+                        <input type="hidden" name="actionToken" value="@Model.ActionToken" />
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-dark">Thời Gian Khám Mới Mong Muốn <span class="text-danger">*</span></label>
                             <input type="datetime-local" name="newScheduledStart" class="form-control form-control-lg fs-15" 
                                    value="@d.ScheduledStart.AddDays(2).ToString("yyyy-MM-ddTHH:mm")" required />
-                            <div class="form-text text-muted">Vui lòng chọn ngày giờ làm việc từ Thứ Hai đến Chủ Nhật (08:00 - 17:00).</div>
+                            <div class="form-text text-muted">Vui lòng chọn ngày giờ làm việc từ Thứ Hai đến Chủ Nhật (07:00 - 21:00). Số thứ tự khám cũ sẽ được làm mới khi Check-in vào ngày khám mới.</div>
                         </div>
 
                         <div class="mb-3">

@@ -566,4 +566,438 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         var appt = await db.Appointments.FindAsync(100L);
         Assert.Equal("Cancelled", appt?.Status);
     }
+
+    [Fact]
+    public async Task PatientReschedule_ResetsQueueNumberAndInvalidatesToken()
+    {
+        using var db = CreateDbContext(nameof(PatientReschedule_ResetsQueueNumberAndInvalidatesToken));
+        await SeedDataAsync(db);
+        var leaveService = CreateLeaveService(db);
+        var disruptionService = CreateDisruptionService(db);
+
+        // Pre-set a QueueNumber on the appointment
+        var appt = await db.Appointments.FindAsync(100L);
+        appt!.QueueNumber = "Q-005";
+        await db.SaveChangesAsync();
+
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var leave = new DentistLeaveRequest
+        {
+            DentistUserId = 10,
+            LeaveType = "AnnualLeave",
+            StartDate = tomorrow,
+            EndDate = tomorrow,
+            Reason = "Nghỉ phép",
+            Status = "Pending",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DentistLeaveRequests.Add(leave);
+        await db.SaveChangesAsync();
+
+        await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
+        var disruption = await db.AppointmentDisruptions.FirstOrDefaultAsync(d => d.AppointmentId == 100);
+        Assert.NotNull(disruption);
+        Assert.NotNull(disruption.ActionToken);
+
+        // Reschedule to day after tomorrow 10:00
+        var newDate = DateTime.UtcNow.AddDays(2).Date.AddHours(10);
+        var req = new PatientDisruptionRescheduleRequest
+        {
+            NewScheduledStart = newDate,
+            Reason = "Dời sang ngày kia",
+            ActionToken = disruption.ActionToken
+        };
+
+        var result = await disruptionService.PatientRescheduleDisruptionAsync(disruption.DisruptionId, 20, req);
+        Assert.True(result.Success);
+
+        var updatedAppt = await db.Appointments.FindAsync(100L);
+        Assert.Null(updatedAppt?.QueueNumber); // Queue number MUST be reset!
+        Assert.Null(updatedAppt?.RoomId);
+        Assert.Null(updatedAppt?.DentalChairId);
+
+        var updatedDisruption = await db.AppointmentDisruptions.FindAsync(disruption.DisruptionId);
+        Assert.Null(updatedDisruption?.ActionToken); // Token invalidated!
+    }
+
+    [Fact]
+    public async Task PatientResolution_BlocksCheckedInOrInServiceAppointments()
+    {
+        using var db = CreateDbContext(nameof(PatientResolution_BlocksCheckedInOrInServiceAppointments));
+        await SeedDataAsync(db);
+        var leaveService = CreateLeaveService(db);
+        var disruptionService = CreateDisruptionService(db);
+
+        var appt = await db.Appointments.FindAsync(100L);
+        appt!.Status = AppointmentStatus.CheckedIn;
+        await db.SaveChangesAsync();
+
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var leave = new DentistLeaveRequest
+        {
+            DentistUserId = 10,
+            LeaveType = "Emergency",
+            StartDate = tomorrow,
+            EndDate = tomorrow,
+            Reason = "Khẩn cấp",
+            Status = "Pending",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DentistLeaveRequests.Add(leave);
+        await db.SaveChangesAsync();
+
+        await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
+        var disruption = await db.AppointmentDisruptions.FirstOrDefaultAsync(d => d.AppointmentId == 100);
+        Assert.NotNull(disruption);
+        Assert.Equal(AppointmentDisruptionStatus.NeedsStaffAction, disruption.Status);
+
+        // Patient attempts to change doctor directly
+        var changeResult = await disruptionService.PatientChooseNewDentistAsync(disruption.DisruptionId, 20, new PatientChooseNewDentistRequest
+        {
+            NewDentistUserId = 11
+        });
+        Assert.False(changeResult.Success);
+        Assert.Contains("tiếp đón", changeResult.Message);
+
+        // Patient attempts to reschedule directly
+        var reschedResult = await disruptionService.PatientRescheduleDisruptionAsync(disruption.DisruptionId, 20, new PatientDisruptionRescheduleRequest
+        {
+            NewScheduledStart = DateTime.UtcNow.AddDays(2).Date.AddHours(9),
+            Reason = "Thử dời lịch"
+        });
+        Assert.False(reschedResult.Success);
+        Assert.Contains("tiếp đón", reschedResult.Message);
+    }
+
+    [Fact]
+    public async Task ActionToken_ExpiredOrInvalid_IsRejected()
+    {
+        using var db = CreateDbContext(nameof(ActionToken_ExpiredOrInvalid_IsRejected));
+        await SeedDataAsync(db);
+        var leaveService = CreateLeaveService(db);
+        var disruptionService = CreateDisruptionService(db);
+
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var leave = new DentistLeaveRequest
+        {
+            DentistUserId = 10,
+            LeaveType = "AnnualLeave",
+            StartDate = tomorrow,
+            EndDate = tomorrow,
+            Reason = "Nghỉ phép",
+            Status = "Pending",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DentistLeaveRequests.Add(leave);
+        await db.SaveChangesAsync();
+
+        await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
+        var disruption = await db.AppointmentDisruptions.FirstOrDefaultAsync(d => d.AppointmentId == 100);
+        Assert.NotNull(disruption);
+
+        // Case 1: Wrong token
+        var wrongTokenResult = await disruptionService.PatientChooseNewDentistAsync(disruption.DisruptionId, 20, new PatientChooseNewDentistRequest
+        {
+            NewDentistUserId = 11,
+            ActionToken = "invalid_token_123"
+        });
+        Assert.False(wrongTokenResult.Success);
+        Assert.Contains("không hợp lệ", wrongTokenResult.Message);
+
+        // Case 2: Expired token
+        disruption.TokenExpiresAt = DateTime.UtcNow.AddMinutes(-5);
+        await db.SaveChangesAsync();
+
+        var expiredTokenResult = await disruptionService.PatientChooseNewDentistAsync(disruption.DisruptionId, 20, new PatientChooseNewDentistRequest
+        {
+            NewDentistUserId = 11,
+            ActionToken = disruption.ActionToken
+        });
+        Assert.False(expiredTokenResult.Success);
+        Assert.Contains("hết hạn", expiredTokenResult.Message);
+    }
+
+    [Fact]
+    public async Task Security_IDOR_Protection_On_Disruption_And_LeaveDetail()
+    {
+        using var db = CreateDbContext(nameof(Security_IDOR_Protection_On_Disruption_And_LeaveDetail));
+        await SeedDataAsync(db);
+        var leaveService = CreateLeaveService(db);
+        var disruptionService = CreateDisruptionService(db);
+
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var leave = new DentistLeaveRequest
+        {
+            DentistUserId = 10,
+            LeaveType = "AnnualLeave",
+            StartDate = tomorrow,
+            EndDate = tomorrow,
+            Reason = "Lý do cá nhân riêng tư",
+            Status = "Pending",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DentistLeaveRequests.Add(leave);
+        await db.SaveChangesAsync();
+
+        // 1. Dentist 11 attempts to view Dentist 10's private leave request
+        var dentist11View = await leaveService.GetLeaveRequestDetailAsync(leave.LeaveRequestId, currentUserId: 11, currentRole: UserRole.Dentist);
+        Assert.False(dentist11View.Success);
+        Assert.Contains("không có quyền", dentist11View.Message);
+
+        // 2. Patient attempts to view Dentist's private leave request
+        var patientView = await leaveService.GetLeaveRequestDetailAsync(leave.LeaveRequestId, currentUserId: 20, currentRole: UserRole.Patient);
+        Assert.False(patientView.Success);
+
+        // 3. Dentist 10 views own leave request: allowed
+        var dentist10View = await leaveService.GetLeaveRequestDetailAsync(leave.LeaveRequestId, currentUserId: 10, currentRole: UserRole.Dentist);
+        Assert.True(dentist10View.Success);
+
+        // Approve leave
+        await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
+        var disruption = await db.AppointmentDisruptions.FirstOrDefaultAsync(d => d.AppointmentId == 100);
+        Assert.NotNull(disruption);
+
+        // 4. Another patient (e.g. UserId 999) attempts to view disruption of Patient 20
+        var strangerDisruption = await disruptionService.GetDisruptionByAppointmentIdAsync(100, currentUserId: 999, currentRole: UserRole.Patient);
+        Assert.False(strangerDisruption.Success);
+
+        // 5. Patient 20 views own disruption: allowed
+        var ownerDisruption = await disruptionService.GetDisruptionByAppointmentIdAsync(100, currentUserId: 20, currentRole: UserRole.Patient);
+        Assert.True(ownerDisruption.Success);
+    }
+
+    [Fact]
+    public async Task PartialShiftLeave_DoesNotCancelOrAffectMorningAppointments()
+    {
+        using var db = CreateDbContext(nameof(PartialShiftLeave_DoesNotCancelOrAffectMorningAppointments));
+        await SeedDataAsync(db);
+        var leaveService = CreateLeaveService(db);
+
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+
+        // Create morning appointment 08:30 - 09:00 for doctor 10
+        var morningAppt = new Appointment
+        {
+            AppointmentId = 201,
+            AppointmentCode = "APP-MORNING-201",
+            PatientUserId = 20,
+            DepartmentId = 1,
+            RequestedServiceId = 1,
+            AssignedDentistUserId = 10,
+            ScheduledStart = tomorrow.ToDateTime(new TimeOnly(8, 30)),
+            ScheduledEnd = tomorrow.ToDateTime(new TimeOnly(9, 0)),
+            ReasonForVisit = "Khám sáng",
+            BookingSource = "Online",
+            Status = AppointmentStatus.Confirmed,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        // Create afternoon appointment 14:00 - 14:30 for doctor 10
+        var afternoonAppt = new Appointment
+        {
+            AppointmentId = 202,
+            AppointmentCode = "APP-AFTERNOON-202",
+            PatientUserId = 20,
+            DepartmentId = 1,
+            RequestedServiceId = 1,
+            AssignedDentistUserId = 10,
+            ScheduledStart = tomorrow.ToDateTime(new TimeOnly(14, 0)),
+            ScheduledEnd = tomorrow.ToDateTime(new TimeOnly(14, 30)),
+            ReasonForVisit = "Khám chiều",
+            BookingSource = "Online",
+            Status = AppointmentStatus.Confirmed,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        db.Appointments.AddRange(morningAppt, afternoonAppt);
+        await db.SaveChangesAsync();
+
+        // Doctor submits partial shift leave ONLY in afternoon (13:00 to 17:00)
+        var partialLeave = new DentistLeaveRequest
+        {
+            DentistUserId = 10,
+            LeaveType = "Personal",
+            StartDate = tomorrow,
+            EndDate = tomorrow,
+            StartTime = new TimeOnly(13, 0),
+            EndTime = new TimeOnly(17, 0),
+            Reason = "Việc gia đình buổi chiều",
+            Status = "Pending",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DentistLeaveRequests.Add(partialLeave);
+        await db.SaveChangesAsync();
+
+        var impact = await leaveService.GetLeaveImpactAnalysisAsync(partialLeave.LeaveRequestId);
+        Assert.True(impact.Success);
+        Assert.Equal(1, impact.Data?.TotalAffected);
+        Assert.Equal(202L, impact.Data?.AffectedAppointments[0].AppointmentId); // Only afternoon appt!
+
+        // Approve leave
+        var approveResult = await leaveService.ApproveLeaveRequestAsync(partialLeave.LeaveRequestId, 1);
+        Assert.True(approveResult.Success);
+
+        // Verify morning appointment remains untouched and confirmed
+        var morningApptDb = await db.Appointments.FindAsync(201L);
+        Assert.Equal(AppointmentStatus.Confirmed, morningApptDb?.Status);
+        Assert.Equal(10L, morningApptDb?.AssignedDentistUserId);
+
+        // Verify only afternoon appointment has disruption created
+        var morningDisruption = await db.AppointmentDisruptions.FirstOrDefaultAsync(d => d.AppointmentId == 201);
+        Assert.Null(morningDisruption);
+
+        var afternoonDisruption = await db.AppointmentDisruptions.FirstOrDefaultAsync(d => d.AppointmentId == 202);
+        Assert.NotNull(afternoonDisruption);
+    }
+
+    [Fact]
+    public async Task ProcessPendingEmails_RetriesUpTo3Times_AndAlertsReceptionistOnMaxFailures()
+    {
+        using var db = CreateDbContext(nameof(ProcessPendingEmails_RetriesUpTo3Times_AndAlertsReceptionistOnMaxFailures));
+        await SeedDataAsync(db);
+        var mockEmail = new Mock<IEmailService>();
+        mockEmail.Setup(e => e.SendDoctorLeaveDisruptionEmailAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("SMTP connection timed out"));
+
+        var disruptionService = new AppointmentDisruptionService(
+            db,
+            _mockReminderService.Object,
+            mockEmail.Object,
+            _mockNotificationService.Object,
+            _mockConfiguration.Object,
+            _mockDisruptionLogger.Object);
+
+        var tomorrow = DateTime.UtcNow.AddDays(1);
+        var disruption = new AppointmentDisruption
+        {
+            AppointmentId = 100,
+            DentistLeaveRequestId = 1,
+            OriginalDentistUserId = 10,
+            OriginalScheduledStart = tomorrow,
+            OriginalScheduledEnd = tomorrow.AddMinutes(30),
+            Status = AppointmentDisruptionStatus.PendingPatientChoice,
+            EmailDeliveryStatus = DisruptionEmailStatus.Pending,
+            EmailRetryCount = 2, // Already failed twice
+            ActionToken = "token-test",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.AppointmentDisruptions.Add(disruption);
+        await db.SaveChangesAsync();
+
+        var result = await disruptionService.ProcessPendingDisruptionEmailsAsync();
+        Assert.True(result.Success);
+
+        var updatedDisruption = await db.AppointmentDisruptions.FindAsync(disruption.DisruptionId);
+        Assert.Equal(3, updatedDisruption?.EmailRetryCount);
+        Assert.Equal(DisruptionEmailStatus.Failed, updatedDisruption?.EmailDeliveryStatus);
+
+        // Verify receptionist was notified
+        _mockNotificationService.Verify(n => n.CreateNotificationAsync(
+            5L, // Receptionist UserId
+            100L,
+            "EmailDeliveryFailed",
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Cancellation_PreservesInvoice_AndDoesNotMarkDepositAsRefunded()
+    {
+        using var db = CreateDbContext(nameof(Cancellation_PreservesInvoice_AndDoesNotMarkDepositAsRefunded));
+        await SeedDataAsync(db);
+        var leaveService = CreateLeaveService(db);
+        var disruptionService = CreateDisruptionService(db);
+
+        // Attach Invoice with Paid Deposit
+        var invoice = new Invoice
+        {
+            InvoiceId = 888,
+            InvoiceCode = "INV-888",
+            AppointmentId = 100,
+            GeneratedByUserId = 1,
+            TotalAmount = 500000,
+            Status = "Paid",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Invoices.Add(invoice);
+        await db.SaveChangesAsync();
+
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var leave = new DentistLeaveRequest
+        {
+            DentistUserId = 10,
+            LeaveType = "Emergency",
+            StartDate = tomorrow,
+            EndDate = tomorrow,
+            Reason = "Khẩn cấp",
+            Status = "Pending",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DentistLeaveRequests.Add(leave);
+        await db.SaveChangesAsync();
+
+        await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
+        var disruption = await db.AppointmentDisruptions.FirstOrDefaultAsync(d => d.AppointmentId == 100);
+        Assert.NotNull(disruption);
+
+        // Receptionist cancels
+        var cancelReq = new ReceptionistResolveDisruptionRequest
+        {
+            ResolutionType = "Cancel",
+            StaffNotes = "Bệnh nhân hủy ca khám"
+        };
+        var result = await disruptionService.ReceptionistResolveDisruptionAsync(disruption.DisruptionId, 5, cancelReq);
+        Assert.True(result.Success);
+
+        // Invoice status remains Paid (not automatically refunded)
+        var invoiceDb = await db.Invoices.FindAsync(888L);
+        Assert.Equal("Paid", invoiceDb?.Status);
+
+        // Appointment cancellation note notes deposit
+        var apptDb = await db.Appointments.FindAsync(100L);
+        Assert.Equal(AppointmentStatus.Cancelled, apptDb?.Status);
+        Assert.Contains("tiền cọc #888", apptDb?.CancellationReason ?? "");
+    }
+
+    [Fact]
+    public async Task Concurrency_AdminApproveLeave_And_PatientAction_AreSerializedAndConsistent()
+    {
+        using var db = CreateDbContext(nameof(Concurrency_AdminApproveLeave_And_PatientAction_AreSerializedAndConsistent));
+        await SeedDataAsync(db);
+        var leaveService = CreateLeaveService(db);
+        var disruptionService = CreateDisruptionService(db);
+
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var leave = new DentistLeaveRequest
+        {
+            DentistUserId = 10,
+            LeaveType = "Emergency",
+            StartDate = tomorrow,
+            EndDate = tomorrow,
+            Reason = "Khẩn cấp",
+            Status = "Pending",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DentistLeaveRequests.Add(leave);
+        await db.SaveChangesAsync();
+
+        // Simulate concurrent attempts to approve the same leave request twice simultaneously
+        var task1 = leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest { AdminNotes = "Duyệt lần 1" });
+        var task2 = leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest { AdminNotes = "Duyệt lần 2" });
+
+        var results = await Task.WhenAll(task1, task2);
+
+        // Exactly one approval should succeed; the second should be safely rejected as not Pending
+        var successCount = results.Count(r => r.Success);
+        var failCount = results.Count(r => !r.Success);
+
+        Assert.Equal(1, successCount);
+        Assert.Equal(1, failCount);
+
+        // Verify only 1 disruption was created, never duplicated
+        var disruptions = await db.AppointmentDisruptions.Where(d => d.AppointmentId == 100).ToListAsync();
+        Assert.Single(disruptions);
+    }
 }

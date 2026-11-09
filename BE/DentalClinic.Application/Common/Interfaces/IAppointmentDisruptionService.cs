@@ -9,7 +9,7 @@ namespace DentalClinic.Application.Common.Interfaces;
 public interface IAppointmentDisruptionService
 {
     Task<ApiResponse<List<AppointmentDisruptionDto>>> GetPendingDisruptionsForPatientAsync(long patientUserId, CancellationToken ct = default);
-    Task<ApiResponse<AppointmentDisruptionDto>> GetDisruptionDetailAsync(long disruptionId, long currentUserId, string currentRole, CancellationToken ct = default);
+    Task<ApiResponse<AppointmentDisruptionDto>> GetDisruptionDetailAsync(long disruptionId, long currentUserId, string currentRole, string? actionToken = null, CancellationToken ct = default);
     Task<ApiResponse<AppointmentDisruptionDto>> GetDisruptionByAppointmentIdAsync(long appointmentId, long currentUserId, string currentRole, CancellationToken ct = default);
     Task<ApiResponse<List<AlternativeDentistDto>>> GetAvailableAlternativeDentistsAsync(long disruptionId, CancellationToken ct = default);
     Task<ApiResponse<AppointmentDisruptionDto>> PatientChooseNewDentistAsync(long disruptionId, long patientUserId, PatientChooseNewDentistRequest request, CancellationToken ct = default);

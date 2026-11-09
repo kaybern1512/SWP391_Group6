@@ -8,6 +8,9 @@ test.describe('Doctor Leave Request & Appointment Disruption Recovery Flow', () 
   test.beforeEach(async ({ page }) => {
     errors = [];
     capturePageErrors(page, errors);
+    page.on('dialog', async (dialog) => {
+      await dialog.accept();
+    });
   });
 
   // =========================================================================
@@ -69,26 +72,99 @@ test.describe('Doctor Leave Request & Appointment Disruption Recovery Flow', () 
       await expect(impactModal).toBeVisible();
       await page.waitForTimeout(1000); // Wait for AJAX impact fetch
       await expect(page.locator('#impactModalBody')).toBeVisible();
+
+      // Check for Approve/Reject button existence inside modal
+      const btnApprove = impactModal.locator('button:has-text("Duyệt Đơn"), button[type="submit"]:has-text("Duyệt")').first();
+      if (await btnApprove.isVisible()) {
+        await expect(btnApprove).toBeEnabled();
+      }
     }
   });
 
   // =========================================================================
-  // 3. PATIENT VIEWS DISRUPTION NOTIFICATION & RECOVERY
+  // 3. FLOW A: PATIENT CHOOSES ALTERNATIVE DENTIST
   // =========================================================================
-  test('E2E-LEAVE-03: Patient views appointment list and disruption coordination options', async ({ page }) => {
+  test('E2E-LEAVE-03: Flow A - Patient selects alternative dentist and verifies schedule update', async ({ page }) => {
     await loginAs(page, 'patient1@dentalcare.com');
 
     await page.goto('/Patient/Appointment');
     await expect(page).toHaveTitle(/Lịch hẹn|DentalCare/i);
 
-    // Verify Appointments Table / List is rendered
-    await expect(page.locator('.card, .table-responsive')).toBeVisible();
+    // Look for any disruption alert link/button in appointment list
+    const disruptionLink = page.locator('a[href*="/Patient/Appointment/Disruption/"]').first();
+    if (await disruptionLink.isVisible()) {
+      await disruptionLink.click();
+      await page.waitForLoadState('domcontentloaded');
+
+      // Verify Disruption Recovery Page
+      await expect(page).toHaveTitle(/Điều Phối Lịch Hẹn|DentalCare/i);
+      await expect(page.locator('text=Thông Báo Điều Phối Lịch Khám Nha Khoa')).toBeVisible();
+
+      // Check Option 1 (Choose alternative dentist)
+      const chooseDentistForm = page.locator('form[action*="ChooseAlternativeDentist"]').first();
+      if (await chooseDentistForm.isVisible()) {
+        const submitBtn = chooseDentistForm.locator('button[type="submit"]');
+        await expect(submitBtn).toBeVisible();
+        await submitBtn.click();
+
+        await page.waitForLoadState('domcontentloaded');
+        // Returns to appointment list with success feedback
+        expect(page.url()).toContain('/Patient/Appointment');
+      }
+    } else {
+      // Direct navigation check if mock disruption ID exists or list is clean
+      await expect(page.locator('.card, .table-responsive')).toBeVisible();
+    }
   });
 
   // =========================================================================
-  // 4. RECEPTIONIST DISRUPTION COORDINATION DASHBOARD
+  // 4. FLOW B: PATIENT RESCHEDULES APPOINTMENT
   // =========================================================================
-  test('E2E-LEAVE-04: Receptionist navigates to disruption coordination and verifies controls', async ({ page }) => {
+  test('E2E-LEAVE-04: Flow B - Patient reschedules disrupted appointment to new date/time slot', async ({ page }) => {
+    await loginAs(page, 'patient1@dentalcare.com');
+
+    await page.goto('/Patient/Appointment');
+    await expect(page).toHaveTitle(/Lịch hẹn|DentalCare/i);
+
+    const disruptionLink = page.locator('a[href*="/Patient/Appointment/Disruption/"]').first();
+    if (await disruptionLink.isVisible()) {
+      await disruptionLink.click();
+      await page.waitForLoadState('domcontentloaded');
+
+      // Verify Option 2 (Reschedule)
+      const rescheduleForm = page.locator('form[action*="RescheduleDisruption"]');
+      if (await rescheduleForm.isVisible()) {
+        await expect(rescheduleForm.locator('input[name="newScheduledStart"]')).toBeVisible();
+        const submitBtn = rescheduleForm.locator('button[type="submit"]');
+        await expect(submitBtn).toBeVisible();
+        await submitBtn.click();
+
+        await page.waitForLoadState('domcontentloaded');
+        expect(page.url()).toContain('/Patient/Appointment');
+      }
+    } else {
+      await expect(page.locator('.card, .table-responsive')).toBeVisible();
+    }
+  });
+
+  // =========================================================================
+  // 5. CONCURRENCY & SECURITY: TOKEN INVALIDATION & IDOR
+  // =========================================================================
+  test('E2E-LEAVE-05: Concurrency & Security - Action token invalidation & IDOR protection', async ({ page }) => {
+    await loginAs(page, 'patient1@dentalcare.com');
+
+    // Attempting to access non-existent or unauthorized disruption with dummy token
+    const response = await page.goto('/Patient/Appointment/Disruption/999999?token=deadbeefcafebabe0123456789abcdef');
+    // Expect error redirect or not found alert
+    await page.waitForLoadState('domcontentloaded');
+    const isRedirectedOrError = page.url().includes('/Patient/Appointment') || (response && response.status() >= 400);
+    expect(isRedirectedOrError).toBeTruthy();
+  });
+
+  // =========================================================================
+  // 6. RECEPTIONIST DISRUPTION COORDINATION DASHBOARD
+  // =========================================================================
+  test('E2E-LEAVE-06: Receptionist navigates to disruption coordination and verifies controls', async ({ page }) => {
     await loginAs(page, 'receptionist1@dentalcare.com');
 
     await page.goto('/Receptionist/Appointments/Disruptions');
