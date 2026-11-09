@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -2037,5 +2037,43 @@ public class AppointmentFlowTests
         // Latest created appointment must be first
         Assert.Equal("APP-NEW-02", result.Data[0].AppointmentCode);
         Assert.Equal("APP-OLD-01", result.Data[1].AppointmentCode);
+    }
+
+    [Fact]
+    public async Task CreatePatientAppointmentAsync_DuplicateBookingSubmission_ReturnsFailureWithFriendlyMessage()
+    {
+        using var db = CreateDbContext(nameof(CreatePatientAppointmentAsync_DuplicateBookingSubmission_ReturnsFailureWithFriendlyMessage));
+        await SeedBasicDataAsync(db);
+
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var targetStart = DateTime.Today.AddDays(2).AddHours(9);
+
+        var request = new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = targetStart,
+            ReasonForVisit = "Khám răng định kỳ lần 1"
+        };
+
+        // First booking attempt succeeds
+        var firstResult = await service.CreatePatientAppointmentAsync(101, request);
+        Assert.True(firstResult.Success);
+        Assert.NotNull(firstResult.Data);
+
+        // Second booking attempt with exact same patient, service and time slot (e.g. double-click)
+        var duplicateRequest = new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = targetStart,
+            ReasonForVisit = "Khám răng định kỳ lần 2 (bấm nhầm gửi lặp)"
+        };
+
+        var secondResult = await service.CreatePatientAppointmentAsync(101, duplicateRequest);
+
+        // Must reject duplicate
+        Assert.False(secondResult.Success);
+        Assert.Contains("khung giờ này rồi", secondResult.Message ?? string.Empty);
     }
 }

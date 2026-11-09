@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -22,6 +22,8 @@ public partial class Appointment
     public long? RoomId { get; set; }
 
     public long? DentalChairId { get; set; }
+
+    public long? TreatmentPlanItemId { get; set; }
 
     public DateTime? ScheduledStart { get; set; }
 
@@ -84,4 +86,6 @@ public partial class Appointment
     public virtual ICollection<AppointmentReminderJob> ReminderJobs { get; set; } = new List<AppointmentReminderJob>();
 
     public virtual VisitFeedback? VisitFeedback { get; set; }
+
+    public virtual TreatmentPlanItem? TreatmentPlanItem { get; set; }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -669,6 +669,7 @@ public class MedicineService : IMedicineService
             var today = DateOnly.FromDateTime(DateTime.Today);
             decimal totalAmount = 0;
             var dispensedItemDtos = new List<MedicineDispensationItemDto>();
+            var currentRequestPrescriptionAllocations = new Dictionary<long, int>();
 
             foreach (var item in request.Items)
             {
@@ -682,8 +683,28 @@ public class MedicineService : IMedicineService
                     {
                         throw new KeyNotFoundException($"Mục thuốc #{item.PrescriptionItemId.Value} không thuộc đơn thuốc #{prescription.PrescriptionId}.");
                     }
-                }
 
+                    // P1 – Kiểm tra hạn mức kê đơn tích lũy: AlreadyDispensed + RequestedQuantity <= PrescribedQuantity
+                    var prescribedQty = prescItem.PrescribedQuantity;
+                    if (prescribedQty > 0)
+                    {
+                        var alreadyDispensed = await _context.MedicineDispensationItems
+                            .Where(mdi => mdi.PrescriptionItemId == item.PrescriptionItemId.Value &&
+                                          (mdi.Dispensation.Status == "Dispensed" || mdi.Dispensation.Status == "PartiallyDispensed"))
+                            .SumAsync(mdi => (int?)mdi.QuantityDispensed, ct) ?? 0;
+
+                        currentRequestPrescriptionAllocations.TryGetValue(item.PrescriptionItemId.Value, out int currentBatchSum);
+
+                        if (alreadyDispensed + currentBatchSum + item.Quantity > prescribedQty)
+                        {
+                            throw new InvalidOperationException(
+                                $"Mục thuốc '{prescItem.MedicationName}' đã được cấp {alreadyDispensed}/{prescribedQty} đơn vị. "
+                                + $"Không thể cấp thêm {item.Quantity} đơn vị (vượt quá số lượng kê đơn {prescribedQty}).");
+                        }
+
+                        currentRequestPrescriptionAllocations[item.PrescriptionItemId.Value] = currentBatchSum + item.Quantity;
+                    }
+                }
                 var batch = await _context.MedicineBatches
                     .Include(b => b.Medicine)
                     .FirstOrDefaultAsync(b => b.MedicineBatchId == item.MedicineBatchId, ct);

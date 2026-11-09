@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -94,8 +94,8 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
                 DepartmentScheduleId = d,
                 DepartmentId = 1,
                 DayOfWeek = d,
-                StartTime = new TimeOnly(8, 0),
-                EndTime = new TimeOnly(17, 0),
+                StartTime = new TimeOnly(6, 0),
+                EndTime = new TimeOnly(23, 0),
                 IsActive = true
             });
         }
@@ -182,8 +182,8 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
                 DentistUserId = 301,
                 DepartmentId = 1,
                 WorkDate = today,
-                StartTime = new TimeOnly(8, 0),
-                EndTime = new TimeOnly(17, 0),
+                StartTime = new TimeOnly(6, 0),
+                EndTime = new TimeOnly(23, 0),
                 Status = "Scheduled"
             },
             new DentistWorkSchedule
@@ -192,8 +192,8 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
                 DentistUserId = 301,
                 DepartmentId = 1,
                 WorkDate = today.AddDays(1),
-                StartTime = new TimeOnly(8, 0),
-                EndTime = new TimeOnly(17, 0),
+                StartTime = new TimeOnly(6, 0),
+                EndTime = new TimeOnly(23, 0),
                 Status = "Scheduled"
             }
         );

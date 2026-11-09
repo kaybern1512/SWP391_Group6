@@ -484,52 +484,303 @@ public class AppointmentService : IAppointmentService
             : 30;
         var scheduledEnd = requestedStart.AddMinutes(duration);
 
-        // Generate Unique AppointmentCode (APP-yyyyMMdd-XXXXXX)
-        var code = await GenerateUniqueAppointmentCodeAsync(ct);
+        // Determine if this request should be auto-confirmed (walk-in intake with resource assignment)
+        bool hasAllResources = request.AssignedDentistUserId.HasValue && request.AssignedDentistUserId.Value > 0 &&
+                               request.RoomId.HasValue && request.RoomId.Value > 0 &&
+                               request.DentalChairId.HasValue && request.DentalChairId.Value > 0;
 
+        bool shouldConfirm = request.AutoConfirm || hasAllResources;
+
+        if (request.AutoConfirm && !hasAllResources)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Vui lòng phân bổ đầy đủ Bác sĩ, Phòng khám và Ghế nha khoa để xác nhận lịch hẹn tại quầy.");
+        }
+
+        long? assignedDentistId = null;
+        long? roomId = null;
+        long? dentalChairId = null;
+        string? queueNumber = null;
         var now = DateTime.UtcNow;
-        var appointment = new Appointment
+
+        IDisposable? lockScope = null;
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? tx = null;
+        bool committed = false;
+
+        try
         {
-            AppointmentCode = code,
-            PatientUserId = request.PatientUserId,
-            DepartmentId = request.DepartmentId,
-            RequestedServiceId = request.RequestedServiceId,
-            RequestedDentistUserId = request.RequestedDentistUserId,
-            AssignedDentistUserId = (request.AssignedDentistUserId.HasValue && request.AssignedDentistUserId.Value > 0) ? request.AssignedDentistUserId.Value : null,
-            RoomId = (request.RoomId.HasValue && request.RoomId.Value > 0) ? request.RoomId.Value : null,
-            DentalChairId = (request.DentalChairId.HasValue && request.DentalChairId.Value > 0) ? request.DentalChairId.Value : null,
-            ScheduledStart = requestedStart,
-            ScheduledEnd = scheduledEnd,
-            ReasonForVisit = string.IsNullOrWhiteSpace(request.ReasonForVisit) ? "Khám bệnh tại quầy" : request.ReasonForVisit.Trim(),
-            BookingSource = BookingSource.Receptionist,
-            QueueNumber = null,
-            Status = (request.AssignedDentistUserId.HasValue && request.RoomId.HasValue && request.DentalChairId.HasValue)
-                ? AppointmentStatus.Confirmed
-                : AppointmentStatus.PendingReceptionReview,
-            ConfirmedAt = (request.AssignedDentistUserId.HasValue && request.RoomId.HasValue && request.DentalChairId.HasValue) ? now : null,
-            CreatedByUserId = receptionistUserId,
-            CreatedAt = now
-        };
+            if (shouldConfirm)
+            {
+                assignedDentistId = request.AssignedDentistUserId!.Value;
+                roomId = request.RoomId!.Value;
+                dentalChairId = request.DentalChairId!.Value;
 
-        _dbContext.Appointments.Add(appointment);
+                // 1. Validate assigned dentist in department
+                var isAssignedInDept = await _dbContext.DentistDepartments
+                    .AsNoTracking()
+                    .AnyAsync(dd => dd.DentistUserId == assignedDentistId.Value &&
+                                    dd.DepartmentId == request.DepartmentId &&
+                                    dd.Status == "Active", ct);
 
-        var history = new AppointmentStatusHistory
+                if (!isAssignedInDept)
+                {
+                    return ApiResponse<AppointmentDto>.Fail("Bác sĩ được chỉ định không thuộc chuyên khoa đã chọn.");
+                }
+
+                // 2. Validate Room
+                var room = await _dbContext.Rooms
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.RoomId == roomId.Value && r.Status == "Active", ct);
+
+                if (room == null)
+                {
+                    return ApiResponse<AppointmentDto>.Fail("Phòng khám không tồn tại hoặc đã ngừng hoạt động.");
+                }
+
+                if (room.DepartmentId.HasValue && room.DepartmentId.Value != request.DepartmentId)
+                {
+                    return ApiResponse<AppointmentDto>.Fail("Phòng khám không thuộc chuyên khoa đã chọn.");
+                }
+
+                // 3. Validate Dental Chair
+                var chair = await _dbContext.DentalChairs
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.DentalChairId == dentalChairId.Value &&
+                                              c.RoomId == roomId.Value &&
+                                              c.Status == "Active", ct);
+
+                if (chair == null)
+                {
+                    return ApiResponse<AppointmentDto>.Fail("Ghế nha khoa không thuộc phòng khám đã chọn hoặc không hoạt động.");
+                }
+
+                // 4. Acquire Concurrency Locks
+                var targetDate = requestedStart.Date;
+                var lockKeys = new List<string>
+                {
+                    SqlAppLockHelper.DentistMasterKey(assignedDentistId.Value),
+                    SqlAppLockHelper.DentistKey(assignedDentistId.Value, targetDate),
+                    SqlAppLockHelper.PatientKey(request.PatientUserId, targetDate),
+                    SqlAppLockHelper.DeptQueueKey(request.DepartmentId, targetDate),
+                    SqlAppLockHelper.ChairKey(dentalChairId.Value, targetDate)
+                };
+
+                if (room.IsExclusive)
+                {
+                    lockKeys.Add(SqlAppLockHelper.RoomKey(roomId.Value, targetDate));
+                }
+
+                if (_dbContext.Database.IsRelational())
+                {
+                    tx = await _dbContext.Database.BeginTransactionAsync(ct);
+                }
+
+                lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
+
+                var occupiedStatuses = new[]
+                {
+                    AppointmentStatus.Confirmed,
+                    AppointmentStatus.CheckedIn,
+                    AppointmentStatus.Waiting,
+                    AppointmentStatus.Called,
+                    AppointmentStatus.InService
+                };
+
+                // 5. Validate Dentist Work Shift Coverage
+                var targetDateOnly = DateOnly.FromDateTime(targetDate);
+                var startTimeOnly = TimeOnly.FromDateTime(requestedStart);
+                var endTimeOnly = TimeOnly.FromDateTime(scheduledEnd);
+
+                var doctorShifts = await _dbContext.DentistWorkSchedules
+                    .AsNoTracking()
+                    .Where(ws => ws.DentistUserId == assignedDentistId.Value &&
+                                 ws.WorkDate == targetDateOnly &&
+                                 ws.DepartmentId == request.DepartmentId)
+                    .ToListAsync(ct);
+
+                if (!doctorShifts.Any())
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<AppointmentDto>.Fail("Bác sĩ không có ca làm việc trong ngày được chọn.");
+                }
+
+                var activeShifts = doctorShifts.Where(ws => ws.Status == "Scheduled").ToList();
+                if (!activeShifts.Any())
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<AppointmentDto>.Fail("Ca làm việc của Bác sĩ đã bị hủy.");
+                }
+
+                var coveringShift = activeShifts.FirstOrDefault(ws => ws.StartTime <= startTimeOnly && ws.EndTime >= endTimeOnly);
+                if (coveringShift == null)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    var shiftTimes = string.Join(", ", activeShifts.Select(s => $"{s.StartTime:hh\\:mm} - {s.EndTime:hh\\:mm}"));
+                    return ApiResponse<AppointmentDto>.Fail($"Giờ khám nằm ngoài khung giờ làm việc của Bác sĩ (ca làm việc: {shiftTimes}).");
+                }
+
+                // 6. Validate Dentist Leave
+                bool dentistLeaveConflict = await _dbContext.DentistAvailabilities
+                    .AsNoTracking()
+                    .AnyAsync(da => da.DentistUserId == assignedDentistId.Value &&
+                                    da.AvailabilityStatus != DentistAvailabilityStatus.Available &&
+                                    da.StartDateTime < scheduledEnd &&
+                                    (da.EndDateTime == null || da.EndDateTime > requestedStart), ct);
+
+                if (dentistLeaveConflict)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<AppointmentDto>.Fail("Bác sĩ đang bận hoặc nghỉ phép trong khoảng thời gian này.");
+                }
+
+                // 7. Validate Overlaps: Dentist, Patient, Chair, Exclusive Room
+                bool dentistConflict = await _dbContext.Appointments
+                    .AnyAsync(a => a.AssignedDentistUserId == assignedDentistId.Value &&
+                                   occupiedStatuses.Contains(a.Status) &&
+                                   a.ScheduledStart < scheduledEnd &&
+                                   a.ScheduledEnd > requestedStart, ct);
+
+                if (dentistConflict)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<AppointmentDto>.Fail("Bác sĩ đã có lịch hẹn khác trong khoảng thời gian này.");
+                }
+
+                bool patientConflict = await _dbContext.Appointments
+                    .AnyAsync(a => a.PatientUserId == request.PatientUserId &&
+                                   occupiedStatuses.Contains(a.Status) &&
+                                   a.ScheduledStart < scheduledEnd &&
+                                   a.ScheduledEnd > requestedStart, ct);
+
+                if (patientConflict)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<AppointmentDto>.Fail("Bệnh nhân đã có lịch hẹn khác trong khoảng thời gian này.");
+                }
+
+                bool chairConflict = await _dbContext.Appointments
+                    .AnyAsync(a => a.DentalChairId == dentalChairId.Value &&
+                                   occupiedStatuses.Contains(a.Status) &&
+                                   a.ScheduledStart < scheduledEnd &&
+                                   a.ScheduledEnd > requestedStart, ct);
+
+                if (chairConflict)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<AppointmentDto>.Fail("Ghế nha khoa đã bị trùng lịch trong khoảng thời gian này.");
+                }
+
+                if (room.IsExclusive)
+                {
+                    bool roomConflict = await _dbContext.Appointments
+                        .AnyAsync(a => a.RoomId == roomId.Value &&
+                                       occupiedStatuses.Contains(a.Status) &&
+                                       a.ScheduledStart < scheduledEnd &&
+                                       a.ScheduledEnd > requestedStart, ct);
+
+                    if (roomConflict)
+                    {
+                        if (tx != null) await tx.RollbackAsync(ct);
+                        return ApiResponse<AppointmentDto>.Fail("Phòng khám này yêu cầu sử dụng độc quyền và hiện đang bận.");
+                    }
+                }
+
+                // 8. Monotonic Queue Number Allocation
+                var existingQueueNumbers = await _dbContext.Appointments
+                    .Where(a => a.DepartmentId == request.DepartmentId &&
+                                a.ScheduledStart != null &&
+                                a.ScheduledStart.Value.Date == targetDate &&
+                                a.QueueNumber != null &&
+                                a.QueueNumber != "")
+                    .Select(a => a.QueueNumber!)
+                    .ToListAsync(ct);
+
+                int maxSeq = 0;
+                foreach (var qn in existingQueueNumbers)
+                {
+                    if (!string.IsNullOrEmpty(qn) && qn.StartsWith("Q") && int.TryParse(qn.Substring(1), out int num))
+                    {
+                        if (num > maxSeq) maxSeq = num;
+                    }
+                }
+
+                queueNumber = $"Q{(maxSeq + 1):D3}";
+            }
+
+            var code = await GenerateUniqueAppointmentCodeAsync(ct);
+
+            var appointment = new Appointment
+            {
+                AppointmentCode = code,
+                PatientUserId = request.PatientUserId,
+                DepartmentId = request.DepartmentId,
+                RequestedServiceId = request.RequestedServiceId,
+                RequestedDentistUserId = request.RequestedDentistUserId,
+                AssignedDentistUserId = shouldConfirm ? assignedDentistId : null,
+                RoomId = shouldConfirm ? roomId : null,
+                DentalChairId = shouldConfirm ? dentalChairId : null,
+                ScheduledStart = requestedStart,
+                ScheduledEnd = scheduledEnd,
+                ReasonForVisit = string.IsNullOrWhiteSpace(request.ReasonForVisit) ? "Khám bệnh tại quầy" : request.ReasonForVisit.Trim(),
+                BookingSource = BookingSource.Receptionist,
+                QueueNumber = shouldConfirm ? queueNumber : null,
+                Status = shouldConfirm ? AppointmentStatus.Confirmed : AppointmentStatus.PendingReceptionReview,
+                ConfirmedAt = shouldConfirm ? now : null,
+                CreatedByUserId = receptionistUserId,
+                CreatedAt = now
+            };
+
+            _dbContext.Appointments.Add(appointment);
+
+            var history = new AppointmentStatusHistory
+            {
+                Appointment = appointment,
+                OldStatus = null,
+                NewStatus = appointment.Status,
+                ChangedByUserId = receptionistUserId,
+                Note = shouldConfirm
+                    ? $"Lễ tân tiếp nhận, phân bổ tài nguyên và xác nhận lịch hẹn tại quầy. Số thứ tự: {queueNumber}."
+                    : "Lễ tân tiếp nhận và tạo yêu cầu đặt lịch hẹn tại quầy.",
+                ChangedAt = now
+            };
+            _dbContext.AppointmentStatusHistories.Add(history);
+
+            // P2: Đồng bộ trạng thái FollowUpSchedule khi Appointment được xác nhận
+            var linkedFollowUp = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
+            if (linkedFollowUp != null && (linkedFollowUp.Status == "Pending" || linkedFollowUp.Status == "Scheduled" || linkedFollowUp.Status == "Proposed"))
+            {
+                linkedFollowUp.Status = "Confirmed";
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
+
+            if (tx != null)
+            {
+                await tx.CommitAsync(ct);
+                committed = true;
+            }
+
+            var dto = await MapToDtoAsync(appointment.AppointmentId, ct);
+            return ApiResponse<AppointmentDto>.Ok(dto!, shouldConfirm
+                ? $"Tiếp nhận, phân bổ tài nguyên và xác nhận lịch hẹn tại quầy thành công (STT: {queueNumber})."
+                : "Tiếp nhận và tạo lịch hẹn tại quầy thành công.");
+        }
+        catch
         {
-            Appointment = appointment,
-            OldStatus = null,
-            NewStatus = appointment.Status,
-            ChangedByUserId = receptionistUserId,
-            Note = appointment.Status == AppointmentStatus.Confirmed
-                ? "Lễ tân tiếp nhận, phân bổ tài nguyên và xác nhận lịch hẹn tại quầy."
-                : "Lễ tân tiếp nhận và tạo yêu cầu đặt lịch hẹn tại quầy.",
-            ChangedAt = now
-        };
-        _dbContext.AppointmentStatusHistories.Add(history);
-
-        await _dbContext.SaveChangesAsync(ct);
-
-        var dto = await MapToDtoAsync(appointment.AppointmentId, ct);
-        return ApiResponse<AppointmentDto>.Ok(dto!, "Tiếp nhận và tạo lịch hẹn tại quầy thành công.");
+            if (tx != null && !committed)
+            {
+                await tx.RollbackAsync(ct);
+            }
+            throw;
+        }
+        finally
+        {
+            lockScope?.Dispose();
+            if (tx != null)
+            {
+                await tx.DisposeAsync();
+            }
+        }
     }
 
     public async Task<ApiResponse<List<AppointmentDto>>> GetPatientAppointmentsAsync(
@@ -847,6 +1098,14 @@ public class AppointmentService : IAppointmentService
                 p.Reason += " [Hủy tự động do cuộc hẹn gốc đã bị hủy]";
             }
 
+            // P2: Đồng bộ trạng thái FollowUpSchedule nếu có liên kết
+            var linkedFollowUp = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
+            if (linkedFollowUp != null && linkedFollowUp.Status != "Completed")
+            {
+                linkedFollowUp.Status = "Cancelled";
+            }
+
             await _dbContext.SaveChangesAsync(ct);
             if (tx != null) await tx.CommitAsync(ct);
 
@@ -1110,6 +1369,15 @@ public class AppointmentService : IAppointmentService
             };
             _dbContext.AppointmentStatusHistories.Add(newHistory);
 
+            // P2: Chuyển liên kết FollowUpSchedule sang Appointment mới và giữ trạng thái phù hợp
+            var linkedFollowUp = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
+            if (linkedFollowUp != null)
+            {
+                linkedFollowUp.Appointment = newAppointment;
+                linkedFollowUp.Status = "Scheduled";
+            }
+
             await _dbContext.SaveChangesAsync(ct);
             if (tx != null)
             {
@@ -1294,6 +1562,14 @@ public class AppointmentService : IAppointmentService
             };
             _dbContext.AppointmentStatusHistories.Add(history);
 
+            // P2: Đồng bộ trạng thái FollowUpSchedule khi Appointment được xác nhận
+            var linkedFollowUp = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
+            if (linkedFollowUp != null && (linkedFollowUp.Status == "Pending" || linkedFollowUp.Status == "Scheduled" || linkedFollowUp.Status == "Proposed"))
+            {
+                linkedFollowUp.Status = "Confirmed";
+            }
+
             await _dbContext.SaveChangesAsync(ct);
 
             await _notificationService.CreateNotificationAsync(
@@ -1325,6 +1601,14 @@ public class AppointmentService : IAppointmentService
                 ChangedAt = now
             };
             _dbContext.AppointmentStatusHistories.Add(history);
+
+            // P2: Đồng bộ trạng thái FollowUpSchedule khi Appointment được xác nhận
+            var linkedFollowUp = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
+            if (linkedFollowUp != null && (linkedFollowUp.Status == "Pending" || linkedFollowUp.Status == "Scheduled" || linkedFollowUp.Status == "Proposed"))
+            {
+                linkedFollowUp.Status = "Confirmed";
+            }
 
             await _dbContext.SaveChangesAsync(ct);
 
@@ -1669,6 +1953,14 @@ public class AppointmentService : IAppointmentService
             };
             _dbContext.AppointmentStatusHistories.Add(history);
 
+            // P2: Đồng bộ trạng thái FollowUpSchedule khi Appointment được xác nhận
+            var linkedFollowUp = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
+            if (linkedFollowUp != null && (linkedFollowUp.Status == "Pending" || linkedFollowUp.Status == "Scheduled" || linkedFollowUp.Status == "Proposed"))
+            {
+                linkedFollowUp.Status = "Confirmed";
+            }
+
             await _dbContext.SaveChangesAsync(ct);
             if (tx != null)
             {
@@ -1845,6 +2137,14 @@ public class AppointmentService : IAppointmentService
                 p.Status = ProposalStatus.Expired;
                 p.RespondedAt = now;
                 p.Reason = (string.IsNullOrWhiteSpace(p.Reason) ? "" : p.Reason + " ") + "[Lễ tân hủy lịch hẹn gốc]";
+            }
+
+            // P2: Đồng bộ trạng thái FollowUpSchedule nếu có liên kết
+            var linkedFollowUp = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
+            if (linkedFollowUp != null && linkedFollowUp.Status != "Completed")
+            {
+                linkedFollowUp.Status = "Cancelled";
             }
 
             await _dbContext.SaveChangesAsync(ct);
@@ -2419,6 +2719,14 @@ public class AppointmentService : IAppointmentService
             };
             _dbContext.AppointmentStatusHistories.Add(history);
 
+            // P2: Đồng bộ trạng thái FollowUpSchedule khi Appointment được xác nhận
+            var linkedFollowUp = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
+            if (linkedFollowUp != null && (linkedFollowUp.Status == "Pending" || linkedFollowUp.Status == "Scheduled" || linkedFollowUp.Status == "Proposed"))
+            {
+                linkedFollowUp.Status = "Confirmed";
+            }
+
             await _dbContext.SaveChangesAsync(ct);
             if (tx != null)
             {
@@ -2737,6 +3045,14 @@ public class AppointmentService : IAppointmentService
             ChangedAt = DateTime.UtcNow
         });
 
+        // P2: Chuyển trạng thái FollowUpSchedule sang Completed khi ca khám hoàn tất
+        var linkedFollowUp = await _dbContext.FollowUpSchedules
+            .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
+        if (linkedFollowUp != null)
+        {
+            linkedFollowUp.Status = "Completed";
+        }
+
         await _dbContext.SaveChangesAsync(ct);
 
         await _notificationService.CreateNotificationAsync(
@@ -2790,6 +3106,14 @@ public class AppointmentService : IAppointmentService
             Note = string.IsNullOrWhiteSpace(notes) ? "Bác sĩ đã hoàn tất ca khám và điều trị." : notes.Trim(),
             ChangedAt = DateTime.UtcNow
         });
+
+        // P2: Chuyển trạng thái FollowUpSchedule sang Completed khi ca khám hoàn tất
+        var linkedFollowUp = await _dbContext.FollowUpSchedules
+            .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
+        if (linkedFollowUp != null)
+        {
+            linkedFollowUp.Status = "Completed";
+        }
 
         await _dbContext.SaveChangesAsync(ct);
 

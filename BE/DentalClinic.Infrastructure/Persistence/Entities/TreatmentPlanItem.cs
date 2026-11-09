@@ -32,4 +32,6 @@ public partial class TreatmentPlanItem
     public virtual TreatmentPlan TreatmentPlan { get; set; } = null!;
 
     public virtual ICollection<TreatmentSession> TreatmentSessions { get; set; } = new List<TreatmentSession>();
+
+    public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
 }

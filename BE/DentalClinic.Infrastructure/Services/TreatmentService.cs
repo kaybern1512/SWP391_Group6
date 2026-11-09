@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -859,6 +859,7 @@ public class TreatmentService : ITreatmentService
                 RequestedServiceId = serviceId,
                 RequestedDentistUserId = targetDentistId,
                 AssignedDentistUserId = targetDentistId,
+                TreatmentPlanItemId = request.PlanItemId,
                 ScheduledStart = request.ScheduledStart,
                 ScheduledEnd = proposedEnd,
                 ReasonForVisit = $"[Tái khám phác đồ #{plan.TreatmentPlanId}] {request.Reason.Trim()}",
@@ -1079,6 +1080,18 @@ public class TreatmentService : ITreatmentService
                 }
 
                 item = planItem;
+            }
+            // 1b. Explicit relational linking from Appointment
+            else if (appointment.TreatmentPlanItemId.HasValue && appointment.TreatmentPlanItemId.Value > 0)
+            {
+                var planItem = await _dbContext.TreatmentPlanItems
+                    .Include(tpi => tpi.TreatmentPlan)
+                    .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanItemId == appointment.TreatmentPlanItemId.Value, ct);
+
+                if (planItem != null && planItem.TreatmentPlan.PatientUserId == appointment.PatientUserId)
+                {
+                    item = planItem;
+                }
             }
             // 2. Explicit linking: TreatmentPlanId provided in request
             else if (request.TreatmentPlanId.HasValue && request.TreatmentPlanId.Value > 0)

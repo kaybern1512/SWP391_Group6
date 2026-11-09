@@ -134,6 +134,8 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasIndex(e => e.AppointmentCode, "UQ__Appointm__F67FE26FBAC67A99").IsUnique();
 
+            entity.HasIndex(e => e.TreatmentPlanItemId, "IX_Appointments_TreatmentPlanItemId").HasFilter("([TreatmentPlanItemId] IS NOT NULL)");
+
             entity.Property(e => e.AppointmentCode)
                 .HasMaxLength(30)
                 .IsUnicode(false);
@@ -183,6 +185,11 @@ public partial class DentalClinicDbContext : DbContext
             entity.HasOne(d => d.Room).WithMany(p => p.Appointments)
                 .HasForeignKey(d => d.RoomId)
                 .HasConstraintName("FK_Appointments_Room");
+
+            entity.HasOne(d => d.TreatmentPlanItem).WithMany(p => p.Appointments)
+                .HasForeignKey(d => d.TreatmentPlanItemId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_Appointments_TreatmentPlanItems_TreatmentPlanItemId");
         });
 
         modelBuilder.Entity<AppointmentChangeProposal>(entity =>
