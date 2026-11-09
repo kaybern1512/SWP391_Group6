@@ -1424,7 +1424,9 @@ public virtual DbSet<StaffAttendanceRecord> StaffAttendanceRecords { get; set; }
                 .WithMany()
                 .HasForeignKey(d => d.ShiftId)
                 .OnDelete(DeleteBehavior.SetNull);
-modelBuilder.Entity<StaffAttendanceRecord>(entity =>
+        });
+
+        modelBuilder.Entity<StaffAttendanceRecord>(entity =>
         {
             entity.HasKey(e => e.AttendanceId);
             entity.ToTable("StaffAttendanceRecords");
