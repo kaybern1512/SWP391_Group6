@@ -131,6 +131,12 @@
                 <i class="bi bi-chat-dots"></i>
                 <span>Tư Vấn Trực Tuyến (Live Chat)</span>
             </a>
+
+            <div class="nav-group-title">Chấm Công & Ca Trực</div>
+            <a class="sidebar-link @(currentCtrl == "AttendanceWeb" ? "active" : "")" asp-controller="AttendanceWeb" asp-action="Index">
+                <i class="bi bi-clock-history"></i>
+                <span>Chấm Công Ca Trực</span>
+            </a>
         }
         else if (role == "Dentist")
         {
@@ -178,6 +184,12 @@
             <a class="sidebar-link @(currentCtrl == "DentistSchedule" && currentAction == "Feedback" ? "active" : "")" asp-controller="DentistSchedule" asp-action="Feedback">
                 <i class="bi bi-star"></i>
                 <span>Đánh Giá Từ Bệnh Nhân</span>
+            </a>
+
+            <div class="nav-group-title">Chấm Công & Ca Trực</div>
+            <a class="sidebar-link @(currentCtrl == "AttendanceWeb" ? "active" : "")" asp-controller="AttendanceWeb" asp-action="Index">
+                <i class="bi bi-clock-history"></i>
+                <span>Chấm Công Ca Trực</span>
             </a>
 
 
@@ -240,6 +252,12 @@
             <a class="sidebar-link @(currentCtrl == "AdminAuditLog" ? "active" : "")" asp-controller="AdminAuditLog" asp-action="Index">
                 <i class="bi bi-shield-check"></i>
                 <span>Nhật ký Kiểm toán (Logs)</span>
+            </a>
+
+            <div class="nav-group-title">Vận Hành & Chấm Công</div>
+            <a class="sidebar-link @(currentCtrl == "AdminWorkforce" ? "active" : "")" asp-controller="AdminWorkforce" asp-action="Report">
+                <i class="bi bi-calendar-check"></i>
+                <span>Đối Soát Chấm Công</span>
             </a>
         }
 

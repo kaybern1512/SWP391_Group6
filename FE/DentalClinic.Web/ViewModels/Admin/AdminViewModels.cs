@@ -11,6 +11,7 @@ public class AdminDashboardPageViewModel
     public string Email { get; set; } = string.Empty;
     public string? Code { get; set; }
     public AdminDashboardStatsDto Stats { get; set; } = new();
+    public ClinicOperationsDashboardDto Operations { get; set; } = new();
 }
 
 public class DepartmentManageViewModel
