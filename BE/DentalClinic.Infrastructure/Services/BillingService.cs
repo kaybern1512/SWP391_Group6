@@ -576,7 +576,7 @@ public class BillingService : IBillingService
                 {
                     PerformedServiceId = null,
                     DepartmentServiceId = null,
-                    Description = $"[Thuá»‘c] {item.Medicine?.MedicineName ?? "Thuá»‘c Ä‘iá»u trá»‹"} (LÃ´ {item.MedicineBatch?.BatchNumber ?? "N/A"})",
+                    Description = $"[Thuốc] {item.Medicine?.MedicineName ?? "Thuốc điều trị"} (Lô {item.MedicineBatch?.BatchNumber ?? "N/A"})",
                     Quantity = item.QuantityDispensed,
                     UnitPrice = item.UnitPriceSnapshot
                 });

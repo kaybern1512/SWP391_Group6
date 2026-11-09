@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data;
 using System.IO;
 using System.Threading.Tasks;
@@ -11,13 +11,17 @@ namespace DentalClinic.Tests.FollowUp;
 
 public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
 {
-    public string ServerName { get; } = ".\\SQL2025_DUC";
+    public string ServerName { get; } = Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS";
     public string RunId { get; } = Guid.NewGuid().ToString("N")[..8];
     public string DatabaseName { get; private set; } = null!;
     public string ConnectionString { get; private set; } = null!;
 
     private const string BackupRelativePath = @"DB\DentalClinicManagementDB.bak";
-    private const string MigrationRelativePath = @"DB\migrations\20261104_Update_FollowUpSchedules_Status_CheckConstraint.sql";
+    private static readonly string[] MigrationRelativePaths = new[]
+    {
+        @"DB\migrations\20261104_Update_FollowUpSchedules_Status_CheckConstraint.sql",
+        @"DB\migrations\20261109_Patch_TestFixture_RedesignColumns.sql"
+    };
 
     public async Task InitializeAsync()
     {
@@ -28,7 +32,7 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
         var currentDir = AppContext.BaseDirectory;
         var repoRoot = FindRepoRoot(currentDir);
         var backupPath = Path.Combine(repoRoot, BackupRelativePath);
-        var migrationPath = Path.Combine(repoRoot, MigrationRelativePath);
+        // Migrations will be resolved via MigrationRelativePaths
 
         if (!File.Exists(backupPath))
         {
@@ -43,8 +47,8 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
         string dataPath;
         await using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT CAST(ISNULL(SERVERPROPERTY('InstanceDefaultDataPath'), 'C:\\Program Files\\Microsoft SQL Server\\MSSQL17.SQL2025_DUC\\MSSQL\\DATA\\') AS VARCHAR(260));";
-            dataPath = (string)(await cmd.ExecuteScalarAsync() ?? @"C:\Program Files\Microsoft SQL Server\MSSQL17.SQL2025_DUC\MSSQL\DATA\");
+            cmd.CommandText = "SELECT CAST(ISNULL(SERVERPROPERTY('InstanceDefaultDataPath'), 'C:\\Program Files\\Microsoft SQL Server\\MSSQL16.SQLEXPRESS\\MSSQL\\DATA\\') AS VARCHAR(260));";
+            dataPath = (string)(await cmd.ExecuteScalarAsync() ?? @"C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\DATA\");
         }
 
         var mdfPath = Path.Combine(dataPath, $"{DatabaseName}.mdf");
@@ -79,34 +83,36 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // 4. Apply FollowUp CHECK constraint migration if exists
-        if (File.Exists(migrationPath))
+        // 4. Apply FollowUp CHECK constraint and Phase 0 Redesign migrations
+        await using (var dbConn = new SqlConnection(ConnectionString))
         {
-            var migrationSql = await File.ReadAllTextAsync(migrationPath);
-            // Remove 'USE DentalClinicManagementDB' if present
-            migrationSql = System.Text.RegularExpressions.Regex.Replace(
-                migrationSql,
-                @"USE\s+\[?DentalClinicManagementDB\]?;?",
-                $"USE [{DatabaseName}];",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-            var batches = System.Text.RegularExpressions.Regex.Split(
-                migrationSql,
-                @"^\s*GO\s*$",
-                System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-            await using var dbConn = new SqlConnection(ConnectionString);
             await dbConn.OpenAsync();
-
-            foreach (var batch in batches)
+            foreach (var relPath in MigrationRelativePaths)
             {
-                var trimmed = batch.Trim();
-                if (string.IsNullOrWhiteSpace(trimmed)) continue;
+                var fullMigPath = Path.Combine(repoRoot, relPath);
+                if (!File.Exists(fullMigPath)) continue;
 
-                await using var batchCmd = dbConn.CreateCommand();
-                batchCmd.CommandText = trimmed;
-                // Any migration failure must fail test setup explicitly
-                await batchCmd.ExecuteNonQueryAsync();
+                var migrationSql = await File.ReadAllTextAsync(fullMigPath);
+                migrationSql = System.Text.RegularExpressions.Regex.Replace(
+                    migrationSql,
+                    @"USE\s+\[?DentalClinicManagementDB\]?;?",
+                    $"USE [{DatabaseName}];",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                var batches = System.Text.RegularExpressions.Regex.Split(
+                    migrationSql,
+                    @"^\s*GO\s*$",
+                    System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                foreach (var batch in batches)
+                {
+                    var trimmed = batch.Trim();
+                    if (string.IsNullOrWhiteSpace(trimmed)) continue;
+
+                    await using var batchCmd = dbConn.CreateCommand();
+                    batchCmd.CommandText = trimmed;
+                    await batchCmd.ExecuteNonQueryAsync();
+                }
             }
         }
     }

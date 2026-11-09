@@ -22,7 +22,7 @@ public class RealDatabaseEndToEndSmokeTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? "Server=DESKTOP-1TUBGEU\\SQLEXPRESS;Database=DentalCare_Receptionist_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? "Server=.\\SQLEXPRESS;Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private static async Task<bool> IsDatabaseAvailableAsync(DentalClinicDbContext db)
     {

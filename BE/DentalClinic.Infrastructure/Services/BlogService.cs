@@ -694,7 +694,6 @@ public class BlogService : IBlogService
                 post.IsFeatured = request.IsFeatured.Value;
             }
 
-            if (!string.IsNullOrWhiteSpace(request.ReviewNotes)) post.RejectionReason = request.ReviewNotes;
             post.UpdatedAt = DateTime.UtcNow;
 
             await _dbContext.SaveChangesAsync(ct);
