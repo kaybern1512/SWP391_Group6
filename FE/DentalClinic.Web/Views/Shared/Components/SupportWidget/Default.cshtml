@@ -1,3 +1,4 @@
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @model DentalClinic.Web.ViewModels.Support.SupportWidgetViewModel
 @{
     var config = Model.Config;
@@ -14,7 +15,7 @@
      data-user-id="@(Model.UserId?.ToString() ?? "")"
      data-user-role="@(Model.UserRole ?? "Guest")"
      data-default-conv="@Model.DefaultConversationId"
-     data-api-base="https://localhost:7350">
+     data-api-base="@(Configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7352")">
 
     <!-- 1. FLOATING ACTION BUTTON (FAB) -->
     <button type="button" 

@@ -353,7 +353,7 @@ public class AppointmentsController : ControllerBase
     // ==========================================
 
     [HttpGet("api/department/appointment-requests")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<List<AppointmentDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDepartmentRequests(CancellationToken ct)
     {
@@ -362,8 +362,9 @@ public class AppointmentsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("api/receptionist/appointments/{id:long}/available-dentists")]
     [HttpGet("api/department/appointments/{id:long}/available-dentists")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<List<DentistOptionDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAvailableDentists(long id, CancellationToken ct)
     {
@@ -372,8 +373,9 @@ public class AppointmentsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("api/receptionist/available-resources")]
     [HttpGet("api/department/available-resources")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<AvailableResourcesDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAvailableResources(
         [FromQuery] long departmentId,
@@ -385,8 +387,9 @@ public class AppointmentsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("api/receptionist/appointments/{id:long}/confirm")]
     [HttpPost("api/department/appointments/{id:long}/confirm")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<AppointmentDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<AppointmentDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ManagerConfirm(long id, [FromBody] ManagerConfirmRequest request, CancellationToken ct)
@@ -400,8 +403,9 @@ public class AppointmentsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("api/receptionist/appointments/{id:long}/propose-change")]
     [HttpPost("api/department/appointments/{id:long}/propose-change")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ManagerProposeChange(long id, [FromBody] ManagerProposeChangeRequest request, CancellationToken ct)

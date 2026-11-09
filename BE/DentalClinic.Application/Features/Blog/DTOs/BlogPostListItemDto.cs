@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace DentalClinic.Application.Features.Blog.DTOs;
 
@@ -23,4 +23,5 @@ public class BlogPostListItemDto
     public DateTime? PublishedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string? RejectionReason { get; set; }
 }

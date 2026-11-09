@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -663,6 +663,7 @@ public class BlogService : IBlogService
                 post.IsFeatured = request.IsFeatured.Value;
             }
 
+            if (!string.IsNullOrWhiteSpace(request.ReviewNotes)) post.RejectionReason = request.ReviewNotes;
             post.UpdatedAt = DateTime.UtcNow;
 
             await _dbContext.SaveChangesAsync(ct);
@@ -1074,7 +1075,8 @@ public class BlogService : IBlogService
             ViewCount = post.ViewCount,
             PublishedAt = post.PublishedAt,
             CreatedAt = post.CreatedAt,
-            UpdatedAt = post.UpdatedAt
+            UpdatedAt = post.UpdatedAt,
+            RejectionReason = post.RejectionReason
         };
     }
 
@@ -1102,6 +1104,7 @@ public class BlogService : IBlogService
             PublishedAt = post.PublishedAt,
             CreatedAt = post.CreatedAt,
             UpdatedAt = post.UpdatedAt,
+            RejectionReason = post.RejectionReason,
             RelatedPosts = new List<BlogPostListItemDto>()
         };
     }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -120,7 +120,7 @@ public class FollowUpAndReminderServiceTests
     // =========================================================================
 
     [Fact]
-    public async Task CreatePlanFollowUpAppointment_ValidRequest_CreatesPendingDepartmentReviewAppointment()
+    public async Task CreatePlanFollowUpAppointment_ValidRequest_CreatesPendingReceptionReviewAppointment()
     {
         var db = CreateInMemoryDbContext("FollowUp_Success_" + Guid.NewGuid());
         await SeedFollowUpFixtureAsync(db);
@@ -141,7 +141,7 @@ public class FollowUpAndReminderServiceTests
 
         var appt = await db.Appointments.FirstOrDefaultAsync(a => a.AppointmentId == result.Data.AppointmentId);
         Assert.NotNull(appt);
-        Assert.Equal(AppointmentStatus.PendingDepartmentReview, appt.Status);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, appt.Status);
         Assert.Equal(BookingSource.Receptionist, appt.BookingSource);
         Assert.Equal(101, appt.PatientUserId);
         Assert.Equal(1, appt.DepartmentId);
@@ -151,7 +151,7 @@ public class FollowUpAndReminderServiceTests
         var history = await db.AppointmentStatusHistories
             .FirstOrDefaultAsync(h => h.AppointmentId == appt.AppointmentId);
         Assert.NotNull(history);
-        Assert.Equal(AppointmentStatus.PendingDepartmentReview, history.NewStatus);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, history.NewStatus);
         Assert.Equal(301, history.ChangedByUserId);
 
         // Verify notification to Department Manager (201)

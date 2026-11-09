@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using DentalClinic.Application.Features.Booking.DTOs;
 
@@ -10,6 +10,10 @@ public class CreateReceptionistAppointmentRequest
     public long DepartmentId { get; set; }
     public long RequestedServiceId { get; set; }
     public long? RequestedDentistUserId { get; set; }
+    public long? AssignedDentistUserId { get; set; }
+    public long? RoomId { get; set; }
+    public long? DentalChairId { get; set; }
+    public bool AutoConfirm { get; set; } = false;
     public DateTime ScheduledStart { get; set; }
     public string ReasonForVisit { get; set; } = string.Empty;
 }
@@ -19,6 +23,10 @@ public class CreateAppointmentRequest
     public long DepartmentId { get; set; }
     public long RequestedServiceId { get; set; }
     public long? RequestedDentistUserId { get; set; }
+    public long? AssignedDentistUserId { get; set; }
+    public long? RoomId { get; set; }
+    public long? DentalChairId { get; set; }
+    public bool AutoConfirm { get; set; } = false;
     public DateTime ScheduledStart { get; set; }
     public string ReasonForVisit { get; set; } = string.Empty;
 }

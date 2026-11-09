@@ -1,3 +1,4 @@
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @{
     ViewData["Title"] = "Tổng Đài Tư Vấn Trực Tuyến (Live Chat)";
 }
@@ -138,7 +139,7 @@
         let currentConversationId = null;
         let conversations = [];
         let hubConnection = null;
-        const apiBaseUrl = 'https://localhost:7350';
+        const apiBaseUrl = '@(Configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7352")';
 
         document.addEventListener('DOMContentLoaded', function () {
             loadConversations();

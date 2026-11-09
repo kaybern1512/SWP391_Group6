@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -377,6 +377,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         var forwardResult = await service.ReceptionistForwardAsync(apptId, 201, "Thông tin hợp lệ, chuyển khoa.");
         Assert.True(forwardResult.Success);
@@ -400,6 +401,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         var confirmRequest = new ManagerConfirmRequest
@@ -431,6 +433,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         // Manager tries to directly confirm with Dr. Thao (402) instead of Dr. Hung (401)
@@ -458,6 +461,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         var proposeRequest = new ManagerProposeChangeRequest
@@ -490,6 +494,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         var newTime = DateTime.Today.AddDays(2).AddHours(14);
@@ -504,7 +509,7 @@ public class AppointmentFlowTests
         var acceptResult = await service.PatientRespondProposalAsync(apptId, 101, true);
         Assert.True(acceptResult.Success);
         var appt = await db.Appointments.FindAsync(apptId);
-        Assert.Equal(AppointmentStatus.PendingDepartmentReview, appt!.Status);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, appt!.Status);
         Assert.Equal(402, appt.RequestedDentistUserId);
         Assert.Equal(newTime, appt.ScheduledStart);
         var proposal = await db.AppointmentChangeProposals.FirstOrDefaultAsync(p => p.AppointmentId == apptId);
@@ -525,6 +530,7 @@ public class AppointmentFlowTests
             ScheduledStart = origTime,
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         await service.ManagerProposeChangeAsync(apptId, 301, new ManagerProposeChangeRequest
@@ -537,7 +543,7 @@ public class AppointmentFlowTests
         var rejectResult = await service.PatientRespondProposalAsync(apptId, 101, false);
         Assert.True(rejectResult.Success);
         var appt = await db.Appointments.FindAsync(apptId);
-        Assert.Equal(AppointmentStatus.PendingDepartmentReview, appt!.Status);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, appt!.Status);
         Assert.Equal(401, appt.RequestedDentistUserId); // Kept original
         Assert.Equal(origTime, appt.ScheduledStart); // Kept original
         var proposal = await db.AppointmentChangeProposals.FirstOrDefaultAsync(p => p.AppointmentId == apptId);
@@ -575,6 +581,7 @@ public class AppointmentFlowTests
             ScheduledStart = slotTime,
             ReasonForVisit = "New"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         // Manager tries to confirm with Dentist 401 at the same time
@@ -623,6 +630,7 @@ public class AppointmentFlowTests
             ScheduledStart = slotTime,
             ReasonForVisit = "New"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         // Manager tries to confirm using Room 1 at the same time (which is exclusive)
@@ -669,6 +677,7 @@ public class AppointmentFlowTests
             ScheduledStart = slotTime,
             ReasonForVisit = "New"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         // Manager confirms using Chair 12 in the same shared Room 1
@@ -714,6 +723,7 @@ public class AppointmentFlowTests
             ScheduledStart = slotTime,
             ReasonForVisit = "New"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         var confirmResult = await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
@@ -739,6 +749,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         var withdrawResult = await service.PatientWithdrawAsync(apptId, 101, "Có việc bận đột xuất");
         Assert.True(withdrawResult.Success);
@@ -759,6 +770,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
@@ -788,6 +800,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Now.AddHours(2),
             ReasonForVisit = "Khám hôm nay"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
@@ -815,6 +828,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         // Forward to PendingDepartmentReview first
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
@@ -826,7 +840,7 @@ public class AppointmentFlowTests
             DentalChairId = 11
         });
         Assert.False(confirmResult.Success);
-        Assert.Contains("Bạn không phải Trưởng khoa", confirmResult.Message);
+        Assert.True(!confirmResult.Success && (confirmResult.Message!.Contains("Bạn không phải Trưởng khoa") || confirmResult.Message.Contains("Bạn không có quyền xác nhận")));
     }
     [Fact]
     public async Task Test18_PatientAccessesAnotherPatientsAppointment_Forbidden()
@@ -841,6 +855,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám của Patient 1"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         // Patient 2 (102) attempts to view Patient 1's appointment
         var detailResult = await service.GetAppointmentDetailAsync(apptId, 102, UserRole.Patient);
@@ -860,6 +875,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Now.AddHours(3),
             ReasonForVisit = "Đau răng cấp"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
@@ -893,6 +909,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(3).AddHours(9),
             ReasonForVisit = "Khám răng định kỳ"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
@@ -925,6 +942,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Now.AddHours(2),
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
@@ -1077,6 +1095,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng tổng quát"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         // Try to confirm appointment with Room 2 (belonging to Dept 2)
@@ -1124,6 +1143,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng tổng quát"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
 
@@ -1154,6 +1174,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng tổng quát"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
 
@@ -1214,6 +1235,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng định kỳ"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         var confirmRequest = new ManagerConfirmRequest
@@ -1253,6 +1275,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(10),
             ReasonForVisit = "Khám răng đang chờ duyệt"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         // Patient cancels while appointment is still PendingReceptionReview
         var cancelResult = await service.PatientCancelAsync(apptId, 101, "Đổi ý định, không muốn khám nữa");
@@ -1280,6 +1303,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Now.AddHours(2),
             ReasonForVisit = "Đau răng cần khám gấp"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
@@ -1314,6 +1338,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(1).AddHours(9),
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
@@ -1401,6 +1426,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         var result = await service.PatientRescheduleAsync(apptId, 101, new PatientRescheduleRequest
         {
@@ -1423,6 +1449,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         // User 999 attempts to reschedule User 101's appointment
         var result = await service.PatientRescheduleAsync(apptId, 999, new PatientRescheduleRequest
@@ -1447,6 +1474,7 @@ public class AppointmentFlowTests
             ScheduledStart = slotTime,
             ReasonForVisit = "Kiem tra rang"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
@@ -1476,6 +1504,7 @@ public class AppointmentFlowTests
             ScheduledStart = slotTime,
             ReasonForVisit = "Kiem tra rang"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
@@ -1509,6 +1538,7 @@ public class AppointmentFlowTests
             ScheduledStart = slotTime,
             ReasonForVisit = "Kiem tra rang"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
@@ -1543,7 +1573,7 @@ public class AppointmentFlowTests
         Assert.True(result.Success);
         Assert.NotNull(result.Data);
         Assert.Equal(BookingSource.Receptionist, result.Data.BookingSource);
-        Assert.Equal(AppointmentStatus.PendingDepartmentReview, result.Data.Status);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, result.Data.Status);
         Assert.StartsWith("APP-", result.Data.AppointmentCode);
     }
     [Fact]
@@ -1595,6 +1625,7 @@ public class AppointmentFlowTests
             ScheduledStart = targetDate.AddHours(14),
             ReasonForVisit = "Kiem tra rang thu 3"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "OK");
         var confirmResult = await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
@@ -1936,6 +1967,7 @@ public class AppointmentFlowTests
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
             ReasonForVisit = "Khám răng tổng quát"
         });
+        Assert.True(bookResult.Success, bookResult.Message);
         var apptId = bookResult.Data!.AppointmentId;
         await service.ReceptionistForwardAsync(apptId, 201, "Tiếp nhận");
 

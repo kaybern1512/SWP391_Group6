@@ -58,12 +58,13 @@ builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options 
 });
 
 // 4. Configure CORS for Frontend MVC (https://localhost:7129)
-var frontendBaseUrl = builder.Configuration["Frontend:BaseUrl"] ?? "https://localhost:7129";
+var frontendBaseUrl = builder.Configuration["Frontend:BaseUrl"] ?? "https://localhost:7122";
+var allowedCorsOrigins = new List<string> { frontendBaseUrl, "https://localhost:7122", "https://localhost:7129" }.Distinct().ToArray();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendCorsPolicy", policy =>
     {
-        policy.WithOrigins(frontendBaseUrl)
+        policy.WithOrigins(allowedCorsOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();

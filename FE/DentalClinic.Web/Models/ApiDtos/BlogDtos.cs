@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Web.Models.ApiDtos;
@@ -45,6 +45,7 @@ public class BlogPostListItemDto
     public DateTime? PublishedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string? RejectionReason { get; set; }
 }
 
 public class BlogPostDto : BlogPostListItemDto

@@ -22,7 +22,7 @@ public class RealDatabaseEndToEndSmokeTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? "Server=DESKTOP-1TUBGEU\\SQLEXPRESS;Database=DentalClinic_Disposable_PreDeployClone;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? "Server=DESKTOP-1TUBGEU\\SQLEXPRESS;Database=DentalCare_Receptionist_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private static async Task<bool> IsDatabaseAvailableAsync(DentalClinicDbContext db)
     {
@@ -34,6 +34,45 @@ public class RealDatabaseEndToEndSmokeTests
         {
             return false;
         }
+    }
+
+    private static async Task<DateTime> GetValidTestWorkDateAsync(DentalClinicDbContext db, long dentistUserId, int offsetDays = 2, int hour = 10)
+    {
+        var minDate = DateOnly.FromDateTime(DateTime.Today).AddDays(offsetDays);
+        var shifts = await db.DentistWorkSchedules
+            .AsNoTracking()
+            .Where(ws => ws.DentistUserId == dentistUserId && ws.WorkDate >= minDate && ws.Status == "Scheduled")
+            .OrderBy(ws => ws.WorkDate)
+            .Take(30)
+            .ToListAsync();
+
+        foreach (var shift in shifts)
+        {
+            for (int h = hour; h <= 15; h++)
+            {
+                for (int m = 0; m < 60; m += 30)
+                {
+                    var start = shift.WorkDate.ToDateTime(new TimeOnly(h, m));
+                    var end = start.AddHours(2);
+
+                    bool busy = await db.Appointments.AsNoTracking().AnyAsync(a =>
+                        a.Status != AppointmentStatus.Cancelled &&
+                        a.Status != AppointmentStatus.Withdrawn &&
+                        a.ScheduledStart.HasValue &&
+                        a.ScheduledStart.Value < end &&
+                        (a.ScheduledEnd ?? a.ScheduledStart.Value.AddMinutes(30)) > start &&
+                        (a.AssignedDentistUserId == dentistUserId || a.PatientUserId == 13 || a.PatientUserId == 14 || a.PatientUserId == 15));
+
+                    if (!busy)
+                    {
+                        return start;
+                    }
+                }
+            }
+        }
+
+        return shifts.FirstOrDefault()?.WorkDate.ToDateTime(new TimeOnly(hour, 0))
+            ?? DateTime.Today.AddDays(offsetDays + 1).AddHours(hour);
     }
 
     private DentalClinicDbContext CreateDbContext()
@@ -66,7 +105,7 @@ public class RealDatabaseEndToEndSmokeTests
         long roomId = 1; // ROOM-101 (Shared)
         long chairId = 1; // First chair in ROOM-101
 
-        var testDate = DateTime.Today.AddDays(300 + Random.Shared.Next(1, 50)).AddHours(9); // Next week 09:00
+        var testDate = (await GetValidTestWorkDateAsync(db, dentistUserId, 7, 9));
 
         // Step 1: Patient creates appointment
         var createReq = new CreateAppointmentRequest
@@ -201,7 +240,7 @@ public class RealDatabaseEndToEndSmokeTests
         long roomId = 4; // ROOM-102 (Shared)
         long chairId = 7; // Chair CHAIR-102-A in ROOM-102
 
-        var slotTime = DateTime.Today.AddDays(400 + Random.Shared.Next(1, 50)).AddHours(14); // Next week afternoon
+        var slotTime = (await GetValidTestWorkDateAsync(db, dentistUserId, 8, 14));
 
         // Step 1: Receptionist creates walk-in appointment
         var walkInReq = new CreateReceptionistAppointmentRequest
@@ -221,7 +260,7 @@ public class RealDatabaseEndToEndSmokeTests
         Assert.NotNull(savedAppt);
         Assert.Equal("Receptionist", savedAppt.BookingSource);
         Assert.Equal(patientUserId, savedAppt.PatientUserId);
-        Assert.Equal(AppointmentStatus.PendingDepartmentReview, savedAppt.Status);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, savedAppt.Status);
 
         // Step 2: DepartmentManager confirms
         var confirmReq = new ManagerConfirmRequest
@@ -264,7 +303,7 @@ public class RealDatabaseEndToEndSmokeTests
         var mockApptLogger = new Mock<ILogger<AppointmentService>>();
         var apptService = new AppointmentService(db, mockNotification.Object, mockApptLogger.Object);
 
-        var slotStart = DateTime.Today.AddDays(500 + Random.Shared.Next(1, 50)).AddHours(10);
+        var slotStart = (await GetValidTestWorkDateAsync(db, 3, 9, 9));
         var slotEnd = slotStart.AddMinutes(45);
 
         // PART 1: Shared Room (ROOM-101, IsExclusive=false in Dept 1)
@@ -407,7 +446,8 @@ public class RealDatabaseEndToEndSmokeTests
     [Fact]
     public async Task ScenarioD_Concurrency_LockProtectionAndUniqueQueueNumbers_Enforced()
     {
-        var slotStart = DateTime.Today.AddDays(Random.Shared.Next(1000, 30000)).AddHours(8);
+        DateTime slotStart;
+        using (var dateDb = CreateDbContext()) { slotStart = (await GetValidTestWorkDateAsync(dateDb, 3, 10, 8)); }
         var slotEnd = slotStart.AddMinutes(30);
 
         // PART 1: Parallel Confirmations for the SAME Dentist
@@ -480,11 +520,12 @@ public class RealDatabaseEndToEndSmokeTests
         }
 
         // PART 2: Concurrent QueueNumber Allocation produces strictly unique queue numbers
-        var testQueueDate = DateTime.Today.AddDays(Random.Shared.Next(30001, 60000)).AddHours(9);
         var qAppts = new List<Appointment>();
+        DateTime testQueueDate;
         using (var setupDb = CreateDbContext())
         {
             if (!await IsDatabaseAvailableAsync(setupDb)) return;
+            testQueueDate = (await GetValidTestWorkDateAsync(setupDb, 3, 11, 9));
             for (int i = 0; i < 4; i++)
             {
                 var q = new Appointment
@@ -592,7 +633,7 @@ public class RealDatabaseEndToEndSmokeTests
         long roomId = 1;         // ROOM-101
         long chairId = 2;        // CHAIR-101-B
 
-        var testDate = DateTime.Today.AddDays(3000 + Random.Shared.Next(1, 50000)).AddHours(Random.Shared.Next(8, 16));
+        var testDate = (await GetValidTestWorkDateAsync(db, dentistUserId, 12, 9));
 
         // Step 1: Patient books root canal service in Department 1
         var createReq = new CreateAppointmentRequest
