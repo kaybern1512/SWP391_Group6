@@ -328,9 +328,15 @@
                             <button type="button" class="btn btn-warning text-dark btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAddAdditionalService">
                                 <i class="bi bi-plus-circle-fill me-1"></i> Thêm Dịch Vụ / Ghế Làm Tiếp
                             </button>
-                            <a asp-controller="DentistPrescription" asp-action="Index" asp-route-search="@record.PatientCode" class="btn btn-outline-success btn-sm bg-white shadow-sm" title="Kê đơn thuốc điện tử">
+                            @if (Model.ActivePrescription != null)
+                            {
+                                <a asp-controller="DentistPrescription" asp-action="Print" asp-route-id="@Model.ActivePrescription.PrescriptionId" target="_blank" class="btn btn-outline-success btn-sm bg-white shadow-sm" title="Xem & In đơn thuốc đã kê">
+                                    <i class="bi bi-printer me-1"></i> In Đơn (#RX-@Model.ActivePrescription.PrescriptionId)
+                                </a>
+                            }
+                            <button type="button" class="btn btn-success btn-sm fw-semibold shadow-sm text-white" data-bs-toggle="modal" data-bs-target="#modalMedicalRecordPrescription" title="Kê đơn thuốc trực tiếp cho ca khám này">
                                 <i class="bi bi-capsule me-1"></i> Kê Đơn Thuốc
-                            </a>
+                            </button>
                             <button type="button" class="btn btn-danger btn-sm fw-bold shadow-sm" onclick="openCompleteExamModal(@activeAppt.AppointmentId, '@(record.PatientName?.Replace("'", "\\'") ?? "")', '@activeAppt.AppointmentCode')">
                                 <i class="bi bi-check-circle-fill me-1"></i> Hoàn Thành Ca Khám
                             </button>
@@ -340,9 +346,24 @@
                             <span class="badge bg-success text-white px-3 py-2 fw-semibold fs-13 shadow-sm d-inline-flex align-items-center">
                                 <i class="bi bi-check-all fs-6 me-1"></i> Ca khám đã hoàn tất
                             </span>
-                            <a asp-controller="DentistPrescription" asp-action="Index" asp-route-search="@record.PatientCode" class="btn btn-outline-success btn-sm bg-white shadow-sm" title="Kê đơn thuốc điện tử">
-                                <i class="bi bi-capsule me-1"></i> Kê Đơn Thuốc
-                            </a>
+                            @if (Model.ActivePrescription != null)
+                            {
+                                <a asp-controller="DentistPrescription" asp-action="Print" asp-route-id="@Model.ActivePrescription.PrescriptionId" target="_blank" class="btn btn-outline-success btn-sm bg-white shadow-sm" title="Xem & In đơn thuốc đã kê">
+                                    <i class="bi bi-printer me-1"></i> In Đơn (#RX-@Model.ActivePrescription.PrescriptionId)
+                                </a>
+                            }
+                            @if (activeAppt != null)
+                            {
+                                <button type="button" class="btn btn-outline-success btn-sm bg-white shadow-sm" data-bs-toggle="modal" data-bs-target="#modalMedicalRecordPrescription" title="Kê đơn thuốc điện tử cho ca này">
+                                    <i class="bi bi-capsule me-1"></i> Kê Đơn Thuốc
+                                </button>
+                            }
+                            else
+                            {
+                                <a asp-controller="DentistPrescription" asp-action="Index" asp-route-search="@record.PatientCode" class="btn btn-outline-success btn-sm bg-white shadow-sm" title="Kê đơn thuốc điện tử">
+                                    <i class="bi bi-capsule me-1"></i> Kê Đơn Thuốc
+                                </a>
+                            }
                         }
                     </div>
                 </div>
@@ -993,8 +1014,8 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow">
                 <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title fw-bold" id="modalAddAdditionalServiceLabel">
-                        <i class="bi bi-plus-circle-fill me-2"></i>Chuyển Tiếp Dịch Vụ / Ghế Làm Tiếp
+                    <h5 class="modal-title fw-bold text-dark" id="modalAddAdditionalServiceLabel">
+                        <i class="bi bi-plus-circle-fill me-2 text-primary"></i>Thêm Dịch Vụ Phát Sinh / Chuyển Tiếp Điều Trị
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -1004,8 +1025,12 @@
                     <input type="hidden" name="PatientUserId" value="@record.PatientUserId" />
 
                     <div class="modal-body p-4">
-                        <div class="alert alert-light border mb-3 small">
-                            Bệnh nhân: <strong>@record.PatientName</strong> &bull; Ca khám hiện tại: <strong>@(activeAppt?.AppointmentCode ?? "--")</strong>
+                        <div class="alert alert-light border mb-2 small d-flex justify-content-between align-items-center">
+                            <div>Bệnh nhân: <strong>@record.PatientName</strong> &bull; Ca: <strong>@(activeAppt?.AppointmentCode ?? "--")</strong></div>
+                            <span class="badge bg-primary">Dịch vụ gốc: @(activeAppt?.ServiceName ?? "Khám")</span>
+                        </div>
+                        <div class="alert alert-info border-info py-2 px-3 small mb-3">
+                            <i class="bi bi-info-circle-fill me-1"></i> Dịch vụ thêm sẽ <strong>tự động đồng bộ vào hồ sơ điều trị</strong> và xuất hiện ngay trên <strong>Hóa đơn gộp của Lễ tân</strong>.
                         </div>
 
                         <div class="mb-3">
@@ -1073,8 +1098,8 @@
                     </div>
                     <div class="modal-footer bg-light">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-                        <button type="submit" class="btn btn-warning fw-semibold px-4">
-                            <i class="bi bi-check2-circle me-1"></i> Xác Nhận Chuyển Tiếp
+                        <button type="submit" class="btn btn-warning fw-bold px-4 text-dark shadow-sm">
+                            <i class="bi bi-check2-circle me-1"></i> Lưu & Đồng Bộ Dịch Vụ
                         </button>
                     </div>
                 </form>
@@ -1403,6 +1428,88 @@
         </div>
     </div>
 </div>
+
+
+<!-- ==================================================== -->
+<!-- MODAL: KÊ ĐƠN THUỐC TRỰC TIẾP CHO CA KHÁM (DIRECT)  -->
+<!-- ==================================================== -->
+@if (activeAppt != null && record != null)
+{
+    var currentExamUrl = Url.Action("Index", "DentistMedicalRecord", new { patientId = record.PatientUserId, appointmentId = activeAppt.AppointmentId, isExamining = isExamining });
+    <div class="modal fade" id="modalMedicalRecordPrescription" tabindex="-1" aria-labelledby="modalMedicalRecordPrescriptionLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold" id="modalMedicalRecordPrescriptionLabel">
+                        <i class="bi bi-capsule me-2"></i>Kê Đơn Thuốc Cho Ca Khám Đang Điều Trị
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form asp-controller="DentistPrescription" asp-action="Create" method="post" onsubmit="return prepareMrPrescriptionJson()">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="AppointmentId" value="@activeAppt.AppointmentId" />
+                    <input type="hidden" name="ReturnUrl" value="@currentExamUrl" />
+                    <input type="hidden" id="mrPrescriptionItemsJsonInput" name="ItemsJson" value="[]" />
+
+                    <div class="modal-body p-4">
+                        <!-- Direct appointment binding banner -->
+                        <div class="alert alert-success border-success bg-success-subtle d-flex align-items-center justify-content-between p-3 mb-3 rounded-3">
+                            <div>
+                                <div class="fw-bold text-success fs-6">
+                                    <i class="bi bi-check-circle-fill me-1"></i> Đang kê đơn gắn thẳng vào ca khám: @activeAppt.AppointmentCode
+                                </div>
+                                <div class="text-dark small mt-1">
+                                    Bệnh nhân: <strong>@record.PatientName</strong> (@record.PatientCode)
+                                    &bull; Dịch vụ: <strong>@activeAppt.ServiceName</strong>
+                                    &bull; Trạng thái: <strong>@activeAppt.Status</strong>
+                                </div>
+                            </div>
+                            <a asp-controller="DentistPrescription" asp-action="Index" asp-route-appointmentId="@activeAppt.AppointmentId" asp-route-search="@record.PatientCode" class="btn btn-sm btn-outline-success bg-white" title="Mở trang đơn thuốc đầy đủ">
+                                <i class="bi bi-box-arrow-up-right me-1"></i>Trang Đơn Thuốc
+                            </a>
+                        </div>
+
+                        <!-- Danh mục thuốc -->
+                        <div class="border rounded-3 p-3 bg-light mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-bold text-slate-800 mb-0">
+                                    <i class="bi bi-prescription2 me-1 text-success"></i> Danh Mục Thuốc Trong Đơn:
+                                </label>
+                                <button type="button" class="btn btn-sm btn-success" onclick="addMrMedicationRow()">
+                                    <i class="bi bi-plus-lg me-1"></i> Thêm Thuốc
+                                </button>
+                            </div>
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <span class="text-muted small align-self-center me-1">Mẫu nhanh:</span>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 small" onclick="addMrSampleMed(0)">+ Amoxicillin 500mg</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 small" onclick="addMrSampleMed(1)">+ Paracetamol 500mg</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 small" onclick="addMrSampleMed(2)">+ Alphachymotrypsin</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 small" onclick="addMrSampleMed(3)">+ Ibuprofen 400mg</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 small" onclick="addMrSampleMed(4)">+ Nước súc miệng</button>
+                            </div>
+                            <div id="mrMedicationRowsContainer" class="d-flex flex-column gap-2">
+                                <!-- Dynamic Rows -->
+                            </div>
+                        </div>
+
+                        <!-- Lời dặn chung -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-slate-700">Lời dặn chung của bác sĩ</label>
+                            <textarea name="GeneralInstructions" class="form-control" rows="2" 
+                                      placeholder="Ví dụ: Uống thuốc sau khi ăn no. Kiêng đồ ăn quá cay nóng, nước ngọt có ga. Tái khám sau 7 ngày hoặc khi có dấu hiệu bất thường."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy Bỏ</button>
+                        <button type="submit" class="btn btn-success px-4 fw-medium">
+                            <i class="bi bi-check-circle me-1"></i> Lưu Đơn Thuốc Vào Ca Khám
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
 
 @section Scripts {
     <script>

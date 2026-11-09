@@ -20,34 +20,48 @@ public class DentistMedicalRecordController : Controller
     private readonly IMedicalRecordApiService _medicalRecordApi;
     private readonly IAppointmentApiService? _appointmentApiService;
     private readonly IPostCareApiService? _postCareApi;
+    private readonly IPrescriptionApiService? _prescriptionApi;
+    private readonly IMedicineApiService? _medicineApi;
 
     [ActivatorUtilitiesConstructor]
     public DentistMedicalRecordController(
         IMedicalRecordApiService medicalRecordApi,
         IAppointmentApiService appointmentApiService,
-        IPostCareApiService postCareApi)
+        IPostCareApiService postCareApi,
+        IPrescriptionApiService prescriptionApi,
+        IMedicineApiService medicineApi)
     {
         _medicalRecordApi = medicalRecordApi;
         _appointmentApiService = appointmentApiService;
         _postCareApi = postCareApi;
+        _prescriptionApi = prescriptionApi;
+        _medicineApi = medicineApi;
+    }
+
+    public DentistMedicalRecordController(
+        IMedicalRecordApiService medicalRecordApi,
+        IAppointmentApiService appointmentApiService,
+        IPostCareApiService postCareApi)
+        : this(medicalRecordApi, appointmentApiService, postCareApi, null!, null!)
+    {
     }
 
     public DentistMedicalRecordController(
         IMedicalRecordApiService medicalRecordApi,
         IPostCareApiService postCareApi)
-        : this(medicalRecordApi, null!, postCareApi)
+        : this(medicalRecordApi, null!, postCareApi, null!, null!)
     {
     }
 
     public DentistMedicalRecordController(
         IMedicalRecordApiService medicalRecordApi,
         IAppointmentApiService appointmentApiService)
-        : this(medicalRecordApi, appointmentApiService, null!)
+        : this(medicalRecordApi, appointmentApiService, null!, null!, null!)
     {
     }
 
     public DentistMedicalRecordController(IMedicalRecordApiService medicalRecordApi)
-        : this(medicalRecordApi, null!, null!)
+        : this(medicalRecordApi, null!, null!, null!, null!)
     {
     }
 
@@ -143,6 +157,26 @@ public class DentistMedicalRecordController : Controller
         var isCompleted = activeAppt != null && (activeAppt.Status == "Completed" || activeAppt.Status == "Cancelled");
         var isCurrentlyExamining = !isCompleted && (isExamining || (activeAppt != null && activeAppt.Status == "InService"));
 
+        var availableMeds = new List<MedicineDto>();
+        if (_medicineApi != null)
+        {
+            var medRes = await _medicineApi.GetAvailableForPrescriptionAsync();
+            if (medRes?.IsSuccess == true && medRes.Data != null)
+            {
+                availableMeds = medRes.Data;
+            }
+        }
+
+        PrescriptionDto? activePrescription = null;
+        if (_prescriptionApi != null && appointmentId.HasValue && appointmentId.Value > 0)
+        {
+            var presList = await _prescriptionApi.GetDentistPrescriptionsAsync();
+            if (presList?.IsSuccess == true && presList.Data != null)
+            {
+                activePrescription = presList.Data.FirstOrDefault(p => p.AppointmentId == appointmentId.Value);
+            }
+        }
+
         var vm = new DentistMedicalRecordIndexViewModel
         {
             SelectedPatientUserId = targetPatientId,
@@ -155,6 +189,8 @@ public class DentistMedicalRecordController : Controller
             DepartmentServices = services,
             DepartmentDentists = dentists,
             AvailableChairs = chairs,
+            AvailableMedicines = availableMeds,
+            ActivePrescription = activePrescription,
             NewEntryForm = new CreateClinicalEntryFormModel
             {
                 PatientUserId = targetPatientId ?? 0,
@@ -329,23 +365,19 @@ public class DentistMedicalRecordController : Controller
             return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
         }
 
-        // If doctor performs self and picked chair
-        if (executionMode != "delegate" && dentalChairId.HasValue && dentalChairId.Value > 0 && _appointmentApiService != null)
+        if (_appointmentApiService != null)
         {
-            var apptDetail = await _appointmentApiService.GetAppointmentDetailAsync(appointmentId);
-            if (apptDetail?.Data != null && apptDetail.Data.Status != "Completed" && apptDetail.Data.Status != "Cancelled")
-            {
-                await _appointmentApiService.DentistAssignChairAsync(appointmentId, dentalChairId.Value);
-            }
-        }
+            var result = await _appointmentApiService.DentistAddAdditionalServiceAsync(
+                appointmentId, serviceId, 1, executionMode, dentalChairId, targetDentistUserId, notes);
 
-        if (executionMode == "delegate" && targetDentistUserId.HasValue && targetDentistUserId.Value > 0)
-        {
-            TempData["SuccessMessage"] = "Đã chuyển tiếp chỉ định dịch vụ cho bác sĩ phụ trách trong chuyên khoa thành công!";
-        }
-        else
-        {
-            TempData["SuccessMessage"] = "Đã tiếp nhận bổ sung dịch vụ điều trị thành công! Bác sĩ có thể tiếp tục thực hiện ngay tại ghế.";
+            if (result.IsSuccess)
+            {
+                TempData["SuccessMessage"] = result.Message ?? "Đã bổ sung dịch vụ vào ca khám và đồng bộ sang Hóa đơn viện phí thành công!";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = result.Message ?? "Không thể bổ sung dịch vụ.";
+            }
         }
 
         return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });

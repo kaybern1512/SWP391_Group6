@@ -501,4 +501,18 @@ public class AppointmentsController : ControllerBase
         }
         return Ok(result);
     }
+    [HttpPost("api/dentist/appointments/{id:long}/add-service")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DentistAddAdditionalService(long id, [FromBody] DentistAddAdditionalServiceRequest request, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _appointmentService.DentistAddAdditionalServiceAsync(id, dentistUserId, request, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
 }

@@ -48,4 +48,5 @@ public interface IAppointmentService
     Task<ApiResponse> DentistCompleteAppointmentAsync(long appointmentId, long dentistUserId, string? notes = null, CancellationToken ct = default);
     Task<ApiResponse<List<ChairOptionDto>>> GetDentistRoomChairsAsync(long appointmentId, long dentistUserId, CancellationToken ct = default);
     Task<ApiResponse> DentistAssignChairAsync(long appointmentId, long dentistUserId, long dentalChairId, CancellationToken ct = default);
+    Task<ApiResponse> DentistAddAdditionalServiceAsync(long appointmentId, long dentistUserId, DentistAddAdditionalServiceRequest request, CancellationToken ct = default);
 }

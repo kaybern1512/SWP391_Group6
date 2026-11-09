@@ -258,6 +258,19 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendPostActionAsync($"/api/dentist/appointments/{appointmentId}/assign-chair", new { dentalChairId = chairId });
     }
 
+    public async Task<ApiResult> DentistAddAdditionalServiceAsync(long appointmentId, long serviceId, int quantity = 1, string? executionMode = null, long? dentalChairId = null, long? targetDentistUserId = null, string? notes = null)
+    {
+        return await SendPostActionAsync($"/api/dentist/appointments/{appointmentId}/add-service", new
+        {
+            serviceId,
+            quantity = quantity > 0 ? quantity : 1,
+            executionMode,
+            dentalChairId,
+            targetDentistUserId,
+            notes
+        });
+    }
+
     // ==========================================
     // GENERIC HTTP HELPERS
     // ==========================================

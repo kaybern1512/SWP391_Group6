@@ -210,6 +210,16 @@ public class AssignChairRequest
     public long DentalChairId { get; set; }
 }
 
+public class DentistAddAdditionalServiceRequest
+{
+    public long ServiceId { get; set; }
+    public int Quantity { get; set; } = 1;
+    public string? ExecutionMode { get; set; }
+    public long? DentalChairId { get; set; }
+    public long? TargetDentistUserId { get; set; }
+    public string? Notes { get; set; }
+}
+
 public class StaffCancelAppointmentRequest
 {
     public string Reason { get; set; } = string.Empty;

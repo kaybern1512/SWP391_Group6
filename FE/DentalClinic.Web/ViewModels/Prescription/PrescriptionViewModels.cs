@@ -12,6 +12,13 @@ public class DentistPrescriptionIndexViewModel
     public CreatePrescriptionFormModel NewPrescriptionForm { get; set; } = new();
     public List<MedicineDto> AvailableMedicines { get; set; } = new();
     public Dictionary<long, PrescriptionDispensationStatusDto> DispensationStatusMap { get; set; } = new();
+
+    // Target appointment pre-selected from active examination
+    public long? TargetAppointmentId { get; set; }
+    public PrescriptionEligibleAppointmentDto? TargetAppointment { get; set; }
+    public bool AutoOpenModal { get; set; }
+    public string? ReturnUrl { get; set; }
+    public PrescriptionDto? ExistingPrescriptionForTarget { get; set; }
 }
 
 public class DispensePrescriptionFormModel
@@ -31,6 +38,8 @@ public class CreatePrescriptionFormModel
     public string? GeneralInstructions { get; set; }
 
     public string? ItemsJson { get; set; }
+
+    public string? ReturnUrl { get; set; }
 }
 
 public class PatientPrescriptionIndexViewModel

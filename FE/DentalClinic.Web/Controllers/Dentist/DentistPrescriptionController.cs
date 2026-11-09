@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using DentalClinic.Web.Models.ApiDtos;
@@ -7,6 +8,7 @@ using DentalClinic.Web.Services;
 using DentalClinic.Web.ViewModels.Prescription;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DentalClinic.Web.Controllers.Dentist;
 
@@ -16,21 +18,35 @@ public class DentistPrescriptionController : Controller
 {
     private readonly IPrescriptionApiService _prescriptionApi;
     private readonly IMedicineApiService _medicineApi;
+    private readonly IAppointmentApiService? _appointmentApi;
 
-    public DentistPrescriptionController(IPrescriptionApiService prescriptionApi, IMedicineApiService medicineApi)
+    [ActivatorUtilitiesConstructor]
+    public DentistPrescriptionController(
+        IPrescriptionApiService prescriptionApi,
+        IMedicineApiService medicineApi,
+        IAppointmentApiService appointmentApi)
     {
         _prescriptionApi = prescriptionApi;
         _medicineApi = medicineApi;
+        _appointmentApi = appointmentApi;
+    }
+
+    public DentistPrescriptionController(
+        IPrescriptionApiService prescriptionApi,
+        IMedicineApiService medicineApi)
+        : this(prescriptionApi, medicineApi, null!)
+    {
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index(string? search = null)
+    public async Task<IActionResult> Index(string? search = null, long? appointmentId = null, bool autoOpen = false, string? returnUrl = null)
     {
         var presResult = await _prescriptionApi.GetDentistPrescriptionsAsync(search);
         var apptResult = await _prescriptionApi.GetEligibleAppointmentsAsync();
         var medResult = await _medicineApi.GetAvailableForPrescriptionAsync();
 
         var prescriptions = presResult.IsSuccess && presResult.Data != null ? presResult.Data : new List<PrescriptionDto>();
+        var eligibleAppts = apptResult?.IsSuccess == true && apptResult.Data != null ? apptResult.Data : new List<PrescriptionEligibleAppointmentDto>();
         var statusMap = new Dictionary<long, PrescriptionDispensationStatusDto>();
 
         foreach (var p in prescriptions)
@@ -42,12 +58,53 @@ public class DentistPrescriptionController : Controller
             }
         }
 
+        PrescriptionEligibleAppointmentDto? targetAppt = null;
+        if (appointmentId.HasValue && appointmentId.Value > 0)
+        {
+            targetAppt = eligibleAppts.FirstOrDefault(a => a.AppointmentId == appointmentId.Value);
+            if (targetAppt == null && _appointmentApi != null)
+            {
+                var apptDetail = await _appointmentApi.GetAppointmentDetailAsync(appointmentId.Value);
+                if (apptDetail?.IsSuccess == true && apptDetail.Data != null)
+                {
+                    targetAppt = new PrescriptionEligibleAppointmentDto
+                    {
+                        AppointmentId = apptDetail.Data.AppointmentId,
+                        AppointmentCode = apptDetail.Data.AppointmentCode,
+                        PatientUserId = apptDetail.Data.PatientUserId,
+                        PatientName = apptDetail.Data.PatientName,
+                        PatientCode = apptDetail.Data.PatientCode,
+                        PatientPhone = apptDetail.Data.PatientPhone,
+                        DepartmentName = apptDetail.Data.DepartmentName,
+                        ServiceName = apptDetail.Data.ServiceName,
+                        ScheduledStart = apptDetail.Data.ScheduledStart,
+                        Status = apptDetail.Data.Status,
+                        HasPrescription = false
+                    };
+                    eligibleAppts.Insert(0, targetAppt);
+                }
+            }
+        }
+
+        var existingPres = targetAppt != null
+            ? prescriptions.FirstOrDefault(p => p.AppointmentId == targetAppt.AppointmentId)
+            : null;
+
         var vm = new DentistPrescriptionIndexViewModel
         {
             Prescriptions = prescriptions,
-            EligibleAppointments = apptResult?.IsSuccess == true && apptResult.Data != null ? apptResult.Data : new List<PrescriptionEligibleAppointmentDto>(),
+            EligibleAppointments = eligibleAppts,
             Search = search,
-            NewPrescriptionForm = new CreatePrescriptionFormModel(),
+            TargetAppointmentId = appointmentId,
+            TargetAppointment = targetAppt,
+            AutoOpenModal = (autoOpen || (targetAppt != null && existingPres == null)),
+            ReturnUrl = returnUrl,
+            ExistingPrescriptionForTarget = existingPres,
+            NewPrescriptionForm = new CreatePrescriptionFormModel
+            {
+                AppointmentId = appointmentId ?? 0,
+                ReturnUrl = returnUrl
+            },
             AvailableMedicines = medResult?.IsSuccess == true && medResult.Data != null ? medResult.Data : new List<MedicineDto>(),
             DispensationStatusMap = statusMap
         };
@@ -62,6 +119,10 @@ public class DentistPrescriptionController : Controller
         if (model.AppointmentId <= 0)
         {
             TempData["ErrorMessage"] = "Vui lòng chọn ca khám để kê đơn thuốc.";
+            if (!string.IsNullOrWhiteSpace(model.ReturnUrl) && Url.IsLocalUrl(model.ReturnUrl))
+            {
+                return Redirect(model.ReturnUrl);
+            }
             return RedirectToAction(nameof(Index));
         }
 
@@ -85,7 +146,11 @@ public class DentistPrescriptionController : Controller
         if (items.Count == 0)
         {
             TempData["ErrorMessage"] = "Đơn thuốc cần có ít nhất 1 loại thuốc.";
-            return RedirectToAction(nameof(Index));
+            if (!string.IsNullOrWhiteSpace(model.ReturnUrl) && Url.IsLocalUrl(model.ReturnUrl))
+            {
+                return Redirect(model.ReturnUrl);
+            }
+            return RedirectToAction(nameof(Index), new { appointmentId = model.AppointmentId, autoOpen = true, returnUrl = model.ReturnUrl });
         }
 
         var req = new CreatePrescriptionRequest
@@ -105,7 +170,12 @@ public class DentistPrescriptionController : Controller
             TempData["ErrorMessage"] = result.Message ?? "Không thể lưu đơn thuốc.";
         }
 
-        return RedirectToAction(nameof(Index));
+        if (!string.IsNullOrWhiteSpace(model.ReturnUrl) && Url.IsLocalUrl(model.ReturnUrl))
+        {
+            return Redirect(model.ReturnUrl);
+        }
+
+        return RedirectToAction(nameof(Index), new { appointmentId = model.AppointmentId });
     }
 
     [HttpGet("{id:long}/Print")]
@@ -179,5 +249,4 @@ public class DentistPrescriptionController : Controller
         var result = await _medicineApi.GetBatchesAsync(id);
         return Json(result);
     }
-
 }

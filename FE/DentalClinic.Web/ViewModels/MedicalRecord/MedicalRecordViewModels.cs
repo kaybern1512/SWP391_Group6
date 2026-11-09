@@ -20,6 +20,10 @@ public class DentistMedicalRecordIndexViewModel
     public List<DepartmentServiceDto> DepartmentServices { get; set; } = new();
     public List<DentistOptionDto> DepartmentDentists { get; set; } = new();
     public List<DentalChairOptionDto> AvailableChairs { get; set; } = new();
+
+    // Clinical Prescription Context
+    public List<MedicineDto> AvailableMedicines { get; set; } = new();
+    public PrescriptionDto? ActivePrescription { get; set; }
 }
 
 public class CreateClinicalEntryFormModel
