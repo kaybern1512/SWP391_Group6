@@ -1,4 +1,4 @@
-﻿using DentalClinic.Web.ViewModels.Services;
+using DentalClinic.Web.ViewModels.Services;
 
 using DentalClinic.Web.Helpers;
 
@@ -246,13 +246,33 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
 
     }
 
-    public static List<BookingComboViewModel> GetAvailableCombos()
+        public async Task<List<BookingComboViewModel>> GetCombosCatalogAsync()
+    {
+        try
+        {
+            var apiResult = await _appointmentApiService.GetAvailableCombosAsync();
+            if (apiResult.IsSuccess && apiResult.Data != null && apiResult.Data.Any())
+            {
+                return apiResult.Data;
+            }
+        }
+        catch
+        {
+            // fallback if API not reachable
+        }
+
+        return GetFallbackCombos();
+    }
+
+    public static List<BookingComboViewModel> GetAvailableCombos() => GetFallbackCombos();
+
+    public static List<BookingComboViewModel> GetFallbackCombos()
     {
         return new List<BookingComboViewModel>
         {
             new()
             {
-                Code = "COMBO_HYGIENE",
+                Code = "COMBO_CARE",
                 Title = "Chăm Sóc & Vệ Sinh Nụ Cười Sáng Khỏe",
                 Tagline = "Làm sạch mảng bám, ngừa sâu răng và viêm nướu định kỳ",
                 Badge = "Bán chạy nhất",
@@ -389,7 +409,7 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
 
         var eligibility = eligibilityResult?.Data ?? new BookingEligibilityDto();
         var (filteredDepts, filteredServices) = await GetAllowedBookingCatalogAsync();
-        var availableCombos = GetAvailableCombos();
+        var availableCombos = await GetCombosCatalogAsync();
 
         var vm = new PatientBookViewModel
         {
@@ -409,11 +429,14 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
         // Categorization & pre-selection based on query parameters or defaults
         if (!string.IsNullOrEmpty(combo))
         {
-            var matchedCombo = availableCombos.FirstOrDefault(c => c.Code.Equals(combo, StringComparison.OrdinalIgnoreCase));
+            var matchedCombo = availableCombos.FirstOrDefault(c =>
+                c.Code.Equals(combo, StringComparison.OrdinalIgnoreCase) ||
+                (combo.Equals("COMBO_HYGIENE", StringComparison.OrdinalIgnoreCase) && c.Code.Equals("COMBO_CARE", StringComparison.OrdinalIgnoreCase)) ||
+                (combo.Equals("COMBO_CARE", StringComparison.OrdinalIgnoreCase) && c.Code.Equals("COMBO_HYGIENE", StringComparison.OrdinalIgnoreCase)));
             if (matchedCombo != null)
             {
                 vm.BookingCategory = "Combo";
-                vm.SelectedComboCode = matchedCombo.Code;
+                vm.SelectedComboCode = combo.Equals("COMBO_HYGIENE", StringComparison.OrdinalIgnoreCase) ? combo : matchedCombo.Code;
                 vm.DepartmentId = matchedCombo.DepartmentId;
                 vm.RequestedServiceId = matchedCombo.ServiceId;
             }
@@ -572,7 +595,7 @@ return Json(slots);
             return View("~/Views/Patient/Appointment/Book.cshtml", model);
         }
 
-        var availableCombos = GetAvailableCombos();
+        var availableCombos = await GetCombosCatalogAsync();
         var reasonToSubmit = model.ReasonForVisit ?? string.Empty;
         if (model.BookingCategory == "Combo" && !string.IsNullOrEmpty(model.SelectedComboCode))
         {

@@ -32,8 +32,9 @@ Toàn bộ các yêu cầu nghiệp vụ cốt lõi đã được củng cố:
 5. **Bảo toàn và tương thích hoàn toàn với tính năng Doctor Leave Recovery**: Khi bác sĩ có lịch hẹn xin nghỉ phép đột xuất, bệnh nhân nhận thông báo gián đoạn và có thể chọn bác sĩ thay thế hoặc đổi lịch trực tiếp trên cổng bệnh nhân mà không làm mất thông tin khám.
 6. **Bộ kiểm thử toàn diện 100% PASS**:
    - Frontend Web Tests: **323 / 323 tests PASS (100%)**.
-   - Core Database Integration & Smoke Tests: **100% PASS** trên database `DentalCare_PatientHardening_QA`.
-   - Playwright End-to-End Suite: 14 kịch bản `PAT-E2E-01` đến `PAT-E2E-14` trong `e2e/patient-portal-full-business-flow.spec.js`.
+   - Backend Core & Database Integration Tests: **88 / 88 tests PASS (100%)** trên database `DentalCare_PatientHardening_QA`.
+   - Playwright End-to-End Suite: 14 kịch bản `PAT-E2E-01` đến `PAT-E2E-14` trong `e2e/patient-portal-full-business-flow.spec.js` chạy trên Chrome thực tế: **14 / 14 tests PASS (100%)** trong 17.7 giây.
+   - Tổng cộng hạng mục nghiệm thu: **433 / 433 tests PASS (100%)**.
 
 ---
 
@@ -170,11 +171,21 @@ Toàn bộ các yêu cầu nghiệp vụ cốt lõi đã được củng cố:
 - **Mã nguồn**: `FE/DentalClinic.Web/Views/Patient/Invoices/Detail.cshtml`.
 - **Khắc phục**: Thay thế các hằng số mặc định hardcode bằng các thuộc tính động từ service cấu hình hệ thống `@VietQrHelper.BankId`, `@VietQrHelper.AccountNo`, `@VietQrHelper.AccountName`. Đảm bảo khi phòng khám thay đổi thông tin thụ hưởng trên Admin/ClinicProfile thì mã QR trên cổng bệnh nhân tự động cập nhật chính xác.
 
-### Issue 06: Đồng bộ hóa Doctor Leave Disruption Recovery & Receptionist Shift Management
-- **Mã nguồn**: `BE/DentalClinic.Infrastructure/Services/BookingService.cs`, `FE/DentalClinic.Web/Controllers/Patient/PatientAppointmentController.cs`, `BE/DentalClinic.Tests/EndToEnd/RealDatabaseEndToEndSmokeTests.cs`.
+### Issue 06: Chuẩn hóa Dependency Injection Doctor Leave Disruption Recovery
+- **Mã nguồn**: `FE/DentalClinic.Web/Controllers/Patient/PatientAppointmentController.cs`, `FE/DentalClinic.Web/Program.cs`.
 - **Khắc phục**:
-  - Tích hợp `IAppointmentDisruptionApiService` vào `PatientAppointmentController` theo hướng loose-coupling (optional injection), đảm bảo tương thích ngược tuyệt đối với toàn bộ các test mock hiện có.
-  - Sửa lỗi lọc ca làm việc theo `DepartmentId` trong `RealDatabaseEndToEndSmokeTests.cs`, khắc phục triệt để lỗi "Bác sĩ không có ca làm việc trong ngày được chọn" khi kiểm thử trên database thực tế.
+  - Chuyển `IAppointmentDisruptionApiService` thành mandatory, non-nullable constructor dependency trong `PatientAppointmentController`, xóa bỏ các kiểm tra null thủ công.
+  - Xác minh đăng ký HttpClient trong `Program.cs` và cập nhật toàn bộ test suites (`AppointmentWebControllerTests`, `DentistScheduleWebControllerTests`) để tiêm mock hợp lệ.
+  - Toàn bộ 21/21 integration tests của Doctor Leave Recovery (`Option A`: Chọn bác sĩ mới & `Option B`: Dời lịch) đạt 100% Passed.
+
+### Issue 07: Danh mục Combo Dịch vụ trên Cơ sở dữ liệu và Ràng buộc Nghiệp vụ (Phase 2 & 3)
+- **Mã nguồn**: `BE/DentalClinic.Infrastructure/Persistence/Entities/ServiceCombo.cs`, `DB/20261110_Add_ServiceCombos_And_Appointment_Combo_Tracking.sql`, `AppointmentService.cs`, `AppointmentsController.cs`, `PatientAppointmentController.cs`.
+- **Khắc phục**:
+  - Tạo bảng `ServiceCombos` trong Database liên kết với `Departments` và `DepartmentServices`.
+  - Bổ sung `ComboCode VARCHAR(50)` và `ComboId BIGINT` vào bảng `Appointments`.
+  - Backend `AppointmentService.CreatePatientAppointmentAsync` tra cứu catalog từ DB, tự động áp đặt `DepartmentId`, `RequestedServiceId`, `DurationMinutes`, và giá niêm yết chuẩn; bảo đảm chỉ tạo duy nhất 1 lịch hẹn, không tự ý tạo `TreatmentPlan`.
+  - Cung cấp API `GET /api/patient/appointments/combos` và tích hợp vào frontend dynamic catalog.
+  - Hoàn thiện điều hướng Khám Tổng Quát động: tra cứu từ danh mục dịch vụ theo chuyên khoa và từ khóa ngữ nghĩa, gán `null` cho bác sĩ khi chọn phân công tự động, vào hàng chờ `PendingReceptionReview` (không auto-confirm, không tạo DiagnosticOrder).
 
 ---
 

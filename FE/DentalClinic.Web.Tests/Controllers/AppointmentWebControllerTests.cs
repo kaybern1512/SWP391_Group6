@@ -1,4 +1,4 @@
-﻿using DentalClinic.Web.ViewModels.Feedback;
+using DentalClinic.Web.ViewModels.Feedback;
 
 using System;
 
@@ -49,6 +49,7 @@ public class AppointmentWebControllerTests
     private readonly Mock<IAppointmentApiService> _apiMock;
 
     private readonly Mock<IFeedbackApiService> _feedbackApiMock;
+    private readonly Mock<IAppointmentDisruptionApiService> _disruptionApiMock;
 
 
 
@@ -59,6 +60,7 @@ public class AppointmentWebControllerTests
         _apiMock = new Mock<IAppointmentApiService>();
 
         _feedbackApiMock = new Mock<IFeedbackApiService>();
+        _disruptionApiMock = new Mock<IAppointmentDisruptionApiService>();
 
     }
 
@@ -110,7 +112,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -154,7 +156,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -212,7 +214,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -276,7 +278,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -337,7 +339,7 @@ public class AppointmentWebControllerTests
                 new() { DepartmentServiceId = 2, DepartmentId = 1, ServiceName = "Lấy cao răng" }
             }));
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(101, "Patient")
         };
@@ -364,7 +366,7 @@ public class AppointmentWebControllerTests
         _apiMock.Setup(x => x.GetServicesAsync(It.IsAny<long>()))
             .ReturnsAsync(ApiResult<List<DepartmentServiceDto>>.Success(new List<DepartmentServiceDto>()));
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(101, "Patient")
         };
@@ -392,7 +394,7 @@ public class AppointmentWebControllerTests
                 new() { DepartmentServiceId = 6, DepartmentId = 2, ServiceName = "Tẩy trắng Laser" }
             }));
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(101, "Patient")
         };
@@ -417,7 +419,7 @@ public class AppointmentWebControllerTests
         _apiMock.Setup(x => x.GetServicesAsync(It.IsAny<long>()))
             .ReturnsAsync(ApiResult<List<DepartmentServiceDto>>.Success(new List<DepartmentServiceDto>()));
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(101, "Patient")
         };
@@ -439,7 +441,7 @@ public class AppointmentWebControllerTests
             .Callback<CreateAppointmentRequest>(r => capturedRequest = r)
             .ReturnsAsync(ApiResult<AppointmentDto>.Success(new AppointmentDto { AppointmentId = 999 }));
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(101, "Patient"),
             TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
@@ -486,7 +488,7 @@ public class AppointmentWebControllerTests
         _apiMock.Setup(x => x.GetDentistsAsync(It.IsAny<long>()))
             .ReturnsAsync(ApiResult<List<DentistOptionDto>>.Success(new List<DentistOptionDto>()));
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(101, "Patient")
         };
@@ -818,7 +820,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -874,7 +876,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -980,7 +982,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1022,7 +1024,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1074,7 +1076,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1106,7 +1108,7 @@ public class AppointmentWebControllerTests
 
         var pastDate = PatientAppointmentController.GetClinicToday().AddDays(-2);
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1166,7 +1168,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1194,7 +1196,7 @@ public class AppointmentWebControllerTests
 
     {
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1236,7 +1238,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1274,7 +1276,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1524,7 +1526,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1588,7 +1590,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1762,7 +1764,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1810,7 +1812,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1848,7 +1850,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1902,7 +1904,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1940,7 +1942,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,6 +21,7 @@ public interface IAppointmentService
     Task<ApiResponse<AppointmentChangeProposalDto>> GetAppointmentProposalAsync(long appointmentId, long patientUserId, CancellationToken ct = default);
     Task<ApiResponse> PatientRespondProposalAsync(long appointmentId, long patientUserId, bool accept, CancellationToken ct = default);
     Task<ApiResponse<BookingEligibilityDto>> GetBookingEligibilityAsync(long patientUserId, CancellationToken ct = default);
+    Task<ApiResponse<List<BookingComboDto>>> GetAvailableCombosAsync(CancellationToken ct = default);
 
 // Receptionist Operations
     Task<ApiResponse<List<AdminUserDto>>> GetPatientsAsync(string? search = null, CancellationToken ct = default);

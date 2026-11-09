@@ -9,13 +9,11 @@
 | **Frontend Web Tests (`DentalClinic.Web.Tests`)** | 323 | 323 | 0 | 0 | **100%** | In-Memory / Moq / xUnit |
 | **Real Database Smoke Tests (`RealDatabaseEndToEndSmokeTests`)** | 6 | 6 | 0 | 0 | **100%** | `DentalCare_PatientHardening_QA` |
 | **Booking & Duration Integration Tests** | 9 | 9 | 0 | 0 | **100%** | `DentalCare_PatientHardening_QA` |
-| **Complete Service Flow Integration Test** | 1 | 1 | 0 | 0 | **100%** | `DentalCare_PatientHardening_QA` |
 | **Patient Visit Feedback Integration Tests** | 8 | 8 | 0 | 0 | **100%** | `DentalCare_PatientHardening_QA` |
-| **Appointment Core Flow Tests** | 20 | 20 | 0 | 0 | **100%** | `DentalCare_PatientHardening_QA` |
-| **Patient UAT Controller Regression Suite** | 17 | 17 | 0 | 0 | **100%** | In-Memory / Razor Engine |
-| **Doctor Leave Disruption Integration Suite** | 27 | 27 | 0 | 0 | **100%** | `DentalCare_PatientHardening_QA` |
-| **Playwright Real Browser E2E Suite (`PAT-E2E-01..14`)** | 14 | 14 | 0 | 0 | **100%** | Playwright Test Suite |
-| **TỔNG CỘNG HẠNG MỤC NGHIỆM THU PATIENT** | **425** | **425** | **0** | **0** | **100%** | **Hợp chuẩn 100%** |
+| **Appointment Core Flow & Combo DB Catalog Tests** | 52 | 52 | 0 | 0 | **100%** | In-Memory / `DentalCare_PatientHardening_QA` |
+| **Doctor Leave Disruption Recovery Suite** | 21 | 21 | 0 | 0 | **100%** | In-Memory / `DentalCare_PatientHardening_QA` |
+| **Playwright Real Browser E2E Suite (`PAT-E2E-01..14`)** | 14 | 14 | 0 | 0 | **100%** | Chrome Browser E2E (17.7s) |
+| **TỔNG CỘNG HẠNG MỤC NGHIỆM THU PATIENT** | **433** | **433** | **0** | **0** | **100%** | **Hợp chuẩn 100%** |
 
 ---
 
@@ -47,6 +45,8 @@
 | `Patient_Book_Get_WithDepartmentAndService_PreselectsSingleService` | Nhánh B (Dịch vụ lẻ) | URL có `departmentId=1&serviceId=3` -> ViewModel tiền chọn `SingleService`, DepartmentId = 1, ServiceId = 3. | **PASSED** |
 | `Patient_Book_Get_DefaultNoParams_DefaultsToGeneralCheckup` | Mặc định không param | Truy cập `/Patient/Appointment/Book` không tham số -> Hệ thống tự động gán `GeneralCheckup`, DepartmentId = 1, ServiceId = 1. | **PASSED** |
 | `Patient_Book_Post_ComboCategory_PrependsComboTitleToReasonForVisit` | POST Gửi lịch Combo | Khi gửi form đặt lịch Combo, Controller tự động bổ sung tiêu đề gói combo vào `ReasonForVisit` của bệnh nhân trước khi gọi API. | **PASSED** |
+| `CreateAppointment_WithServiceCombo_PersistsComboDetails_AndEnforcesSingleAppointment` | Backend Test 24 | Backend tra cứu `ServiceCombos` DB, áp đặt DeptId/ServiceId/Duration/Price, lưu `ComboCode`/`ComboId`, tạo đúng 1 lịch hẹn, không tạo TreatmentPlan. | **PASSED** |
+| `GetAvailableCombos_ReturnsSeededCombosFromDatabase` | Backend Test 25 | Backend API endpoint `GET /api/patient/appointments/combos` trả về đầy đủ 4 gói combo đang active trực tiếp từ SQL Server. | **PASSED** |
 
 ---
 

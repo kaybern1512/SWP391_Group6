@@ -142,6 +142,35 @@ public class AppointmentService : IAppointmentService
 
         }
 
+                // 1b. Validate & Map Service Combo if specified
+        ServiceCombo? selectedCombo = null;
+        if (request.ComboId.HasValue && request.ComboId.Value > 0)
+        {
+            selectedCombo = await _dbContext.ServiceCombos
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.ComboId == request.ComboId.Value && c.Status == "Active", ct);
+            if (selectedCombo == null)
+            {
+                return ApiResponse<AppointmentDto>.Fail("GÃ³i Combo dá»‹ch vá»¥ khÃ´ng tá»“n táº¡i hoáº·c Ä‘Ã£ ngá»«ng Ã¡p dá»¥ng.");
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(request.ComboCode))
+        {
+            selectedCombo = await _dbContext.ServiceCombos
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.ComboCode == request.ComboCode && c.Status == "Active", ct);
+            if (selectedCombo == null)
+            {
+                return ApiResponse<AppointmentDto>.Fail("GÃ³i Combo dá»‹ch vá»¥ khÃ´ng tá»“n táº¡i hoáº·c Ä‘Ã£ ngá»«ng Ã¡p dá»¥ng.");
+            }
+        }
+
+        if (selectedCombo != null)
+        {
+            request.DepartmentId = selectedCombo.DepartmentId;
+            request.RequestedServiceId = selectedCombo.PrimaryServiceId;
+        }
+
         // 2. Validate Department
 
         var department = await _dbContext.Departments
@@ -353,6 +382,8 @@ public class AppointmentService : IAppointmentService
             ScheduledStart = requestedStart,
 
             ScheduledEnd = scheduledEnd,
+            ComboCode = selectedCombo != null ? selectedCombo.ComboCode : request.ComboCode,
+            ComboId = selectedCombo != null ? selectedCombo.ComboId : request.ComboId,
 
             ReasonForVisit = string.IsNullOrWhiteSpace(request.ReasonForVisit) ? "Khám bệnh" : request.ReasonForVisit.Trim(),
 
@@ -776,6 +807,35 @@ public class AppointmentService : IAppointmentService
 
             return ApiResponse<AppointmentDto>.Fail("Hồ sơ bệnh nhân không hợp lệ hoặc đã bị khóa.");
 
+        }
+
+                // 1b. Validate & Map Service Combo if specified
+        ServiceCombo? selectedCombo = null;
+        if (request.ComboId.HasValue && request.ComboId.Value > 0)
+        {
+            selectedCombo = await _dbContext.ServiceCombos
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.ComboId == request.ComboId.Value && c.Status == "Active", ct);
+            if (selectedCombo == null)
+            {
+                return ApiResponse<AppointmentDto>.Fail("GÃ³i Combo dá»‹ch vá»¥ khÃ´ng tá»“n táº¡i hoáº·c Ä‘Ã£ ngá»«ng Ã¡p dá»¥ng.");
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(request.ComboCode))
+        {
+            selectedCombo = await _dbContext.ServiceCombos
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.ComboCode == request.ComboCode && c.Status == "Active", ct);
+            if (selectedCombo == null)
+            {
+                return ApiResponse<AppointmentDto>.Fail("GÃ³i Combo dá»‹ch vá»¥ khÃ´ng tá»“n táº¡i hoáº·c Ä‘Ã£ ngá»«ng Ã¡p dá»¥ng.");
+            }
+        }
+
+        if (selectedCombo != null)
+        {
+            request.DepartmentId = selectedCombo.DepartmentId;
+            request.RequestedServiceId = selectedCombo.PrimaryServiceId;
         }
 
         // 2. Validate Department
@@ -5565,6 +5625,7 @@ public class AppointmentService : IAppointmentService
             .Include(a => a.Room)
 
             .Include(a => a.DentalChair)
+            .Include(a => a.Combo)
 
             .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
 
@@ -5716,6 +5777,9 @@ public class AppointmentService : IAppointmentService
 
             ScheduledEnd = a.ScheduledEnd,
 
+            ComboCode = a.ComboCode,
+            ComboId = a.ComboId,
+            ComboTitle = a.Combo?.Title,
             ReasonForVisit = a.ReasonForVisit,
 
             BookingSource = a.BookingSource,
@@ -6482,4 +6546,41 @@ public class AppointmentService : IAppointmentService
 
     }
 
+    public async Task<ApiResponse<List<BookingComboDto>>> GetAvailableCombosAsync(CancellationToken ct = default)
+    {
+        var combos = await _dbContext.ServiceCombos
+            .AsNoTracking()
+            .Include(c => c.Department)
+            .Include(c => c.PrimaryService)
+            .Where(c => c.Status == "Active")
+            .OrderBy(c => c.ComboId)
+            .ToListAsync(ct);
+
+        var result = combos.Select(c => new BookingComboDto
+        {
+            ComboId = c.ComboId,
+            ComboCode = c.ComboCode,
+            Title = c.Title,
+            Tagline = c.Tagline,
+            Badge = c.Badge,
+            IconClass = c.IconClass,
+            Description = c.Description,
+            DepartmentId = c.DepartmentId,
+            DepartmentName = c.Department != null ? c.Department.Name : string.Empty,
+            PrimaryServiceId = c.PrimaryServiceId,
+            PrimaryServiceName = c.PrimaryService != null ? c.PrimaryService.ServiceName : string.Empty,
+            OriginalPrice = c.OriginalPrice,
+            ComboPrice = c.ComboPrice,
+            DurationMinutes = c.DurationMinutes,
+            IncludedServices = !string.IsNullOrWhiteSpace(c.IncludedServices)
+                ? System.Text.Json.JsonSerializer.Deserialize<List<string>>(c.IncludedServices, (System.Text.Json.JsonSerializerOptions)null) ?? new List<string>()
+                : new List<string>(),
+            Benefits = !string.IsNullOrWhiteSpace(c.Benefits)
+                ? System.Text.Json.JsonSerializer.Deserialize<List<string>>(c.Benefits, (System.Text.Json.JsonSerializerOptions)null) ?? new List<string>()
+                : new List<string>(),
+            Status = c.Status
+        }).ToList();
+
+        return ApiResponse<List<BookingComboDto>>.Ok(result);
+    }
 }

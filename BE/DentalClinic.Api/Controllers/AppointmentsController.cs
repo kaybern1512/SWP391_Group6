@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading;
@@ -40,6 +40,16 @@ public class AppointmentsController : ControllerBase
     // ==========================================
     // PATIENT ENDPOINTS
     // ==========================================
+
+    [HttpGet("api/patient/appointments/combos")]
+    [HttpGet("api/appointments/combos")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<List<BookingComboDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetCombos(CancellationToken ct)
+    {
+        var result = await _appointmentService.GetAvailableCombosAsync(ct);
+        return Ok(result);
+    }
 
     [HttpPost("api/patient/appointments")]
     [Authorize(Roles = UserRole.Patient)]

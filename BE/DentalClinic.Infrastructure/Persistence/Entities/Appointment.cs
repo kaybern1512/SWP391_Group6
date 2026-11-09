@@ -25,6 +25,10 @@ public partial class Appointment
 
     public long? TreatmentPlanItemId { get; set; }
 
+    public string? ComboCode { get; set; }
+
+    public long? ComboId { get; set; }
+
     public DateTime? ScheduledStart { get; set; }
 
     public DateTime? ScheduledEnd { get; set; }
@@ -92,4 +96,6 @@ public partial class Appointment
     public virtual VisitFeedback? VisitFeedback { get; set; }
 
     public virtual TreatmentPlanItem? TreatmentPlanItem { get; set; }
+
+    public virtual ServiceCombo? Combo { get; set; }
 }

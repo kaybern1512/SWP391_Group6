@@ -52,6 +52,7 @@ public partial class DentalClinicDbContext : DbContext
     public virtual DbSet<DepartmentReferral> DepartmentReferrals { get; set; }
 
     public virtual DbSet<DepartmentService> DepartmentServices { get; set; }
+    public virtual DbSet<ServiceCombo> ServiceCombos { get; set; }
 
     public virtual DbSet<DepartmentWorkSchedule> DepartmentWorkSchedules { get; set; }
 
@@ -159,6 +160,8 @@ public partial class DentalClinicDbContext : DbContext
                 .HasMaxLength(30)
                 .IsUnicode(false);
             entity.Property(e => e.ReasonForVisit).HasMaxLength(1000);
+            entity.Property(e => e.ComboCode).HasMaxLength(50).IsUnicode(false);
+            entity.HasOne(d => d.Combo).WithMany().HasForeignKey(d => d.ComboId).HasConstraintName("FK_Appointments_ServiceCombos");
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .IsUnicode(false)
@@ -1416,6 +1419,29 @@ public partial class DentalClinicDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(d => d.ShiftId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+                modelBuilder.Entity<ServiceCombo>(entity =>
+        {
+            entity.HasKey(e => e.ComboId);
+            entity.HasIndex(e => e.ComboCode).IsUnique();
+            entity.Property(e => e.ComboCode).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.Tagline).HasMaxLength(300);
+            entity.Property(e => e.Badge).HasMaxLength(50);
+            entity.Property(e => e.IconClass).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.OriginalPrice).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.ComboPrice).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Active");
+
+            entity.HasOne(d => d.Department).WithMany()
+                .HasForeignKey(d => d.DepartmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.PrimaryService).WithMany()
+                .HasForeignKey(d => d.PrimaryServiceId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
         });
 
         OnModelCreatingPartial(modelBuilder);

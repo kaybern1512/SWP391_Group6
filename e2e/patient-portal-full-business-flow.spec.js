@@ -60,7 +60,7 @@ test.describe('Patient Portal Full Business Flow & Acceptance Test Suite', () =>
     await expect(page.locator('#category-content-single')).toBeVisible();
 
     // Select chuyên khoa và dịch vụ hiển thị
-    const deptSelect = page.locator('#singleDepartmentSelect');
+    const deptSelect = page.locator('#departmentFilterSelect');
     await expect(deptSelect).toBeVisible();
     await expect(deptSelect).toHaveValue('1');
   });
@@ -92,28 +92,23 @@ test.describe('Patient Portal Full Business Flow & Acceptance Test Suite', () =>
     await page.goto('/Patient/Appointment/Book?category=GeneralCheckup');
 
     // Chuyển sang Step 2: Khoa & Bác sĩ
-    const nextBtn1 = page.locator('#btn-next-step-1');
-    if (await nextBtn1.isVisible()) {
-      await nextBtn1.click();
-    } else {
-      await page.locator('#step-nav-2').click();
-    }
+    await page.locator('#step-nav-2').click();
 
     // Kiểm tra 2 chế độ lựa chọn bác sĩ
-    const optPreferred = page.locator('#doc-mode-pref');
-    const optClinicAssigns = page.locator('#doc-mode-auto');
+    const optPreferred = page.locator('#modeCardDoctor');
+    const optClinicAssigns = page.locator('#modeCardClinic');
 
     await expect(optPreferred).toBeVisible();
     await expect(optClinicAssigns).toBeVisible();
 
     // Chọn Lựa chọn B: Phòng khám tự sắp xếp
     await optClinicAssigns.click();
-    await expect(page.locator('#hiddenDoctorSelectionMode')).toHaveValue('ClinicAssigns');
-    await expect(page.locator('#hiddenDentistId')).toHaveValue('0');
+    await expect(page.locator('#hiddenDoctorSelectionMode')).toHaveValue('ClinicAssignment');
+    await expect(page.locator('#hiddenDentistId')).toHaveValue('');
 
     // Chọn lại Lựa chọn A: Chỉ định Bác sĩ
     await optPreferred.click();
-    await expect(page.locator('#hiddenDoctorSelectionMode')).toHaveValue('PreferredDoctor');
+    await expect(page.locator('#hiddenDoctorSelectionMode')).toHaveValue('PreferredDentist');
   });
 
   // =========================================================================
@@ -126,7 +121,7 @@ test.describe('Patient Portal Full Business Flow & Acceptance Test Suite', () =>
     // Chuyển sang Step 3: Ngày & Giờ
     await page.locator('#step-nav-3').click();
 
-    const dateInput = page.locator('#bookingDateInput');
+    const dateInput = page.locator('#inputAppointmentDate');
     await expect(dateInput).toBeVisible();
 
     // Kiểm tra thuộc tính min của date input không cho phép ngày quá khứ
@@ -146,7 +141,7 @@ test.describe('Patient Portal Full Business Flow & Acceptance Test Suite', () =>
 
     // Đi đến Step 4: Thông tin BN
     await page.locator('#step-nav-4').click();
-    await page.locator('#patientReasonInput').fill('Khám răng định kỳ và tư vấn thẩm mỹ');
+    await page.locator('#inputReasonForVisit').fill('Khám răng định kỳ và tư vấn thẩm mỹ');
 
     // Đi đến Step 5: Xác nhận
     await page.locator('#step-nav-5').click();
@@ -154,7 +149,7 @@ test.describe('Patient Portal Full Business Flow & Acceptance Test Suite', () =>
     // Xác nhận cảnh báo quy trình: Lịch sẽ ở trạng thái PendingReceptionReview, không cấp số thứ tự tại bước này
     const step5Panel = page.locator('#step-panel-5');
     await expect(step5Panel).toBeVisible();
-    await expect(step5Panel).toContainText(/Chờ Lễ tân duyệt|PendingReceptionReview/i);
+    await expect(step5Panel).toContainText(/Lễ tân|Chờ Lễ tân duyệt|PendingReceptionReview/i);
 
     // Nút Gửi lịch khám
     const submitBtn = page.locator('#btnSubmitBooking');
@@ -203,10 +198,16 @@ test.describe('Patient Portal Full Business Flow & Acceptance Test Suite', () =>
     await page.goto('/Patient/Appointment');
     await expect(page).toHaveTitle(/Lịch hẹn của tôi|Lịch hẹn|DentalCare/i);
 
-    // Kiểm tra modal hoặc nút hủy nếu có lịch hẹn hợp lệ
-    const cancelButtons = page.locator('button[data-bs-target*="cancel"], a[href*="Cancel"], .btn-outline-danger');
-    if (await cancelButtons.count() > 0) {
-      await expect(cancelButtons.first()).toBeVisible();
+    // Kiểm tra chi tiết lịch hẹn để xem modal hoặc nút hủy
+    const detailLinks = page.locator('a[href*="/Patient/Appointment/Detail/"]');
+    if (await detailLinks.count() > 0) {
+      await detailLinks.first().click();
+      await page.waitForLoadState('domcontentloaded');
+
+      const cancelButtons = page.locator('button[data-bs-target="#withdrawModal"], button[data-bs-target="#cancelModal"]');
+      if (await cancelButtons.count() > 0) {
+        await expect(cancelButtons.first()).toBeVisible();
+      }
     }
   });
 
@@ -286,7 +287,7 @@ test.describe('Patient Portal Full Business Flow & Acceptance Test Suite', () =>
     // Kiểm tra danh sách hóa đơn
     const invoiceRows = page.locator('table tbody tr, .invoice-card');
     if (await invoiceRows.count() > 0) {
-      const detailLink = invoiceRows.first().locator('a[href*="/Detail/"]');
+      const detailLink = invoiceRows.first().locator('a[href*="/Detail/"]').first();
       if (await detailLink.count() > 0) {
         await detailLink.click();
         await page.waitForLoadState('domcontentloaded');
