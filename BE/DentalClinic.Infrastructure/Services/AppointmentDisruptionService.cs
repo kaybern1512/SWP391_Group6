@@ -50,7 +50,7 @@ public class AppointmentDisruptionService : IAppointmentDisruptionService
             .Include(d => d.Appointment).ThenInclude(a => a.Department)
             .Include(d => d.Appointment).ThenInclude(a => a.PatientUser).ThenInclude(p => p.User)
             .Include(d => d.OriginalDentistUser).ThenInclude(dp => dp.User)
-            .Include(d => d.NewDentistUser).ThenInclude(dp => dp.User)
+            .Include(d => d.NewDentistUser).ThenInclude(dp => dp!.User)
             .Where(d => d.Appointment.PatientUserId == patientUserId &&
                         d.Status == AppointmentDisruptionStatus.PendingPatientChoice)
             .OrderBy(d => d.OriginalScheduledStart)
@@ -73,7 +73,7 @@ public class AppointmentDisruptionService : IAppointmentDisruptionService
             .Include(d => d.Appointment).ThenInclude(a => a.Department)
             .Include(d => d.Appointment).ThenInclude(a => a.PatientUser).ThenInclude(p => p.User)
             .Include(d => d.OriginalDentistUser).ThenInclude(dp => dp.User)
-            .Include(d => d.NewDentistUser).ThenInclude(dp => dp.User)
+            .Include(d => d.NewDentistUser).ThenInclude(dp => dp!.User)
             .FirstOrDefaultAsync(d => d.DisruptionId == disruptionId, ct);
 
         if (disruption == null)
@@ -112,7 +112,7 @@ public class AppointmentDisruptionService : IAppointmentDisruptionService
             .Include(d => d.Appointment).ThenInclude(a => a.Department)
             .Include(d => d.Appointment).ThenInclude(a => a.PatientUser).ThenInclude(p => p.User)
             .Include(d => d.OriginalDentistUser).ThenInclude(dp => dp.User)
-            .Include(d => d.NewDentistUser).ThenInclude(dp => dp.User)
+            .Include(d => d.NewDentistUser).ThenInclude(dp => dp!.User)
             .Where(d => d.AppointmentId == appointmentId)
             .OrderByDescending(d => d.CreatedAt)
             .FirstOrDefaultAsync(ct);
@@ -874,7 +874,7 @@ public class AppointmentDisruptionService : IAppointmentDisruptionService
             .Include(d => d.Appointment).ThenInclude(a => a.Department)
             .Include(d => d.Appointment).ThenInclude(a => a.PatientUser).ThenInclude(p => p.User)
             .Include(d => d.OriginalDentistUser).ThenInclude(dp => dp.User)
-            .Include(d => d.NewDentistUser).ThenInclude(dp => dp.User)
+            .Include(d => d.NewDentistUser).ThenInclude(dp => dp!.User)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(statusFilter))

@@ -22,14 +22,14 @@ public class ReceptionistAppointmentController : Controller
     private readonly ILogger<ReceptionistAppointmentController>? _logger;
 
     public ReceptionistAppointmentController(IAppointmentApiService appointmentApiService)
-        : this(appointmentApiService, null, null, null)
+        : this(appointmentApiService, (IAppointmentDisruptionApiService)null!, null, null)
     {
     }
 
     public ReceptionistAppointmentController(
         IAppointmentApiService appointmentApiService,
         IAppointmentDisruptionApiService? disruptionApi)
-        : this(appointmentApiService, disruptionApi, null, null)
+        : this(appointmentApiService, disruptionApi!, null, null)
     {
     }
 
@@ -407,7 +407,7 @@ public class ReceptionistAppointmentController : Controller
     [HttpGet("Disruptions")]
     public async Task<IActionResult> Disruptions([FromQuery] string? status = null, [FromQuery] bool? urgentOnly = null)
     {
-        var result = await _disruptionApi.GetReceptionistDisruptionsAsync(status, urgentOnly);
+        var result = await _disruptionApi!.GetReceptionistDisruptionsAsync(status, urgentOnly);
         var disruptions = result.IsSuccess && result.Data != null ? result.Data : new List<AppointmentDisruptionDto>();
         ViewBag.CurrentStatus = status;
         ViewBag.UrgentOnly = urgentOnly;
@@ -417,11 +417,11 @@ public class ReceptionistAppointmentController : Controller
     [HttpGet("DisruptionDetailJson/{id:long}")]
     public async Task<IActionResult> DisruptionDetailJson(long id)
     {
-        var detailResult = await _disruptionApi.GetDisruptionDetailAsync(id);
+        var detailResult = await _disruptionApi!.GetDisruptionDetailAsync(id);
         if (!detailResult.IsSuccess || detailResult.Data == null)
             return Json(new { success = false, message = detailResult.Message ?? "KhÃ´ng tÃ¬m tháº¥y dá»¯ liá»‡u giÃ¡n Ä‘oáº¡n." });
 
-        var altResult = await _disruptionApi.GetAvailableAlternativeDentistsAsync(id);
+        var altResult = await _disruptionApi!.GetAvailableAlternativeDentistsAsync(id);
         var alternatives = altResult.IsSuccess && altResult.Data != null ? altResult.Data : new List<AlternativeDentistDto>();
 
         return Json(new
@@ -450,7 +450,7 @@ public class ReceptionistAppointmentController : Controller
             StaffNotes = staffNotes
         };
 
-        var result = await _disruptionApi.ReceptionistResolveDisruptionAsync(id, req);
+        var result = await _disruptionApi!.ReceptionistResolveDisruptionAsync(id, req);
         if (result.IsSuccess)
         {
             TempData["SuccessMessage"] = "Äiá»u phá»‘i vÃ  xá»­ lÃ½ giÃ¡n Ä‘oáº¡n lá»‹ch háº¹n thÃ nh cÃ´ng!";

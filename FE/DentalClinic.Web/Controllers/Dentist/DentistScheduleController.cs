@@ -167,7 +167,7 @@ public class DentistScheduleController : Controller
             return RedirectToAction(nameof(Schedule));
         }
 
-        var result = await _leaveApi.SubmitLeaveRequestAsync(request);
+        var result = await _leaveApi!.SubmitLeaveRequestAsync(request);
         if (result.IsSuccess)
         {
             TempData["SuccessMessage"] = "Gửi đơn xin nghỉ phép thành công. Vui lòng chờ Quản trị viên xét duyệt.";
@@ -184,7 +184,7 @@ public class DentistScheduleController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> WithdrawLeaveRequest(long id)
     {
-        var result = await _leaveApi.WithdrawLeaveRequestAsync(id);
+        var result = await _leaveApi!.WithdrawLeaveRequestAsync(id);
         if (result.IsSuccess)
         {
             TempData["SuccessMessage"] = "Rút đơn xin nghỉ phép thành công.";

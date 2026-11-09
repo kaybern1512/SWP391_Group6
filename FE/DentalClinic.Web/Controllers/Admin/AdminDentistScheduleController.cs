@@ -282,7 +282,7 @@ public class AdminDentistScheduleController : Controller
     [HttpGet("LeaveImpact/{id:long}")]
     public async Task<IActionResult> LeaveImpact(long id)
     {
-        var result = await _leaveApi.GetLeaveImpactAnalysisAsync(id);
+        var result = await _leaveApi!.GetLeaveImpactAnalysisAsync(id);
         return Json(result);
     }
 
@@ -290,7 +290,7 @@ public class AdminDentistScheduleController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ApproveLeave(long id, string? adminNotes)
     {
-        var result = await _leaveApi.ApproveLeaveRequestAsync(id, new ApproveDentistLeaveRequest { AdminNotes = adminNotes });
+        var result = await _leaveApi!.ApproveLeaveRequestAsync(id, new ApproveDentistLeaveRequest { AdminNotes = adminNotes });
         if (result.IsSuccess)
         {
             TempData["SuccessMessage"] = "PhÃª duyá»‡t Ä‘Æ¡n xin nghá»‰ phÃ©p thÃ nh cÃ´ng. Há»‡ thá»‘ng Ä‘Ã£ tá»± Ä‘á»™ng táº¡o sá»± cá»‘ giÃ¡n Ä‘oáº¡n vÃ  gá»­i thÃ´ng bÃ¡o khÃ´i phá»¥c lá»‹ch cho bá»‡nh nhÃ¢n.";
@@ -312,7 +312,7 @@ public class AdminDentistScheduleController : Controller
             return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
         }
 
-        var result = await _leaveApi.RejectLeaveRequestAsync(id, new RejectDentistLeaveRequest { RejectionReason = rejectionReason });
+        var result = await _leaveApi!.RejectLeaveRequestAsync(id, new RejectDentistLeaveRequest { RejectionReason = rejectionReason });
         if (result.IsSuccess)
         {
             TempData["SuccessMessage"] = "ÄÃ£ tá»« chá»‘i Ä‘Æ¡n xin nghá»‰ phÃ©p.";

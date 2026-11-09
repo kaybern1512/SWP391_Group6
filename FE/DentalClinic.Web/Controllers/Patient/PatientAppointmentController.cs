@@ -1,4 +1,4 @@
-using DentalClinic.Web.Helpers;
+﻿using DentalClinic.Web.Helpers;
 using System;
 using System.Linq;
 using System.Security.Claims;
@@ -579,7 +579,7 @@ public class PatientAppointmentController : Controller
     [HttpGet("Disruption/{id:long}")]
     public async Task<IActionResult> Disruption(long id, [FromQuery] string? token)
     {
-        var disruptionResult = await _disruptionApi.GetDisruptionDetailAsync(id, token);
+        var disruptionResult = await _disruptionApi!.GetDisruptionDetailAsync(id, token);
         if (!disruptionResult.IsSuccess || disruptionResult.Data == null)
         {
             TempData["ErrorMessage"] = disruptionResult.Message ?? "KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin sá»± cá»‘ giÃ¡n Ä‘oáº¡n lá»‹ch háº¹n hoáº·c liÃªn káº¿t Ä‘Ã£ háº¿t hiá»‡u lá»±c.";
@@ -587,7 +587,7 @@ public class PatientAppointmentController : Controller
         }
 
         var disruption = disruptionResult.Data;
-        var altResult = await _disruptionApi.GetAvailableAlternativeDentistsAsync(id);
+        var altResult = await _disruptionApi!.GetAvailableAlternativeDentistsAsync(id);
         var alternatives = altResult.IsSuccess && altResult.Data != null ? altResult.Data : new List<AlternativeDentistDto>();
 
         var apptResult = await _appointmentApiService.GetAppointmentDetailAsync(disruption.AppointmentId);
@@ -615,7 +615,7 @@ public class PatientAppointmentController : Controller
             ActionToken = actionToken
         };
 
-        var result = await _disruptionApi.PatientChooseNewDentistAsync(id, req);
+        var result = await _disruptionApi!.PatientChooseNewDentistAsync(id, req);
         if (result.IsSuccess)
         {
             TempData["SuccessMessage"] = "ÄÃ£ chuyá»ƒn Ä‘á»•i bÃ¡c sÄ© Ä‘iá»u trá»‹ thÃ nh cÃ´ng. Lá»‹ch háº¹n cá»§a báº¡n giá»¯ nguyÃªn ngÃ y giá» Ä‘Ã£ Ä‘áº·t!";
@@ -638,7 +638,7 @@ public class PatientAppointmentController : Controller
             ActionToken = actionToken
         };
 
-        var result = await _disruptionApi.PatientRescheduleDisruptionAsync(id, req);
+        var result = await _disruptionApi!.PatientRescheduleDisruptionAsync(id, req);
         if (result.IsSuccess)
         {
             TempData["SuccessMessage"] = "ÄÃ£ dá»i lá»‹ch háº¹n khÃ¡m má»›i thÃ nh cÃ´ng! Há»‡ thá»‘ng Ä‘Ã£ gá»­i email xÃ¡c nháº­n Ä‘áº¿n báº¡n.";
