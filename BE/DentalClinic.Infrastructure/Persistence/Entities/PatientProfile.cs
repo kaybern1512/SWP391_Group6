@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -34,6 +34,8 @@ public partial class PatientProfile
     public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
     public virtual ICollection<TreatmentPlan> TreatmentPlans { get; set; } = new List<TreatmentPlan>();
+    public virtual ICollection<DiagnosticOrder> DiagnosticOrders { get; set; } = new List<DiagnosticOrder>();
+    public virtual ICollection<ImagingSession> ImagingSessions { get; set; } = new List<ImagingSession>();
 
     public virtual UserAccount User { get; set; } = null!;
 }

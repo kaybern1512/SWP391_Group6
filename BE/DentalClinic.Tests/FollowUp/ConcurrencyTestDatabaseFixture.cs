@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data;
 using System.IO;
 using System.Threading.Tasks;
@@ -20,6 +20,7 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
     private const string MigrationRelativePath = @"DB\migrations\20261104_Update_FollowUpSchedules_Status_CheckConstraint.sql";
     private const string Phase0MigrationRelativePath = @"DB\redesign_migrations\20261109_Phase0_Database_Standardization_4Roles.sql";
     private const string AddTreatmentPlanItemMigrationRelativePath = @"DB\redesign_migrations\20261109_Add_TreatmentPlanItemId_To_Appointments.sql";
+    private const string ImagingMigrationRelativePath = @"DB\redesign_migrations\20261110_Add_Imaging_Room_Equipment_And_Queue_Schema.sql";
 
     public async Task InitializeAsync()
     {
@@ -88,6 +89,11 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
         await ApplyMigrationFileAsync(phase0Path, DatabaseName, ConnectionString);
         var addFkPath = Path.Combine(repoRoot, AddTreatmentPlanItemMigrationRelativePath);
         await ApplyMigrationFileAsync(addFkPath, DatabaseName, ConnectionString);
+        var imagingPath = Path.Combine(repoRoot, ImagingMigrationRelativePath);
+        if (File.Exists(imagingPath))
+        {
+            await ApplyMigrationFileAsync(imagingPath, DatabaseName, ConnectionString);
+        }
     }
 
     public async Task DisposeAsync()

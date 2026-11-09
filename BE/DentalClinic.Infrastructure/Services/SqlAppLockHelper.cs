@@ -65,6 +65,10 @@ public static class SqlAppLockHelper
 
     /// <summary>Lock key for receptionist shift swap request.</summary>
     public static string ReceptionistSwapKey(long swapRequestId) => $"Lock_ReceptionistSwap_{swapRequestId}";
+    public static string ImagingEquipmentKey(long equipmentId) => $"IMAGING_EQUIPMENT_{equipmentId}";
+    public static string ImagingRoomKey(long roomId) => $"IMAGING_ROOM_{roomId}";
+    public static string ImagingQueueDateKey(DateTime date) => $"Lock_ImagingQueue_{date:yyyyMMdd}";
+    public static string DiagnosticOrderKey(long orderId) => $"Lock_DiagnosticOrder_{orderId}";
 
     #endregion
 
