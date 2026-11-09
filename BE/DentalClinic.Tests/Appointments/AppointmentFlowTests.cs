@@ -2077,4 +2077,60 @@ public class AppointmentFlowTests
         Assert.False(secondResult.Success);
         Assert.Contains("khung giờ này rồi", secondResult.Message ?? string.Empty);
     }
+
+    [Fact]
+    public async Task CreatePatientAppointmentAsync_ShiftPolicy_AllowsMaxTwoDifferentSessionsPerDay()
+    {
+        using var db = CreateDbContext(nameof(CreatePatientAppointmentAsync_ShiftPolicy_AllowsMaxTwoDifferentSessionsPerDay));
+        await SeedBasicDataAsync(db);
+
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var targetDate = DateTime.Today.AddDays(3);
+
+        // 1. First booking: Morning slot (09:00) -> SUCCESS
+        var morningRequest1 = new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = targetDate.AddHours(9),
+            ReasonForVisit = "Khám cạo vôi buổi sáng"
+        };
+        var res1 = await service.CreatePatientAppointmentAsync(101, morningRequest1);
+        Assert.True(res1.Success);
+
+        // 2. Second booking in same morning session (10:30) -> REJECTED
+        var morningRequest2 = new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = targetDate.AddHours(10).AddMinutes(30),
+            ReasonForVisit = "Thử đặt thêm buổi sáng nữa"
+        };
+        var res2 = await service.CreatePatientAppointmentAsync(101, morningRequest2);
+        Assert.False(res2.Success);
+        Assert.Contains("Buổi Sáng", res2.Message ?? string.Empty);
+
+        // 3. Second booking in different session: Afternoon (14:00) -> SUCCESS
+        var afternoonRequest = new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = targetDate.AddHours(14),
+            ReasonForVisit = "Khám trám răng buổi chiều"
+        };
+        var res3 = await service.CreatePatientAppointmentAsync(101, afternoonRequest);
+        Assert.True(res3.Success);
+
+        // 4. Third booking in same day -> REJECTED (max 2 per day)
+        var thirdRequest = new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = targetDate.AddHours(16),
+            ReasonForVisit = "Thử đặt ca thứ 3 trong ngày"
+        };
+        var res4 = await service.CreatePatientAppointmentAsync(101, thirdRequest);
+        Assert.False(res4.Success);
+        Assert.Contains("tối đa 2 lịch khám trong cùng một ngày", res4.Message ?? string.Empty);
+    }
 }
