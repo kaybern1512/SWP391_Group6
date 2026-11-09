@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +14,7 @@ namespace DentalClinic.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Route("api/feedbacks")]
 [Authorize]
 public class FeedbackController : ControllerBase
 {

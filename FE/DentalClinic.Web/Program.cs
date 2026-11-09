@@ -1,4 +1,4 @@
-using DentalClinic.Web.Handlers;
+﻿using DentalClinic.Web.Handlers;
 using DentalClinic.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -275,6 +275,9 @@ builder.Services.AddHttpClient<IMedicineApiService, MedicineApiService>(client =
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
 var app = builder.Build();
+
+// Initialize VietQR helper settings from configuration
+DentalClinic.Web.Helpers.VietQrHelper.Initialize(app.Configuration);
 
 // Configure HTTP request pipeline
 if (!app.Environment.IsDevelopment())

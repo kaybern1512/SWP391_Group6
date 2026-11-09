@@ -1,4 +1,4 @@
-@model DentalClinic.Web.Models.ApiDtos.InvoiceDto
+﻿@model DentalClinic.Web.Models.ApiDtos.InvoiceDto
 @{
     ViewData["Title"] = $"Chi Tiết Hóa Đơn #{Model.InvoiceCode}";
 }
@@ -502,7 +502,7 @@
                     if (!vietQrImg) return;
                     const amount = Math.round(parseFloat(payAmountInput.value) || @Model.RemainingAmount);
                     const invoiceCode = '@Model.InvoiceCode';
-                    const url = `https://img.vietqr.io/image/MB-039123456789-compact2.png?amount=${amount}&addInfo=THANH%20TOAN%20${encodeURIComponent(invoiceCode)}&accountName=NHA%20KHOA%20DENTALCARE`;
+                    const url = `https://img.vietqr.io/image/@DentalClinic.Web.Helpers.VietQrHelper.BankId-@DentalClinic.Web.Helpers.VietQrHelper.AccountNo-compact2.png?amount=${amount}&addInfo=THANH%20TOAN%20${encodeURIComponent(invoiceCode)}&accountName=@Uri.EscapeDataString(DentalClinic.Web.Helpers.VietQrHelper.AccountName)`;
                     vietQrImg.src = url;
                 }
 

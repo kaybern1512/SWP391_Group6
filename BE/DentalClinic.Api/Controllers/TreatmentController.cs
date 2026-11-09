@@ -24,11 +24,16 @@ public class TreatmentController : ControllerBase
         _treatmentService = treatmentService;
     }
 
-    private long GetCurrentUserId()
-    {
-        var idStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? User.FindFirst("sub")?.Value;
-        return long.TryParse(idStr, out var id) ? id : 0;
+    private long GetCurrentUserId()
+    {
+        var idStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("sub")?.Value;
+        return long.TryParse(idStr, out var id) ? id : 0;
+    }
+
+    private string GetCurrentUserRole()
+    {
+        return User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
     }
 
     // ==========================================
@@ -49,15 +54,24 @@ public class TreatmentController : ControllerBase
     [HttpGet("plans/{id:long}")]
     [Authorize]
     [ProducesResponseType(typeof(ApiResponse<TreatmentPlanDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<TreatmentPlanDto>), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetTreatmentPlanById(long id, CancellationToken ct)
-    {
-        var result = await _treatmentService.GetTreatmentPlanByIdAsync(id, ct);
-        if (!result.Success)
-        {
-            return NotFound(result);
-        }
-        return Ok(result);
+    [ProducesResponseType(typeof(ApiResponse<TreatmentPlanDto>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<TreatmentPlanDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetTreatmentPlanById(long id, CancellationToken ct)
+    {
+        var result = await _treatmentService.GetTreatmentPlanByIdAsync(id, ct);
+        if (!result.Success)
+        {
+            return NotFound(result);
+        }
+
+        var role = GetCurrentUserRole();
+        var userId = GetCurrentUserId();
+        if (role == "Patient" && result.Data?.PatientUserId != userId)
+        {
+            return Forbid();
+        }
+
+        return Ok(result);
     }
 
     [HttpPost("plans")]

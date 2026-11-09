@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
@@ -96,8 +96,16 @@ public class MedicalRecordController : ControllerBase
     [HttpGet("patient/{patientUserId:long}/odontogram")]
     [Authorize]
     [ProducesResponseType(typeof(ApiResponse<List<OdontogramEntryDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<List<OdontogramEntryDto>>), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetCurrentOdontogram(long patientUserId, CancellationToken ct)
     {
+        var currentUserRole = GetCurrentUserRole();
+        var currentUserId = GetCurrentUserId();
+        if (currentUserRole == UserRole.Patient && patientUserId != currentUserId)
+        {
+            return Forbid();
+        }
+
         var result = await _medicalRecordService.GetCurrentOdontogramAsync(patientUserId, ct);
         return Ok(result);
     }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Application.Features.Treatments.DTOs;
@@ -38,7 +38,7 @@ public class TreatmentPlanItemDto
     public int SequenceNo { get; set; }
     public DateOnly? ExpectedDate { get; set; }
     public decimal? EstimatedCost { get; set; }
-    public string Status { get; set; } = "Pending";
+    public string Status { get; set; } = "Planned";
     public string? Note { get; set; }
 
     public List<TreatmentSessionDto> Sessions { get; set; } = new();
@@ -79,7 +79,7 @@ public class CreateTreatmentPlanRequest
 {
     public long PatientUserId { get; set; }
     public long DepartmentId { get; set; }
-    public string? Status { get; set; } = "Active";
+    public string? Status { get; set; } = "Planned";
     public List<CreateTreatmentPlanItemInput> Items { get; set; } = new();
 }
 
@@ -91,7 +91,7 @@ public class CreateTreatmentPlanItemInput
     public int SequenceNo { get; set; }
     public DateOnly? ExpectedDate { get; set; }
     public decimal? EstimatedCost { get; set; }
-    public string Status { get; set; } = "Pending";
+    public string Status { get; set; } = "Planned";
     public string? Note { get; set; }
     public long? TreatmentPlanItemId { get; set; }
     public long? TreatmentPlanId { get; set; }
