@@ -142,3 +142,27 @@ public static class DiagnosticResultSourceType
 
     public static readonly string[] All = { Internal, External };
 }
+
+public static class ConsultationStatus
+{
+    public const string Requested = "Requested";
+    public const string InReview = "InReview";
+    public const string Answered = "Answered";
+    public const string Cancelled = "Cancelled";
+
+    public static readonly string[] All = { Requested, InReview, Answered, Cancelled };
+
+    public static bool IsValid(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return false;
+        return All.Any(s => string.Equals(s, status.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+}
+
+public static class ConsultationUrgency
+{
+    public const string Normal = "Normal";
+    public const string Urgent = "Urgent";
+
+    public static readonly string[] All = { Normal, Urgent };
+}

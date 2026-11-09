@@ -110,6 +110,7 @@ public partial class DentalClinicDbContext : DbContext
     public virtual DbSet<DiagnosticOrder> DiagnosticOrders { get; set; }
     public virtual DbSet<ImagingSession> ImagingSessions { get; set; }
     public virtual DbSet<DiagnosticResult> DiagnosticResults { get; set; }
+    public virtual DbSet<ClinicalConsultation> ClinicalConsultations { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -668,6 +669,18 @@ public partial class DentalClinicDbContext : DbContext
                 .HasForeignKey(d => d.TreatmentSessionId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_DepartmentReferrals_TreatmentSession");
+
+            entity.HasOne(d => d.SourceAppointment)
+                .WithMany(p => p.OutgoingReferrals)
+                .HasForeignKey(d => d.SourceAppointmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_DepartmentReferrals_SourceAppointment");
+
+            entity.HasOne(d => d.DestinationAppointment)
+                .WithMany(p => p.IncomingReferrals)
+                .HasForeignKey(d => d.DestinationAppointmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_DepartmentReferrals_DestinationAppointment");
         });
 
         modelBuilder.Entity<DepartmentService>(entity =>
@@ -1005,6 +1018,12 @@ public partial class DentalClinicDbContext : DbContext
             entity.HasKey(e => e.ConfigId);
             entity.ToTable("ImagingServiceConfigs");
             entity.HasIndex(e => e.DiagnosticType).IsUnique();
+
+            entity.HasOne(d => d.DepartmentService)
+                .WithMany()
+                .HasForeignKey(d => d.DepartmentServiceId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_ImagingServiceConfigs_DepartmentService");
             entity.Property(e => e.DiagnosticType).HasMaxLength(50).IsUnicode(false);
             entity.Property(e => e.ServiceName).HasMaxLength(150);
             entity.Property(e => e.Price).HasPrecision(18, 2);
@@ -1135,6 +1154,43 @@ public partial class DentalClinicDbContext : DbContext
                 .HasForeignKey(d => d.UploadedByUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_DiagnosticResults_UploadedBy");
+        });
+
+        modelBuilder.Entity<ClinicalConsultation>(entity =>
+        {
+            entity.HasKey(e => e.ConsultationId);
+            entity.ToTable("ClinicalConsultations");
+            entity.Property(e => e.ConsultationReason).HasMaxLength(500);
+            entity.Property(e => e.ClinicalQuestion).HasMaxLength(1000);
+            entity.Property(e => e.Urgency).HasMaxLength(20).IsUnicode(false).HasDefaultValue("Normal");
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Requested");
+            entity.Property(e => e.DentistOpinion).HasMaxLength(2000);
+            entity.Property(e => e.Recommendations).HasMaxLength(1000);
+            entity.Property(e => e.RequestedAtUtc).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.SourceAppointment)
+                .WithMany(p => p.ClinicalConsultations)
+                .HasForeignKey(d => d.SourceAppointmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ClinicalConsultations_Appointment");
+
+            entity.HasOne(d => d.PatientUser)
+                .WithMany(p => p.ClinicalConsultations)
+                .HasForeignKey(d => d.PatientUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ClinicalConsultations_Patient");
+
+            entity.HasOne(d => d.RequestingDentistUser)
+                .WithMany(p => p.ClinicalConsultationsRequested)
+                .HasForeignKey(d => d.RequestingDentistUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ClinicalConsultations_RequestingDentist");
+
+            entity.HasOne(d => d.ConsultedDentistUser)
+                .WithMany(p => p.ClinicalConsultationsReceived)
+                .HasForeignKey(d => d.ConsultedDentistUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ClinicalConsultations_ConsultedDentist");
         });
 
         modelBuilder.Entity<StaffProfile>(entity =>

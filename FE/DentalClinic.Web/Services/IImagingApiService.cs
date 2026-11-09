@@ -25,4 +25,11 @@ public interface IImagingApiService
     Task<ApiResult<ImagingEquipmentDto>> UpdateEquipmentStatusAsync(long equipmentId, UpdateEquipmentStatusRequest request);
     Task<ApiResult<List<ImagingServiceConfigDto>>> GetAllConfigsAsync();
     Task<ApiResult<ImagingServiceConfigDto>> UpdateConfigAsync(long configId, UpdateImagingConfigRequest request);
+
+    // Clinical Consultations
+    Task<ApiResult<ClinicalConsultationDto>> CreateConsultationAsync(CreateConsultationRequest request);
+    Task<ApiResult<ClinicalConsultationDto>> RespondConsultationAsync(long consultationId, RespondConsultationRequest request);
+    Task<ApiResult<List<ClinicalConsultationDto>>> GetDentistConsultationsAsync(string? type = null);
+    Task<ApiResult<List<ClinicalConsultationDto>>> GetAppointmentConsultationsAsync(long appointmentId);
+    Task<ApiResult<ClinicalConsultationDto>> GetConsultationByIdAsync(long consultationId);
 }

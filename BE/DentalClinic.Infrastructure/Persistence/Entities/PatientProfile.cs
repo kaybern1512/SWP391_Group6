@@ -36,6 +36,7 @@ public partial class PatientProfile
     public virtual ICollection<TreatmentPlan> TreatmentPlans { get; set; } = new List<TreatmentPlan>();
     public virtual ICollection<DiagnosticOrder> DiagnosticOrders { get; set; } = new List<DiagnosticOrder>();
     public virtual ICollection<ImagingSession> ImagingSessions { get; set; } = new List<ImagingSession>();
+    public virtual ICollection<ClinicalConsultation> ClinicalConsultations { get; set; } = new List<ClinicalConsultation>();
 
     public virtual UserAccount User { get; set; } = null!;
 }

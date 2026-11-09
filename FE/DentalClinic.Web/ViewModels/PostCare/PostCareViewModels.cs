@@ -10,6 +10,7 @@ public class DentistReferralIndexViewModel
     public List<DepartmentDto> Departments { get; set; } = new();
     public List<TreatmentSessionDto> RecentSessions { get; set; } = new();
     public List<FollowUpProposalDto> PendingProposals { get; set; } = new();
+    public List<ClinicalConsultationDto> Consultations { get; set; } = new();
     public string? ActiveTab { get; set; } = "referrals";
     public long? SelectedSessionId { get; set; }
 }
@@ -21,6 +22,14 @@ public class DepartmentReferralIndexViewModel
     public string? StatusFilter { get; set; }
     public long? DepartmentId { get; set; }
     public string DepartmentName { get; set; } = string.Empty;
+}
+
+public class ReceptionistReferralIndexViewModel
+{
+    public List<DepartmentReferralDto> Referrals { get; set; } = new();
+    public List<DepartmentDto> Departments { get; set; } = new();
+    public List<TreatmentDentistOptionDto> Dentists { get; set; } = new();
+    public string? StatusFilter { get; set; }
 }
 
 public class PatientFollowUpIndexViewModel
@@ -41,4 +50,3 @@ public class ReceptionistFollowUpIndexViewModel
     public int CalledCount { get; set; }
     public int UnreachableCount { get; set; }
 }
-

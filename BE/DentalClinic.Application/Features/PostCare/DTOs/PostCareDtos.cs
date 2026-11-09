@@ -6,6 +6,8 @@ public class DepartmentReferralDto
 {
     public long ReferralId { get; set; }
     public long TreatmentSessionId { get; set; }
+    public long? SourceAppointmentId { get; set; }
+    public long? DestinationAppointmentId { get; set; }
     public long PatientUserId { get; set; }
     public string PatientName { get; set; } = string.Empty;
     public string? PatientCode { get; set; }
@@ -29,6 +31,7 @@ public class DepartmentReferralDto
 public class CreateReferralRequest
 {
     public long TreatmentSessionId { get; set; }
+    public long? SourceAppointmentId { get; set; }
     public long ToDepartmentId { get; set; }
     public string Urgency { get; set; } = "Normal";
     public string Reason { get; set; } = string.Empty;

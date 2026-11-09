@@ -178,3 +178,68 @@ public class ImagingQueueSummaryDto
     public List<ImagingSessionDto> ActiveSessions { get; set; } = new();
     public List<ImagingSessionDto> WaitingQueue { get; set; } = new();
 }
+
+public class CreateConsultationRequest
+{
+    public long SourceAppointmentId { get; set; }
+    public long ConsultedDentistUserId { get; set; }
+    public string ConsultationReason { get; set; } = null!;
+    public string ClinicalQuestion { get; set; } = null!;
+    public string Urgency { get; set; } = "Normal";
+}
+
+public class RespondConsultationRequest
+{
+    public string DentistOpinion { get; set; } = null!;
+    public string? Recommendations { get; set; }
+}
+
+public class ClinicalConsultationDto
+{
+    public long ConsultationId { get; set; }
+    public long SourceAppointmentId { get; set; }
+    public long PatientUserId { get; set; }
+    public string PatientName { get; set; } = null!;
+    public string? PatientCode { get; set; }
+    public long RequestingDentistUserId { get; set; }
+    public string RequestingDentistName { get; set; } = null!;
+    public long ConsultedDentistUserId { get; set; }
+    public string ConsultedDentistName { get; set; } = null!;
+    public string ConsultationReason { get; set; } = null!;
+    public string ClinicalQuestion { get; set; } = null!;
+    public string Urgency { get; set; } = "Normal";
+    public string Status { get; set; } = "Requested";
+    public string? DentistOpinion { get; set; }
+    public string? Recommendations { get; set; }
+    public DateTime RequestedAtUtc { get; set; }
+    public DateTime? AnsweredAtUtc { get; set; }
+}
+
+public class ScheduleDestinationReferralRequest
+{
+    public long ReferralId { get; set; }
+    public long? AssignedDentistUserId { get; set; }
+    public long? RequestedServiceId { get; set; }
+    public DateTime ScheduledStart { get; set; }
+    public DateTime ScheduledEnd { get; set; }
+    public long? DentalChairId { get; set; }
+    public long? RoomId { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class ReferralSourceSummaryDto
+{
+    public long ReferralId { get; set; }
+    public long SourceAppointmentId { get; set; }
+    public string PatientName { get; set; } = null!;
+    public string? PatientCode { get; set; }
+    public string FromDepartmentName { get; set; } = null!;
+    public string ToDepartmentName { get; set; } = null!;
+    public string RequestingDentistName { get; set; } = null!;
+    public string Reason { get; set; } = null!;
+    public string? ClinicalInstructions { get; set; }
+    public string Urgency { get; set; } = "Normal";
+    public string Status { get; set; } = null!;
+    public long? DestinationAppointmentId { get; set; }
+    public List<DiagnosticResultDto> DiagnosticImages { get; set; } = new();
+}

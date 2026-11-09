@@ -28,4 +28,11 @@ public interface IImagingService
     Task<ImagingEquipmentDto> UpdateEquipmentStatusAsync(long equipmentId, string operationalStatus, CancellationToken ct = default);
     Task<List<ImagingServiceConfigDto>> GetAllServiceConfigsAsync(CancellationToken ct = default);
     Task<ImagingServiceConfigDto> UpdateServiceConfigAsync(long configId, UpdateImagingConfigRequest request, CancellationToken ct = default);
+
+    // Clinical Consultations (Hội chẩn lâm sàng giữa các bác sĩ)
+    Task<ClinicalConsultationDto> CreateConsultationAsync(CreateConsultationRequest request, long dentistUserId, CancellationToken ct = default);
+    Task<ClinicalConsultationDto> RespondConsultationAsync(long consultationId, RespondConsultationRequest request, long dentistUserId, CancellationToken ct = default);
+    Task<List<ClinicalConsultationDto>> GetConsultationsByDentistAsync(long dentistUserId, string type, CancellationToken ct = default);
+    Task<List<ClinicalConsultationDto>> GetConsultationsByAppointmentAsync(long appointmentId, CancellationToken ct = default);
+    Task<ClinicalConsultationDto?> GetConsultationByIdAsync(long consultationId, CancellationToken ct = default);
 }

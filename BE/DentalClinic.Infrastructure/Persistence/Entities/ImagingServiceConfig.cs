@@ -17,4 +17,8 @@ public partial class ImagingServiceConfig
     public decimal Price { get; set; } = 0;
 
     public bool IsActive { get; set; } = true;
+
+    public long? DepartmentServiceId { get; set; }
+
+    public virtual DepartmentService? DepartmentService { get; set; }
 }

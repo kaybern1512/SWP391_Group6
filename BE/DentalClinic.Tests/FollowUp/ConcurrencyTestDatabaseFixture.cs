@@ -21,6 +21,7 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
     private const string Phase0MigrationRelativePath = @"DB\redesign_migrations\20261109_Phase0_Database_Standardization_4Roles.sql";
     private const string AddTreatmentPlanItemMigrationRelativePath = @"DB\redesign_migrations\20261109_Add_TreatmentPlanItemId_To_Appointments.sql";
     private const string ImagingMigrationRelativePath = @"DB\redesign_migrations\20261110_Add_Imaging_Room_Equipment_And_Queue_Schema.sql";
+    private const string ConsultationAndReferralMigrationRelativePath = @"DB\redesign_migrations\20261110_Add_Clinical_Consultation_And_Referral_Linkage.sql";
 
     public async Task InitializeAsync()
     {
@@ -93,6 +94,11 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
         if (File.Exists(imagingPath))
         {
             await ApplyMigrationFileAsync(imagingPath, DatabaseName, ConnectionString);
+        }
+        var consultPath = Path.Combine(repoRoot, ConsultationAndReferralMigrationRelativePath);
+        if (File.Exists(consultPath))
+        {
+            await ApplyMigrationFileAsync(consultPath, DatabaseName, ConnectionString);
         }
     }
 

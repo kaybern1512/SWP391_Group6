@@ -193,4 +193,32 @@ public class ImagingApiService : IImagingApiService
     }
 
     #endregion
+
+    public async Task<ApiResult<ClinicalConsultationDto>> CreateConsultationAsync(CreateConsultationRequest request)
+    {
+        return await SendPostAsync<ClinicalConsultationDto>("/api/clinical-diagnostics/consultations", request);
+    }
+
+    public async Task<ApiResult<ClinicalConsultationDto>> RespondConsultationAsync(long consultationId, RespondConsultationRequest request)
+    {
+        return await SendPostAsync<ClinicalConsultationDto>($"/api/clinical-diagnostics/consultations/{consultationId}/respond", request);
+    }
+
+    public async Task<ApiResult<List<ClinicalConsultationDto>>> GetDentistConsultationsAsync(string? type = null)
+    {
+        var url = string.IsNullOrEmpty(type)
+            ? "/api/clinical-diagnostics/consultations/dentist"
+            : $"/api/clinical-diagnostics/consultations/dentist?type={Uri.EscapeDataString(type)}";
+        return await SendGetAsync<List<ClinicalConsultationDto>>(url);
+    }
+
+    public async Task<ApiResult<List<ClinicalConsultationDto>>> GetAppointmentConsultationsAsync(long appointmentId)
+    {
+        return await SendGetAsync<List<ClinicalConsultationDto>>($"/api/clinical-diagnostics/consultations/appointment/{appointmentId}");
+    }
+
+    public async Task<ApiResult<ClinicalConsultationDto>> GetConsultationByIdAsync(long consultationId)
+    {
+        return await SendGetAsync<ClinicalConsultationDto>($"/api/clinical-diagnostics/consultations/{consultationId}");
+    }
 }

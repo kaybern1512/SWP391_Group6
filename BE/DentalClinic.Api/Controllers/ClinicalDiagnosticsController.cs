@@ -1,3 +1,6 @@
+using DentalClinic.Infrastructure.Persistence.Entities;
+using DentalClinic.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
@@ -19,10 +22,17 @@ namespace DentalClinic.Api.Controllers;
 public class ClinicalDiagnosticsController : ControllerBase
 {
     private readonly IImagingService _imagingService;
+    private readonly IMedicalImagingStorageService _imagingStorageService;
+    private readonly DentalClinicDbContext _dbContext;
 
-    public ClinicalDiagnosticsController(IImagingService imagingService)
+    public ClinicalDiagnosticsController(
+        IImagingService imagingService,
+        IMedicalImagingStorageService imagingStorageService,
+        DentalClinicDbContext dbContext)
     {
         _imagingService = imagingService;
+        _imagingStorageService = imagingStorageService;
+        _dbContext = dbContext;
     }
 
     private long GetCurrentUserId()
@@ -152,7 +162,7 @@ public class ClinicalDiagnosticsController : ControllerBase
     }
 
     [HttpPost("sessions/{sessionId}/acquire")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<ImagingSessionDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> AcquireImage(long sessionId, CancellationToken ct)
     {
@@ -168,7 +178,7 @@ public class ClinicalDiagnosticsController : ControllerBase
     }
 
     [HttpPost("results/upload")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<DiagnosticResultDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> UploadResult([FromBody] UploadDiagnosticResultRequest request, CancellationToken ct)
     {
@@ -201,7 +211,7 @@ public class ClinicalDiagnosticsController : ControllerBase
     }
 
     [HttpPost("results/{resultId}/review")]
-    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = UserRole.Dentist)]
     [ProducesResponseType(typeof(ApiResponse<DiagnosticResultDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ReviewResult(long resultId, [FromBody] ReviewDiagnosticResultRequest request, CancellationToken ct)
     {
@@ -308,6 +318,170 @@ public class ClinicalDiagnosticsController : ControllerBase
         catch (Exception ex)
         {
             return BadRequest(ApiResponse<ImagingServiceConfigDto>.Fail(ex.Message));
+        }
+    }
+
+    [HttpPost("results/upload-file")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<DiagnosticResultDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UploadResultFile(
+        [FromForm] IFormFile file,
+        [FromForm] long diagnosticOrderId,
+        [FromForm] long imagingSessionId,
+        [FromForm] long? equipmentId,
+        [FromForm] string? bodyPart,
+        [FromForm] string? findings,
+        [FromForm] string? reviewNotes,
+        CancellationToken ct)
+    {
+        try
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(ApiResponse<DiagnosticResultDto>.Fail("Vui lòng đính kèm tệp hình ảnh chẩn đoán hợp lệ."));
+
+            var userId = GetCurrentUserId();
+            using var stream = file.OpenReadStream();
+            var uploadResult = await _imagingStorageService.UploadDentalImageAsync(stream, file.FileName, file.ContentType, "clinical-imaging", ct);
+
+            if (uploadResult == null || string.IsNullOrEmpty(uploadResult.Url))
+                return BadRequest(ApiResponse<DiagnosticResultDto>.Fail("Không thể lưu trữ tệp hình ảnh chẩn đoán."));
+
+            var request = new UploadDiagnosticResultRequest
+            {
+                DiagnosticOrderId = diagnosticOrderId,
+                ImagingSessionId = imagingSessionId,
+                EquipmentId = equipmentId,
+                FileUrl = uploadResult.Url,
+                ThumbnailUrl = uploadResult.Url,
+                ImageFormat = System.IO.Path.GetExtension(file.FileName).TrimStart('.').ToUpperInvariant(),
+                Findings = findings,
+                PerformedAtUtc = DateTime.UtcNow
+            };
+
+            var result = await _imagingService.UploadDiagnosticResultAsync(request, userId, ct);
+            return Ok(ApiResponse<DiagnosticResultDto>.Ok(result, "Tải lên tệp chẩn đoán hình ảnh thành công."));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<DiagnosticResultDto>.Fail(ex.Message));
+        }
+    }
+
+    [HttpGet("results/{resultId}/image")]
+    [Authorize]
+    public async Task<IActionResult> GetResultImageStream(long resultId, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _dbContext.DiagnosticResults
+                .AsNoTracking()
+                .Include(r => r.DiagnosticOrder)
+                .FirstOrDefaultAsync(r => r.DiagnosticResultId == resultId, ct);
+
+            if (result == null)
+                return NotFound("Không tìm thấy kết quả chẩn đoán.");
+
+            var stream = await _imagingStorageService.GetImageStreamAsync(result.FileUrl, ct);
+            if (stream == null)
+                return NotFound("Không thể tải luồng dữ liệu hình ảnh từ bộ lưu trữ.");
+
+            var mimeType = "image/jpeg";
+            if (result.FileUrl.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) mimeType = "image/png";
+            else if (result.FileUrl.EndsWith(".dcm", StringComparison.OrdinalIgnoreCase)) mimeType = "application/dicom";
+
+            return File(stream, mimeType);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    // ==========================================
+    // CLINICAL CONSULTATIONS (HỘI CHẨN CHUYÊN MÔN)
+    // ==========================================
+
+    [HttpPost("consultations")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<ClinicalConsultationDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CreateConsultation([FromBody] CreateConsultationRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var dentistUserId = GetCurrentUserId();
+            var result = await _imagingService.CreateConsultationAsync(request, dentistUserId, ct);
+            return Ok(ApiResponse<ClinicalConsultationDto>.Ok(result, "Gửi yêu cầu hội chẩn chuyên môn thành công."));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<ClinicalConsultationDto>.Fail(ex.Message));
+        }
+    }
+
+    [HttpPost("consultations/{id}/respond")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<ClinicalConsultationDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RespondConsultation(long id, [FromBody] RespondConsultationRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var dentistUserId = GetCurrentUserId();
+            var result = await _imagingService.RespondConsultationAsync(id, request, dentistUserId, ct);
+            return Ok(ApiResponse<ClinicalConsultationDto>.Ok(result, "Gửi phản hồi ý kiến hội chẩn thành công."));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<ClinicalConsultationDto>.Fail(ex.Message));
+        }
+    }
+
+    [HttpGet("consultations/dentist")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<List<ClinicalConsultationDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDentistConsultations([FromQuery] string? type, CancellationToken ct)
+    {
+        try
+        {
+            var dentistUserId = GetCurrentUserId();
+            var result = await _imagingService.GetConsultationsByDentistAsync(dentistUserId, type ?? "all", ct);
+            return Ok(ApiResponse<List<ClinicalConsultationDto>>.Ok(result));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<List<ClinicalConsultationDto>>.Fail(ex.Message));
+        }
+    }
+
+    [HttpGet("consultations/appointment/{appointmentId}")]
+    [ProducesResponseType(typeof(ApiResponse<List<ClinicalConsultationDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAppointmentConsultations(long appointmentId, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _imagingService.GetConsultationsByAppointmentAsync(appointmentId, ct);
+            return Ok(ApiResponse<List<ClinicalConsultationDto>>.Ok(result));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<List<ClinicalConsultationDto>>.Fail(ex.Message));
+        }
+    }
+
+    [HttpGet("consultations/{id}")]
+    [ProducesResponseType(typeof(ApiResponse<ClinicalConsultationDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetConsultationById(long id, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _imagingService.GetConsultationByIdAsync(id, ct);
+            if (result == null)
+                return NotFound(ApiResponse<ClinicalConsultationDto>.Fail("Không tìm thấy thông tin hội chẩn."));
+
+            return Ok(ApiResponse<ClinicalConsultationDto>.Ok(result));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<ClinicalConsultationDto>.Fail(ex.Message));
         }
     }
 }

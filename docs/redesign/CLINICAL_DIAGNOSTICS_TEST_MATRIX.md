@@ -1,12 +1,11 @@
 # TEST MATRIX – CLINICAL DIAGNOSTICS & IMAGING QUEUE
 
-**Feature:** Dedicated X-ray Room, Equipment Scheduling & Imaging Queue  
+**Feature:** Dedicated X-ray Room, Equipment Scheduling, Imaging Queue, Clinical Consultation & Specialty Referral Linkage  
 **Branch:** `feature/clinical-diagnostics-specialty-referral`  
-**Test File:** `BE/DentalClinic.Tests/ClinicalDiagnostics/ImagingRoomAndQueueTests.cs`  
 
 ---
 
-## Danh Sách 32 Kịch Bản Kiểm Thử Backend & Concurrency
+## 1. Danh Sách 32 Kịch Bản Kiểm Thử Unit & Mock (`ImagingRoomAndQueueTests.cs`)
 
 | ID | Tên Kịch Bản | Mục Tiêu Nghiệp Vụ | Kết Quả |
 | :---: | :--- | :--- | :---: |
@@ -45,7 +44,43 @@
 
 ---
 
-## Danh Sách 5 Kịch Bản Kiểm Thử Frontend Controller
+## 2. Danh Sách 5 Kịch Bản Kiểm Thử SQL Server Concurrency Đa Luồng Thực Tế
+
+**File:** `BE/DentalClinic.Tests/ClinicalDiagnostics/SqlServerImagingAndReferralConcurrencyTests.cs`  
+**Database:** `DentalCare_Integration_Dev`
+
+| ID | Tên Kịch Bản | Mục Tiêu Nghiệp Vụ | Kết Quả |
+| :---: | :--- | :--- | :---: |
+| **SQL01** | `Test1_TwoConcurrentBookings_OnSameMachineAndSlot_OnlyOneSucceeds` | Hai luồng đặt lịch cùng 1 máy và 1 slot thời gian; applock đảm bảo duy nhất 1 thành công | **PASSED** |
+| **SQL02** | `Test2_TwoConcurrentCheckIns_NearCapacity_MaxWaitingNotExceeded` | Hai luồng check-in khi phòng chờ còn 1 chỗ trống (2/3); đảm bảo chỉ 1 ca vào hàng đợi | **PASSED** |
+| **SQL03** | `Test3_ConcurrentQueueNumbering_YieldsDistinctSequentialNumbers` | Hai luồng check-in đồng thời; transaction lock đảm bảo sinh ra 2 số thứ tự khác nhau | **PASSED** |
+| **SQL04** | `Test4_TwoConcurrentReferralScheduling_OnlyOneDestinationApptCreated` | Hai luồng cùng đặt lịch đích cho 1 phiếu chuyển khoa; đảm bảo chỉ 1 lịch đích được tạo | **PASSED** |
+| **SQL05** | `Test5_ConcurrentInvoiceCreation_SpGetAppLockPreventsDuplicateBilling` | Hai luồng cùng lập hóa đơn cho ca có chụp X-quang; khóa appointment chống double-billing | **PASSED** |
+
+---
+
+## 3. Danh Sách 10 Kịch Bản Kiểm Thử Real Playwright E2E Browser / API
+
+**File:** `e2e/imaging-queue-workflow.spec.js`  
+**Browser:** Chromium Headless  
+**Environment:** BE `https://localhost:7350` / FE `https://localhost:7129`
+
+| ID | Tên Kịch Bản | Mục Tiêu Nghiệp Vụ | Kết Quả |
+| :---: | :--- | :--- | :---: |
+| **E2E-01** | `Receptionist navigates to Imaging Queue and verifies room, equipment status & KPIs` | Lễ tân giám sát phòng XRAY-01, thiết bị XRAY-MACH-01, KPI ca chụp và hàng đợi | **PASSED** |
+| **E2E-02** | `Receptionist verifies queue sections, capacity indicators, and interactive controls` | Kiểm tra giao diện hàng đợi, các thẻ điều phối, chỉ số công suất phòng | **PASSED** |
+| **E2E-03** | `RBAC Guard: Receptionist is blocked (HTTP 403) from acquiring images or uploading technical results` | Phân quyền: Lễ tân gọi Acquire/Upload bị trả về HTTP 403 Forbidden | **PASSED** |
+| **E2E-04** | `RBAC Guard: SystemAdministrator is blocked (HTTP 403) from clinical review` | Phân quyền: Admin gọi ReviewResult bị chặn HTTP 403 (chỉ Bác sĩ mới được review) | **PASSED** |
+| **E2E-05** | `Receptionist navigates to Referrals coordination workspace and verifies filter pills and table` | Lễ tân mở không gian điều phối chuyển khoa, kiểm tra bộ lọc trạng thái và danh sách | **PASSED** |
+| **E2E-06** | `Dentist navigates to Dentist Referrals, switches to Consultations tab, and inspects request modal` | Bác sĩ vào tab Hội Chẩn Lâm Sàng, mở modal tạo yêu cầu hội chẩn chuyên môn | **PASSED** |
+| **E2E-07** | `Full Diagnostic Imaging Workflow: Order, Slot Booking, Check-in, Acquisition & Real File Upload` | Toàn trình: Tạo chỉ định -> Đặt slot -> Check-in hàng đợi -> Chụp -> Upload file ảnh thật | **PASSED** |
+| **E2E-08** | `Secure Image Streaming & Clinical Dentist Result Review` | Stream tệp ảnh bảo mật qua API (`image/png`) và Bác sĩ đánh giá lâm sàng | **PASSED** |
+| **E2E-09** | `Clinical Consultation: Dentist A creates consultation, Dentist B responds with clinical opinion` | Bác sĩ A gửi câu hỏi hội chẩn, Bác sĩ B phản hồi ý kiến chuyên môn | **PASSED** |
+| **E2E-10** | `Specialty Referral Scheduling & DepartmentServices Pricing Verification` | Điều phối chuyển khoa đích và xác minh đơn giá dịch vụ lấy từ DepartmentServices | **PASSED** |
+
+---
+
+## 4. Danh Sách 5 Kịch Bản Kiểm Thử Frontend Controller
 
 **File:** `FE/DentalClinic.Web.Tests/Controllers/ReceptionistImagingQueueControllerTests.cs`
 
