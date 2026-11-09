@@ -71,7 +71,7 @@ public class RealDatabaseEndToEndSmokeTests
                         a.ScheduledStart.HasValue &&
                         a.ScheduledStart.Value < end &&
                         (a.ScheduledEnd ?? a.ScheduledStart.Value.AddMinutes(30)) > start &&
-                        (a.AssignedDentistUserId == dentistUserId || a.PatientUserId == 13 || a.PatientUserId == 14 || a.PatientUserId == 15));
+                        (a.AssignedDentistUserId == dentistUserId || a.PatientUserId == 13 || a.PatientUserId == 14 || a.PatientUserId == 15 || a.PatientUserId == 5));
 
                     if (busy) continue;
 
@@ -79,7 +79,7 @@ public class RealDatabaseEndToEndSmokeTests
                     var dateStart = start.Date;
                     var dateEnd = dateStart.AddDays(1);
                     var patientAppts = await db.Appointments.AsNoTracking()
-                        .Where(a => a.PatientUserId == 13 &&
+                        .Where(a => (a.PatientUserId == 13 || a.PatientUserId == 5) &&
                                     a.Status != AppointmentStatus.Cancelled &&
                                     a.Status != AppointmentStatus.Withdrawn &&
                                     a.ScheduledStart.HasValue &&
@@ -386,7 +386,7 @@ public class RealDatabaseEndToEndSmokeTests
             ScheduledStart = slotStart,
             ScheduledEnd = slotEnd
         });
-        Assert.True(conf2.Success, "Shared multi-chair room must allow different chairs concurrently");
+        Assert.True(conf2.Success, $"Shared multi-chair room must allow different chairs concurrently: {conf2.Message}");
 
         // PART 2: Double-booking an occupied chair is REJECTED
         var appt3 = new Appointment

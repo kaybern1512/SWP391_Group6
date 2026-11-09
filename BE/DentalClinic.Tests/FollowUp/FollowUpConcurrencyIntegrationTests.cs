@@ -664,7 +664,7 @@ public class FollowUpConcurrencyIntegrationTests
     {
         using var setupDb = _fixture.CreateDbContext();
         var targetDate = DateTime.Today.AddDays(10);
-        var managerId = 5L;       // Manager of Department 3
+        var managerId = 4L;       // Manager of Department 3
         var doctor1 = 1L;         // Active Dentist in Dept 3
         var doctor2 = 4L;         // Active Dentist in Dept 3
         var exclusiveRoomId = 2L; // Room 201: Department 3, IsExclusive = true
@@ -1504,7 +1504,7 @@ public class FollowUpConcurrencyIntegrationTests
     {
         using var setupDb = _fixture.CreateDbContext();
         var doctorId = 1L;   // Dentist in Dept 1
-        var managerId = 17L; // Manager of Dept 1
+        var managerId = 10L; // Manager of Dept 1
         var targetDate = DateTime.Today.AddDays(27);
         await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
 
@@ -1585,7 +1585,7 @@ public class FollowUpConcurrencyIntegrationTests
         var patientId = 6L;
         var doctorA = 1L; // Dentist 1 in Dept 1
         var doctorB = 4L; // Dentist 4 in Dept 1
-        var managerId = 17L;
+        var managerId = 10L;
         var targetDate = DateTime.Today.AddDays(28);
 
         await EnsureDoctorScheduleAsync(setupDb, doctorA, targetDate, 1);
@@ -1666,7 +1666,7 @@ public class FollowUpConcurrencyIntegrationTests
     {
         using var setupDb = _fixture.CreateDbContext();
         var chairId = 1L; // Chair 1 in Room 1
-        var managerId = 17L;
+        var managerId = 10L;
         var doctor1 = 1L;
         var doctor4 = 4L;
         var targetDate = DateTime.Today.AddDays(29);
@@ -1761,7 +1761,7 @@ public class FollowUpConcurrencyIntegrationTests
         var exclusiveRoomId = 2L; // Room 2: IsExclusive = true, Department 3
         var chair1 = 3L;
         var chair2 = 4L;
-        var managerId = 5L;       // Manager of Department 3
+        var managerId = 4L;       // Manager of Department 3
         var doctor1 = 1L;
         var doctor4 = 4L;
         var targetDate = DateTime.Today.AddDays(30);
@@ -1852,7 +1852,7 @@ public class FollowUpConcurrencyIntegrationTests
     {
         using var setupDb = _fixture.CreateDbContext();
         var doctorId = 1L;
-        var managerId = 17L;
+        var managerId = 10L;
         var targetDate = DateTime.Today.AddDays(31);
 
         await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
@@ -1933,7 +1933,7 @@ public class FollowUpConcurrencyIntegrationTests
         using var setupDb = _fixture.CreateDbContext();
         var doctorId = 1L;   // Dept 1
         var doctor4 = 4L;   // Dept 3
-        var managerId = 5L;  // Manager Dept 3
+        var managerId = 4L;  // Manager Dept 3
         var patientId = 6L;
         var targetDate = DateTime.Today.AddDays(32);
         await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
@@ -1998,7 +1998,7 @@ public class FollowUpConcurrencyIntegrationTests
         using var setupDb = _fixture.CreateDbContext();
         var doctorId = 1L;   // Dept 1
         var doctor4 = 4L;   // Dept 3
-        var managerId = 5L;  // Manager Dept 3
+        var managerId = 4L;  // Manager Dept 3
         var patientId = 6L;
         var targetDate = DateTime.Today.AddDays(33);
         await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
@@ -2058,7 +2058,7 @@ public class FollowUpConcurrencyIntegrationTests
         using var setupDb = _fixture.CreateDbContext();
         var doctorId = 1L;   // Dept 1
         var doctor4 = 4L;   // Dept 3
-        var managerId = 5L;  // Manager Dept 3
+        var managerId = 4L;  // Manager Dept 3
         var patientId = 6L;
         var targetDate = DateTime.Today.AddDays(34);
         await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
@@ -2139,8 +2139,8 @@ public class FollowUpConcurrencyIntegrationTests
         using var setupDb = _fixture.CreateDbContext();
         var doctor1 = 1L;   // Dept 1
         var doctor4 = 4L;   // Dept 3
-        var manager1 = 17L; // Manager Dept 1
-        var manager5 = 5L;  // Manager Dept 3
+        var manager1 = 10L; // Manager Dept 1
+        var manager5 = 4L;  // Manager Dept 3
         var patientId = 6L;
         var targetDate = DateTime.Today.AddDays(35);
         await EnsureDoctorScheduleAsync(setupDb, doctor1, targetDate, 1);
@@ -2216,19 +2216,10 @@ public class FollowUpConcurrencyIntegrationTests
         using var setupDb = _fixture.CreateDbContext();
         var doctorId = 1L;
         var targetDate = DateTime.Today.AddDays(136);
-        var targetDateOnly = DateOnly.FromDateTime(targetDate);
+        await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
 
-        // Doctor has a shift 08:00 - 12:00
-        var shift = new DentistWorkSchedule
-        {
-            DentistUserId = doctorId,
-            DepartmentId = 1,
-            WorkDate = targetDateOnly,
-            StartTime = new TimeOnly(8, 0),
-            EndTime = new TimeOnly(12, 0),
-            Status = "Scheduled"
-        };
-        setupDb.DentistWorkSchedules.Add(shift);
+        var shift = await setupDb.DentistWorkSchedules
+            .FirstAsync(ws => ws.DentistUserId == doctorId && ws.WorkDate == DateOnly.FromDateTime(targetDate.Date));
 
         // Confirmed appointment at 09:00 - 09:30 during this shift
         var appt = new Appointment
@@ -2500,7 +2491,7 @@ public class FollowUpConcurrencyIntegrationTests
     {
         using var setupDb = _fixture.CreateDbContext();
         var doctorId = 45L;
-        var managerId = 17L;
+        var managerId = 10L;
         var targetDate = DateTime.Today.AddDays(75); // Day 75 (> 60 days)
         await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
 
@@ -2575,7 +2566,7 @@ public class FollowUpConcurrencyIntegrationTests
     {
         using var setupDb = _fixture.CreateDbContext();
         var doctorId = 46L;
-        var managerId = 17L;
+        var managerId = 10L;
         var targetDate = DateTime.Today.AddDays(45); // Day 45 (> 30 days)
         await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
 
@@ -2635,7 +2626,7 @@ public class FollowUpConcurrencyIntegrationTests
     {
         using var setupDb = _fixture.CreateDbContext();
         var doctorId = 1L;
-        var managerId = 17L;
+        var managerId = 10L;
         var targetDate = DateTime.Today.AddDays(70);
         var targetDateOnly = DateOnly.FromDateTime(targetDate.Date);
         var existingShifts = await setupDb.DentistWorkSchedules
@@ -2686,7 +2677,7 @@ public class FollowUpConcurrencyIntegrationTests
     {
         using var setupDb = _fixture.CreateDbContext();
         var doctorId = 1L;
-        var managerId = 17L;
+        var managerId = 10L;
         var targetDate = DateTime.Today.AddDays(71);
         var targetDateOnly = DateOnly.FromDateTime(targetDate.Date);
 
@@ -2749,7 +2740,7 @@ public class FollowUpConcurrencyIntegrationTests
     {
         using var setupDb = _fixture.CreateDbContext();
         var doctorId = 1L;
-        var managerId = 17L;
+        var managerId = 10L;
         var targetDate = DateTime.Today.AddDays(72);
         var targetDateOnly = DateOnly.FromDateTime(targetDate.Date);
 
@@ -2815,7 +2806,7 @@ public class FollowUpConcurrencyIntegrationTests
     {
         using var setupDb = _fixture.CreateDbContext();
         var doctorId = 1L;
-        var managerId = 17L;
+        var managerId = 10L;
         var targetDate = DateTime.Today.AddDays(73);
         var targetDateOnly = DateOnly.FromDateTime(targetDate.Date);
 
@@ -3645,7 +3636,7 @@ public class FollowUpConcurrencyIntegrationTests
         using var setupDb = _fixture.CreateDbContext();
         var patientId = 6L;
         var doctorId = 1L;
-        var managerId = 17L;
+        var managerId = 10L;
         var receptionistId = 2L;
         var chairId = 1L;
         var targetDate1 = DateTime.Today.AddDays(61);
