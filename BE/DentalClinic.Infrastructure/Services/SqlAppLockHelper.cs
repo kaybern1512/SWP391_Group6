@@ -54,6 +54,12 @@ public static class SqlAppLockHelper
     /// <summary>Lock key for a prescription entity during dispensing operations.</summary>
     public static string PrescriptionKey(long prescriptionId) => $"Lock_Prescription_{prescriptionId}";
 
+    /// <summary>Lock key for staff attendance punches to prevent concurrent double-punch race conditions.</summary>
+    public static string AttendancePunchKey(long userId) => $"Lock_AttendancePunch_{userId}";
+
+    /// <summary>Lock key for monthly attendance period reconciliation/closure.</summary>
+    public static string AttendancePeriodKey(int year, int month) => $"Lock_AttendancePeriod_{year}_{month:D2}";
+
     #endregion
 
     /// <summary>
