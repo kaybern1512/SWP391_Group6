@@ -13,7 +13,7 @@ test.describe('Patient Portal End-to-End Suite', () => {
     const passwordInput = page.locator('input[type="password"]');
     await expect(passwordInput).toBeVisible();
 
-    const submitBtn = page.locator('button[type="submit"]');
+    const submitBtn = page.locator('button[type="submit"]').first();
     await expect(submitBtn).toBeVisible();
   });
 
@@ -33,3 +33,4 @@ test.describe('Patient Portal End-to-End Suite', () => {
     await expect(page).toHaveTitle(/Tin tức|Blog|DentalCare/i);
   });
 });
+

@@ -1255,6 +1255,12 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                 return ApiResponse<FollowUpProposalDto>.Fail("Khung giờ đề xuất đã qua hoặc ở quá khứ. Không thể phê duyệt.");
             }
 
+            if (freshProposal.Appointment == null)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<FollowUpProposalDto>.Fail("Không tìm thấy cuộc hẹn liên kết với đề xuất thay đổi lịch.");
+            }
+
             var validation = await ValidateFollowUpSlotAsync(
                 doctorUserId,
                 freshProposal.Appointment.PatientUserId,
