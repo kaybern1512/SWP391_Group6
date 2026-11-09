@@ -1,4 +1,4 @@
-﻿using DentalClinic.Web.Handlers;
+using DentalClinic.Web.Handlers;
 using DentalClinic.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -162,6 +162,14 @@ builder.Services.AddHttpClient<IAdminApiService, AdminApiService>(client =>
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
 // Dentist Schedule & Availability API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IReceptionistWorkforceApiService, ReceptionistWorkforceApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 builder.Services.AddHttpClient<IDentistScheduleApiService, DentistScheduleApiService>(client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);
