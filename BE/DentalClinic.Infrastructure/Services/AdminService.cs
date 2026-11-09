@@ -347,7 +347,7 @@ public class AdminService : IAdminService
             return ApiResponse<AdminDepartmentServiceDto>.Fail($"Dịch vụ '{trimmedName}' đã tồn tại trong chuyên khoa này.");
         }
 
-        var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric" };
+        var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric", "Implant", "Orthodontics", "General", "Endodontics", "Periodontics", "Examination" };
         var serviceType = validTypes.Contains(request.ServiceType, StringComparer.OrdinalIgnoreCase) ? request.ServiceType : "Treatment";
 
         var service = new DepartmentService
@@ -419,7 +419,7 @@ public class AdminService : IAdminService
 
         var oldValues = JsonSerializer.Serialize(new { service.ServiceName, service.DepartmentId, service.Price, service.Status });
 
-        var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric" };
+        var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric", "Implant", "Orthodontics", "General", "Endodontics", "Periodontics", "Examination" };
         if (!string.IsNullOrWhiteSpace(request.ServiceType) && validTypes.Contains(request.ServiceType, StringComparer.OrdinalIgnoreCase))
         {
             service.ServiceType = request.ServiceType;
@@ -1604,11 +1604,22 @@ public class AdminService : IAdminService
 
         if (normalizedRole == UserRole.Dentist)
         {
+            var qualification = !string.IsNullOrWhiteSpace(request.Education) 
+                ? request.Education.Trim() 
+                : (!string.IsNullOrWhiteSpace(request.Specialty) ? request.Specialty.Trim() : "Bác sĩ Chuyên khoa Răng Hàm Mặt");
+            var licenseNum = !string.IsNullOrWhiteSpace(request.StaffCode) 
+                ? request.StaffCode.Trim() 
+                : $"LIC-{user.UserId:D4}";
+
             var dentistProfile = new DentistProfile
             {
                 UserId = user.UserId,
                 YearsOfExperience = request.ExperienceYears ?? 3,
-                Biography = "Bác sĩ chuyên khoa tại phòng khám DentalCare."
+                Qualification = qualification,
+                LicenseNumber = licenseNum,
+                Biography = !string.IsNullOrWhiteSpace(request.Specialty)
+                    ? $"Bác sĩ chuyên khoa {request.Specialty.Trim()} tại phòng khám DentalCare."
+                    : "Bác sĩ chuyên khoa tại phòng khám DentalCare."
             };
             _dbContext.DentistProfiles.Add(dentistProfile);
 

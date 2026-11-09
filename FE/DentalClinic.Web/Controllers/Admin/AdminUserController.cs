@@ -25,8 +25,8 @@ public class AdminUserController : Controller
         var result = await _adminApi.GetUsersAsync(role, search);
         var deptsResult = await _adminApi.GetDepartmentsAsync();
 
-        var users = result.IsSuccess && result.Data != null ? result.Data : new();
-        var departments = deptsResult.IsSuccess && deptsResult.Data != null ? deptsResult.Data : new();
+        var users = result?.IsSuccess == true && result.Data != null ? result.Data : new();
+        var departments = deptsResult?.IsSuccess == true && deptsResult.Data != null ? deptsResult.Data : new();
 
         var vm = new UserManageViewModel
         {
