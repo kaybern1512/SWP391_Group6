@@ -1,4 +1,4 @@
-﻿using DentalClinic.Domain.Common;
+using DentalClinic.Domain.Common;
 
 using System;
 using System.Collections.Generic;
@@ -615,7 +615,7 @@ public class AppointmentService : IAppointmentService
                 if (coveringShift == null)
                 {
                     if (tx != null) await tx.RollbackAsync(ct);
-                    var shiftTimes = string.Join(", ", activeShifts.Select(s => $"{s.StartTime:hh\\:mm} - {s.EndTime:hh\\:mm}"));
+                    var shiftTimes = string.Join(", ", activeShifts.Select(s => $"{s.StartTime:HH\\:mm} - {s.EndTime:HH\\:mm}"));
                     return ApiResponse<AppointmentDto>.Fail($"Giờ khám nằm ngoài khung giờ làm việc của Bác sĩ (ca làm việc: {shiftTimes}).");
                 }
 
@@ -2610,7 +2610,7 @@ public class AppointmentService : IAppointmentService
             if (coveringShift == null)
             {
                 if (tx != null) await tx.RollbackAsync(ct);
-                var shiftTimes = string.Join(", ", activeShifts.Select(s => $"{s.StartTime:hh\\:mm} - {s.EndTime:hh\\:mm}"));
+                var shiftTimes = string.Join(", ", activeShifts.Select(s => $"{s.StartTime:HH\\:mm} - {s.EndTime:HH\\:mm}"));
                 return ApiResponse<AppointmentDto>.Fail($"Giờ khám nằm ngoài khung giờ làm việc của Bác sĩ (ca làm việc: {shiftTimes}).");
             }
 

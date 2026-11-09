@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -94,8 +94,8 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
                 DepartmentScheduleId = d,
                 DepartmentId = 1,
                 DayOfWeek = d,
-                StartTime = new TimeOnly(6, 0),
-                EndTime = new TimeOnly(23, 0),
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59, 59),
                 IsActive = true
             });
         }
@@ -182,8 +182,8 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
                 DentistUserId = 301,
                 DepartmentId = 1,
                 WorkDate = today,
-                StartTime = new TimeOnly(6, 0),
-                EndTime = new TimeOnly(23, 0),
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59, 59),
                 Status = "Scheduled"
             },
             new DentistWorkSchedule
@@ -192,8 +192,8 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
                 DentistUserId = 301,
                 DepartmentId = 1,
                 WorkDate = today.AddDays(1),
-                StartTime = new TimeOnly(6, 0),
-                EndTime = new TimeOnly(23, 0),
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59, 59),
                 Status = "Scheduled"
             }
         );
@@ -685,7 +685,7 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
             AssignedDentistUserId = dentistId,
             RoomId = 10,
             DentalChairId = 101,
-            ScheduledStart = nowClinic.AddMinutes(5),
+            ScheduledStart = nowClinic.Hour >= 22 ? ClinicTimeHelper.Today.AddDays(1).AddHours(9) : nowClinic.AddMinutes(5),
             ReasonForVisit = "Bệnh nhân vãng lai đau răng khẩn cấp",
             AutoConfirm = true
         });
