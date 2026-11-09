@@ -17,7 +17,7 @@ test.describe('Doctor Leave Request & Appointment Disruption Recovery Flow', () 
   // 1. DENTIST SUBMITS LEAVE REQUEST
   // =========================================================================
   test('E2E-LEAVE-01: Dentist submits leave request and views status on personal schedule', async ({ page }) => {
-    await loginAs(page, 'dentist1@dentalcare.com');
+    await loginAs(page, 'dentist@dentalcare.com');
 
     await page.goto('/Dentist/Schedule');
     await expect(page).toHaveTitle(/Lịch Làm Việc|Lịch Trình|DentalCare/i);
@@ -113,7 +113,7 @@ test.describe('Doctor Leave Request & Appointment Disruption Recovery Flow', () 
       }
     } else {
       // Direct navigation check if mock disruption ID exists or list is clean
-      await expect(page.locator('.card, .table-responsive')).toBeVisible();
+      await expect(page.locator('.card, .table-responsive').first()).toBeVisible();
     }
   });
 
@@ -143,7 +143,7 @@ test.describe('Doctor Leave Request & Appointment Disruption Recovery Flow', () 
         expect(page.url()).toContain('/Patient/Appointment');
       }
     } else {
-      await expect(page.locator('.card, .table-responsive')).toBeVisible();
+      await expect(page.locator('.card, .table-responsive').first()).toBeVisible();
     }
   });
 
@@ -165,7 +165,7 @@ test.describe('Doctor Leave Request & Appointment Disruption Recovery Flow', () 
   // 6. RECEPTIONIST DISRUPTION COORDINATION DASHBOARD
   // =========================================================================
   test('E2E-LEAVE-06: Receptionist navigates to disruption coordination and verifies controls', async ({ page }) => {
-    await loginAs(page, 'receptionist1@dentalcare.com');
+    await loginAs(page, 'receptionist@dentalcare.com');
 
     await page.goto('/Receptionist/Appointments/Disruptions');
     await expect(page).toHaveTitle(/Điều Phối|Lịch Hẹn|DentalCare/i);

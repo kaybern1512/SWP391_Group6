@@ -1,4 +1,4 @@
-﻿@model AdminDentistScheduleManageViewModel
+@model AdminDentistScheduleManageViewModel
 @{
     ViewData["Title"] = "Quản lý Bác Sĩ & Lịch Làm Việc";
 }
@@ -76,7 +76,19 @@
                 <i class="bi bi-calendar-range me-2"></i>Trạng Thái Nghỉ Phép & Bận (@Model.Availabilities.Count)
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link @(Model.ActiveTab == "leave-requests" ? "active" : "")"
+               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="leave-requests">
+                <i class="bi bi-envelope-paper me-2"></i>Duyệt Đơn Nghỉ Phép (@Model.LeaveRequests.Count(l => l.Status == "Pending"))
+            </a>
+        </li>
     </ul>
+
+    <!-- TAB: LEAVE REQUESTS -->
+    @if (Model.ActiveTab == "leave-requests")
+    {
+        <partial name="~/Views/Admin/DentistSchedule/_LeaveRequestsTab.cshtml" model="Model" />
+    }
 
     <!-- TAB: MONTHLY SCHEDULING -->
     @if (Model.ActiveTab == "monthly")

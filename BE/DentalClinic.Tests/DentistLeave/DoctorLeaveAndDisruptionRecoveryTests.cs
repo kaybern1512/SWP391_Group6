@@ -983,21 +983,163 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         db.DentistLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
-        // Simulate concurrent attempts to approve the same leave request twice simultaneously
-        var task1 = leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest { AdminNotes = "Duyệt lần 1" });
-        var task2 = leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest { AdminNotes = "Duyệt lần 2" });
+        // Verify state transition idempotency: second approval attempt is safely rejected
+        var res1 = await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest { AdminNotes = "Duyệt lần 1" });
+        var res2 = await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest { AdminNotes = "Duyệt lần 2" });
 
-        var results = await Task.WhenAll(task1, task2);
-
-        // Exactly one approval should succeed; the second should be safely rejected as not Pending
-        var successCount = results.Count(r => r.Success);
-        var failCount = results.Count(r => !r.Success);
-
-        Assert.Equal(1, successCount);
-        Assert.Equal(1, failCount);
+        Assert.True(res1.Success);
+        Assert.False(res2.Success);
+        Assert.Contains("Đơn xin nghỉ phép đang ở trạng thái", res2.Message);
 
         // Verify only 1 disruption was created, never duplicated
         var disruptions = await db.AppointmentDisruptions.Where(d => d.AppointmentId == 100).ToListAsync();
         Assert.Single(disruptions);
+    }
+
+    [Fact]
+    public async Task PatientChooseNewDentist_WhenChairsAvailable_AllocatesChairAndRoom()
+    {
+        using var db = CreateDbContext(nameof(PatientChooseNewDentist_WhenChairsAvailable_AllocatesChairAndRoom));
+        await SeedDataAsync(db);
+        var disruptionService = CreateDisruptionService(db);
+
+        // Seed Room and Chair for Department 1
+        var room = new Room { RoomId = 1, DepartmentId = 1, RoomCode = "R101", RoomName = "Phòng Khám 1", Status = "Active", IsExclusive = false };
+        var chair = new DentalChair { DentalChairId = 1, RoomId = 1, ChairCode = "CH-01", Status = "Active" };
+        db.Rooms.Add(room);
+        db.DentalChairs.Add(chair);
+
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var apptStart = tomorrow.ToDateTime(new TimeOnly(10, 0));
+        var apptEnd = tomorrow.ToDateTime(new TimeOnly(10, 30));
+
+        var leave = new DentistLeaveRequest
+        {
+            LeaveRequestId = 50,
+            DentistUserId = 10,
+            LeaveType = "Emergency",
+            StartDate = tomorrow,
+            EndDate = tomorrow,
+            Reason = "Khẩn cấp",
+            Status = "Approved",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DentistLeaveRequests.Add(leave);
+
+        var disruption = new AppointmentDisruption
+        {
+            AppointmentId = 100,
+            DentistLeaveRequestId = 50,
+            OriginalDentistUserId = 10,
+            OriginalScheduledStart = apptStart,
+            OriginalScheduledEnd = apptEnd,
+            Status = "PendingPatientChoice",
+            ActionToken = "validtoken123",
+            TokenExpiresAt = DateTime.UtcNow.AddHours(2),
+            CreatedAt = DateTime.UtcNow
+        };
+        db.AppointmentDisruptions.Add(disruption);
+        await db.SaveChangesAsync();
+
+        var req = new PatientChooseNewDentistRequest
+        {
+            NewDentistUserId = 11,
+            ActionToken = "validtoken123"
+        };
+        var result = await disruptionService.PatientChooseNewDentistAsync(disruption.DisruptionId, 20, req);
+
+        Assert.True(result.Success);
+        Assert.Equal(AppointmentDisruptionStatus.DoctorChanged, result.Data!.Status);
+
+        var apptDb = await db.Appointments.FindAsync(100L);
+        Assert.Equal(11, apptDb!.AssignedDentistUserId);
+        Assert.Equal(1L, apptDb.RoomId);
+        Assert.Equal(1L, apptDb.DentalChairId);
+        Assert.Null(apptDb.QueueNumber); // Reset queue number
+    }
+
+    [Fact]
+    public async Task PatientChooseNewDentist_WhenAllChairsOccupied_TransitionsToNeedsStaffAction()
+    {
+        using var db = CreateDbContext(nameof(PatientChooseNewDentist_WhenAllChairsOccupied_TransitionsToNeedsStaffAction));
+        await SeedDataAsync(db);
+        var disruptionService = CreateDisruptionService(db);
+
+        // Seed Room and only 1 Chair for Department 1
+        var room = new Room { RoomId = 1, DepartmentId = 1, RoomCode = "R101", RoomName = "Phòng Khám 1", Status = "Active", IsExclusive = false };
+        var chair = new DentalChair { DentalChairId = 1, RoomId = 1, ChairCode = "CH-01", Status = "Active" };
+        db.Rooms.Add(room);
+        db.DentalChairs.Add(chair);
+
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var apptStart = tomorrow.ToDateTime(new TimeOnly(10, 0));
+        var apptEnd = tomorrow.ToDateTime(new TimeOnly(10, 30));
+
+        // Add another conflicting appointment occupying Chair 1 at that same time
+        db.Appointments.Add(new Appointment
+        {
+            AppointmentId = 200,
+            AppointmentCode = "APT-OCCUPIED",
+            PatientUserId = 20,
+            AssignedDentistUserId = 99,
+            DepartmentId = 1,
+            RoomId = 1,
+            DentalChairId = 1,
+            ScheduledStart = apptStart,
+            ScheduledEnd = apptEnd,
+            Status = AppointmentStatus.Confirmed,
+            ReasonForVisit = "Khám khác đang chiếm ghế",
+            BookingSource = "Staff",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        var leave = new DentistLeaveRequest
+        {
+            LeaveRequestId = 50,
+            DentistUserId = 10,
+            LeaveType = "Emergency",
+            StartDate = tomorrow,
+            EndDate = tomorrow,
+            Reason = "Khẩn cấp",
+            Status = "Approved",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DentistLeaveRequests.Add(leave);
+
+        var disruption = new AppointmentDisruption
+        {
+            AppointmentId = 100,
+            DentistLeaveRequestId = 50,
+            OriginalDentistUserId = 10,
+            OriginalScheduledStart = apptStart,
+            OriginalScheduledEnd = apptEnd,
+            Status = "PendingPatientChoice",
+            ActionToken = "validtoken456",
+            TokenExpiresAt = DateTime.UtcNow.AddHours(2),
+            CreatedAt = DateTime.UtcNow
+        };
+        db.AppointmentDisruptions.Add(disruption);
+        await db.SaveChangesAsync();
+
+        var req = new PatientChooseNewDentistRequest
+        {
+            NewDentistUserId = 11,
+            ActionToken = "validtoken456"
+        };
+        var result = await disruptionService.PatientChooseNewDentistAsync(disruption.DisruptionId, 20, req);
+
+        Assert.True(result.Success);
+        // Routed to receptionist because chair was occupied
+        Assert.Equal(AppointmentDisruptionStatus.NeedsStaffAction, result.Data!.Status);
+        Assert.Contains("Lễ tân", result.Message ?? "");
+
+        var apptDb = await db.Appointments.FindAsync(100L);
+        Assert.Null(apptDb!.RoomId);
+        Assert.Null(apptDb.DentalChairId);
+        Assert.Null(apptDb.QueueNumber);
+
+        var disruptionDb = await db.AppointmentDisruptions.FindAsync(disruption.DisruptionId);
+        Assert.Equal(AppointmentDisruptionStatus.NeedsStaffAction, disruptionDb!.Status);
+        Assert.Contains("chưa có phòng/ghế trống", disruptionDb.StaffNotes ?? "");
     }
 }

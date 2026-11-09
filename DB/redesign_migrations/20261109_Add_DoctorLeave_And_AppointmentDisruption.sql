@@ -93,7 +93,7 @@ BEGIN
     CREATE UNIQUE NONCLUSTERED INDEX [UQ_AppointmentDisruptions_Appt_Leave] 
         ON [dbo].[AppointmentDisruptions] ([AppointmentId], [DentistLeaveRequestId]);
 
-    CREATE NONCLUSTERED INDEX [IX_AppointmentDisruptions_ActionToken] 
+    CREATE UNIQUE NONCLUSTERED INDEX [UQ_AppointmentDisruptions_ActionToken] 
         ON [dbo].[AppointmentDisruptions] ([ActionToken]) WHERE [ActionToken] IS NOT NULL;
 
     PRINT 'Created AppointmentDisruptions table successfully.';
@@ -114,6 +114,19 @@ BEGIN
         CREATE UNIQUE NONCLUSTERED INDEX [UQ_AppointmentDisruptions_Appt_Leave] 
             ON [dbo].[AppointmentDisruptions] ([AppointmentId], [DentistLeaveRequestId]);
         PRINT 'Created UQ_AppointmentDisruptions_Appt_Leave unique index.';
+    END
+
+    IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_AppointmentDisruptions_ActionToken' AND object_id = OBJECT_ID('dbo.AppointmentDisruptions'))
+    BEGIN
+        DROP INDEX [IX_AppointmentDisruptions_ActionToken] ON [dbo].[AppointmentDisruptions];
+        PRINT 'Dropped legacy IX_AppointmentDisruptions_ActionToken non-unique index.';
+    END
+
+    IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'UQ_AppointmentDisruptions_ActionToken' AND object_id = OBJECT_ID('dbo.AppointmentDisruptions'))
+    BEGIN
+        CREATE UNIQUE NONCLUSTERED INDEX [UQ_AppointmentDisruptions_ActionToken] 
+            ON [dbo].[AppointmentDisruptions] ([ActionToken]) WHERE [ActionToken] IS NOT NULL;
+        PRINT 'Created UQ_AppointmentDisruptions_ActionToken unique filtered index.';
     END
 END
 GO

@@ -367,10 +367,94 @@ public class AppointmentDisruptionService : IAppointmentDisruptionService
                 return ApiResponse<AppointmentDisruptionDto>.Fail("Bác sĩ vừa được phân công một ca khám khác trong khung giờ này. Vui lòng chọn phương án hoặc bác sĩ khác.");
             }
 
-            // Apply dentist update to appointment (invalidate room/chair/queue for safety)
+            // Check room & chair allocation for the department
+            long? assignedRoomId = null;
+            long? assignedChairId = null;
+
+            var deptId = appt.DepartmentId;
+            var deptChairsQuery = _dbContext.DentalChairs
+                .Include(c => c.Room)
+                .Where(c => c.Status == "Active" && (c.Room == null || c.Room.Status == "Active"));
+
+            if (deptId.HasValue)
+            {
+                deptChairsQuery = deptChairsQuery.Where(c => c.Room == null || c.Room.DepartmentId == deptId.Value);
+            }
+
+            var allDeptChairs = await deptChairsQuery.ToListAsync(ct);
+            if (allDeptChairs.Any())
+            {
+                var occupiedChairIds = await _dbContext.Appointments
+                    .AsNoTracking()
+                    .Where(a => a.AppointmentId != appt.AppointmentId &&
+                                a.DentalChairId.HasValue &&
+                                occupiedStatuses.Contains(a.Status) &&
+                                a.ScheduledStart.HasValue &&
+                                a.ScheduledStart.Value < apptEnd &&
+                                (a.ScheduledEnd ?? a.ScheduledStart.Value.AddMinutes(30)) > apptStart)
+                    .Select(a => a.DentalChairId!.Value)
+                    .ToListAsync(ct);
+
+                var occupiedExclusiveRoomIds = await _dbContext.Appointments
+                    .AsNoTracking()
+                    .Where(a => a.AppointmentId != appt.AppointmentId &&
+                                a.RoomId.HasValue &&
+                                a.Room != null && a.Room.IsExclusive &&
+                                occupiedStatuses.Contains(a.Status) &&
+                                a.ScheduledStart.HasValue &&
+                                a.ScheduledStart.Value < apptEnd &&
+                                (a.ScheduledEnd ?? a.ScheduledStart.Value.AddMinutes(30)) > apptStart)
+                    .Select(a => a.RoomId!.Value)
+                    .ToListAsync(ct);
+
+                var availableChair = allDeptChairs.FirstOrDefault(c =>
+                    !occupiedChairIds.Contains(c.DentalChairId) &&
+                    !occupiedExclusiveRoomIds.Contains(c.RoomId));
+
+                if (availableChair != null)
+                {
+                    assignedChairId = availableChair.DentalChairId;
+                    assignedRoomId = availableChair.RoomId;
+                }
+                else
+                {
+                    // No available chair/room in department for this slot -> route to Receptionist
+                    appt.AssignedDentistUserId = request.NewDentistUserId;
+                    appt.RoomId = null;
+                    appt.DentalChairId = null;
+                    appt.QueueNumber = null;
+                    appt.UpdatedAt = now;
+
+                    disruption.Status = AppointmentDisruptionStatus.NeedsStaffAction;
+                    disruption.PatientChoice = DisruptionPatientChoice.ChangeDoctor;
+                    disruption.NewDentistUserId = request.NewDentistUserId;
+                    disruption.StaffNotes = "Bệnh nhân đã chọn Bác sĩ thay thế nhưng chưa có phòng/ghế trống trong khung giờ này. Cần Lễ tân bố trí tài nguyên thủ công.";
+                    disruption.ActionToken = null;
+                    disruption.TokenExpiresAt = null;
+                    disruption.UpdatedAt = now;
+
+                    _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+                    {
+                        AppointmentId = appt.AppointmentId,
+                        OldStatus = appt.Status,
+                        NewStatus = appt.Status,
+                        ChangedByUserId = patientUserId,
+                        Note = "Bệnh nhân chọn đổi bác sĩ nhưng phòng khám thiếu phòng/ghế khả dụng. Chuyển Lễ tân tiếp đón điều phối.",
+                        ChangedAt = now
+                    });
+
+                    await _dbContext.SaveChangesAsync(ct);
+                    if (tx != null) await tx.CommitAsync(ct);
+
+                    return ApiResponse<AppointmentDisruptionDto>.Ok(MapToDto(disruption),
+                        "Bác sĩ đã được lựa chọn. Tuy nhiên, khung giờ này phòng khám chưa thể tự động phân bổ phòng/ghế trống. Yêu cầu của bạn đã được chuyển tới Lễ tân để ưu tiên sắp xếp trực tiếp.");
+                }
+            }
+
+            // Apply dentist and resources update to appointment (queue number reset for check-in)
             appt.AssignedDentistUserId = request.NewDentistUserId;
-            appt.RoomId = null;
-            appt.DentalChairId = null;
+            appt.RoomId = assignedRoomId;
+            appt.DentalChairId = assignedChairId;
             appt.QueueNumber = null;
             appt.UpdatedAt = now;
 
@@ -613,11 +697,95 @@ public class AppointmentDisruptionService : IAppointmentDisruptionService
                 return ApiResponse<AppointmentDisruptionDto>.Fail("Khung giờ mới này vừa được đặt bởi bệnh nhân khác. Vui lòng chọn khung giờ khác.");
             }
 
-            // Update appointment schedule (clear room, dental chair, and queue number)
+            // Check room & chair allocation for the new rescheduled time
+            long? assignedRoomId = null;
+            long? assignedChairId = null;
+
+            var deptId = appt.DepartmentId;
+            var deptChairsQuery = _dbContext.DentalChairs
+                .Include(c => c.Room)
+                .Where(c => c.Status == "Active" && (c.Room == null || c.Room.Status == "Active"));
+
+            if (deptId.HasValue)
+            {
+                deptChairsQuery = deptChairsQuery.Where(c => c.Room == null || c.Room.DepartmentId == deptId.Value);
+            }
+
+            var allDeptChairs = await deptChairsQuery.ToListAsync(ct);
+            if (allDeptChairs.Any())
+            {
+                var occupiedChairIds = await _dbContext.Appointments
+                    .AsNoTracking()
+                    .Where(a => a.AppointmentId != appt.AppointmentId &&
+                                a.DentalChairId.HasValue &&
+                                occupiedStatuses.Contains(a.Status) &&
+                                a.ScheduledStart.HasValue &&
+                                a.ScheduledStart.Value < newEnd &&
+                                (a.ScheduledEnd ?? a.ScheduledStart.Value.AddMinutes(30)) > newStart)
+                    .Select(a => a.DentalChairId!.Value)
+                    .ToListAsync(ct);
+
+                var occupiedExclusiveRoomIds = await _dbContext.Appointments
+                    .AsNoTracking()
+                    .Where(a => a.AppointmentId != appt.AppointmentId &&
+                                a.RoomId.HasValue &&
+                                a.Room != null && a.Room.IsExclusive &&
+                                occupiedStatuses.Contains(a.Status) &&
+                                a.ScheduledStart.HasValue &&
+                                a.ScheduledStart.Value < newEnd &&
+                                (a.ScheduledEnd ?? a.ScheduledStart.Value.AddMinutes(30)) > newStart)
+                    .Select(a => a.RoomId!.Value)
+                    .ToListAsync(ct);
+
+                var availableChair = allDeptChairs.FirstOrDefault(c =>
+                    !occupiedChairIds.Contains(c.DentalChairId) &&
+                    !occupiedExclusiveRoomIds.Contains(c.RoomId));
+
+                if (availableChair != null)
+                {
+                    assignedChairId = availableChair.DentalChairId;
+                    assignedRoomId = availableChair.RoomId;
+                }
+                else
+                {
+                    // No available chair/room for the new requested slot -> route to Receptionist
+                    appt.ScheduledStart = newStart;
+                    appt.ScheduledEnd = newEnd;
+                    appt.RoomId = null;
+                    appt.DentalChairId = null;
+                    appt.QueueNumber = null;
+                    appt.UpdatedAt = now;
+
+                    disruption.Status = AppointmentDisruptionStatus.NeedsStaffAction;
+                    disruption.PatientChoice = DisruptionPatientChoice.Reschedule;
+                    disruption.StaffNotes = $"Bệnh nhân yêu cầu dời lịch sang {newStart:HH:mm dd/MM/yyyy} nhưng phòng khám chưa có phòng/ghế trống. Cần Lễ tân bố trí tài nguyên thủ công.";
+                    disruption.ActionToken = null;
+                    disruption.TokenExpiresAt = null;
+                    disruption.UpdatedAt = now;
+
+                    _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+                    {
+                        AppointmentId = appt.AppointmentId,
+                        OldStatus = appt.Status,
+                        NewStatus = appt.Status,
+                        ChangedByUserId = patientUserId,
+                        Note = $"Bệnh nhân dời lịch sang {newStart:dd/MM/yyyy HH:mm} nhưng phòng khám thiếu phòng/ghế khả dụng. Chuyển Lễ tân tiếp đón điều phối.",
+                        ChangedAt = now
+                    });
+
+                    await _dbContext.SaveChangesAsync(ct);
+                    if (tx != null) await tx.CommitAsync(ct);
+
+                    return ApiResponse<AppointmentDisruptionDto>.Ok(MapToDto(disruption),
+                        "Khung giờ mới đã được ghi nhận. Tuy nhiên, thời điểm này chưa thể tự động phân bổ phòng/ghế trống. Yêu cầu đã được chuyển tới Lễ tân để ưu tiên bố trí.");
+                }
+            }
+
+            // Update appointment schedule (assign room/chair, clear queue number for new day check-in)
             appt.ScheduledStart = newStart;
             appt.ScheduledEnd = newEnd;
-            appt.RoomId = null;
-            appt.DentalChairId = null;
+            appt.RoomId = assignedRoomId;
+            appt.DentalChairId = assignedChairId;
             appt.QueueNumber = null;
             appt.UpdatedAt = now;
 

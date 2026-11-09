@@ -557,6 +557,7 @@ public partial class DentalClinicDbContext : DbContext
             entity.Property(e => e.EmailFailureReason).HasMaxLength(500);
             entity.Property(e => e.EmailRetryCount).HasDefaultValue(0);
             entity.Property(e => e.ActionToken).HasMaxLength(100);
+            entity.HasIndex(e => e.ActionToken, "UQ_AppointmentDisruptions_ActionToken").IsUnique().HasFilter("[ActionToken] IS NOT NULL");
             entity.HasIndex(e => new { e.AppointmentId, e.DentistLeaveRequestId }, "UQ_AppointmentDisruptions_Appt_Leave").IsUnique();
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
 

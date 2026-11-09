@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -22,7 +22,7 @@ public class RealDatabaseEndToEndSmokeTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? "Server=.\\SQLEXPRESS;Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? "Server=.\\SQLEXPRESS;Database=DentalCare_Leave_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private static async Task<bool> IsDatabaseAvailableAsync(DentalClinicDbContext db)
     {

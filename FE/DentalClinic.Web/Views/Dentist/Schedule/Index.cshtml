@@ -1,4 +1,4 @@
-﻿@using System.Globalization
+@using System.Globalization
 @model DentalClinic.Web.ViewModels.DentistSchedule.DentistPersonalScheduleViewModel
 @{
     ViewData["Title"] = "Lịch Làm Việc Hàng Tháng";
@@ -176,7 +176,15 @@
             <h1 class="h3 fw-bold text-slate-800 mb-0">Lịch Làm Việc & Phân Công Ca Trực</h1>
             <p class="text-muted small mb-0 mt-1">Theo dõi ca trực theo lịch tháng, khung giờ làm việc và danh sách bệnh nhân khám tại các chuyên khoa</p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-warning text-dark fw-bold d-flex align-items-center gap-1 shadow-sm" data-bs-toggle="modal" data-bs-target="#createLeaveModal">
+                <i class="bi bi-calendar-plus"></i>
+                <span>Xin Nghỉ Phép</span>
+            </button>
+            <button type="button" class="btn btn-outline-secondary d-flex align-items-center gap-1 shadow-sm" data-bs-toggle="modal" data-bs-target="#myLeavesModal">
+                <i class="bi bi-card-checklist"></i>
+                <span>Đơn Nghỉ Của Tôi</span>
+            </button>
             <a asp-controller="DentistSchedule" asp-action="Availability" class="btn btn-outline-secondary d-flex align-items-center gap-2">
                 <i class="bi bi-clock-history"></i>
                 <span>Trạng Thái / Nghỉ Phép</span>

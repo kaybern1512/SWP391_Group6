@@ -274,6 +274,24 @@ builder.Services.AddHttpClient<IMedicineApiService, MedicineApiService>(client =
 .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
+// Dentist Leave API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IDentistLeaveApiService, DentistLeaveApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
+// Appointment Disruption API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IAppointmentDisruptionApiService, AppointmentDisruptionApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 var app = builder.Build();
 
 // Initialize VietQR helper settings from configuration
