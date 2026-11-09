@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -18,6 +18,16 @@ public partial class DepartmentService
     public decimal Price { get; set; }
 
     public string Status { get; set; } = null!;
+
+    public string ServiceType { get; set; } = "Treatment";
+
+    public bool RequiresExclusiveRoom { get; set; } = false;
+
+    public bool RequiresConsultationFirst { get; set; } = false;
+
+    public int MinLeadTimeHours { get; set; } = 2;
+
+    public string? BookingInstructions { get; set; }
 
     public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
 

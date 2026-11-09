@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
 
@@ -34,9 +35,19 @@ public partial class BlogPost
 
     public DateTime? UpdatedAt { get; set; }
 
+    public string PostType { get; set; } = "Blog";
+
+    public string? RejectionReason { get; set; }
+
+    public long? ApprovedByUserId { get; set; }
+
+    public DateTime? ApprovedAt { get; set; }
+
     public virtual BlogCategory Category { get; set; } = null!;
 
     public virtual UserAccount AuthorUser { get; set; } = null!;
+
+    public virtual UserAccount? ApprovedByUser { get; set; }
 
     public virtual ICollection<BlogPostMedia> MediaItems { get; set; } = new List<BlogPostMedia>();
 }

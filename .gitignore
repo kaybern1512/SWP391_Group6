@@ -95,3 +95,4 @@ setup-secrets.ps1
 appsettings*.Local.json
 
 cookies.txt
+*.bak
