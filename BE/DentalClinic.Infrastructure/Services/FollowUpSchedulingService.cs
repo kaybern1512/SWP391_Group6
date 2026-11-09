@@ -1,4 +1,5 @@
 ﻿using DentalClinic.Domain.Common;
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,13 +19,14 @@ namespace DentalClinic.Infrastructure.Services;
 public class FollowUpSchedulingService : IFollowUpSchedulingService
 {
     private readonly DentalClinicDbContext _dbContext;
-    private readonly INotificationService _notificationService;
+    private readonly INotificationService? _notificationService;
+    private readonly IAppointmentReminderService? _reminderService;
     private readonly ILogger<FollowUpSchedulingService> _logger;
 
     public FollowUpSchedulingService(
         DentalClinicDbContext dbContext,
         ILogger<FollowUpSchedulingService> logger)
-        : this(dbContext, null!, logger)
+        : this(dbContext, null!, null!, logger)
     {
     }
 
@@ -32,9 +34,19 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         DentalClinicDbContext dbContext,
         INotificationService notificationService,
         ILogger<FollowUpSchedulingService> logger)
+: this(dbContext, notificationService, null!, logger)
+    {
+    }
+
+    public FollowUpSchedulingService(
+        DentalClinicDbContext dbContext,
+        INotificationService? notificationService,
+        IAppointmentReminderService? reminderService,
+        ILogger<FollowUpSchedulingService> logger)
     {
         _dbContext = dbContext;
         _notificationService = notificationService;
+        _reminderService = reminderService;
         _logger = logger;
     }
 
@@ -622,6 +634,20 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                 await tx.CommitAsync(ct);
             }
 
+            // Schedule automated reminder jobs (T-24h & T-8h)
+            if (_reminderService != null)
+            {
+                try
+                {
+                    await _reminderService.ScheduleRemindersForAppointmentAsync(appointment.AppointmentId, ct);
+                }
+                catch (Exception remEx)
+                {
+                    _logger.LogWarning(remEx, "Không thể lập lịch gửi email nhắc hẹn cho ca tái khám #{AppointmentId}.", appointment.AppointmentId);
+                }
+            }
+
+
             // 6. Send Patient Notification
             var deptName = "Nha khoa";
             if (departmentId.HasValue)
@@ -802,6 +828,16 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                 if (tx != null) await tx.RollbackAsync(ct);
                 return ApiResponse<FollowUpProposalDto>.Fail("Cuộc hẹn này đang có một yêu cầu thay đổi đang chờ bác sĩ phản hồi.");
             }
+
+            // Throttling: prevent spamming proposals (max 3 proposals per appointment)
+            var proposalCount = await _dbContext.AppointmentChangeProposals
+                .CountAsync(p => p.AppointmentId == request.AppointmentId, ct);
+            if (proposalCount >= 3)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<FollowUpProposalDto>.Fail("Bạn đã vượt quá số lần đề xuất thay đổi lịch cho cuộc hẹn này (tối đa 3 lần). Vui lòng liên hệ trực tiếp phòng khám hoặc lễ tân.");
+            }
+
 
             var doctorId = freshAppt.AssignedDentistUserId ?? freshAppt.RequestedDentistUserId;
             if (doctorId.HasValue && doctorId.Value > 0)
@@ -1279,6 +1315,13 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             if (!isRebook)
             {
                 // Reschedule: update existing appointment
+                // If scheduled time moves to another slot, clear chair/room to avoid chair double-booking
+                if (freshProposal.Appointment.ScheduledStart != proposedStart)
+                {
+                    freshProposal.Appointment.DentalChairId = null;
+                    freshProposal.Appointment.RoomId = null;
+                }
+
                 freshProposal.Appointment.ScheduledStart = proposedStart;
                 freshProposal.Appointment.ScheduledEnd = proposedEnd;
                 freshProposal.Appointment.Status = AppointmentStatus.Confirmed;
@@ -1316,11 +1359,36 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                 finalAppointment = newApt;
             }
 
+            // Synchronize FollowUpSchedule with the final approved appointment and new date
+            var followUp = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.AppointmentId == freshProposal.AppointmentId, ct);
+            if (followUp != null)
+            {
+                followUp.AppointmentId = finalAppointment.AppointmentId;
+                followUp.RecommendedDate = proposedStart;
+                followUp.Status = "Scheduled";
+            }
+
+
             freshProposal.Status = ProposalStatus.Accepted;
             freshProposal.RespondedAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync(ct);
 
             if (tx != null) await tx.CommitAsync(ct);
+
+            // Reschedule automated reminder jobs according to new appointment time
+            if (_reminderService != null)
+            {
+                try
+                {
+                    await _reminderService.RescheduleRemindersForAppointmentAsync(finalAppointment.AppointmentId, ct);
+                }
+                catch (Exception remEx)
+                {
+                    _logger.LogWarning(remEx, "Không thể cập nhật lịch gửi email nhắc hẹn cho ca tái khám #{AppointmentId}.", finalAppointment.AppointmentId);
+                }
+            }
+
 
             // Notify patient
             try

@@ -127,4 +127,62 @@ public class PrescriptionWebControllerTests
         var vm = viewResult.Model.Should().BeOfType<PatientPrescriptionIndexViewModel>().Subject;
         vm.Prescriptions.Should().HaveCount(1);
     }
+    [Fact]
+    public async Task DentistPrescriptionController_Index_WithAppointmentId_PreselectsTargetAppointmentAndAutoOpensModal()
+    {
+        var eligibleAppts = new List<PrescriptionEligibleAppointmentDto>
+        {
+            new() { AppointmentId = 10, PatientName = "Nguyễn Văn A", AppointmentCode = "APP-001" }
+        };
+
+        _apiMock.Setup(x => x.GetDentistPrescriptionsAsync(null))
+            .ReturnsAsync(ApiResult<List<PrescriptionDto>>.Success(new List<PrescriptionDto>()));
+        _apiMock.Setup(x => x.GetEligibleAppointmentsAsync())
+            .ReturnsAsync(ApiResult<List<PrescriptionEligibleAppointmentDto>>.Success(eligibleAppts));
+
+        var controller = new DentistPrescriptionController(_apiMock.Object, _medicineApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist")
+        };
+
+        var result = await controller.Index(appointmentId: 10, autoOpen: true);
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = viewResult.Model.Should().BeOfType<DentistPrescriptionIndexViewModel>().Subject;
+        vm.TargetAppointmentId.Should().Be(10);
+        vm.TargetAppointment.Should().NotBeNull();
+        vm.TargetAppointment!.AppointmentCode.Should().Be("APP-001");
+        vm.AutoOpenModal.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DentistPrescriptionController_Create_WithLocalReturnUrl_RedirectsToReturnUrl()
+    {
+        _apiMock.Setup(x => x.CreatePrescriptionAsync(It.IsAny<CreatePrescriptionRequest>()))
+            .ReturnsAsync(ApiResult<PrescriptionDto>.Success(new PrescriptionDto { PrescriptionId = 5, AppointmentCode = "APP-001" }));
+
+        var mockUrl = new Mock<IUrlHelper>();
+        mockUrl.Setup(u => u.IsLocalUrl("/Dentist/MedicalRecords?patientId=1&appointmentId=10")).Returns(true);
+
+        var controller = new DentistPrescriptionController(_apiMock.Object, _medicineApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(1, "Dentist"),
+            TempData = CreateTempData(),
+            Url = mockUrl.Object
+        };
+
+        var form = new CreatePrescriptionFormModel
+        {
+            AppointmentId = 10,
+            GeneralInstructions = "Uống sau ăn",
+            ItemsJson = "[{\"MedicationName\":\"Paracetamol\",\"Dosage\":\"500mg\"}]",
+            ReturnUrl = "/Dentist/MedicalRecords?patientId=1&appointmentId=10"
+        };
+
+        var result = await controller.Create(form);
+
+        var redirect = result.Should().BeOfType<RedirectResult>().Subject;
+        redirect.Url.Should().Be("/Dentist/MedicalRecords?patientId=1&appointmentId=10");
+        controller.TempData["SuccessMessage"].Should().NotBeNull();
+    }
 }

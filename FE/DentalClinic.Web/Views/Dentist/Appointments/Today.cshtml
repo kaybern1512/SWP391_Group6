@@ -252,7 +252,14 @@
                                         </a>
                                         @if (appt.Status == "InService" || appt.Status == "Completed")
                                         {
-                                            <a asp-controller="DentistPrescription" asp-action="Index" asp-route-search="@appt.PatientCode" class="btn btn-sm btn-outline-success" title="Kê đơn hoặc xem đơn thuốc">
+                                            <a asp-controller="DentistPrescription" 
+                                               asp-action="Index" 
+                                               asp-route-appointmentId="@appt.AppointmentId" 
+                                               asp-route-search="@appt.PatientCode" 
+                                               asp-route-autoOpen="true" 
+                                               asp-route-returnUrl="@(Url.Action("Today", "DentistAppointment", new { date = Model.SelectedDate.ToString("yyyy-MM-dd") }))" 
+                                               class="btn btn-sm btn-outline-success fw-medium" 
+                                               title="Kê đơn thuốc trực tiếp cho ca khám này">
                                                 <i class="bi bi-capsule me-1"></i>Đơn Thuốc
                                             </a>
                                         }

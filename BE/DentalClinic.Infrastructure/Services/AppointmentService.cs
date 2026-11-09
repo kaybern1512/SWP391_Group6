@@ -1,4 +1,5 @@
 ﻿using DentalClinic.Domain.Common;
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1057,6 +1058,7 @@ public class AppointmentService : IAppointmentService
             }
 
             var localNow = ClinicTimeHelper.Now;
+
             bool isLate = false;
             double hoursNotice = 0;
             if (appointment.ScheduledStart.HasValue)
@@ -1105,6 +1107,7 @@ public class AppointmentService : IAppointmentService
             {
                 linkedFollowUp.Status = "Cancelled";
             }
+
 
             await _dbContext.SaveChangesAsync(ct);
             if (tx != null) await tx.CommitAsync(ct);
@@ -1195,6 +1198,7 @@ public class AppointmentService : IAppointmentService
 
         // Validate new schedule time
         if (newStart <= clinicNow)
+
         {
             return ApiResponse<AppointmentDto>.Fail("Thời gian khám mới không được nằm trong quá khứ.");
         }
@@ -1289,6 +1293,7 @@ public class AppointmentService : IAppointmentService
             if (duration <= 0) duration = 30;
             var scheduledEnd = newStart.AddMinutes(duration);
 
+
             newCode = await GenerateUniqueAppointmentCodeAsync(ct);
             var now = DateTime.UtcNow;
 
@@ -1348,6 +1353,7 @@ public class AppointmentService : IAppointmentService
                 RoomId = null,
                 DentalChairId = null,
                 ScheduledStart = newStart,
+
                 ScheduledEnd = scheduledEnd,
                 ReasonForVisit = $"{appointment.ReasonForVisit} (Dời từ lịch {appointment.AppointmentCode})",
                 BookingSource = BookingSource.Patient,
@@ -1377,6 +1383,7 @@ public class AppointmentService : IAppointmentService
                 linkedFollowUp.Appointment = newAppointment;
                 linkedFollowUp.Status = "Scheduled";
             }
+
 
             await _dbContext.SaveChangesAsync(ct);
             if (tx != null)
@@ -2147,6 +2154,7 @@ public class AppointmentService : IAppointmentService
                 linkedFollowUp.Status = "Cancelled";
             }
 
+
             await _dbContext.SaveChangesAsync(ct);
             if (tx != null)
             {
@@ -2733,6 +2741,7 @@ public class AppointmentService : IAppointmentService
                 await tx.CommitAsync(ct);
                 committed = true;
             }
+
 
             // Post-commit side effect: send notification (does not rollback or fail the main operation if delivery fails)
             try
@@ -3511,4 +3520,177 @@ public class AppointmentService : IAppointmentService
         {
             return ManagerProposeChangeAsync(appointmentId, receptionistUserId, request, ct);
         }
+
+    
+    public async Task<ApiResponse> DentistAddAdditionalServiceAsync(
+        long appointmentId,
+        long dentistUserId,
+        DentistAddAdditionalServiceRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null || request.ServiceId <= 0)
+        {
+            return ApiResponse.Fail("Vui lòng chọn dịch vụ muốn bổ sung.");
+        }
+
+        var appt = await _dbContext.Appointments
+            .Include(a => a.RequestedService)
+            .Include(a => a.TreatmentSessions)
+                .ThenInclude(ts => ts.PerformedServices)
+            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+
+        if (appt == null)
+        {
+            return ApiResponse.Fail("Không tìm thấy thông tin lịch hẹn.");
+        }
+
+        if (appt.Status == AppointmentStatus.Completed || appt.Status == AppointmentStatus.Cancelled)
+        {
+            return ApiResponse.Fail($"Không thể bổ sung dịch vụ khi ca khám đã ở trạng thái {appt.Status}.");
+        }
+
+        if (appt.AssignedDentistUserId.HasValue && appt.AssignedDentistUserId.Value != dentistUserId)
+        {
+            var user = await _dbContext.UserAccounts.FirstOrDefaultAsync(u => u.UserId == dentistUserId, ct);
+            var isStaffOrAdmin = user != null && (user.Role == UserRole.SystemAdministrator || user.Role == UserRole.DepartmentManager);
+            if (!isStaffOrAdmin)
+            {
+                return ApiResponse.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
+            }
+        }
+
+        var service = await _dbContext.DepartmentServices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.DepartmentServiceId == request.ServiceId && s.Status == "Active", ct);
+
+        if (service == null)
+        {
+            return ApiResponse.Fail("Dịch vụ không tồn tại hoặc đã ngừng hoạt động.");
+        }
+
+        var now = DateTime.UtcNow;
+        var deptId = appt.DepartmentId ?? 1;
+
+        // Get or create TreatmentSession for this appointment
+        var session = appt.TreatmentSessions.FirstOrDefault();
+        if (session == null)
+        {
+            var appointmentNote = $"Đợt khám {appt.AppointmentCode}";
+            var plan = await _dbContext.TreatmentPlans
+                .FirstOrDefaultAsync(tp => tp.PatientUserId == appt.PatientUserId &&
+                                           tp.DepartmentId == deptId &&
+                                           tp.TreatmentPlanItems.Any(tpi => tpi.Note == appointmentNote), ct);
+
+            if (plan == null)
+            {
+                plan = new TreatmentPlan
+                {
+                    PatientUserId = appt.PatientUserId,
+                    DepartmentId = deptId,
+                    CreatedByDentistUserId = dentistUserId,
+                    Status = "Completed",
+                    CreatedAt = now
+                };
+                _dbContext.TreatmentPlans.Add(plan);
+                await _dbContext.SaveChangesAsync(ct);
+            }
+
+            var item = await _dbContext.TreatmentPlanItems
+                .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId && tpi.Note == appointmentNote, ct);
+
+            if (item == null)
+            {
+                var maxSeq = await _dbContext.TreatmentPlanItems
+                    .Where(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId)
+                    .Select(tpi => (int?)tpi.SequenceNo)
+                    .MaxAsync(ct) ?? 0;
+
+                item = new TreatmentPlanItem
+                {
+                    TreatmentPlanId = plan.TreatmentPlanId,
+                    SequenceNo = maxSeq + 1,
+                    Status = "Completed",
+                    AssignedDentistUserId = dentistUserId,
+                    Note = appointmentNote
+                };
+                _dbContext.TreatmentPlanItems.Add(item);
+                await _dbContext.SaveChangesAsync(ct);
+            }
+
+            session = new TreatmentSession
+            {
+                TreatmentPlanItemId = item.TreatmentPlanItemId,
+                AppointmentId = appointmentId,
+                DentistUserId = dentistUserId,
+                SessionDate = now,
+                TreatmentResult = "Thực hiện dịch vụ nha khoa",
+                ClinicalNote = $"Phiên điều trị cho ca khám {appt.AppointmentCode}"
+            };
+            _dbContext.TreatmentSessions.Add(session);
+            await _dbContext.SaveChangesAsync(ct);
+        }
+
+        // If session.PerformedServices is empty and appt.RequestedService exists, add requested service as base
+        if (session.PerformedServices == null || !session.PerformedServices.Any())
+        {
+            if (appt.RequestedService != null)
+            {
+                var baseService = new PerformedService
+                {
+                    TreatmentSessionId = session.TreatmentSessionId,
+                    DepartmentServiceId = appt.RequestedService.DepartmentServiceId,
+                    Quantity = 1,
+                    UnitPrice = appt.RequestedService.Price,
+                    Amount = appt.RequestedService.Price
+                };
+                _dbContext.PerformedServices.Add(baseService);
+            }
+        }
+
+        // Add additional performed service
+        var qty = request.Quantity > 0 ? request.Quantity : 1;
+        var performedService = new PerformedService
+        {
+            TreatmentSessionId = session.TreatmentSessionId,
+            DepartmentServiceId = service.DepartmentServiceId,
+            Quantity = qty,
+            UnitPrice = service.Price,
+            Amount = qty * service.Price
+        };
+        _dbContext.PerformedServices.Add(performedService);
+
+        // Update dental chair if provided
+        if (request.DentalChairId.HasValue && request.DentalChairId.Value > 0)
+        {
+            var chair = await _dbContext.DentalChairs.FirstOrDefaultAsync(c => c.DentalChairId == request.DentalChairId.Value, ct);
+            if (chair != null)
+            {
+                appt.DentalChairId = chair.DentalChairId;
+                appt.RoomId = chair.RoomId;
+            }
+        }
+
+        // Delegate to another dentist if requested
+        if (request.ExecutionMode == "delegate" && request.TargetDentistUserId.HasValue && request.TargetDentistUserId.Value > 0)
+        {
+            appt.AssignedDentistUserId = request.TargetDentistUserId.Value;
+        }
+
+        appt.UpdatedAt = now;
+
+        var modeDesc = request.ExecutionMode == "delegate" ? "Chuyển giao bác sĩ khác" : "Bác sĩ tự thực hiện tại ghế";
+        _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+        {
+            AppointmentId = appointmentId,
+            OldStatus = appt.Status,
+            NewStatus = appt.Status,
+            ChangedByUserId = dentistUserId,
+            Note = $"Bổ sung dịch vụ thực hiện: {service.ServiceName} ({modeDesc}). {request.Notes?.Trim()}",
+            ChangedAt = now
+        });
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        return ApiResponse.Ok($"Đã bổ sung dịch vụ {service.ServiceName} vào ca khám thành công! Dịch vụ đã được tự động đồng bộ vào phiên điều trị và hóa đơn viện phí.");
     }
+}
