@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -173,6 +173,7 @@ public class AdminControllerAuthorizationRegressionTests
         // Test search filter
         var searchResult = await service.GetPatientsAsync("Nguyen Van A");
         Assert.True(searchResult.Success);
+        Assert.NotNull(searchResult.Data);
         Assert.Single(searchResult.Data);
         Assert.Equal("Nguyen Van A", searchResult.Data[0].FullName);
     }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -529,8 +529,8 @@ public class PostCareService : IPostCareService
         if (followUp == null)
             return ApiResponse<FollowUpScheduleDto>.Fail("Không tìm thấy lịch hẹn tái khám.");
 
-        var patientUserId = followUp.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.PatientUserId;
-        var dentistUserId = followUp.TreatmentSession?.DentistUserId;
+        var patientUserId = followUp.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.PatientUserId ?? followUp.Appointment?.PatientUserId;
+        var dentistUserId = followUp.TreatmentSession?.DentistUserId ?? followUp.Appointment?.AssignedDentistUserId;
         var deptId = followUp.Appointment?.DepartmentId ?? followUp.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.DepartmentId;
 
         // Phân quyền chi tiết trên từng đối tượng (Object-Level Authorization / BOLA Prevention)
@@ -728,16 +728,21 @@ public class PostCareService : IPostCareService
         await _dbContext.SaveChangesAsync(ct);
 
         var finalDeptId = followUp.Appointment?.DepartmentId ?? followUp.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.DepartmentId;
+        var patientUser = followUp.Appointment?.PatientUser ?? followUp.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.PatientUser;
+        var dentistUser = followUp.Appointment?.AssignedDentistUser?.User ?? followUp.TreatmentSession?.DentistUser?.User;
+        var finalDentistUserId = followUp.Appointment?.AssignedDentistUserId ?? followUp.TreatmentSession?.DentistUserId ?? 0;
+        var finalPatientUserId = patientUser?.UserId ?? 0;
+
         var dto = new FollowUpScheduleDto
         {
             FollowUpId = followUp.FollowUpId,
             TreatmentSessionId = followUp.TreatmentSessionId,
-            PatientUserId = followUp.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUserId,
-            PatientName = followUp.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.FullName,
-            PatientCode = followUp.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.PatientCode,
-            PatientPhoneNumber = followUp.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.EmergencyContact,
-            DentistUserId = followUp.TreatmentSession.DentistUserId,
-            DentistName = followUp.TreatmentSession.DentistUser.User.FullName,
+            PatientUserId = finalPatientUserId,
+            PatientName = patientUser?.FullName ?? "Bệnh nhân",
+            PatientCode = patientUser?.PatientCode ?? "",
+            PatientPhoneNumber = patientUser?.EmergencyContact,
+            DentistUserId = finalDentistUserId,
+            DentistName = dentistUser?.FullName ?? "Bác sĩ phụ trách",
             DepartmentId = finalDeptId,
             DepartmentName = followUp.Appointment?.Department?.Name ?? "Nha khoa tổng quát",
             RecommendedDate = followUp.RecommendedDate,

@@ -562,6 +562,7 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
             Method = "Cash"
         });
         Assert.False(pay3.Success);
+        Assert.NotNull(pay3.Message);
         Assert.Contains("đã được thanh toán", pay3.Message.ToLowerInvariant());
     }
 
@@ -814,6 +815,7 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
         });
 
         Assert.False(confOverlap.Success);
+        Assert.NotNull(confOverlap.Message);
         Assert.Contains("lịch hẹn khác", confOverlap.Message.ToLowerInvariant());
     }
 
@@ -1068,6 +1070,7 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
             ScheduledEnd = tomorrow.AddHours(10).AddMinutes(30)
         });
         Assert.False(confB.Success);
+        Assert.NotNull(confB.Message);
         Assert.Contains("lịch hẹn khác", confB.Message.ToLowerInvariant());
     }
 

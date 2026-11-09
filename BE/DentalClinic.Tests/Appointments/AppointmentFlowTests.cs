@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -1488,6 +1488,7 @@ public class AppointmentFlowTests
         // Attempt Dentist Start directly from Confirmed without Check-in
         var startResult = await service.DentistStartAppointmentAsync(apptId, 401);
         Assert.False(startResult.Success);
+        Assert.NotNull(startResult.Message);
         Assert.Contains("check-in", startResult.Message.ToLowerInvariant());
     }
     [Fact]

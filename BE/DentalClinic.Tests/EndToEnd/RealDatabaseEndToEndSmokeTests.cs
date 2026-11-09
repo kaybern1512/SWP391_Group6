@@ -443,6 +443,7 @@ public class RealDatabaseEndToEndSmokeTests
             ScheduledEnd = slotExEnd
         });
         Assert.False(confEx2.Success, "Exclusive room must reject concurrent overlapping appointments");
+        Assert.NotNull(confEx2.Message);
         Assert.Contains("phòng", confEx2.Message.ToLowerInvariant());
     }
 
@@ -668,6 +669,7 @@ public class RealDatabaseEndToEndSmokeTests
         };
         var missingChairResult = await apptService.ManagerConfirmAsync(apptId, managerUserId, missingChairReq);
         Assert.False(missingChairResult.Success);
+        Assert.NotNull(missingChairResult.Message);
         Assert.Contains("ghế nha khoa", missingChairResult.Message.ToLowerInvariant());
 
         // Rule 3B: Valid Dentist + Room + Chair succeeds
@@ -735,6 +737,7 @@ public class RealDatabaseEndToEndSmokeTests
         // Duplicate invoice creation MUST be rejected
         var dupInvResult = await billingService.CreateInvoiceAsync(receptionistUserId, invoiceReq);
         Assert.False(dupInvResult.Success);
+        Assert.NotNull(dupInvResult.Message);
         Assert.Contains("đã được lập hóa đơn", dupInvResult.Message.ToLowerInvariant());
 
         // Process payment
@@ -773,6 +776,6 @@ public class RealDatabaseEndToEndSmokeTests
         var medRecordResult = await medService.GetMedicalRecordByPatientIdAsync(patientUserId);
         Assert.True(medRecordResult.Success);
         Assert.NotNull(medRecordResult.Data);
-        Assert.Contains(medRecordResult.Data.ClinicalEntries, ce => ce.AppointmentId == apptId && ce.Diagnosis.Contains("Viêm tủy"));
+        Assert.Contains(medRecordResult.Data.ClinicalEntries, ce => ce.AppointmentId == apptId && ce.Diagnosis != null && ce.Diagnosis.Contains("Viêm tủy"));
     }
 }

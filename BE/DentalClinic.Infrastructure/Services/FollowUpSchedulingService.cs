@@ -724,7 +724,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             .AsNoTracking()
             .Include(a => a.PatientUser)
             .Include(a => a.AssignedDentistUser)
-                .ThenInclude(d => d.User)
+                .ThenInclude(d => d!.User)
             .Include(a => a.Department)
             .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId, ct);
 
@@ -779,7 +779,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             // Reload fresh appointment state under the lock
             var freshAppt = await _dbContext.Appointments
                 .Include(a => a.PatientUser)
-                .Include(a => a.AssignedDentistUser).ThenInclude(d => d.User)
+                .Include(a => a.AssignedDentistUser).ThenInclude(d => d!.User)
                 .Include(a => a.Department)
                 .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId, ct);
 
@@ -1013,7 +1013,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                 .ThenInclude(a => a.PatientUser)
             .Include(p => p.Appointment)
                 .ThenInclude(a => a.AssignedDentistUser)
-                    .ThenInclude(d => d.User)
+                    .ThenInclude(d => d!.User)
             .Include(p => p.Appointment)
                 .ThenInclude(a => a.Department)
             .Where(p => p.ProposedByUserId == patientUserId || p.Appointment.PatientUserId == patientUserId)
@@ -1055,7 +1055,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                 .ThenInclude(a => a.PatientUser)
             .Include(p => p.Appointment)
                 .ThenInclude(a => a.AssignedDentistUser)
-                    .ThenInclude(d => d.User)
+                    .ThenInclude(d => d!.User)
             .Include(p => p.Appointment)
                 .ThenInclude(a => a.Department)
             .Where(p => p.Status == ProposalStatus.Pending &&
@@ -1105,7 +1105,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                 .ThenInclude(a => a.PatientUser)
             .Include(p => p.Appointment)
                 .ThenInclude(a => a.AssignedDentistUser)
-                    .ThenInclude(d => d.User)
+                    .ThenInclude(d => d!.User)
             .Include(p => p.Appointment)
                 .ThenInclude(a => a.Department)
             .FirstOrDefaultAsync(p => p.ProposalId == request.ProposalId, ct);
@@ -1159,7 +1159,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
                     .ThenInclude(a => a.PatientUser)
                 .Include(p => p.Appointment)
                     .ThenInclude(a => a.AssignedDentistUser)
-                        .ThenInclude(d => d.User)
+                        .ThenInclude(d => d!.User)
                 .Include(p => p.Appointment)
                     .ThenInclude(a => a.Department)
                 .FirstOrDefaultAsync(p => p.ProposalId == request.ProposalId, ct);
@@ -1177,6 +1177,12 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             {
                 if (tx != null) await tx.RollbackAsync(ct);
                 return ApiResponse<FollowUpProposalDto>.Fail("Không tìm thấy yêu cầu thay đổi lịch.");
+            }
+
+            if (freshProposal.Appointment == null)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<FollowUpProposalDto>.Fail("Không tìm thấy cuộc hẹn liên kết với đề xuất thay đổi lịch.");
             }
 
             if (freshProposal.Status != ProposalStatus.Pending)
@@ -1253,12 +1259,6 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             {
                 if (tx != null) await tx.RollbackAsync(ct);
                 return ApiResponse<FollowUpProposalDto>.Fail("Khung giờ đề xuất đã qua hoặc ở quá khứ. Không thể phê duyệt.");
-            }
-
-            if (freshProposal.Appointment == null)
-            {
-                if (tx != null) await tx.RollbackAsync(ct);
-                return ApiResponse<FollowUpProposalDto>.Fail("Không tìm thấy cuộc hẹn liên kết với đề xuất thay đổi lịch.");
             }
 
             var validation = await ValidateFollowUpSlotAsync(

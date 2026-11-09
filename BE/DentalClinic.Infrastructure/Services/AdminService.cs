@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -1291,7 +1291,7 @@ public class AdminService : IAdminService
         var query = _dbContext.UserAccounts
             .AsNoTracking()
             .Include(u => u.StaffProfile)
-                .ThenInclude(sp => sp.DentistProfile)
+                .ThenInclude(sp => sp!.DentistProfile)
             .Include(u => u.PatientProfile)
             .AsQueryable();
 
@@ -1671,7 +1671,7 @@ public class AdminService : IAdminService
     {
         var user = await _dbContext.UserAccounts
             .Include(u => u.StaffProfile)
-                .ThenInclude(sp => sp.DentistProfile)
+                .ThenInclude(sp => sp!.DentistProfile)
             .FirstOrDefaultAsync(u => u.UserId == userId, ct);
 
         if (user == null || user.StaffProfile == null)

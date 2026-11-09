@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -947,6 +947,7 @@ public class DentistSubsystemComprehensiveTests
         });
         Assert.True(prescRes.Success, prescRes.Message);
         var presc = await db.Prescriptions.FindAsync(prescRes.Data!.PrescriptionId);
+        Assert.NotNull(presc);
 
         var med = new MedicineEntity { MedicineCode = "MED-TEST-17", MedicineName = "Test Med", Unit = "Viên", UnitPrice = 1000m, Status = "Active" };
         db.Medicines.Add(med);
@@ -1008,7 +1009,7 @@ public class DentistSubsystemComprehensiveTests
         Assert.NotEqual("Active", containerPlan.Status);     // Never insert 'Active' as Status!
 
         // Note prefix contains [DirectCare] tag
-        Assert.True(containerPlan.TreatmentPlanItems.Any(i => i.Note != null && i.Note.StartsWith("[DirectCare]")));
+        Assert.Contains(containerPlan.TreatmentPlanItems, i => i.Note != null && i.Note.StartsWith("[DirectCare]"));
 
         // Long-term patient treatment plan list must exclude direct-care single visit containers
         var patientPlansRes = await treatmentService.GetPatientTreatmentPlansAsync(patientId);
@@ -1070,6 +1071,7 @@ public class DentistSubsystemComprehensiveTests
         });
         Assert.True(prescRes20.Success, prescRes20.Message);
         var presc = await db.Prescriptions.Include(p => p.PrescriptionItems).FirstOrDefaultAsync(p => p.PrescriptionId == prescRes20.Data!.PrescriptionId);
+        Assert.NotNull(presc);
 
         var med1 = new MedicineEntity { MedicineCode = "M1", MedicineName = "Amoxicillin", Unit = "Viên", UnitPrice = 2000m, Status = "Active" };
         var med2 = new MedicineEntity { MedicineCode = "M2", MedicineName = "Paracetamol", Unit = "Viên", UnitPrice = 1000m, Status = "Active" };

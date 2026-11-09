@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -411,6 +411,7 @@ public class FollowUpEndToEndIntegrationTests
             IsApproved = true
         });
         Assert.False(doctorResolveResult.Success);
+        Assert.NotNull(doctorResolveResult.Message);
         Assert.True(doctorResolveResult.Message.Contains("Pending") || doctorResolveResult.Message.Contains("xử lý") || doctorResolveResult.Message.Contains("Expired"));
     }
 
