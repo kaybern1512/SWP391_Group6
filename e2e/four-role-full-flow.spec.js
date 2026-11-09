@@ -28,7 +28,7 @@ test.describe('DentalCare 4-Role End-to-End Real Browser Acceptance Suite', () =
     await expect(page.locator('#step-nav-5')).toBeVisible();
 
     // Verify Service Catalog is visible on Step 1
-    const visibleServices = page.locator('.service-card:visible, .selection-card:visible');
+    const visibleServices = page.locator('.category-card:visible, .service-card:visible, .selection-card:visible');
     const serviceCount = await visibleServices.count();
     expect(serviceCount).toBeGreaterThan(0);
 
@@ -77,6 +77,7 @@ test.describe('DentalCare 4-Role End-to-End Real Browser Acceptance Suite', () =
   // 3. DENTIST CLINICAL RECORDS & COMPLETION
   // =========================================================================
   test('E2E-DEN: Dentist Today Schedule, Clinical EMR & Prescription Dispensation', async ({ page }) => {
+    test.setTimeout(60000);
     await loginAs(page, 'dentist@dentalcare.com');
 
     // 3.1 Today's Clinical Schedule

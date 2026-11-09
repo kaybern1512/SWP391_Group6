@@ -1,4 +1,4 @@
-﻿// @ts-check
+// @ts-check
 const { test, expect } = require('@playwright/test');
 const { loginAs, capturePageErrors } = require('./helpers/auth');
 const https = require('https');
@@ -59,7 +59,8 @@ test.describe.serial('Dedicated X-Ray Room, Equipment Scheduling & Imaging Queue
 
   test.beforeAll(() => {
     try {
-      execSync('sqlcmd -S ".\\SQLEXPRESS" -d "DentalCare_Integration_Dev" -Q "UPDATE ImagingSessions SET Status = \'Completed\' WHERE ImagingRoomId = 9 AND Status = \'Waiting\'"');
+      const db = process.env.TEST_DB || 'DentalCare_FullRelease_QA';
+      execSync(`sqlcmd -S ".\\SQLEXPRESS" -d "${db}" -I -Q "UPDATE ImagingSessions SET Status = 'Completed' WHERE ImagingRoomId = 9 AND Status = 'Waiting'"`);
     } catch {
       // Ignore if sqlcmd not directly reachable
     }

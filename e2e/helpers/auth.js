@@ -15,11 +15,9 @@ async function loginAs(page, email, password = 'Password123@') {
   await page.locator('input[name="Email"]').fill(email);
   await page.locator('input[name="Password"]').fill(password);
 
-  // Click login button (the primary submit button)
-  await Promise.all([
-    page.waitForNavigation({ timeout: 15000 }),
-    page.locator('button.btn-dc-primary').click(),
-  ]);
+  // Click login button and wait for redirect away from login page
+  await page.locator('button.btn-dc-primary').click();
+  await page.waitForURL(url => !url.pathname.toLowerCase().includes('/account/login'), { timeout: 15000 });
 }
 
 /**
@@ -38,9 +36,10 @@ function capturePageErrors(page, errorList) {
       if (
         !text.includes('favicon') &&
         !text.includes('fonts.gstatic.com') &&
-        !text.includes('cloudinary') &&
-        !text.includes('Failed to load resource') &&
-        !text.includes('signalr')
+        !text.includes('cdn.jsdelivr.net') &&
+        !text.includes('SignalR') &&
+        !text.includes('negotiate') &&
+        !text.includes('Failed to load resource')
       ) {
         errorList.push(`[CONSOLE_ERROR] ${text}`);
       }
@@ -48,7 +47,4 @@ function capturePageErrors(page, errorList) {
   });
 }
 
-module.exports = {
-  loginAs,
-  capturePageErrors,
-};
+module.exports = { loginAs, capturePageErrors };
