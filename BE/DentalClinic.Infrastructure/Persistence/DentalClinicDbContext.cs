@@ -94,6 +94,11 @@ public partial class DentalClinicDbContext : DbContext
     public virtual DbSet<MedicineStockTransaction> MedicineStockTransactions { get; set; }
     public virtual DbSet<MedicineDispensation> MedicineDispensations { get; set; }
     public virtual DbSet<MedicineDispensationItem> MedicineDispensationItems { get; set; }
+    public virtual DbSet<StaffAttendanceRecord> StaffAttendanceRecords { get; set; }
+    public virtual DbSet<StaffAttendanceEvent> StaffAttendanceEvents { get; set; }
+    public virtual DbSet<StaffAttendanceCorrectionRequest> StaffAttendanceCorrectionRequests { get; set; }
+    public virtual DbSet<AttendancePeriodClosure> AttendancePeriodClosures { get; set; }
+    public virtual DbSet<AttendancePolicy> AttendancePolicies { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1164,6 +1169,110 @@ public partial class DentalClinicDbContext : DbContext
                 .WithMany(p => p.DispensationItems)
                 .HasForeignKey(d => d.MedicineBatchId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<StaffAttendanceRecord>(entity =>
+        {
+            entity.HasKey(e => e.AttendanceId);
+            entity.ToTable("StaffAttendanceRecords");
+
+            entity.HasIndex(e => new { e.UserId, e.WorkDate, e.ShiftIdentifier }).IsUnique();
+            entity.HasIndex(e => new { e.WorkDate, e.Role, e.Status });
+            entity.HasIndex(e => new { e.IsFinalized, e.WorkDate });
+
+            entity.Property(e => e.ShiftIdentifier).HasMaxLength(100);
+            entity.Property(e => e.Role).HasMaxLength(40).IsUnicode(false);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.LeaveHours).HasPrecision(5, 2);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.RowVersion).IsRowVersion();
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.FinalizedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.FinalizedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<StaffAttendanceEvent>(entity =>
+        {
+            entity.HasKey(e => e.EventId);
+            entity.ToTable("StaffAttendanceEvents");
+
+            entity.Property(e => e.EventType).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.Source).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.IpAddress).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.Note).HasMaxLength(1000);
+
+            entity.HasOne(d => d.Attendance)
+                .WithMany(p => p.Events)
+                .HasForeignKey(d => d.AttendanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<StaffAttendanceCorrectionRequest>(entity =>
+        {
+            entity.HasKey(e => e.CorrectionRequestId);
+            entity.ToTable("StaffAttendanceCorrectionRequests");
+
+            entity.Property(e => e.Reason).HasMaxLength(200);
+            entity.Property(e => e.Explanation).HasMaxLength(1000);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.AdminNote).HasMaxLength(1000);
+
+            entity.HasOne(d => d.Attendance)
+                .WithMany(p => p.CorrectionRequests)
+                .HasForeignKey(d => d.AttendanceId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.ReviewedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReviewedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<AttendancePeriodClosure>(entity =>
+        {
+            entity.HasKey(e => e.ClosureId);
+            entity.ToTable("AttendancePeriodClosures");
+
+            entity.HasIndex(e => new { e.Year, e.Month }).IsUnique();
+
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.TotalWorkedHours).HasPrecision(10, 2);
+            entity.Property(e => e.ReopenReason).HasMaxLength(1000);
+
+            entity.HasOne(d => d.FinalizedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.FinalizedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.ReopenedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReopenedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<AttendancePolicy>(entity =>
+        {
+            entity.HasKey(e => e.PolicyId);
+            entity.ToTable("AttendancePolicies");
+
+            entity.Property(e => e.StandardWorkDayHours).HasPrecision(4, 2);
         });
 
         OnModelCreatingPartial(modelBuilder);
