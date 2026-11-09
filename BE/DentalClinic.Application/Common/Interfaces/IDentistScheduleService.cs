@@ -20,6 +20,17 @@ public interface IDentistScheduleService
     Task<ApiResponse<bool>> CancelScheduleAsync(long scheduleId, long currentUserId, CancellationToken ct = default);
 
     // ==========================================
+    // MONTHLY & BULK SCHEDULING
+    // ==========================================
+    Task<ApiResponse<MonthlyDentistScheduleDto>> GetMonthlyScheduleAsync(MonthlyDentistScheduleFilterRequest request, CancellationToken ct = default);
+    Task<ApiResponse<BulkSchedulePreviewResultDto>> PreviewBulkScheduleAsync(BulkScheduleAssignmentRequest request, CancellationToken ct = default);
+    Task<ApiResponse<BulkScheduleApplyResultDto>> ApplyBulkScheduleAsync(BulkScheduleApplyRequest request, long currentUserId, CancellationToken ct = default);
+    Task<ApiResponse<CopyMonthSchedulePreviewDto>> PreviewCopyMonthScheduleAsync(CopyMonthScheduleRequest request, CancellationToken ct = default);
+    Task<ApiResponse<BulkScheduleApplyResultDto>> ApplyCopyMonthScheduleAsync(CopyMonthScheduleRequest request, long currentUserId, CancellationToken ct = default);
+    Task<ApiResponse<List<AffectedAppointmentDto>>> GetAffectedAppointmentsAsync(long dentistUserId, DateOnly workDate, TimeOnly? newStart, TimeOnly? newEnd, CancellationToken ct = default);
+    Task<ApiResponse<bool>> ApplyDailyOverrideAsync(DailyScheduleOverrideRequest request, long currentUserId, CancellationToken ct = default);
+
+    // ==========================================
     // AVAILABILITY
     // ==========================================
     Task<ApiResponse<List<DentistAvailabilityDto>>> GetAvailabilitiesAsync(DentistAvailabilityFilterRequest request, CancellationToken ct = default);

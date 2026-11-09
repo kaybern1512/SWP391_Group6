@@ -18,7 +18,16 @@
             <p class="page-subtitle">Phân bổ bác sĩ vào chuyên khoa, điều phối ca trực tuần và theo dõi trạng thái nghỉ phép/bận</p>
         </div>
         <div class="page-actions d-flex gap-2">
-            @if (Model.ActiveTab == "allocations")
+            @if (Model.ActiveTab == "monthly")
+            {
+                <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#copyMonthModal">
+                    <i class="bi bi-copy me-1"></i> Sao Chép Tháng Trước
+                </button>
+                <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#bulkScheduleModal">
+                    <i class="bi bi-calendar-plus me-1"></i> Phân Công Hàng Loạt
+                </button>
+            }
+            else if (Model.ActiveTab == "allocations")
             {
                 <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#assignDentistModal">
                     <i class="bi bi-person-plus me-1"></i> Phân Công Chuyên Khoa
@@ -42,6 +51,14 @@
     <!-- Navigation Tabs -->
     <ul class="nav nav-tabs-dc mb-4" role="tablist">
         <li class="nav-item">
+            <a class="nav-link @(Model.ActiveTab == "monthly" ? "active" : "")"
+               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="monthly"
+               asp-route-year="@Model.SelectedYear" asp-route-month="@Model.SelectedMonth"
+               asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId">
+                <i class="bi bi-calendar3 me-2"></i>Lịch Trực Theo Tháng
+            </a>
+        </li>
+        <li class="nav-item">
             <a class="nav-link @(Model.ActiveTab == "allocations" ? "active" : "")"
                asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="allocations">
                 <i class="bi bi-diagram-3 me-2"></i>Phân Công Chuyên Khoa (@Model.Allocations.Count)
@@ -60,6 +77,12 @@
             </a>
         </li>
     </ul>
+
+    <!-- TAB: MONTHLY SCHEDULING -->
+    @if (Model.ActiveTab == "monthly")
+    {
+        <partial name="_MonthlyScheduleTab" model="Model" />
+    }
 
     <!-- TAB 1: ALLOCATIONS -->
     @if (Model.ActiveTab == "allocations")

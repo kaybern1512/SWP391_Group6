@@ -164,6 +164,9 @@ public class AdminDentistScheduleManageViewModel
     public long? SelectedDentistId { get; set; }
     public DateOnly? FromDate { get; set; }
     public DateOnly? ToDate { get; set; }
+    public MonthlyDentistScheduleDto? MonthlySchedule { get; set; }
+    public int SelectedYear { get; set; } = DateTime.Today.Year;
+    public int SelectedMonth { get; set; } = DateTime.Today.Month;
 }
 
 public class AdminFeedbackManageViewModel

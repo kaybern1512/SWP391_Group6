@@ -120,6 +120,55 @@ public class DentistScheduleApiService : IDentistScheduleApiService
     }
 
     // ==========================================
+    // MONTHLY & BULK SCHEDULING
+    // ==========================================
+
+    public async Task<ApiResult<MonthlyDentistScheduleDto>> GetMonthlyScheduleAsync(MonthlyDentistScheduleFilterRequest request)
+    {
+        var queryParams = new List<string>
+        {
+            $"year={request.Year}",
+            $"month={request.Month}"
+        };
+        if (request.DepartmentId.HasValue) queryParams.Add($"departmentId={request.DepartmentId.Value}");
+        if (request.DentistUserId.HasValue) queryParams.Add($"dentistUserId={request.DentistUserId.Value}");
+
+        var url = "/api/DentistSchedule/monthly?" + string.Join("&", queryParams);
+        return await SendGetAsync<MonthlyDentistScheduleDto>(url);
+    }
+
+    public async Task<ApiResult<BulkSchedulePreviewResultDto>> BulkPreviewScheduleAsync(BulkScheduleAssignmentRequest request)
+    {
+        return await SendPostAsync<BulkSchedulePreviewResultDto>("/api/DentistSchedule/bulk-preview", request);
+    }
+
+    public async Task<ApiResult<BulkScheduleApplyResultDto>> BulkApplyScheduleAsync(BulkScheduleApplyRequest request)
+    {
+        return await SendPostAsync<BulkScheduleApplyResultDto>("/api/DentistSchedule/bulk-apply", request);
+    }
+
+    public async Task<ApiResult<CopyMonthSchedulePreviewDto>> CopyMonthPreviewScheduleAsync(CopyMonthScheduleRequest request)
+    {
+        return await SendPostAsync<CopyMonthSchedulePreviewDto>("/api/DentistSchedule/copy-month-preview", request);
+    }
+
+    public async Task<ApiResult<BulkScheduleApplyResultDto>> CopyMonthApplyScheduleAsync(CopyMonthScheduleRequest request)
+    {
+        return await SendPostAsync<BulkScheduleApplyResultDto>("/api/DentistSchedule/copy-month-apply", request);
+    }
+
+    public async Task<ApiResult<List<AffectedAppointmentDto>>> GetAffectedAppointmentsAsync(long dentistUserId, DateOnly workDate, TimeOnly startTime, TimeOnly endTime)
+    {
+        var url = $"/api/DentistSchedule/affected-appointments?dentistUserId={dentistUserId}&workDate={workDate:yyyy-MM-dd}&startTime={startTime:HH:mm}&endTime={endTime:HH:mm}";
+        return await SendGetAsync<List<AffectedAppointmentDto>>(url);
+    }
+
+    public async Task<ApiResult> DailyOverrideScheduleAsync(DailyScheduleOverrideRequest request)
+    {
+        return await SendPutAsync("/api/DentistSchedule/daily-override", request);
+    }
+
+    // ==========================================
     // HTTP HELPERS
     // ==========================================
 
