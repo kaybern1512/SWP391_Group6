@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -94,6 +94,13 @@ public partial class DentalClinicDbContext : DbContext
     public virtual DbSet<MedicineStockTransaction> MedicineStockTransactions { get; set; }
     public virtual DbSet<MedicineDispensation> MedicineDispensations { get; set; }
     public virtual DbSet<MedicineDispensationItem> MedicineDispensationItems { get; set; }
+    public virtual DbSet<ReceptionistShiftTemplate> ReceptionistShiftTemplates { get; set; }
+    public virtual DbSet<ReceptionistWorkSchedule> ReceptionistWorkSchedules { get; set; }
+    public virtual DbSet<ReceptionistLeaveRequest> ReceptionistLeaveRequests { get; set; }
+    public virtual DbSet<ReceptionistLeaveRequestPeriod> ReceptionistLeaveRequestPeriods { get; set; }
+    public virtual DbSet<ReceptionistShiftSwapRequest> ReceptionistShiftSwapRequests { get; set; }
+    public virtual DbSet<ReceptionistCoverageIncident> ReceptionistCoverageIncidents { get; set; }
+    public virtual DbSet<ReceptionistWorkHandover> ReceptionistWorkHandovers { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1164,6 +1171,169 @@ public partial class DentalClinicDbContext : DbContext
                 .WithMany(p => p.DispensationItems)
                 .HasForeignKey(d => d.MedicineBatchId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<ReceptionistShiftTemplate>(entity =>
+        {
+            entity.HasKey(e => e.ShiftTemplateId);
+            entity.ToTable("ReceptionistShiftTemplates");
+            entity.Property(e => e.TemplateName).HasMaxLength(100);
+            entity.Property(e => e.MinStaffRequired).HasDefaultValue(2);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.DisplayOrder).HasDefaultValue(1);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+        });
+
+        modelBuilder.Entity<ReceptionistWorkSchedule>(entity =>
+        {
+            entity.HasKey(e => e.ReceptionistScheduleId);
+            entity.ToTable("ReceptionistWorkSchedules");
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Scheduled");
+            entity.Property(e => e.IsPublished).HasDefaultValue(true);
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.ReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.ShiftTemplate)
+                .WithMany(p => p.WorkSchedules)
+                .HasForeignKey(d => d.ShiftTemplateId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(d => d.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.CreatedBy)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ReceptionistLeaveRequest>(entity =>
+        {
+            entity.HasKey(e => e.LeaveRequestId);
+            entity.ToTable("ReceptionistLeaveRequests");
+            entity.Property(e => e.LeaveType).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.AdditionalNotes).HasMaxLength(1000);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Pending");
+            entity.Property(e => e.RejectionReason).HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.ReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.ApprovedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ApprovedBy)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ReceptionistLeaveRequestPeriod>(entity =>
+        {
+            entity.HasKey(e => e.PeriodId);
+            entity.ToTable("ReceptionistLeaveRequestPeriods");
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Pending");
+
+            entity.HasOne(d => d.LeaveRequest)
+                .WithMany(p => p.Periods)
+                .HasForeignKey(d => d.LeaveRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ReceptionistShiftSwapRequest>(entity =>
+        {
+            entity.HasKey(e => e.SwapRequestId);
+            entity.ToTable("ReceptionistShiftSwapRequests");
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("PendingCounterparty");
+            entity.Property(e => e.CounterpartyNote).HasMaxLength(500);
+            entity.Property(e => e.AdminDecisionReason).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.RequestingReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.RequestingReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.TargetReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.TargetReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.SourceSchedule)
+                .WithMany(p => p.SourceSwapRequests)
+                .HasForeignKey(d => d.SourceScheduleId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.TargetSchedule)
+                .WithMany(p => p.TargetSwapRequests)
+                .HasForeignKey(d => d.TargetScheduleId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.AdminDecisionByUser)
+                .WithMany()
+                .HasForeignKey(d => d.AdminDecisionBy)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ReceptionistCoverageIncident>(entity =>
+        {
+            entity.HasKey(e => e.IncidentId);
+            entity.ToTable("ReceptionistCoverageIncidents");
+            entity.Property(e => e.IncidentType).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.RequiredMinimumCount).HasDefaultValue(2);
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.ReportedAt).HasDefaultValueSql("(sysutcdatetime())");
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Open");
+            entity.Property(e => e.ResolutionNotes).HasMaxLength(1000);
+
+            entity.HasOne(d => d.AffectedReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.AffectedReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.ReportedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReportedBy)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.ReplacementReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReplacementReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.ResolvedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ResolvedBy)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ReceptionistWorkHandover>(entity =>
+        {
+            entity.HasKey(e => e.HandoverId);
+            entity.ToTable("ReceptionistWorkHandovers");
+            entity.Property(e => e.HandoverType).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.HandoverStatus).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Transferred");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.FromReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.FromReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.ToReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.ToReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.Shift)
+                .WithMany()
+                .HasForeignKey(d => d.ShiftId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         OnModelCreatingPartial(modelBuilder);

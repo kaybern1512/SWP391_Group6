@@ -1,0 +1,201 @@
+@using DentalClinic.Web.Models.ApiDtos
+@{
+    ViewData["Title"] = "Lịch Làm Việc Của Tôi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var today = (DateOnly)ViewBag.Today;
+    var schedules = ViewBag.Schedules as List<ReceptionistWorkScheduleDto> ?? new();
+    var leaves = ViewBag.Leaves as List<ReceptionistLeaveRequestDto> ?? new();
+    var templates = ViewBag.Templates as List<ReceptionistShiftTemplateDto> ?? new();
+
+    var todayShift = schedules.FirstOrDefault(s => s.WorkDate == today && s.Status == "Scheduled");
+    var upcomingShifts = schedules.Where(s => s.WorkDate >= today && s.Status == "Scheduled").OrderBy(s => s.WorkDate).ToList();
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h2 class="h4 fw-bold text-dark mb-1">
+                <i class="bi bi-calendar-check text-primary me-2"></i>Lịch Làm Việc Của Tôi
+            </h2>
+            <p class="text-muted small mb-0">Theo dõi ca trực hôm nay, lịch trực tuần/tháng và báo cáo vắng mặt khẩn cấp</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="@Url.Action("Index", "ReceptionistLeave")" class="btn btn-outline-warning btn-sm">
+                <i class="bi bi-calendar2-x me-1"></i> Xin Nghỉ Phép
+            </a>
+            <a href="@Url.Action("Index", "ReceptionistShiftSwap")" class="btn btn-outline-info btn-sm">
+                <i class="bi bi-arrow-left-right me-1"></i> Đổi Ca Trực
+            </a>
+            <a href="@Url.Action("Index", "ReceptionistHandover")" class="btn btn-outline-success btn-sm">
+                <i class="bi bi-arrow-repeat me-1"></i> Bàn Giao Ca
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Today Shift Card -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 border-primary">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <span class="badge bg-primary px-3 py-2 fs-6 mb-2">Hôm Nay: @today.ToString("dd/MM/yyyy")</span>
+                            <h5 class="fw-bold mb-1">Ca Trực Hiện Tại</h5>
+                        </div>
+                        <i class="bi bi-clock-history fs-1 text-primary opacity-50"></i>
+                    </div>
+
+                    @if (todayShift != null)
+                    {
+                        <div class="p-3 bg-light rounded-3 mb-3 border">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="fw-bold fs-5 text-primary">@todayShift.StartTime.ToString("HH:mm") - @todayShift.EndTime.ToString("HH:mm")</span>
+                                <span class="badge bg-success">@todayShift.Status</span>
+                            </div>
+                            <div class="text-muted small">Ca Mẫu: @(todayShift.ShiftTemplateName ?? "Tùy chỉnh")</div>
+                            @if (!string.IsNullOrEmpty(todayShift.Notes))
+                            {
+                                <div class="small mt-1 text-secondary"><i class="bi bi-info-circle me-1"></i>@todayShift.Notes</div>
+                            }
+                        </div>
+                        <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#emergencyAbsenceModal" id="btnReportAbsenceModal">
+                            <i class="bi bi-exclamation-octagon me-1"></i> Báo Vắng Mặt Khẩn Cấp (Sự Cố Đột Xuất)
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="alert alert-secondary py-3 text-center mb-0">
+                            <i class="bi bi-cup-hot fs-3 d-block mb-2 text-muted"></i>
+                            Bạn không có ca trực nào được phân công trong ngày hôm nay.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-3 h-100">
+                <div class="card-body p-4">
+                    <h5 class="fw-bold mb-3"><i class="bi bi-info-circle text-info me-2"></i>Quy Định Trực Ca & Nghỉ Phép</h5>
+                    <ul class="list-unstyled mb-0 d-flex flex-column gap-2 small">
+                        <li class="d-flex align-items-start">
+                            <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
+                            <div><strong>Quy tắc Tối đa 2 Lễ tân nghỉ/ngày (Rule 1):</strong> Phòng khám chỉ phê duyệt tối đa 2 người nghỉ trong một ngày lịch.</div>
+                        </li>
+                        <li class="d-flex align-items-start">
+                            <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
+                            <div><strong>Quy tắc Tối thiểu 2 Lễ tân trực/ca (Rule 2):</strong> Mọi khung giờ trực luôn bảo đảm từ 2 lễ tân khả dụng trở lên.</div>
+                        </li>
+                        <li class="d-flex align-items-start">
+                            <i class="bi bi-arrow-left-right text-primary me-2 mt-1"></i>
+                            <div><strong>Đổi ca trực:</strong> Cần đồng nghiệp xác nhận và Quản trị viên duyệt trước khi có hiệu lực.</div>
+                        </li>
+                        <li class="d-flex align-items-start">
+                            <i class="bi bi-exclamation-triangle-fill text-warning me-2 mt-1"></i>
+                            <div><strong>Báo vắng đột xuất:</strong> Báo ngay khi có sự cố khẩn cấp để Quản trị viên kịp thời điều phối nhân sự trực thay.</div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upcoming Shifts Table -->
+    <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-bold"><i class="bi bi-calendar3 me-2 text-primary"></i>Danh Sách Ca Trực Sắp Tới (30 Ngày)</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="myShiftsTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Ngày Làm Việc</th>
+                            <th>Thứ</th>
+                            <th>Khung Giờ</th>
+                            <th>Ca Trực</th>
+                            <th>Ghi Chú</th>
+                            <th>Trạng Thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!upcomingShifts.Any())
+                        {
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">Bạn chưa có ca trực nào trong 30 ngày tới.</td>
+                            </tr>
+                        }
+                        @foreach (var s in upcomingShifts)
+                        {
+                            string dowName = s.WorkDate.DayOfWeek switch
+                            {
+                                DayOfWeek.Monday => "Thứ 2",
+                                DayOfWeek.Tuesday => "Thứ 3",
+                                DayOfWeek.Wednesday => "Thứ 4",
+                                DayOfWeek.Thursday => "Thứ 5",
+                                DayOfWeek.Friday => "Thứ 6",
+                                DayOfWeek.Saturday => "Thứ 7",
+                                _ => "Chủ Nhật"
+                            };
+                            <tr>
+                                <td class="fw-semibold">@s.WorkDate.ToString("dd/MM/yyyy")</td>
+                                <td>@dowName</td>
+                                <td><span class="badge bg-light text-dark border">@s.StartTime.ToString("HH:mm") - @s.EndTime.ToString("HH:mm")</span></td>
+                                <td>@(s.ShiftTemplateName ?? "Ca tùy chỉnh")</td>
+                                <td>@(s.Notes ?? "-")</td>
+                                <td><span class="badge bg-success">@s.Status</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Báo Vắng Mặt Khẩn Cấp -->
+@if (todayShift != null)
+{
+    <div class="modal fade" id="emergencyAbsenceModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" action="@Url.Action("ReportAbsence")">
+                    <input type="hidden" name="ScheduleId" value="@todayShift.ReceptionistScheduleId" />
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold text-danger"><i class="bi bi-exclamation-octagon me-2"></i>Báo Vắng Mặt Khẩn Cấp</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-warning small">
+                            <i class="bi bi-info-circle me-1"></i> Báo vắng mặt khẩn cấp sẽ ghi nhận thực tế vắng ca của bạn ngày <strong>@todayShift.WorkDate.ToString("dd/MM/yyyy")</strong> và tự động gửi cảnh báo thiếu nhân sự tới Quản trị viên để kịp thời điều phối người thay thế.
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Lý Do Đột Xuất (Bắt buộc)</label>
+                            <textarea name="Reason" class="form-control" rows="3" required placeholder="Nhập lý do sự cố (sức khỏe cấp bách, việc gia đình đột xuất...)" id="emergencyAbsenceReason"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                        <button type="submit" class="btn btn-danger" id="btnSubmitEmergencyAbsence">Xác Nhận Báo Vắng</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
