@@ -1,6 +1,6 @@
 # DENTALCARE 4-ROLE ARCHITECTURE: DENTIST SUBSYSTEM API CONTRACTS & REQUIREMENTS
 
-**Branch:** `feature/dentist-redesign` | **Commit:** `327a5fb125d31da37b4e4a61630e45f191442b0a`  
+**Branch:** `feature/dentist-redesign` | **Commit:** `679a82737fe19655e55fbd3468613bf792008fad`  
 **Backend:** `https://localhost:7354` | **Frontend:** `https://localhost:7124` | **Database:** `DentalCare_Dentist_Dev`  
 
 ## 1. Overview & Architectural Boundaries

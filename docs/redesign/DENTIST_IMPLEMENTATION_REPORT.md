@@ -2,7 +2,7 @@
 
 **Role:** Senior .NET Backend Developer (Clinical Workflow, Treatment Plan, Prescriptions, Chairside Dispensing)  
 **Workspace:** `D:\SWP391\DentalCare-Dentist`  
-**Branch:** `feature/dentist-redesign` (Baseline: `5ad6d95`, Head Commit: `327a5fb125d31da37b4e4a61630e45f191442b0a`)  
+**Branch:** `feature/dentist-redesign` (Baseline: `5ad6d95`, Head Commit: `679a82737fe19655e55fbd3468613bf792008fad`)  
 **Target Architecture:** 4-Role DentalCare Architecture (`Patient`, `Receptionist`, `Dentist`, `SystemAdministrator`)  
 **Backend Port:** `https://localhost:7354` (`DentalClinic.Backend.sln`)  
 **Frontend Port:** `https://localhost:7124` (`DentalClinic.Web.sln`)  
