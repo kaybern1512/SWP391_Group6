@@ -22,7 +22,7 @@ public class RealDatabaseEndToEndSmokeTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private static async Task<bool> IsDatabaseAvailableAsync(DentalClinicDbContext db)
     {
@@ -66,10 +66,25 @@ public class RealDatabaseEndToEndSmokeTests
                         (a.ScheduledEnd ?? a.ScheduledStart.Value.AddMinutes(30)) > start &&
                         (a.AssignedDentistUserId == dentistUserId || a.PatientUserId == 13 || a.PatientUserId == 14 || a.PatientUserId == 15));
 
-                    if (!busy)
-                    {
-                        return start;
-                    }
+                    if (busy) continue;
+
+                    // Enforce shift quota check for patient in test helper
+                    var dateStart = start.Date;
+                    var dateEnd = dateStart.AddDays(1);
+                    var patientAppts = await db.Appointments.AsNoTracking()
+                        .Where(a => a.PatientUserId == 13 &&
+                                    a.Status != AppointmentStatus.Cancelled &&
+                                    a.Status != AppointmentStatus.Withdrawn &&
+                                    a.ScheduledStart.HasValue &&
+                                    a.ScheduledStart.Value >= dateStart &&
+                                    a.ScheduledStart.Value < dateEnd)
+                        .ToListAsync();
+
+                    if (patientAppts.Count >= 2) continue;
+                    bool isMorn = start.Hour < 12;
+                    if (patientAppts.Any(a => (a.ScheduledStart!.Value.Hour < 12) == isMorn)) continue;
+
+                    return start;
                 }
             }
         }

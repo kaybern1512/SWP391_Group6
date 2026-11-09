@@ -11,7 +11,7 @@ namespace DentalClinic.Tests.FollowUp;
 
 public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
 {
-    public string ServerName { get; } = Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? ".\\SQLEXPRESS";
+    public string ServerName { get; } = Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? ".\\MSSQLSERVER01";
     public string RunId { get; } = Guid.NewGuid().ToString("N")[..8];
     public string DatabaseName { get; private set; } = null!;
     public string ConnectionString { get; private set; } = null!;
@@ -46,8 +46,8 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
         string dataPath;
         await using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT CAST(ISNULL(SERVERPROPERTY('InstanceDefaultDataPath'), 'C:\\Program Files\\Microsoft SQL Server\\MSSQL16.SQLEXPRESS\\MSSQL\\DATA\\') AS VARCHAR(260));";
-            dataPath = (string)(await cmd.ExecuteScalarAsync() ?? @"C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\DATA\");
+            cmd.CommandText = "SELECT CAST(ISNULL(SERVERPROPERTY('InstanceDefaultDataPath'), 'C:\\Program Files\\Microsoft SQL Server\\MSSQL16.MSSQLSERVER01\\MSSQL\\DATA\\') AS VARCHAR(260));";
+            dataPath = (string)(await cmd.ExecuteScalarAsync() ?? @"C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER01\MSSQL\DATA\");
         }
 
         var mdfPath = Path.Combine(dataPath, $"{DatabaseName}.mdf");

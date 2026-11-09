@@ -386,8 +386,8 @@ public class BookingTimezoneAndDurationIntegrationTests
         Assert.True(res1.Data.ScheduledEnd.HasValue && res1.Data.ScheduledStart.HasValue);
         Assert.Equal(30, (res1.Data.ScheduledEnd.Value - res1.Data.ScheduledStart.Value).TotalMinutes);
 
-        // 2. Service 2 (60 min)
-        var start2 = targetDate.AddHours(10);
+        // 2. Service 2 (60 min) - booked on next day to comply with shift quota
+        var start2 = targetDate.AddDays(1).AddHours(10);
         var res2 = await apptService.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
         {
             DepartmentId = 1,
@@ -400,8 +400,8 @@ public class BookingTimezoneAndDurationIntegrationTests
         Assert.True(res2.Data.ScheduledEnd.HasValue && res2.Data.ScheduledStart.HasValue);
         Assert.Equal(60, (res2.Data.ScheduledEnd.Value - res2.Data.ScheduledStart.Value).TotalMinutes);
 
-        // 3. Service 3 (90 min)
-        var start3 = targetDate.AddHours(14);
+        // 3. Service 3 (90 min) - booked on subsequent day
+        var start3 = targetDate.AddDays(2).AddHours(14);
         var res3 = await apptService.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
         {
             DepartmentId = 1,

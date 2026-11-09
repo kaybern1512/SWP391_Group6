@@ -143,11 +143,12 @@ public class BookingService : IBookingService
             ? service.DurationMinutes.Value
             : 30; // Application default: 30 minutes
 
-        // 3. Check Department Schedule for DayOfWeek (1=Monday to 7=Sunday)
+        // 3. Check Department Schedule for DayOfWeek (1=Monday to 7=Sunday, or 0=Sunday)
         int dow = targetDate.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)targetDate.DayOfWeek;
+        int dow0 = (int)targetDate.DayOfWeek;
         var deptSchedules = await _dbContext.DepartmentWorkSchedules
             .AsNoTracking()
-            .Where(ds => ds.DepartmentId == query.DepartmentId && ds.DayOfWeek == dow && ds.IsActive)
+            .Where(ds => ds.DepartmentId == query.DepartmentId && (ds.DayOfWeek == dow || ds.DayOfWeek == dow0) && ds.IsActive)
             .ToListAsync(ct);
 
         if (!deptSchedules.Any())
