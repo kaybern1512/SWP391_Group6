@@ -72,6 +72,11 @@ public static class DependencyInjection
         services.AddScoped<IBlogService, BlogService>();
         services.AddScoped<IAppointmentReminderService, AppointmentReminderService>();
         services.AddScoped<IMedicineService, MedicineService>();
+        services.AddScoped<IReceptionistCoverageService, ReceptionistCoverageService>();
+        services.AddScoped<IReceptionistScheduleService, ReceptionistScheduleService>();
+        services.AddScoped<IReceptionistLeaveService, ReceptionistLeaveService>();
+        services.AddScoped<IReceptionistShiftSwapService, ReceptionistShiftSwapService>();
+        services.AddScoped<IReceptionistHandoverService, ReceptionistHandoverService>();
         services.AddHostedService<AppointmentReminderBackgroundWorker>();
 
         return services;
