@@ -48,6 +48,8 @@ public class FeedbackApiService : IFeedbackApiService
         if (request.DepartmentId.HasValue) queryParams.Add($"departmentId={request.DepartmentId.Value}");
         if (request.DentistUserId.HasValue) queryParams.Add($"dentistUserId={request.DentistUserId.Value}");
         if (request.MinRating.HasValue) queryParams.Add($"minRating={request.MinRating.Value}");
+        if (!string.IsNullOrWhiteSpace(request.Status)) queryParams.Add($"status={Uri.EscapeDataString(request.Status)}");
+        if (!string.IsNullOrWhiteSpace(request.Search)) queryParams.Add($"search={Uri.EscapeDataString(request.Search)}");
         if (request.FromDate.HasValue) queryParams.Add($"fromDate={request.FromDate.Value:yyyy-MM-ddTHH:mm:ss}");
         if (request.ToDate.HasValue) queryParams.Add($"toDate={request.ToDate.Value:yyyy-MM-ddTHH:mm:ss}");
         queryParams.Add($"page={request.Page}");
@@ -55,6 +57,16 @@ public class FeedbackApiService : IFeedbackApiService
 
         var url = "/api/Feedback?" + string.Join("&", queryParams);
         return await SendGetAsync<FeedbackPagedResultDto>(url);
+    }
+
+    public async Task<ApiResult<VisitFeedbackDto>> ModerateFeedbackAsync(long feedbackId, ModerateFeedbackRequest request)
+    {
+        return await SendPutAsync<VisitFeedbackDto>($"/api/Feedback/{feedbackId}/moderate", request);
+    }
+
+    public async Task<ApiResult<VisitFeedbackDto>> RespondFeedbackAsync(long feedbackId, RespondFeedbackRequest request)
+    {
+        return await SendPostAsync<VisitFeedbackDto>($"/api/Feedback/{feedbackId}/respond", request);
     }
 
     private async Task<ApiResult<T>> SendGetAsync<T>(string url)
@@ -81,6 +93,20 @@ public class FeedbackApiService : IFeedbackApiService
         catch (Exception ex)
         {
             _logger.LogError(ex, "HTTP POST failed for {Url}", url);
+            return ApiResult<T>.Failure("Không thể kết nối đến máy chủ.");
+        }
+    }
+
+    private async Task<ApiResult<T>> SendPutAsync<T>(string url, object body)
+    {
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync(url, body);
+            return await HandleApiResponseAsync<T>(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "HTTP PUT failed for {Url}", url);
             return ApiResult<T>.Failure("Không thể kết nối đến máy chủ.");
         }
     }

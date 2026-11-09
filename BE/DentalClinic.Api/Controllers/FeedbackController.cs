@@ -83,4 +83,34 @@ public class FeedbackController : ControllerBase
         var result = await _feedbackService.GetFeedbacksAsync(request, ct);
         return Ok(result);
     }
+
+    [HttpPut("{id:long}/moderate")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<VisitFeedbackDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<VisitFeedbackDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ModerateFeedback(long id, [FromBody] ModerateFeedbackRequest request, CancellationToken ct)
+    {
+        var adminUserId = GetCurrentUserId();
+        var result = await _feedbackService.ModerateFeedbackAsync(id, request, adminUserId, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("{id:long}/respond")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<VisitFeedbackDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<VisitFeedbackDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RespondFeedback(long id, [FromBody] RespondFeedbackRequest request, CancellationToken ct)
+    {
+        var adminUserId = GetCurrentUserId();
+        var result = await _feedbackService.RespondFeedbackAsync(id, request, adminUserId, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
 }

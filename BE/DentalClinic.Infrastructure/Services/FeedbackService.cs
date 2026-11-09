@@ -71,6 +71,9 @@ public class FeedbackService : IFeedbackService
             DentistRating = request.DentistRating,
             ClinicRating = request.ClinicRating,
             Comment = request.Comment?.Trim(),
+            DentistUserId = appointment.AssignedDentistUserId,
+            PatientUserId = patientUserId,
+            Status = "Approved",
             CreatedAt = DateTime.UtcNow
         };
 
@@ -91,6 +94,7 @@ public class FeedbackService : IFeedbackService
             DentistRating = feedback.DentistRating,
             ClinicRating = feedback.ClinicRating,
             Comment = feedback.Comment,
+            Status = feedback.Status,
             CreatedAt = feedback.CreatedAt,
             AppointmentDate = appointment.ScheduledStart,
             ServiceName = appointment.RequestedService?.ServiceName
@@ -112,6 +116,8 @@ public class FeedbackService : IFeedbackService
                 .ThenInclude(a => a.Department)
             .Include(f => f.Appointment)
                 .ThenInclude(a => a.RequestedService)
+            .Include(f => f.AdminRespondedByUser)
+                .ThenInclude(u => u!.StaffProfile)
             .FirstOrDefaultAsync(f => f.AppointmentId == appointmentId, ct);
 
         if (feedback == null)
@@ -134,7 +140,13 @@ public class FeedbackService : IFeedbackService
             DentistRating = feedback.DentistRating,
             ClinicRating = feedback.ClinicRating,
             Comment = feedback.Comment,
+            Status = feedback.Status,
+            AdminNotes = feedback.AdminNotes,
+            AdminRespondedByUserId = feedback.AdminRespondedByUserId,
+            AdminRespondedByName = feedback.AdminRespondedByUser?.StaffProfile?.FullName,
+            AdminResponse = feedback.AdminResponse,
             CreatedAt = feedback.CreatedAt,
+            UpdatedAt = feedback.UpdatedAt,
             AppointmentDate = appt.ScheduledStart,
             ServiceName = appt.RequestedService?.ServiceName
         };
@@ -162,7 +174,9 @@ public class FeedbackService : IFeedbackService
                 .ThenInclude(a => a.Department)
             .Include(f => f.Appointment)
                 .ThenInclude(a => a.RequestedService)
-            .Where(f => f.Appointment.AssignedDentistUserId == dentistUserId)
+            .Include(f => f.AdminRespondedByUser)
+                .ThenInclude(u => u!.StaffProfile)
+            .Where(f => (f.DentistUserId == dentistUserId || f.Appointment.AssignedDentistUserId == dentistUserId) && f.Status != "Hidden")
             .OrderByDescending(f => f.CreatedAt)
             .ToListAsync(ct);
 
@@ -184,7 +198,13 @@ public class FeedbackService : IFeedbackService
             DentistRating = f.DentistRating,
             ClinicRating = f.ClinicRating,
             Comment = f.Comment,
+            Status = f.Status,
+            AdminNotes = f.AdminNotes,
+            AdminRespondedByUserId = f.AdminRespondedByUserId,
+            AdminRespondedByName = f.AdminRespondedByUser?.StaffProfile?.FullName,
+            AdminResponse = f.AdminResponse,
             CreatedAt = f.CreatedAt,
+            UpdatedAt = f.UpdatedAt,
             AppointmentDate = f.Appointment.ScheduledStart,
             ServiceName = f.Appointment.RequestedService?.ServiceName
         }).ToList();
@@ -215,7 +235,9 @@ public class FeedbackService : IFeedbackService
                 .ThenInclude(a => a.Department)
             .Include(f => f.Appointment)
                 .ThenInclude(a => a.RequestedService)
-            .Where(f => f.Appointment.PatientUserId == patientUserId)
+            .Include(f => f.AdminRespondedByUser)
+                .ThenInclude(u => u!.StaffProfile)
+            .Where(f => f.PatientUserId == patientUserId || f.Appointment.PatientUserId == patientUserId)
             .OrderByDescending(f => f.CreatedAt)
             .Select(f => new VisitFeedbackDto
             {
@@ -231,7 +253,13 @@ public class FeedbackService : IFeedbackService
                 DentistRating = f.DentistRating,
                 ClinicRating = f.ClinicRating,
                 Comment = f.Comment,
+                Status = f.Status,
+                AdminNotes = f.AdminNotes,
+                AdminRespondedByUserId = f.AdminRespondedByUserId,
+                AdminRespondedByName = f.AdminRespondedByUser != null && f.AdminRespondedByUser.StaffProfile != null ? f.AdminRespondedByUser.StaffProfile.FullName : null,
+                AdminResponse = f.AdminResponse,
                 CreatedAt = f.CreatedAt,
+                UpdatedAt = f.UpdatedAt,
                 AppointmentDate = f.Appointment.ScheduledStart,
                 ServiceName = f.Appointment.RequestedService != null ? f.Appointment.RequestedService.ServiceName : null
             })
@@ -253,6 +281,8 @@ public class FeedbackService : IFeedbackService
                 .ThenInclude(a => a.Department)
             .Include(f => f.Appointment)
                 .ThenInclude(a => a.RequestedService)
+            .Include(f => f.AdminRespondedByUser)
+                .ThenInclude(u => u!.StaffProfile)
             .AsQueryable();
 
         if (request.DepartmentId.HasValue)
@@ -262,12 +292,27 @@ public class FeedbackService : IFeedbackService
 
         if (request.DentistUserId.HasValue)
         {
-            query = query.Where(f => f.Appointment.AssignedDentistUserId == request.DentistUserId.Value);
+            query = query.Where(f => f.DentistUserId == request.DentistUserId.Value || f.Appointment.AssignedDentistUserId == request.DentistUserId.Value);
         }
 
         if (request.MinRating.HasValue)
         {
             query = query.Where(f => f.DentistRating >= request.MinRating.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            query = query.Where(f => f.Status == request.Status.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var q = request.Search.Trim().ToLower();
+            query = query.Where(f =>
+                (f.Comment != null && f.Comment.ToLower().Contains(q)) ||
+                f.Appointment.AppointmentCode.ToLower().Contains(q) ||
+                f.Appointment.PatientUser.FullName.ToLower().Contains(q) ||
+                (f.Appointment.AssignedDentistUser != null && f.Appointment.AssignedDentistUser.User.FullName.ToLower().Contains(q)));
         }
 
         if (request.FromDate.HasValue)
@@ -284,6 +329,10 @@ public class FeedbackService : IFeedbackService
         double overallDentist = total > 0 ? await query.AverageAsync(f => (double)f.DentistRating, ct) : 0;
         double overallClinic = total > 0 ? await query.AverageAsync(f => (double)f.ClinicRating, ct) : 0;
 
+        var approvedCount = await _dbContext.VisitFeedbacks.CountAsync(f => f.Status == "Approved", ct);
+        var hiddenCount = await _dbContext.VisitFeedbacks.CountAsync(f => f.Status == "Hidden", ct);
+        var pendingCount = await _dbContext.VisitFeedbacks.CountAsync(f => f.Status == "Pending", ct);
+
         var page = request.Page < 1 ? 1 : request.Page;
         var pageSize = request.PageSize < 1 ? 20 : request.PageSize;
 
@@ -298,14 +347,20 @@ public class FeedbackService : IFeedbackService
                 AppointmentCode = f.Appointment.AppointmentCode,
                 PatientUserId = f.Appointment.PatientUserId,
                 PatientName = f.Appointment.PatientUser.FullName,
-                DentistUserId = f.Appointment.AssignedDentistUserId,
+                DentistUserId = f.DentistUserId ?? f.Appointment.AssignedDentistUserId,
                 DentistName = f.Appointment.AssignedDentistUser != null ? f.Appointment.AssignedDentistUser.User.FullName : null,
                 DepartmentId = f.Appointment.DepartmentId,
                 DepartmentName = f.Appointment.Department != null ? f.Appointment.Department.Name : null,
                 DentistRating = f.DentistRating,
                 ClinicRating = f.ClinicRating,
                 Comment = f.Comment,
+                Status = f.Status,
+                AdminNotes = f.AdminNotes,
+                AdminRespondedByUserId = f.AdminRespondedByUserId,
+                AdminRespondedByName = f.AdminRespondedByUser != null && f.AdminRespondedByUser.StaffProfile != null ? f.AdminRespondedByUser.StaffProfile.FullName : null,
+                AdminResponse = f.AdminResponse,
                 CreatedAt = f.CreatedAt,
+                UpdatedAt = f.UpdatedAt,
                 AppointmentDate = f.Appointment.ScheduledStart,
                 ServiceName = f.Appointment.RequestedService != null ? f.Appointment.RequestedService.ServiceName : null
             })
@@ -318,9 +373,122 @@ public class FeedbackService : IFeedbackService
             Page = page,
             PageSize = pageSize,
             OverallDentistRating = Math.Round(overallDentist, 1),
-            OverallClinicRating = Math.Round(overallClinic, 1)
+            OverallClinicRating = Math.Round(overallClinic, 1),
+            ApprovedCount = approvedCount,
+            HiddenCount = hiddenCount,
+            PendingCount = pendingCount
         };
 
         return ApiResponse<FeedbackPagedResultDto>.Ok(result);
+    }
+
+    public async Task<ApiResponse<VisitFeedbackDto>> ModerateFeedbackAsync(long feedbackId, ModerateFeedbackRequest request, long adminUserId, CancellationToken ct = default)
+    {
+        var feedback = await _dbContext.VisitFeedbacks
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a.PatientUser)
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a.AssignedDentistUser)
+                    .ThenInclude(d => d!.User)
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a.Department)
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a.RequestedService)
+            .Include(f => f.AdminRespondedByUser)
+                .ThenInclude(u => u!.StaffProfile)
+            .FirstOrDefaultAsync(f => f.FeedbackId == feedbackId, ct);
+
+        if (feedback == null)
+        {
+            return ApiResponse<VisitFeedbackDto>.Fail("Không tìm thấy đánh giá.");
+        }
+
+        var validStatuses = new[] { "Approved", "Hidden", "Pending" };
+        var status = validStatuses.Contains(request.Status, StringComparer.OrdinalIgnoreCase) ? request.Status : "Approved";
+
+        feedback.Status = status;
+        if (!string.IsNullOrWhiteSpace(request.AdminNotes))
+        {
+            feedback.AdminNotes = request.AdminNotes.Trim();
+        }
+        feedback.UpdatedAt = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        return await GetFeedbackDtoByIdAsync(feedback.FeedbackId, ct);
+    }
+
+    public async Task<ApiResponse<VisitFeedbackDto>> RespondFeedbackAsync(long feedbackId, RespondFeedbackRequest request, long adminUserId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.AdminResponse))
+        {
+            return ApiResponse<VisitFeedbackDto>.Fail("Nội dung phản hồi không được để trống.");
+        }
+
+        var feedback = await _dbContext.VisitFeedbacks
+            .FirstOrDefaultAsync(f => f.FeedbackId == feedbackId, ct);
+
+        if (feedback == null)
+        {
+            return ApiResponse<VisitFeedbackDto>.Fail("Không tìm thấy đánh giá.");
+        }
+
+        feedback.AdminResponse = request.AdminResponse.Trim();
+        feedback.AdminRespondedByUserId = adminUserId;
+        feedback.UpdatedAt = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        return await GetFeedbackDtoByIdAsync(feedback.FeedbackId, ct);
+    }
+
+    private async Task<ApiResponse<VisitFeedbackDto>> GetFeedbackDtoByIdAsync(long feedbackId, CancellationToken ct)
+    {
+        var f = await _dbContext.VisitFeedbacks
+            .AsNoTracking()
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a.PatientUser)
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a.AssignedDentistUser)
+                    .ThenInclude(d => d!.User)
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a.Department)
+            .Include(f => f.Appointment)
+                .ThenInclude(a => a.RequestedService)
+            .Include(f => f.AdminRespondedByUser)
+                .ThenInclude(u => u!.StaffProfile)
+            .FirstOrDefaultAsync(f => f.FeedbackId == feedbackId, ct);
+
+        if (f == null)
+        {
+            return ApiResponse<VisitFeedbackDto>.Fail("Không tìm thấy đánh giá.");
+        }
+
+        var dto = new VisitFeedbackDto
+        {
+            FeedbackId = f.FeedbackId,
+            AppointmentId = f.Appointment.AppointmentId,
+            AppointmentCode = f.Appointment.AppointmentCode,
+            PatientUserId = f.Appointment.PatientUserId,
+            PatientName = f.Appointment.PatientUser.FullName,
+            DentistUserId = f.DentistUserId ?? f.Appointment.AssignedDentistUserId,
+            DentistName = f.Appointment.AssignedDentistUser != null ? f.Appointment.AssignedDentistUser.User.FullName : null,
+            DepartmentId = f.Appointment.DepartmentId,
+            DepartmentName = f.Appointment.Department != null ? f.Appointment.Department.Name : null,
+            DentistRating = f.DentistRating,
+            ClinicRating = f.ClinicRating,
+            Comment = f.Comment,
+            Status = f.Status,
+            AdminNotes = f.AdminNotes,
+            AdminRespondedByUserId = f.AdminRespondedByUserId,
+            AdminRespondedByName = f.AdminRespondedByUser?.StaffProfile?.FullName,
+            AdminResponse = f.AdminResponse,
+            CreatedAt = f.CreatedAt,
+            UpdatedAt = f.UpdatedAt,
+            AppointmentDate = f.Appointment.ScheduledStart,
+            ServiceName = f.Appointment.RequestedService != null ? f.Appointment.RequestedService.ServiceName : null
+        };
+
+        return ApiResponse<VisitFeedbackDto>.Ok(dto);
     }
 }

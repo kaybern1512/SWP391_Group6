@@ -10,7 +10,7 @@ public class AdminDepartmentDto
 {
     public long DepartmentId { get; set; }
     public string Name { get; set; } = string.Empty;
-    public string DepartmentName => Name;
+    public string DepartmentName { get => Name; set => Name = value; }
     public string? Description { get; set; }
     public long? ManagerUserId { get; set; }
     public string? ManagerName { get; set; }
@@ -39,7 +39,7 @@ public class UpdateDepartmentRequest
 }
 
 // ==========================================
-// SERVICE DTOS
+// SERVICE DTOS (Phase 0 Extended)
 // ==========================================
 public class AdminDepartmentServiceDto
 {
@@ -51,6 +51,11 @@ public class AdminDepartmentServiceDto
     public int? DurationMinutes { get; set; }
     public decimal Price { get; set; }
     public string Status { get; set; } = string.Empty;
+    public string ServiceType { get; set; } = "Treatment";
+    public bool RequiresExclusiveRoom { get; set; }
+    public bool RequiresConsultationFirst { get; set; }
+    public int MinLeadTimeHours { get; set; } = 2;
+    public string? BookingInstructions { get; set; }
 }
 
 public class CreateDepartmentServiceRequest
@@ -61,6 +66,11 @@ public class CreateDepartmentServiceRequest
     public int? DurationMinutes { get; set; }
     public decimal Price { get; set; }
     public string Status { get; set; } = "Active";
+    public string ServiceType { get; set; } = "Treatment";
+    public bool RequiresExclusiveRoom { get; set; }
+    public bool RequiresConsultationFirst { get; set; }
+    public int MinLeadTimeHours { get; set; } = 2;
+    public string? BookingInstructions { get; set; }
 }
 
 public class UpdateDepartmentServiceRequest
@@ -71,10 +81,15 @@ public class UpdateDepartmentServiceRequest
     public int? DurationMinutes { get; set; }
     public decimal Price { get; set; }
     public string Status { get; set; } = "Active";
+    public string ServiceType { get; set; } = "Treatment";
+    public bool RequiresExclusiveRoom { get; set; }
+    public bool RequiresConsultationFirst { get; set; }
+    public int MinLeadTimeHours { get; set; } = 2;
+    public string? BookingInstructions { get; set; }
 }
 
 // ==========================================
-// ROOM DTOS
+// ROOM DTOS (Phase 0 Extended)
 // ==========================================
 public class AdminRoomDto
 {
@@ -84,6 +99,7 @@ public class AdminRoomDto
     public long? DepartmentId { get; set; }
     public string? DepartmentName { get; set; }
     public string Status { get; set; } = string.Empty;
+    public bool IsExclusive { get; set; }
     public int ChairsCount { get; set; }
     public int ActiveChairsCount { get; set; }
 }
@@ -94,6 +110,7 @@ public class CreateRoomRequest
     public string? RoomName { get; set; }
     public long? DepartmentId { get; set; }
     public string Status { get; set; } = "Active";
+    public bool IsExclusive { get; set; }
 }
 
 public class UpdateRoomRequest
@@ -102,6 +119,7 @@ public class UpdateRoomRequest
     public string? RoomName { get; set; }
     public long? DepartmentId { get; set; }
     public string Status { get; set; } = "Active";
+    public bool IsExclusive { get; set; }
 }
 
 public class UpdateRoomStatusRequest
@@ -267,8 +285,31 @@ public class AdminUserDto
     public string? Code { get; set; }
     public string Role { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+    public string? Specialty { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
+}
+
+public class CreateStaffRequest
+{
+    public string Email { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string? PhoneNumber { get; set; }
+    public string Role { get; set; } = "Dentist"; // Dentist, Receptionist, SystemAdministrator
+    public string? StaffCode { get; set; }
+    public string? Specialty { get; set; }
+    public string? Education { get; set; }
+    public int? ExperienceYears { get; set; }
+    public long? DepartmentId { get; set; }
+}
+
+public class UpdateStaffRequest
+{
+    public string FullName { get; set; } = string.Empty;
+    public string? PhoneNumber { get; set; }
+    public string? Specialty { get; set; }
+    public string? Status { get; set; }
 }
 
 public class ToggleUserLockRequest
@@ -299,4 +340,18 @@ public class AssignDentistDepartmentRequest
     public long DentistUserId { get; set; }
     public long DepartmentId { get; set; }
     public string Status { get; set; } = "Active";
+}
+
+// ==========================================
+// SYSTEM & DATABASE INFO DTOS
+// ==========================================
+public class DatabaseInfoDto
+{
+    public string DatabaseName { get; set; } = string.Empty;
+    public string ServerName { get; set; } = string.Empty;
+    public string Status { get; set; } = "Connected";
+    public DateTime ServerTime { get; set; }
+    public int TotalUsers { get; set; }
+    public int TotalServices { get; set; }
+    public int TotalAppointments { get; set; }
 }

@@ -17,7 +17,13 @@ public class VisitFeedbackDto
     public byte DentistRating { get; set; }
     public byte ClinicRating { get; set; }
     public string? Comment { get; set; }
+    public string Status { get; set; } = "Approved"; // Approved, Hidden, Pending
+    public string? AdminNotes { get; set; }
+    public long? AdminRespondedByUserId { get; set; }
+    public string? AdminRespondedByName { get; set; }
+    public string? AdminResponse { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
     public DateTime? AppointmentDate { get; set; }
     public string? ServiceName { get; set; }
 }
@@ -28,6 +34,18 @@ public class CreateFeedbackRequest
     public byte DentistRating { get; set; } // 1 - 5
     public byte ClinicRating { get; set; }  // 1 - 5
     public string? Comment { get; set; }
+}
+
+public class ModerateFeedbackRequest
+{
+    public string Status { get; set; } = "Approved"; // "Approved" or "Hidden"
+    public string? AdminNotes { get; set; }
+}
+
+public class RespondFeedbackRequest
+{
+    public string AdminResponse { get; set; } = string.Empty;
+    public string Response { get => AdminResponse; set => AdminResponse = value; }
 }
 
 public class DentistFeedbackSummaryDto
@@ -45,6 +63,8 @@ public class FeedbackFilterRequest
     public long? DepartmentId { get; set; }
     public long? DentistUserId { get; set; }
     public byte? MinRating { get; set; }
+    public string? Status { get; set; } // Approved, Hidden, Pending
+    public string? Search { get; set; }
     public DateTime? FromDate { get; set; }
     public DateTime? ToDate { get; set; }
     public int Page { get; set; } = 1;
@@ -59,4 +79,7 @@ public class FeedbackPagedResultDto
     public int PageSize { get; set; }
     public double OverallDentistRating { get; set; }
     public double OverallClinicRating { get; set; }
+    public int ApprovedCount { get; set; }
+    public int HiddenCount { get; set; }
+    public int PendingCount { get; set; }
 }

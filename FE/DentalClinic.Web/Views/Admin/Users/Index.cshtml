@@ -14,8 +14,13 @@
                 <span class="text-muted small">&bull;</span>
                 <span class="badge-dc badge-role-systemadministrator">Bảo mật & Người dùng</span>
             </div>
-            <h1 class="page-title">Quản lý Tài khoản & Quyền hạn Người dùng</h1>
-            <p class="page-subtitle">Danh sách toàn bộ tài khoản bệnh nhân và cán bộ nhân viên phòng khám trong hệ thống</p>
+            <h1 class="page-title">Quản lý Tài khoản & Quyền hạn Cán bộ Nhân viên</h1>
+            <p class="page-subtitle">Mô hình 4 vai trò chuẩn: Bệnh nhân, Bác sĩ, Lễ tân và Quản trị viên. Quản lý phân quyền và thông tin nhân viên.</p>
+        </div>
+        <div class="page-actions">
+            <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createStaffModal">
+                <i class="bi bi-person-plus me-1"></i> Thêm Nhân Viên Mới
+            </button>
         </div>
     </div>
 
@@ -30,7 +35,6 @@
                         <option value="Patient" selected="@(Model.RoleFilter == "Patient")">Bệnh nhân (Patient)</option>
                         <option value="Dentist" selected="@(Model.RoleFilter == "Dentist")">Bác sĩ nha khoa (Dentist)</option>
                         <option value="Receptionist" selected="@(Model.RoleFilter == "Receptionist")">Lễ tân (Receptionist)</option>
-                        <option value="DepartmentManager" selected="@(Model.RoleFilter == "DepartmentManager")">Trưởng khoa (DepartmentManager)</option>
                         <option value="SystemAdministrator" selected="@(Model.RoleFilter == "SystemAdministrator")">Quản trị viên (SystemAdministrator)</option>
                     </select>
                 </div>
@@ -71,7 +75,8 @@
                             <th>Họ và tên</th>
                             <th>Email & Điện thoại</th>
                             <th>Vai trò (Role)</th>
-                            <th>Trạng thái tài khoản</th>
+                            <th>Chuyên môn / Ghi chú</th>
+                            <th>Trạng thái</th>
                             <th>Ngày tạo</th>
                             <th class="text-end">Hành động</th>
                         </tr>
@@ -105,23 +110,31 @@
                                         }
                                         else if (u.Role == "Dentist")
                                         {
-                                            <span class="badge bg-success-subtle text-success border">Bác sĩ</span>
+                                            <span class="badge bg-success-subtle text-success border">Bác sĩ nha khoa</span>
                                         }
                                         else if (u.Role == "Receptionist")
                                         {
-                                            <span class="badge bg-info-subtle text-info border">Lễ tân</span>
-                                        }
-                                        else if (u.Role == "DepartmentManager")
-                                        {
-                                            <span class="badge bg-warning-subtle text-warning border">Trưởng khoa</span>
+                                            <span class="badge bg-info-subtle text-info border">Lễ tân phòng khám</span>
                                         }
                                         else if (u.Role == "SystemAdministrator")
                                         {
-                                            <span class="badge bg-danger-subtle text-danger border">Admin</span>
+                                            <span class="badge bg-danger-subtle text-danger border">Quản trị viên (Admin)</span>
                                         }
                                         else
                                         {
                                             <span class="badge bg-light text-dark border">@u.Role</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(u.Specialty))
+                                        {
+                                            <span class="badge bg-light text-dark border">
+                                                <i class="bi bi-award me-1 text-primary"></i>@u.Specialty
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">—</span>
                                         }
                                     </td>
                                     <td>
@@ -148,12 +161,23 @@
                                         @u.CreatedAt.ToString("dd/MM/yyyy HH:mm")
                                     </td>
                                     <td class="text-end text-nowrap">
+                                        @if (u.Role != "Patient")
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-primary me-1 btn-edit-staff"
+                                                    data-id="@u.UserId"
+                                                    data-name="@u.FullName"
+                                                    data-phone="@u.PhoneNumber"
+                                                    data-role="@u.Role"
+                                                    data-specialty="@u.Specialty">
+                                                <i class="bi bi-pencil-square"></i> Sửa
+                                            </button>
+                                        }
                                         <button type="button" class="btn btn-sm @(u.Status == "Locked" ? "btn-outline-success" : "btn-outline-danger") btn-toggle-lock"
                                                 data-id="@u.UserId"
                                                 data-name="@u.FullName"
                                                 data-status="@u.Status">
                                             <i class="bi @(u.Status == "Locked" ? "bi-unlock" : "bi-lock")"></i>
-                                            @(u.Status == "Locked" ? "Mở khóa" : "Khóa tài khoản")
+                                            @(u.Status == "Locked" ? "Mở khóa" : "Khóa")
                                         </button>
                                     </td>
                                 </tr>
@@ -162,7 +186,7 @@
                         else
                         {
                             <tr>
-                                <td colspan="8" class="text-center py-4 text-muted">
+                                <td colspan="9" class="text-center py-4 text-muted">
                                     <i class="bi bi-people fs-3 d-block mb-1"></i>
                                     Không tìm thấy tài khoản người dùng nào phù hợp.
                                 </td>
@@ -171,6 +195,116 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm Cán Bộ Nhân Viên Mới -->
+<div class="modal fade" id="createStaffModal" tabindex="-1" aria-labelledby="createStaffLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form asp-controller="AdminUser" asp-action="CreateStaff" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="returnRole" value="@Model.RoleFilter" />
+                <input type="hidden" name="returnSearch" value="@Model.SearchKeyword" />
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="createStaffLabel">
+                        <i class="bi bi-person-plus text-primary me-2"></i>Thêm Mới Cán Bộ Nhân Viên
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Vai trò nhân viên <span class="text-danger">*</span></label>
+                            <select name="Role" id="staffRoleSelect" class="form-select" required>
+                                <option value="Dentist">Bác sĩ nha khoa (Dentist)</option>
+                                <option value="Receptionist">Lễ tân phòng khám (Receptionist)</option>
+                                <option value="SystemAdministrator">Quản trị viên (SystemAdministrator)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Họ và tên <span class="text-danger">*</span></label>
+                            <input type="text" name="FullName" class="form-control" placeholder="Ví dụ: Bác sĩ Nguyễn Văn A" required maxlength="100" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Địa chỉ Email (Đăng nhập) <span class="text-danger">*</span></label>
+                            <input type="email" name="Email" class="form-control" placeholder="bacsi@dentalcare.com" required maxlength="256" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Mật khẩu khởi tạo <span class="text-danger">*</span></label>
+                            <input type="password" name="Password" class="form-control" placeholder="Tối thiểu 6 ký tự..." required minlength="6" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Số điện thoại liên hệ</label>
+                            <input type="tel" name="PhoneNumber" class="form-control" placeholder="0901234567" maxlength="20" />
+                        </div>
+                        <div class="col-md-6" id="dentistDeptBlock">
+                            <label class="form-label fw-semibold">Chuyên khoa trực thuộc (nếu là Bác sĩ)</label>
+                            <select name="DepartmentId" class="form-select">
+                                <option value="">-- Chọn chuyên khoa --</option>
+                                @foreach (var d in Model.Departments)
+                                {
+                                    <option value="@d.DepartmentId">@d.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12" id="dentistSpecialtyBlock">
+                            <label class="form-label fw-semibold">Trình độ / Chuyên môn / Chứng chỉ hành nghề</label>
+                            <input type="text" name="Specialty" class="form-control" placeholder="Ví dụ: Thạc sĩ Bác sĩ Chỉnh nha, Chứng chỉ Cấy ghép Implant Quốc tế..." maxlength="200" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Tạo Tài Khoản Nhân Viên</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Sửa Thông Tin Cán Bộ Nhân Viên -->
+<div class="modal fade" id="editStaffModal" tabindex="-1" aria-labelledby="editStaffLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="editStaffForm" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="returnRole" value="@Model.RoleFilter" />
+                <input type="hidden" name="returnSearch" value="@Model.SearchKeyword" />
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="editStaffLabel">
+                        <i class="bi bi-pencil-square text-primary me-2"></i>Cập Nhật Thông Tin Nhân Viên
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Họ và tên <span class="text-danger">*</span></label>
+                        <input type="text" name="FullName" id="editStaffFullName" class="form-control" required maxlength="100" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Số điện thoại</label>
+                        <input type="tel" name="PhoneNumber" id="editStaffPhone" class="form-control" maxlength="20" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Vai trò (Role)</label>
+                        <select name="Role" id="editStaffRole" class="form-select">
+                            <option value="Dentist">Bác sĩ nha khoa (Dentist)</option>
+                            <option value="Receptionist">Lễ tân phòng khám (Receptionist)</option>
+                            <option value="SystemAdministrator">Quản trị viên (SystemAdministrator)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="editSpecialtyWrapper">
+                        <label class="form-label fw-semibold">Trình độ / Chuyên môn</label>
+                        <input type="text" name="Specialty" id="editStaffSpecialty" class="form-control" maxlength="200" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">Lưu Thay Đổi</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -193,7 +327,7 @@
                     <p id="lockConfirmText" class="mb-3"></p>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Lý do thực hiện (sẽ ghi nhận vào Audit Log):</label>
-                        <textarea name="reason" class="form-control" rows="3" placeholder="Ví dụ: Yêu cầu kỷ luật nội bộ, bảo mật thông tin, thanh tra tài khoản..." required></textarea>
+                        <textarea name="reason" class="form-control" rows="3" placeholder="Ví dụ: Yêu cầu kỷ luật nội bộ, bảo mật thông tin, nhân viên nghỉ việc..." required></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -208,10 +342,11 @@
 @section Scripts {
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const modal = new bootstrap.Modal(document.getElementById('toggleLockModal'));
-            const form = document.getElementById('toggleLockForm');
-            const text = document.getElementById('lockConfirmText');
-            const btn = document.getElementById('lockConfirmBtn');
+            // Lock modal
+            const lockModal = new bootstrap.Modal(document.getElementById('toggleLockModal'));
+            const lockForm = document.getElementById('toggleLockForm');
+            const lockText = document.getElementById('lockConfirmText');
+            const lockBtn = document.getElementById('lockConfirmBtn');
 
             document.querySelectorAll('.btn-toggle-lock').forEach(b => {
                 b.addEventListener('click', function () {
@@ -220,20 +355,54 @@
                     const status = this.dataset.status;
                     const isLocked = status === 'Locked';
 
-                    form.action = '/Admin/Users/ToggleLock/' + id;
+                    lockForm.action = '/Admin/Users/ToggleLock/' + id;
                     if (isLocked) {
-                        text.innerHTML = `Bạn có chắc chắn muốn <strong>MỞ KHÓA</strong> tài khoản của <strong>${name}</strong>?`;
-                        btn.className = 'btn btn-success';
-                        btn.textContent = 'Xác nhận Mở Khóa';
+                        lockText.innerHTML = `Bạn có chắc chắn muốn <strong>MỞ KHÓA</strong> tài khoản của <strong>${name}</strong>?`;
+                        lockBtn.className = 'btn btn-success';
+                        lockBtn.textContent = 'Xác nhận Mở Khóa';
                     } else {
-                        text.innerHTML = `Bạn có chắc chắn muốn <strong>KHÓA</strong> tài khoản của <strong>${name}</strong>? Người dùng sẽ không thể đăng nhập vào hệ thống.`;
-                        btn.className = 'btn btn-danger';
-                        btn.textContent = 'Xác nhận Khóa Tài Khoản';
+                        lockText.innerHTML = `Bạn có chắc chắn muốn <strong>KHÓA</strong> tài khoản của <strong>${name}</strong>? Người dùng sẽ không thể đăng nhập vào hệ thống.`;
+                        lockBtn.className = 'btn btn-danger';
+                        lockBtn.textContent = 'Xác nhận Khóa Tài Khoản';
                     }
 
-                    modal.show();
+                    lockModal.show();
                 });
             });
+
+            // Edit staff modal
+            const editModalEl = document.getElementById('editStaffModal');
+            if (editModalEl) {
+                const editModal = new bootstrap.Modal(editModalEl);
+                const editForm = document.getElementById('editStaffForm');
+                document.querySelectorAll('.btn-edit-staff').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        const id = this.dataset.id;
+                        editForm.action = '/Admin/Users/UpdateStaff/' + id;
+                        document.getElementById('editStaffFullName').value = this.dataset.name || '';
+                        document.getElementById('editStaffPhone').value = this.dataset.phone || '';
+                        document.getElementById('editStaffRole').value = this.dataset.role || 'Dentist';
+                        document.getElementById('editStaffSpecialty').value = this.dataset.specialty || '';
+                        editModal.show();
+                    });
+                });
+            }
+
+            // Role change handler for Create
+            const roleSelect = document.getElementById('staffRoleSelect');
+            const deptBlock = document.getElementById('dentistDeptBlock');
+            const specBlock = document.getElementById('dentistSpecialtyBlock');
+            if (roleSelect && deptBlock && specBlock) {
+                roleSelect.addEventListener('change', function () {
+                    if (this.value === 'Dentist') {
+                        deptBlock.style.display = 'block';
+                        specBlock.style.display = 'block';
+                    } else {
+                        deptBlock.style.display = 'none';
+                        specBlock.style.display = 'none';
+                    }
+                });
+            }
         });
     </script>
 }

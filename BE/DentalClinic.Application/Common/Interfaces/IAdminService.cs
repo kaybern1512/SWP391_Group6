@@ -18,7 +18,7 @@ public interface IAdminService
     Task<ApiResponse> ToggleDepartmentStatusAsync(long departmentId, long? adminUserId = null, CancellationToken ct = default);
 
     // ==========================================
-    // SERVICES
+    // SERVICES (Phase 0 Extended)
     // ==========================================
     Task<ApiResponse<List<AdminDepartmentServiceDto>>> GetServicesAsync(long? departmentId = null, string? search = null, CancellationToken ct = default);
     Task<ApiResponse<AdminDepartmentServiceDto>> GetServiceByIdAsync(long serviceId, CancellationToken ct = default);
@@ -27,7 +27,7 @@ public interface IAdminService
     Task<ApiResponse> ToggleServiceStatusAsync(long serviceId, long? adminUserId = null, CancellationToken ct = default);
 
     // ==========================================
-    // ROOMS
+    // ROOMS (Phase 0 Extended)
     // ==========================================
     Task<ApiResponse<List<AdminRoomDto>>> GetRoomsAsync(CancellationToken ct = default);
     Task<ApiResponse<AdminRoomDto>> GetRoomByIdAsync(long roomId, CancellationToken ct = default);
@@ -61,6 +61,8 @@ public interface IAdminService
     // ==========================================
     Task<ApiResponse<List<AdminUserDto>>> GetUsersAsync(string? role = null, string? search = null, CancellationToken ct = default);
     Task<ApiResponse> ToggleUserLockAsync(long userId, string? reason = null, long? adminUserId = null, CancellationToken ct = default);
+    Task<ApiResponse<AdminUserDto>> CreateStaffAccountAsync(CreateStaffRequest request, long adminUserId, CancellationToken ct = default);
+    Task<ApiResponse<AdminUserDto>> UpdateStaffAccountAsync(long userId, UpdateStaffRequest request, long adminUserId, CancellationToken ct = default);
 
     // ==========================================
     // DENTIST DEPARTMENT ALLOCATIONS
@@ -68,4 +70,9 @@ public interface IAdminService
     Task<ApiResponse<List<DentistDepartmentAllocationDto>>> GetDentistAllocationsAsync(long? departmentId = null, CancellationToken ct = default);
     Task<ApiResponse<DentistDepartmentAllocationDto>> AssignDentistToDepartmentAsync(AssignDentistDepartmentRequest request, long? adminUserId = null, CancellationToken ct = default);
     Task<ApiResponse> ToggleDentistAllocationStatusAsync(long dentistDepartmentId, long? adminUserId = null, CancellationToken ct = default);
+
+    // ==========================================
+    // SYSTEM & DATABASE INFO
+    // ==========================================
+    Task<ApiResponse<DatabaseInfoDto>> GetDatabaseInfoAsync(CancellationToken ct = default);
 }

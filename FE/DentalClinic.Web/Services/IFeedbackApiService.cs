@@ -12,4 +12,6 @@ public interface IFeedbackApiService
     Task<ApiResult<DentistFeedbackSummaryDto>> GetDentistFeedbackSummaryAsync(long dentistUserId);
     Task<ApiResult<List<VisitFeedbackDto>>> GetMyFeedbacksAsync();
     Task<ApiResult<FeedbackPagedResultDto>> GetFeedbacksAsync(FeedbackFilterRequest request);
+    Task<ApiResult<VisitFeedbackDto>> ModerateFeedbackAsync(long feedbackId, ModerateFeedbackRequest request);
+    Task<ApiResult<VisitFeedbackDto>> RespondFeedbackAsync(long feedbackId, RespondFeedbackRequest request);
 }

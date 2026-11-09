@@ -198,6 +198,21 @@ public class AdminApiService : IAdminApiService
         return await SendPostActionAsync($"/api/admin/users/{userId}/toggle-lock", new ToggleUserLockRequest { Reason = reason });
     }
 
+    public async Task<ApiResult<AdminUserDto>> CreateStaffAccountAsync(CreateStaffRequest request)
+    {
+        return await SendPostAsync<CreateStaffRequest, AdminUserDto>("/api/admin/users/staff", request);
+    }
+
+    public async Task<ApiResult<AdminUserDto>> UpdateStaffAccountAsync(long userId, UpdateStaffRequest request)
+    {
+        return await SendPutAsync<UpdateStaffRequest, AdminUserDto>($"/api/admin/users/staff/{userId}", request);
+    }
+
+    public async Task<ApiResult<DatabaseInfoDto>> GetDatabaseInfoAsync()
+    {
+        return await SendGetAsync<DatabaseInfoDto>("/api/admin/system/db-info");
+    }
+
     public async Task<ApiResult<List<DentistDepartmentAllocationDto>>> GetDentistAllocationsAsync(long? departmentId = null)
     {
         var url = "/api/admin/dentist-allocations";

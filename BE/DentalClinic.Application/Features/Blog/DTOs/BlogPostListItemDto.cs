@@ -23,4 +23,9 @@ public class BlogPostListItemDto
     public DateTime? PublishedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string PostType { get; set; } = "Blog";
+    public string? RejectionReason { get; set; }
+    public long? ApprovedByUserId { get; set; }
+    public string? ApprovedByName { get; set; }
+    public DateTime? ApprovedAt { get; set; }
 }

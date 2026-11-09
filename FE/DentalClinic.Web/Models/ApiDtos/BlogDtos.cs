@@ -45,6 +45,11 @@ public class BlogPostListItemDto
     public DateTime? PublishedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string PostType { get; set; } = "Blog";
+    public string? RejectionReason { get; set; }
+    public long? ApprovedByUserId { get; set; }
+    public string? ApprovedByName { get; set; }
+    public DateTime? ApprovedAt { get; set; }
 }
 
 public class BlogPostDto : BlogPostListItemDto
@@ -71,6 +76,7 @@ public class CreateBlogPostRequest
     public string? ThumbnailUrl { get; set; }
     public string? VideoUrl { get; set; }
     public string Status { get; set; } = "Draft";
+    public string PostType { get; set; } = "Blog";
 }
 
 public class UpdateBlogPostRequest
@@ -82,6 +88,7 @@ public class UpdateBlogPostRequest
     public string? ThumbnailUrl { get; set; }
     public string? VideoUrl { get; set; }
     public string? Status { get; set; }
+    public string? PostType { get; set; }
 }
 
 public class ReviewBlogPostRequest
@@ -89,6 +96,7 @@ public class ReviewBlogPostRequest
     public string Status { get; set; } = string.Empty;
     public bool? IsFeatured { get; set; }
     public string? ReviewNotes { get; set; }
+    public string? RejectionReason { get; set; }
 }
 
 public class BlogMediaDto
@@ -124,6 +132,7 @@ public class BlogFilterRequest
     public int? CategoryId { get; set; }
     public string? Keyword { get; set; }
     public string? Status { get; set; }
+    public string? PostType { get; set; }
     public long? AuthorUserId { get; set; }
     public bool? IsFeatured { get; set; }
     public int Page { get; set; } = 1;

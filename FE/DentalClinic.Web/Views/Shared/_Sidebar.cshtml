@@ -14,8 +14,7 @@
         "patient" => "Bệnh nhân",
         "dentist" => "Bác sĩ",
         "receptionist" => "Lễ tân",
-        "departmentmanager" => "Trưởng khoa",
-        "systemadministrator" => "Quản trị viên",
+                "systemadministrator" => "Quản trị viên",
         _ => role
     };
 }
@@ -177,53 +176,6 @@
                 <span>Đánh Giá Từ Bệnh Nhân</span>
             </a>
         }
-        else if (role == "DepartmentManager")
-        {
-            <div class="nav-group-title">Tổng Quan</div>
-            <a class="sidebar-link @(currentCtrl == "DepartmentDashboard" ? "active" : "")" asp-controller="DepartmentDashboard" asp-action="Dashboard">
-                <i class="bi bi-grid-1x2"></i>
-                <span>Bàn Quản Lý Chuyên Khoa</span>
-            </a>
-
-            <div class="nav-group-title">Điều Phối Chuyên Môn</div>
-            <a class="sidebar-link @(currentCtrl == "DepartmentAppointment" ? "active" : "")" asp-controller="DepartmentAppointment" asp-action="Requests">
-                <i class="bi bi-check2-square"></i>
-                <span>Duyệt & Phân Bổ Ca Khám</span>
-            </a>
-            <a class="sidebar-link @(currentCtrl == "DepartmentReferral" ? "active" : "")" asp-controller="DepartmentReferral" asp-action="Index">
-                <i class="bi bi-arrow-left-right"></i>
-                <span>Xử Lý Ca Chuyển Khoa</span>
-            </a>
-            <a class="sidebar-link @(currentCtrl == "DepartmentTreatment" ? "active" : "")" asp-controller="DepartmentTreatment" asp-action="Index">
-                <i class="bi bi-graph-up"></i>
-                <span>Giám Sát Tiến Độ Điều Trị</span>
-            </a>
-
-            <div class="nav-group-title">Vận Hành Chuyên Khoa</div>
-            <a class="sidebar-link @(currentCtrl == "DepartmentDentist" ? "active" : "")" asp-controller="DepartmentDentist" asp-action="Index">
-                <i class="bi bi-person-plus"></i>
-                <span>Phân Bổ Bác Sĩ</span>
-            </a>
-            <a class="sidebar-link @(currentCtrl == "DepartmentSchedule" ? "active" : "")" asp-controller="DepartmentSchedule" asp-action="Index">
-                <i class="bi bi-calendar-range"></i>
-                <span>Lịch Trực Bác Sĩ</span>
-            </a>
-            <a class="sidebar-link @(currentCtrl == "DepartmentService" ? "active" : "")" asp-controller="DepartmentService" asp-action="Index">
-                <i class="bi bi-tags"></i>
-                <span>Dịch Vụ & Bảng Giá Khoa</span>
-            </a>
-            <a class="sidebar-link @(currentCtrl == "DepartmentReport" ? "active" : "")" asp-controller="DepartmentReport" asp-action="Performance">
-                <i class="bi bi-file-earmark-bar-graph"></i>
-                <span>Báo Cáo Hiệu Suất Khoa</span>
-            </a>
-
-
-            <div class="nav-group-title">Truyền Thông & Bài Viết</div>
-            <a class="sidebar-link @(currentCtrl == "DepartmentBlog" ? "active" : "")" asp-controller="DepartmentBlog" asp-action="Index">
-                <i class="bi bi-journal-richtext"></i>
-                <span>Bài Viết Chuyên Môn</span>
-            </a>
-        }
         else if (role == "SystemAdministrator")
         {
             <div class="nav-group-title">Tổng quan</div>
@@ -232,7 +184,7 @@
                 <span>Trung Tâm Quản Trị</span>
             </a>
 
-            <div class="nav-group-title">Quản trị Danh mục</div>
+            <div class="nav-group-title">Quản trị Danh mục & Lịch</div>
             <a class="sidebar-link @(currentCtrl == "AdminDepartment" ? "active" : "")" asp-controller="AdminDepartment" asp-action="Index">
                 <i class="bi bi-hospital"></i>
                 <span>Quản lý Chuyên khoa</span>
@@ -241,19 +193,33 @@
                 <i class="bi bi-tags"></i>
                 <span>Danh mục Dịch vụ</span>
             </a>
+            <a class="sidebar-link @(currentCtrl == "AdminDentistSchedule" ? "active" : "")" asp-controller="AdminDentistSchedule" asp-action="Index">
+                <i class="bi bi-calendar-week"></i>
+                <span>Bác Sĩ & Lịch Làm Việc</span>
+            </a>
             <a class="sidebar-link @(currentCtrl == "AdminRoomChair" ? "active" : "")" asp-controller="AdminRoomChair" asp-action="Index">
                 <i class="bi bi-door-open"></i>
-                <span>Phòng & Ghế nha khoa</span>
+                <span>Phòng & Ghế Nha Khoa</span>
             </a>
             <a class="sidebar-link @(currentCtrl == "AdminMedicine" ? "active" : "")" asp-controller="AdminMedicine" asp-action="Index">
                 <i class="bi bi-capsule"></i>
                 <span>Kho Thuốc & Dược Phẩm</span>
             </a>
 
-            <div class="nav-group-title">Người dùng & Phân quyền</div>
+            <div class="nav-group-title">Người dùng & Đánh giá</div>
             <a class="sidebar-link @(currentCtrl == "AdminUser" ? "active" : "")" asp-controller="AdminUser" asp-action="Index">
                 <i class="bi bi-people"></i>
                 <span>Tài khoản Người dùng</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "AdminFeedback" ? "active" : "")" asp-controller="AdminFeedback" asp-action="Index">
+                <i class="bi bi-star"></i>
+                <span>Quản Lý Đánh Giá Bác Sĩ</span>
+            </a>
+
+            <div class="nav-group-title">Tin Tức & Blog CMS</div>
+            <a class="sidebar-link @(currentCtrl == "AdminBlog" ? "active" : "")" asp-controller="AdminBlog" asp-action="Index">
+                <i class="bi bi-journal-album"></i>
+                <span>Quản Lý Blog & Tin Tức</span>
             </a>
 
             <div class="nav-group-title">Báo cáo & Giám sát</div>
@@ -268,11 +234,6 @@
             <a class="sidebar-link @(currentCtrl == "AdminAuditLog" ? "active" : "")" asp-controller="AdminAuditLog" asp-action="Index">
                 <i class="bi bi-shield-check"></i>
                 <span>Nhật ký Kiểm toán (Logs)</span>
-            </a>
-            <div class="nav-group-title">Tin Tức & Blog</div>
-            <a class="sidebar-link @(currentCtrl == "AdminBlog" ? "active" : "")" asp-controller="AdminBlog" asp-action="Index">
-                <i class="bi bi-journal-album"></i>
-                <span>Quản Lý Blog Kiến Thức</span>
             </a>
         }
 

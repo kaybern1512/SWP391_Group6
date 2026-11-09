@@ -13,4 +13,6 @@ public interface IFeedbackService
     Task<ApiResponse<DentistFeedbackSummaryDto>> GetDentistFeedbackSummaryAsync(long dentistUserId, CancellationToken ct = default);
     Task<ApiResponse<List<VisitFeedbackDto>>> GetMyFeedbacksAsync(long patientUserId, CancellationToken ct = default);
     Task<ApiResponse<FeedbackPagedResultDto>> GetFeedbacksAsync(FeedbackFilterRequest request, CancellationToken ct = default);
+    Task<ApiResponse<VisitFeedbackDto>> ModerateFeedbackAsync(long feedbackId, ModerateFeedbackRequest request, long adminUserId, CancellationToken ct = default);
+    Task<ApiResponse<VisitFeedbackDto>> RespondFeedbackAsync(long feedbackId, RespondFeedbackRequest request, long adminUserId, CancellationToken ct = default);
 }

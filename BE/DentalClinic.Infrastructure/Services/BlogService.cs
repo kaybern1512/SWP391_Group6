@@ -364,6 +364,9 @@ public class BlogService : IBlogService
                 ? BlogPostStatus.PendingReview
                 : BlogPostStatus.Draft;
 
+            var validPostTypes = new[] { "Blog", "ClinicNews", "Announcement" };
+            var postType = validPostTypes.Contains(request.PostType, StringComparer.OrdinalIgnoreCase) ? request.PostType : "Blog";
+
             var post = new BlogPost
             {
                 CategoryId = request.CategoryId,
@@ -375,11 +378,12 @@ public class BlogService : IBlogService
                 ThumbnailUrl = string.IsNullOrWhiteSpace(request.ThumbnailUrl) ? null : request.ThumbnailUrl.Trim(),
                 VideoUrl = string.IsNullOrWhiteSpace(request.VideoUrl) ? null : request.VideoUrl.Trim(),
                 Status = status,
+                PostType = postType,
                 IsFeatured = false,
                 ViewCount = 0,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = null,
-                PublishedAt = null
+                PublishedAt = status == BlogPostStatus.Published ? DateTime.UtcNow : null
             };
 
             _dbContext.BlogPosts.Add(post);
@@ -454,6 +458,14 @@ public class BlogService : IBlogService
             post.Content = _htmlSanitizer.Sanitize(request.Content ?? string.Empty);
             post.ThumbnailUrl = string.IsNullOrWhiteSpace(request.ThumbnailUrl) ? null : request.ThumbnailUrl.Trim();
             post.VideoUrl = string.IsNullOrWhiteSpace(request.VideoUrl) ? null : request.VideoUrl.Trim();
+            if (!string.IsNullOrWhiteSpace(request.PostType))
+            {
+                var validPostTypes = new[] { "Blog", "ClinicNews", "Announcement" };
+                if (validPostTypes.Contains(request.PostType, StringComparer.OrdinalIgnoreCase))
+                {
+                    post.PostType = request.PostType;
+                }
+            }
             post.UpdatedAt = DateTime.UtcNow;
 
             if (!string.IsNullOrWhiteSpace(request.Status))
@@ -653,9 +665,21 @@ public class BlogService : IBlogService
             var oldStatus = post.Status;
             post.Status = request.Status;
 
-            if (request.Status == BlogPostStatus.Published && post.PublishedAt == null)
+            if (request.Status == BlogPostStatus.Published)
             {
-                post.PublishedAt = DateTime.UtcNow;
+                if (post.PublishedAt == null)
+                {
+                    post.PublishedAt = DateTime.UtcNow;
+                }
+                post.ApprovedByUserId = adminUserId;
+                post.ApprovedAt = DateTime.UtcNow;
+                post.RejectionReason = null;
+            }
+            else if (request.Status == "Rejected" || request.Status == BlogPostStatus.Draft)
+            {
+                post.RejectionReason = request.RejectionReason ?? request.ReviewNotes;
+                post.ApprovedByUserId = null;
+                post.ApprovedAt = null;
             }
 
             if (request.IsFeatured.HasValue)
@@ -1074,7 +1098,12 @@ public class BlogService : IBlogService
             ViewCount = post.ViewCount,
             PublishedAt = post.PublishedAt,
             CreatedAt = post.CreatedAt,
-            UpdatedAt = post.UpdatedAt
+            UpdatedAt = post.UpdatedAt,
+            PostType = post.PostType ?? "Blog",
+            RejectionReason = post.RejectionReason,
+            ApprovedByUserId = post.ApprovedByUserId,
+            ApprovedByName = post.ApprovedByUser != null ? (post.ApprovedByUser.StaffProfile != null ? post.ApprovedByUser.StaffProfile.FullName : post.ApprovedByUser.Email) : null,
+            ApprovedAt = post.ApprovedAt
         };
     }
 
@@ -1102,6 +1131,11 @@ public class BlogService : IBlogService
             PublishedAt = post.PublishedAt,
             CreatedAt = post.CreatedAt,
             UpdatedAt = post.UpdatedAt,
+            PostType = post.PostType ?? "Blog",
+            RejectionReason = post.RejectionReason,
+            ApprovedByUserId = post.ApprovedByUserId,
+            ApprovedByName = post.ApprovedByUser != null ? (post.ApprovedByUser.StaffProfile != null ? post.ApprovedByUser.StaffProfile.FullName : post.ApprovedByUser.Email) : null,
+            ApprovedAt = post.ApprovedAt,
             RelatedPosts = new List<BlogPostListItemDto>()
         };
     }
