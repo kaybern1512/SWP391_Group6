@@ -9,6 +9,7 @@ using DentalClinic.Application.Features.ReceptionistWorkforce.DTOs;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using DentalClinic.Domain.Enums;
 
 namespace DentalClinic.Infrastructure.Services;
 
@@ -368,6 +369,17 @@ public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
 
         try
         {
+            bool isLockedPeriod = await _dbContext.IsPeriodLockedAsync(swap.SourceSchedule.WorkDate, ct);
+            if (!isLockedPeriod && swap.TargetSchedule != null)
+            {
+                isLockedPeriod = await _dbContext.IsPeriodLockedAsync(swap.TargetSchedule.WorkDate, ct);
+            }
+            if (isLockedPeriod)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<bool>.Fail("Không thể duyệt đổi ca hồi tố trong kỳ công đã được chốt sổ. Vui lòng mở lại kỳ công trước khi thực hiện.");
+            }
+
             // Verify source schedule still Scheduled
             if (swap.SourceSchedule.Status != "Scheduled")
             {

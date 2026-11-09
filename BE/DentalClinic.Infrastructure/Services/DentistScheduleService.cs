@@ -136,6 +136,12 @@ public class DentistScheduleService : IDentistScheduleService
             return ApiResponse<DentistWorkScheduleDto>.Fail("Giờ kết thúc ca làm việc phải lớn hơn giờ bắt đầu.");
         }
 
+        bool isPeriodLocked = await _dbContext.IsPeriodLockedAsync(request.WorkDate, ct);
+        if (isPeriodLocked)
+        {
+            return ApiResponse<DentistWorkScheduleDto>.Fail($"Kỳ công tháng {request.WorkDate.Month:D2}/{request.WorkDate.Year} đã được chốt sổ. Không thể phân ca làm việc mới.");
+        }
+
         var dentist = await _dbContext.DentistProfiles
             .Include(dp => dp.User)
             .FirstOrDefaultAsync(dp => dp.UserId == request.DentistUserId, ct);
@@ -231,6 +237,12 @@ public class DentistScheduleService : IDentistScheduleService
         if (department == null)
         {
             return ApiResponse<DentistWorkScheduleDto>.Fail("Không tìm thấy chuyên khoa.");
+        }
+
+        bool isUpdatePeriodLocked = await _dbContext.IsPeriodLockedAsync(schedule.WorkDate, ct) || await _dbContext.IsPeriodLockedAsync(request.WorkDate, ct);
+        if (isUpdatePeriodLocked)
+        {
+            return ApiResponse<DentistWorkScheduleDto>.Fail("Kỳ công đã được chốt sổ. Không thể điều chỉnh ca làm việc.");
         }
 
         var isRelational = _dbContext.Database.IsRelational();
@@ -378,6 +390,12 @@ public class DentistScheduleService : IDentistScheduleService
         if (schedule.Status == "Cancelled")
         {
             return ApiResponse<bool>.Fail("Ca làm việc đã ở trạng thái hủy trước đó.");
+        }
+
+        bool isCancelPeriodLocked = await _dbContext.IsPeriodLockedAsync(schedule.WorkDate, ct);
+        if (isCancelPeriodLocked)
+        {
+            return ApiResponse<bool>.Fail($"Kỳ công tháng {schedule.WorkDate.Month:D2}/{schedule.WorkDate.Year} đã được chốt sổ. Không thể hủy ca làm việc.");
         }
 
         var isRelational = _dbContext.Database.IsRelational();
@@ -1718,6 +1736,11 @@ public class DentistScheduleService : IDentistScheduleService
 
     public async Task<ApiResponse<bool>> ApplyDailyOverrideAsync(DailyScheduleOverrideRequest request, long currentUserId, CancellationToken ct = default)
     {
+        bool isOverridePeriodLocked = await _dbContext.IsPeriodLockedAsync(request.WorkDate, ct);
+        if (isOverridePeriodLocked)
+        {
+            return ApiResponse<bool>.Fail($"Kỳ công tháng {request.WorkDate.Month:D2}/{request.WorkDate.Year} đã được chốt sổ. Không thể ghi đè lịch làm việc.");
+        }
         var isRelational = _dbContext.Database.IsRelational();
         var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
         IDisposable? lockScope = null;

@@ -300,6 +300,15 @@ builder.Services.AddHttpClient<IAppointmentDisruptionApiService, AppointmentDisr
 .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
+// Attendance API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IAttendanceApiService, AttendanceApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 var app = builder.Build();
 
 // Initialize VietQR helper settings from configuration

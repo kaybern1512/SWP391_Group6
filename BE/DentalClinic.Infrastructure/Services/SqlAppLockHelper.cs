@@ -54,7 +54,7 @@ public static class SqlAppLockHelper
     /// <summary>Lock key for a prescription entity during dispensing operations.</summary>
     public static string PrescriptionKey(long prescriptionId) => $"Lock_Prescription_{prescriptionId}";
 
-    /// <summary>Lock key for receptionist daily coverage and leave approval synchronization.</summary>
+/// <summary>Lock key for receptionist daily coverage and leave approval synchronization.</summary>
     public static string ReceptionistCoverageDateKey(DateOnly date) => $"Lock_Receptionist_Coverage_{date:yyyyMMdd}";
 
     /// <summary>Lock key for receptionist schedule on a specific calendar date.</summary>
@@ -65,6 +65,12 @@ public static class SqlAppLockHelper
 
     /// <summary>Lock key for receptionist shift swap request.</summary>
     public static string ReceptionistSwapKey(long swapRequestId) => $"Lock_ReceptionistSwap_{swapRequestId}";
+
+    /// <summary>Lock key for staff attendance punches to prevent concurrent double-punch race conditions.</summary>
+    public static string AttendancePunchKey(long userId) => $"Lock_AttendancePunch_{userId}";
+
+    /// <summary>Lock key for monthly attendance period reconciliation/closure.</summary>
+    public static string AttendancePeriodKey(int year, int month) => $"Lock_AttendancePeriod_{year}_{month:D2}";
 
     #endregion
 

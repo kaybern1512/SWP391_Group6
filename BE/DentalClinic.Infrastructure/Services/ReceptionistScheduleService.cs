@@ -7,6 +7,7 @@ using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.ReceptionistWorkforce.DTOs;
 using DentalClinic.Domain.Common;
+using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -313,6 +314,12 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
 
+        bool isPeriodLocked = await _dbContext.IsPeriodLockedAsync(request.WorkDate, ct);
+        if (isPeriodLocked)
+        {
+            return ApiResponse<ReceptionistWorkScheduleDto>.Fail($"Kỳ công tháng {request.WorkDate.Month:D2}/{request.WorkDate.Year} đã được chốt sổ. Không thể phân ca trực.");
+        }
+
         // Check if employee has approved leave during this time
         bool hasLeave = await _dbContext.ReceptionistLeaveRequestPeriods
             .AnyAsync(p => p.LeaveRequest.ReceptionistUserId == request.ReceptionistUserId &&
@@ -415,6 +422,12 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
 
+        bool isPeriodLocked = await _dbContext.IsPeriodLockedAsync(schedule.WorkDate, ct);
+        if (isPeriodLocked)
+        {
+            return ApiResponse<ReceptionistWorkScheduleDto>.Fail($"Kỳ công tháng {schedule.WorkDate.Month:D2}/{schedule.WorkDate.Year} đã được chốt sổ. Không thể điều chỉnh ca trực.");
+        }
+
         // Check if employee has approved leave during new time
         bool hasLeave = await _dbContext.ReceptionistLeaveRequestPeriods
             .AnyAsync(p => p.LeaveRequest.ReceptionistUserId == schedule.ReceptionistUserId &&
@@ -483,6 +496,12 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         };
 
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
+
+        bool isPeriodLocked = await _dbContext.IsPeriodLockedAsync(schedule.WorkDate, ct);
+        if (isPeriodLocked)
+        {
+            return ApiResponse<bool>.Fail($"Kỳ công tháng {schedule.WorkDate.Month:D2}/{schedule.WorkDate.Year} đã được chốt sổ. Không thể xóa ca trực.");
+        }
 
         schedule.Status = "Cancelled";
         schedule.UpdatedAt = DateTime.UtcNow;
@@ -821,6 +840,12 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         };
 
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
+
+        bool isPeriodLocked = await _dbContext.IsPeriodLockedAsync(request.Date, ct);
+        if (isPeriodLocked)
+        {
+            return ApiResponse<bool>.Fail($"Kỳ công tháng {request.Date.Month:D2}/{request.Date.Year} đã được chốt sổ. Không thể ghi đè lịch trực.");
+        }
 
         // Cancel existing shifts on this date
         var existing = await _dbContext.ReceptionistWorkSchedules

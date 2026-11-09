@@ -361,7 +361,26 @@
                         lockBtn.className = 'btn btn-success';
                         lockBtn.textContent = 'Xác nhận Mở Khóa';
                     } else {
-                        lockText.innerHTML = `Bạn có chắc chắn muốn <strong>KHÓA</strong> tài khoản của <strong>${name}</strong>? Người dùng sẽ không thể đăng nhập vào hệ thống.`;
+                        lockText.innerHTML = `<div class="d-flex align-items-center mb-2"><div class="spinner-border spinner-border-sm text-primary me-2"></div><span class="small text-muted">Đang phân tích tác động vận hành...</span></div>Bạn có chắc chắn muốn <strong>KHÓA</strong> tài khoản của <strong>${name}</strong>?`;
+                        lockBtn.className = 'btn btn-danger';
+                        lockBtn.textContent = 'Xác nhận Khóa Tài Khoản';
+
+                        fetch('/api/admin/impact/user-lock/' + id)
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data && data.success && data.data) {
+                                    let html = `Bạn có chắc chắn muốn <strong>KHÓA</strong> tài khoản của <strong>${name}</strong>?`;
+                                    if (data.data.warnings && data.data.warnings.length > 0) {
+                                        html += `<div class="alert alert-warning mt-2 text-start small mb-0"><i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Cảnh báo tác động vận hành:</strong><ul class="mb-0 ps-3 mt-1">`;
+                                        data.data.warnings.forEach(w => { html += `<li>${w}</li>`; });
+                                        html += `</ul></div>`;
+                                    }
+                                    lockText.innerHTML = html;
+                                }
+                            })
+                            .catch(() => {
+                                lockText.innerHTML = `Bạn có chắc chắn muốn <strong>KHÓA</strong> tài khoản của <strong>${name}</strong>? Người dùng sẽ không thể đăng nhập vào hệ thống.`;
+                            });
                         lockBtn.className = 'btn btn-danger';
                         lockBtn.textContent = 'Xác nhận Khóa Tài Khoản';
                     }

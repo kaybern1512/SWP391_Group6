@@ -424,6 +424,13 @@ public class DentistLeaveService : IDentistLeaveService
             };
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
 
+            bool isLockedPeriod = await _dbContext.IsPeriodLockedAsync(leave.StartDate, leave.EndDate, ct);
+            if (isLockedPeriod)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<DentistLeaveRequestDto>.Fail("Không thể duyệt nghỉ phép bác sĩ trong kỳ công đã được chốt sổ. Vui lòng mở lại kỳ công trước khi phê duyệt.");
+            }
+
             // Check if dentist is currently in service
             var hasInService = await _dbContext.Appointments
                 .AsNoTracking()

@@ -828,3 +828,4 @@ public class MonthlyDentistScheduleServiceTests
         Assert.Equal(UserRole.SystemAdministrator, bulkAuth!.Roles);
     }
 }
+

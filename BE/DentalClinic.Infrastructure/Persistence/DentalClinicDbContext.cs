@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,50 @@ public partial class DentalClinicDbContext : DbContext
         : base(options)
     {
     }
+
+    private bool? _attendancePeriodClosuresTableExists;
+
+    public virtual async Task<bool> IsPeriodLockedAsync(int year, int month, CancellationToken ct = default)
+    {
+        if (Database.IsSqlServer())
+        {
+            if (!_attendancePeriodClosuresTableExists.HasValue)
+            {
+                _attendancePeriodClosuresTableExists = await Database
+                    .SqlQueryRaw<int>("SELECT 1 AS [Value] WHERE OBJECT_ID(N'AttendancePeriodClosures', N'U') IS NOT NULL")
+                    .AnyAsync(ct);
+            }
+
+            if (!_attendancePeriodClosuresTableExists.Value) return false;
+        }
+
+        return await AttendancePeriodClosures
+            .AnyAsync(p => p.Year == year && p.Month == month && p.Status == PeriodClosureStatus.Locked, ct);
+    }
+
+    public virtual async Task<bool> IsPeriodLockedAsync(DateOnly date, CancellationToken ct = default)
+        => await IsPeriodLockedAsync(date.Year, date.Month, ct);
+
+    public virtual async Task<bool> IsPeriodLockedAsync(DateOnly startDate, DateOnly endDate, CancellationToken ct = default)
+    {
+        if (Database.IsSqlServer())
+        {
+            if (!_attendancePeriodClosuresTableExists.HasValue)
+            {
+                _attendancePeriodClosuresTableExists = await Database
+                    .SqlQueryRaw<int>("SELECT 1 AS [Value] WHERE OBJECT_ID(N'AttendancePeriodClosures', N'U') IS NOT NULL")
+                    .AnyAsync(ct);
+            }
+
+            if (!_attendancePeriodClosuresTableExists.Value) return false;
+        }
+
+        return await AttendancePeriodClosures
+            .AnyAsync(p => p.Status == PeriodClosureStatus.Locked &&
+                           ((p.Year == startDate.Year && p.Month == startDate.Month) ||
+                            (p.Year == endDate.Year && p.Month == endDate.Month)), ct);
+    }
+
 
     public virtual DbSet<Appointment> Appointments { get; set; }
     public virtual DbSet<AppointmentReminderJob> AppointmentReminderJobs { get; set; }
@@ -98,6 +143,7 @@ public partial class DentalClinicDbContext : DbContext
     public virtual DbSet<MedicineStockTransaction> MedicineStockTransactions { get; set; }
     public virtual DbSet<MedicineDispensation> MedicineDispensations { get; set; }
     public virtual DbSet<MedicineDispensationItem> MedicineDispensationItems { get; set; }
+
     public virtual DbSet<ReceptionistShiftTemplate> ReceptionistShiftTemplates { get; set; }
     public virtual DbSet<ReceptionistWorkSchedule> ReceptionistWorkSchedules { get; set; }
     public virtual DbSet<ReceptionistLeaveRequest> ReceptionistLeaveRequests { get; set; }
@@ -105,6 +151,12 @@ public partial class DentalClinicDbContext : DbContext
     public virtual DbSet<ReceptionistShiftSwapRequest> ReceptionistShiftSwapRequests { get; set; }
     public virtual DbSet<ReceptionistCoverageIncident> ReceptionistCoverageIncidents { get; set; }
     public virtual DbSet<ReceptionistWorkHandover> ReceptionistWorkHandovers { get; set; }
+public virtual DbSet<StaffAttendanceRecord> StaffAttendanceRecords { get; set; }
+    public virtual DbSet<StaffAttendanceEvent> StaffAttendanceEvents { get; set; }
+    public virtual DbSet<StaffAttendanceCorrectionRequest> StaffAttendanceCorrectionRequests { get; set; }
+    public virtual DbSet<AttendancePeriodClosure> AttendancePeriodClosures { get; set; }
+    public virtual DbSet<AttendancePolicy> AttendancePolicies { get; set; }
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1255,6 +1307,7 @@ public partial class DentalClinicDbContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull);
         });
 
+
         modelBuilder.Entity<ReceptionistShiftTemplate>(entity =>
         {
             entity.HasKey(e => e.ShiftTemplateId);
@@ -1416,6 +1469,111 @@ public partial class DentalClinicDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(d => d.ShiftId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<StaffAttendanceRecord>(entity =>
+        {
+            entity.HasKey(e => e.AttendanceId);
+            entity.ToTable("StaffAttendanceRecords");
+
+            entity.HasIndex(e => new { e.UserId, e.WorkDate, e.ShiftIdentifier }).IsUnique();
+            entity.HasIndex(e => new { e.WorkDate, e.Role, e.Status });
+            entity.HasIndex(e => new { e.IsFinalized, e.WorkDate });
+
+            entity.Property(e => e.ShiftIdentifier).HasMaxLength(100);
+            entity.Property(e => e.Role).HasMaxLength(40).IsUnicode(false);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.LeaveHours).HasPrecision(5, 2);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.RowVersion).IsRowVersion();
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.FinalizedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.FinalizedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<StaffAttendanceEvent>(entity =>
+        {
+            entity.HasKey(e => e.EventId);
+            entity.ToTable("StaffAttendanceEvents");
+
+            entity.Property(e => e.EventType).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.Source).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.IpAddress).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.Note).HasMaxLength(1000);
+
+            entity.HasOne(d => d.Attendance)
+                .WithMany(p => p.Events)
+                .HasForeignKey(d => d.AttendanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<StaffAttendanceCorrectionRequest>(entity =>
+        {
+            entity.HasKey(e => e.CorrectionRequestId);
+            entity.ToTable("StaffAttendanceCorrectionRequests");
+
+            entity.Property(e => e.Reason).HasMaxLength(200);
+            entity.Property(e => e.Explanation).HasMaxLength(1000);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.AdminNote).HasMaxLength(1000);
+
+            entity.HasOne(d => d.Attendance)
+                .WithMany(p => p.CorrectionRequests)
+                .HasForeignKey(d => d.AttendanceId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.ReviewedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReviewedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<AttendancePeriodClosure>(entity =>
+        {
+            entity.HasKey(e => e.ClosureId);
+            entity.ToTable("AttendancePeriodClosures");
+
+            entity.HasIndex(e => new { e.Year, e.Month }).IsUnique();
+
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.TotalWorkedHours).HasPrecision(10, 2);
+            entity.Property(e => e.ReopenReason).HasMaxLength(1000);
+
+            entity.HasOne(d => d.FinalizedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.FinalizedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.ReopenedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReopenedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<AttendancePolicy>(entity =>
+        {
+            entity.HasKey(e => e.PolicyId);
+            entity.ToTable("AttendancePolicies");
+
+            entity.Property(e => e.StandardWorkDayHours).HasPrecision(4, 2);
+
         });
 
         OnModelCreatingPartial(modelBuilder);

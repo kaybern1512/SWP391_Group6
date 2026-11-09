@@ -1,0 +1,538 @@
+@model DentalClinic.Web.Models.ApiDtos.WorkforceMonthlySummaryDto
+@{
+    ViewData["Title"] = "Đối Soát Chấm Công & Vận Hành Nhân Sự";
+
+    var selectedYear = ViewBag.SelectedYear as int? ?? Model.Year;
+    var selectedMonth = ViewBag.SelectedMonth as int? ?? Model.Month;
+    var selectedRole = ViewBag.SelectedRole as string ?? "";
+    var pendingCorrections = ViewBag.PendingCorrections as List<DentalClinic.Web.Models.ApiDtos.AttendanceCorrectionRequestDto> 
+        ?? new List<DentalClinic.Web.Models.ApiDtos.AttendanceCorrectionRequestDto>();
+}
+
+<div class="container-fluid px-4 py-3">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h2 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-calendar-check text-primary me-2"></i>Bảng Đối Soát Chấm Công & Vận Hành Nhân Sự
+            </h2>
+            <p class="text-muted small mb-0">Quản lý lịch trực, chấm công, ngày công quy đổi và đối soát đóng sổ kỳ công theo tháng</p>
+        </div>
+        <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
+            @if (Model.IsLocked)
+            {
+                <span class="badge bg-success-subtle text-success border border-success px-3 py-2 fs-6">
+                    <i class="bi bi-lock-fill me-1"></i>ĐÃ CHỐT SỔ KỲ CÔNG
+                </span>
+                <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#reopenModal">
+                    <i class="bi bi-unlock me-1"></i>Mở lại kỳ công
+                </button>
+            }
+            else
+            {
+                <span class="badge bg-warning-subtle text-dark border border-warning px-3 py-2 fs-6">
+                    <i class="bi bi-unlock-fill me-1"></i>KỲ CÔNG ĐANG MỞ
+                </span>
+                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#finalizeModal">
+                    <i class="bi bi-lock me-1"></i>Chốt sổ kỳ công
+                </button>
+            }
+            <a asp-action="Export" asp-route-year="@selectedYear" asp-route-month="@selectedMonth" asp-route-role="@selectedRole" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-file-earmark-excel me-1"></i>Xuất CSV
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Filter Bar -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body py-3">
+            <form method="get" asp-action="Report" class="row g-2 align-items-center">
+                <div class="col-auto">
+                    <label class="form-label small fw-bold mb-0 text-muted">Tháng:</label>
+                </div>
+                <div class="col-auto">
+                    <select name="month" class="form-select form-select-sm">
+                        @for (int m = 1; m <= 12; m++)
+                        {
+                            <option value="@m" selected="@(m == selectedMonth)">Tháng @m.ToString("D2")</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small fw-bold mb-0 text-muted">Năm:</label>
+                </div>
+                <div class="col-auto">
+                    <select name="year" class="form-select form-select-sm">
+                        @for (int y = DateTime.UtcNow.Year - 1; y <= DateTime.UtcNow.Year + 1; y++)
+                        {
+                            <option value="@y" selected="@(y == selectedYear)">Năm @y</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small fw-bold mb-0 text-muted">Vai trò:</label>
+                </div>
+                <div class="col-auto">
+                    <select name="role" class="form-select form-select-sm">
+                        <option value="" selected="@(string.IsNullOrEmpty(selectedRole))">Tất cả vai trò</option>
+                        <option value="Dentist" selected="@(selectedRole == "Dentist")">Bác sĩ nha khoa</option>
+                        <option value="Receptionist" selected="@(selectedRole == "Receptionist")">Tiếp tân quầy</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary btn-sm px-3">
+                        <i class="bi bi-funnel me-1"></i>Xem báo cáo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Summary KPI Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-primary text-white p-3 me-3">
+                        <i class="bi bi-people fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Tổng Nhân Sự Theo Dõi</div>
+                        <div class="h4 fw-bold mb-0">@Model.TotalActiveStaff</div>
+                        <small class="text-secondary">@Model.TotalDentists Bác sĩ | @Model.TotalReceptionists Tiếp tân</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-success text-white p-3 me-3">
+                        <i class="bi bi-clock-history fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Tổng Giờ Làm Thực Tế</div>
+                        <div class="h4 fw-bold text-success mb-0">@Model.TotalClinicWorkedHours.ToString("N1") h</div>
+                        <small class="text-secondary">Công quy đổi: @((Model.TotalClinicWorkedHours / 8.0m).ToString("N1")) ngày</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-danger text-white p-3 me-3">
+                        <i class="bi bi-exclamation-octagon fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Quên Chấm Công Ra</div>
+                        <div class="h4 fw-bold text-danger mb-0">@Model.TotalMissingPunches</div>
+                        <small class="text-secondary">Cần giải trình hoặc đối soát</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-warning text-dark p-3 me-3">
+                        <i class="bi bi-clipboard-check fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Giải Trình Chờ Duyệt</div>
+                        <div class="h4 fw-bold text-warning mb-0">@pendingCorrections.Count</div>
+                        <small class="text-secondary">Yêu cầu điều chỉnh từ nhân viên</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-tabs mb-3" id="workforceTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active fw-semibold" id="reconcile-tab" data-bs-toggle="tab" data-bs-target="#reconcile" type="button" role="tab">
+                <i class="bi bi-table me-1"></i>Bảng Đối Soát Công Tháng (@Model.StaffReports.Count nhân viên)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link fw-semibold text-warning" id="corrections-tab" data-bs-toggle="tab" data-bs-target="#corrections" type="button" role="tab">
+                <i class="bi bi-hourglass-split me-1"></i>Xét Duyệt Giải Trình Điều Chỉnh (@pendingCorrections.Count)
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tab Contents -->
+    <div class="tab-content" id="workforceTabContent">
+        <!-- Reconcile Table Tab -->
+        <div class="tab-pane fade show active" id="reconcile" role="tabpanel">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 text-center" style="font-size: 0.9rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="text-start">Mã NV & Họ Tên</th>
+                                    <th>Vai Trò</th>
+                                    <th>Ca Phân Công</th>
+                                    <th>Ngày Đi Làm</th>
+                                    <th>Ca Hoàn Thành</th>
+                                    <th class="text-success fw-bold">Tổng Giờ Làm</th>
+                                    <th class="text-primary fw-bold">Công Chuẩn (8h)</th>
+                                    <th>Nghỉ Phép</th>
+                                    <th>Vắng Không Phép</th>
+                                    <th>Trễ / Sớm</th>
+                                    <th>Quên Chấm</th>
+                                    <th>Chi Tiết</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.StaffReports.Any())
+                                {
+                                    foreach (var staff in Model.StaffReports)
+                                    {
+                                        <tr>
+                                            <td class="text-start">
+                                                <div class="fw-bold text-dark">@staff.StaffName</div>
+                                                <small class="text-muted">@staff.StaffCode</small>
+                                            </td>
+                                            <td>
+                                                <span class="badge @(staff.Role == "Dentist" ? "bg-info-subtle text-info border border-info" : "bg-primary-subtle text-primary border border-primary")">
+                                                    @(staff.Role == "Dentist" ? "Bác sĩ" : "Tiếp tân")
+                                                </span>
+                                            </td>
+                                            <td>@staff.ScheduledShifts <small class="text-muted">ca</small></td>
+                                            <td>@staff.WorkedDays <small class="text-muted">ngày</small></td>
+                                            <td>
+                                                <span class="badge bg-light text-dark border">@staff.CompletedShifts</span>
+                                            </td>
+                                            <td class="text-success fw-bold fs-6">@staff.ActualWorkedHours.ToString("N1") h</td>
+                                            <td class="text-primary fw-bold fs-6">@staff.EquivalentStandardDays.ToString("N2")</td>
+                                            <td>
+                                                @if (staff.ApprovedLeaveDays > 0 || staff.ApprovedLeaveHours > 0)
+                                                {
+                                                    <span class="badge bg-info-subtle text-info">@staff.ApprovedLeaveDays ngày (@staff.ApprovedLeaveHours.ToString("N1") h)</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">0</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (staff.UnexpectedAbsenceDays > 0)
+                                                {
+                                                    <span class="badge bg-danger">@staff.UnexpectedAbsenceDays</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">0</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (staff.LateCount > 0 || staff.EarlyDepartureCount > 0)
+                                                {
+                                                    <span class="badge bg-warning text-dark">
+                                                        @(staff.LateCount) trễ / @(staff.EarlyDepartureCount) sớm
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">0</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (staff.MissingPunchCount > 0)
+                                                {
+                                                    <span class="badge bg-danger">@staff.MissingPunchCount</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">0</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#detailModal-@staff.UserId">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="12" class="text-center py-4 text-muted">
+                                            <i class="bi bi-inbox fs-2 d-block mb-2"></i>Không có dữ liệu nhân sự cho kỳ công này.
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Corrections Tab -->
+        <div class="tab-pane fade" id="corrections" role="tabpanel">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nhân Viên</th>
+                                    <th>Ngày Chấm Công</th>
+                                    <th>Giờ Gốc</th>
+                                    <th>Giờ Đề Xuất Điều Chỉnh</th>
+                                    <th>Lý Do & Giải Trình</th>
+                                    <th>Thời Gian Gửi</th>
+                                    <th class="text-end pe-4">Thao Tác</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (pendingCorrections.Any())
+                                {
+                                    foreach (var c in pendingCorrections)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="fw-bold">@c.StaffName</div>
+                                                <small class="text-muted">@c.StaffCode (@c.Role)</small>
+                                            </td>
+                                            <td>@c.WorkDate.ToString("dd/MM/yyyy")</td>
+                                            <td>
+                                                <div class="small">Vào: @(c.OriginalClockIn.HasValue ? c.OriginalClockIn.Value.ToString("HH:mm") : "--:--")</div>
+                                                <div class="small">Ra: @(c.OriginalClockOut.HasValue ? c.OriginalClockOut.Value.ToString("HH:mm") : "--:--")</div>
+                                            </td>
+                                            <td>
+                                                <div class="small text-primary fw-bold">Vào: @(c.RequestedClockIn.HasValue ? c.RequestedClockIn.Value.ToString("HH:mm") : "Giữ nguyên")</div>
+                                                <div class="small text-primary fw-bold">Ra: @(c.RequestedClockOut.HasValue ? c.RequestedClockOut.Value.ToString("HH:mm") : "Giữ nguyên")</div>
+                                            </td>
+                                            <td>
+                                                <div class="fw-semibold">@c.Reason</div>
+                                                <small class="text-muted">@c.Explanation</small>
+                                            </td>
+                                            <td>@c.CreatedAt.ToString("dd/MM HH:mm")</td>
+                                            <td class="text-end pe-4">
+                                                <form method="post" asp-action="ReviewCorrection" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="id" value="@c.CorrectionRequestId" />
+                                                    <input type="hidden" name="approve" value="true" />
+                                                    <input type="hidden" name="year" value="@selectedYear" />
+                                                    <input type="hidden" name="month" value="@selectedMonth" />
+                                                    <input type="hidden" name="note" value="Chấp thuận giải trình" />
+                                                    <button type="submit" class="btn btn-sm btn-success me-1">
+                                                        <i class="bi bi-check-lg me-1"></i>Duyệt
+                                                    </button>
+                                                </form>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectModal-@c.CorrectionRequestId">
+                                                    <i class="bi bi-x-lg me-1"></i>Từ chối
+                                                </button>
+                                            </td>
+                                        </tr>
+
+                                        <!-- Reject Modal -->
+                                        <div class="modal fade" id="rejectModal-@c.CorrectionRequestId" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <form method="post" asp-action="ReviewCorrection">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="id" value="@c.CorrectionRequestId" />
+                                                        <input type="hidden" name="approve" value="false" />
+                                                        <input type="hidden" name="year" value="@selectedYear" />
+                                                        <input type="hidden" name="month" value="@selectedMonth" />
+                                                        <div class="modal-header">
+                                                            <h5 class="modal-title">Từ chối giải trình chấm công</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            <p class="small text-muted mb-2">Nhân viên: <strong>@c.StaffName</strong> (@c.WorkDate.ToString("dd/MM/yyyy"))</p>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small fw-bold">Lý do từ chối:</label>
+                                                                <textarea name="note" class="form-control" rows="3" required placeholder="Nhập lý do từ chối..."></textarea>
+                                                            </div>
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Hủy</button>
+                                                            <button type="submit" class="btn btn-danger btn-sm">Xác nhận từ chối</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="7" class="text-center py-4 text-muted">
+                                            <i class="bi bi-check2-circle fs-2 d-block mb-2 text-success"></i>Không có giải trình nào đang chờ xét duyệt.
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Employee Detail Modals -->
+@foreach (var staff in Model.StaffReports)
+{
+    <div class="modal fade" id="detailModal-@staff.UserId" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Chi Tiết Chấm Công: @staff.StaffName (@staff.StaffCode)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle mb-0 text-center" style="font-size: 0.85rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Ngày</th>
+                                    <th>Lịch Trực</th>
+                                    <th>Chấm Vào</th>
+                                    <th>Chấm Ra</th>
+                                    <th>Giờ Làm</th>
+                                    <th>Trễ / Sớm</th>
+                                    <th>Trạng Thái</th>
+                                    <th>Ghi Chú</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (staff.Records.Any())
+                                {
+                                    foreach (var r in staff.Records)
+                                    {
+                                        <tr>
+                                            <td>@r.WorkDate.ToString("dd/MM/yyyy")</td>
+                                            <td>@r.ScheduledStartTime.ToString("HH:mm") - @r.ScheduledEndTime.ToString("HH:mm")</td>
+                                            <td>@(r.ClockInTimeUtc.HasValue ? r.ClockInTimeUtc.Value.ToString("HH:mm") : "--:--")</td>
+                                            <td>@(r.ClockOutTimeUtc.HasValue ? r.ClockOutTimeUtc.Value.ToString("HH:mm") : "--:--")</td>
+                                            <td class="fw-bold">@r.WorkedHours.ToString("N1") h</td>
+                                            <td>
+                                                @if (r.LateMinutes > 0)
+                                                {
+                                                    <span class="text-danger small d-block">Trễ: @(r.LateMinutes)m</span>
+                                                }
+                                                @if (r.EarlyLeaveMinutes > 0)
+                                                {
+                                                    <span class="text-warning small d-block">Sớm: @(r.EarlyLeaveMinutes)m</span>
+                                                }
+                                                @if (r.LateMinutes == 0 && r.EarlyLeaveMinutes == 0)
+                                                {
+                                                    <span class="text-success small">Đúng giờ</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-dark border">@r.StatusName</span>
+                                            </td>
+                                            <td class="text-start small text-muted">@r.AdjustmentNote</td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr><td colspan="8" class="text-muted py-3">Không có bản ghi điểm danh trong tháng.</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Finalize Period Modal -->
+<div class="modal fade" id="finalizeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" asp-action="FinalizePeriod">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="year" value="@selectedYear" />
+                <input type="hidden" name="month" value="@selectedMonth" />
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="bi bi-lock me-2"></i>Chốt Sổ Kỳ Công Tháng @selectedMonth.ToString("D2")/@selectedYear</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>Lưu ý quan trọng:</strong> Sau khi chốt sổ, toàn bộ bản ghi chấm công trong tháng sẽ được <strong>khóa bất biến</strong> và lưu trữ snapshot. Nhân viên và bác sĩ sẽ không thể chấm công bổ sung hoặc sửa đổi.
+                    </div>
+                    <ul class="list-group list-group-flush small mb-3">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Tổng số nhân sự:</span>
+                            <strong>@Model.TotalActiveStaff người</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Tổng giờ làm ghi nhận:</span>
+                            <strong>@Model.TotalClinicWorkedHours.ToString("N1") giờ</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Số ca quên chấm công:</span>
+                            <strong class="text-danger">@Model.TotalMissingPunches ca</strong>
+                        </li>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Hủy bỏ</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Xác nhận chốt sổ kỳ công</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Reopen Period Modal -->
+<div class="modal fade" id="reopenModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" asp-action="ReopenPeriod">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="year" value="@selectedYear" />
+                <input type="hidden" name="month" value="@selectedMonth" />
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title"><i class="bi bi-unlock me-2"></i>Mở Lại Kỳ Công Tháng @selectedMonth.ToString("D2")/@selectedYear</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">Vui lòng cung cấp lý do bắt buộc để phục vụ lưu vết kiểm toán hệ thống:</p>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Lý do mở lại:</label>
+                        <textarea name="reason" class="form-control" rows="3" required placeholder="Nhập lý do mở lại kỳ công..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Hủy bỏ</button>
+                    <button type="submit" class="btn btn-warning btn-sm">Xác nhận mở lại kỳ công</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -7,6 +7,7 @@ using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.ReceptionistWorkforce.DTOs;
 using DentalClinic.Domain.Common;
+using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -437,6 +438,13 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
                 return ApiResponse<bool>.Fail("Đơn xin nghỉ phép đã được thay đổi hoặc xử lý bởi người khác.");
             }
 
+            bool isLockedPeriod = await _dbContext.IsPeriodLockedAsync(freshLeave.StartDate, freshLeave.EndDate, ct);
+            if (isLockedPeriod)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<bool>.Fail("Không thể duyệt nghỉ phép hồi tố trong kỳ công đã được chốt sổ. Vui lòng mở lại kỳ công trước khi phê duyệt.");
+            }
+
             // Multi-day ALL-OR-NOTHING validation
             var violationReasons = new List<string>();
 
@@ -595,6 +603,12 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
         if (leave.Status != "Approved")
         {
             return ApiResponse<bool>.Fail("Chỉ có thể hủy đơn nghỉ phép đã được phê duyệt.");
+        }
+
+        bool isCancelLocked = await _dbContext.IsPeriodLockedAsync(leave.StartDate, leave.EndDate, ct);
+        if (isCancelLocked)
+        {
+            return ApiResponse<bool>.Fail("Không thể hủy nghỉ phép trong kỳ công đã được chốt sổ. Vui lòng mở lại kỳ công trước.");
         }
 
         leave.Status = "Cancelled";

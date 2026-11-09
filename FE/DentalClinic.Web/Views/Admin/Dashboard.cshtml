@@ -96,6 +96,235 @@
         </div>
     </div>
 
+        <!-- Operations Alerts & Real-time Operations Widget -->
+    @{
+        var ops = Model.Operations;
+    }
+
+    @if (ops != null && ops.ActiveAlerts != null && ops.ActiveAlerts.Any())
+    {
+        <div class="mb-4">
+            @foreach (var alert in ops.ActiveAlerts)
+            {
+                var isCritical = alert.Severity == "Critical";
+                <div class="alert @(isCritical ? "alert-danger" : "alert-warning") border d-flex align-items-center justify-content-between py-2 px-3 mb-2 shadow-sm rounded-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi @(isCritical ? "bi-exclamation-triangle-fill fs-5" : "bi-exclamation-circle-fill fs-5")"></i>
+                        <div>
+                            <strong class="d-block">@alert.Title</strong>
+                            <span class="small">@alert.Message</span>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(alert.ActionUrl))
+                    {
+                        <a href="@alert.ActionUrl" class="btn btn-sm @(isCritical ? "btn-danger" : "btn-warning") text-nowrap ms-3">
+                            @(string.IsNullOrEmpty(alert.ActionLabel) ? "Chi tiết" : alert.ActionLabel)
+                        </a>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (ops != null)
+    {
+        <div class="card-dc mb-4">
+            <div class="card-dc-header d-flex justify-content-between align-items-center bg-light">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-broadcast text-primary fs-5"></i>
+                    <div>
+                        <span class="fw-bold fs-6">Giám sát Vận hành Phòng khám Thời gian thực</span>
+                        <span class="text-muted small ms-2 d-none d-md-inline">(Ngày: @ops.OperationDate.ToString("dd/MM/yyyy"))</span>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <a asp-controller="AdminWorkforce" asp-action="Report" class="btn btn-dc-primary btn-sm">
+                        <i class="bi bi-calendar-check me-1"></i> Đối soát & Chốt công tháng
+                    </a>
+                </div>
+            </div>
+            <div class="card-dc-body p-3">
+                <div class="row g-3">
+                    <!-- Col 1: Workforce Attendance -->
+                    <div class="col-md-6 col-lg-3">
+                        <div class="border rounded p-3 h-100 bg-white">
+                            <h6 class="fw-bold text-dark d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-people-fill text-primary"></i> Nhân sự & Điểm danh
+                            </h6>
+                            <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                <span class="small text-muted">Bác sĩ trực:</span>
+                                <span class="fw-bold @(ops.WorkforceKpis.PresentDentistsCount < ops.WorkforceKpis.ScheduledDentistsCount ? "text-warning" : "text-success")">
+                                    @ops.WorkforceKpis.PresentDentistsCount / @ops.WorkforceKpis.ScheduledDentistsCount
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                <span class="small text-muted">Lễ tân trực:</span>
+                                <span class="fw-bold @(ops.WorkforceKpis.PresentReceptionistsCount < 2 ? "text-danger" : "text-success")">
+                                    @ops.WorkforceKpis.PresentReceptionistsCount / @ops.WorkforceKpis.ScheduledReceptionistsCount
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                <span class="small text-muted">Nhân viên nghỉ phép:</span>
+                                <span class="badge bg-secondary">@ops.WorkforceKpis.OnLeaveStaffCount</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center py-1">
+                                <span class="small text-muted">Quên chấm công (Missing):</span>
+                                <span class="badge @(ops.WorkforceKpis.MissingPunchCount > 0 ? "bg-warning text-dark" : "bg-light text-muted border")">
+                                    @ops.WorkforceKpis.MissingPunchCount
+                                </span>
+                            </div>
+
+                            @if (ops.ReceptionistCoverage != null && ops.ReceptionistCoverage.Any())
+                            {
+                                <div class="mt-2 pt-2 border-top">
+                                    <div class="small fw-semibold text-muted mb-1">Độ phủ Lễ tân (tối thiểu 2):</div>
+                                    @foreach (var rc in ops.ReceptionistCoverage)
+                                    {
+                                        <div class="d-flex justify-content-between align-items-center small py-1">
+                                            <span>@rc.ShiftName:</span>
+                                            @if (rc.HasShortage)
+                                            {
+                                                <span class="badge bg-danger text-white">Thiếu: @rc.PresentCount/2</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-success text-white">Đủ: @rc.PresentCount</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Col 2: Appointments Today Pipeline -->
+                    <div class="col-md-6 col-lg-3">
+                        <div class="border rounded p-3 h-100 bg-white">
+                            <h6 class="fw-bold text-dark d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-calendar-event text-info"></i> Lịch khám Hôm nay (@ops.AppointmentOperations.TotalToday)
+                            </h6>
+                            <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                <span class="small text-muted"><i class="bi bi-hourglass me-1 text-warning"></i> Chờ duyệt:</span>
+                                <span class="badge bg-warning text-dark">@ops.AppointmentOperations.PendingReviewCount</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                <span class="small text-muted"><i class="bi bi-check-circle me-1 text-primary"></i> Đã xác nhận:</span>
+                                <span class="badge bg-primary">@ops.AppointmentOperations.ConfirmedCount</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                <span class="small text-muted"><i class="bi bi-person-badge me-1 text-info"></i> Chờ khám (Check-in):</span>
+                                <span class="badge bg-info text-white">@ops.AppointmentOperations.CheckedInCount</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                <span class="small text-muted"><i class="bi bi-heart-pulse me-1 text-teal"></i> Đang khám:</span>
+                                <span class="badge bg-success">@ops.AppointmentOperations.InServiceCount</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                <span class="small text-muted"><i class="bi bi-check-all me-1 text-success"></i> Hoàn thành:</span>
+                                <span class="badge bg-success-subtle text-success border">@ops.AppointmentOperations.CompletedCount</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center py-1">
+                                <span class="small text-muted"><i class="bi bi-x-circle me-1 text-danger"></i> Đã hủy:</span>
+                                <span class="badge bg-danger-subtle text-danger border">@ops.AppointmentOperations.CancelledCount</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Col 3: Financials & Receivables -->
+                    <div class="col-md-6 col-lg-3">
+                        <div class="border rounded p-3 h-100 bg-white">
+                            <h6 class="fw-bold text-dark d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-cash-coin text-success"></i> Viện phí & Công nợ
+                            </h6>
+                            <div class="small text-muted">Lập hóa đơn hôm nay:</div>
+                            <div class="fw-bold fs-6 text-dark mb-1">@ops.FinancialOperations.TotalInvoicedToday.ToString("N0") đ</div>
+                            
+                            <div class="small text-muted">Thực thu hôm nay:</div>
+                            <div class="fw-bold fs-6 text-success mb-1">@ops.FinancialOperations.TotalCollectedToday.ToString("N0") đ</div>
+
+                            <div class="small text-muted">Công nợ chưa thu hôm nay:</div>
+                            <div class="fw-bold fs-6 text-danger mb-2">@ops.FinancialOperations.TotalOutstandingToday.ToString("N0") đ</div>
+
+                            <div class="pt-2 border-top small">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted">Hóa đơn chưa trả:</span>
+                                    <span class="badge bg-danger">@ops.FinancialOperations.UnpaidInvoicesCount</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <span class="text-muted">Trả một phần:</span>
+                                    <span class="badge bg-warning text-dark">@ops.FinancialOperations.PartiallyPaidInvoicesCount</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Col 4: Medicine Alerts -->
+                    <div class="col-md-6 col-lg-3">
+                        <div class="border rounded p-3 h-100 bg-white">
+                            <h6 class="fw-bold text-dark d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-capsule text-danger"></i> Cảnh báo Dược phẩm
+                            </h6>
+                            <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                <span class="small text-muted">Lô thuốc đã hết hạn:</span>
+                                <span class="badge @(ops.MedicineInventory.ExpiredBatchesCount > 0 ? "bg-danger" : "bg-light text-muted border")">
+                                    @ops.MedicineInventory.ExpiredBatchesCount
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                <span class="small text-muted">Cận hạn (&lt; 30 ngày):</span>
+                                <span class="badge @(ops.MedicineInventory.NearExpiryBatchesCount > 0 ? "bg-warning text-dark" : "bg-light text-muted border")">
+                                    @ops.MedicineInventory.NearExpiryBatchesCount
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                <span class="small text-muted">Thuốc sắp hết hàng:</span>
+                                <span class="badge @(ops.MedicineInventory.LowStockMedicinesCount > 0 ? "bg-info text-white" : "bg-light text-muted border")">
+                                    @ops.MedicineInventory.LowStockMedicinesCount
+                                </span>
+                            </div>
+                            <div class="mt-3">
+                                <a asp-controller="AdminMedicine" asp-action="Index" class="btn btn-outline-secondary btn-sm w-100">
+                                    <i class="bi bi-box-seam me-1"></i> Quản lý kho dược
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @if (ops.DoctorLeaveOperations != null && (ops.DoctorLeaveOperations.ActiveDisruptionsCount > 0 || ops.DoctorLeaveOperations.PendingDentistLeavesCount > 0))
+                {
+                    <div class="mt-3 p-3 bg-warning-subtle border border-warning rounded">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold text-dark"><i class="bi bi-calendar-x-fill text-warning me-1"></i> Theo dõi Nghỉ phép Bác sĩ & Gián đoạn Lịch hẹn:</span>
+                            <span class="badge @(ops.DoctorLeaveOperations.UrgentDisruptionsCount > 0 ? "bg-danger text-white" : "bg-warning text-dark")">Khẩn cấp: @ops.DoctorLeaveOperations.UrgentDisruptionsCount</span>
+                        </div>
+                        <div class="row g-2 small text-secondary">
+                            <div class="col-sm-6 col-md-3">Đơn nghỉ phép chờ duyệt: <strong class="text-dark">@ops.DoctorLeaveOperations.PendingDentistLeavesCount</strong></div>
+                            <div class="col-sm-6 col-md-3">Tổng ca gián đoạn: <strong class="text-dark">@ops.DoctorLeaveOperations.ActiveDisruptionsCount</strong></div>
+                            <div class="col-sm-6 col-md-3">Chờ bệnh nhân phản hồi: <strong class="text-dark">@ops.DoctorLeaveOperations.DisruptionsPendingPatientCount</strong></div>
+                            <div class="col-sm-6 col-md-3">Chờ lễ tân điều phối: <strong class="text-danger">@ops.DoctorLeaveOperations.DisruptionsPendingReceptionistCount</strong></div>
+                        </div>
+                    </div>
+                }
+
+                @if (ops.DentistStatuses != null && ops.DentistStatuses.Any(d => d.HasAlert))
+                {
+                    <div class="mt-3 p-2 bg-danger-subtle border border-danger-subtle rounded text-danger small">
+                        <strong><i class="bi bi-exclamation-octagon-fill me-1"></i> Cảnh báo Bác sĩ có lịch hẹn nhưng chưa điểm danh:</strong>
+                        <ul class="mb-0 mt-1 ps-3">
+                            @foreach (var d in ops.DentistStatuses.Where(d => d.HasAlert))
+                            {
+                                <li>
+                                    <strong>@d.DentistName</strong> (@d.DepartmentName) - Có @d.ScheduledAppointmentsCount lịch khám hôm nay (Ca trực: @d.ShiftStart.ToString("HH:mm") - @d.ShiftEnd.ToString("HH:mm")) nhưng chưa điểm danh!
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
     <!-- Quick Navigation Management Cards -->
     <div class="mb-4">
         <h5 class="font-heading fs-6 fw-bold text-dark mb-3">Phân hệ Quản trị & Vận hành</h5>
