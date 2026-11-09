@@ -117,6 +117,11 @@ public PatientAppointmentController(
         var result = await _appointmentApiService.GetPatientAppointmentsAsync(status);
 
         var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
+        if (result.StatusCode == 401 || eligibilityResult?.StatusCode == 401)
+        {
+            TempData["ErrorMessage"] = "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.";
+            return RedirectToAction("Login", "Account", new { returnUrl = Url.Action(nameof(Index), "PatientAppointment") });
+        }
 
 var vm = new AppointmentListViewModel
 
@@ -259,6 +264,11 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
     {
 
         var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
+        if (eligibilityResult?.StatusCode == 401)
+        {
+            TempData["ErrorMessage"] = "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.";
+            return RedirectToAction("Login", "Account", new { returnUrl = Url.Action(nameof(Book), "PatientAppointment", new { departmentId, dentistId, date, reason }) });
+        }
 
         var eligibility = eligibilityResult?.Data ?? new BookingEligibilityDto();
 
@@ -453,6 +463,11 @@ var result = await _appointmentApiService.BookAppointmentAsync(request);
         if (!result.IsSuccess)
 
         {
+            if (result.StatusCode == 401)
+            {
+                TempData["ErrorMessage"] = "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.";
+                return RedirectToAction("Login", "Account", new { returnUrl = Url.Action(nameof(Book), "PatientAppointment") });
+            }
 
             ModelState.AddModelError(string.Empty, result.Message ?? "Không thể đặt lịch khám.");
 
