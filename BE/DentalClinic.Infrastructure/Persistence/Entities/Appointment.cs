@@ -25,6 +25,10 @@ public partial class Appointment
 
     public long? TreatmentPlanItemId { get; set; }
 
+    public string? ComboCode { get; set; }
+
+    public long? ComboId { get; set; }
+
     public DateTime? ScheduledStart { get; set; }
 
     public DateTime? ScheduledEnd { get; set; }
@@ -97,4 +101,6 @@ public partial class Appointment
     public virtual ICollection<ClinicalConsultation> ClinicalConsultations { get; set; } = new List<ClinicalConsultation>();
     public virtual ICollection<DepartmentReferral> IncomingReferrals { get; set; } = new List<DepartmentReferral>();
     public virtual ICollection<DepartmentReferral> OutgoingReferrals { get; set; } = new List<DepartmentReferral>();
+
+    public virtual ServiceCombo? Combo { get; set; };
 }

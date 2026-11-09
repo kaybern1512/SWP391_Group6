@@ -6,13 +6,91 @@
 <div class="container-fluid px-0">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h1 class="h3 fw-bold text-dark mb-1">Check-in Bệnh Nhân Hôm Nay</h1>
-            <p class="text-muted mb-0">Ngày: <strong class="text-primary">@DateTime.Today.ToString("dd/MM/yyyy")</strong> &bull; Quầy tiếp đón và quản lý số thứ tự khám (Queue Number)</p>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-person-lines-fill text-primary me-2"></i>Bàn Tiếp Đón & Quản Lý Ca Khám Hôm Nay
+            </h1>
+            <p class="text-muted mb-0">Ngày: <strong class="text-primary">@DateTime.Today.ToString("dd/MM/yyyy")</strong> &bull; Theo dõi tiến trình ca khám: Chưa check-in, Đã check-in, Đang khám và Chờ thu phí</p>
         </div>
-        <div>
+        <div class="d-flex gap-2">
+            <a asp-controller="ReceptionistBilling" asp-action="Index" asp-route-tab="billable" class="btn btn-outline-success fw-semibold shadow-sm">
+                <i class="bi bi-receipt-cutoff me-1"></i> Thu Viện Phí & Hóa Đơn
+            </a>
             <a asp-action="Requests" class="btn btn-outline-secondary">
                 <i class="bi bi-inbox me-1"></i> Yêu cầu mới chờ duyệt
             </a>
+        </div>
+    </div>
+
+    @{
+        var allAppts = Model.ConfirmedAppointments;
+        var totalCount = allAppts.Count;
+        var unCheckInCount = allAppts.Count(a => a.Status == "Confirmed");
+        var checkedInCount = allAppts.Count(a => a.Status == "CheckedIn" || a.Status == "Waiting");
+        var inServiceCount = allAppts.Count(a => a.Status == "InService");
+        var completedCount = allAppts.Count(a => a.Status == "Completed");
+        var noShowCount = allAppts.Count(a => a.Status == "NoShow");
+    }
+
+    <!-- 4 Operational KPI Stat Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-info h-100 kpi-card" style="cursor: pointer;" onclick="filterTableByStatus('Confirmed')">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small text-uppercase fw-semibold">Chưa Check-in</div>
+                        <h3 class="fw-bold text-info mb-0 mt-1">@unCheckInCount</h3>
+                        <div class="text-muted small mt-1"><i class="bi bi-clock"></i> Chờ bệnh nhân đến</div>
+                    </div>
+                    <div class="rounded-circle bg-info bg-opacity-10 p-3 text-info">
+                        <i class="bi bi-hourglass fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-success h-100 kpi-card" style="cursor: pointer;" onclick="filterTableByStatus('CheckedIn')">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small text-uppercase fw-semibold">Đã Check-in</div>
+                        <h3 class="fw-bold text-success mb-0 mt-1">@checkedInCount</h3>
+                        <div class="text-muted small mt-1"><i class="bi bi-check2-circle"></i> Đang chờ vào ghế</div>
+                    </div>
+                    <div class="rounded-circle bg-success bg-opacity-10 p-3 text-success">
+                        <i class="bi bi-person-check fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-primary h-100 kpi-card" style="cursor: pointer;" onclick="filterTableByStatus('InService')">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small text-uppercase fw-semibold">Đang Khám Tại Ghế</div>
+                        <h3 class="fw-bold text-primary mb-0 mt-1">@inServiceCount</h3>
+                        <div class="text-muted small mt-1"><i class="bi bi-heart-pulse"></i> Bác sĩ đang điều trị</div>
+                    </div>
+                    <div class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary">
+                        <i class="bi bi-activity fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-warning h-100 kpi-card" style="cursor: pointer;" onclick="filterTableByStatus('Completed')">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small text-uppercase fw-semibold">Khám Xong (Chờ Thu Phí)</div>
+                        <h3 class="fw-bold text-warning mb-0 mt-1">@completedCount</h3>
+                        <div class="text-muted small mt-1"><i class="bi bi-receipt"></i> Cần xuất hóa đơn</div>
+                    </div>
+                    <div class="rounded-circle bg-warning bg-opacity-10 p-3 text-warning">
+                        <i class="bi bi-receipt-cutoff fs-4"></i>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -41,6 +119,32 @@
         </div>
     </div>
 
+    <!-- Quick Status Filter Pills -->
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+        <span class="text-muted small fw-semibold me-1"><i class="bi bi-funnel me-1"></i>Lọc trạng thái:</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold filter-pill active" data-filter="all" onclick="filterTableByStatus('all')">
+            Tất Cả (@totalCount)
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="Confirmed" onclick="filterTableByStatus('Confirmed')">
+            <i class="bi bi-clock me-1"></i>Chưa Check-in (@unCheckInCount)
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="CheckedIn" onclick="filterTableByStatus('CheckedIn')">
+            <i class="bi bi-person-check me-1"></i>Đã Check-in (@checkedInCount)
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="InService" onclick="filterTableByStatus('InService')">
+            <i class="bi bi-heart-pulse-fill me-1"></i>Đang Khám Tại Ghế (@inServiceCount)
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="Completed" onclick="filterTableByStatus('Completed')">
+            <i class="bi bi-check-circle-fill me-1"></i>Khám Xong (Chờ Thu Phí) (@completedCount)
+        </button>
+        @if (noShowCount > 0)
+        {
+            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="NoShow" onclick="filterTableByStatus('NoShow')">
+                <i class="bi bi-person-x me-1"></i>Vắng Mặt (@noShowCount)
+            </button>
+        }
+    </div>
+
     @if (Model.ConfirmedAppointments.Count == 0)
     {
         <div class="card border-0 shadow-sm text-center py-5">
@@ -58,27 +162,36 @@
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <h5 class="card-title mb-0 fw-bold text-dark">
-                    <i class="bi bi-list-check me-2 text-success"></i>Danh sách lượt khám trong ngày (@Model.ConfirmedAppointments.Count lượt)
+                    <i class="bi bi-list-check me-2 text-primary"></i>Danh Sách Ca Khám Trong Ngày (@Model.ConfirmedAppointments.Count lượt khám)
                 </h5>
+                <span class="badge bg-light text-muted border px-2 py-1 small">
+                    <i class="bi bi-arrow-repeat me-1"></i>Tự động phân nhóm trạng thái
+                </span>
             </div>
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-hover align-middle mb-0" id="todayAppointmentsTable">
                     <thead class="table-light">
                         <tr>
-                            <th class="ps-3 text-center" style="width: 100px;">STT</th>
+                            <th class="ps-3 text-center" style="width: 90px;">STT</th>
                             <th>Mã Hẹn</th>
                             <th>Bệnh Nhân</th>
                             <th>Dịch Vụ & Khoa</th>
                             <th>Khung Giờ</th>
-                            <th>Bác Sĩ & Vị Trí</th>
-                            <th>Trạng Thái</th>
-                            <th class="text-end pe-3">Check-In</th>
+                            <th>Bác Sĩ & Ghế</th>
+                            <th>Tiến Trình Ca Khám</th>
+                            <th class="text-end pe-3">Thao Tác</th>
                         </tr>
                     </thead>
                     <tbody>
+                        <tr id="noFilterResultsRow" style="display: none;">
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-2 text-muted d-block mb-2"></i>
+                                <span class="fw-semibold">Không tìm thấy ca khám nào thuộc phân loại trạng thái này.</span>
+                            </td>
+                        </tr>
                         @foreach (var appt in Model.ConfirmedAppointments)
                         {
-                            <tr>
+                            <tr class="appointment-row" data-status="@appt.Status">
                                 <td class="ps-3 text-center">
                                     @if (!string.IsNullOrEmpty(appt.QueueNumber))
                                     {
@@ -128,6 +241,18 @@
                                     {
                                         <span class="badge bg-warning text-dark px-3 py-2">
                                             <i class="bi bi-hourglass-split me-1"></i>Đang chờ vào khám
+                                        </span>
+                                    }
+                                    else if (appt.Status == "InService")
+                                    {
+                                        <span class="badge bg-primary px-3 py-2">
+                                            <i class="bi bi-heart-pulse-fill me-1"></i>Đang điều trị tại ghế
+                                        </span>
+                                    }
+                                    else if (appt.Status == "Completed")
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success px-3 py-2 fw-bold">
+                                            <i class="bi bi-check-circle-fill me-1"></i>Khám xong - Chờ thu phí
                                         </span>
                                     }
                                     else if (appt.Status == "NoShow")
@@ -336,6 +461,22 @@
                                             </div>
                                         </div>
                                     }
+                                    else if (appt.Status == "Completed")
+                                    {
+                                        <div class="d-flex justify-content-end gap-1">
+                                            <a asp-controller="ReceptionistBilling" asp-action="Create" asp-route-appointmentId="@appt.AppointmentId" class="btn btn-success btn-sm shadow-sm fw-bold px-3 py-2 text-nowrap" title="Xuất hóa đơn viện phí và thu tiền">
+                                                <i class="bi bi-receipt-cutoff me-1"></i> Xuất Hóa Đơn
+                                            </a>
+                                        </div>
+                                    }
+                                    else if (appt.Status == "InService")
+                                    {
+                                        <div class="d-flex justify-content-end gap-1">
+                                            <span class="badge bg-light text-muted border px-3 py-2 small" title="Bác sĩ đang thực hiện ca khám tại ghế">
+                                                <i class="bi bi-heart-pulse text-danger me-1"></i>Đang trên ghế khám
+                                            </span>
+                                        </div>
+                                    }
                                     else
                                     {
                                         <div class="d-flex justify-content-end gap-1">
@@ -353,3 +494,68 @@
         </div>
     }
 </div>
+
+@section Scripts {
+<script>
+function filterTableByStatus(status) {
+    const rows = document.querySelectorAll('#todayAppointmentsTable tbody tr.appointment-row');
+    const pills = document.querySelectorAll('.filter-pill');
+    
+    pills.forEach(p => {
+        if (p.getAttribute('data-filter') === status) {
+            p.classList.add('active');
+            p.classList.remove('btn-outline-secondary', 'btn-outline-info', 'btn-outline-success', 'btn-outline-primary', 'btn-outline-warning', 'btn-outline-danger');
+            if (status === 'Confirmed') p.classList.add('btn-info', 'text-white');
+            else if (status === 'CheckedIn') p.classList.add('btn-success', 'text-white');
+            else if (status === 'InService') p.classList.add('btn-primary', 'text-white');
+            else if (status === 'Completed') p.classList.add('btn-warning', 'text-dark');
+            else if (status === 'NoShow') p.classList.add('btn-danger', 'text-white');
+            else p.classList.add('btn-secondary', 'text-white');
+        } else {
+            p.classList.remove('active', 'btn-info', 'btn-success', 'btn-primary', 'btn-warning', 'btn-danger', 'btn-secondary', 'text-white');
+            const f = p.getAttribute('data-filter');
+            if (f === 'Confirmed') p.classList.add('btn-outline-info');
+            else if (f === 'CheckedIn') p.classList.add('btn-outline-success');
+            else if (f === 'InService') p.classList.add('btn-outline-primary');
+            else if (f === 'Completed') p.classList.add('btn-outline-warning', 'text-dark');
+            else if (f === 'NoShow') p.classList.add('btn-outline-danger');
+            else p.classList.add('btn-outline-secondary');
+        }
+    });
+
+    let visibleCount = 0;
+    rows.forEach(row => {
+        const rowStatus = row.getAttribute('data-status');
+        if (status === 'all') {
+            row.style.display = '';
+            visibleCount++;
+        } else if (status === 'CheckedIn') {
+            if (rowStatus === 'CheckedIn' || rowStatus === 'Waiting') {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        } else if (rowStatus === status) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+
+    const noMatchRow = document.getElementById('noFilterResultsRow');
+    if (noMatchRow) {
+        noMatchRow.style.display = visibleCount === 0 ? '' : 'none';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialStatus = urlParams.get('status') || '@(Model.StatusFilter ?? "")';
+    if (initialStatus) {
+        filterTableByStatus(initialStatus);
+    }
+});
+</script>
+}

@@ -332,13 +332,14 @@ public class ReceptionistAppointmentController : Controller
     }
 
     [HttpGet("TodayCheckIn")]
-    public async Task<IActionResult> TodayCheckIn([FromQuery] string? search)
+    public async Task<IActionResult> TodayCheckIn([FromQuery] string? search = null, [FromQuery] string? status = null)
     {
         var result = await _appointmentApiService.GetReceptionistTodayConfirmedAsync(search);
         var vm = new ReceptionistTodayCheckInViewModel
         {
             ConfirmedAppointments = result.Data ?? new(),
-            SearchQuery = search
+            SearchQuery = search,
+            StatusFilter = status
         };
         return View("~/Views/Receptionist/Appointments/TodayCheckIn.cshtml", vm);
     }

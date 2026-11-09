@@ -121,6 +121,11 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendGetAsync<BookingEligibilityDto>("/api/patient/appointments/booking-eligibility");
     }
 
+    public async Task<ApiResult<List<DentalClinic.Web.ViewModels.Appointments.BookingComboViewModel>>> GetAvailableCombosAsync()
+    {
+        return await SendGetAsync<List<DentalClinic.Web.ViewModels.Appointments.BookingComboViewModel>>("/api/patient/appointments/combos");
+    }
+
     // ==========================================
     // RECEPTIONIST
     // ==========================================

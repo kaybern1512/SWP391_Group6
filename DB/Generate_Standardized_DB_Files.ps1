@@ -12,7 +12,7 @@
 param (
     [string]$ServerInstance = ".\MSSQLSERVER01",
     [string]$DatabaseName = "DentalClinicManagementDB",
-    [string]$OutputDir = "D:\SWP\SWP391_Group6\DB"
+    [string]$OutputDir = "D:\SWP\DB"
 )
 
 $ErrorActionPreference = "Stop"

@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using DentalClinic.Web.Models.ApiDtos;
+using DentalClinic.Web.Services;
 using DentalClinic.Web.ViewModels.Dashboard;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,10 +11,42 @@ namespace DentalClinic.Web.Controllers.Receptionist;
 [Route("Receptionist")]
 public class ReceptionistDashboardController : Controller
 {
+    private readonly IAppointmentApiService? _appointmentApiService;
+
+    public ReceptionistDashboardController()
+    {
+    }
+
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public ReceptionistDashboardController(IAppointmentApiService appointmentApiService)
+    {
+        _appointmentApiService = appointmentApiService;
+    }
+
     [HttpGet("")]
     [HttpGet("Dashboard")]
-    public IActionResult Dashboard()
+    public async Task<IActionResult> Dashboard()
     {
+        List<AppointmentDto> todayAppts = new();
+        List<AppointmentDto> pendingRequests = new();
+
+        if (_appointmentApiService != null)
+        {
+            var apptsTask = _appointmentApiService.GetReceptionistTodayConfirmedAsync();
+            var reqsTask = _appointmentApiService.GetReceptionistRequestsAsync();
+            await Task.WhenAll(apptsTask, reqsTask);
+
+            todayAppts = apptsTask.Result.Data ?? new();
+            pendingRequests = reqsTask.Result.Data ?? new();
+        }
+
+        var unCheckedIn = todayAppts.Count(a => a.Status == "Confirmed");
+        var checkedIn = todayAppts.Count(a => a.Status == "CheckedIn" || a.Status == "Waiting");
+        var inService = todayAppts.Count(a => a.Status == "InService");
+        var completed = todayAppts.Count(a => a.Status == "Completed");
+
+        ViewBag.TodayAppointments = todayAppts;
+
         var vm = new DashboardViewModel
         {
             Role = "Receptionist",
@@ -26,7 +60,7 @@ public class ReceptionistDashboardController : Controller
                 new()
                 {
                     Title = "Yêu Cầu Chờ Xử Lý",
-                    Value = "--",
+                    Value = _appointmentApiService != null ? pendingRequests.Count.ToString() : "--",
                     Note = "Đặt hẹn trực tuyến & hotline",
                     Icon = "bi-inbox",
                     ColorClass = "warning"
@@ -34,25 +68,25 @@ public class ReceptionistDashboardController : Controller
                 new()
                 {
                     Title = "Ca Khám Hôm Nay",
-                    Value = "--",
-                    Note = "Đã lên lịch trong ngày",
+                    Value = _appointmentApiService != null ? todayAppts.Count.ToString() : "--",
+                    Note = $"{unCheckedIn} chưa check-in, {checkedIn} đã đến",
                     Icon = "bi-calendar-check",
                     ColorClass = "primary"
                 },
                 new()
                 {
-                    Title = "Bệnh Nhân Chờ Check-in",
-                    Value = "--",
-                    Note = "Hàng chờ sảnh tiếp tân",
-                    Icon = "bi-people",
+                    Title = "Đang Khám Tại Ghế",
+                    Value = _appointmentApiService != null ? inService.ToString() : "--",
+                    Note = "Bác sĩ đang điều trị",
+                    Icon = "bi-heart-pulse",
                     ColorClass = "teal"
                 },
                 new()
                 {
-                    Title = "Hóa Đơn Chờ Thu Phí",
-                    Value = "--",
-                    Note = "Viện phí sau điều trị",
-                    Icon = "bi-file-earmark-text",
+                    Title = "Khám Xong (Chờ Thu Phí)",
+                    Value = _appointmentApiService != null ? completed.ToString() : "--",
+                    Note = "Cần xuất hóa đơn viện phí",
+                    Icon = "bi-receipt-cutoff",
                     ColorClass = "danger"
                 }
             },
@@ -92,7 +126,7 @@ public class ReceptionistDashboardController : Controller
                     ColorClass = "success",
                     Description = "Lập hóa đơn ca khám hoàn thành, thu tiền mặt/chuyển khoản VietQR và in phiếu thu viện phí.",
                     ActionText = "Vào Thu Phí",
-                    ActionUrl = "/Receptionist/Billing"
+                    ActionUrl = "/Receptionist/Billing?tab=billable"
                 },
                 new()
                 {

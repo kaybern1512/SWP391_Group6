@@ -676,6 +676,13 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
 
         var apptService = new AppointmentService(db, _mockNotification.Object, _mockApptLogger.Object);
         var nowClinic = ClinicTimeHelper.Now;
+        var todayShift = await db.DentistWorkSchedules.FirstOrDefaultAsync(s => s.DentistUserId == dentistId && s.WorkDate == ClinicTimeHelper.TodayDateOnly);
+        if (todayShift != null)
+        {
+            todayShift.StartTime = new TimeOnly(0, 0);
+            todayShift.EndTime = new TimeOnly(23, 59, 59);
+            await db.SaveChangesAsync();
+        }
 
         var walkInRes = await apptService.CreateReceptionistAppointmentAsync(staffId, new CreateReceptionistAppointmentRequest
         {

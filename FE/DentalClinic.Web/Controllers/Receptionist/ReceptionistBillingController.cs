@@ -25,7 +25,8 @@ public class ReceptionistBillingController : Controller
         [FromQuery] string? status = null,
         [FromQuery] string? search = null,
         [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null)
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] string? tab = null)
     {
         var invoicesTask = _billingApiService.GetInvoicesAsync(status, search, fromDate, toDate);
         var billableTask = _billingApiService.GetBillableAppointmentsAsync();
@@ -40,6 +41,7 @@ public class ReceptionistBillingController : Controller
         ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
         ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
         ViewBag.BillableAppointments = billableAppointments;
+        ViewBag.ActiveTab = tab;
 
         return View("~/Views/Receptionist/Billing/Index.cshtml", invoices);
     }
