@@ -18,7 +18,7 @@ namespace DentalClinic.Tests.Admin;
 
 public class AdminEndToEndSqlServerIntegrationTests
 {
-    private const string ConnectionString = "Server=DESKTOP-1TUBGEU\\SQLEXPRESS;Database=DentalCare_Admin_Dev;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
+    private const string ConnectionString = "Server=.\\SQLEXPRESS;Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
 
     private static DentalClinicDbContext CreateRealDbContext()
     {
