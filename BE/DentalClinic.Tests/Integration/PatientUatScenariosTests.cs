@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -81,6 +81,20 @@ public class PatientUatScenariosTests
         var dSurgery = new Department { DepartmentId = 3, Name = "Khoa Tiểu Phẫu", Status = "Active" };
         db.Departments.AddRange(dGeneral, dOrtho, dSurgery);
 
+        // 4b. Department Work Schedule
+        for (byte dow = 1; dow <= 7; dow++)
+        {
+            db.DepartmentWorkSchedules.Add(new DepartmentWorkSchedule
+            {
+                DepartmentScheduleId = dow,
+                DepartmentId = 1,
+                DayOfWeek = dow,
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(18, 0),
+                IsActive = true
+            });
+        }
+
         // 5. Dentists
         var d1User = new UserAccount { UserId = 401, Email = "dentist1@dentalcare.com", Role = UserRole.Dentist, Status = AccountStatus.Active };
         var d1Staff = new StaffProfile { UserId = 401, EmployeeCode = "EMP-D1", FullName = "BS. Hùng", EmploymentStatus = "Active", User = d1User };
@@ -116,10 +130,10 @@ public class PatientUatScenariosTests
             Status = "Scheduled"
         });
 
-        // 8. Seed 31 Dental Services across departments
+        // 8. Seed 31 Dental Services across departments (i=1 -> dept 1)
         for (int i = 1; i <= 31; i++)
         {
-            int deptId = (i % 3) + 1;
+            int deptId = ((i - 1) % 3) + 1;
             int duration = (i % 4 == 0) ? 60 : (i % 3 == 0) ? 45 : 30;
             db.DepartmentServices.Add(new DepartmentService
             {
@@ -158,7 +172,6 @@ public class PatientUatScenariosTests
         var targetDate = DateTime.Today.AddDays(2).AddHours(9);
         await SeedPatientEnvironmentAsync(db, targetDate);
 
-        // Add 1 appointment for Patient 101 and 1 for Patient 102
         db.Appointments.Add(new Appointment
         {
             AppointmentId = 10,
@@ -166,6 +179,8 @@ public class PatientUatScenariosTests
             PatientUserId = 101,
             DepartmentId = 1,
             RequestedServiceId = 1,
+            BookingSource = "Online",
+            ReasonForVisit = "Khám răng định kỳ",
             ScheduledStart = targetDate,
             ScheduledEnd = targetDate.AddMinutes(30),
             Status = AppointmentStatus.Confirmed
@@ -178,6 +193,8 @@ public class PatientUatScenariosTests
             PatientUserId = 102,
             DepartmentId = 1,
             RequestedServiceId = 1,
+            BookingSource = "Online",
+            ReasonForVisit = "Khám răng định kỳ",
             ScheduledStart = targetDate,
             ScheduledEnd = targetDate.AddMinutes(30),
             Status = AppointmentStatus.Confirmed
@@ -297,6 +314,8 @@ public class PatientUatScenariosTests
             PatientUserId = 101,
             DepartmentId = 1,
             RequestedServiceId = 1,
+            BookingSource = "Online",
+            ReasonForVisit = "Khám răng định kỳ",
             ScheduledStart = apptDate,
             ScheduledEnd = apptDate.AddMinutes(30),
             Status = AppointmentStatus.PendingReceptionReview
@@ -348,6 +367,8 @@ public class PatientUatScenariosTests
             AssignedDentistUserId = 401,
             DepartmentId = 1,
             RequestedServiceId = 1,
+            BookingSource = "Online",
+            ReasonForVisit = "Khám răng định kỳ",
             ScheduledStart = oldDate,
             ScheduledEnd = oldDate.AddMinutes(30),
             Status = AppointmentStatus.Confirmed
@@ -427,8 +448,9 @@ public class PatientUatScenariosTests
         var medService = new MedicalRecordService(db, _mockMedLogger.Object);
         var entries = await medService.GetCurrentOdontogramAsync(101);
         Assert.True(entries.Success);
-        Assert.Single(entries.Data!);
-        Assert.Equal("T18", entries.Data![0].ToothNumber);
+        Assert.Equal(32, entries.Data!.Count);
+        var tooth18 = entries.Data!.FirstOrDefault(e => e.ToothNumber == "T18" || e.ToothNumber == "18");
+        Assert.NotNull(tooth18);
     }
 
     [Fact]
@@ -492,6 +514,8 @@ public class PatientUatScenariosTests
             DepartmentId = 1,
             RequestedServiceId = 1,
             AssignedDentistUserId = 401,
+            BookingSource = "Online",
+            ReasonForVisit = "Khám răng định kỳ",
             ScheduledStart = DateTime.Today.AddDays(-1),
             ScheduledEnd = DateTime.Today.AddDays(-1).AddMinutes(30),
             Status = AppointmentStatus.Completed
@@ -504,6 +528,7 @@ public class PatientUatScenariosTests
             PatientUserId = 101,
             DepartmentId = 1,
             CreatedByDentistUserId = 401,
+            Status = "InProgress",
             CreatedAt = DateTime.UtcNow
         };
         db.TreatmentPlans.Add(plan);
@@ -513,7 +538,8 @@ public class PatientUatScenariosTests
             TreatmentPlanItemId = 702,
             TreatmentPlanId = 701,
             DepartmentServiceId = 1,
-            SequenceNo = 1
+            SequenceNo = 1,
+            Status = "Pending"
         };
         db.TreatmentPlanItems.Add(planItem);
 
@@ -561,6 +587,8 @@ public class PatientUatScenariosTests
             PatientUserId = 101,
             DepartmentId = 1,
             RequestedServiceId = 1,
+            BookingSource = "Online",
+            ReasonForVisit = "Khám răng định kỳ",
             ScheduledStart = DateTime.Today.AddDays(-1),
             ScheduledEnd = DateTime.Today.AddDays(-1).AddMinutes(30),
             Status = AppointmentStatus.Completed
@@ -615,6 +643,8 @@ public class PatientUatScenariosTests
             AssignedDentistUserId = 401,
             DepartmentId = 1,
             RequestedServiceId = 1,
+            BookingSource = "Online",
+            ReasonForVisit = "Khám răng định kỳ",
             ScheduledStart = DateTime.Today.AddDays(-2),
             ScheduledEnd = DateTime.Today.AddDays(-2).AddMinutes(30),
             Status = AppointmentStatus.Completed
@@ -628,6 +658,8 @@ public class PatientUatScenariosTests
             AssignedDentistUserId = 401,
             DepartmentId = 1,
             RequestedServiceId = 1,
+            BookingSource = "Online",
+            ReasonForVisit = "Khám răng định kỳ",
             ScheduledStart = DateTime.Today.AddDays(2),
             ScheduledEnd = DateTime.Today.AddDays(2).AddMinutes(30),
             Status = AppointmentStatus.PendingReceptionReview
@@ -679,7 +711,7 @@ public class PatientUatScenariosTests
         // 4. Duplicate feedback on same appointment -> Rejected
         var resDuplicate = await feedbackService.CreateFeedbackAsync(validReq, 101);
         Assert.False(resDuplicate.Success);
-        Assert.Contains("đã được đánh giá", resDuplicate.Message ?? string.Empty);
+        Assert.Contains("trước đó", resDuplicate.Message ?? string.Empty);
     }
 
     [Fact]

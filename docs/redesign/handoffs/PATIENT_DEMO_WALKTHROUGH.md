@@ -1,4 +1,4 @@
-# KỊCH BẢN THAO TÁC DEMO TOÀN DIỆN PHÂN HỆ BỆNH NHÂN (ANTI 3)
+﻿# KỊCH BẢN THAO TÁC DEMO TOÀN DIỆN PHÂN HỆ BỆNH NHÂN (ANTI 3)
 # PATIENT END-TO-END DEMO WALKTHROUGH & RUNBOOK
 
 - **Dự án**: `D:\SWP391\DentalCare-Patient`
@@ -11,12 +11,18 @@
 
 ## 1. DANH SÁCH TÀI KHOẢN & DỮ LIỆU FIXTURE SẴN CÓ TRÊN DATABASE
 
+> [!CAUTION]
+> **THÔNG BÁO BẢO MẬT & DỮ LIỆU DEMO (SECURITY & DEMO DATA NOTICE)**
+> - Mọi thông tin email, mật khẩu demo (ví dụ: Password123@) trong tài liệu này là dữ liệu hạt giống (Seed Data) chỉ phục vụ môi trường kiểm thử phát triển cục bộ (DentalCare_Integration_Dev).
+> - Tuyệt đối không tái sử dụng các mật khẩu này trên môi trường triển khai thực tế (Staging/Production). Trên môi trường thực tế, mật khẩu phải được băm an toàn qua IPasswordHasherService và cấu hình tài chính VietQR phải được cấu hình qua biến môi trường bảo mật (VietQrSettings).
+
+
 Tất cả các tài khoản dưới đây đều đã được cấu hình sẵn dữ liệu thực tế trên cơ sở dữ liệu `DentalCare_Patient_Dev`:
 
 | Tài Khoản Email | Mật Khẩu | Họ Tên & Mã BN | Vai Trò Trong Kịch Bản Demo | Dữ Liệu Sẵn Có Trên Hệ Thống |
 | :--- | :---: | :--- | :--- | :--- |
 | `patient1@dentalcare.com` | `Password123@` | **Trần Mai Chi**<br>`PAT-202610-0002` | **Tài khoản Demo chính** (Đặt lịch, Xem bệnh án, Sơ đồ răng, Đánh giá bác sĩ) | - Ca khám 62 (`Completed`, chưa đánh giá)<br>- Ca khám 2 (`Confirmed`, để demo dời lịch)<br>- Ca khám 72 (`Completed`, đã đánh giá) |
-| `vovandong1512@gmail.com` | `Password123@` | **Võ Văn Đông**<br>`PAT-202610-0001` | **Tài khoản Demo viện phí & Đơn thuốc** (Thanh toán VietQR & In đơn thuốc) | - Hóa đơn 4 (`400.000 đ`, Chưa thanh toán)<br>- Đơn thuốc 5 (Đầy đủ danh mục thuốc & cấp phát) |
+| `patient3@dentalcare.com` | `Password123@` | **Võ Văn Đông**<br>`PAT-202610-0001` | **Tài khoản Demo viện phí & Đơn thuốc** (Thanh toán VietQR & In đơn thuốc) | - Hóa đơn 4 (`400.000 đ`, Chưa thanh toán)<br>- Đơn thuốc 5 (Đầy đủ danh mục thuốc & cấp phát) |
 
 ---
 
@@ -135,7 +141,7 @@ flowchart LR
 ---
 
 ### BƯỚC 6: XEM ĐƠN THUỐC & IN ĐƠN THUỐC
-- **Chuẩn bị chuyển tài khoản**: Đăng xuất tài khoản `patient1` và đăng nhập tài khoản **`vovandong1512@gmail.com`** (Mật khẩu: `Password123@`).
+- **Chuẩn bị chuyển tài khoản**: Đăng xuất tài khoản `patient1` và đăng nhập tài khoản **`patient3@dentalcare.com`** (Mật khẩu: `Password123@`).
 - **Đường dẫn màn hình**: `https://localhost:7123/Patient/Prescriptions`
 - **Thao tác**:
   1. Bấm vào menu *"Đơn Thuốc"* trên Sidebar.
@@ -188,7 +194,7 @@ flowchart LR
 - [x] Backend API đang chạy trên cổng `https://localhost:7353` / `http://localhost:5353`.
 - [x] Frontend Web đang chạy trên cổng `https://localhost:7123` / `http://localhost:5043`.
 - [x] Cơ sở dữ liệu SQL Server đang kết nối đúng `DentalCare_Patient_Dev`.
-- [x] Đã chuẩn bị sẵn thông tin đăng nhập: `patient1@dentalcare.com` và `vovandong1512@gmail.com`.
+- [x] Đã chuẩn bị sẵn thông tin đăng nhập: `patient1@dentalcare.com` và `patient3@dentalcare.com`.
 - [x] Trình duyệt web đã bỏ chặn Pop-up / In ấn để demo in đơn thuốc.
 
 ---

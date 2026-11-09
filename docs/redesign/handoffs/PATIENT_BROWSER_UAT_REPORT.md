@@ -1,4 +1,4 @@
-# BÁO CÁO KIỂM THỬ THỰC TẾ TRÊN TRÌNH DUYỆT & GIAO DIỆN BỆNH NHÂN (ANTI 3)
+﻿# BÁO CÁO KIỂM THỬ THỰC TẾ TRÊN TRÌNH DUYỆT & GIAO DIỆN BỆNH NHÂN (ANTI 3)
 # PATIENT REAL BROWSER UAT & VERIFICATION REPORT
 
 - **Dự án**: `D:\SWP391\DentalCare-Patient`
@@ -13,11 +13,17 @@
   - **Dữ liệu tài khoản thực tế**:
     - Bệnh nhân 1: `patient1@dentalcare.com` (UserId: 13, Mã BN: `PAT-202610-0002`, Họ tên: Trần Mai Chi, Mật khẩu: `Password123@`)
     - Bệnh nhân 2: `patient2@dentalcare.com` (UserId: 14, Mã BN: `PAT-202610-0003`, Họ tên: Nguyễn Bảo Nam, Mật khẩu: `Password123@`)
-    - Bệnh nhân 3: `vovandong1512@gmail.com` (UserId: 7, Mã BN: `PAT-202610-0001`, Họ tên: Võ Văn Đông, Mật khẩu: `Password123@`)
+    - Bệnh nhân 3: `patient3@dentalcare.com` (UserId: 7, Mã BN: `PAT-202610-0001`, Họ tên: Võ Văn Đông, Mật khẩu: `Password123@`)
 
 ---
 
 ## 1. CÔNG BỐ PHƯƠNG PHÁP & GIỚI HẠN CÔNG CỤ KIỂM THỬ
+
+> [!CAUTION]
+> **THÔNG BÁO BẢO MẬT & DỮ LIỆU DEMO (SECURITY & DEMO DATA NOTICE)**
+> - Mọi thông tin email, mật khẩu demo (`Password123@`) trong tài liệu này là dữ liệu hạt giống (Seed Data) chỉ phục vụ môi trường kiểm thử phát triển cục bộ (`DentalCare_Integration_Dev`).
+> - Tuyệt đối không tái sử dụng các mật khẩu này trên môi trường triển khai thực tế. Cấu hình ngân hàng VietQR phải được thiết lập qua biến môi trường bảo mật (`VietQrSettings`).
+
 
 > [!IMPORTANT]
 > **CÔNG BỐ MINH BẠCH VỀ CÔNG CỤ BROWSER AUTOMATION THEO QUY ĐỊNH:**
@@ -32,7 +38,7 @@
 ### A.1. Đăng ký, Đăng nhập, Đăng xuất
 - **Kịch bản**: 
   - Truy cập `GET /Account/Register`: Trả về HTTP 200 OK, form nhập thông tin họ tên, email, số điện thoại, ngày sinh, giới tính, mật khẩu hiển thị đầy đủ các trường nhập chuẩn HTML5.
-  - Đăng nhập `POST /Account/Login`: Thử nghiệm tài khoản bệnh nhân `patient1@dentalcare.com` và `vovandong1512@gmail.com` với mật khẩu `Password123@`.
+  - Đăng nhập `POST /Account/Login`: Thử nghiệm tài khoản bệnh nhân `patient1@dentalcare.com` và `patient3@dentalcare.com` với mật khẩu `Password123@`.
 - **Kết quả thực tế**:
   - Hệ thống cấp cookie xác thực bảo mật mang tên `.DentalCare.Patient.Auth` (cờ `HttpOnly = true`, `Secure = true`).
   - Redirect 302 Found chuyển hướng người dùng trực tiếp vào `/Patient/Dashboard`.
@@ -125,7 +131,7 @@
 - **Đánh giá**: **VERIFIED**
 
 ### A.13. Xem Đơn thuốc & Thuốc thực cấp kho dược
-- **Kịch bản**: Đăng nhập tài khoản bệnh nhân `vovandong1512@gmail.com` (sở hữu Đơn thuốc 5 và 3) và truy cập `GET /Patient/Prescriptions` và `GET /Patient/Prescriptions/5/Print`.
+- **Kịch bản**: Đăng nhập tài khoản bệnh nhân `patient3@dentalcare.com` (sở hữu Đơn thuốc 5 và 3) và truy cập `GET /Patient/Prescriptions` và `GET /Patient/Prescriptions/5/Print`.
 - **Kết quả thực tế**:
   - Trả về HTTP 200 OK.
   - Danh sách đơn thuốc phân định rõ ràng giữa danh mục thuốc bác sĩ chỉ định và số lượng thuốc thực tế đã cấp phát từ kho dược qua API `/api/medicines/dispensations/prescription/{id}`.
