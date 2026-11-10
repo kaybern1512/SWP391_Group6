@@ -10,13 +10,13 @@ $beDir = Join-Path $swpRoot "BE\DentalClinic.Api"
 $feDir = Join-Path $swpRoot "FE\DentalClinic.Web"
 
 Write-Host "==> [Start-Daemons] Launching DentalClinic.Api (Port 7350/5350)..." -ForegroundColor Cyan
-Start-Process -FilePath "dotnet" -ArgumentList "run --launch-profile https" -WorkingDirectory $beDir -WindowStyle Hidden
+Start-Process -FilePath "dotnet" -ArgumentList "run --launch-profile https --no-build --no-restore" -WorkingDirectory $beDir -WindowStyle Hidden
 
 Write-Host "==> [Start-Daemons] Launching DentalClinic.Web (Port 7129/5129)..." -ForegroundColor Cyan
-Start-Process -FilePath "dotnet" -ArgumentList "run --launch-profile https" -WorkingDirectory $feDir -WindowStyle Hidden
+Start-Process -FilePath "dotnet" -ArgumentList "run --launch-profile https --no-build --no-restore" -WorkingDirectory $feDir -WindowStyle Hidden
 
-Write-Host "==> [Start-Daemons] Daemons started. Waiting 5s for ports to bind..." -ForegroundColor Yellow
-Start-Sleep -Seconds 5
+Write-Host "==> [Start-Daemons] Daemons started. Waiting 8s for ports to bind..." -ForegroundColor Yellow
+Start-Sleep -Seconds 8
 
 $beListening = Get-NetTCPConnection -LocalPort 7350 -State Listen -ErrorAction SilentlyContinue
 $feListening = Get-NetTCPConnection -LocalPort 7129 -State Listen -ErrorAction SilentlyContinue

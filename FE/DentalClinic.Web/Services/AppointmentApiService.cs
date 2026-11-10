@@ -167,12 +167,28 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendPostActionAsync($"/api/receptionist/appointments/{id}/reject", request);
     }
 
-    public async Task<ApiResult<List<AppointmentDto>>> GetReceptionistTodayConfirmedAsync(string? search = null)
+    public async Task<ApiResult<List<AppointmentDto>>> GetReceptionistTodayConfirmedAsync(
+        string? search = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? shift = null,
+        long? departmentId = null,
+        long? dentistId = null,
+        string? status = null)
     {
+        var q = new List<string>();
+        if (!string.IsNullOrWhiteSpace(search)) q.Add($"search={Uri.EscapeDataString(search)}");
+        if (fromDate.HasValue) q.Add($"fromDate={fromDate.Value:yyyy-MM-dd}");
+        if (toDate.HasValue) q.Add($"toDate={toDate.Value:yyyy-MM-dd}");
+        if (!string.IsNullOrWhiteSpace(shift)) q.Add($"shift={Uri.EscapeDataString(shift)}");
+        if (departmentId.HasValue) q.Add($"departmentId={departmentId.Value}");
+        if (dentistId.HasValue) q.Add($"dentistId={dentistId.Value}");
+        if (!string.IsNullOrWhiteSpace(status)) q.Add($"status={Uri.EscapeDataString(status)}");
+
         var url = "/api/receptionist/today-appointments";
-        if (!string.IsNullOrWhiteSpace(search))
+        if (q.Count > 0)
         {
-            url += $"?search={Uri.EscapeDataString(search)}";
+            url += "?" + string.Join("&", q);
         }
         return await SendGetAsync<List<AppointmentDto>>(url);
     }

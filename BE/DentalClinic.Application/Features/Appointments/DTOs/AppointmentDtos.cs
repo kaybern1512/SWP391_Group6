@@ -16,6 +16,7 @@ public class CreateReceptionistAppointmentRequest
     public long? RoomId { get; set; }
     public long? DentalChairId { get; set; }
     public bool AutoConfirm { get; set; } = false;
+    public bool AutoCheckIn { get; set; } = false;
     public DateTime ScheduledStart { get; set; }
     public string ReasonForVisit { get; set; } = string.Empty;
 }
@@ -245,6 +246,7 @@ public class RegisterWalkInPatientRequest
     public string FullName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
+    public string? NationalId { get; set; }
     public DateTime? DateOfBirth { get; set; }
     public string? Gender { get; set; }
 }

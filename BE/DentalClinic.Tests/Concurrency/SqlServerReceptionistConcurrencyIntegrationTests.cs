@@ -20,7 +20,7 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
 {
     private static readonly string ConnectionString =
         Environment.GetEnvironmentVariable("TEST_SQL_CONNECTION")
-        ?? "Server=.\\SQLEXPRESS;Database=DentalCare_Integration_Dev;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
+        ?? "Server=.\\MSSQLSERVER01;Database=DentalCare_Integration_Dev;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
 
     private readonly Mock<IAuditLogService> _mockAudit = new();
     private readonly Mock<INotificationService> _mockNotify = new();

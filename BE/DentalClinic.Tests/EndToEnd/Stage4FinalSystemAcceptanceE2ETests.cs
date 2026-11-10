@@ -27,7 +27,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private DentalClinicDbContext CreateDbContext()
     {
@@ -69,6 +69,18 @@ public class Stage4FinalSystemAcceptanceE2ETests
                     var end = start.AddMinutes(30);
 
                     if (TimeOnly.FromTimeSpan(end.TimeOfDay) > shift.EndTime)
+                        continue;
+
+                    var shiftStart = h < 12 ? shift.WorkDate.ToDateTime(new TimeOnly(0, 0)) : shift.WorkDate.ToDateTime(new TimeOnly(12, 0));
+                    var shiftEnd = h < 12 ? shift.WorkDate.ToDateTime(new TimeOnly(12, 0)) : shift.WorkDate.ToDateTime(new TimeOnly(23, 59, 59));
+                    bool shiftConflict = await db.Appointments.AsNoTracking().AnyAsync(a =>
+                        a.Status != AppointmentStatus.Cancelled &&
+                        a.Status != AppointmentStatus.Withdrawn &&
+                        (a.PatientUserId == 13 || a.PatientUserId == 14) &&
+                        a.ScheduledStart.HasValue &&
+                        a.ScheduledStart.Value >= shiftStart &&
+                        a.ScheduledStart.Value < shiftEnd);
+                    if (shiftConflict)
                         continue;
 
                     bool conflict = await db.Appointments.AsNoTracking().AnyAsync(a =>
@@ -428,6 +440,11 @@ public class Stage4FinalSystemAcceptanceE2ETests
         // Verify batch stock: 100 - 6 - 3 = 91 (Query fresh from DB without tracking cache)
         var reloadedBatch = await db.MedicineBatches.AsNoTracking().FirstOrDefaultAsync(b => b.MedicineBatchId == batch.MedicineBatchId);
         Assert.Equal(91, reloadedBatch!.QuantityAvailable);
+
+        // Mark test appointment completed so dentist is freed
+        appt.Status = AppointmentStatus.Completed;
+        appt.CompletedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
     }
 
     [Fact]
@@ -502,6 +519,11 @@ public class Stage4FinalSystemAcceptanceE2ETests
         Assert.NotNull(finalInvoice);
         Assert.Equal(400000, finalInvoice.Payments.Sum(p => p.Amount));
         Assert.Equal("PartiallyPaid", finalInvoice.Status);
+
+        // Mark test appointment completed
+        appt.Status = AppointmentStatus.Completed;
+        appt.CompletedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
     }
 
     // =========================================================================
@@ -516,6 +538,17 @@ public class Stage4FinalSystemAcceptanceE2ETests
 
         var existingSession = await db.TreatmentSessions.AsNoTracking().FirstAsync();
         var testDate = await GetAvailableSlotForDentistAsync(db, 3, offsetDays: 5, defaultHour: 10);
+
+        // Clean any conflicting appointments for patient 13 on that date
+        var sameDayAppts = await db.Appointments
+            .Where(a => a.PatientUserId == 13 && a.ScheduledStart.HasValue && a.ScheduledStart.Value.Date == testDate.Date)
+            .ToListAsync();
+        foreach (var a in sameDayAppts)
+        {
+            a.Status = AppointmentStatus.Cancelled;
+            a.CancelledAt = DateTime.UtcNow;
+        }
+        if (sameDayAppts.Count > 0) await db.SaveChangesAsync();
 
         // Create booking in PendingReceptionReview
         var apptService = new AppointmentService(db, Mock.Of<INotificationService>(), Mock.Of<ILogger<AppointmentService>>());
@@ -600,6 +633,26 @@ public class Stage4FinalSystemAcceptanceE2ETests
         long chairId = 1;              // CHAIR-101-A
 
         var testDate = await GetAvailableSlotForDentistAsync(db, dentistUserId, offsetDays: 4, defaultHour: 10);
+
+        // Clean any conflicting appointments for patient or dentist on test date
+        var staleAppts = await db.Appointments
+            .Where(a => (a.PatientUserId == patientUserId && a.ScheduledStart.HasValue && a.ScheduledStart.Value.Date == testDate.Date)
+                     || (a.AssignedDentistUserId == dentistUserId && a.Status == AppointmentStatus.InService))
+            .ToListAsync();
+        foreach (var a in staleAppts)
+        {
+            if (a.Status == AppointmentStatus.InService)
+            {
+                a.Status = AppointmentStatus.Completed;
+                a.CompletedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                a.Status = AppointmentStatus.Cancelled;
+                a.CancelledAt = DateTime.UtcNow;
+            }
+        }
+        if (staleAppts.Count > 0) await db.SaveChangesAsync();
 
         // ---------------------------------------------------------------------
         // STEP 1: PATIENT BOOKS ONLINE (PendingReceptionReview)

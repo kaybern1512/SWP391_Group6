@@ -1,4 +1,4 @@
-﻿using DentalClinic.Web.Helpers;
+using DentalClinic.Web.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,6 +14,9 @@ namespace DentalClinic.Web.Controllers.Receptionist;
 
 [Authorize(Roles = "Receptionist,SystemAdministrator")]
 [Route("Receptionist/Appointments")]
+
+
+
 public class ReceptionistAppointmentController : Controller
 {
     private readonly IAppointmentApiService _appointmentApiService;
@@ -332,17 +335,155 @@ public class ReceptionistAppointmentController : Controller
     }
 
     [HttpGet("TodayCheckIn")]
-    public async Task<IActionResult> TodayCheckIn([FromQuery] string? search = null, [FromQuery] string? status = null)
+    public async Task<IActionResult> TodayCheckIn(
+        [FromQuery] string? search = null,
+        [FromQuery] string? status = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] string? shift = null,
+        [FromQuery] long? departmentId = null,
+        [FromQuery] long? dentistId = null,
+        [FromQuery] string? dateFilterMode = "today")
     {
-        var result = await _appointmentApiService.GetReceptionistTodayConfirmedAsync(search);
+        var today = ClinicTimeHelper.Today.Date;
+        if (!fromDate.HasValue)
+        {
+            if (dateFilterMode == "tomorrow")
+            {
+                fromDate = today.AddDays(1);
+                toDate = today.AddDays(1);
+            }
+            else if (dateFilterMode == "7days")
+            {
+                fromDate = today;
+                toDate = today.AddDays(6);
+            }
+            else if (dateFilterMode == "custom" && fromDate.HasValue)
+            {
+                // keep custom
+            }
+            else
+            {
+                dateFilterMode = "today";
+                fromDate = today;
+                toDate = today;
+            }
+        }
+        else if (string.IsNullOrEmpty(dateFilterMode))
+        {
+            dateFilterMode = "custom";
+        }
+
+        var resultTask = _appointmentApiService.GetReceptionistTodayConfirmedAsync(search, fromDate, toDate, shift, departmentId, dentistId, status);
+        var deptsTask = _appointmentApiService.GetDepartmentsAsync();
+
+        await Task.WhenAll(resultTask, deptsTask);
+
+        var appts = resultTask.Result.Data ?? new();
+        var depts = deptsTask.Result.Data ?? new();
+
+        var dentists = new List<DentistOptionDto>();
+        if (departmentId.HasValue && departmentId.Value > 0)
+        {
+            var dentistsResult = await _appointmentApiService.GetDentistsAsync(departmentId.Value);
+            dentists = dentistsResult.Data ?? new();
+        }
+
         var vm = new ReceptionistTodayCheckInViewModel
         {
-            ConfirmedAppointments = result.Data ?? new(),
+            ConfirmedAppointments = appts,
             SearchQuery = search,
-            StatusFilter = status
+            StatusFilter = status,
+            FromDate = fromDate,
+            ToDate = toDate,
+            Shift = shift,
+            DepartmentId = departmentId,
+            DentistId = dentistId,
+            DateFilterMode = dateFilterMode ?? "today",
+            Departments = depts,
+            Dentists = dentists
         };
         return View("~/Views/Receptionist/Appointments/TodayCheckIn.cshtml", vm);
     }
+    [HttpGet("GetResources")]
+    public async Task<IActionResult> GetResources(long departmentId, string? start = null, string? end = null)
+    {
+        var startTime = !string.IsNullOrWhiteSpace(start) && DateTime.TryParse(start, out var s) ? s : DateTime.Now;
+        var endTime = !string.IsNullOrWhiteSpace(end) && DateTime.TryParse(end, out var e) ? e : startTime.AddMinutes(30);
+        var result = await _appointmentApiService.GetAvailableResourcesAsync(departmentId, startTime, endTime);
+        return Json(result.Data ?? new());
+    }
+
+    [HttpGet("SearchPatient")]
+    public async Task<IActionResult> SearchPatient([FromQuery] string query)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2)
+        {
+            return Json(new { success = true, patients = new List<AdminUserDto>() });
+        }
+        var result = await _appointmentApiService.GetPatientsAsync(query.Trim());
+        return Json(new { success = result.IsSuccess, patients = result.Data ?? new() });
+    }
+
+    [HttpPost("WalkInCheckIn")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> WalkInCheckIn([FromForm] WalkInCheckInRequest request)
+    {
+        long patientId = request.PatientUserId ?? 0;
+        if (patientId <= 0)
+        {
+            if (string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(request.PhoneNumber))
+            {
+                TempData["ErrorMessage"] = "Vui lòng nhập họ tên và số điện thoại bệnh nhân vãng lai.";
+                return RedirectToAction(nameof(TodayCheckIn));
+            }
+
+            var regResult = await _appointmentApiService.RegisterWalkInPatientAsync(new RegisterWalkInPatientRequest
+            {
+                FullName = request.FullName.Trim(),
+                PhoneNumber = request.PhoneNumber.Trim(),
+                Email = $"walkin_{request.PhoneNumber.Trim()}@dentalcare.local",
+                NationalId = request.NationalId?.Trim(),
+                DateOfBirth = request.DateOfBirth,
+                Gender = request.Gender
+            });
+
+            if (!regResult.IsSuccess || regResult.Data == null)
+            {
+                TempData["ErrorMessage"] = regResult.Message ?? "Không thể đăng ký hồ sơ bệnh nhân vãng lai.";
+                return RedirectToAction(nameof(TodayCheckIn));
+            }
+            patientId = regResult.Data.PatientUserId;
+        }
+
+        var apptReq = new CreateReceptionistAppointmentRequest
+        {
+            PatientUserId = patientId,
+            DepartmentId = request.DepartmentId,
+            RequestedServiceId = request.RequestedServiceId,
+            AssignedDentistUserId = request.AssignedDentistUserId,
+            RequestedDentistUserId = request.AssignedDentistUserId,
+            RoomId = request.RoomId,
+            DentalChairId = request.DentalChairId,
+            ScheduledStart = request.ScheduledStart == default ? DateTime.Now : request.ScheduledStart,
+            ReasonForVisit = string.IsNullOrWhiteSpace(request.ReasonForVisit) ? "Tiếp đón khách vãng lai tại quầy" : request.ReasonForVisit.Trim(),
+            AutoConfirm = true,
+            AutoCheckIn = true
+        };
+
+        var apptResult = await _appointmentApiService.CreateReceptionistAppointmentAsync(apptReq);
+        if (apptResult.IsSuccess)
+        {
+            TempData["SuccessMessage"] = $"Tiếp đón thành công bệnh nhân vãng lai! Mã lịch: {apptResult.Data?.AppointmentCode}. Số thứ tự: {apptResult.Data?.QueueNumber}. Bệnh nhân đã check-in và sẵn sàng vào khám.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = apptResult.Message ?? "Không thể tạo lịch tiếp đón vãng lai.";
+        }
+
+        return RedirectToAction(nameof(TodayCheckIn));
+    }
+
 
     [HttpPost("CheckIn/{id:long}")]
     [ValidateAntiForgeryToken]
@@ -420,7 +561,7 @@ public class ReceptionistAppointmentController : Controller
     {
         var detailResult = await _disruptionApi!.GetDisruptionDetailAsync(id);
         if (!detailResult.IsSuccess || detailResult.Data == null)
-            return Json(new { success = false, message = detailResult.Message ?? "KhÃ´ng tÃ¬m tháº¥y dá»¯ liá»‡u giÃ¡n Ä‘oáº¡n." });
+            return Json(new { success = false, message = detailResult.Message ?? "Không tìm thấy dữ liệu gián đoạn." });
 
         var altResult = await _disruptionApi!.GetAvailableAlternativeDentistsAsync(id);
         var alternatives = altResult.IsSuccess && altResult.Data != null ? altResult.Data : new List<AlternativeDentistDto>();
@@ -439,7 +580,7 @@ public class ReceptionistAppointmentController : Controller
     {
         if (string.IsNullOrWhiteSpace(staffNotes))
         {
-            TempData["ErrorMessage"] = "Vui lÃ²ng nháº­p ghi chÃº biÃªn báº£n xá»­ lÃ½ cá»§a lá»… tÃ¢n.";
+            TempData["ErrorMessage"] = "Vui lòng nhập ghi chú biên bản xử lý của lễ tân.";
             return RedirectToAction(nameof(Disruptions));
         }
 
@@ -458,9 +599,26 @@ public class ReceptionistAppointmentController : Controller
         }
         else
         {
-            TempData["ErrorMessage"] = result.Message ?? "KhÃ´ng thá»ƒ xá»­ lÃ½ giÃ¡n Ä‘oáº¡n.";
+            TempData["ErrorMessage"] = result.Message ?? "Không thể xử lý gián đoạn.";
         }
 
         return RedirectToAction(nameof(Disruptions));
     }
+}
+
+public class WalkInCheckInRequest
+{
+    public long? PatientUserId { get; set; }
+    public string? FullName { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? NationalId { get; set; }
+    public DateTime? DateOfBirth { get; set; }
+    public string? Gender { get; set; }
+    public long DepartmentId { get; set; }
+    public long RequestedServiceId { get; set; }
+    public long AssignedDentistUserId { get; set; }
+    public int RoomId { get; set; }
+    public int DentalChairId { get; set; }
+    public DateTime ScheduledStart { get; set; }
+    public string? ReasonForVisit { get; set; }
 }

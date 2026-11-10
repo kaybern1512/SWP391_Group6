@@ -25,7 +25,7 @@ namespace DentalClinic.Tests.Attendance;
 [Collection("SqlServerUAT")]
 public class AdminOperationsRealDatabaseUatTests
 {
-    private const string ConnectionString = "Server=.\\SQLEXPRESS;Database=DentalCare_AdminOperations_Dev;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
+    private const string ConnectionString = "Server=.\\MSSQLSERVER01;Database=DentalCare_AdminOperations_Dev;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
 
     private static DentalClinicDbContext CreateRealDbContext()
     {

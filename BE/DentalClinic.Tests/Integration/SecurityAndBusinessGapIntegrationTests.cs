@@ -135,7 +135,8 @@ public class SecurityAndBusinessGapIntegrationTests
         Assert.True(result.Success);
         Assert.NotNull(result.Data);
         Assert.Equal(AppointmentStatus.Confirmed, result.Data.Status);
-        Assert.Equal("Q001", result.Data.QueueNumber);
+        Assert.True(result.Data.QueueNumber.EndsWith("001"), $"Expected queue number to end with 001, got {result.Data.QueueNumber}");
+        Assert.StartsWith("Q", result.Data.QueueNumber);
         Assert.NotNull(result.Data.ConfirmedAt);
         Assert.Equal(401, result.Data.AssignedDentistUserId);
         Assert.Equal(11, result.Data.DentalChairId);

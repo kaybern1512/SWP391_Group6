@@ -763,8 +763,10 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
         Assert.Equal(AppointmentStatus.CheckedIn, fresh1!.Status);
         Assert.Equal(AppointmentStatus.CheckedIn, fresh2!.Status);
 
-        Assert.Equal("Q001", fresh1.QueueNumber);
-        Assert.Equal("Q002", fresh2.QueueNumber);
+        Assert.True(fresh1.QueueNumber.EndsWith("001"), $"Expected queue number to end with 001, got {fresh1.QueueNumber}");
+        Assert.True(fresh2.QueueNumber.EndsWith("002"), $"Expected queue number to end with 002, got {fresh2.QueueNumber}");
+        Assert.StartsWith("Q", fresh1.QueueNumber);
+        Assert.StartsWith("Q", fresh2.QueueNumber);
     }
 
     [Fact]

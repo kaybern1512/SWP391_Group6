@@ -31,7 +31,7 @@ public class CompleteServiceFlowIntegrationTests
 
             var server = Environment.GetEnvironmentVariable("TEST_SQL_SERVER")
                          ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE")
-                         ?? ".\\SQLEXPRESS";
+                         ?? ".\\MSSQLSERVER01";
             var dbName = Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Integration_Dev";
             return $"Server={server};Database={dbName};Trusted_Connection=True;TrustServerCertificate=True;";
         }
@@ -106,6 +106,17 @@ public class CompleteServiceFlowIntegrationTests
             });
             await db.SaveChangesAsync();
         }
+
+        // Clean any stale InService appointments for dentist to prevent double-booking block
+        var staleInService = await db.Appointments
+            .Where(a => a.AssignedDentistUserId == dentistUserId && a.Status == AppointmentStatus.InService)
+            .ToListAsync();
+        foreach (var s in staleInService)
+        {
+            s.Status = AppointmentStatus.Completed;
+            s.CompletedAt = DateTime.UtcNow;
+        }
+        if (staleInService.Count > 0) await db.SaveChangesAsync();
 
         _output.WriteLine("======================================================================");
         _output.WriteLine("KHỞI CHẠY LUỒNG KHÁM HOÀN CHỈNH: DỊCH VỤ CHÍNH + DỊCH VỤ THÊM");

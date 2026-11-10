@@ -22,7 +22,7 @@ public class RealDatabaseEndToEndSmokeTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database={Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Integration_Dev"};Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database={Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Integration_Dev"};Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private static async Task<bool> IsDatabaseAvailableAsync(DentalClinicDbContext db)
     {
@@ -136,6 +136,17 @@ public class RealDatabaseEndToEndSmokeTests
         long chairId = 1; // First chair in ROOM-101
 
         var testDate = (await GetValidTestWorkDateAsync(db, dentistUserId, 2, 9, 2, departmentId));
+
+        // Clean any stale InService appointments for dentist or chair
+        var staleInServiceA = await db.Appointments
+            .Where(a => (a.AssignedDentistUserId == dentistUserId || a.DentalChairId == chairId) && a.Status == AppointmentStatus.InService)
+            .ToListAsync();
+        foreach (var s in staleInServiceA)
+        {
+            s.Status = AppointmentStatus.Completed;
+            s.CompletedAt = DateTime.UtcNow;
+        }
+        if (staleInServiceA.Count > 0) await db.SaveChangesAsync();
 
         // Step 1: Patient creates appointment
         var createReq = new CreateAppointmentRequest
@@ -271,6 +282,17 @@ public class RealDatabaseEndToEndSmokeTests
         long chairId = 7; // Chair CHAIR-102-A in ROOM-102
 
         var slotTime = (await GetValidTestWorkDateAsync(db, dentistUserId, 2, 14, 2, departmentId));
+
+        // Clean any stale InService appointments for dentist or chair
+        var staleInServiceB = await db.Appointments
+            .Where(a => (a.AssignedDentistUserId == dentistUserId || a.DentalChairId == chairId) && a.Status == AppointmentStatus.InService)
+            .ToListAsync();
+        foreach (var s in staleInServiceB)
+        {
+            s.Status = AppointmentStatus.Completed;
+            s.CompletedAt = DateTime.UtcNow;
+        }
+        if (staleInServiceB.Count > 0) await db.SaveChangesAsync();
 
         // Step 1: Receptionist creates walk-in appointment
         var walkInReq = new CreateReceptionistAppointmentRequest

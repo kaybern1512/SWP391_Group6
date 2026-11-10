@@ -1302,46 +1302,91 @@ public class AppointmentWebControllerTests
 
 
 
-    [Fact]
-
+        [Fact]
     public async Task Receptionist_TodayCheckIn_ReturnsViewWithList()
-
     {
-
-        _apiMock.Setup(x => x.GetReceptionistTodayConfirmedAsync("test"))
-
+        _apiMock.Setup(x => x.GetReceptionistTodayConfirmedAsync("test", It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string>(), It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<string>()))
             .ReturnsAsync(ApiResult<List<AppointmentDto>>.Success(new List<AppointmentDto>
-
             {
-
-                new() { AppointmentId = 1, AppointmentCode = "APP-TODAY-01", Status = "Confirmed" }
-
+                new() { AppointmentId = 1, AppointmentCode = "APP-TODAY-01", Status = "Confirmed", QueueNumber = "Q-TQ-001" }
             }));
 
-
+        _apiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(new List<DepartmentDto>()));
 
         var controller = new ReceptionistAppointmentController(_apiMock.Object)
-
         {
-
             ControllerContext = CreateContextWithUser(201, "Receptionist")
-
         };
-
-
 
         var result = await controller.TodayCheckIn("test");
 
-
-
         var view = result.Should().BeOfType<ViewResult>().Subject;
-
         var vm = view.Model.Should().BeOfType<ReceptionistTodayCheckInViewModel>().Subject;
-
         vm.ConfirmedAppointments.Should().HaveCount(1);
-
         vm.SearchQuery.Should().Be("test");
+    }
 
+    [Fact]
+    public async Task Receptionist_SearchPatient_ReturnsJsonResult()
+    {
+        _apiMock.Setup(x => x.GetPatientsAsync("0901234567"))
+            .ReturnsAsync(ApiResult<List<AdminUserDto>>.Success(new List<AdminUserDto>
+            {
+                new() { UserId = 50, FullName = "Bệnh nhân test", PhoneNumber = "0901234567", Code = "P-050" }
+            }));
+
+        var controller = new ReceptionistAppointmentController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(201, "Receptionist")
+        };
+
+        var result = await controller.SearchPatient("0901234567");
+        result.Should().BeOfType<JsonResult>();
+    }
+
+    [Fact]
+    public async Task Receptionist_WalkInCheckIn_Success_RegistersPatientAndRedirects()
+    {
+        _apiMock.Setup(x => x.RegisterWalkInPatientAsync(It.IsAny<RegisterWalkInPatientRequest>()))
+            .ReturnsAsync(ApiResult<RegisterWalkInPatientResponse>.Success(new RegisterWalkInPatientResponse
+            {
+                PatientUserId = 999,
+                PatientCode = "P-999",
+                FullName = "Nguyễn Văn Vãng Lai"
+            }));
+
+        _apiMock.Setup(x => x.CreateReceptionistAppointmentAsync(It.IsAny<CreateReceptionistAppointmentRequest>()))
+            .ReturnsAsync(ApiResult<AppointmentDto>.Success(new AppointmentDto
+            {
+                AppointmentId = 888,
+                AppointmentCode = "APP-WALKIN-888",
+                QueueNumber = "Q-TQ-005",
+                Status = "CheckedIn"
+            }));
+
+        var controller = new ReceptionistAppointmentController(_apiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(201, "Receptionist"),
+            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
+        };
+
+        var request = new WalkInCheckInRequest
+        {
+            FullName = "Nguyễn Văn Vãng Lai",
+            PhoneNumber = "0912345678",
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            AssignedDentistUserId = 20,
+            RoomId = 1,
+            DentalChairId = 2
+        };
+
+        var result = await controller.WalkInCheckIn(request);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("TodayCheckIn");
+        controller.TempData["SuccessMessage"]?.ToString().Should().Contain("Q-TQ-005");
     }
 
 

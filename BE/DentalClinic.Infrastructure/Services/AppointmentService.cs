@@ -1,3 +1,4 @@
+using DentalClinic.Infrastructure.Hubs;
 ﻿using DentalClinic.Domain.Common;
 
 using System;
@@ -34,6 +35,9 @@ using Microsoft.Extensions.Logging;
 
 namespace DentalClinic.Infrastructure.Services;
 
+
+
+
 public class AppointmentService : IAppointmentService
 
 {
@@ -47,6 +51,25 @@ public class AppointmentService : IAppointmentService
     private readonly IAppointmentReminderService? _reminderService;
 
     private readonly ILogger<AppointmentService> _logger;
+    private readonly Microsoft.AspNetCore.SignalR.IHubContext<ClinicQueueHub, IClinicQueueClient>? _queueHubContext;
+
+    private static string GetDepartmentCode(string? deptName, long? deptId)
+    {
+        if (deptId == 1) return "TQ";
+        if (deptId == 2) return "TM";
+        if (deptId == 3) return "IP";
+        if (deptId == 4) return "TE";
+        if (!string.IsNullOrWhiteSpace(deptName))
+        {
+            var upper = deptName.ToUpperInvariant();
+            if (upper.Contains("TỔNG QUÁT") || upper.Contains("TONG QUAT") || upper.Contains("NỘI NHA") || upper.Contains("NOI NHA")) return "TQ";
+            if (upper.Contains("CHỈNH NHA") || upper.Contains("CHINH NHA") || upper.Contains("THẨM MỸ") || upper.Contains("THAM MY")) return "TM";
+            if (upper.Contains("IMPLANT") || upper.Contains("PHẪU THUẬT") || upper.Contains("PHAU THUAT")) return "IP";
+            if (upper.Contains("TRẺ EM") || upper.Contains("TRE EM") || upper.Contains("NHI")) return "TE";
+        }
+        return "DC";
+    }
+
 
     public AppointmentService(
 
@@ -78,30 +101,21 @@ public class AppointmentService : IAppointmentService
 
     }
 
+        [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
     public AppointmentService(
-
         DentalClinicDbContext dbContext,
-
         INotificationService notificationService,
-
         IEmailService? emailService,
-
         IAppointmentReminderService? reminderService,
-
-        ILogger<AppointmentService> logger)
-
+        ILogger<AppointmentService> logger,
+        Microsoft.AspNetCore.SignalR.IHubContext<ClinicQueueHub, IClinicQueueClient>? queueHubContext = null)
     {
-
         _dbContext = dbContext;
-
         _notificationService = notificationService;
-
         _emailService = emailService;
-
         _reminderService = reminderService;
-
         _logger = logger;
-
+        _queueHubContext = queueHubContext;
     }
 
     public async Task<ApiResponse<AppointmentDto>> CreatePatientAppointmentAsync(
@@ -444,6 +458,10 @@ public class AppointmentService : IAppointmentService
             ct);
 
         var dto = await MapToDtoAsync(appointment.AppointmentId, ct);
+        if (_queueHubContext != null && dto != null)
+        {
+            _ = _queueHubContext.Clients.All.ReceiveAppointmentCreated(dto);
+        }
 
         return ApiResponse<AppointmentDto>.Ok(dto!, "Yêu cầu đặt lịch khám đã được gửi thành công. Vui lòng chờ phòng khám xem xét.");
 
@@ -477,7 +495,8 @@ public class AppointmentService : IAppointmentService
 
                 (u.PatientProfile != null && u.PatientProfile.FullName.ToLower().Contains(q)) ||
 
-                (u.PatientProfile != null && u.PatientProfile.PatientCode.ToLower().Contains(q)));
+                (u.PatientProfile != null && u.PatientProfile.PatientCode.ToLower().Contains(q)) ||
+                (u.PatientProfile != null && u.PatientProfile.NationalId != null && u.PatientProfile.NationalId.Contains(q)));
 
         }
 
@@ -502,7 +521,9 @@ public class AppointmentService : IAppointmentService
                 FullName = u.PatientProfile != null ? u.PatientProfile.FullName : "N/A",
 
                 Code = u.PatientProfile != null ? u.PatientProfile.PatientCode : null,
-
+                NationalId = u.PatientProfile != null ? u.PatientProfile.NationalId : null,
+                DateOfBirth = u.PatientProfile != null ? u.PatientProfile.DateOfBirth : null,
+                Gender = u.PatientProfile != null ? u.PatientProfile.Gender : null,
                 CreatedAt = u.CreatedAt
 
             })
@@ -680,14 +701,11 @@ public class AppointmentService : IAppointmentService
             };
 
             var patientProfile = new PatientProfile
-
             {
-
                 UserId = userAccount.UserId,
-
                 PatientCode = patientCode,
-
                 FullName = request.FullName.Trim(),
+                NationalId = string.IsNullOrWhiteSpace(request.NationalId) ? null : request.NationalId.Trim(),
 
                 DateOfBirth = request.DateOfBirth.HasValue ? DateOnly.FromDateTime(request.DateOfBirth.Value) : null,
 
@@ -1311,22 +1329,18 @@ public class AppointmentService : IAppointmentService
                     .ToListAsync(ct);
 
                 int maxSeq = 0;
-
                 foreach (var qn in existingQueueNumbers)
-
                 {
-
-                    if (!string.IsNullOrEmpty(qn) && qn.StartsWith("Q") && int.TryParse(qn.Substring(1), out int num))
-
+                    if (string.IsNullOrWhiteSpace(qn)) continue;
+                    var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
+                    if (match.Success && int.TryParse(match.Value, out int num))
                     {
-
                         if (num > maxSeq) maxSeq = num;
-
                     }
-
                 }
-
-                queueNumber = $"Q{(maxSeq + 1):D3}";
+                var dept = await _dbContext.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == request.DepartmentId, ct);
+                var deptCode = GetDepartmentCode(dept?.Name, request.DepartmentId);
+                queueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
 
             }
 
@@ -1362,7 +1376,8 @@ public class AppointmentService : IAppointmentService
 
                 QueueNumber = shouldConfirm ? queueNumber : null,
 
-                Status = shouldConfirm ? AppointmentStatus.Confirmed : AppointmentStatus.PendingReceptionReview,
+                Status = (request.AutoCheckIn && shouldConfirm) ? AppointmentStatus.CheckedIn : (shouldConfirm ? AppointmentStatus.Confirmed : AppointmentStatus.PendingReceptionReview),
+                CheckedInAt = (request.AutoCheckIn && shouldConfirm) ? now : null,
 
                 ConfirmedAt = shouldConfirm ? now : null,
 
@@ -1388,7 +1403,7 @@ public class AppointmentService : IAppointmentService
 
                 Note = shouldConfirm
 
-                    ? $"Lễ tân tiếp nhận, phân bổ tài nguyên và xác nhận lịch hẹn tại quầy. Số thứ tự: {queueNumber}."
+                    ? (request.AutoCheckIn ? $"Tiếp đón vãng lai và check-in trực tiếp tại quầy. Số thứ tự: {queueNumber}." : $"Lễ tân tiếp nhận, phân bổ tài nguyên và xác nhận lịch hẹn tại quầy. Số thứ tự: {queueNumber}.")
 
                     : "Lễ tân tiếp nhận và tạo yêu cầu đặt lịch hẹn tại quầy.",
 
@@ -1692,6 +1707,7 @@ public class AppointmentService : IAppointmentService
             appointment.Status = AppointmentStatus.Withdrawn;
 
             appointment.CancelledAt = now;
+            appointment.QueueNumber = null;
 
             appointment.CancellationReason = string.IsNullOrWhiteSpace(reason) ? "Bệnh nhân rút lại yêu cầu đặt lịch." : reason.Trim();
 
@@ -1946,8 +1962,8 @@ public class AppointmentService : IAppointmentService
             var oldStatus = appointment.Status;
 
             appointment.Status = AppointmentStatus.Cancelled;
-
             appointment.CancelledAt = now;
+            appointment.QueueNumber = null;
 
             var reasonPrefix = isLate ? "[Hủy sát giờ <12h] " : "";
 
@@ -3274,22 +3290,76 @@ public class AppointmentService : IAppointmentService
 
     public async Task<ApiResponse<List<AppointmentDto>>> GetReceptionistTodayConfirmedAsync(
         string? searchQuery = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? shift = null,
+        long? departmentId = null,
+        long? dentistId = null,
+        string? status = null,
         CancellationToken ct = default)
     {
-        var today = ClinicTimeHelper.Today.Date;
-        var tomorrow = today.AddDays(1);
+        DateTime startRange;
+        DateTime endRange;
+
+        if (fromDate.HasValue)
+        {
+            startRange = fromDate.Value.Date;
+            endRange = toDate.HasValue ? toDate.Value.Date.AddDays(1) : startRange.AddDays(1);
+        }
+        else
+        {
+            startRange = ClinicTimeHelper.Today.Date;
+            endRange = startRange.AddDays(1);
+        }
 
         var query = _dbContext.Appointments
             .AsNoTracking()
             .Where(a => a.ScheduledStart != null &&
-                        a.ScheduledStart.Value >= today &&
-                        a.ScheduledStart.Value < tomorrow &&
-                        (a.Status == AppointmentStatus.Confirmed ||
-                         a.Status == AppointmentStatus.CheckedIn ||
-                         a.Status == AppointmentStatus.Waiting ||
-                         a.Status == AppointmentStatus.InService ||
-                         a.Status == AppointmentStatus.Completed ||
-                         a.Status == AppointmentStatus.NoShow));
+                        a.ScheduledStart.Value >= startRange &&
+                        a.ScheduledStart.Value < endRange);
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var statusStr = status.Trim();
+            query = query.Where(a => a.Status == statusStr);
+        }
+        else
+        {
+            query = query.Where(a =>
+                a.Status == AppointmentStatus.Confirmed ||
+                a.Status == AppointmentStatus.CheckedIn ||
+                a.Status == AppointmentStatus.Waiting ||
+                a.Status == AppointmentStatus.InService ||
+                a.Status == AppointmentStatus.Completed ||
+                a.Status == AppointmentStatus.NoShow);
+        }
+
+        if (departmentId.HasValue && departmentId.Value > 0)
+        {
+            query = query.Where(a => a.DepartmentId == departmentId.Value);
+        }
+
+        if (dentistId.HasValue && dentistId.Value > 0)
+        {
+            query = query.Where(a => a.AssignedDentistUserId == dentistId.Value || (a.AssignedDentistUserId == null && a.RequestedDentistUserId == dentistId.Value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(shift))
+        {
+            var s = shift.Trim().ToLowerInvariant();
+            if (s.Contains("sang") || s.Contains("morning"))
+            {
+                query = query.Where(a => a.ScheduledStart!.Value.Hour >= 7 && a.ScheduledStart!.Value.Hour < 12);
+            }
+            else if (s.Contains("chieu") || s.Contains("afternoon"))
+            {
+                query = query.Where(a => a.ScheduledStart!.Value.Hour >= 12 && a.ScheduledStart!.Value.Hour < 17);
+            }
+            else if (s.Contains("toi") || s.Contains("evening"))
+            {
+                query = query.Where(a => a.ScheduledStart!.Value.Hour >= 17 && a.ScheduledStart!.Value.Hour < 22);
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
@@ -3298,7 +3368,8 @@ public class AppointmentService : IAppointmentService
                 a.AppointmentCode.ToLower().Contains(q) ||
                 a.PatientUser.PatientCode.ToLower().Contains(q) ||
                 a.PatientUser.FullName.ToLower().Contains(q) ||
-                (a.PatientUser.User.PhoneNumber != null && a.PatientUser.User.PhoneNumber.Contains(q)));
+                (a.PatientUser.User.PhoneNumber != null && a.PatientUser.User.PhoneNumber.Contains(q)) ||
+                (a.QueueNumber != null && a.QueueNumber.ToLower().Contains(q)));
         }
 
         var finalQuery = query
@@ -3394,22 +3465,20 @@ public class AppointmentService : IAppointmentService
                     .ToListAsync(ct);
 
                 int maxSeq = 0;
-
                 foreach (var qn in existingQueueNumbers)
-
                 {
-
-                    if (!string.IsNullOrEmpty(qn) && qn.StartsWith("Q") && int.TryParse(qn.Substring(1), out int num))
-
+                    if (string.IsNullOrWhiteSpace(qn)) continue;
+                    var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
+                    if (match.Success && int.TryParse(match.Value, out int num))
                     {
-
                         if (num > maxSeq) maxSeq = num;
-
                     }
-
                 }
-
-                appointment.QueueNumber = $"Q{(maxSeq + 1):D3}";
+                var dept = appointment.DepartmentId.HasValue
+                    ? await _dbContext.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == appointment.DepartmentId.Value, ct)
+                    : null;
+                var deptCode = GetDepartmentCode(dept?.Name, appointment.DepartmentId);
+                appointment.QueueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
 
             }
 
@@ -3471,6 +3540,11 @@ public class AppointmentService : IAppointmentService
 
             }
 
+            var queueDto = await MapToDtoAsync(appointment.AppointmentId, ct);
+            if (_queueHubContext != null && queueDto != null)
+            {
+                _ = _queueHubContext.Clients.All.ReceivePatientCheckedIn(queueDto);
+            }
             return ApiResponse.Ok($"Check-in bệnh nhân thành công. Số thứ tự: {appointment.QueueNumber}.");
 
         }
@@ -3725,6 +3799,7 @@ public class AppointmentService : IAppointmentService
 
             appointment.CancelledAt = now;
 
+            appointment.QueueNumber = null;
             appointment.CancellationReason = $"[Lễ tân hủy] {reason.Trim()}";
 
             appointment.UpdatedAt = now;
@@ -4704,22 +4779,20 @@ public class AppointmentService : IAppointmentService
                 .ToListAsync(ct);
 
             int maxSeq = 0;
-
             foreach (var qn in existingQueueNumbers)
-
             {
-
-                if (!string.IsNullOrEmpty(qn) && qn.StartsWith("Q") && int.TryParse(qn.Substring(1), out int num))
-
+                if (string.IsNullOrWhiteSpace(qn)) continue;
+                var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
+                if (match.Success && int.TryParse(match.Value, out int num))
                 {
-
                     if (num > maxSeq) maxSeq = num;
-
                 }
-
             }
-
-            var queueNumber = $"Q{(maxSeq + 1):D3}";
+            var dept = appointment.DepartmentId.HasValue
+                ? await _dbContext.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == appointment.DepartmentId.Value, ct)
+                : null;
+            var deptCode = GetDepartmentCode(dept?.Name, appointment.DepartmentId);
+            var queueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
 
             var oldStatus = appointment.Status;
 
@@ -5333,6 +5406,8 @@ public class AppointmentService : IAppointmentService
                 DentalChairId = appointment.DentalChairId
             };
 
+            var queueDto = await MapToDtoAsync(appointment.AppointmentId, ct);
+            if (_queueHubContext != null && queueDto != null) { _ = _queueHubContext.Clients.All.ReceivePatientInService(queueDto); }
             return ApiResponse<StartAppointmentResultDto>.Ok(resultDto, "Đã tiếp nhận bệnh nhân vào ghế điều trị thành công.");
         }
         finally
@@ -5443,6 +5518,8 @@ public class AppointmentService : IAppointmentService
 
             ct);
 
+        var queueDto = await MapToDtoAsync(appointment.AppointmentId, ct);
+        if (_queueHubContext != null && queueDto != null) { _ = _queueHubContext.Clients.All.ReceiveTreatmentCompleted(queueDto); }
         return ApiResponse.Ok("Đã hoàn thành ca khám thành công.");
 
     }

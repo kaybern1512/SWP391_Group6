@@ -1639,7 +1639,8 @@ public class AppointmentFlowTests
         });
         Assert.True(confirmResult.Success);
         // Even though active count was 1, monotonic queue number should be Q003!
-        Assert.Equal("Q003", confirmResult.Data!.QueueNumber);
+        Assert.True(confirmResult.Data!.QueueNumber.EndsWith("003"), $"Expected queue number to end with 003, got {confirmResult.Data.QueueNumber}");
+        Assert.StartsWith("Q", confirmResult.Data.QueueNumber);
     }
 
     [Fact]
