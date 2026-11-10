@@ -8,7 +8,13 @@ param()
 Write-Host "==> [Stop-Daemons] Scanning for active DentalClinic processes and MSBuild nodes..." -ForegroundColor Cyan
 
 # Terminate dotnet processes running DentalClinic projects or MSBuild
-$dotnetProcs = Get-CimInstance Win32_Process -Filter "Name = 'dotnet.exe'" -ErrorAction SilentlyContinue
+$dotnetProcs = @()
+try {
+    $dotnetProcs = Get-CimInstance Win32_Process -Filter "Name = 'dotnet.exe'" -ErrorAction Stop
+} catch {
+    # Fallback if CIM is restricted by sandbox
+    $dotnetProcs = @()
+}
 $stoppedCount = 0
 
 foreach ($proc in $dotnetProcs) {
