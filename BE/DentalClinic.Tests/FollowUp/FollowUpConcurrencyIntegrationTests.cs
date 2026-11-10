@@ -2505,6 +2505,9 @@ public class FollowUpConcurrencyIntegrationTests
         await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
 
         var leaveStart = DateTime.Today.AddDays(1);
+        var existingConflicts = await setupDb.Appointments.Where(a => (a.AssignedDentistUserId == doctorId || a.RequestedDentistUserId == doctorId) && a.ScheduledStart >= leaveStart).ToListAsync();
+        foreach (var c in existingConflicts) c.Status = AppointmentStatus.Cancelled;
+        if (existingConflicts.Count > 0) await setupDb.SaveChangesAsync();
         var leaveEnd = DateTime.Today.AddDays(90); // 90-day leave
 
         var existingLeaveAppts = await setupDb.Appointments
@@ -2531,7 +2534,7 @@ public class FollowUpConcurrencyIntegrationTests
             AvailabilityStatus = DentistAvailabilityStatus.OnLeave,
             Reason = "Nghỉ phép dài hạn 90 ngày"
         }, doctorId, UserRole.Dentist);
-        Assert.True(leaveRes.Success);
+        Assert.True(leaveRes.Success, leaveRes.Message);
 
         // Manager attempts to confirm an appointment on Day 75 (falls within the 90-day leave)
         var start = targetDate.AddHours(10);
@@ -2580,6 +2583,9 @@ public class FollowUpConcurrencyIntegrationTests
         await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
 
         var leaveStart = DateTime.Today.AddDays(1);
+        var existingConflicts = await setupDb.Appointments.Where(a => (a.AssignedDentistUserId == doctorId || a.RequestedDentistUserId == doctorId) && a.ScheduledStart >= leaveStart).ToListAsync();
+        foreach (var conflict in existingConflicts) conflict.Status = AppointmentStatus.Cancelled;
+        if (existingConflicts.Count > 0) await setupDb.SaveChangesAsync();
 
         // Doctor registers indefinite leave (EndDateTime = null)
         using var leaveDb = _fixture.CreateDbContext();
@@ -2592,7 +2598,7 @@ public class FollowUpConcurrencyIntegrationTests
             AvailabilityStatus = DentistAvailabilityStatus.OnLeave,
             Reason = "Nghỉ phép không xác định thời hạn"
         }, doctorId, UserRole.Dentist);
-        Assert.True(leaveRes.Success);
+        Assert.True(leaveRes.Success, leaveRes.Message);
 
         var start = targetDate.AddHours(14);
         var end = start.AddMinutes(30);

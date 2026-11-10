@@ -3,7 +3,7 @@
 -- MASTER CLEAN DATABASE SCHEMA (44 TABLES, VIEWS, STORED PROCEDURES)
 -- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
 -- Database Name: DentalClinicManagementDB
--- Generated: 2026-11-09 23:24:39
+-- Generated: 2026-11-10 23:17:34
 -- =========================================================================================
 
 -- =========================================================================================

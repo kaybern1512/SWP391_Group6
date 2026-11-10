@@ -56,6 +56,7 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
         // 2. RESTORE isolated test database
         await using (var cmd = conn.CreateCommand())
         {
+            cmd.CommandTimeout = 180;
             cmd.CommandText = $@"
 RESTORE DATABASE [{DatabaseName}] 
 FROM DISK = N'{backupPath}' 
@@ -242,6 +243,7 @@ UPDATE Departments SET ManagerUserId = 5 WHERE DepartmentId = 3;
             if (string.IsNullOrWhiteSpace(trimmed)) continue;
 
             await using var batchCmd = dbConn.CreateCommand();
+            batchCmd.CommandTimeout = 120;
             batchCmd.CommandText = trimmed;
             await batchCmd.ExecuteNonQueryAsync();
         }

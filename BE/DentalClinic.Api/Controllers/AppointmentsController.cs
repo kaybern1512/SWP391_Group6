@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading;
@@ -228,7 +228,7 @@ public class AppointmentsController : ControllerBase
     public async Task<IActionResult> RegisterWalkInPatient([FromBody] RegisterWalkInPatientRequest request, CancellationToken ct)
     {
         var staffUserId = GetCurrentUserId();
-        if (staffUserId <= 0) return Unauthorized(ApiResponse.Fail("KhÃ´ng thá»ƒ xÃ¡c Ä‘á»‹nh danh tÃ­nh nhÃ¢n viÃªn tiáº¿p Ä‘Ã³n."));
+        if (staffUserId <= 0) return Unauthorized(ApiResponse.Fail("Không thể xác định danh tính nhân viên tiếp đón."));
 
         var result = await _appointmentService.RegisterWalkInPatientAsync(staffUserId, request, ct);
         if (!result.Success)

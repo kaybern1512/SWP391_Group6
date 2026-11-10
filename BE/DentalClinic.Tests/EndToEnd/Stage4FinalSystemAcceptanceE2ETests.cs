@@ -298,7 +298,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
             TreatmentPlanItemId = existingItem.TreatmentPlanItemId,
             DentistUserId = 3,
             SessionDate = DateTime.UtcNow,
-            TreatmentResult = "Thá»±c hiá»‡n thá»§ thuáº­t"
+            TreatmentResult = "Thực hiện thủ thuật"
         };
         db.TreatmentSessions.Add(session);
         await db.SaveChangesAsync();
@@ -306,7 +306,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
         var pres = new Prescription
         {
             TreatmentSessionId = session.TreatmentSessionId,
-            GeneralInstructions = "Uá»‘ng sau Äƒn",
+            GeneralInstructions = "Uống sau ăn",
             IssuedAt = DateTime.UtcNow
         };
         db.Prescriptions.Add(pres);
@@ -317,9 +317,9 @@ public class Stage4FinalSystemAcceptanceE2ETests
             PrescriptionId = pres.PrescriptionId,
             MedicationName = "Amoxicillin 500mg Test",
             Dosage = "500mg",
-            Frequency = "2 láº§n/ngÃ y",
-            Duration = "5 ngÃ y",
-            Instructions = "KÃª Ä‘Æ¡n: 10 viÃªn",
+            Frequency = "2 lần/ngày",
+            Duration = "5 ngày",
+            Instructions = "Kê đơn: 10 viên",
             PrescribedQuantity = 10
         };
         db.PrescriptionItems.Add(presItem);
@@ -329,7 +329,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
             MedicineCode = "MED-TST-" + Guid.NewGuid().ToString("N")[..6],
             MedicineName = "Amoxicillin 500mg Test",
             UnitPrice = 5000,
-            Unit = "ViÃªn",
+            Unit = "Viên",
             Status = "Active",
             CreatedAt = DateTime.UtcNow
         };
@@ -525,7 +525,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
             RequestedServiceId = 1,
             RequestedDentistUserId = 3,
             ScheduledStart = testDate,
-            ReasonForVisit = "TÃ¡i khÃ¡m theo dÃµi"
+            ReasonForVisit = "Tái khám theo dõi"
         };
         var bookRes = await apptService.CreatePatientAppointmentAsync(13, bookReq);
         Assert.True(bookRes.Success, bookRes.Message);
@@ -536,7 +536,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
             TreatmentSessionId = existingSession.TreatmentSessionId,
             AppointmentId = apptId,
             RecommendedDate = testDate,
-            Reason = "Theo dÃµi tá»§y rÄƒng sau 1 tuáº§n",
+            Reason = "Theo dõi tủy răng sau 1 tuần",
             Status = "Pending"
         };
         db.FollowUpSchedules.Add(followUp);
@@ -568,7 +568,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
         Assert.Equal("Completed", fuAfterStart!.Status);
 
         // 3. Dentist completes appointment -> Completed (FollowUp becomes Completed)
-        var comp = await apptService.DentistCompleteAppointmentAsync(apptId, 3, "TÃ¡i khÃ¡m hoÃ n táº¥t");
+        var comp = await apptService.DentistCompleteAppointmentAsync(apptId, 3, "Tái khám hoàn tất");
         Assert.True(comp.Success);
 
         var fuAfterComplete = await db.FollowUpSchedules.FindAsync(followUp.FollowUpId);
@@ -592,10 +592,10 @@ public class Stage4FinalSystemAcceptanceE2ETests
         var prescService = new PrescriptionService(db, Mock.Of<ILogger<PrescriptionService>>());
         var feedbackService = new FeedbackService(db);
 
-        long patientUserId = 13;       // Tráº§n Mai Chi
-        long receptionistUserId = 2;   // Lá»… TÃ¢n Nguyá»…n Thá»‹ Mai
-        long dentistUserId = 3;        // BS. Tráº§n VÄƒn HÃ¹ng
-        long departmentId = 1;         // Khoa RÄƒng Tá»•ng QuÃ¡t
+        long patientUserId = 13;       // Trần Mai Chi
+        long receptionistUserId = 2;   // Lễ Tân Nguyễn Thị Mai
+        long dentistUserId = 3;        // BS. Trần Văn Hùng
+        long departmentId = 1;         // Khoa Răng Tổng Quát
         long roomId = 1;               // ROOM-101
         long chairId = 1;              // CHAIR-101-A
 
@@ -610,7 +610,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
             RequestedServiceId = 1,
             RequestedDentistUserId = dentistUserId,
             ScheduledStart = testDate,
-            ReasonForVisit = "TrÃ¡m rÄƒng tháº©m má»¹ vÃ  kiá»ƒm tra rÄƒng sá»‘ 36"
+            ReasonForVisit = "Trám răng thẩm mỹ và kiểm tra răng số 36"
         };
         var bookResult = await apptService.CreatePatientAppointmentAsync(patientUserId, bookReq);
         Assert.True(bookResult.Success, bookResult.Message);
@@ -664,8 +664,8 @@ public class Stage4FinalSystemAcceptanceE2ETests
             PatientUserId = patientUserId,
             Diagnosis = "SÃ¢u ngÃ  sÃ¢u rÄƒng 36, tá»§y bÃ¬nh thÆ°á»ng",
             Symptoms = "ÃŠ buá»‘t nháº¹ khi Äƒn Ä‘á»“ ngá»t",
-            ClinicalFindings = "Lá»— sÃ¢u máº·t nhai rÄƒng 36 kÃ­ch thÆ°á»›c 2x2mm",
-            ClinicalNotes = "LÃ m sáº¡ch lá»— sÃ¢u, trÃ¡m composite quang trÃ¹ng há»£p",
+            ClinicalFindings = "Lỗ sâu mặt nhai răng 36 kích thước 2x2mm",
+            ClinicalNotes = "Làm sạch lỗ sâu, trám composite quang trùng hợp",
             CompleteAppointment = false,
             ToothConditions = new List<ToothConditionInput>
             {
@@ -674,7 +674,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
                     ToothNumber = "36",
                     Surface = "O",
                     Condition = "Caries",
-                    Note = "TrÃ¡m composite máº·t nhai rÄƒng 36"
+                    Note = "Trám composite mặt nhai răng 36"
                 }
             }
         };
@@ -695,7 +695,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
             DepartmentServiceId = 1,
             Quantity = 1,
             UnitPrice = 150000, // Actual procedure price
-            Note = "TrÃ¡m composite hoÃ n táº¥t"
+            Note = "Trám composite hoàn tất"
         };
         var perfResult = await perfService.AddPerformedServiceToAppointmentAsync(appointmentId, dentistUserId, perfReq);
         Assert.True(perfResult.Success, perfResult.Message);
@@ -706,16 +706,16 @@ public class Stage4FinalSystemAcceptanceE2ETests
         var prescReq = new CreatePrescriptionRequest
         {
             AppointmentId = appointmentId,
-            GeneralInstructions = "Uá»‘ng sau Äƒn 30 phÃºt, vá»‡ sinh rÄƒng miá»‡ng hÃ ng ngÃ y",
+            GeneralInstructions = "Uống sau ăn 30 phÃºt, vá»‡ sinh rÄƒng miá»‡ng hÃ ng ngÃ y",
             Items = new List<CreatePrescriptionItemInput>
             {
                 new()
                 {
                     MedicationName = "Paracetamol 500mg",
                     Dosage = "500mg",
-                    Frequency = "NgÃ y 2 láº§n khi Ä‘au",
-                    Duration = "5 ngÃ y",
-                    Instructions = "KÃª Ä‘Æ¡n: 10 viÃªn"
+                    Frequency = "Ngày 2 lần khi đau",
+                    Duration = "5 ngày",
+                    Instructions = "Kê đơn: 10 viên"
                 }
             }
         };
@@ -733,7 +733,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
                 MedicineCode = "MED-PARA-500",
                 MedicineName = "Paracetamol 500mg",
                 UnitPrice = 6500,
-                Unit = "ViÃªn",
+                Unit = "Viên",
                 Status = "Active",
                 CreatedAt = DateTime.UtcNow
             };
@@ -804,8 +804,8 @@ public class Stage4FinalSystemAcceptanceE2ETests
             Note = "HÃ³a Ä‘Æ¡n dá»‹ch vá»¥ Ä‘iá»u trá»‹ rÄƒng 36 vÃ  thuá»‘c cáº¥p thá»±c táº¿",
             Items = new List<CreateInvoiceItemRequest>
             {
-                new() { Description = "TrÃ¡m composite tháº©m má»¹ máº·t nhai rÄƒng 36", Quantity = 1, UnitPrice = 150000 },
-                new() { Description = "Paracetamol 500mg (6 viÃªn thá»±c cáº¥p)", Quantity = 6, UnitPrice = 6583.3333333333333333333333333m }
+                new() { Description = "Trám composite thẩm mỹ mặt nhai răng 36", Quantity = 1, UnitPrice = 150000 },
+                new() { Description = "Paracetamol 500mg (6 viên thực cấp)", Quantity = 6, UnitPrice = 6583.3333333333333333333333333m }
             }
         };
         var invoiceResult = await billingService.CreateInvoiceAsync(receptionistUserId, invoiceReq);
@@ -858,7 +858,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
             DentistUserId = dentistUserId,
             DentistRating = 5,
             ClinicRating = 5,
-            Comment = "BÃ¡c sÄ© HÃ¹ng vÃ  Lá»… tÃ¢n Mai ráº¥t nháº¹ nhÃ ng, chu Ä‘Ã¡o vÃ  chuyÃªn nghiá»‡p!"
+            Comment = "Bác sĩ Hùng và Lễ tân Mai rất nhẹ nhàng, chu đáo và chuyên nghiệp!"
         };
         var feedResult = await feedbackService.CreateFeedbackAsync(feedReq, patientUserId);
         Assert.True(feedResult.Success, feedResult.Message);

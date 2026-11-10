@@ -1498,7 +1498,7 @@ public class AppointmentWebControllerTests
 
             {
 
-                new() { DepartmentId = 1, Name = "Khoa RÄƒng Tá»•ng QuÃ¡t" }
+                new() { DepartmentId = 1, Name = "Khoa Răng Tổng Quát" }
 
             }));
 
