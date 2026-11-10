@@ -54,7 +54,7 @@ public static class SqlAppLockHelper
     /// <summary>Lock key for a prescription entity during dispensing operations.</summary>
     public static string PrescriptionKey(long prescriptionId) => $"Lock_Prescription_{prescriptionId}";
 
-/// <summary>Lock key for receptionist daily coverage and leave approval synchronization.</summary>
+    /// <summary>Lock key for receptionist daily coverage and leave approval synchronization.</summary>
     public static string ReceptionistCoverageDateKey(DateOnly date) => $"Lock_Receptionist_Coverage_{date:yyyyMMdd}";
 
     /// <summary>Lock key for receptionist schedule on a specific calendar date.</summary>
@@ -119,6 +119,17 @@ public static class SqlAppLockHelper
         {
             var hasTransaction = dbContext.Database.CurrentTransaction != null;
             var lockOwner = hasTransaction ? "Transaction" : "Session";
+            bool openedConnection = false;
+
+            if (!hasTransaction)
+            {
+                var conn = dbContext.Database.GetDbConnection();
+                if (conn.State != ConnectionState.Open)
+                {
+                    await dbContext.Database.OpenConnectionAsync(ct);
+                    openedConnection = true;
+                }
+            }
 
             foreach (var key in sortedKeys)
             {
@@ -135,13 +146,17 @@ public static class SqlAppLockHelper
                 var returnCode = pRes.Value is int code ? code : Convert.ToInt32(pRes.Value);
                 if (returnCode < 0)
                 {
+                    if (openedConnection)
+                    {
+                        try { dbContext.Database.CloseConnection(); } catch { }
+                    }
                     throw new TimeoutException($"Không thể lấy khóa ứng dụng cho tài nguyên '{key}' (mã lỗi sp_getapplock: {returnCode}). Vui lòng thử lại.");
                 }
             }
 
             if (!hasTransaction)
             {
-                return new SessionLockReleaser(dbContext, sortedKeys);
+                return new SessionLockReleaser(dbContext, sortedKeys, openedConnection);
             }
 
             return EmptyDisposable.Instance;
@@ -180,12 +195,14 @@ public static class SqlAppLockHelper
     {
         private readonly DentalClinicDbContext _dbContext;
         private readonly List<string> _keys;
+        private readonly bool _openedConnection;
         private int _disposed;
 
-        public SessionLockReleaser(DentalClinicDbContext dbContext, List<string> keys)
+        public SessionLockReleaser(DentalClinicDbContext dbContext, List<string> keys, bool openedConnection)
         {
             _dbContext = dbContext;
             _keys = keys;
+            _openedConnection = openedConnection;
         }
 
         public void Dispose()
@@ -200,6 +217,18 @@ public static class SqlAppLockHelper
                     _dbContext.Database.ExecuteSqlRaw(
                         "EXEC sp_releaseapplock @Resource = @resource, @LockOwner = 'Session';",
                         pResource);
+                }
+                catch
+                {
+                    // Suppress cleanup error
+                }
+            }
+
+            if (_openedConnection)
+            {
+                try
+                {
+                    _dbContext.Database.CloseConnection();
                 }
                 catch
                 {

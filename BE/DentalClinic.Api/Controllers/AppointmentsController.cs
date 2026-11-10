@@ -455,7 +455,7 @@ public class AppointmentsController : ControllerBase
 
     [HttpPost("api/dentist/appointments/{id:long}/start")]
     [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
-    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<StartAppointmentResultDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> DentistStartAppointment(long id, CancellationToken ct)
     {

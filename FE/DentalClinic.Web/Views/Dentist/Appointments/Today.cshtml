@@ -56,6 +56,21 @@
         </div>
     </div>
 
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-4" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm mb-4" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
     @if (Model.Appointments.Count == 0)
     {
         <div class="card border-0 shadow-sm text-center py-5">
@@ -216,15 +231,24 @@
                                 </td>
                                 <td class="text-end pe-3">
                                     <div class="d-flex align-items-center justify-content-end gap-1 flex-wrap">
-                                        @if (appt.Status == "CheckedIn")
+                                        @if (appt.Status == "CheckedIn" || appt.Status == "Waiting")
                                         {
-                                            <form asp-controller="DentistAppointment" asp-action="Start" asp-route-id="@appt.AppointmentId" method="post" class="d-inline">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
-                                                <button type="submit" class="btn btn-sm btn-primary fw-semibold shadow-sm text-nowrap" title="Tiếp nhận bệnh nhân vào ghế và bắt đầu khám bệnh">
-                                                    <i class="bi bi-box-arrow-in-right me-1"></i>Vào Khám
+                                            @if (appt.DentalChairId.HasValue && appt.DentalChairId.Value > 0)
+                                            {
+                                                <form asp-controller="DentistAppointment" asp-action="Start" asp-route-id="@appt.AppointmentId" method="post" class="d-inline start-exam-form">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" />
+                                                    <button type="submit" class="btn btn-sm btn-primary fw-semibold shadow-sm text-nowrap btn-start-exam" title="Tiếp nhận bệnh nhân vào ghế và bắt đầu khám bệnh">
+                                                        <i class="bi bi-box-arrow-in-right me-1"></i>Vào Khám
+                                                    </button>
+                                                </form>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" class="btn btn-sm btn-warning text-dark fw-semibold shadow-sm text-nowrap" onclick="openPickChairModal(@appt.AppointmentId, '@appt.PatientName', '@(appt.RoomName ?? "")', 0)" title="Vui lòng chọn ghế nha khoa trước khi vào khám">
+                                                    <i class="bi bi-pin-map-fill me-1"></i>Chọn Ghế Để Khám
                                                 </button>
-                                            </form>
+                                            }
                                         }
                                         else if (appt.Status == "Confirmed")
                                         {
@@ -399,5 +423,17 @@
             const modal = new bootstrap.Modal(document.getElementById('pickChairModal'));
             modal.show();
         }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.start-exam-form').forEach(form => {
+                form.addEventListener('submit', function() {
+                    const btn = this.querySelector('.btn-start-exam');
+                    if (btn) {
+                        btn.disabled = true;
+                        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Đang vào khám...';
+                    }
+                });
+            });
+        });
     </script>
 }

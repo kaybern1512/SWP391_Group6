@@ -362,3 +362,11 @@ public class RegisterWalkInPatientResponse
     public string Status { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
 }
+
+public class StartAppointmentResultDto
+{
+    public long AppointmentId { get; set; }
+    public long PatientUserId { get; set; }
+    public string Status { get; set; } = "InService";
+    public long? DentalChairId { get; set; }
+}

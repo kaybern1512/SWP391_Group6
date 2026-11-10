@@ -280,3 +280,11 @@ public class BookingComboDto
     public List<string> Benefits { get; set; } = new();
     public string Status { get; set; } = "Active";
 }
+
+public class StartAppointmentResultDto
+{
+    public long AppointmentId { get; set; }
+    public long PatientUserId { get; set; }
+    public string Status { get; set; } = "InService";
+    public long? DentalChairId { get; set; }
+}

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -503,8 +503,16 @@ public class SqlServerImagingAndReferralConcurrencyTests
                         a.ScheduledStart < scheduledEnd.AddHours(4) &&
                         a.ScheduledEnd > scheduledStart)
             .ToListAsync();
-        seedDb.Appointments.RemoveRange(existingAppts);
-        await seedDb.SaveChangesAsync();
+        if (existingAppts.Any())
+        {
+            var apptIds = existingAppts.Select(a => a.AppointmentId).ToList();
+            var referencingReferrals = await seedDb.DepartmentReferrals
+                .Where(r => r.DestinationAppointmentId.HasValue && apptIds.Contains(r.DestinationAppointmentId.Value))
+                .ToListAsync();
+            foreach (var r in referencingReferrals) r.DestinationAppointmentId = null;
+            seedDb.Appointments.RemoveRange(existingAppts);
+            await seedDb.SaveChangesAsync();
+        }
 
         var req1 = new ScheduleDestinationReferralRequest
         {
