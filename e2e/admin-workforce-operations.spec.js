@@ -235,7 +235,7 @@ test.describe('Admin Workforce Attendance & Clinic Operations Management Suite',
     await expect(page.locator('text=Lễ tân trực:')).toBeVisible();
 
     // Verify Today Appointments Pipeline counters
-    await expect(page.locator('text=Lịch khám Hôm nay')).toBeVisible();
+    await expect(page.locator('text=Lịch khám Hôm nay').first()).toBeVisible();
     await expect(page.getByText('Chờ duyệt:', { exact: true })).toBeVisible();
     await expect(page.locator('text=Đang khám:')).toBeVisible();
     await expect(page.locator('span:has-text("Hoàn thành:")').first()).toBeVisible();

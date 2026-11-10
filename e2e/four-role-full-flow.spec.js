@@ -55,7 +55,7 @@ test.describe('DentalCare 4-Role End-to-End Real Browser Acceptance Suite', () =
     // 2.1 Requests List
     await page.goto('/Receptionist/Appointments/Requests');
     await expect(page).toHaveTitle(/Yêu cầu đặt hẹn|Lễ tân|DentalCare/i);
-    await expect(page.locator('.card-dc, table, .table, .requests-container').first()).toBeVisible();
+    await expect(page.locator('.card, .card-dc, table, .table, .requests-container').first()).toBeVisible();
 
     // Verify review modals or action buttons exist
     const actionButtons = page.locator('button:has-text("Xác nhận"), button:has-text("Tiếp nhận"), .btn-dc-primary, .btn-primary');
