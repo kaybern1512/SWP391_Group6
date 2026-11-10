@@ -317,6 +317,121 @@ public class EmailService : IEmailService
         await SendEmailAsync(toEmail, patientName, subject, htmlBody, devLogSummary, isOtp: false, ct);
     }
 
+    public async Task SendDoctorLeaveDisruptionEmailAsync(
+        string toEmail,
+        string patientName,
+        string appointmentCode,
+        DateTime scheduledStart,
+        string serviceName,
+        string actionUrl,
+        CancellationToken ct = default)
+    {
+        var subject = $"[DentalCare] ThÃ´ng bÃ¡o thay Ä‘á»•i lá»‹ch khÃ¡m nha khoa - MÃ£ {appointmentCode}";
+        var formattedDate = scheduledStart.ToString("dd/MM/yyyy");
+        var formattedTime = scheduledStart.ToString("HH:mm");
+
+        var htmlBody = $@"
+<div style=""font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;"">
+    <div style=""text-align: center; margin-bottom: 24px;"">
+        <h2 style=""color: #0d9488; margin: 0; font-size: 22px;"">ðŸ¦· Nha Khoa Ä a ChuyÃªn Khoa DentalCare</h2>
+        <p style=""color: #64748b; font-size: 13px; margin: 4px 0 0;"">ChÄƒm sÃ³c ná»¥ cÆ°á» i toÃ n diá»‡n - TiÃªu chuáº©n quá»‘c táº¿</p>
+    </div>
+
+    <div style=""background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; border-radius: 8px; padding: 18px 24px; margin-bottom: 24px;"">
+        <h3 style=""margin: 0 0 6px; font-size: 17px;"">âš  ThÃ´ng BÃ¡o Thay Ä á»•i Lá»‹ch KhÃ¡m Nha Khoa</h3>
+        <p style=""margin: 0; font-size: 13px; opacity: 0.95;"">
+            KÃ­nh gá»­i QuÃ½ khÃ¡ch <strong>{WebUtility.HtmlEncode(patientName)}</strong>
+        </p>
+    </div>
+
+    <div style=""color: #334155; line-height: 1.6; font-size: 14px; margin-bottom: 20px;"">
+        <p>
+            DentalCare xin thÃ´ng bÃ¡o ráº±ng bÃ¡c sÄ© phá»¥ trÃ¡ch lá»‹ch háº¹n <strong>{WebUtility.HtmlEncode(appointmentCode)}</strong> (dá»‹ch vá»¥: <em>{WebUtility.HtmlEncode(serviceName)}</em>) cá»§a QuÃ½ khÃ¡ch vÃ o ngÃ y <strong>{formattedDate}</strong> lÃºc <strong>{formattedTime}</strong> hiá»‡n khÃ´ng thá»ƒ tiáº¿p tá»¥c lá»‹ch khÃ¡m theo káº¿ hoáº¡ch do cÃ³ thay Ä‘á»•i vá»  lá»‹ch cÃ´ng tÃ¡c.
+        </p>
+        <p>
+            ChÃºng tÃ´i thÃ nh tháº­t xin lá»—i vÃ¬ sá»± báº¥t tiá»‡n nÃ y.
+        </p>
+        <p>
+            Ä á»ƒ báº£o Ä‘áº£m viá»‡c thÄƒm khÃ¡m cá»§a QuÃ½ khÃ¡ch diá»…n ra thuáº­n lá»£i nháº¥t, QuÃ½ khÃ¡ch cÃ³ thá»ƒ lá»±a chá» n má»™t trong hai phÆ°Æ¡ng Ã¡n sau:
+        </p>
+        <div style=""background-color: #f8fafc; border-left: 4px solid #0d9488; padding: 12px 16px; margin: 12px 0; border-radius: 0 8px 8px 0;"">
+            <strong style=""color: #0f766e;"">PhÆ°Æ¡ng Ã¡n 1 â€“ Ä á»•i bÃ¡c sÄ©:</strong><br/>
+            Giá»¯ nguyÃªn ngÃ y giá»  khÃ¡m vÃ  lá»±a chá» n bÃ¡c sÄ© khÃ¡c cÃ³ chuyÃªn mÃ´n tÆ°Æ¡ng Ä‘Æ°Æ¡ng trong cÃ¹ng chuyÃªn khoa.
+        </div>
+        <div style=""background-color: #f8fafc; border-left: 4px solid #0284c7; padding: 12px 16px; margin: 12px 0; border-radius: 0 8px 8px 0;"">
+            <strong style=""color: #0369a1;"">PhÆ°Æ¡ng Ã¡n 2 â€“ Dá» i lá»‹ch khÃ¡m:</strong><br/>
+            Giá»¯ nguyÃªn bÃ¡c sÄ© Ä‘ang phá»¥ trÃ¡ch vÃ  lá»±a chá» n ngÃ y giá»  khÃ¡m má»›i phÃ¹ há»£p sau khi bÃ¡c sÄ© trá»Ÿ láº¡i lÃ m viá»‡c.
+        </div>
+        <p style=""font-size: 13px; color: #64748b;"">
+            Náº¿u hai phÆ°Æ¡ng Ã¡n trÃªn chÆ°a thuáº­n tiá»‡n, QuÃ½ khÃ¡ch cÃ³ thá»ƒ liÃªn há»‡ bá»™ pháº­n lá»… tÃ¢n qua hotline phÃ²ng khÃ¡m Ä‘á»ƒ Ä‘Æ°á»£c há»— trá»£ trá»±c tiáº¿p.
+        </p>
+    </div>
+
+    <div style=""text-align: center; margin: 28px 0;"">
+        <a href=""{actionUrl}"" style=""background-color: #0d9488; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 15px; padding: 14px 28px; border-radius: 8px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(13, 148, 136, 0.3);"">
+            âž¡ï¸  Chá» n PhÆ°Æ¡ng Ã¡n Xá»­ LÃ½ Lá»‹ch Háº¹n
+        </a>
+    </div>
+
+    <div style=""text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 16px;"">
+        <p style=""margin: 0 0 4px;"">TrÃ¢n trá» ng,<br/><strong>Ä á»™i ngÅ© Nha Khoa DentalCare</strong></p>
+        <p style=""margin: 0;"">Ä Ã¢y lÃ  email thÃ´ng bÃ¡o tá»± Ä‘á»™ng, vui lÃ²ng khÃ´ng tráº£ lá» i trá»±c tiáº¿p email nÃ y.</p>
+    </div>
+</div>";
+
+        var devLogSummary = $"DOCTOR LEAVE DISRUPTION: Code={appointmentCode}, Patient={patientName}, Time={formattedDate} {formattedTime}, ActionUrl={actionUrl}";
+        await SendEmailAsync(toEmail, patientName, subject, htmlBody, devLogSummary, isOtp: false, ct);
+    }
+
+    public async Task SendDoctorLeaveRecoveryConfirmationEmailAsync(
+        string toEmail,
+        string patientName,
+        string appointmentCode,
+        string resolutionSummary,
+        DateTime appointmentTime,
+        string dentistName,
+        CancellationToken ct = default)
+    {
+        var subject = $"[DentalCare] XÃ¡c nháº­n Ä‘iá» u chá»‰nh lá»‹ch khÃ¡m thÃ nh cÃ´ng - MÃ£ {appointmentCode}";
+        var formattedTime = $"{appointmentTime:HH:mm}, ngÃ y {appointmentTime:dd/MM/yyyy}";
+
+        var htmlBody = $@"
+<div style=""font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;"">
+    <div style=""text-align: center; margin-bottom: 24px;"">
+        <h2 style=""color: #0d9488; margin: 0; font-size: 22px;"">ðŸ¦· Nha Khoa Ä a ChuyÃªn Khoa DentalCare</h2>
+    </div>
+
+    <div style=""background: #10b981; color: #ffffff; border-radius: 8px; padding: 18px 24px; margin-bottom: 24px; text-align: center;"">
+        <h3 style=""margin: 0 0 6px; font-size: 18px;"">âœ… Ä iá» u Chá»‰nh Lá»‹ch KhÃ¡m ThÃ nh CÃ´ng</h3>
+        <p style=""margin: 0; font-size: 14px; opacity: 0.95;"">
+            Cáº£m Æ¡n QuÃ½ khÃ¡ch <strong>{WebUtility.HtmlEncode(patientName)}</strong> Ä‘Ã£ xÃ¡c nháº­n phÆ°Æ¡ng Ã¡n xá»­ lÃ½.
+        </p>
+    </div>
+
+    <div style=""background-color: #f8fafc; border-radius: 8px; padding: 20px; margin-bottom: 20px;"">
+        <p style=""margin: 0 0 10px; font-size: 14px; color: #334155;"">
+            <strong>Káº¿t quáº£ Ä‘iá» u chá»‰nh:</strong> {WebUtility.HtmlEncode(resolutionSummary)}
+        </p>
+        <p style=""margin: 0 0 10px; font-size: 14px; color: #334155;"">
+            <strong>MÃ£ lá»‹ch háº¹n:</strong> <span style=""color: #0d9488; font-weight: 700;"">{WebUtility.HtmlEncode(appointmentCode)}</span>
+        </p>
+        <p style=""margin: 0 0 10px; font-size: 14px; color: #334155;"">
+            <strong>Thá» i gian khÃ¡m:</strong> <span style=""color: #0284c7; font-weight: 600;"">{formattedTime}</span>
+        </p>
+        <p style=""margin: 0; font-size: 14px; color: #334155;"">
+            <strong>BÃ¡c sÄ© phá»¥ trÃ¡ch:</strong> {WebUtility.HtmlEncode(dentistName)}
+        </p>
+    </div>
+
+    <div style=""text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 16px;"">
+        <p style=""margin: 0;"">TrÃ¢n trá» ng,<br/><strong>Nha Khoa DentalCare</strong></p>
+    </div>
+</div>";
+
+        var devLogSummary = $"DOCTOR LEAVE RECOVERY CONFIRMED: Code={appointmentCode}, Summary={resolutionSummary}, Time={formattedTime}, Dentist={dentistName}";
+        await SendEmailAsync(toEmail, patientName, subject, htmlBody, devLogSummary, isOtp: false, ct);
+    }
+
     private async Task SendEmailAsync(string toEmail, string fullName, string subject, string htmlBody, string payloadInfo, bool isOtp, CancellationToken ct)
     {
         var smtpServer = _configuration["EmailSettings:SmtpServer"];

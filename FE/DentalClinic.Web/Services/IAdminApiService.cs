@@ -56,4 +56,21 @@ public interface IAdminApiService
     Task<ApiResult<List<DentistDepartmentAllocationDto>>> GetDentistAllocationsAsync(long? departmentId = null);
     Task<ApiResult<DentistDepartmentAllocationDto>> AssignDentistToDepartmentAsync(AssignDentistDepartmentRequest request);
     Task<ApiResult> ToggleDentistAllocationStatusAsync(long id);
+
+    // Workforce Attendance & Monthly Reconciliation
+    Task<ApiResult<WorkforceMonthlySummaryDto>> GetMonthlyWorkforceReportAsync(int year, int month, string? role = null);
+    Task<ApiResult<AttendancePeriodClosureDto>> FinalizeWorkforcePeriodAsync(int year, int month);
+    Task<ApiResult<AttendancePeriodClosureDto>> ReopenWorkforcePeriodAsync(int year, int month, string reason);
+    Task<byte[]> ExportWorkforceReportCsvAsync(int year, int month, string? role = null);
+
+    // Operations Dashboard
+    Task<ApiResult<ClinicOperationsDashboardDto>> GetClinicOperationsDashboardAsync(DateOnly? date = null);
+
+    // Admin Impact Analysis
+    Task<ApiResult<UserLockImpactDto>> PreviewUserLockImpactAsync(long userId);
+    Task<ApiResult<ServiceDeactivationImpactDto>> PreviewServiceDeactivationImpactAsync(long serviceId);
+    Task<ApiResult<RoomChairDeactivationImpactDto>> PreviewRoomDeactivationImpactAsync(long roomId);
+    Task<ApiResult<RoomChairDeactivationImpactDto>> PreviewChairDeactivationImpactAsync(long chairId);
+    Task<ApiResult<PriceChangeImpactDto>> PreviewPriceChangeImpactAsync(long serviceId, decimal newPrice);
+    Task<ApiResult> ExecuteSafeStatusChangeAsync(long userId, string newStatus, string? reason);
 }

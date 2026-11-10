@@ -1,0 +1,303 @@
+@using DentalClinic.Web.Models.ApiDtos
+@{
+    ViewData["Title"] = "Bàn Giao Ca Trực Lễ Tân";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var currentUserId = (long)ViewBag.CurrentUserId;
+    var summary = ViewBag.Summary as HandoverSummaryItemsDto ?? new();
+    var handovers = ViewBag.Handovers as List<ReceptionistWorkHandoverDto> ?? new();
+    var colleagues = ViewBag.Colleagues as List<AdminUserDto> ?? new();
+    var todayShift = ViewBag.TodayShift as ReceptionistWorkScheduleDto;
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h2 class="h4 fw-bold text-dark mb-1">
+                <i class="bi bi-arrow-repeat text-success me-2"></i>Bàn Giao Ca Trực & Tiếp Nhận Công Việc
+            </h2>
+            <p class="text-muted small mb-0">Liên thông danh sách chờ tiếp đón, hóa đơn viện phí cần thu và tin nhắn tư vấn giữa các ca trực</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createHandoverModal">
+                <i class="bi bi-file-earmark-plus me-1"></i> Lập Biên Bản Bàn Giao
+            </button>
+            <a href="@Url.Action("Index", "ReceptionistSchedule")" class="btn btn-outline-secondary">
+                <i class="bi bi-calendar-check me-1"></i> Lịch Trực
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Live Queue Snapshot Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-3 border-start border-4 border-warning h-100">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small fw-bold text-uppercase">Hàng Đợi Tiếp Đón Hôm Nay</span>
+                        <span class="badge bg-warning text-dark fs-6">@summary.PendingAppointmentRequests ca</span>
+                    </div>
+                    <div class="small text-muted mb-2">Lịch hẹn cần xác nhận check-in hoặc đón tiếp vào phòng khám:</div>
+                    @if (summary.SamplePendingAppointments.Any())
+                    {
+                        <ul class="list-group list-group-flush small">
+                            @foreach (var appt in summary.SamplePendingAppointments)
+                            {
+                                <li class="list-group-item px-0 py-1 d-flex justify-content-between align-items-center bg-transparent border-0">
+                                    <span>
+                                        <i class="bi bi-person-fill text-secondary me-1"></i><strong>@appt.PatientName</strong>
+                                        <span class="text-muted">(@appt.ServiceName)</span>
+                                    </span>
+                                    <span class="badge bg-light text-dark">@appt.ScheduledStart.ToString("HH:mm")</span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <div class="text-muted small fst-italic">Không có lịch hẹn tồn đọng.</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-3 border-start border-4 border-danger h-100">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small fw-bold text-uppercase">Hóa Đơn Đang Chờ Thu Viện Phí</span>
+                        <span class="badge bg-danger fs-6">@summary.UnpaidInvoicesCount hóa đơn</span>
+                    </div>
+                    <div class="small text-muted mb-2">Hóa đơn bệnh nhân hoàn tất khám/điều trị cần thanh toán hoặc trả góp:</div>
+                    @if (summary.SampleUnpaidInvoices.Any())
+                    {
+                        <ul class="list-group list-group-flush small">
+                            @foreach (var inv in summary.SampleUnpaidInvoices)
+                            {
+                                <li class="list-group-item px-0 py-1 d-flex justify-content-between align-items-center bg-transparent border-0">
+                                    <span>
+                                        <i class="bi bi-receipt text-danger me-1"></i><strong>@inv.InvoiceCode</strong> - @inv.PatientName
+                                    </span>
+                                    <span class="badge bg-danger bg-opacity-10 text-danger fw-bold">
+                                        @inv.RemainingAmount.ToString("N0") VNĐ
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <div class="text-muted small fst-italic">Tất cả hóa đơn đã được thanh toán hoặc không có viện phí tồn.</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-3 border-start border-4 border-info h-100">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small fw-bold text-uppercase">Tin Nhắn Tư Vấn Chưa Xong</span>
+                        <span class="badge bg-info text-dark fs-6">@summary.ActiveChatSessionsCount phiên</span>
+                    </div>
+                    <div class="small text-muted mb-2">Bệnh nhân đang nhắn tin qua kênh trực tuyến cần lễ tân ca tiếp theo hỗ trợ tư vấn:</div>
+                    <div class="d-flex align-items-center mt-3">
+                        <i class="bi bi-chat-dots-fill text-info fs-1 me-3"></i>
+                        <div>
+                            <div class="fw-bold">Phiên hỗ trợ trực tuyến</div>
+                            <small class="text-muted">Được chia sẻ tự động trên hàng đợi tin nhắn chung của toàn bộ lễ tân trực.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Handover Log Table -->
+    <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">
+                <i class="bi bi-journal-text text-primary me-2"></i>Biên Bản Bàn Giao Ca Trong Ngày
+            </h5>
+            <span class="badge bg-light text-dark border">Hôm Nay: @DateTime.Today.ToString("dd/MM/yyyy")</span>
+        </div>
+        <div class="card-body p-0">
+            @if (!handovers.Any())
+            {
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary opacity-50"></i>
+                    Chưa có biên bản bàn giao ca nào được lập cho hôm nay.
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Mã BB</th>
+                                <th>Người bàn giao</th>
+                                <th>Người nhận bàn giao</th>
+                                <th>Loại bàn giao</th>
+                                <th>Tồn đọng (Hẹn / HĐ / Chat)</th>
+                                <th>Nội dung dặn dò</th>
+                                <th>Trạng thái</th>
+                                <th>Thời gian</th>
+                                <th class="text-end">Tiếp nhận</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var h in handovers)
+                            {
+                                <tr>
+                                    <td class="fw-bold text-secondary">#@h.HandoverId</td>
+                                    <td class="fw-semibold">
+                                        @h.FromReceptionistName
+                                        @if (h.FromReceptionistUserId == currentUserId)
+                                        {
+                                            <span class="badge bg-primary ms-1">Tôi</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(h.ToReceptionistName))
+                                        {
+                                            <span class="fw-semibold">@h.ToReceptionistName</span>
+                                            if (h.ToReceptionistUserId == currentUserId)
+                                            {
+                                                <span class="badge bg-success ms-1">Tôi</span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Toàn bộ ca trực tiếp theo</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (h.HandoverType == "ShiftEnd")
+                                        {
+                                            <span class="badge bg-info text-dark">Hết ca trực</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark">Bàn giao nghỉ phép</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="small">
+                                            <span class="text-warning fw-bold">@h.PendingAppointmentCount</span> lịch hẹn &bull;
+                                            <span class="text-danger fw-bold">@h.UnpaidInvoiceCount</span> hóa đơn &bull;
+                                            <span class="text-info fw-bold">@h.ActiveChatCount</span> chat
+                                        </div>
+                                    </td>
+                                    <td class="small" style="max-width: 250px;">
+                                        @h.Notes
+                                    </td>
+                                    <td>
+                                        @if (h.HandoverStatus == "Acknowledged")
+                                        {
+                                            <span class="badge bg-success"><i class="bi bi-check2-all me-1"></i>Đã tiếp nhận</span>
+                                            if (h.AcknowledgedAt.HasValue)
+                                            {
+                                                <div class="text-muted extra-small">@h.AcknowledgedAt.Value.ToString("HH:mm")</div>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Chờ tiếp nhận</span>
+                                        }
+                                    </td>
+                                    <td class="text-muted small">
+                                        @h.CreatedAt.ToString("HH:mm")
+                                    </td>
+                                    <td class="text-end">
+                                        @if (h.HandoverStatus != "Acknowledged" && h.FromReceptionistUserId != currentUserId)
+                                        {
+                                            <form method="post" action="@Url.Action("Acknowledge", "ReceptionistHandover", new { handoverId = h.HandoverId })">
+                                                <button type="submit" class="btn btn-sm btn-success">
+                                                    <i class="bi bi-check-lg me-1"></i> Tiếp nhận
+                                                </button>
+                                            </form>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Modal Create Handover -->
+<div class="modal fade" id="createHandoverModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post" action="@Url.Action("Create", "ReceptionistHandover")">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-file-earmark-plus me-2"></i>Lập Biên Bản Bàn Giao Ca Trực
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Lý Do / Loại Bàn Giao <span class="text-danger">*</span></label>
+                        <select name="HandoverType" class="form-select" required>
+                            <option value="ShiftEnd">Hết ca trực - Bàn giao ca kế tiếp</option>
+                            <option value="Leave">Bàn giao trước khi nghỉ phép</option>
+                            <option value="Emergency">Bàn giao đột xuất</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Bàn Giao Cho Đồng Nghiệp Chỉ Định (Tùy chọn)</label>
+                        <select name="ToReceptionistUserId" class="form-select">
+                            <option value="">-- Để trống để bàn giao chung cho ca kế tiếp --</option>
+                            @foreach (var c in colleagues)
+                            {
+                                <option value="@c.UserId">@c.FullName (@c.Email)</option>
+                            }
+                        </select>
+                        <div class="form-text">Nếu không chọn cụ thể, mọi lễ tân ở ca tiếp theo đều có thể tiếp nhận biên bản này.</div>
+                    </div>
+
+                    <div class="card bg-light border-0 p-3 mb-3 small">
+                        <div class="fw-bold mb-1"><i class="bi bi-layers-half text-primary me-1"></i>Thống kê tồn đọng tự động đính kèm:</div>
+                        <ul class="mb-0 ps-3">
+                            <li>Lịch hẹn chờ tiếp đón: <strong>@summary.PendingAppointmentRequests</strong> ca</li>
+                            <li>Hóa đơn chờ thanh toán: <strong>@summary.UnpaidInvoicesCount</strong> hóa đơn</li>
+                            <li>Phiên tư vấn đang mở: <strong>@summary.ActiveChatSessionsCount</strong> phiên</li>
+                        </ul>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Ghi Chú & Dặn Dò Công Việc <span class="text-danger">*</span></label>
+                        <textarea name="Notes" class="form-control" rows="4" required placeholder="Ghi chú chi tiết các bệnh nhân cần lưu ý đặc biệt, các ca thanh toán viện phí chưa dứt điểm, các yêu cầu từ bác sĩ..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check2-circle me-1"></i> Lưu Biên Bản Bàn Giao
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

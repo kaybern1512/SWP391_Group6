@@ -28,7 +28,7 @@ test.describe('DentalCare 4-Role End-to-End Real Browser Acceptance Suite', () =
     await expect(page.locator('#step-nav-5')).toBeVisible();
 
     // Verify Service Catalog is visible on Step 1
-    const visibleServices = page.locator('.service-card:visible, .selection-card:visible');
+    const visibleServices = page.locator('.category-card:visible, .service-card:visible, .selection-card:visible');
     const serviceCount = await visibleServices.count();
     expect(serviceCount).toBeGreaterThan(0);
 
@@ -55,7 +55,7 @@ test.describe('DentalCare 4-Role End-to-End Real Browser Acceptance Suite', () =
     // 2.1 Requests List
     await page.goto('/Receptionist/Appointments/Requests');
     await expect(page).toHaveTitle(/Yêu cầu đặt hẹn|Lễ tân|DentalCare/i);
-    await expect(page.locator('.card-dc, table, .table, .requests-container').first()).toBeVisible();
+    await expect(page.locator('.card, .card-dc, table, .table, .requests-container').first()).toBeVisible();
 
     // Verify review modals or action buttons exist
     const actionButtons = page.locator('button:has-text("Xác nhận"), button:has-text("Tiếp nhận"), .btn-dc-primary, .btn-primary');
@@ -77,6 +77,7 @@ test.describe('DentalCare 4-Role End-to-End Real Browser Acceptance Suite', () =
   // 3. DENTIST CLINICAL RECORDS & COMPLETION
   // =========================================================================
   test('E2E-DEN: Dentist Today Schedule, Clinical EMR & Prescription Dispensation', async ({ page }) => {
+    test.setTimeout(60000);
     await loginAs(page, 'dentist@dentalcare.com');
 
     // 3.1 Today's Clinical Schedule

@@ -121,6 +121,11 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendGetAsync<BookingEligibilityDto>("/api/patient/appointments/booking-eligibility");
     }
 
+    public async Task<ApiResult<List<DentalClinic.Web.ViewModels.Appointments.BookingComboViewModel>>> GetAvailableCombosAsync()
+    {
+        return await SendGetAsync<List<DentalClinic.Web.ViewModels.Appointments.BookingComboViewModel>>("/api/patient/appointments/combos");
+    }
+
     // ==========================================
     // RECEPTIONIST
     // ==========================================
@@ -238,9 +243,9 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendGetAsync<List<AppointmentDto>>($"/api/dentist/appointments{qs}");
     }
 
-    public async Task<ApiResult> DentistStartAppointmentAsync(long id)
+    public async Task<ApiResult<StartAppointmentResultDto>> DentistStartAppointmentAsync(long id)
     {
-        return await SendPostActionAsync($"/api/dentist/appointments/{id}/start", new object());
+        return await SendPostAsync<object, StartAppointmentResultDto>($"/api/dentist/appointments/{id}/start", new object());
     }
 
     public async Task<ApiResult> DentistCompleteAppointmentAsync(long id, string? notes = null)

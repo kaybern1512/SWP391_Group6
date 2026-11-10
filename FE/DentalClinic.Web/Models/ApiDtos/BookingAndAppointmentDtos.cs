@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -102,6 +102,8 @@ public class CreateReceptionistAppointmentRequest
     public long PatientUserId { get; set; }
     public long DepartmentId { get; set; }
     public long RequestedServiceId { get; set; }
+    public string? ComboCode { get; set; }
+    public long? ComboId { get; set; }
     public long? RequestedDentistUserId { get; set; }
     public long? AssignedDentistUserId { get; set; }
     public long? RoomId { get; set; }
@@ -115,6 +117,8 @@ public class CreateAppointmentRequest
 {
     public long DepartmentId { get; set; }
     public long RequestedServiceId { get; set; }
+    public string? ComboCode { get; set; }
+    public long? ComboId { get; set; }
     public long? RequestedDentistUserId { get; set; }
     public long? AssignedDentistUserId { get; set; }
     public long? RoomId { get; set; }
@@ -135,6 +139,9 @@ public class AppointmentDto
     public long DepartmentId { get; set; }
     public string DepartmentName { get; set; } = string.Empty;
     public long RequestedServiceId { get; set; }
+    public string? ComboCode { get; set; }
+    public long? ComboId { get; set; }
+    public string? ComboTitle { get; set; }
     public string ServiceName { get; set; } = string.Empty;
     private int? _durationMinutes;
 
@@ -354,4 +361,12 @@ public class RegisterWalkInPatientResponse
     public string PhoneNumber { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
+}
+
+public class StartAppointmentResultDto
+{
+    public long AppointmentId { get; set; }
+    public long PatientUserId { get; set; }
+    public string Status { get; set; } = "InService";
+    public long? DentalChairId { get; set; }
 }

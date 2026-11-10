@@ -299,7 +299,7 @@ public class DentistScheduleWebControllerTests
         _feedbackApiMock.Setup(x => x.GetFeedbackByAppointmentIdAsync(100))
             .ReturnsAsync(ApiResult<VisitFeedbackDto?>.Failure("Not found"));
 
-        var controller = new PatientAppointmentController(_appointmentApiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_appointmentApiMock.Object, _feedbackApiMock.Object, new Mock<IAppointmentDisruptionApiService>().Object)
         {
             ControllerContext = CreateContext(50, "Patient")
         };
@@ -322,7 +322,7 @@ public class DentistScheduleWebControllerTests
                 Status = "Confirmed"
             }));
 
-        var controller = new PatientAppointmentController(_appointmentApiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_appointmentApiMock.Object, _feedbackApiMock.Object, new Mock<IAppointmentDisruptionApiService>().Object)
         {
             ControllerContext = CreateContext(50, "Patient"),
             TempData = CreateTempData()
@@ -341,7 +341,7 @@ public class DentistScheduleWebControllerTests
         _feedbackApiMock.Setup(x => x.CreateFeedbackAsync(It.IsAny<CreateFeedbackRequest>()))
             .ReturnsAsync(ApiResult<VisitFeedbackDto>.Success(new VisitFeedbackDto { FeedbackId = 1 }));
 
-        var controller = new PatientAppointmentController(_appointmentApiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_appointmentApiMock.Object, _feedbackApiMock.Object, new Mock<IAppointmentDisruptionApiService>().Object)
         {
             ControllerContext = CreateContext(50, "Patient"),
             TempData = CreateTempData()

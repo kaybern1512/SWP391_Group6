@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data;
 using System.IO;
 using System.Threading.Tasks;
@@ -11,7 +11,7 @@ namespace DentalClinic.Tests.FollowUp;
 
 public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
 {
-    public string ServerName { get; } = Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? ".\\MSSQLSERVER01";
+    public string ServerName { get; } = Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? ".\\SQLEXPRESS";
     public string RunId { get; } = Guid.NewGuid().ToString("N")[..8];
     public string DatabaseName { get; private set; } = null!;
     public string ConnectionString { get; private set; } = null!;
@@ -21,6 +21,12 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
     private const string Phase0MigrationRelativePath = @"DB\redesign_migrations\20261109_Phase0_Database_Standardization_4Roles.sql";
     private const string AddTreatmentPlanItemMigrationRelativePath = @"DB\redesign_migrations\20261109_Add_TreatmentPlanItemId_To_Appointments.sql";
     private const string UpdateTreatmentPlansMigrationRelativePath = @"DB\redesign_migrations\20261109_Update_TreatmentPlans_Status_CheckConstraint_Add_Active_Pending.sql";
+    private const string ImagingMigrationRelativePath = @"DB\redesign_migrations\20261110_Add_Imaging_Room_Equipment_And_Queue_Schema.sql";
+    private const string ConsultationAndReferralMigrationRelativePath = @"DB\redesign_migrations\20261110_Add_Clinical_Consultation_And_Referral_Linkage.sql";
+    private const string DoctorLeaveMigrationRelativePath = @"DB\redesign_migrations\20261109_Add_DoctorLeave_And_AppointmentDisruption.sql";
+    private const string ReceptionistShiftMigrationRelativePath = @"DB\redesign_migrations\20261110_Receptionist_Shift_Leave_Workforce_Schema.sql";
+    private const string StaffAttendanceMigrationRelativePath = @"DB\migrations\20261110_Add_Staff_Attendance_And_Operations_Tables.sql";
+    private const string ServiceCombosMigrationRelativePath = @"DB\20261110_Add_ServiceCombos_And_Appointment_Combo_Tracking.sql";
 
     public async Task InitializeAsync()
     {
@@ -46,7 +52,7 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
         string dataPath;
         await using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT CAST(ISNULL(SERVERPROPERTY('InstanceDefaultDataPath'), 'C:\\Program Files\\Microsoft SQL Server\\MSSQL16.MSSQLSERVER01\\MSSQL\\DATA\\') AS VARCHAR(260));";
+            cmd.CommandText = "SELECT CAST(ISNULL(SERVERPROPERTY('InstanceDefaultDataPath'), 'C:\\Program Files\\Microsoft SQL Server\\MSSQL16.SQLEXPRESS\\MSSQL\\DATA\\') AS VARCHAR(260));";
             dataPath = (string)(await cmd.ExecuteScalarAsync() ?? @"C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER01\MSSQL\DATA\");
         }
 
@@ -91,72 +97,39 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
         var addFkPath = Path.Combine(repoRoot, AddTreatmentPlanItemMigrationRelativePath);
         await ApplyMigrationFileAsync(addFkPath, DatabaseName, ConnectionString);
         var updatePlanPath = Path.Combine(repoRoot, UpdateTreatmentPlansMigrationRelativePath);
-        await ApplyMigrationFileAsync(updatePlanPath, DatabaseName, ConnectionString);
-
-        // 5. Ensure test fixture personas, profiles, and department managers
-        await using (var cmd = conn.CreateCommand())
+        if (File.Exists(updatePlanPath))
         {
-            cmd.CommandText = $@"
-USE [{DatabaseName}];
-
--- 5.1 PatientProfiles for concurrency test patients 6 & 7
-IF NOT EXISTS (SELECT 1 FROM PatientProfiles WHERE UserId = 6)
-BEGIN
-    INSERT INTO PatientProfiles (UserId, PatientCode, FullName, DateOfBirth, Gender, CreatedAt, UpdatedAt)
-    VALUES (6, 'PAT-TEST-006', N'Bệnh nhân Test 6', '1990-01-01', 'Male', SYSDATETIME(), SYSDATETIME());
-END
-IF NOT EXISTS (SELECT 1 FROM PatientProfiles WHERE UserId = 7)
-BEGIN
-    INSERT INTO PatientProfiles (UserId, PatientCode, FullName, DateOfBirth, Gender, CreatedAt, UpdatedAt)
-    VALUES (7, 'PAT-TEST-007', N'Bệnh nhân Test 7', '1992-05-15', 'Male', SYSDATETIME(), SYSDATETIME());
-END
-
--- 5.2 DentistProfile for Doctor 1 (used across tests B25-B35)
-IF NOT EXISTS (SELECT 1 FROM StaffProfiles WHERE UserId = 1)
-BEGIN
-    INSERT INTO StaffProfiles (UserId, EmployeeCode, FullName, EmploymentStatus, CreatedAt, UpdatedAt)
-    VALUES (1, 'EMP-DOC-01', N'Bác sĩ 1', 'Active', SYSDATETIME(), SYSDATETIME());
-END
-IF NOT EXISTS (SELECT 1 FROM DentistProfiles WHERE UserId = 1)
-BEGIN
-    INSERT INTO DentistProfiles (UserId, LicenseNumber, Qualification, YearsOfExperience, Biography)
-    VALUES (1, 'LIC-DOC-01', N'Bác sĩ điều trị', 10, N'Test Doctor 1');
-END
-IF NOT EXISTS (SELECT 1 FROM DentistDepartments WHERE DentistUserId = 1 AND DepartmentId = 1)
-BEGIN
-    INSERT INTO DentistDepartments (DentistUserId, DepartmentId, Status, AssignedAt)
-    VALUES (1, 1, 'Active', SYSDATETIME());
-END
-
--- 5.3 Department Managers for concurrency test suites (Dept 1 Manager: 17, Dept 3 Manager: 5)
-UPDATE UserAccounts SET Role = 'Dentist' WHERE UserId IN (5, 17);
-
-IF NOT EXISTS (SELECT 1 FROM StaffProfiles WHERE UserId = 17)
-BEGIN
-    INSERT INTO StaffProfiles (UserId, EmployeeCode, FullName, EmploymentStatus, CreatedAt, UpdatedAt)
-    VALUES (17, 'EMP-MGR-17', N'Trưởng khoa 17', 'Active', SYSDATETIME(), SYSDATETIME());
-END
-IF NOT EXISTS (SELECT 1 FROM DentistProfiles WHERE UserId = 17)
-BEGIN
-    INSERT INTO DentistProfiles (UserId, LicenseNumber, Qualification, YearsOfExperience, Biography)
-    VALUES (17, 'LIC-MGR-17', N'Bác sĩ Trưởng khoa', 15, N'Test Manager 17');
-END
-
-IF NOT EXISTS (SELECT 1 FROM StaffProfiles WHERE UserId = 5)
-BEGIN
-    INSERT INTO StaffProfiles (UserId, EmployeeCode, FullName, EmploymentStatus, CreatedAt, UpdatedAt)
-    VALUES (5, 'EMP-MGR-5', N'Trưởng khoa 5', 'Active', SYSDATETIME(), SYSDATETIME());
-END
-IF NOT EXISTS (SELECT 1 FROM DentistProfiles WHERE UserId = 5)
-BEGIN
-    INSERT INTO DentistProfiles (UserId, LicenseNumber, Qualification, YearsOfExperience, Biography)
-    VALUES (5, 'LIC-MGR-5', N'Bác sĩ Trưởng khoa', 15, N'Test Manager 5');
-END
-
-UPDATE Departments SET ManagerUserId = 17 WHERE DepartmentId = 1;
-UPDATE Departments SET ManagerUserId = 5 WHERE DepartmentId = 3;
-";
-            await cmd.ExecuteNonQueryAsync();
+            await ApplyMigrationFileAsync(updatePlanPath, DatabaseName, ConnectionString);
+        }
+        var imagingPath = Path.Combine(repoRoot, ImagingMigrationRelativePath);
+        if (File.Exists(imagingPath))
+        {
+            await ApplyMigrationFileAsync(imagingPath, DatabaseName, ConnectionString);
+        }
+        var consultPath = Path.Combine(repoRoot, ConsultationAndReferralMigrationRelativePath);
+        if (File.Exists(consultPath))
+        {
+            await ApplyMigrationFileAsync(consultPath, DatabaseName, ConnectionString);
+        }
+        var leavePath = Path.Combine(repoRoot, DoctorLeaveMigrationRelativePath);
+        if (File.Exists(leavePath))
+        {
+            await ApplyMigrationFileAsync(leavePath, DatabaseName, ConnectionString);
+        }
+        var recepPath = Path.Combine(repoRoot, ReceptionistShiftMigrationRelativePath);
+        if (File.Exists(recepPath))
+        {
+            await ApplyMigrationFileAsync(recepPath, DatabaseName, ConnectionString);
+        }
+        var attendancePath = Path.Combine(repoRoot, StaffAttendanceMigrationRelativePath);
+        if (File.Exists(attendancePath))
+        {
+            await ApplyMigrationFileAsync(attendancePath, DatabaseName, ConnectionString);
+        }
+        var comboPath = Path.Combine(repoRoot, ServiceCombosMigrationRelativePath);
+        if (File.Exists(comboPath))
+        {
+            await ApplyMigrationFileAsync(comboPath, DatabaseName, ConnectionString);
         }
     }
 

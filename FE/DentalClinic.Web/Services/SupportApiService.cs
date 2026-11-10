@@ -24,9 +24,14 @@ public class SupportApiService : ISupportApiService
         _logger = logger;
     }
 
+    private static SupportConfigDto? _cachedConfig;
+
     public async Task<ApiResult<SupportConfigDto>> GetSupportConfigAsync()
     {
-        return await SendGetAsync<SupportConfigDto>("/api/support/config");
+        if (_cachedConfig != null) return ApiResult<SupportConfigDto>.Success(_cachedConfig);
+        var res = await SendGetAsync<SupportConfigDto>("/api/support/config");
+        if (res.IsSuccess && res.Data != null) _cachedConfig = res.Data;
+        return res;
     }
 
     public async Task<ApiResult<List<ChatMessageDto>>> GetMessagesAsync(string conversationId)

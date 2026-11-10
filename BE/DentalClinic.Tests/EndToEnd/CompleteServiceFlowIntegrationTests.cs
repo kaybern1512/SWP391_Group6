@@ -31,8 +31,9 @@ public class CompleteServiceFlowIntegrationTests
 
             var server = Environment.GetEnvironmentVariable("TEST_SQL_SERVER")
                          ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE")
-                         ?? ".\\MSSQLSERVER01";
-            return $"Server={server};Database=DentalClinicManagementDB;Trusted_Connection=True;TrustServerCertificate=True;";
+                         ?? ".\\SQLEXPRESS";
+            var dbName = Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Integration_Dev";
+            return $"Server={server};Database={dbName};Trusted_Connection=True;TrustServerCertificate=True;";
         }
     }
 

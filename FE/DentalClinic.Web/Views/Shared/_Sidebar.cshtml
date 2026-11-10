@@ -51,11 +51,11 @@
             </a>
 
             <div class="nav-group-title">Khám & Chăm Sóc</div>
-            <a class="sidebar-link @(currentCtrl == "PatientAppointment" && currentAction == "Book" ? "active" : "")" asp-controller="PatientAppointment" asp-action="Book">
-            <a class="sidebar-link @(currentCtrl == "PatientAppointment" && currentAction == "Services" ? "active" : "")" asp-controller="PatientAppointment" asp-action="Services">
+                        <a class="sidebar-link @(currentCtrl == "PatientAppointment" && currentAction == "Services" ? "active" : "")" asp-controller="PatientAppointment" asp-action="Services">
                 <i class="bi bi-stars"></i>
                 <span>Dịch Vụ Nha Khoa</span>
             </a>
+            <a class="sidebar-link @(currentCtrl == "PatientAppointment" && currentAction == "Book" ? "active" : "")" asp-controller="PatientAppointment" asp-action="Book">
                 <i class="bi bi-calendar-plus"></i>
                 <span>Đặt Lịch Khám</span>
             </a>
@@ -111,6 +111,10 @@
                 <i class="bi bi-calendar-check"></i>
                 <span>Điều Phối & Phê Duyệt Lịch</span>
             </a>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistImagingQueue" ? "active" : "")" asp-controller="ReceptionistImagingQueue" asp-action="Index">
+                <i class="bi bi-camera"></i>
+                <span>Hàng Đợi Chụp X-Quang</span>
+            </a>
 
             <div class="nav-group-title">Hồ Sơ & Viện Phí</div>
             <a class="sidebar-link @(currentCtrl == "ReceptionistPatient" ? "active" : "")" asp-controller="ReceptionistPatient" asp-action="Index">
@@ -134,6 +138,28 @@
             <a class="sidebar-link @(currentCtrl == "ReceptionistChat" ? "active" : "")" asp-controller="ReceptionistChat" asp-action="Index">
                 <i class="bi bi-chat-dots"></i>
                 <span>Tư Vấn Trực Tuyến (Live Chat)</span>
+            </a>
+
+            <div class="nav-group-title">Ca Trực & Chấm Công</div>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistSchedule" ? "active" : "")" asp-controller="ReceptionistSchedule" asp-action="Index">
+                <i class="bi bi-calendar-check"></i>
+                <span>Lịch Làm Việc Của Tôi</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "AttendanceWeb" ? "active" : "")" asp-controller="AttendanceWeb" asp-action="Index">
+                <i class="bi bi-clock-history"></i>
+                <span>Chấm Công Ca Trực</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistLeave" ? "active" : "")" asp-controller="ReceptionistLeave" asp-action="Index">
+                <i class="bi bi-calendar2-x"></i>
+                <span>Đơn Xin Nghỉ Phép</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistShiftSwap" ? "active" : "")" asp-controller="ReceptionistShiftSwap" asp-action="Index">
+                <i class="bi bi-arrow-left-right"></i>
+                <span>Đổi Ca Trực</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "ReceptionistHandover" ? "active" : "")" asp-controller="ReceptionistHandover" asp-action="Index">
+                <i class="bi bi-arrow-repeat"></i>
+                <span>Bàn Giao Ca Trực</span>
             </a>
         }
         else if (role == "Dentist")
@@ -184,6 +210,12 @@
                 <span>Đánh Giá Từ Bệnh Nhân</span>
             </a>
 
+            <div class="nav-group-title">Chấm Công & Ca Trực</div>
+            <a class="sidebar-link @(currentCtrl == "AttendanceWeb" ? "active" : "")" asp-controller="AttendanceWeb" asp-action="Index">
+                <i class="bi bi-clock-history"></i>
+                <span>Chấm Công Ca Trực</span>
+            </a>
+
 
         }
         else if (role == "SystemAdministrator")
@@ -206,6 +238,10 @@
             <a class="sidebar-link @(currentCtrl == "AdminDentistSchedule" ? "active" : "")" asp-controller="AdminDentistSchedule" asp-action="Index">
                 <i class="bi bi-calendar-week"></i>
                 <span>Bác Sĩ & Lịch Làm Việc</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "AdminReceptionistSchedule" ? "active" : "")" asp-controller="AdminReceptionistSchedule" asp-action="Index">
+                <i class="bi bi-calendar-range"></i>
+                <span>Lịch Trực Lễ Tân & Nhân Sự</span>
             </a>
             <a class="sidebar-link @(currentCtrl == "AdminRoomChair" ? "active" : "")" asp-controller="AdminRoomChair" asp-action="Index">
                 <i class="bi bi-door-open"></i>
@@ -244,6 +280,12 @@
             <a class="sidebar-link @(currentCtrl == "AdminAuditLog" ? "active" : "")" asp-controller="AdminAuditLog" asp-action="Index">
                 <i class="bi bi-shield-check"></i>
                 <span>Nhật ký Kiểm toán (Logs)</span>
+            </a>
+
+            <div class="nav-group-title">Vận Hành & Chấm Công</div>
+            <a class="sidebar-link @(currentCtrl == "AdminWorkforce" ? "active" : "")" asp-controller="AdminWorkforce" asp-action="Report">
+                <i class="bi bi-calendar-check"></i>
+                <span>Đối Soát Chấm Công</span>
             </a>
         }
 

@@ -26,18 +26,24 @@ public class AdminDashboardController : Controller
     public async Task<IActionResult> Dashboard()
     {
         var statsResult = await _adminApi.GetDashboardStatsAsync();
-        var stats = statsResult.IsSuccess && statsResult.Data != null 
+        var opsResult = await _adminApi.GetClinicOperationsDashboardAsync();
+
+        var stats = statsResult != null && statsResult.IsSuccess && statsResult.Data != null 
             ? statsResult.Data 
             : new AdminDashboardStatsDto();
+
+        var ops = opsResult != null && opsResult.IsSuccess && opsResult.Data != null
+            ? opsResult.Data
+            : new ClinicOperationsDashboardDto();
 
         var vm = new AdminDashboardPageViewModel
         {
             FullName = User.FindFirst(ClaimTypes.Name)?.Value ?? "System Administrator",
             Email = User.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty,
             Code = User.FindFirst("UserCode")?.Value,
-            Stats = stats
+            Stats = stats,
+            Operations = ops
         };
-
         return View("~/Views/Admin/Dashboard.cshtml", vm);
     }
 

@@ -273,4 +273,14 @@ public class PostCareApiService : IPostCareApiService
             return default;
         }
     }
+
+    public async Task<ApiResult<DepartmentReferralDto>> ScheduleReferralDestinationAppointmentAsync(long referralId, ScheduleDestinationReferralRequest request)
+    {
+        return await SendPostAsync<ScheduleDestinationReferralRequest, DepartmentReferralDto>($"/api/post-care/referrals/{referralId}/schedule", request);
+    }
+
+    public async Task<ApiResult<ReferralSourceSummaryDto>> GetReferralSourceSummaryAsync(long referralId)
+    {
+        return await SendGetAsync<ReferralSourceSummaryDto>($"/api/post-care/referrals/{referralId}/source-summary");
+    }
 }

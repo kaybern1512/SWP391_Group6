@@ -9,6 +9,8 @@ public class CreateReceptionistAppointmentRequest
     public long PatientUserId { get; set; }
     public long DepartmentId { get; set; }
     public long RequestedServiceId { get; set; }
+    public string? ComboCode { get; set; }
+    public long? ComboId { get; set; }
     public long? RequestedDentistUserId { get; set; }
     public long? AssignedDentistUserId { get; set; }
     public long? RoomId { get; set; }
@@ -22,6 +24,8 @@ public class CreateAppointmentRequest
 {
     public long DepartmentId { get; set; }
     public long RequestedServiceId { get; set; }
+    public string? ComboCode { get; set; }
+    public long? ComboId { get; set; }
     public long? RequestedDentistUserId { get; set; }
     public long? AssignedDentistUserId { get; set; }
     public long? RoomId { get; set; }
@@ -67,6 +71,9 @@ public class AppointmentDto
     public DateTime? CancelledAt { get; set; }
     public string? CancellationReason { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string? ComboCode { get; set; }
+    public long? ComboId { get; set; }
+    public string? ComboTitle { get; set; }
 
     public List<AppointmentChangeProposalDto> Proposals { get; set; } = new();
     public List<StatusHistoryDto> StatusHistories { get; set; } = new();
@@ -251,4 +258,33 @@ public class RegisterWalkInPatientResponse
     public string PhoneNumber { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
+}
+
+public class BookingComboDto
+{
+    public long ComboId { get; set; }
+    public string ComboCode { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string? Tagline { get; set; }
+    public string? Badge { get; set; }
+    public string? IconClass { get; set; }
+    public string? Description { get; set; }
+    public long DepartmentId { get; set; }
+    public string DepartmentName { get; set; } = string.Empty;
+    public long PrimaryServiceId { get; set; }
+    public string PrimaryServiceName { get; set; } = string.Empty;
+    public decimal OriginalPrice { get; set; }
+    public decimal ComboPrice { get; set; }
+    public int DurationMinutes { get; set; } = 45;
+    public List<string> IncludedServices { get; set; } = new();
+    public List<string> Benefits { get; set; } = new();
+    public string Status { get; set; } = "Active";
+}
+
+public class StartAppointmentResultDto
+{
+    public long AppointmentId { get; set; }
+    public long PatientUserId { get; set; }
+    public string Status { get; set; } = "InService";
+    public long? DentalChairId { get; set; }
 }

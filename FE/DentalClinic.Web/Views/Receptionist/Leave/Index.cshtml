@@ -1,0 +1,326 @@
+@using DentalClinic.Web.Models.ApiDtos
+@{
+    ViewData["Title"] = "Đơn Xin Nghỉ Phép Lễ Tân";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var leaves = ViewBag.Leaves as List<ReceptionistLeaveRequestDto> ?? new();
+    var upcomingShifts = ViewBag.UpcomingShifts as List<ReceptionistWorkScheduleDto> ?? new();
+
+    int pendingCount = leaves.Count(l => l.Status == "Pending");
+    int approvedCount = leaves.Count(l => l.Status == "Approved");
+    int rejectedCount = leaves.Count(l => l.Status == "Rejected");
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h2 class="h4 fw-bold text-dark mb-1">
+                <i class="bi bi-calendar2-x text-warning me-2"></i>Đơn Xin Nghỉ Phép
+            </h2>
+            <p class="text-muted small mb-0">Quản lý và tạo yêu cầu xin nghỉ phép (Cả ngày, Nửa ngày, Theo giờ hoặc Nhiều ngày)</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createLeaveModal">
+                <i class="bi bi-plus-circle me-1"></i> Tạo Đơn Xin Nghỉ
+            </button>
+            <a href="@Url.Action("Index", "ReceptionistSchedule")" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Xem Lịch Trực
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Stat Summary -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 bg-light">
+                <div class="card-body d-flex align-items-center justify-content-between p-3">
+                    <div>
+                        <div class="text-muted small">Tổng Số Đơn</div>
+                        <div class="fs-4 fw-bold text-dark">@leaves.Count</div>
+                    </div>
+                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-3">
+                        <i class="bi bi-file-earmark-text fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 bg-light">
+                <div class="card-body d-flex align-items-center justify-content-between p-3">
+                    <div>
+                        <div class="text-muted small">Chờ Xét Duyệt</div>
+                        <div class="fs-4 fw-bold text-warning">@pendingCount</div>
+                    </div>
+                    <div class="bg-warning bg-opacity-10 text-warning rounded-circle p-3">
+                        <i class="bi bi-hourglass-split fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 bg-light">
+                <div class="card-body d-flex align-items-center justify-content-between p-3">
+                    <div>
+                        <div class="text-muted small">Đã Được Duyệt</div>
+                        <div class="fs-4 fw-bold text-success">@approvedCount</div>
+                    </div>
+                    <div class="bg-success bg-opacity-10 text-success rounded-circle p-3">
+                        <i class="bi bi-check2-circle fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 bg-light">
+                <div class="card-body d-flex align-items-center justify-content-between p-3">
+                    <div>
+                        <div class="text-muted small">Bị Từ Chối</div>
+                        <div class="fs-4 fw-bold text-danger">@rejectedCount</div>
+                    </div>
+                    <div class="bg-danger bg-opacity-10 text-danger rounded-circle p-3">
+                        <i class="bi bi-x-circle fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rule Note Banner -->
+    <div class="alert alert-info border-0 shadow-sm rounded-3 d-flex align-items-center mb-4">
+        <i class="bi bi-info-circle-fill fs-4 me-3 text-info"></i>
+        <div class="small">
+            <strong>Quy tắc xét duyệt nghỉ phép lễ tân:</strong>
+            <ul class="mb-0 ps-3">
+                <li><strong>Quy tắc 1:</strong> Mỗi ngày chỉ duyệt tối đa 2 lễ tân nghỉ phép trên toàn phòng khám.</li>
+                <li><strong>Quy tắc 2:</strong> Mỗi ca trực phải đảm bảo duy trì tối thiểu 2 lễ tân làm việc tại mọi thời điểm.</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Leaves List -->
+    <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white py-3 border-0">
+            <h5 class="fw-bold mb-0 text-dark">
+                <i class="bi bi-clock-history text-primary me-2"></i>Lịch Sử Đơn Nghỉ Phép
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            @if (!leaves.Any())
+            {
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary opacity-50"></i>
+                    Bạn chưa gửi đơn xin nghỉ phép nào.
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Mã đơn</th>
+                                <th>Loại nghỉ</th>
+                                <th>Thời gian xin nghỉ</th>
+                                <th>Lý do</th>
+                                <th>Trạng thái</th>
+                                <th>Phản hồi quản lý</th>
+                                <th>Ngày gửi</th>
+                                <th class="text-end">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var l in leaves)
+                            {
+                                <tr>
+                                    <td class="fw-bold text-secondary">#@l.LeaveRequestId</td>
+                                    <td>
+                                        <span class="badge bg-secondary">@l.LeaveType</span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">
+                                            @l.StartDate.ToString("dd/MM/yyyy")
+                                            @if (l.EndDate > l.StartDate)
+                                            {
+                                                <span> - @l.EndDate.ToString("dd/MM/yyyy")</span>
+                                            }
+                                        </div>
+                                        @if (l.StartTime.HasValue && l.EndTime.HasValue)
+                                        {
+                                            <div class="text-muted small">
+                                                <i class="bi bi-clock me-1"></i>@l.StartTime.Value.ToString(@"hh\:mm") - @l.EndTime.Value.ToString(@"hh\:mm")
+                                            </div>
+                                        }
+                                    </td>
+                                    <td class="text-truncate" style="max-width: 200px;" title="@l.Reason">
+                                        @l.Reason
+                                    </td>
+                                    <td>
+                                        @if (l.Status == "Pending")
+                                        {
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass me-1"></i>Chờ duyệt</span>
+                                        }
+                                        else if (l.Status == "Approved")
+                                        {
+                                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Đã duyệt</span>
+                                        }
+                                        else if (l.Status == "Rejected")
+                                        {
+                                            <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Từ chối</span>
+                                        }
+                                        else if (l.Status == "Withdrawn")
+                                        {
+                                            <span class="badge bg-secondary"><i class="bi bi-arrow-return-left me-1"></i>Đã rút</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-dark">@l.Status</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(l.RejectionReason))
+                                        {
+                                            <span class="text-danger small"><i class="bi bi-exclamation-circle me-1"></i>@l.RejectionReason</span>
+                                        }
+                                        else if (l.Status == "Approved")
+                                        {
+                                            <span class="text-success small"><i class="bi bi-check me-1"></i>Đã phê duyệt ca nghỉ</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">-</span>
+                                        }
+                                    </td>
+                                    <td class="text-muted small">
+                                        @l.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+                                    </td>
+                                    <td class="text-end">
+                                        @if (l.Status == "Pending")
+                                        {
+                                            <form method="post" action="@Url.Action("Withdraw", "ReceptionistLeave", new { leaveId = l.LeaveRequestId })" onsubmit="return confirm('Bạn có chắc chắn muốn rút đơn xin nghỉ phép này không?');" class="d-inline">
+                                                <button type="submit" class="btn btn-outline-danger btn-sm">
+                                                    <i class="bi bi-trash me-1"></i> Rút đơn
+                                                </button>
+                                            </form>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Modal Create Leave -->
+<div class="modal fade" id="createLeaveModal" tabindex="-1" aria-labelledby="createLeaveModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post" action="@Url.Action("Create", "ReceptionistLeave")">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="createLeaveModalLabel">
+                        <i class="bi bi-calendar-plus me-2"></i>Tạo Đơn Xin Nghỉ Phép
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Hình Thức Nghỉ <span class="text-danger">*</span></label>
+                        <select name="LeaveType" id="leaveTypeSelect" class="form-select" required onchange="toggleLeaveFields()">
+                            <option value="FullDay">Nghỉ cả ngày (Full Day)</option>
+                            <option value="HalfDayMorning">Nghỉ nửa ngày sáng (Morning)</option>
+                            <option value="HalfDayAfternoon">Nghỉ nửa ngày chiều (Afternoon)</option>
+                            <option value="Hourly">Nghỉ theo giờ (Hourly)</option>
+                            <option value="MultiDay">Nghỉ nhiều ngày (Multi-day)</option>
+                        </select>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6" id="startDateCol">
+                            <label class="form-label fw-bold" id="startDateLabel">Ngày Nghỉ <span class="text-danger">*</span></label>
+                            <input type="date" name="StartDate" id="startDateInput" class="form-control" required value="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" onchange="syncEndDate()" />
+                        </div>
+                        <div class="col-md-6 d-none" id="endDateCol">
+                            <label class="form-label fw-bold">Đến Ngày <span class="text-danger">*</span></label>
+                            <input type="date" name="EndDate" id="endDateInput" class="form-control" value="@DateTime.Today.AddDays(2).ToString("yyyy-MM-dd")" />
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3 d-none" id="hourlyTimeRow">
+                        <div class="col-6">
+                            <label class="form-label fw-bold">Từ Giờ</label>
+                            <input type="time" name="StartTime" id="startTimeInput" class="form-control" value="08:00" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold">Đến Giờ</label>
+                            <input type="time" name="EndTime" id="endTimeInput" class="form-control" value="12:00" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Lý Do Nghỉ Phép <span class="text-danger">*</span></label>
+                        <textarea name="Reason" class="form-control" rows="3" required placeholder="Nêu rõ lý do xin nghỉ để Quản trị viên tiện xét duyệt..."></textarea>
+                    </div>
+
+                    <div class="alert alert-warning py-2 px-3 small mb-0">
+                        <i class="bi bi-shield-exclamation me-1"></i>Hệ thống tự động kiểm tra quy tắc tối đa 2 người nghỉ/ngày và tối thiểu 2 người trực/ca trước khi duyệt.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send me-1"></i> Gửi Đơn Xin Nghỉ
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleLeaveFields() {
+    const type = document.getElementById('leaveTypeSelect').value;
+    const endDateCol = document.getElementById('endDateCol');
+    const startDateLabel = document.getElementById('startDateLabel');
+    const hourlyRow = document.getElementById('hourlyTimeRow');
+
+    if (type === 'MultiDay') {
+        endDateCol.classList.remove('d-none');
+        startDateLabel.innerText = 'Từ Ngày *';
+        hourlyRow.classList.add('d-none');
+    } else if (type === 'Hourly') {
+        endDateCol.classList.add('d-none');
+        startDateLabel.innerText = 'Ngày Nghỉ *';
+        hourlyRow.classList.remove('d-none');
+        syncEndDate();
+    } else {
+        endDateCol.classList.add('d-none');
+        startDateLabel.innerText = 'Ngày Nghỉ *';
+        hourlyRow.classList.add('d-none');
+        syncEndDate();
+    }
+}
+
+function syncEndDate() {
+    const type = document.getElementById('leaveTypeSelect').value;
+    if (type !== 'MultiDay') {
+        document.getElementById('endDateInput').value = document.getElementById('startDateInput').value;
+    }
+}
+</script>

@@ -41,6 +41,16 @@ public class AppointmentsController : ControllerBase
     // PATIENT ENDPOINTS
     // ==========================================
 
+    [HttpGet("api/patient/appointments/combos")]
+    [HttpGet("api/appointments/combos")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<List<BookingComboDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetCombos(CancellationToken ct)
+    {
+        var result = await _appointmentService.GetAvailableCombosAsync(ct);
+        return Ok(result);
+    }
+
     [HttpPost("api/patient/appointments")]
     [Authorize(Roles = UserRole.Patient)]
     [ProducesResponseType(typeof(ApiResponse<AppointmentDto>), StatusCodes.Status200OK)]
@@ -445,7 +455,7 @@ public class AppointmentsController : ControllerBase
 
     [HttpPost("api/dentist/appointments/{id:long}/start")]
     [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
-    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<StartAppointmentResultDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> DentistStartAppointment(long id, CancellationToken ct)
     {

@@ -1,4 +1,4 @@
-@model DentalClinic.Web.ViewModels.Appointments.AppointmentDetailViewModel
+﻿@model DentalClinic.Web.ViewModels.Appointments.AppointmentDetailViewModel
 @{
     ViewData["Title"] = $"Chi tiết lịch hẹn {Model.Appointment.AppointmentCode}";
     var appt = Model.Appointment;
@@ -57,6 +57,27 @@
             </div>
         </div>
     </div>
+
+        <!-- DOCTOR LEAVE DISRUPTION BANNER -->
+    @if (Model.ActiveDisruption != null && Model.ActiveDisruption.Status == "Active")
+    {
+        <div class="card border-warning shadow-sm mb-4 border-start border-5 border-warning">
+            <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-warning-subtle text-warning p-3 rounded-circle">
+                        <i class="bi bi-exclamation-triangle-fill fs-3"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-slate-800 mb-1">Lá»‹ch Háº¹n Cáº§n Äiá»u Phá»‘i - BÃ¡c SÄ© Xin Nghá»‰ PhÃ©p</h5>
+                        <p class="text-secondary mb-0">BÃ¡c sÄ© phá»¥ trÃ¡ch lá»‹ch khÃ¡m nÃ y Ä‘ang cÃ³ lá»‹ch nghá»‰ phÃ©p. Vui lÃ²ng chá»n Ä‘á»•i bÃ¡c sÄ© hoáº·c dá»i lá»‹ch khÃ¡m Ä‘á»ƒ chÃºng tÃ´i chuáº©n bá»‹ Ä‘Ã³n tiáº¿p tá»‘t nháº¥t.</p>
+                    </div>
+                </div>
+                <a asp-action="Disruption" asp-route-id="@Model.ActiveDisruption.DisruptionId" class="btn btn-warning text-dark fw-bold px-4 py-2">
+                    <i class="bi bi-arrow-repeat me-1"></i> Xá»­ LÃ½ Ngay
+                </a>
+            </div>
+        </div>
+    }
 
     <!-- PROPOSAL BANNER IF AWAITING PATIENT RESPONSE -->
     @if (appt.Status == "AwaitingPatientResponse" && Model.ActiveProposal != null)

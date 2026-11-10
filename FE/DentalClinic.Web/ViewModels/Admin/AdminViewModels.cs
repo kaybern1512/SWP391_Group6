@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using DentalClinic.Web.Models.ApiDtos;
@@ -11,6 +11,7 @@ public class AdminDashboardPageViewModel
     public string Email { get; set; } = string.Empty;
     public string? Code { get; set; }
     public AdminDashboardStatsDto Stats { get; set; } = new();
+    public ClinicOperationsDashboardDto Operations { get; set; } = new();
 }
 
 public class DepartmentManageViewModel
@@ -166,7 +167,8 @@ public class AdminDentistScheduleManageViewModel
     public DateOnly? ToDate { get; set; }
     public MonthlyDentistScheduleDto? MonthlySchedule { get; set; }
     public int SelectedYear { get; set; } = DateTime.Today.Year;
-    public int SelectedMonth { get; set; } = DateTime.Today.Month;
+        public int SelectedMonth { get; set; } = DateTime.Today.Month;
+    public List<DentistLeaveRequestDto> LeaveRequests { get; set; } = new();
 }
 
 public class AdminFeedbackManageViewModel

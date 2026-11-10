@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Features.ClinicalDiagnostics.DTOs;
 using DentalClinic.Application.Features.PostCare.DTOs;
 
 namespace DentalClinic.Application.Common.Interfaces;
@@ -13,6 +14,10 @@ public interface IPostCareService
     Task<ApiResponse<List<DepartmentReferralDto>>> GetDentistReferralsAsync(long dentistUserId, CancellationToken ct = default);
     Task<ApiResponse<List<DepartmentReferralDto>>> GetDepartmentReferralsAsync(long managerUserId, string? status = null, CancellationToken ct = default);
     Task<ApiResponse<DepartmentReferralDto>> ReviewReferralAsync(long managerUserId, long referralId, ReviewReferralRequest request, CancellationToken ct = default);
+
+    // Internal Specialty Referral Linkage & Scheduling
+    Task<ApiResponse<DepartmentReferralDto>> ScheduleReferralDestinationAppointmentAsync(long receptionistUserId, ScheduleDestinationReferralRequest request, CancellationToken ct = default);
+    Task<ApiResponse<ReferralSourceSummaryDto>> GetReferralSourceSummaryAsync(long referralId, CancellationToken ct = default);
 
     // Follow-ups (Hẹn tái khám định kỳ)
     Task<ApiResponse<FollowUpScheduleDto>> CreateFollowUpAsync(long dentistUserId, CreateFollowUpRequest request, CancellationToken ct = default);

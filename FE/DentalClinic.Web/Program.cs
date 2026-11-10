@@ -1,4 +1,4 @@
-﻿using DentalClinic.Web.Handlers;
+using DentalClinic.Web.Handlers;
 using DentalClinic.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -162,6 +162,14 @@ builder.Services.AddHttpClient<IAdminApiService, AdminApiService>(client =>
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
 // Dentist Schedule & Availability API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IReceptionistWorkforceApiService, ReceptionistWorkforceApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 builder.Services.AddHttpClient<IDentistScheduleApiService, DentistScheduleApiService>(client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);
@@ -267,6 +275,42 @@ builder.Services.AddHttpClient<IBlogApiService, BlogApiService>(client =>
 
 // Medicine Inventory API client with ApiAuthorizationHandler
 builder.Services.AddHttpClient<IMedicineApiService, MedicineApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
+// Dentist Leave API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IDentistLeaveApiService, DentistLeaveApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
+// Clinical Diagnostics & Imaging API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IImagingApiService, ImagingApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
+// Appointment Disruption API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IAppointmentDisruptionApiService, AppointmentDisruptionApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
+// Attendance API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<IAttendanceApiService, AttendanceApiService>(client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);

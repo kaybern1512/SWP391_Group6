@@ -237,6 +237,73 @@ public class AdminApiService : IAdminApiService
     // GENERIC HELPERS
     // ==========================================
 
+    
+    // ==========================================
+    // WORKFORCE ATTENDANCE & OPERATIONS
+    // ==========================================
+
+    public async Task<ApiResult<WorkforceMonthlySummaryDto>> GetMonthlyWorkforceReportAsync(int year, int month, string? role = null)
+    {
+        var url = $"/api/admin/workforce/monthly?year={year}&month={month}";
+        if (!string.IsNullOrWhiteSpace(role)) url += $"&role={Uri.EscapeDataString(role)}";
+        return await SendGetAsync<WorkforceMonthlySummaryDto>(url);
+    }
+
+    public async Task<ApiResult<AttendancePeriodClosureDto>> FinalizeWorkforcePeriodAsync(int year, int month)
+    {
+        return await SendPostAsync<object, AttendancePeriodClosureDto>("/api/admin/workforce/finalize", new { Year = year, Month = month });
+    }
+
+    public async Task<ApiResult<AttendancePeriodClosureDto>> ReopenWorkforcePeriodAsync(int year, int month, string reason)
+    {
+        return await SendPostAsync<object, AttendancePeriodClosureDto>("/api/admin/workforce/reopen", new { Year = year, Month = month, Reason = reason });
+    }
+
+    public async Task<byte[]> ExportWorkforceReportCsvAsync(int year, int month, string? role = null)
+    {
+        var url = $"/api/admin/workforce/export?year={year}&month={month}";
+        if (!string.IsNullOrWhiteSpace(role)) url += $"&role={Uri.EscapeDataString(role)}";
+        var res = await _httpClient.GetAsync(url);
+        return res.IsSuccessStatusCode ? await res.Content.ReadAsByteArrayAsync() : Array.Empty<byte>();
+    }
+
+    public async Task<ApiResult<ClinicOperationsDashboardDto>> GetClinicOperationsDashboardAsync(DateOnly? date = null)
+    {
+        var url = "/api/admin/operations/dashboard";
+        if (date.HasValue) url += $"?date={date.Value:yyyy-MM-dd}";
+        return await SendGetAsync<ClinicOperationsDashboardDto>(url);
+    }
+
+    public async Task<ApiResult<UserLockImpactDto>> PreviewUserLockImpactAsync(long userId)
+    {
+        return await SendGetAsync<UserLockImpactDto>($"/api/admin/impact/user-lock/{userId}");
+    }
+
+    public async Task<ApiResult<ServiceDeactivationImpactDto>> PreviewServiceDeactivationImpactAsync(long serviceId)
+    {
+        return await SendGetAsync<ServiceDeactivationImpactDto>($"/api/admin/impact/service-deactivate/{serviceId}");
+    }
+
+    public async Task<ApiResult<RoomChairDeactivationImpactDto>> PreviewRoomDeactivationImpactAsync(long roomId)
+    {
+        return await SendGetAsync<RoomChairDeactivationImpactDto>($"/api/admin/impact/room-deactivate/{roomId}");
+    }
+
+    public async Task<ApiResult<RoomChairDeactivationImpactDto>> PreviewChairDeactivationImpactAsync(long chairId)
+    {
+        return await SendGetAsync<RoomChairDeactivationImpactDto>($"/api/admin/impact/chair-deactivate/{chairId}");
+    }
+
+    public async Task<ApiResult<PriceChangeImpactDto>> PreviewPriceChangeImpactAsync(long serviceId, decimal newPrice)
+    {
+        return await SendGetAsync<PriceChangeImpactDto>($"/api/admin/impact/price-change?serviceId={serviceId}&newPrice={newPrice}");
+    }
+
+    public async Task<ApiResult> ExecuteSafeStatusChangeAsync(long userId, string newStatus, string? reason)
+    {
+        return await SendPostActionAsync("/api/admin/impact/safe-status-change", new { UserId = userId, NewStatus = newStatus, Reason = reason });
+    }
+
     private async Task<ApiResult<T>> SendGetAsync<T>(string endpoint)
     {
         try

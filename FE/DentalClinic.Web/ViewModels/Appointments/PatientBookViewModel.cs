@@ -87,6 +87,8 @@ public class PatientBookViewModel
 public class BookingComboViewModel
 {
     public string Code { get; set; } = string.Empty;
+    public long ComboId { get; set; }
+    public string ComboCode { get => Code; set => Code = value; }
     public string Title { get; set; } = string.Empty;
     public string Tagline { get; set; } = string.Empty;
     public string Badge { get; set; } = string.Empty;
@@ -98,7 +100,9 @@ public class BookingComboViewModel
     public long DepartmentId { get; set; }
     public string DepartmentName { get; set; } = string.Empty;
     public long ServiceId { get; set; }
+    public long PrimaryServiceId { get => ServiceId; set => ServiceId = value; }
     public string ServiceName { get; set; } = string.Empty;
+    public string PrimaryServiceName { get => ServiceName; set => ServiceName = value; }
     public List<string> IncludedServices { get; set; } = new();
     public List<string> Benefits { get; set; } = new();
     public string IconClass { get; set; } = "bi-stars";

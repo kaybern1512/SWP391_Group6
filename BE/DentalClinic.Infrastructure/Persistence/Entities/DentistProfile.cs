@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -29,6 +29,12 @@ public partial class DentistProfile
 
     public virtual ICollection<DentistWorkSchedule> DentistWorkSchedules { get; set; } = new List<DentistWorkSchedule>();
 
+    public virtual ICollection<DentistLeaveRequest> DentistLeaveRequests { get; set; } = new List<DentistLeaveRequest>();
+
+    public virtual ICollection<AppointmentDisruption> AppointmentDisruptionsOriginal { get; set; } = new List<AppointmentDisruption>();
+
+    public virtual ICollection<AppointmentDisruption> AppointmentDisruptionsNew { get; set; } = new List<AppointmentDisruption>();
+
     public virtual ICollection<DepartmentReferral> DepartmentReferrals { get; set; } = new List<DepartmentReferral>();
 
     public virtual ICollection<TreatmentPlanItem> TreatmentPlanItems { get; set; } = new List<TreatmentPlanItem>();
@@ -36,6 +42,10 @@ public partial class DentistProfile
     public virtual ICollection<TreatmentPlan> TreatmentPlans { get; set; } = new List<TreatmentPlan>();
 
     public virtual ICollection<TreatmentSession> TreatmentSessions { get; set; } = new List<TreatmentSession>();
+    public virtual ICollection<DiagnosticOrder> DiagnosticOrders { get; set; } = new List<DiagnosticOrder>();
+    public virtual ICollection<DiagnosticResult> DiagnosticResultsReviewed { get; set; } = new List<DiagnosticResult>();
+    public virtual ICollection<ClinicalConsultation> ClinicalConsultationsRequested { get; set; } = new List<ClinicalConsultation>();
+    public virtual ICollection<ClinicalConsultation> ClinicalConsultationsReceived { get; set; } = new List<ClinicalConsultation>();
 
     public virtual StaffProfile User { get; set; } = null!;
 }

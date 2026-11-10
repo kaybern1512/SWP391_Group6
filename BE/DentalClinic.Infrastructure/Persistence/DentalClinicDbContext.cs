@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,68 @@ public partial class DentalClinicDbContext : DbContext
         : base(options)
     {
     }
+
+    private bool? _attendancePeriodClosuresTableExists;
+
+    private async Task EnsureAttendanceSchemaCheckedAsync(CancellationToken ct)
+    {
+        if (!Database.IsSqlServer()) return;
+
+        if (!_attendancePeriodClosuresTableExists.HasValue)
+        {
+            _attendancePeriodClosuresTableExists = await Database
+                .SqlQueryRaw<int>("SELECT 1 AS [Value] WHERE OBJECT_ID(N'AttendancePeriodClosures', N'U') IS NOT NULL")
+                .AnyAsync(ct);
+
+            if (!_attendancePeriodClosuresTableExists.Value)
+            {
+                var dbName = Database.GetDbConnection().Database ?? string.Empty;
+                bool isKnownLegacyTestDb = dbName.Equals("DentalCare_Integration_Dev", StringComparison.OrdinalIgnoreCase)
+                    || dbName.Equals("DentalCare_Combined_Leave_QA", StringComparison.OrdinalIgnoreCase)
+                    || dbName.StartsWith("DentalClinic_Concurrency_QA", StringComparison.OrdinalIgnoreCase);
+
+                if (!isKnownLegacyTestDb)
+                {
+                    throw new InvalidOperationException(
+                        $"Bảng 'AttendancePeriodClosures' không tồn tại trong cơ sở dữ liệu '{dbName}'. " +
+                        "Cần áp dụng migration '20261110_Add_Staff_Attendance_And_Operations_Tables.sql' để đảm bảo an toàn bảo vệ kỳ công tại môi trường này.");
+                }
+            }
+        }
+    }
+
+    public virtual async Task<bool> IsPeriodLockedAsync(int year, int month, CancellationToken ct = default)
+    {
+        await EnsureAttendanceSchemaCheckedAsync(ct);
+
+        if (Database.IsSqlServer() && _attendancePeriodClosuresTableExists == false)
+        {
+            return false;
+        }
+
+        return await AttendancePeriodClosures
+            .AnyAsync(p => p.Year == year && p.Month == month &&
+                           (p.Status == PeriodClosureStatus.Locked || p.Status == PeriodClosureStatus.Finalized), ct);
+    }
+
+    public virtual async Task<bool> IsPeriodLockedAsync(DateOnly date, CancellationToken ct = default)
+        => await IsPeriodLockedAsync(date.Year, date.Month, ct);
+
+    public virtual async Task<bool> IsPeriodLockedAsync(DateOnly startDate, DateOnly endDate, CancellationToken ct = default)
+    {
+        await EnsureAttendanceSchemaCheckedAsync(ct);
+
+        if (Database.IsSqlServer() && _attendancePeriodClosuresTableExists == false)
+        {
+            return false;
+        }
+
+        return await AttendancePeriodClosures
+            .AnyAsync(p => (p.Status == PeriodClosureStatus.Locked || p.Status == PeriodClosureStatus.Finalized) &&
+                           ((p.Year == startDate.Year && p.Month == startDate.Month) ||
+                            (p.Year == endDate.Year && p.Month == endDate.Month)), ct);
+    }
+
 
     public virtual DbSet<Appointment> Appointments { get; set; }
     public virtual DbSet<AppointmentReminderJob> AppointmentReminderJobs { get; set; }
@@ -43,11 +106,16 @@ public partial class DentalClinicDbContext : DbContext
 
     public virtual DbSet<DentistWorkSchedule> DentistWorkSchedules { get; set; }
 
+    public virtual DbSet<DentistLeaveRequest> DentistLeaveRequests { get; set; }
+
+    public virtual DbSet<AppointmentDisruption> AppointmentDisruptions { get; set; }
+
     public virtual DbSet<Department> Departments { get; set; }
 
     public virtual DbSet<DepartmentReferral> DepartmentReferrals { get; set; }
 
     public virtual DbSet<DepartmentService> DepartmentServices { get; set; }
+    public virtual DbSet<ServiceCombo> ServiceCombos { get; set; }
 
     public virtual DbSet<DepartmentWorkSchedule> DepartmentWorkSchedules { get; set; }
 
@@ -94,6 +162,26 @@ public partial class DentalClinicDbContext : DbContext
     public virtual DbSet<MedicineStockTransaction> MedicineStockTransactions { get; set; }
     public virtual DbSet<MedicineDispensation> MedicineDispensations { get; set; }
     public virtual DbSet<MedicineDispensationItem> MedicineDispensationItems { get; set; }
+
+    public virtual DbSet<ReceptionistShiftTemplate> ReceptionistShiftTemplates { get; set; }
+    public virtual DbSet<ReceptionistWorkSchedule> ReceptionistWorkSchedules { get; set; }
+    public virtual DbSet<ReceptionistLeaveRequest> ReceptionistLeaveRequests { get; set; }
+    public virtual DbSet<ReceptionistLeaveRequestPeriod> ReceptionistLeaveRequestPeriods { get; set; }
+    public virtual DbSet<ReceptionistShiftSwapRequest> ReceptionistShiftSwapRequests { get; set; }
+    public virtual DbSet<ReceptionistCoverageIncident> ReceptionistCoverageIncidents { get; set; }
+    public virtual DbSet<ReceptionistWorkHandover> ReceptionistWorkHandovers { get; set; }
+    public virtual DbSet<StaffAttendanceRecord> StaffAttendanceRecords { get; set; }
+    public virtual DbSet<StaffAttendanceEvent> StaffAttendanceEvents { get; set; }
+    public virtual DbSet<StaffAttendanceCorrectionRequest> StaffAttendanceCorrectionRequests { get; set; }
+    public virtual DbSet<AttendancePeriodClosure> AttendancePeriodClosures { get; set; }
+    public virtual DbSet<AttendancePolicy> AttendancePolicies { get; set; }
+
+    public virtual DbSet<ImagingEquipment> ImagingEquipments { get; set; }
+    public virtual DbSet<ImagingServiceConfig> ImagingServiceConfigs { get; set; }
+    public virtual DbSet<DiagnosticOrder> DiagnosticOrders { get; set; }
+    public virtual DbSet<ImagingSession> ImagingSessions { get; set; }
+    public virtual DbSet<DiagnosticResult> DiagnosticResults { get; set; }
+    public virtual DbSet<ClinicalConsultation> ClinicalConsultations { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -148,6 +236,8 @@ public partial class DentalClinicDbContext : DbContext
                 .HasMaxLength(30)
                 .IsUnicode(false);
             entity.Property(e => e.ReasonForVisit).HasMaxLength(1000);
+            entity.Property(e => e.ComboCode).HasMaxLength(50).IsUnicode(false);
+            entity.HasOne(d => d.Combo).WithMany().HasForeignKey(d => d.ComboId).HasConstraintName("FK_Appointments_ServiceCombos");
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .IsUnicode(false)
@@ -516,6 +606,84 @@ public partial class DentalClinicDbContext : DbContext
                 .HasConstraintName("FK_DentistWorkSchedules_Department");
         });
 
+        modelBuilder.Entity<DentistLeaveRequest>(entity =>
+        {
+            entity.HasKey(e => e.LeaveRequestId);
+            entity.ToTable("DentistLeaveRequests");
+
+            entity.Property(e => e.LeaveType).HasMaxLength(50);
+            entity.Property(e => e.Reason).HasMaxLength(500);
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Pending");
+            entity.Property(e => e.RejectionReason).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
+
+            entity.HasOne(d => d.DentistUser)
+                .WithMany(p => p.DentistLeaveRequests)
+                .HasForeignKey(d => d.DentistUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_DentistLeaveRequests_Dentist");
+
+            entity.HasOne(d => d.ReviewedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReviewedByUserId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_DentistLeaveRequests_ReviewedByUser");
+        });
+
+        modelBuilder.Entity<AppointmentDisruption>(entity =>
+        {
+            entity.HasKey(e => e.DisruptionId);
+            entity.ToTable("AppointmentDisruptions");
+
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("PendingPatientChoice");
+            entity.Property(e => e.PatientChoice).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.StaffNotes).HasMaxLength(500);
+            entity.Property(e => e.EmailDeliveryStatus).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Pending");
+            entity.Property(e => e.EmailFailureReason).HasMaxLength(500);
+            entity.Property(e => e.EmailRetryCount).HasDefaultValue(0);
+            entity.Property(e => e.ActionToken).HasMaxLength(100);
+            entity.HasIndex(e => e.ActionToken, "UQ_AppointmentDisruptions_ActionToken").IsUnique().HasFilter("[ActionToken] IS NOT NULL");
+            entity.HasIndex(e => new { e.AppointmentId, e.DentistLeaveRequestId }, "UQ_AppointmentDisruptions_Appt_Leave").IsUnique();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
+
+            entity.HasOne(d => d.Appointment)
+                .WithMany(p => p.AppointmentDisruptions)
+                .HasForeignKey(d => d.AppointmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_AppointmentDisruptions_Appointment");
+
+            entity.HasOne(d => d.DentistLeaveRequest)
+                .WithMany(p => p.AppointmentDisruptions)
+                .HasForeignKey(d => d.DentistLeaveRequestId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_AppointmentDisruptions_LeaveRequest");
+
+            entity.HasOne(d => d.OriginalDentistUser)
+                .WithMany(p => p.AppointmentDisruptionsOriginal)
+                .HasForeignKey(d => d.OriginalDentistUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_AppointmentDisruptions_OriginalDentist");
+
+            entity.HasOne(d => d.ResolvedAppointment)
+                .WithMany(p => p.ResolvedAppointmentDisruptions)
+                .HasForeignKey(d => d.ResolvedAppointmentId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_AppointmentDisruptions_ResolvedAppointment");
+
+            entity.HasOne(d => d.NewDentistUser)
+                .WithMany(p => p.AppointmentDisruptionsNew)
+                .HasForeignKey(d => d.NewDentistUserId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_AppointmentDisruptions_NewDentist");
+
+            entity.HasOne(d => d.ResolvedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ResolvedByUserId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_AppointmentDisruptions_ResolvedByUser");
+        });
+
         modelBuilder.Entity<Department>(entity =>
         {
             entity.HasKey(e => e.DepartmentId).HasName("PK__Departme__B2079BED03A46DCB");
@@ -574,6 +742,18 @@ public partial class DentalClinicDbContext : DbContext
                 .HasForeignKey(d => d.TreatmentSessionId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_DepartmentReferrals_TreatmentSession");
+
+            entity.HasOne(d => d.SourceAppointment)
+                .WithMany(p => p.OutgoingReferrals)
+                .HasForeignKey(d => d.SourceAppointmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_DepartmentReferrals_SourceAppointment");
+
+            entity.HasOne(d => d.DestinationAppointment)
+                .WithMany(p => p.IncomingReferrals)
+                .HasForeignKey(d => d.DestinationAppointmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_DepartmentReferrals_DestinationAppointment");
         });
 
         modelBuilder.Entity<DepartmentService>(entity =>
@@ -879,6 +1059,211 @@ public partial class DentalClinicDbContext : DbContext
             entity.HasOne(d => d.Department).WithMany(p => p.Rooms)
                 .HasForeignKey(d => d.DepartmentId)
                 .HasConstraintName("FK_Rooms_Department");
+            entity.Property(e => e.RoomType).HasMaxLength(50).HasDefaultValue("Treatment");
+            entity.Property(e => e.MaxConcurrentPatients).HasDefaultValue(1);
+            entity.Property(e => e.MaxWaitingPatients).HasDefaultValue(3);
+            entity.Property(e => e.TargetMaxWaitMinutes).HasDefaultValue(20);
+            entity.Property(e => e.EscalationWaitMinutes).HasDefaultValue(30);
+        });
+
+        modelBuilder.Entity<ImagingEquipment>(entity =>
+        {
+            entity.HasKey(e => e.EquipmentId);
+            entity.ToTable("ImagingEquipments");
+            entity.HasIndex(e => e.EquipmentCode).IsUnique();
+            entity.Property(e => e.EquipmentCode).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.EquipmentName).HasMaxLength(150);
+            entity.Property(e => e.EquipmentType).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.SupportedDiagnosticTypes).HasMaxLength(250);
+            entity.Property(e => e.OperationalStatus).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Operational");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.CreatedAtUtc).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.Room)
+                .WithMany(p => p.ImagingEquipments)
+                .HasForeignKey(d => d.RoomId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ImagingEquipments_Room");
+        });
+
+        modelBuilder.Entity<ImagingServiceConfig>(entity =>
+        {
+            entity.HasKey(e => e.ConfigId);
+            entity.ToTable("ImagingServiceConfigs");
+            entity.HasIndex(e => e.DiagnosticType).IsUnique();
+
+            entity.HasOne(d => d.DepartmentService)
+                .WithMany()
+                .HasForeignKey(d => d.DepartmentServiceId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_ImagingServiceConfigs_DepartmentService");
+            entity.Property(e => e.DiagnosticType).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.ServiceName).HasMaxLength(150);
+            entity.Property(e => e.Price).HasPrecision(18, 2);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+        });
+
+        modelBuilder.Entity<DiagnosticOrder>(entity =>
+        {
+            entity.HasKey(e => e.DiagnosticOrderId);
+            entity.ToTable("DiagnosticOrders");
+            entity.Property(e => e.DiagnosticType).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.ClinicalIndication).HasMaxLength(500);
+            entity.Property(e => e.ExternalFacilityName).HasMaxLength(200);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Ordered");
+            entity.Property(e => e.CreatedAtUtc).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.Appointment)
+                .WithMany(p => p.DiagnosticOrders)
+                .HasForeignKey(d => d.AppointmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_DiagnosticOrders_Appointment");
+
+            entity.HasOne(d => d.PatientUser)
+                .WithMany(p => p.DiagnosticOrders)
+                .HasForeignKey(d => d.PatientUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_DiagnosticOrders_Patient");
+
+            entity.HasOne(d => d.DentistUser)
+                .WithMany(p => p.DiagnosticOrders)
+                .HasForeignKey(d => d.DentistUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_DiagnosticOrders_Dentist");
+        });
+
+        modelBuilder.Entity<ImagingSession>(entity =>
+        {
+            entity.HasKey(e => e.ImagingSessionId);
+            entity.ToTable("ImagingSessions");
+            entity.Property(e => e.QueueNumber).HasMaxLength(20).IsUnicode(false);
+            entity.Property(e => e.Priority).HasMaxLength(20).IsUnicode(false).HasDefaultValue("Normal");
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Scheduled");
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.Property(e => e.CreatedAtUtc).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.DiagnosticOrder)
+                .WithMany(p => p.ImagingSessions)
+                .HasForeignKey(d => d.DiagnosticOrderId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ImagingSessions_Order");
+
+            entity.HasOne(d => d.SourceAppointment)
+                .WithMany(p => p.ImagingSessions)
+                .HasForeignKey(d => d.SourceAppointmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ImagingSessions_Appointment");
+
+            entity.HasOne(d => d.PatientUser)
+                .WithMany(p => p.ImagingSessions)
+                .HasForeignKey(d => d.PatientUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ImagingSessions_Patient");
+
+            entity.HasOne(d => d.ImagingRoom)
+                .WithMany(p => p.ImagingSessions)
+                .HasForeignKey(d => d.ImagingRoomId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ImagingSessions_Room");
+
+            entity.HasOne(d => d.Equipment)
+                .WithMany(p => p.ImagingSessions)
+                .HasForeignKey(d => d.EquipmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ImagingSessions_Equipment");
+
+            entity.HasOne(d => d.AssignedOperatorUser)
+                .WithMany()
+                .HasForeignKey(d => d.AssignedOperatorUserId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_ImagingSessions_Operator");
+
+            entity.HasOne(d => d.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.CreatedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ImagingSessions_CreatedBy");
+        });
+
+        modelBuilder.Entity<DiagnosticResult>(entity =>
+        {
+            entity.HasKey(e => e.DiagnosticResultId);
+            entity.ToTable("DiagnosticResults");
+            entity.Property(e => e.SourceType).HasMaxLength(20).IsUnicode(false).HasDefaultValue("Internal");
+            entity.Property(e => e.ExternalFacilityName).HasMaxLength(200);
+            entity.Property(e => e.FileUrl).HasMaxLength(500);
+            entity.Property(e => e.ThumbnailUrl).HasMaxLength(500);
+            entity.Property(e => e.ImageFormat).HasMaxLength(20).IsUnicode(false).HasDefaultValue("JPEG");
+            entity.Property(e => e.Findings).HasMaxLength(1000);
+            entity.Property(e => e.ReviewNotes).HasMaxLength(1000);
+            entity.Property(e => e.UploadedAtUtc).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.DiagnosticOrder)
+                .WithMany(p => p.DiagnosticResults)
+                .HasForeignKey(d => d.DiagnosticOrderId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_DiagnosticResults_Order");
+
+            entity.HasOne(d => d.ImagingSession)
+                .WithMany(p => p.DiagnosticResults)
+                .HasForeignKey(d => d.ImagingSessionId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_DiagnosticResults_Session");
+
+            entity.HasOne(d => d.Equipment)
+                .WithMany(p => p.DiagnosticResults)
+                .HasForeignKey(d => d.EquipmentId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_DiagnosticResults_Equipment");
+
+            entity.HasOne(d => d.ReviewedByDentistUser)
+                .WithMany(p => p.DiagnosticResultsReviewed)
+                .HasForeignKey(d => d.ReviewedByDentistUserId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_DiagnosticResults_Reviewer");
+
+            entity.HasOne(d => d.UploadedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.UploadedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_DiagnosticResults_UploadedBy");
+        });
+
+        modelBuilder.Entity<ClinicalConsultation>(entity =>
+        {
+            entity.HasKey(e => e.ConsultationId);
+            entity.ToTable("ClinicalConsultations");
+            entity.Property(e => e.ConsultationReason).HasMaxLength(500);
+            entity.Property(e => e.ClinicalQuestion).HasMaxLength(1000);
+            entity.Property(e => e.Urgency).HasMaxLength(20).IsUnicode(false).HasDefaultValue("Normal");
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Requested");
+            entity.Property(e => e.DentistOpinion).HasMaxLength(2000);
+            entity.Property(e => e.Recommendations).HasMaxLength(1000);
+            entity.Property(e => e.RequestedAtUtc).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.SourceAppointment)
+                .WithMany(p => p.ClinicalConsultations)
+                .HasForeignKey(d => d.SourceAppointmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ClinicalConsultations_Appointment");
+
+            entity.HasOne(d => d.PatientUser)
+                .WithMany(p => p.ClinicalConsultations)
+                .HasForeignKey(d => d.PatientUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ClinicalConsultations_Patient");
+
+            entity.HasOne(d => d.RequestingDentistUser)
+                .WithMany(p => p.ClinicalConsultationsRequested)
+                .HasForeignKey(d => d.RequestingDentistUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ClinicalConsultations_RequestingDentist");
+
+            entity.HasOne(d => d.ConsultedDentistUser)
+                .WithMany(p => p.ClinicalConsultationsReceived)
+                .HasForeignKey(d => d.ConsultedDentistUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ClinicalConsultations_ConsultedDentist");
         });
 
         modelBuilder.Entity<StaffProfile>(entity =>
@@ -1163,6 +1548,298 @@ public partial class DentalClinicDbContext : DbContext
             entity.HasOne(d => d.MedicineBatch)
                 .WithMany(p => p.DispensationItems)
                 .HasForeignKey(d => d.MedicineBatchId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+
+        modelBuilder.Entity<ReceptionistShiftTemplate>(entity =>
+        {
+            entity.HasKey(e => e.ShiftTemplateId);
+            entity.ToTable("ReceptionistShiftTemplates");
+            entity.Property(e => e.TemplateName).HasMaxLength(100);
+            entity.Property(e => e.MinStaffRequired).HasDefaultValue(2);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.DisplayOrder).HasDefaultValue(1);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+        });
+
+        modelBuilder.Entity<ReceptionistWorkSchedule>(entity =>
+        {
+            entity.HasKey(e => e.ReceptionistScheduleId);
+            entity.ToTable("ReceptionistWorkSchedules");
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Scheduled");
+            entity.Property(e => e.IsPublished).HasDefaultValue(true);
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.ReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.ShiftTemplate)
+                .WithMany(p => p.WorkSchedules)
+                .HasForeignKey(d => d.ShiftTemplateId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(d => d.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.CreatedBy)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ReceptionistLeaveRequest>(entity =>
+        {
+            entity.HasKey(e => e.LeaveRequestId);
+            entity.ToTable("ReceptionistLeaveRequests");
+            entity.Property(e => e.LeaveType).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.AdditionalNotes).HasMaxLength(1000);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Pending");
+            entity.Property(e => e.RejectionReason).HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.ReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.ApprovedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ApprovedBy)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ReceptionistLeaveRequestPeriod>(entity =>
+        {
+            entity.HasKey(e => e.PeriodId);
+            entity.ToTable("ReceptionistLeaveRequestPeriods");
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Pending");
+
+            entity.HasOne(d => d.LeaveRequest)
+                .WithMany(p => p.Periods)
+                .HasForeignKey(d => d.LeaveRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ReceptionistShiftSwapRequest>(entity =>
+        {
+            entity.HasKey(e => e.SwapRequestId);
+            entity.ToTable("ReceptionistShiftSwapRequests");
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("PendingCounterparty");
+            entity.Property(e => e.CounterpartyNote).HasMaxLength(500);
+            entity.Property(e => e.AdminDecisionReason).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.RequestingReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.RequestingReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.TargetReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.TargetReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.SourceSchedule)
+                .WithMany(p => p.SourceSwapRequests)
+                .HasForeignKey(d => d.SourceScheduleId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.TargetSchedule)
+                .WithMany(p => p.TargetSwapRequests)
+                .HasForeignKey(d => d.TargetScheduleId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.AdminDecisionByUser)
+                .WithMany()
+                .HasForeignKey(d => d.AdminDecisionBy)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ReceptionistCoverageIncident>(entity =>
+        {
+            entity.HasKey(e => e.IncidentId);
+            entity.ToTable("ReceptionistCoverageIncidents");
+            entity.Property(e => e.IncidentType).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.RequiredMinimumCount).HasDefaultValue(2);
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.ReportedAt).HasDefaultValueSql("(sysutcdatetime())");
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Open");
+            entity.Property(e => e.ResolutionNotes).HasMaxLength(1000);
+
+            entity.HasOne(d => d.AffectedReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.AffectedReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.ReportedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReportedBy)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.ReplacementReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReplacementReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.ResolvedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ResolvedBy)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ReceptionistWorkHandover>(entity =>
+        {
+            entity.HasKey(e => e.HandoverId);
+            entity.ToTable("ReceptionistWorkHandovers");
+            entity.Property(e => e.HandoverType).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.HandoverStatus).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Transferred");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.FromReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.FromReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.ToReceptionistUser)
+                .WithMany()
+                .HasForeignKey(d => d.ToReceptionistUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(d => d.Shift)
+                .WithMany()
+                .HasForeignKey(d => d.ShiftId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<StaffAttendanceRecord>(entity =>
+        {
+            entity.HasKey(e => e.AttendanceId);
+            entity.ToTable("StaffAttendanceRecords");
+
+            entity.HasIndex(e => new { e.UserId, e.WorkDate, e.ShiftIdentifier }).IsUnique();
+            entity.HasIndex(e => new { e.WorkDate, e.Role, e.Status });
+            entity.HasIndex(e => new { e.IsFinalized, e.WorkDate });
+
+            entity.Property(e => e.ShiftIdentifier).HasMaxLength(100);
+            entity.Property(e => e.Role).HasMaxLength(40).IsUnicode(false);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.LeaveHours).HasPrecision(5, 2);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.RowVersion).IsRowVersion();
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.FinalizedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.FinalizedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<StaffAttendanceEvent>(entity =>
+        {
+            entity.HasKey(e => e.EventId);
+            entity.ToTable("StaffAttendanceEvents");
+
+            entity.Property(e => e.EventType).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.Source).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.IpAddress).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.Note).HasMaxLength(1000);
+
+            entity.HasOne(d => d.Attendance)
+                .WithMany(p => p.Events)
+                .HasForeignKey(d => d.AttendanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<StaffAttendanceCorrectionRequest>(entity =>
+        {
+            entity.HasKey(e => e.CorrectionRequestId);
+            entity.ToTable("StaffAttendanceCorrectionRequests");
+
+            entity.Property(e => e.Reason).HasMaxLength(200);
+            entity.Property(e => e.Explanation).HasMaxLength(1000);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.AdminNote).HasMaxLength(1000);
+
+            entity.HasOne(d => d.Attendance)
+                .WithMany(p => p.CorrectionRequests)
+                .HasForeignKey(d => d.AttendanceId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.ReviewedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReviewedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<AttendancePeriodClosure>(entity =>
+        {
+            entity.HasKey(e => e.ClosureId);
+            entity.ToTable("AttendancePeriodClosures");
+
+            entity.HasIndex(e => new { e.Year, e.Month }).IsUnique();
+
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false);
+            entity.Property(e => e.TotalWorkedHours).HasPrecision(10, 2);
+            entity.Property(e => e.ReopenReason).HasMaxLength(1000);
+
+            entity.HasOne(d => d.FinalizedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.FinalizedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.ReopenedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.ReopenedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<AttendancePolicy>(entity =>
+        {
+            entity.HasKey(e => e.PolicyId);
+            entity.ToTable("AttendancePolicies");
+
+            entity.Property(e => e.StandardWorkDayHours).HasPrecision(4, 2);
+
+        });
+
+                modelBuilder.Entity<ServiceCombo>(entity =>
+        {
+            entity.HasKey(e => e.ComboId);
+            entity.HasIndex(e => e.ComboCode).IsUnique();
+            entity.Property(e => e.ComboCode).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.Tagline).HasMaxLength(300);
+            entity.Property(e => e.Badge).HasMaxLength(50);
+            entity.Property(e => e.IconClass).HasMaxLength(50).IsUnicode(false);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.OriginalPrice).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.ComboPrice).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Active");
+
+            entity.HasOne(d => d.Department).WithMany()
+                .HasForeignKey(d => d.DepartmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.PrimaryService).WithMany()
+                .HasForeignKey(d => d.PrimaryServiceId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
         });
 

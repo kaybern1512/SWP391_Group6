@@ -1,0 +1,427 @@
+@model DentalClinic.Web.ViewModels.Admin.AdminDentistScheduleManageViewModel
+
+@{
+    var pendingCount = Model.LeaveRequests.Count(l => l.Status == "Pending");
+    var approvedCount = Model.LeaveRequests.Count(l => l.Status == "Approved");
+    var rejectedCount = Model.LeaveRequests.Count(l => l.Status == "Rejected");
+    var totalAffectedCount = Model.LeaveRequests.Sum(l => l.AffectedAppointmentsCount);
+}
+
+<!-- Summary Statistics Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm rounded-3 p-3 bg-white border-start border-4 border-warning">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold">Đơn Chờ Xét Duyệt</div>
+                    <div class="fs-4 fw-bold text-warning">@pendingCount đơn</div>
+                </div>
+                <div class="bg-warning-subtle text-warning p-3 rounded-circle">
+                    <i class="bi bi-clock-history fs-4"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm rounded-3 p-3 bg-white border-start border-4 border-danger">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold">Lịch Hẹn Bị Ảnh Hưởng</div>
+                    <div class="fs-4 fw-bold text-danger">@totalAffectedCount ca</div>
+                </div>
+                <div class="bg-danger-subtle text-danger p-3 rounded-circle">
+                    <i class="bi bi-exclamation-triangle fs-4"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm rounded-3 p-3 bg-white border-start border-4 border-success">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold">Đơn Đã Phê Duyệt</div>
+                    <div class="fs-4 fw-bold text-success">@approvedCount đơn</div>
+                </div>
+                <div class="bg-success-subtle text-success p-3 rounded-circle">
+                    <i class="bi bi-check2-circle fs-4"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm rounded-3 p-3 bg-white border-start border-4 border-secondary">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold">Đơn Đã Từ Chối</div>
+                    <div class="fs-4 fw-bold text-secondary">@rejectedCount đơn</div>
+                </div>
+                <div class="bg-secondary-subtle text-secondary p-3 rounded-circle">
+                    <i class="bi bi-x-circle fs-4"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Table of Leave Requests -->
+<div class="card border-0 shadow-sm rounded-3">
+    <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+        <h5 class="card-title fw-bold text-slate-800 mb-0 d-flex align-items-center gap-2">
+            <i class="bi bi-journal-medical text-primary"></i>
+            <span>Danh Sách Đơn Xin Nghỉ Phép Bác Sĩ</span>
+        </h5>
+        <span class="badge bg-secondary-subtle text-secondary rounded-pill">@Model.LeaveRequests.Count đơn</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light text-muted fs-13 text-uppercase">
+                <tr>
+                    <th class="ps-4">Mã Đơn</th>
+                    <th>Bác Sĩ Xin Nghỉ</th>
+                    <th>Loại Nghỉ Phép</th>
+                    <th>Khoảng Thời Gian</th>
+                    <th>Lý Do Nghỉ (Nội Bộ)</th>
+                    <th>Lịch Ảnh Hưởng</th>
+                    <th>Trạng Thái</th>
+                    <th class="text-end pe-4">Thao Tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.LeaveRequests == null || !Model.LeaveRequests.Any())
+                {
+                    <tr>
+                        <td colspan="8" class="text-center py-5 text-muted">
+                            <i class="bi bi-calendar-check fs-1 text-secondary mb-2 d-block"></i>
+                            <span>Hiện không có đơn xin nghỉ phép nào của bác sĩ.</span>
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var item in Model.LeaveRequests.OrderByDescending(r => r.CreatedAt))
+                    {
+                        <tr>
+                            <td class="ps-4 fw-bold text-primary">#@item.LeaveRequestId</td>
+                            <td>
+                                <div class="fw-bold text-dark">@item.DentistName</div>
+                                <div class="small text-muted">Mã: @(item.DentistEmployeeCode ?? "—")</div>
+                                @if (item.DepartmentNames != null && item.DepartmentNames.Any())
+                                {
+                                    <div class="small text-secondary">
+                                        <i class="bi bi-hospital me-1"></i>@string.Join(", ", item.DepartmentNames)
+                                    </div>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border">
+                                    @(item.LeaveTypeDisplay ?? item.LeaveType)
+                                </span>
+                            </td>
+                            <td>
+                                <div><strong>Từ:</strong> @item.StartDate.ToString("dd/MM/yyyy") @(item.StartTime.HasValue ? item.StartTime.Value.ToString("HH:mm") : "08:00")</div>
+                                <div><strong>Đến:</strong> @item.EndDate.ToString("dd/MM/yyyy") @(item.EndTime.HasValue ? item.EndTime.Value.ToString("HH:mm") : "17:00")</div>
+                            </td>
+                            <td>
+                                <div class="text-truncate" style="max-width: 200px;" title="@item.Reason">@item.Reason</div>
+                                @if (!string.IsNullOrEmpty(item.Notes))
+                                {
+                                    <div class="small text-muted mt-1"><i class="bi bi-chat-square-text me-1"></i>@item.Notes</div>
+                                }
+                                @if (!string.IsNullOrEmpty(item.RejectionReason))
+                                {
+                                    <div class="small text-danger mt-1">
+                                        <i class="bi bi-x-circle me-1"></i>Từ chối: @item.RejectionReason
+                                    </div>
+                                }
+                            </td>
+                            <td>
+                                @if (item.AffectedAppointmentsCount > 0)
+                                {
+                                    <div class="d-flex flex-column gap-1">
+                                        <span class="badge bg-warning text-dark border border-warning">
+                                            <i class="bi bi-calendar-event me-1"></i>@item.AffectedAppointmentsCount lịch hẹn
+                                        </span>
+                                        @if (item.UrgentAppointmentsCount > 0)
+                                        {
+                                            <span class="badge bg-danger">
+                                                <i class="bi bi-exclamation-octagon me-1"></i>@item.UrgentAppointmentsCount ca khẩn cấp
+                                            </span>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-light text-muted border">Không có</span>
+                                }
+                            </td>
+                            <td>
+                                @if (item.Status == "Pending")
+                                {
+                                    <span class="badge bg-warning text-dark border border-warning">Chờ duyệt</span>
+                                }
+                                else if (item.Status == "Approved")
+                                {
+                                    <span class="badge bg-success">Đã duyệt</span>
+                                    @if (!string.IsNullOrEmpty(item.ReviewedByName))
+                                    {
+                                        <div class="small text-muted mt-1">Bởi: @item.ReviewedByName</div>
+                                    }
+                                }
+                                else if (item.Status == "Rejected")
+                                {
+                                    <span class="badge bg-danger">Đã từ chối</span>
+                                    @if (!string.IsNullOrEmpty(item.ReviewedByName))
+                                    {
+                                        <div class="small text-muted mt-1">Bởi: @item.ReviewedByName</div>
+                                    }
+                                }
+                                else if (item.Status == "Withdrawn")
+                                {
+                                    <span class="badge bg-secondary">Bác sĩ đã rút</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">@item.Status</span>
+                                }
+                            </td>
+                            <td class="text-end pe-4">
+                                @if (item.Status == "Pending")
+                                {
+                                    <div class="d-inline-flex gap-2">
+                                        <button type="button" class="btn btn-sm btn-primary" onclick="openImpactModal(@item.LeaveRequestId, '@Html.Raw(item.DentistName.Replace("'", "\\'"))')">
+                                            <i class="bi bi-search me-1"></i> Xét Duyệt
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="openRejectModal(@item.LeaveRequestId, '@Html.Raw(item.DentistName.Replace("'", "\\'"))')">
+                                            <i class="bi bi-x-circle me-1"></i> Từ Chối
+                                        </button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-sm btn-light border text-muted" onclick="openImpactModal(@item.LeaveRequestId, '@Html.Raw(item.DentistName.Replace("'", "\\'"))')">
+                                        <i class="bi bi-eye me-1"></i> Chi tiết
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- MODAL: PHÂN TÍCH ẢNH HƯỞNG & PHÊ DUYỆT NGHỈ -->
+<!-- ========================================== -->
+<div class="modal fade" id="impactAnalysisModal" tabindex="-1" aria-labelledby="impactAnalysisModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white py-3">
+                <h5 class="modal-title fw-bold mb-0" id="impactAnalysisModalLabel">
+                    <i class="bi bi-shield-check me-2"></i> Phân Tích Ảnh Hưởng Lịch Hẹn & Phê Duyệt Đơn Nghỉ Phép
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4" id="impactModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Đang tải phân tích...</span>
+                    </div>
+                    <div class="mt-2 text-muted small">Đang quét xung đột lịch hẹn và bác sĩ thay thế...</div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2" id="impactModalFooter">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- MODAL: TỪ CHỐI ĐƠN XIN NGHỈ PHÉP -->
+<!-- ========================================== -->
+<div class="modal fade" id="rejectLeaveModal" tabindex="-1" aria-labelledby="rejectLeaveModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form id="rejectLeaveForm" method="post" action="">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-danger text-white py-3">
+                    <h5 class="modal-title fw-bold mb-0" id="rejectLeaveModalLabel">
+                        <i class="bi bi-x-circle me-1"></i> Từ Chối Đơn Xin Nghỉ Phép
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="mb-3">Bạn đang từ chối đơn xin nghỉ phép của bác sĩ: <strong id="rejectDentistName"></strong></p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lý Do Từ Chối <span class="text-danger">*</span></label>
+                        <textarea name="rejectionReason" class="form-control" rows="3" required placeholder="Nhập lý do từ chối (bắt buộc)..."></textarea>
+                        <div class="form-text text-muted">Lý do này sẽ được thông báo trực tiếp đến Bác sĩ trên cổng thông tin cá nhân.</div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-danger fw-semibold">
+                        <i class="bi bi-x-lg me-1"></i> Xác Nhận Từ Chối
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openRejectModal(id, dentistName) {
+        document.getElementById('rejectDentistName').textContent = dentistName;
+        document.getElementById('rejectLeaveForm').action = '/Admin/DentistSchedule/RejectLeave/' + id;
+        const modal = new bootstrap.Modal(document.getElementById('rejectLeaveModal'));
+        modal.show();
+    }
+
+    async function openImpactModal(id, dentistName) {
+        const modalEl = document.getElementById('impactAnalysisModal');
+        const modalBody = document.getElementById('impactModalBody');
+        const modalFooter = document.getElementById('impactModalFooter');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        modalBody.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status"></div>
+                <div class="mt-2 text-muted small">Đang phân tích ảnh hưởng lịch hẹn của bác sĩ <strong>${dentistName}</strong>...</div>
+            </div>`;
+        modalFooter.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>`;
+
+        try {
+            const resp = await fetch(`/Admin/DentistSchedule/LeaveImpact/${id}`);
+            const result = await resp.json();
+
+            if (!result.isSuccess || !result.data) {
+                modalBody.innerHTML = `<div class="alert alert-danger">${result.message || 'Không thể tải phân tích ảnh hưởng.'}</div>`;
+                return;
+            }
+
+            const data = result.data;
+            const isPending = data.leaveStatus === 'Pending';
+
+            let appointmentsHtml = '';
+            if (data.affectedAppointments && data.affectedAppointments.length > 0) {
+                appointmentsHtml = `
+                    <div class="table-responsive border rounded-3 mt-3">
+                        <table class="table table-hover align-middle mb-0 fs-13">
+                            <thead class="table-light text-uppercase">
+                                <tr>
+                                    <th class="ps-3">Mã Hẹn</th>
+                                    <th>Bệnh Nhân</th>
+                                    <th>Số Điện Thoại</th>
+                                    <th>Dịch Vụ Khám</th>
+                                    <th>Thời Gian Hẹn</th>
+                                    <th>Phòng</th>
+                                    <th>Bác Sĩ Thay Thế Khả Dụng</th>
+                                    <th class="text-end pe-3">Trạng Thái</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.affectedAppointments.map(a => `
+                                    <tr>
+                                        <td class="ps-3 fw-bold text-primary">${a.appointmentCode}</td>
+                                        <td class="fw-bold">${a.patientName}</td>
+                                        <td>${a.patientPhone || '—'}</td>
+                                        <td>${a.serviceName}</td>
+                                        <td>${new Date(a.scheduledStart).toLocaleString('vi-VN')}</td>
+                                        <td><span class="badge bg-light text-dark border">${a.roomName || '—'}</span></td>
+                                        <td>
+                                            ${a.availableAlternativeDentists && a.availableAlternativeDentists.length > 0
+                                                ? a.availableAlternativeDentists.map(d => `<span class="badge bg-success-subtle text-success border border-success-subtle me-1 mb-1">${d.dentistName}</span>`).join('')
+                                                : '<span class="text-muted small">Chưa có BS cùng khoa rảnh</span>'}
+                                        </td>
+                                        <td class="text-end pe-3">
+                                            <span class="badge bg-warning-subtle text-warning border border-warning">${a.status}</span>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+            } else {
+                appointmentsHtml = `
+                    <div class="alert alert-success border py-3 text-success d-flex align-items-center gap-2 mt-3">
+                        <i class="bi bi-check-circle-fill fs-5"></i>
+                        <div><strong>Không có lịch hẹn nào bị ảnh hưởng!</strong> Bác sĩ không có cuộc hẹn khám bệnh nhân nào trùng trong khoảng thời gian xin nghỉ này.</div>
+                    </div>`;
+            }
+
+            modalBody.innerHTML = `
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded-3 text-center">
+                            <div class="small text-muted fw-semibold">Tổng Cuộc Hẹn Bị Trùng</div>
+                            <div class="fs-3 fw-bold text-primary">${data.totalAffectedAppointments}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-warning-subtle rounded-3 text-center">
+                            <div class="small text-warning-emphasis fw-semibold">Lịch Đã Xác Nhận (Confirmed)</div>
+                            <div class="fs-3 fw-bold text-warning">${data.confirmedAppointmentsCount}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-danger-subtle rounded-3 text-center">
+                            <div class="small text-danger-emphasis fw-semibold">Ca Khẩn Cấp (Trong 24h)</div>
+                            <div class="fs-3 fw-bold text-danger">${data.urgentAppointmentsCount}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card border bg-light-subtle p-3 mb-3">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div><strong>Bác sĩ:</strong> ${data.dentistName}</div>
+                            <div><strong>Loại nghỉ:</strong> ${data.leaveType}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div><strong>Thời gian nghỉ:</strong> ${new Date(data.startDateTime).toLocaleString('vi-VN')} đến ${new Date(data.endDateTime).toLocaleString('vi-VN')}</div>
+                            <div><strong>Lý do xin nghỉ:</strong> ${data.reason}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <h6 class="fw-bold text-slate-800 mb-2">
+                    <i class="bi bi-calendar2-range text-primary me-1"></i> Danh Sách Lịch Hẹn Cần Điều Phối / Khắc Phục:
+                </h6>
+                ${appointmentsHtml}
+
+                ${isPending ? `
+                    <form id="approveLeaveForm" method="post" action="/Admin/DentistSchedule/ApproveLeave/${id}" class="mt-4 pt-3 border-top">
+                        <input type="hidden" name="__RequestVerificationToken" value="${document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''}" />
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Ghi Chú Phê Duyệt Của Quản Trị Viên (Staff Notes)</label>
+                            <input type="text" name="adminNotes" class="form-control" placeholder="Ghi chú điều phối bổ sung nếu có..." />
+                        </div>
+                        <div class="alert alert-info py-2 small mb-0">
+                            <i class="bi bi-info-circle me-1"></i> Khi phê duyệt: Hệ thống sẽ tự động chuyển trạng thái bác sĩ sang nghỉ phép (Availability: OnLeave), hủy ca trực trùng, tạo sự cố gián đoạn (Disruption) và gửi email kích hoạt phương án lựa chọn (Đổi bác sĩ / Dời lịch) tới bệnh nhân.
+                        </div>
+                    </form>
+                ` : ''}
+            `;
+
+            if (isPending) {
+                modalFooter.innerHTML = `
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-outline-danger" onclick="openRejectModal(${id}, '${dentistName}')">
+                        <i class="bi bi-x-circle me-1"></i> Từ Chối Đơn
+                    </button>
+                    <button type="button" class="btn btn-success fw-semibold" onclick="document.getElementById('approveLeaveForm').submit()">
+                        <i class="bi bi-check2-circle me-1"></i> Phê Duyệt & Kích Hoạt Khắc Phục
+                    </button>
+                `;
+            } else {
+                modalFooter.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>`;
+            }
+
+        } catch (err) {
+            modalBody.innerHTML = `<div class="alert alert-danger">Lỗi kết nối máy chủ: ${err.message}</div>`;
+        }
+    }
+</script>

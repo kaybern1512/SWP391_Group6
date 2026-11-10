@@ -1,4 +1,4 @@
-﻿using DentalClinic.Web.Helpers;
+using DentalClinic.Web.Helpers;
 using System.Threading.Tasks;
 using DentalClinic.Web.Services;
 using DentalClinic.Web.ViewModels.Appointments;
@@ -66,12 +66,17 @@ public class DentistAppointmentController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Start(long id, [FromForm] string? date = null)
     {
-        var apptDetail = await _appointmentApiService.GetAppointmentDetailAsync(id);
         var result = await _appointmentApiService.DentistStartAppointmentAsync(id);
         if (result.IsSuccess)
         {
             TempData["SuccessMessage"] = result.Message ?? "Đã tiếp nhận bệnh nhân vào ghế điều trị và bắt đầu ca khám.";
-            var patientId = apptDetail?.Data?.PatientUserId;
+            var patientId = result.Data?.PatientUserId;
+            if (!patientId.HasValue || patientId.Value <= 0)
+            {
+                var apptDetail = await _appointmentApiService.GetAppointmentDetailAsync(id);
+                patientId = apptDetail?.Data?.PatientUserId;
+            }
+
             if (patientId.HasValue && patientId.Value > 0)
             {
                 return RedirectToAction("Index", "DentistMedicalRecord", new

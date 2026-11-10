@@ -1,3 +1,4 @@
+using DentalClinic.Application.Features.ClinicalDiagnostics.DTOs;
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -801,5 +802,263 @@ public class PostCareService : IPostCareService
             CreatedAt = r.CreatedAt,
             ReviewedAt = r.ReviewedAt
         };
+    }
+
+    public async Task<ApiResponse<DepartmentReferralDto>> ScheduleReferralDestinationAppointmentAsync(
+        long receptionistUserId,
+        ScheduleDestinationReferralRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null)
+            return ApiResponse<DepartmentReferralDto>.Fail("Dữ liệu đặt lịch chuyển khoa không hợp lệ.");
+
+        if (request.ReferralId <= 0)
+            return ApiResponse<DepartmentReferralDto>.Fail("Mã yêu cầu chuyển khoa không hợp lệ.");
+
+        if (request.ScheduledStart >= request.ScheduledEnd)
+            return ApiResponse<DepartmentReferralDto>.Fail("Thời gian bắt đầu phải trước thời gian kết thúc.");
+
+        var startUtc = request.ScheduledStart;
+        var endUtc = request.ScheduledEnd;
+
+        var referral = await _dbContext.DepartmentReferrals
+            .Include(r => r.FromDepartment)
+            .Include(r => r.ToDepartment)
+            .Include(r => r.TreatmentSession)
+                .ThenInclude(s => s.Appointment)
+            .Include(r => r.TreatmentSession)
+                .ThenInclude(s => s.TreatmentPlanItem)
+                    .ThenInclude(i => i.TreatmentPlan)
+                        .ThenInclude(p => p.PatientUser)
+            .FirstOrDefaultAsync(r => r.ReferralId == request.ReferralId, ct);
+
+        if (referral == null)
+            return ApiResponse<DepartmentReferralDto>.Fail("Không tìm thấy yêu cầu chuyển chuyên khoa.");
+
+        if (referral.Status != "Pending" && referral.Status != "Accepted" && referral.Status != "Assigned")
+            return ApiResponse<DepartmentReferralDto>.Fail($"Yêu cầu chuyển khoa đang ở trạng thái '{referral.Status}', không thể đặt lịch.");
+
+        if (referral.DestinationAppointmentId.HasValue)
+        {
+            var existingAppt = await _dbContext.Appointments
+                .FirstOrDefaultAsync(a => a.AppointmentId == referral.DestinationAppointmentId.Value, ct);
+            if (existingAppt != null && existingAppt.Status != AppointmentStatus.Cancelled)
+            {
+                return ApiResponse<DepartmentReferralDto>.Fail($"Ca chuyển khoa này đã có lịch hẹn đích #{existingAppt.AppointmentId} ở trạng thái '{existingAppt.Status}'.");
+            }
+        }
+
+        var assignedDentistId = request.AssignedDentistUserId ?? referral.AssignedDentistUserId;
+        if (!assignedDentistId.HasValue || assignedDentistId.Value <= 0)
+            return ApiResponse<DepartmentReferralDto>.Fail("Vui lòng chỉ định bác sĩ thuộc chuyên khoa tiếp nhận.");
+
+        var isDentistInDept = await _dbContext.DentistDepartments
+            .AsNoTracking()
+            .AnyAsync(dd => dd.DentistUserId == assignedDentistId.Value &&
+                            dd.DepartmentId == referral.ToDepartmentId &&
+                            dd.Status == "Active", ct);
+        if (!isDentistInDept)
+            return ApiResponse<DepartmentReferralDto>.Fail("Bác sĩ được chọn không thuộc chuyên khoa tiếp nhận hoặc đã ngừng công tác.");
+
+        var startDateOnly = DateOnly.FromDateTime(startUtc.Date);
+        var endDateOnly = DateOnly.FromDateTime(endUtc.Date);
+        var onLeave = await _dbContext.DentistLeaveRequests
+            .AsNoTracking()
+            .AnyAsync(l => l.DentistUserId == assignedDentistId.Value &&
+                           l.Status == "Approved" &&
+                           l.StartDate <= endDateOnly &&
+                           l.EndDate >= startDateOnly, ct);
+        if (onLeave)
+            return ApiResponse<DepartmentReferralDto>.Fail("Bác sĩ được chọn có lịch nghỉ phép đã được phê duyệt trong khung giờ này.");
+
+        long? roomId = request.RoomId;
+        long? chairId = request.DentalChairId;
+        if (chairId.HasValue && chairId.Value > 0)
+        {
+            var chair = await _dbContext.DentalChairs
+                .Include(c => c.Room)
+                .FirstOrDefaultAsync(c => c.DentalChairId == chairId.Value && c.Status == "Active", ct);
+            if (chair == null)
+                return ApiResponse<DepartmentReferralDto>.Fail("Ghế nha khoa được chọn không khả dụng hoặc đã ngừng hoạt động.");
+
+            if (chair.Room != null && chair.Room.DepartmentId != referral.ToDepartmentId)
+                return ApiResponse<DepartmentReferralDto>.Fail("Ghế nha khoa không thuộc chuyên khoa tiếp nhận.");
+
+            roomId = chair.RoomId;
+        }
+
+        var lockKeys = new List<string>
+        {
+            $"Lock_Referral_{request.ReferralId}",
+            SqlAppLockHelper.DentistKey(assignedDentistId.Value, startUtc)
+        };
+        if (chairId.HasValue)
+            lockKeys.Add(SqlAppLockHelper.ChairKey(chairId.Value, startUtc));
+
+        await using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
+        using (await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct))
+        {
+            await _dbContext.Entry(referral).ReloadAsync(ct);
+            if (referral.DestinationAppointmentId.HasValue)
+            {
+                var existingAppt = await _dbContext.Appointments
+                    .FirstOrDefaultAsync(a => a.AppointmentId == referral.DestinationAppointmentId.Value, ct);
+                if (existingAppt != null && existingAppt.Status != AppointmentStatus.Cancelled)
+                {
+                    return ApiResponse<DepartmentReferralDto>.Fail($"Ca chuyển khoa này đã có lịch hẹn đích #{existingAppt.AppointmentId} ở trạng thái '{existingAppt.Status}'.");
+                }
+            }
+            var dentistConflict = await _dbContext.Appointments
+                .AsNoTracking()
+                .AnyAsync(a => a.AssignedDentistUserId == assignedDentistId.Value &&
+                               (a.Status == AppointmentStatus.Confirmed || a.Status == AppointmentStatus.CheckedIn || a.Status == AppointmentStatus.InService) &&
+                               a.ScheduledStart < endUtc &&
+                               a.ScheduledEnd > startUtc, ct);
+            if (dentistConflict)
+                return ApiResponse<DepartmentReferralDto>.Fail("Bác sĩ đã có lịch hẹn khác trùng vào khung giờ này.");
+
+            if (chairId.HasValue)
+            {
+                var chairConflict = await _dbContext.Appointments
+                    .AsNoTracking()
+                    .AnyAsync(a => a.DentalChairId == chairId.Value &&
+                                   (a.Status == AppointmentStatus.Confirmed || a.Status == AppointmentStatus.CheckedIn || a.Status == AppointmentStatus.InService) &&
+                                   a.ScheduledStart < endUtc &&
+                                   a.ScheduledEnd > startUtc, ct);
+                if (chairConflict)
+                    return ApiResponse<DepartmentReferralDto>.Fail("Ghế điều trị đã có ca khám khác sử dụng trong khung giờ này.");
+            }
+
+            var patientUserId = referral.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.PatientUserId
+                ?? referral.SourceAppointment?.PatientUserId
+                ?? 0;
+
+            if (patientUserId <= 0)
+                return ApiResponse<DepartmentReferralDto>.Fail("Không xác định được bệnh nhân của ca chuyển khoa.");
+
+            var serviceId = request.RequestedServiceId;
+            if (!serviceId.HasValue || serviceId <= 0)
+            {
+                var defaultService = await _dbContext.DepartmentServices
+                    .Where(s => s.DepartmentId == referral.ToDepartmentId && s.Status == "Active")
+                    .OrderBy(s => s.DepartmentServiceId)
+                    .FirstOrDefaultAsync(ct);
+                serviceId = defaultService?.DepartmentServiceId;
+            }
+
+            var destinationAppt = new Appointment
+            {
+                AppointmentCode = $"APT-{Guid.NewGuid().ToString("N")[..8].ToUpper()}",
+                PatientUserId = patientUserId,
+                DepartmentId = referral.ToDepartmentId,
+                RequestedServiceId = serviceId,
+                AssignedDentistUserId = assignedDentistId.Value,
+                RoomId = roomId,
+                DentalChairId = chairId,
+                ScheduledStart = startUtc,
+                ScheduledEnd = endUtc,
+                BookingSource = BookingSource.Receptionist,
+                Status = AppointmentStatus.Confirmed,
+                ConfirmedAt = DateTime.UtcNow,
+                CreatedByUserId = receptionistUserId,
+                CreatedAt = DateTime.UtcNow,
+                ReasonForVisit = $"[Chuyển khoa từ {referral.FromDepartment?.Name ?? "Chuyên khoa cũ"}] {request.Notes}".Trim()
+            };
+
+            _dbContext.Appointments.Add(destinationAppt);
+            await _dbContext.SaveChangesAsync(ct);
+
+            referral.DestinationAppointmentId = destinationAppt.AppointmentId;
+            referral.AssignedDentistUserId = assignedDentistId.Value;
+            referral.Status = "Assigned";
+            referral.ReviewedByUserId = receptionistUserId;
+            referral.ReviewedAt = DateTime.UtcNow;
+
+            await _dbContext.SaveChangesAsync(ct);
+
+            await tx.CommitAsync(ct);
+
+            _logger.LogInformation("Lễ tân #{StaffId} đã đặt lịch hẹn chuyển khoa #{ReferralId} -> Cuộc hẹn #{ApptId}",
+                receptionistUserId, referral.ReferralId, destinationAppt.AppointmentId);
+
+            var dto = await MapReferralToDtoAsync(referral.ReferralId, ct);
+            return ApiResponse<DepartmentReferralDto>.Ok(dto!, "Điều phối đặt lịch chuyển chuyên khoa thành công.");
+        }
+    }
+
+    public async Task<ApiResponse<ReferralSourceSummaryDto>> GetReferralSourceSummaryAsync(
+        long referralId,
+        CancellationToken ct = default)
+    {
+        var referral = await _dbContext.DepartmentReferrals
+            .AsNoTracking()
+            .Include(r => r.FromDepartment)
+            .Include(r => r.ToDepartment)
+            .Include(r => r.TreatmentSession)
+                .ThenInclude(s => s.Appointment)
+            .Include(r => r.TreatmentSession)
+                .ThenInclude(s => s.DentistUser)
+                    .ThenInclude(d => d.User)
+            .Include(r => r.TreatmentSession)
+                .ThenInclude(s => s.TreatmentPlanItem)
+                    .ThenInclude(i => i.TreatmentPlan)
+                        .ThenInclude(p => p.PatientUser)
+            .FirstOrDefaultAsync(r => r.ReferralId == referralId, ct);
+
+        if (referral == null)
+            return ApiResponse<ReferralSourceSummaryDto>.Fail("Không tìm thấy thông tin ca chuyển khoa.");
+
+        var sourceApptId = referral.SourceAppointmentId ?? referral.TreatmentSession?.AppointmentId ?? 0;
+        var patientUser = referral.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.PatientUser;
+
+        var diagnosticResults = new List<DiagnosticResultDto>();
+        if (sourceApptId > 0)
+        {
+            var images = await _dbContext.DiagnosticResults
+                .AsNoTracking()
+                .Include(r => r.Equipment)
+                .Include(r => r.ReviewedByDentistUser).ThenInclude(d => d!.User)
+                .Where(r => r.DiagnosticOrder.AppointmentId == sourceApptId)
+                .OrderByDescending(r => r.UploadedAtUtc)
+                .ToListAsync(ct);
+
+            diagnosticResults = images.Select(r => new DiagnosticResultDto
+            {
+                DiagnosticResultId = r.DiagnosticResultId,
+                DiagnosticOrderId = r.DiagnosticOrderId,
+                ImagingSessionId = r.ImagingSessionId,
+                EquipmentId = r.EquipmentId,
+                EquipmentName = r.Equipment?.EquipmentName ?? string.Empty,
+                FileUrl = r.FileUrl,
+                ThumbnailUrl = r.ThumbnailUrl,
+                ImageFormat = r.ImageFormat,
+                Findings = r.Findings,
+                ReviewedByDentistUserId = r.ReviewedByDentistUserId,
+                ReviewedByDentistName = r.ReviewedByDentistUser?.User?.FullName,
+                ReviewedAtUtc = r.ReviewedAtUtc,
+                ReviewNotes = r.ReviewNotes,
+                IsReviewed = r.IsReviewed,
+                UploadedAtUtc = r.UploadedAtUtc
+            }).ToList();
+        }
+
+        var summary = new ReferralSourceSummaryDto
+        {
+            ReferralId = referral.ReferralId,
+            SourceAppointmentId = sourceApptId,
+            PatientName = patientUser?.FullName ?? "Bệnh nhân",
+            PatientCode = patientUser?.PatientCode,
+            FromDepartmentName = referral.FromDepartment?.Name ?? string.Empty,
+            ToDepartmentName = referral.ToDepartment?.Name ?? string.Empty,
+            RequestingDentistName = referral.TreatmentSession?.DentistUser?.User?.FullName ?? "Bác sĩ phụ trách",
+            Reason = referral.Reason,
+            ClinicalInstructions = referral.TreatmentSession?.ClinicalNote,
+            Urgency = referral.Urgency,
+            Status = referral.Status,
+            DestinationAppointmentId = referral.DestinationAppointmentId,
+            DiagnosticImages = diagnosticResults
+        };
+
+        return ApiResponse<ReferralSourceSummaryDto>.Ok(summary);
     }
 }

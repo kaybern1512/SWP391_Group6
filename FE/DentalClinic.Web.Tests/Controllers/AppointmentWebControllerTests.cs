@@ -49,6 +49,7 @@ public class AppointmentWebControllerTests
     private readonly Mock<IAppointmentApiService> _apiMock;
 
     private readonly Mock<IFeedbackApiService> _feedbackApiMock;
+    private readonly Mock<IAppointmentDisruptionApiService> _disruptionApiMock;
 
 
 
@@ -59,6 +60,7 @@ public class AppointmentWebControllerTests
         _apiMock = new Mock<IAppointmentApiService>();
 
         _feedbackApiMock = new Mock<IFeedbackApiService>();
+        _disruptionApiMock = new Mock<IAppointmentDisruptionApiService>();
 
     }
 
@@ -110,7 +112,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -154,7 +156,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -212,7 +214,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -276,7 +278,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -322,6 +324,148 @@ public class AppointmentWebControllerTests
 
     }
 
+[Fact]
+    public async Task Patient_Book_Get_WithComboParam_PreselectsComboCategoryAndService()
+    {
+        _apiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(new List<DepartmentDto>
+            {
+                new() { DepartmentId = 1, Name = "Khoa Răng Tổng Quát" },
+                new() { DepartmentId = 2, Name = "Khoa Chỉnh Nha" }
+            }));
+        _apiMock.Setup(x => x.GetServicesAsync(It.IsAny<long>()))
+            .ReturnsAsync(ApiResult<List<DepartmentServiceDto>>.Success(new List<DepartmentServiceDto>
+            {
+                new() { DepartmentServiceId = 2, DepartmentId = 1, ServiceName = "Lấy cao răng" }
+            }));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Book(combo: "COMBO_HYGIENE");
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var model = viewResult.Model.Should().BeOfType<PatientBookViewModel>().Subject;
+        model.BookingCategory.Should().Be("Combo");
+        model.SelectedComboCode.Should().Be("COMBO_HYGIENE");
+        model.DepartmentId.Should().Be(1);
+        model.RequestedServiceId.Should().Be(2);
+        model.Combos.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task Patient_Book_Get_WithCategoryGeneralCheckup_PreselectsGeneralCheckup()
+    {
+        _apiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(new List<DepartmentDto>
+            {
+                new() { DepartmentId = 1, Name = "Khoa Răng Tổng Quát" }
+            }));
+        _apiMock.Setup(x => x.GetServicesAsync(It.IsAny<long>()))
+            .ReturnsAsync(ApiResult<List<DepartmentServiceDto>>.Success(new List<DepartmentServiceDto>()));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Book(category: "GeneralCheckup");
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var model = viewResult.Model.Should().BeOfType<PatientBookViewModel>().Subject;
+        model.BookingCategory.Should().Be("GeneralCheckup");
+        model.DepartmentId.Should().Be(1);
+        model.RequestedServiceId.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Patient_Book_Get_WithDepartmentAndService_PreselectsSingleService()
+    {
+        _apiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(new List<DepartmentDto>
+            {
+                new() { DepartmentId = 2, Name = "Khoa Chỉnh Nha" }
+            }));
+        _apiMock.Setup(x => x.GetServicesAsync(It.IsAny<long>()))
+            .ReturnsAsync(ApiResult<List<DepartmentServiceDto>>.Success(new List<DepartmentServiceDto>
+            {
+                new() { DepartmentServiceId = 6, DepartmentId = 2, ServiceName = "Tẩy trắng Laser" }
+            }));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Book(departmentId: 2, serviceId: 6);
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var model = viewResult.Model.Should().BeOfType<PatientBookViewModel>().Subject;
+        model.BookingCategory.Should().Be("SingleService");
+        model.DepartmentId.Should().Be(2);
+        model.RequestedServiceId.Should().Be(6);
+    }
+
+    [Fact]
+    public async Task Patient_Book_Get_DefaultNoParams_DefaultsToGeneralCheckup()
+    {
+        _apiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(new List<DepartmentDto>
+            {
+                new() { DepartmentId = 1, Name = "Khoa Răng Tổng Quát" }
+            }));
+        _apiMock.Setup(x => x.GetServicesAsync(It.IsAny<long>()))
+            .ReturnsAsync(ApiResult<List<DepartmentServiceDto>>.Success(new List<DepartmentServiceDto>()));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        var result = await controller.Book();
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var model = viewResult.Model.Should().BeOfType<PatientBookViewModel>().Subject;
+        model.BookingCategory.Should().Be("GeneralCheckup");
+        model.DepartmentId.Should().Be(1);
+        model.RequestedServiceId.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Patient_Book_Post_ComboCategory_PrependsComboTitleToReasonForVisit()
+    {
+        CreateAppointmentRequest? capturedRequest = null;
+        _apiMock.Setup(x => x.BookAppointmentAsync(It.IsAny<CreateAppointmentRequest>()))
+            .Callback<CreateAppointmentRequest>(r => capturedRequest = r)
+            .ReturnsAsync(ApiResult<AppointmentDto>.Success(new AppointmentDto { AppointmentId = 999 }));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient"),
+            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
+        };
+
+        var model = new PatientBookViewModel
+        {
+            DepartmentId = 2,
+            RequestedServiceId = 6,
+            BookingCategory = "Combo",
+            SelectedComboCode = "COMBO_WHITENING",
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(14),
+            ReasonForVisit = "Mong muốn làm trắng răng đón Tết"
+        };
+
+        var result = await controller.Book(model);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Success");
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.ReasonForVisit.Should().StartWith("[Gói Combo: Nụ Cười Trắng Sáng Laser Whitening]");
+        capturedRequest.ReasonForVisit.Should().Contain("Mong muốn làm trắng răng đón Tết");
+    }
+
 
 
     [Fact]
@@ -344,7 +488,7 @@ public class AppointmentWebControllerTests
         _apiMock.Setup(x => x.GetDentistsAsync(It.IsAny<long>()))
             .ReturnsAsync(ApiResult<List<DentistOptionDto>>.Success(new List<DentistOptionDto>()));
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(101, "Patient")
         };
@@ -676,7 +820,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -732,7 +876,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -838,7 +982,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -880,7 +1024,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -932,7 +1076,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -964,7 +1108,7 @@ public class AppointmentWebControllerTests
 
         var pastDate = PatientAppointmentController.GetClinicToday().AddDays(-2);
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1024,7 +1168,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1052,7 +1196,7 @@ public class AppointmentWebControllerTests
 
     {
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1094,7 +1238,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1132,7 +1276,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1382,7 +1526,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1446,7 +1590,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1620,7 +1764,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1668,7 +1812,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1706,7 +1850,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1760,7 +1904,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
@@ -1798,7 +1942,7 @@ public class AppointmentWebControllerTests
 
 
 
-        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object)
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
 
         {
 
