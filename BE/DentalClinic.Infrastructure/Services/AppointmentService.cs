@@ -5219,76 +5219,126 @@ public class AppointmentService : IAppointmentService
         long dentistUserId,
         CancellationToken ct = default)
     {
-        var appointment = await _dbContext.Appointments.FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
-        if (appointment == null)
+        IDisposable? apptLock = null;
+        if (_dbContext.Database.IsRelational())
         {
-            return ApiResponse<StartAppointmentResultDto>.Fail("Không tìm thấy thông tin lịch hẹn.");
+            apptLock = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, new[] { SqlAppLockHelper.ApptKey(appointmentId) }, 5000, ct);
         }
 
-        if (!appointment.AssignedDentistUserId.HasValue)
+        try
         {
-            appointment.AssignedDentistUserId = dentistUserId;
-        }
-        else if (appointment.AssignedDentistUserId != dentistUserId)
-        {
-            var isSysAdmin = await _dbContext.UserAccounts.AnyAsync(u => u.UserId == dentistUserId && u.Role == UserRole.SystemAdministrator, ct);
-            if (!isSysAdmin)
+            var appointment = await _dbContext.Appointments.FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+            if (appointment == null)
             {
-                return ApiResponse<StartAppointmentResultDto>.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
+                return ApiResponse<StartAppointmentResultDto>.Fail("Không tìm thấy thông tin lịch hẹn.");
             }
+
+            // Quy trình phân công: Không tự gán bác sĩ trái quy trình phân công của Lễ tân/Trưởng khoa
+            if (!appointment.AssignedDentistUserId.HasValue)
+            {
+                return ApiResponse<StartAppointmentResultDto>.Fail("Ca khám chưa được phân công bác sĩ điều trị. Vui lòng liên hệ Lễ tân để phân công bác sĩ trước khi tiếp nhận.");
+            }
+
+            if (appointment.AssignedDentistUserId != dentistUserId)
+            {
+                var isSysAdmin = await _dbContext.UserAccounts.AnyAsync(u => u.UserId == dentistUserId && u.Role == UserRole.SystemAdministrator, ct);
+                if (!isSysAdmin)
+                {
+                    return ApiResponse<StartAppointmentResultDto>.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
+                }
+            }
+
+            if (appointment.Status != AppointmentStatus.CheckedIn && appointment.Status != AppointmentStatus.Waiting)
+            {
+                return ApiResponse<StartAppointmentResultDto>.Fail($"Không thể bắt đầu ca khám ở trạng thái '{appointment.Status}'. Bệnh nhân cần làm thủ tục check-in trước.");
+            }
+
+            // Đảm bảo RoomId hợp lệ (nạp từ ghế điều trị nếu appointment chưa lưu trực tiếp)
+            if (!appointment.RoomId.HasValue && appointment.DentalChairId.HasValue)
+            {
+                var chair = await _dbContext.DentalChairs.AsNoTracking().FirstOrDefaultAsync(c => c.DentalChairId == appointment.DentalChairId.Value, ct);
+                if (chair != null && chair.RoomId > 0)
+                {
+                    appointment.RoomId = chair.RoomId;
+                }
+            }
+
+            if (!appointment.RoomId.HasValue || appointment.RoomId.Value <= 0)
+            {
+                return ApiResponse<StartAppointmentResultDto>.Fail("Ca khám chưa được phân bổ phòng khám hợp lệ.");
+            }
+
+            if (!appointment.DentalChairId.HasValue || appointment.DentalChairId.Value <= 0)
+            {
+                return ApiResponse<StartAppointmentResultDto>.Fail("Ca khám chưa được phân bổ ghế điều trị hợp lệ. Vui lòng chọn ghế nha khoa trước khi tiếp nhận.");
+            }
+
+            // Kiểm tra chống double-booking ghế điều trị
+            var isChairOccupied = await _dbContext.Appointments
+                .AnyAsync(a => a.AppointmentId != appointment.AppointmentId &&
+                               a.DentalChairId == appointment.DentalChairId &&
+                               a.Status == AppointmentStatus.InService, ct);
+            if (isChairOccupied)
+            {
+                return ApiResponse<StartAppointmentResultDto>.Fail("Ghế điều trị này đang có ca khám khác đang diễn ra. Vui lòng chọn ghế khác hoặc chờ ca khám trước hoàn tất.");
+            }
+
+            // Kiểm tra chống double-booking bác sĩ
+            var isDentistOccupied = await _dbContext.Appointments
+                .AnyAsync(a => a.AppointmentId != appointment.AppointmentId &&
+                               a.AssignedDentistUserId == dentistUserId &&
+                               a.Status == AppointmentStatus.InService, ct);
+            if (isDentistOccupied)
+            {
+                return ApiResponse<StartAppointmentResultDto>.Fail("Bác sĩ hiện đang có một ca khám khác đang diễn ra. Vui lòng hoàn tất ca khám trước khi tiếp nhận bệnh nhân mới.");
+            }
+
+            var oldStatus = appointment.Status;
+            appointment.Status = AppointmentStatus.InService;
+            appointment.UpdatedAt = DateTime.UtcNow;
+
+            _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+            {
+                AppointmentId = appointment.AppointmentId,
+                OldStatus = oldStatus,
+                NewStatus = AppointmentStatus.InService,
+                ChangedByUserId = dentistUserId,
+                Note = "Bác sĩ tiếp nhận bệnh nhân vào ghế điều trị.",
+                ChangedAt = DateTime.UtcNow
+            });
+
+            // P2: Chuyển trạng thái FollowUpSchedule sang Completed khi ca khám hoàn tất
+            var linkedFollowUp = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
+            if (linkedFollowUp != null)
+            {
+                linkedFollowUp.Status = "Completed";
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
+
+            await _notificationService.CreateNotificationAsync(
+                appointment.PatientUserId,
+                appointment.AppointmentId,
+                "AppointmentInService",
+                "Đang điều trị tại ghế",
+                $"Bác sĩ đã bắt đầu thực hiện ca khám/thủ thuật cho lịch hẹn {appointment.AppointmentCode}.",
+                ct);
+
+            var resultDto = new StartAppointmentResultDto
+            {
+                AppointmentId = appointment.AppointmentId,
+                PatientUserId = appointment.PatientUserId,
+                Status = AppointmentStatus.InService,
+                DentalChairId = appointment.DentalChairId
+            };
+
+            return ApiResponse<StartAppointmentResultDto>.Ok(resultDto, "Đã tiếp nhận bệnh nhân vào ghế điều trị thành công.");
         }
-
-        if (appointment.Status != AppointmentStatus.CheckedIn && appointment.Status != AppointmentStatus.Waiting)
+        finally
         {
-            return ApiResponse<StartAppointmentResultDto>.Fail($"Không thể bắt đầu ca khám ở trạng thái '{appointment.Status}'. Bệnh nhân cần làm thủ tục check-in trước.");
+            apptLock?.Dispose();
         }
-
-        if (!appointment.DentalChairId.HasValue || appointment.DentalChairId.Value <= 0)
-        {
-            return ApiResponse<StartAppointmentResultDto>.Fail("Ca khám chưa được phân bổ ghế điều trị hợp lệ. Vui lòng chọn ghế nha khoa trước khi tiếp nhận.");
-        }
-
-        var oldStatus = appointment.Status;
-        appointment.Status = AppointmentStatus.InService;
-        appointment.UpdatedAt = DateTime.UtcNow;
-
-        _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
-        {
-            AppointmentId = appointment.AppointmentId,
-            OldStatus = oldStatus,
-            NewStatus = AppointmentStatus.InService,
-            ChangedByUserId = dentistUserId,
-            Note = "Bác sĩ tiếp nhận bệnh nhân vào ghế điều trị.",
-            ChangedAt = DateTime.UtcNow
-        });
-
-        // P2: Chuyển trạng thái FollowUpSchedule sang Completed khi ca khám hoàn tất
-        var linkedFollowUp = await _dbContext.FollowUpSchedules
-            .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
-        if (linkedFollowUp != null)
-        {
-            linkedFollowUp.Status = "Completed";
-        }
-
-        await _dbContext.SaveChangesAsync(ct);
-
-        await _notificationService.CreateNotificationAsync(
-            appointment.PatientUserId,
-            appointment.AppointmentId,
-            "AppointmentInService",
-            "Đang điều trị tại ghế",
-            $"Bác sĩ đã bắt đầu thực hiện ca khám/thủ thuật cho lịch hẹn {appointment.AppointmentCode}.",
-            ct);
-
-        var resultDto = new StartAppointmentResultDto
-        {
-            AppointmentId = appointment.AppointmentId,
-            PatientUserId = appointment.PatientUserId,
-            Status = AppointmentStatus.InService,
-            DentalChairId = appointment.DentalChairId
-        };
-
-        return ApiResponse<StartAppointmentResultDto>.Ok(resultDto, "Đã tiếp nhận bệnh nhân vào ghế điều trị thành công.");
     }
 
     public async Task<ApiResponse> DentistCompleteAppointmentAsync(

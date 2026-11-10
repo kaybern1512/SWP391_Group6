@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
@@ -131,6 +131,7 @@ public static class SqlAppLockHelper
                 }
             }
 
+            var acquiredKeys = new List<string>();
             foreach (var key in sortedKeys)
             {
                 var pRes = new SqlParameter("@res", SqlDbType.Int) { Direction = ParameterDirection.Output };
@@ -146,17 +147,35 @@ public static class SqlAppLockHelper
                 var returnCode = pRes.Value is int code ? code : Convert.ToInt32(pRes.Value);
                 if (returnCode < 0)
                 {
+                    if (!hasTransaction)
+                    {
+                        foreach (var acquired in acquiredKeys)
+                        {
+                            try
+                            {
+                                var pRel = new SqlParameter("@resource", acquired);
+                                await dbContext.Database.ExecuteSqlRawAsync(
+                                    "EXEC sp_releaseapplock @Resource = @resource, @LockOwner = 'Session';",
+                                    new object[] { pRel },
+                                    CancellationToken.None);
+                            }
+                            catch { }
+                        }
+                    }
+
                     if (openedConnection)
                     {
                         try { dbContext.Database.CloseConnection(); } catch { }
                     }
                     throw new TimeoutException($"Không thể lấy khóa ứng dụng cho tài nguyên '{key}' (mã lỗi sp_getapplock: {returnCode}). Vui lòng thử lại.");
                 }
+
+                acquiredKeys.Add(key);
             }
 
             if (!hasTransaction)
             {
-                return new SessionLockReleaser(dbContext, sortedKeys, openedConnection);
+                return new SessionLockReleaser(dbContext, acquiredKeys, openedConnection);
             }
 
             return EmptyDisposable.Instance;
