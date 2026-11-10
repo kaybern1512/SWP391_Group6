@@ -989,49 +989,51 @@ public class AdminService : IAdminService
             .Where(i => i.Status == "Paid")
             .SumAsync(i => (decimal?)i.TotalAmount, ct) ?? 0;
 
-        // 2. From PerformedServices if appointments completed
-        var performedServiceRevenue = await _dbContext.PerformedServices
-            .AsNoTracking()
-            .Where(p => p.TreatmentSession.Appointment.Status == AppointmentStatus.Completed)
-            .SumAsync(p => (decimal?)p.Amount, ct) ?? 0;
+        decimal totalRevenue = paidInvoiceRevenue;
+        if (totalRevenue <= 0)
+        {
+            var performedServiceRevenue = await _dbContext.PerformedServices
+                .AsNoTracking()
+                .Where(p => p.TreatmentSession.Appointment.Status == AppointmentStatus.Completed)
+                .SumAsync(p => (decimal?)p.Amount, ct) ?? 0;
 
-        // 3. Fallback: estimate from completed appointment requested services price
-        var completedApptPriceRevenue = await _dbContext.Appointments
-            .AsNoTracking()
-            .Where(a => a.Status == AppointmentStatus.Completed && a.RequestedService != null)
-            .SumAsync(a => (decimal?)a.RequestedService!.Price, ct) ?? 0;
+            totalRevenue = performedServiceRevenue > 0
+                ? performedServiceRevenue
+                : (await _dbContext.Appointments
+                    .AsNoTracking()
+                    .Where(a => a.Status == AppointmentStatus.Completed && a.RequestedService != null)
+                    .SumAsync(a => (decimal?)a.RequestedService!.Price, ct) ?? 0);
+        }
 
-        var totalRevenue = paidInvoiceRevenue > 0
-            ? paidInvoiceRevenue
-            : (performedServiceRevenue > 0 ? performedServiceRevenue : completedApptPriceRevenue);
-
-        // Monthly Revenues for the current year
+        // Monthly Revenues for the current year (1 single batch query instead of 12 full table scans)
         var currentYear = DateTime.UtcNow.Year;
+        var startOfYear = new DateTime(currentYear, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var endOfYear = startOfYear.AddYears(1);
+
+        var yearAppts = await _dbContext.Appointments
+            .AsNoTracking()
+            .Where(a => a.ScheduledStart >= startOfYear && a.ScheduledStart < endOfYear)
+            .Select(a => new
+            {
+                Month = a.ScheduledStart!.Value.Month,
+                IsCompleted = a.Status == AppointmentStatus.Completed,
+                Price = a.RequestedService != null ? a.RequestedService.Price : 0
+            })
+            .ToListAsync(ct);
+
         var monthlyList = new List<MonthlyRevenueItemDto>();
         for (int m = 1; m <= 12; m++)
         {
-            var apptsInMonth = await _dbContext.Appointments
-                .AsNoTracking()
-                .Where(a => a.ScheduledStart != null &&
-                            a.ScheduledStart.Value.Year == currentYear &&
-                            a.ScheduledStart.Value.Month == m)
-                .ToListAsync(ct);
-
-            var count = apptsInMonth.Count;
-            var rev = apptsInMonth
-                .Where(a => a.Status == AppointmentStatus.Completed && a.RequestedService != null)
-                .Sum(a => a.RequestedService?.Price ?? 0);
-
+            var inMonth = yearAppts.Where(a => a.Month == m).ToList();
             monthlyList.Add(new MonthlyRevenueItemDto
             {
                 Year = currentYear,
                 Month = m,
                 MonthName = CultureInfo.CurrentCulture.DateTimeFormat.GetAbbreviatedMonthName(m),
-                Revenue = rev,
-                AppointmentCount = count
+                Revenue = inMonth.Where(a => a.IsCompleted).Sum(a => a.Price),
+                AppointmentCount = inMonth.Count
             });
         }
-
         // Department breakdown
         var deptStatsQuery = await _dbContext.Appointments
             .AsNoTracking()
