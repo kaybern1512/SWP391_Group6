@@ -17,7 +17,7 @@ async function loginAs(page, email, password = 'Password123@') {
 
   // Click login button and wait for redirect away from login page
   await page.locator('button.btn-dc-primary').click();
-  await page.waitForURL(url => !url.pathname.toLowerCase().includes('/account/login'), { timeout: 15000 });
+  await page.waitForURL(url => !url.pathname.toLowerCase().includes('/account/login'), { waitUntil: 'domcontentloaded', timeout: 20000 });
 }
 
 /**

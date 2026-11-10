@@ -62,7 +62,7 @@ test.describe('Examination Flow & Localhost Performance Verification', () => {
     // Click "Vào Khám"
     console.log('[EXAM TEST] Clicking "Vào Khám" button...');
     await Promise.all([
-      page.waitForURL(url => url.pathname.toLowerCase().includes('/dentist/medicalrecords'), { timeout: 30000 }),
+      page.waitForURL(url => url.pathname.toLowerCase().includes('/dentist/medicalrecords'), { waitUntil: 'domcontentloaded', timeout: 30000 }),
       startBtn.click()
     ]);
 

@@ -81,31 +81,33 @@ public class MedicalRecordService : IMedicalRecordService
         }
 
         var record = await _dbContext.DentalMedicalRecords
-            .AsSplitQuery()
-            .Include(r => r.ClinicalEntries)
-                .ThenInclude(c => c.DentistUser)
-                    .ThenInclude(d => d.User)
-            .Include(r => r.ClinicalEntries)
-                .ThenInclude(c => c.Appointment)
-            .Include(r => r.ClinicalEntries)
-                .ThenInclude(c => c.OdontogramEntries)
-            .Include(r => r.ClinicalEntries)
-                .ThenInclude(c => c.ImagingRecords)
+            .AsNoTracking()
             .FirstOrDefaultAsync(r => r.PatientUserId == patientUserId, ct);
 
         if (record == null)
         {
             // Tự động khởi tạo hồ sơ bệnh án điện tử nếu chưa có
-            record = new DentalMedicalRecord
+            var newRecord = new DentalMedicalRecord
             {
                 PatientUserId = patientUserId,
                 CreatedAt = DateTime.UtcNow
             };
-            _dbContext.DentalMedicalRecords.Add(record);
+            _dbContext.DentalMedicalRecords.Add(newRecord);
             await _dbContext.SaveChangesAsync(ct);
+            record = newRecord;
         }
 
-        var clinicalDtoList = record.ClinicalEntries
+        var clinicalEntries = await _dbContext.ClinicalEntries
+            .AsNoTracking()
+            .Where(c => c.MedicalRecordId == record.MedicalRecordId)
+            .Include(c => c.DentistUser)
+                .ThenInclude(d => d.User)
+            .Include(c => c.Appointment)
+            .Include(c => c.OdontogramEntries)
+            .Include(c => c.ImagingRecords)
+            .ToListAsync(ct);
+
+        var clinicalDtoList = clinicalEntries
             .OrderByDescending(c => c.CreatedAt)
             .Select(c => new ClinicalEntryDto
             {
@@ -141,7 +143,7 @@ public class MedicalRecordService : IMedicalRecordService
             }).ToList();
 
         // Tính toán trạng thái hiện thời của 32 răng (lấy trạng thái mới nhất ghi nhận cho mỗi răng)
-        var currentOdontogram = ComputeCurrentOdontogram(record.ClinicalEntries);
+        var currentOdontogram = ComputeCurrentOdontogram(clinicalEntries);
 
         var dto = new MedicalRecordDto
         {
@@ -377,9 +379,7 @@ public class MedicalRecordService : IMedicalRecordService
     public async Task<ApiResponse<List<OdontogramEntryDto>>> GetCurrentOdontogramAsync(long patientUserId, CancellationToken ct = default)
     {
         var record = await _dbContext.DentalMedicalRecords
-            .AsSplitQuery()
-            .Include(r => r.ClinicalEntries)
-                .ThenInclude(c => c.OdontogramEntries)
+            .AsNoTracking()
             .FirstOrDefaultAsync(r => r.PatientUserId == patientUserId, ct);
 
         if (record == null)
@@ -394,7 +394,13 @@ public class MedicalRecordService : IMedicalRecordService
             return ApiResponse<List<OdontogramEntryDto>>.Ok(emptyOdontogram);
         }
 
-        var result = ComputeCurrentOdontogram(record.ClinicalEntries);
+        var clinicalEntries = await _dbContext.ClinicalEntries
+            .AsNoTracking()
+            .Where(c => c.MedicalRecordId == record.MedicalRecordId)
+            .Include(c => c.OdontogramEntries)
+            .ToListAsync(ct);
+
+        var result = ComputeCurrentOdontogram(clinicalEntries);
         return ApiResponse<List<OdontogramEntryDto>>.Ok(result);
     }
 
