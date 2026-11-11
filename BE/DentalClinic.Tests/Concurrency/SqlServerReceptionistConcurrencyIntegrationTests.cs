@@ -18,9 +18,9 @@ namespace DentalClinic.Tests.Concurrency;
 [Collection("SqlServerReceptionistIntegration")]
 public class SqlServerReceptionistConcurrencyIntegrationTests
 {
-    private static readonly string ConnectionString =
+    private static string ConnectionString =>
         Environment.GetEnvironmentVariable("TEST_SQL_CONNECTION")
-        ?? "Server=.\\MSSQLSERVER01;Database=DentalCare_Integration_Dev;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database={Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Integration_Dev"};Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
 
     private readonly Mock<IAuditLogService> _mockAudit = new();
     private readonly Mock<INotificationService> _mockNotify = new();

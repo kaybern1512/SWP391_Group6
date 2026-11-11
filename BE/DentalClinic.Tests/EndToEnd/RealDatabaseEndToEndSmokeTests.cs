@@ -22,7 +22,7 @@ public class RealDatabaseEndToEndSmokeTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database={Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Integration_Dev"};Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database={Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Integration_Dev"};Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private static async Task<bool> IsDatabaseAvailableAsync(DentalClinicDbContext db)
     {
@@ -33,6 +33,27 @@ public class RealDatabaseEndToEndSmokeTests
         catch
         {
             return false;
+        }
+    }
+
+    private static async Task CleanDayTestAppointmentsAsync(DentalClinicDbContext db, DateTime testDate, params long[] patientUserIds)
+    {
+        var dayStart = testDate.Date;
+        var dayEnd = dayStart.AddDays(1);
+        var targetPatients = patientUserIds.Length > 0 ? patientUserIds : new long[] { 13, 14, 15, 5 };
+        var stale = await db.Appointments
+            .Where(a => targetPatients.Contains(a.PatientUserId) && a.ScheduledStart.HasValue &&
+                        a.ScheduledStart.Value >= dayStart && a.ScheduledStart.Value < dayEnd &&
+                        a.Status != AppointmentStatus.Cancelled && a.Status != AppointmentStatus.Withdrawn)
+            .ToListAsync();
+        foreach (var pa in stale)
+        {
+            pa.Status = AppointmentStatus.Cancelled;
+            pa.CancellationReason = "Test setup cleanup";
+        }
+        if (stale.Count > 0)
+        {
+            await db.SaveChangesAsync();
         }
     }
 
@@ -147,6 +168,7 @@ public class RealDatabaseEndToEndSmokeTests
             s.CompletedAt = DateTime.UtcNow;
         }
         if (staleInServiceA.Count > 0) await db.SaveChangesAsync();
+        await CleanDayTestAppointmentsAsync(db, testDate, patientUserId);
 
         // Step 1: Patient creates appointment
         var createReq = new CreateAppointmentRequest
@@ -293,6 +315,7 @@ public class RealDatabaseEndToEndSmokeTests
             s.CompletedAt = DateTime.UtcNow;
         }
         if (staleInServiceB.Count > 0) await db.SaveChangesAsync();
+        await CleanDayTestAppointmentsAsync(db, slotTime, patientUserId);
 
         // Step 1: Receptionist creates walk-in appointment
         var walkInReq = new CreateReceptionistAppointmentRequest
@@ -357,6 +380,7 @@ public class RealDatabaseEndToEndSmokeTests
 
         var slotStart = (await GetValidTestWorkDateAsync(db, 3, 2, 9, 4, 1));
         var slotEnd = slotStart.AddMinutes(45);
+        await CleanDayTestAppointmentsAsync(db, slotStart, 13, 14, 15);
 
         // PART 1: Shared Room (ROOM-101, IsExclusive=false in Dept 1)
         var appt1 = new Appointment
@@ -687,6 +711,7 @@ public class RealDatabaseEndToEndSmokeTests
         long chairId = 2;        // CHAIR-101-B
 
         var testDate = (await GetValidTestWorkDateAsync(db, dentistUserId, 14, 9));
+        await CleanDayTestAppointmentsAsync(db, testDate, patientUserId);
 
         // Step 1: Patient books root canal service in Department 1
         var createReq = new CreateAppointmentRequest
