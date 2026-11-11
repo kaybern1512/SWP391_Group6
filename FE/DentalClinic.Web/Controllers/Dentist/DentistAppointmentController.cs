@@ -20,25 +20,165 @@ public class DentistAppointmentController : Controller
 
     [HttpGet("")]
     [HttpGet("Today")]
-    public async Task<IActionResult> Today([FromQuery] string? date = null)
+    [HttpGet("Schedule")]
+    public async Task<IActionResult> Today(
+        [FromQuery] string? datePreset = null,
+        [FromQuery] string? date = null,
+        [FromQuery] string? fromDate = null,
+        [FromQuery] string? toDate = null,
+        [FromQuery] string? fromTime = null,
+        [FromQuery] string? toTime = null,
+        [FromQuery] string? status = null,
+        [FromQuery] long? roomId = null,
+        [FromQuery] long? dentalChairId = null,
+        [FromQuery] string? search = null)
     {
-        var targetDate = ClinicTimeHelper.TodayDateOnly;
-        if (!string.IsNullOrWhiteSpace(date) && System.DateOnly.TryParse(date, out var parsed))
+        var today = ClinicTimeHelper.TodayDateOnly;
+        var targetFromDate = today;
+        var targetToDate = today;
+        var effectivePreset = "today";
+
+        if (!string.IsNullOrWhiteSpace(datePreset))
         {
-            targetDate = parsed;
+            var p = datePreset.Trim().ToLowerInvariant();
+            switch (p)
+            {
+                case "tomorrow":
+                    targetFromDate = today.AddDays(1);
+                    targetToDate = targetFromDate;
+                    effectivePreset = "tomorrow";
+                    break;
+                case "this_week":
+                    var diff = (7 + (int)today.DayOfWeek - (int)DayOfWeek.Monday) % 7;
+                    targetFromDate = today.AddDays(-diff);
+                    targetToDate = targetFromDate.AddDays(6);
+                    effectivePreset = "this_week";
+                    break;
+                case "specific":
+                    if (!string.IsNullOrWhiteSpace(date) && DateOnly.TryParse(date, out var parsedSpec))
+                    {
+                        targetFromDate = parsedSpec;
+                        targetToDate = parsedSpec;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(fromDate) && DateOnly.TryParse(fromDate, out var parsedFromSpec))
+                    {
+                        targetFromDate = parsedFromSpec;
+                        targetToDate = parsedFromSpec;
+                    }
+                    effectivePreset = "specific";
+                    break;
+                case "custom_range":
+                    if (!string.IsNullOrWhiteSpace(fromDate) && DateOnly.TryParse(fromDate, out var pFrom))
+                    {
+                        targetFromDate = pFrom;
+                    }
+                    if (!string.IsNullOrWhiteSpace(toDate) && DateOnly.TryParse(toDate, out var pTo))
+                    {
+                        targetToDate = pTo;
+                    }
+                    effectivePreset = "custom_range";
+                    break;
+                case "today":
+                default:
+                    targetFromDate = today;
+                    targetToDate = today;
+                    effectivePreset = "today";
+                    break;
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(fromDate) || !string.IsNullOrWhiteSpace(toDate))
+        {
+            if (!string.IsNullOrWhiteSpace(fromDate) && DateOnly.TryParse(fromDate, out var pFrom))
+            {
+                targetFromDate = pFrom;
+            }
+            if (!string.IsNullOrWhiteSpace(toDate) && DateOnly.TryParse(toDate, out var pTo))
+            {
+                targetToDate = pTo;
+            }
+            effectivePreset = (targetFromDate == targetToDate)
+                ? (targetFromDate == today ? "today" : (targetFromDate == today.AddDays(1) ? "tomorrow" : "specific"))
+                : "custom_range";
+        }
+        else if (!string.IsNullOrWhiteSpace(date) && DateOnly.TryParse(date, out var parsedSingle))
+        {
+            targetFromDate = parsedSingle;
+            targetToDate = parsedSingle;
+            effectivePreset = (targetFromDate == today) ? "today" : (targetFromDate == today.AddDays(1) ? "tomorrow" : "specific");
         }
 
-        var result = await _appointmentApiService.GetDentistAppointmentsAsync(targetDate, targetDate);
-        if (result == null && string.IsNullOrWhiteSpace(date))
+        TimeOnly? parsedFromTime = null;
+        if (!string.IsNullOrWhiteSpace(fromTime) && TimeOnly.TryParse(fromTime, out var ft))
         {
-            result = await _appointmentApiService.GetDentistTodayAppointmentsAsync();
+            parsedFromTime = ft;
         }
+
+        TimeOnly? parsedToTime = null;
+        if (!string.IsNullOrWhiteSpace(toTime) && TimeOnly.TryParse(toTime, out var tt))
+        {
+            parsedToTime = tt;
+        }
+
+        string? validationError = null;
+        if (targetFromDate > targetToDate)
+        {
+            validationError = $"Ngày bắt đầu ({targetFromDate:dd/MM/yyyy}) không được lớn hơn ngày kết thúc ({targetToDate:dd/MM/yyyy}).";
+        }
+        else if (parsedFromTime.HasValue && parsedToTime.HasValue && parsedFromTime.Value >= parsedToTime.Value)
+        {
+            validationError = $"Giờ bắt đầu ({parsedFromTime.Value:HH:mm}) phải nhỏ hơn giờ kết thúc ({parsedToTime.Value:HH:mm}).";
+        }
+
+        var appointments = new List<DentalClinic.Web.Models.ApiDtos.AppointmentDto>();
+        if (validationError == null)
+        {
+            var result = await _appointmentApiService.GetDentistAppointmentsAsync(
+                targetFromDate,
+                targetToDate,
+                parsedFromTime,
+                parsedToTime,
+                status,
+                roomId,
+                dentalChairId,
+                search);
+
+            if (result == null || (!result.IsSuccess && result.Data == null))
+            {
+                if (effectivePreset == "today" && !parsedFromTime.HasValue && !parsedToTime.HasValue && string.IsNullOrWhiteSpace(status) && string.IsNullOrWhiteSpace(search))
+                {
+                    result = await _appointmentApiService.GetDentistTodayAppointmentsAsync();
+                }
+            }
+
+            if (result != null && result.IsSuccess && result.Data != null)
+            {
+                appointments = result.Data;
+            }
+            else if (result != null && !result.IsSuccess && !string.IsNullOrWhiteSpace(result.Message))
+            {
+                validationError = result.Message;
+            }
+        }
+
+        var roomsResult = await _appointmentApiService.GetDentistRoomsAsync();
+        var availableRooms = roomsResult?.IsSuccess == true && roomsResult.Data != null ? roomsResult.Data : new();
 
         var vm = new DentistTodayAppointmentsViewModel
         {
-            SelectedDate = targetDate,
-            Appointments = result?.Data ?? new()
+            DatePreset = effectivePreset,
+            FromDate = targetFromDate,
+            ToDate = targetToDate,
+            FromTime = parsedFromTime,
+            ToTime = parsedToTime,
+            Status = status,
+            RoomId = roomId,
+            DentalChairId = dentalChairId,
+            SearchTerm = search,
+            Appointments = appointments,
+            AvailableRooms = availableRooms,
+            ValidationError = validationError
         };
+
         return View("~/Views/Dentist/Appointments/Today.cshtml", vm);
     }
 
@@ -64,8 +204,17 @@ public class DentistAppointmentController : Controller
 
     [HttpPost("{id:long}/Start")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Start(long id, [FromForm] string? date = null)
+    public async Task<IActionResult> Start(long id, [FromForm] string? date = null, [FromForm] string? returnUrl = null)
     {
+        IActionResult RedirectTarget()
+        {
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+            return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
+        }
+
         var result = await _appointmentApiService.DentistStartAppointmentAsync(id);
         if (result.IsSuccess)
         {
@@ -91,13 +240,22 @@ public class DentistAppointmentController : Controller
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể bắt đầu buổi khám.";
         }
-        return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
+        return RedirectTarget();
     }
 
     [HttpPost("{id:long}/Complete")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Complete(long id, [FromForm] string? notes, [FromForm] string? date = null)
+    public async Task<IActionResult> Complete(long id, [FromForm] string? notes, [FromForm] string? date = null, [FromForm] string? returnUrl = null)
     {
+        IActionResult RedirectTarget()
+        {
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+            return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
+        }
+
         var result = await _appointmentApiService.DentistCompleteAppointmentAsync(id, notes);
         if (result.IsSuccess)
         {
@@ -107,7 +265,7 @@ public class DentistAppointmentController : Controller
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể hoàn thành buổi khám.";
         }
-        return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
+        return RedirectTarget();
     }
 
     [HttpGet("{id:long}/RoomChairs")]

@@ -192,6 +192,18 @@ public class AvailableResourcesDto
     public List<DentistOptionDto> Dentists { get; set; } = new();
 }
 
+public class DentistAppointmentFilterQuery
+{
+    public DateOnly? FromDate { get; set; }
+    public DateOnly? ToDate { get; set; }
+    public TimeOnly? FromTime { get; set; }
+    public TimeOnly? ToTime { get; set; }
+    public string? Status { get; set; }
+    public long? RoomId { get; set; }
+    public long? DentalChairId { get; set; }
+    public string? SearchTerm { get; set; }
+}
+
 public class BookingEligibilityDto
 {
     public bool IsEligible { get; set; } = true;

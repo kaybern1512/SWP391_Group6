@@ -2145,8 +2145,8 @@ public class AppointmentFlowTests
         var combo = new ServiceCombo
         {
             ComboCode = "COMBO_CARE",
-            Title = "ChÄƒm SÃ³c & Vá»‡ Sinh Ná»¥ CÆ°á»i SÃ¡ng Khá»e",
-            Tagline = "LÃ m sáº¡ch máº£ng bÃ¡m, ngá»«a sÃ¢u rÄƒng",
+            Title = "Chăm Sóc & Vệ Sinh Nụ Cười Sáng Khỏe",
+            Tagline = "Làm sạch mảng bám, ngừa sâu răng",
             DepartmentId = 1,
             PrimaryServiceId = 10,
             OriginalPrice = 450000,
@@ -2166,7 +2166,7 @@ public class AppointmentFlowTests
             RequestedServiceId = 999,
             RequestedDentistUserId = null,
             ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
-            ReasonForVisit = "ÄÄƒng kÃ½ gÃ³i chÄƒm sÃ³c rÄƒng miá»‡ng trá»n gÃ³i"
+            ReasonForVisit = "Đăng ký gói chăm sóc răng miệng trọn gói"
         };
 
         var result = await service.CreatePatientAppointmentAsync(101, request);
@@ -2205,7 +2205,7 @@ public class AppointmentFlowTests
             new ServiceCombo
             {
                 ComboCode = "COMBO_CARE",
-                Title = "ChÄƒm SÃ³c & Vá»‡ Sinh Ná»¥ CÆ°á»i SÃ¡ng Khá»e",
+                Title = "Chăm Sóc & Vệ Sinh Nụ Cười Sáng Khỏe",
                 DepartmentId = 1,
                 PrimaryServiceId = 10,
                 OriginalPrice = 450000,
@@ -2216,7 +2216,7 @@ public class AppointmentFlowTests
             new ServiceCombo
             {
                 ComboCode = "COMBO_INACTIVE",
-                Title = "Combo Táº¡m Ngá»«ng",
+                Title = "Combo Tạm Ngừng",
                 DepartmentId = 1,
                 PrimaryServiceId = 10,
                 OriginalPrice = 500000,

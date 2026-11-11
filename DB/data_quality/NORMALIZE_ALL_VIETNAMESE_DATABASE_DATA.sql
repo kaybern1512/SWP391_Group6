@@ -322,6 +322,103 @@ UPDATE VisitFeedback
 SET Comment = N'Dịch vụ tuyệt vời, phòng khám sạch sẽ hiện đại, không phải chờ lâu.'
 WHERE Comment LIKE '%D%ch v% tuy%t v%i%';
 
+-- -------------------------------------------------------------------------------------
+-- 9. CHUẨN HÓA BỔ SUNG CÁC HỒ SƠ VÀ DỮ LIỆU TỒN ĐỌNG KHÁC
+-- -------------------------------------------------------------------------------------
+PRINT '9. Chuẩn hóa StaffProfiles, PatientProfiles, ImagingConfigs, Referrals, FollowUp...';
+
+UPDATE StaffProfiles SET FullName = N'Quản Trị Viên Kỹ Thuật (Backup)' WHERE UserId = 43;
+UPDATE StaffProfiles SET FullName = N'Lễ Tân Trần Minh Quân (CSKH)' WHERE UserId = 45;
+UPDATE StaffProfiles SET FullName = N'BS. Hoàng Trọng Nghĩa' WHERE UserId = 46;
+UPDATE StaffProfiles SET FullName = N'BS. Vũ Minh Tuấn' WHERE UserId = 47;
+
+UPDATE PatientProfiles SET Address = N'78 Lê Văn Sỹ, Q.3, TP.HCM', EmergencyContact = N'Mẹ: 0986000111' WHERE UserId = 20;
+UPDATE PatientProfiles SET Address = N'230 Phan Xích Long, Phú Nhuận, TP.HCM', EmergencyContact = N'Bố: 0905445566' WHERE UserId = 21;
+UPDATE PatientProfiles SET Address = N'15 Hoàng Hoa Thám, Bình Thạnh, TP.HCM', EmergencyContact = N'Mẹ: 0918999000' WHERE UserId = 22;
+UPDATE PatientProfiles SET Address = N'55 Nguyễn Thị Minh Khai, Quận 1, TP.HCM', EmergencyContact = N'Vợ: 0988456789' WHERE UserId = 48;
+UPDATE PatientProfiles SET Address = N'18 Nguyễn Đình Chiểu, Quận 3, TP.HCM', EmergencyContact = N'Chồng: 0988567890' WHERE UserId = 49;
+UPDATE PatientProfiles SET Address = N'Villa 08 Thảo Điền, TP. Thủ Đức, TP.HCM', EmergencyContact = N'Thư ký: 0988678901' WHERE UserId = 50;
+
+UPDATE DepartmentServices SET ServiceName = N'Chụp X-quang Cận Chóp (Periapical / Intraoral)', Description = N'Chụp phim X-quang kỹ thuật số cận chóp răng kiểm tra sâu răng và cuống răng' WHERE ServiceName LIKE '%C%n Ch%o%' OR ServiceName LIKE '%C%n Ch%p%' OR DepartmentServiceId = 47;
+UPDATE DepartmentServices SET ServiceName = N'Chụp X-quang Toàn Cảnh Panorama (OPG)', Description = N'Chụp phim X-quang toàn cảnh hàm răng khảo sát tổng thể cung răng và xương hàm' WHERE ServiceName LIKE '%Panorama%' OR DepartmentServiceId = 48;
+UPDATE DepartmentServices SET ServiceName = N'Chụp Phim Cắt Lớp Vi Tính 3D Cone Beam CT (CBCT)', Description = N'Chụp phim cắt lớp vi tính 3 chiều Cone Beam CT khảo sát cấu trúc giải phẫu 3D' WHERE ServiceName LIKE '%Cone Beam CT%' OR DepartmentServiceId = 49;
+UPDATE DepartmentServices SET Description = N'Dán mặt sứ Veneer Emax siêu mỏng công nghệ cao, bảo tồn tối đa mô răng thật.' WHERE ServiceName LIKE '%Veneer%' OR DepartmentServiceId = 17;
+
+UPDATE DepartmentServices SET BookingInstructions = N'Dịch vụ chỉnh nha / thẩm mỹ chuyên sâu. Buổi hẹn đầu sẽ bao gồm quét dấu răng 3D và tư vấn phác đồ.' WHERE BookingInstructions COLLATE Latin1_General_BIN LIKE '%ch%nh nha%th%m m%';
+UPDATE DepartmentServices SET BookingInstructions = N'Thủ thuật chuyên sâu cần khám đánh giá trước. Vui lòng ăn nhẹ trước hẹn 1 tiếng, không uống cà phê hoặc chất kích thích.' WHERE BookingInstructions COLLATE Latin1_General_BIN LIKE '%Th% thu%t chuy%n s%u%';
+UPDATE DepartmentServices SET BookingInstructions = N'Vui lòng đến trước 10 phút để hoàn tất thủ tục tiếp đón và chụp phim cơ bản nếu cần.' WHERE BookingInstructions COLLATE Latin1_General_BIN LIKE '%tr%c 10 ph%t%';
+
+UPDATE Appointments SET ReasonForVisit = REPLACE(ReasonForVisit, 'ChÄƒm SĂ³c & Vá»‡ Sinh Ná»¥ CÆ°á» i SĂ¡ng Khá» e', N'Chăm Sóc & Vệ Sinh Nụ Cười Sáng Khỏe') WHERE ReasonForVisit LIKE '%Ch%m S%c & V% Sinh%';
+UPDATE Appointments SET ReasonForVisit = REPLACE(ReasonForVisit, 'Ná»¥ CÆ°á» i Tráº¯ng SĂ¡ng Laser Whitening', N'Nụ Cười Trắng Sáng Laser Whitening') WHERE ReasonForVisit LIKE '%N% C% Tr%ng S%ng Laser%';
+UPDATE Appointments SET ReasonForVisit = REPLACE(ReasonForVisit, 'ThÄƒm KhĂ¡m & Kháº£o SĂ¡t ChuyĂªn SĂ¢u Cáº¥y GhĂ©p Implant', N'Thăm Khám & Khảo Sát Chuyên Sâu Cấy Ghép Implant') WHERE ReasonForVisit LIKE '%Th%m Kh%m & Kh%o S%t%';
+
+UPDATE ImagingServiceConfigs SET ServiceName = N'Chụp X-quang Cận Chóp (Periapical / Intraoral)' WHERE ConfigId = 1;
+UPDATE ImagingServiceConfigs SET ServiceName = N'Chụp X-quang Toàn Cảnh Panorama (OPG)' WHERE ConfigId = 2;
+UPDATE ImagingServiceConfigs SET ServiceName = N'Chụp Phim Cắt Lớp Vi Tính 3D Cone Beam CT (CBCT)' WHERE ConfigId = 3;
+
+UPDATE DepartmentReferrals SET Reason = N'Bệnh nhân có nhu cầu chỉnh nha niềng răng trong suốt Invisalign' WHERE Reason COLLATE Latin1_General_BIN LIKE '%Invisalign%';
+UPDATE DepartmentReferrals SET Reason = N'Bệnh nhân có răng số 46 vỡ lớn sát cuống không thể bảo tồn tủy. Đề nghị chuyển Khoa Phẫu Thuật để nhổ răng và cấy ghép Implant tức thì.' WHERE Reason COLLATE Latin1_General_BIN LIKE '%Implant t%c th%';
+
+UPDATE FollowUpSchedules SET Reason = N'Tái khám kiểm tra tình trạng sâu răng và phục hồi mô răng' WHERE Reason COLLATE Latin1_General_BIN LIKE '%s%u r%ng v% ph%c h%i%';
+UPDATE FollowUpSchedules SET Reason = N'Tái khám kiểm tra vết thương và cắt chỉ vicryl vùng nhổ răng 38' WHERE Reason COLLATE Latin1_General_BIN LIKE '%c%t ch% vicryl%';
+UPDATE FollowUpSchedules SET Reason = N'Theo dõi tủy răng sau 1 tuần' WHERE Reason COLLATE Latin1_General_BIN LIKE '%Theo d%i t%y r%ng sau 1 tu%n%';
+
+UPDATE OdontogramEntries SET Condition = N'Răng khôn ngầm' WHERE Condition COLLATE Latin1_General_BIN LIKE '%R%ng kh%n ng%m%';
+UPDATE OdontogramEntries SET Note = N'Trám composite mặt nhai răng 36' WHERE Note COLLATE Latin1_General_BIN LIKE '%Tr%m composite m%t nhai r%ng 36%';
+UPDATE OdontogramEntries SET Note = N'Đã tiểu phẫu nhổ bỏ an toàn' WHERE Note COLLATE Latin1_General_BIN LIKE '%ti%u ph%u nh% b% an to%n%';
+
+UPDATE ImagingRecords SET ResultSummary = N'Phim Panorama cho thấy răng 38 mọc lệch ngang 90 độ, chân răng gần sát ống thần kinh răng dưới.' WHERE ResultSummary COLLATE Latin1_General_BIN LIKE '%Phim Panorama cho th%y r%ng 38%';
+
+UPDATE BlogPosts SET Title = N'[Bản Nháp] Cẩm nang chăm sóc răng miệng khoa học cho người niềng răng', Summary = N'Tổng hợp các nguyên tắc vệ sinh mắc cài, sử dụng sáp nha khoa và chế độ dinh dưỡng phù hợp cho bệnh nhân chỉnh nha.' WHERE BlogPostId = 7;
+UPDATE BlogPosts SET Title = N'[Thông Báo] Lịch trực cấp cứu nha khoa và đăng ký khám ưu tiên cuối tuần', Summary = N'Thông tin chi tiết về ca trực của các bác sĩ chuyên khoa vào thứ Bảy và Chủ Nhật nhằm hỗ trợ bệnh nhân kịp thời.' WHERE BlogPostId = 8;
+
+UPDATE Appointments SET ReasonForVisit = N'Đau buốt răng khi uống nước lạnh, cần khám tủy' WHERE ReasonForVisit COLLATE Latin1_General_BIN LIKE '%u bu%t r%ng khi u%ng n%c l%nh%';
+UPDATE Appointments SET ReasonForVisit = N'Đau nhức ê buốt vùng răng hàm dưới R46 khi nhai (Demo Đang Khám & Sơ Đồ Răng)' WHERE ReasonForVisit COLLATE Latin1_General_BIN LIKE '%au nh%c % bu%t v%ng r%ng h%m d%i R46%';
+UPDATE Appointments SET ReasonForVisit = N'Đau răng hàm mặt nhai cần khám tổng quát' WHERE ReasonForVisit COLLATE Latin1_General_BIN LIKE '%au r%ng h%m m%t nhai%';
+UPDATE Appointments SET ReasonForVisit = N'Đau răng vùng hàm dưới cần kiểm tra và điều trị' WHERE ReasonForVisit COLLATE Latin1_General_BIN LIKE '%au r%ng v%ng h%m d%i c%n ki%m tra%';
+UPDATE Appointments SET ReasonForVisit = N'Cấp phát thuốc đồng thời' WHERE ReasonForVisit COLLATE Latin1_General_BIN LIKE '%p ph%t thu%c %ng th%i%';
+UPDATE Appointments SET ReasonForVisit = N'Khám răng định kỳ & cạo vôi răng (Demo Bác sĩ bấm Vào Khám)' WHERE ReasonForVisit COLLATE Latin1_General_BIN LIKE '%Kh%m r%ng %nh k% & c%o v%i r%ng%';
+UPDATE Appointments SET ReasonForVisit = N'Kiểm tra cấp số thứ tự đồng thời' WHERE ReasonForVisit COLLATE Latin1_General_BIN LIKE '%Ki%m tra c%p s% th% t% %ng th%i%';
+UPDATE Appointments SET ReasonForVisit = N'Tái khám theo dõi' WHERE ReasonForVisit COLLATE Latin1_General_BIN LIKE '%T%i kh%m theo d%i%';
+UPDATE Appointments SET ReasonForVisit = N'Thanh toán đồng thời' WHERE ReasonForVisit COLLATE Latin1_General_BIN LIKE '%Thanh to%n %ng th%i%';
+UPDATE Appointments SET ReasonForVisit = N'Trám răng thẩm mỹ và kiểm tra răng số 36' WHERE ReasonForVisit COLLATE Latin1_General_BIN LIKE '%Tr%m r%ng th%m m% v% ki%m tra r%ng s% 36%';
+
+UPDATE AppointmentStatusHistories SET Note = N'Bác sĩ xác nhận hoàn tất khám và điều trị' WHERE Note COLLATE Latin1_General_BIN LIKE '%B%c s% x%c nh%n ho%n t%t kh%m v% %i%u tr%%';
+UPDATE AppointmentStatusHistories SET Note = N'Bệnh nhân đã đến phòng khám đúng giờ ' + SUBSTRING(Note, CHARINDEX('(', Note), LEN(Note)) WHERE Note COLLATE Latin1_General_BIN LIKE '%B%nh nh%n % %n ph%ng kh%m %ng gi%%' AND Note LIKE '%(%';
+UPDATE AppointmentStatusHistories SET Note = N'Bệnh nhân check-in tại quầy tiếp đón' WHERE Note COLLATE Latin1_General_BIN LIKE '%B%nh nh%n check-in t%i qu%y ti%p %n%';
+UPDATE AppointmentStatusHistories SET Note = N'Check-in đồng thời ' + SUBSTRING(Note, CHARINDEX('(', Note), LEN(Note)) WHERE Note COLLATE Latin1_General_BIN LIKE '%Check-in %ng th%i%' AND Note LIKE '%(%';
+UPDATE AppointmentStatusHistories SET Note = N'Check-in phẫu thuật' WHERE Note COLLATE Latin1_General_BIN LIKE '%Check-in ph%u thu%t%';
+UPDATE AppointmentStatusHistories SET Note = N'Check-in tiếp nhận' WHERE Note COLLATE Latin1_General_BIN LIKE '%Check-in ti%p nh%n%';
+UPDATE AppointmentStatusHistories SET Note = N'Hoàn tất điều trị sâu răng 36, dặn dò bệnh nhân chu đáo' WHERE Note COLLATE Latin1_General_BIN LIKE '%Ho%n t%t %i%u tr% s%u r%ng 36%';
+UPDATE AppointmentStatusHistories SET Note = N'Lễ tân tiếp nhận bệnh nhân vào khám' WHERE Note COLLATE Latin1_General_BIN LIKE '%L% t%n ti%p nh%n b%nh nh%n v%o kh%m%';
+UPDATE AppointmentStatusHistories SET Note = N'Tái khám hoàn tất' WHERE Note COLLATE Latin1_General_BIN LIKE '%T%i kh%m ho%n t%t%';
+UPDATE AppointmentStatusHistories SET Note = N'Tự động chuyển tiếp sang hàng đợi Lễ tân tiếp nhận theo quy trình' WHERE Note COLLATE Latin1_General_BIN LIKE '%T% %ng chuy%n ti%p sang h%ng %i L% t%n%';
+
+-- ClinicalEntries by ID or patterns
+UPDATE ClinicalEntries SET Symptoms = N'Răng ê buốt nhẹ khi uống nước lạnh', ClinicalFindings = N'Rãnh sâu ngà nông mặt nhai R35', Diagnosis = N'Sâu ngà nông răng 35', ClinicalNotes = N'Chỉ định trám thẩm mỹ Composite' WHERE Symptoms LIKE '%u%ng n%c l%nh%' OR Symptoms LIKE '%bu%t nh%%';
+UPDATE ClinicalEntries SET Symptoms = N'Đau nhức răng hàm khi nhai đồ cứng', ClinicalFindings = N'Vỡ mẻ múi ngoài răng 46', Diagnosis = N'Nứt vỡ thân răng 46', ClinicalNotes = N'Chỉ định điều trị tủy và bọc sứ bảo tồn' WHERE Symptoms LIKE '%nhai % c%ng%' OR Symptoms LIKE '%au nh%c r%ng h%m%';
+UPDATE ClinicalEntries SET Symptoms = N'Sâu răng hàm gây dắt thức ăn', ClinicalFindings = N'Lỗ sâu kẽ R16-R17 sâu ngà trung bình', Diagnosis = N'Sâu kẽ răng 16, 17', ClinicalNotes = N'Nạo sạch ngà mủn, hàn trám xoang II Composite' WHERE Symptoms LIKE '%d%t th%c %n%' OR Symptoms LIKE '%S%u r%ng h%m%';
+UPDATE ClinicalEntries SET Symptoms = N'Ê buốt răng khi ăn đồ nóng lạnh', ClinicalFindings = N'Mòn cổ răng mặt ngoài R24, R25', Diagnosis = N'Mòn ngót cổ răng (K03.1)', ClinicalNotes = N'Hàn trám bít cổ răng men ngà bằng GIC Fuji IX' WHERE Symptoms LIKE '%n%ng l%nh%' OR Symptoms LIKE '%bu%t r%ng khi %n%';
+
+-- PrescriptionItems & Invoices
+UPDATE PrescriptionItems SET Instructions = N'Uống sáng 1v, tối 1v sau khi ăn no' WHERE Instructions LIKE '%s%ng 1v%';
+UPDATE PrescriptionItems SET Instructions = N'Uống khi đau nhiều, cách nhau ít nhất 6 tiếng' WHERE Instructions LIKE '%au nhi%u%';
+UPDATE PrescriptionItems SET Instructions = N'Ngậm dưới lưỡi giảm phù nề, sưng má' WHERE Instructions LIKE '%d%i l%i%';
+UPDATE PrescriptionItems SET Instructions = N'Bắt đầu súc nhẹ từ ngày thứ 2 trở đi sau ăn' WHERE Instructions LIKE '%s%c nh%%' OR Instructions LIKE '%th% 2%';
+
+UPDATE InvoiceItems SET Description = N'Tiểu phẫu nhổ răng khôn mọc ngầm kẹt xương R38' WHERE Description LIKE '%nh% r%ng kh%n m%c ng%m%';
+UPDATE InvoiceItems SET Description = N'Chụp phim X-quang Panorama toàn cảnh KTS' WHERE Description LIKE '%Panorama to%n c%nh%';
+UPDATE InvoiceItems SET Description = N'Đơn thuốc điều trị sau phẫu thuật (Kháng sinh, giảm đau)' WHERE Description LIKE '%n thu%c %i%u tr%%';
+UPDATE InvoiceItems SET Description = N'Hàn trám răng thẩm mỹ Composite xoang I (2 răng)' WHERE Description LIKE '%xoang I%';
+
+UPDATE VisitFeedback SET Comment = N'Răng sứ đẹp xuất sắc, cười tự tin hơn hẳn.' WHERE Comment LIKE '%R%ng s% %p xu%t s%c%';
+UPDATE VisitFeedback SET Comment = N'Dịch vụ khám chu đáo, phòng khám sạch sẽ và bác sĩ tư vấn rất nhiệt tình.' WHERE Comment LIKE '%D%ch v% kh%m chu %';
+
+UPDATE Appointments SET ReasonForVisit = N'[Gói Combo: Thăm Khám & Khảo Sát Chuyên Sâu Cấy Ghép Implant] tôi muốn cấy implant' WHERE ReasonForVisit LIKE '%C%y Gh%p Implant%t%i mu%n%';
+UPDATE Appointments SET ReasonForVisit = N'[Gói Combo: Chăm Sóc & Vệ Sinh Nụ Cười Sáng Khỏe] đau rabnwfkk' WHERE ReasonForVisit LIKE '%S%ng Kh%e%au rabnwfkk%';
+UPDATE Appointments SET ReasonForVisit = N'[Gói Combo: Nụ Cười Trắng Sáng Laser Whitening] răng của tôi mới bị mẻ' WHERE ReasonForVisit LIKE '%Laser Whitening%m%i b% m%%';
+UPDATE AppointmentStatusHistories SET Note = N'Tự động chuyển tiếp sang hàng đợi Lễ tân tiếp nhận theo quy trình' WHERE Note COLLATE Latin1_General_BIN LIKE '%T% %ng chuy%n ti%p sang h%ng %i L% t%n%';
+
 PRINT '=====================================================================================';
 PRINT '>>> HOÀN TẤT CHUẨN HÓA TIẾNG VIỆT TOÀN DIỆN CHO DATABASE: ' + DB_NAME();
 PRINT '=====================================================================================';

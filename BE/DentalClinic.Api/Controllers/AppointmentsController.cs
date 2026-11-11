@@ -454,10 +454,24 @@ public class AppointmentsController : ControllerBase
     [HttpGet("api/dentist/appointments")]
     [Authorize(Roles = UserRole.Dentist)]
     [ProducesResponseType(typeof(ApiResponse<List<AppointmentDto>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetDentistAppointments([FromQuery] DateOnly? fromDate, [FromQuery] DateOnly? toDate, CancellationToken ct)
+    public async Task<IActionResult> GetDentistAppointments([FromQuery] DentistAppointmentFilterQuery filter, CancellationToken ct)
     {
         var dentistUserId = GetCurrentUserId();
-        var result = await _appointmentService.GetDentistAppointmentsAsync(dentistUserId, fromDate, toDate, ct);
+        var result = await _appointmentService.GetDentistAppointmentsAsync(dentistUserId, filter, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpGet("api/dentist/rooms")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<List<RoomOptionDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDentistRooms(CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _appointmentService.GetDentistRoomsAsync(dentistUserId, ct);
         return Ok(result);
     }
 

@@ -165,7 +165,7 @@ public class AppointmentService : IAppointmentService
                 .FirstOrDefaultAsync(c => c.ComboId == request.ComboId.Value && c.Status == "Active", ct);
             if (selectedCombo == null)
             {
-                return ApiResponse<AppointmentDto>.Fail("GÃ³i Combo dá»‹ch vá»¥ khÃ´ng tá»“n táº¡i hoáº·c Ä‘Ã£ ngá»«ng Ã¡p dá»¥ng.");
+                return ApiResponse<AppointmentDto>.Fail("Gói Combo dịch vụ không tồn tại hoặc đã ngừng áp dụng.");
             }
         }
         else if (!string.IsNullOrWhiteSpace(request.ComboCode))
@@ -175,7 +175,7 @@ public class AppointmentService : IAppointmentService
                 .FirstOrDefaultAsync(c => c.ComboCode == request.ComboCode && c.Status == "Active", ct);
             if (selectedCombo == null)
             {
-                return ApiResponse<AppointmentDto>.Fail("GÃ³i Combo dá»‹ch vá»¥ khÃ´ng tá»“n táº¡i hoáº·c Ä‘Ã£ ngá»«ng Ã¡p dá»¥ng.");
+                return ApiResponse<AppointmentDto>.Fail("Gói Combo dịch vụ không tồn tại hoặc đã ngừng áp dụng.");
             }
         }
 
@@ -836,7 +836,7 @@ public class AppointmentService : IAppointmentService
                 .FirstOrDefaultAsync(c => c.ComboId == request.ComboId.Value && c.Status == "Active", ct);
             if (selectedCombo == null)
             {
-                return ApiResponse<AppointmentDto>.Fail("GÃ³i Combo dá»‹ch vá»¥ khÃ´ng tá»“n táº¡i hoáº·c Ä‘Ã£ ngá»«ng Ã¡p dá»¥ng.");
+                return ApiResponse<AppointmentDto>.Fail("Gói Combo dịch vụ không tồn tại hoặc đã ngừng áp dụng.");
             }
         }
         else if (!string.IsNullOrWhiteSpace(request.ComboCode))
@@ -846,7 +846,7 @@ public class AppointmentService : IAppointmentService
                 .FirstOrDefaultAsync(c => c.ComboCode == request.ComboCode && c.Status == "Active", ct);
             if (selectedCombo == null)
             {
-                return ApiResponse<AppointmentDto>.Fail("GÃ³i Combo dá»‹ch vá»¥ khÃ´ng tá»“n táº¡i hoáº·c Ä‘Ã£ ngá»«ng Ã¡p dá»¥ng.");
+                return ApiResponse<AppointmentDto>.Fail("Gói Combo dịch vụ không tồn tại hoặc đã ngừng áp dụng.");
             }
         }
 
@@ -5223,68 +5223,173 @@ public class AppointmentService : IAppointmentService
     }
 
     public async Task<ApiResponse<List<AppointmentDto>>> GetDentistAppointmentsAsync(
-
         long dentistUserId,
-
-        DateOnly? fromDate = null,
-
-        DateOnly? toDate = null,
-
+        DentistAppointmentFilterQuery filter,
         CancellationToken ct = default)
-
     {
+        if (filter == null)
+        {
+            return await GetDentistAppointmentsAsync(dentistUserId, ct: ct);
+        }
+
+        if (filter.FromDate.HasValue && filter.ToDate.HasValue && filter.FromDate.Value > filter.ToDate.Value)
+        {
+            return ApiResponse<List<AppointmentDto>>.Fail("Ngày bắt đầu không được lớn hơn ngày kết thúc.");
+        }
+
+        if (filter.FromTime.HasValue && filter.ToTime.HasValue && filter.FromTime.Value >= filter.ToTime.Value)
+        {
+            return ApiResponse<List<AppointmentDto>>.Fail("Giờ bắt đầu phải nhỏ hơn giờ kết thúc.");
+        }
+
+        return await GetDentistAppointmentsAsync(
+            dentistUserId,
+            filter.FromDate,
+            filter.ToDate,
+            filter.FromTime,
+            filter.ToTime,
+            filter.Status,
+            filter.RoomId,
+            filter.DentalChairId,
+            filter.SearchTerm,
+            ct);
+    }
+
+    public async Task<ApiResponse<List<AppointmentDto>>> GetDentistAppointmentsAsync(
+        long dentistUserId,
+        DateOnly? fromDate = null,
+        DateOnly? toDate = null,
+        TimeOnly? fromTime = null,
+        TimeOnly? toTime = null,
+        string? status = null,
+        long? roomId = null,
+        long? dentalChairId = null,
+        string? searchTerm = null,
+        CancellationToken ct = default)
+    {
+        if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+        {
+            return ApiResponse<List<AppointmentDto>>.Fail("Ngày bắt đầu không được lớn hơn ngày kết thúc.");
+        }
+
+        if (fromTime.HasValue && toTime.HasValue && fromTime.Value >= toTime.Value)
+        {
+            return ApiResponse<List<AppointmentDto>>.Fail("Giờ bắt đầu phải nhỏ hơn giờ kết thúc.");
+        }
 
         var query = _dbContext.Appointments
-
             .AsNoTracking()
-
             .Where(a => a.AssignedDentistUserId == dentistUserId && a.ScheduledStart != null);
 
         if (fromDate.HasValue)
-
         {
-
             var startDt = fromDate.Value.ToDateTime(TimeOnly.MinValue);
-
             query = query.Where(a => a.ScheduledStart >= startDt);
-
         }
 
         if (toDate.HasValue)
-
         {
-
             var endDt = toDate.Value.ToDateTime(TimeOnly.MaxValue);
-
             query = query.Where(a => a.ScheduledStart <= endDt);
-
         }
 
-        var visibleStatuses = new[]
-
+        if (fromTime.HasValue)
         {
+            var ts = fromTime.Value.ToTimeSpan();
+            query = query.Where(a => a.ScheduledStart != null && a.ScheduledStart.Value.TimeOfDay >= ts);
+        }
 
-            AppointmentStatus.Confirmed,
+        if (toTime.HasValue)
+        {
+            var ts = toTime.Value.ToTimeSpan();
+            query = query.Where(a => a.ScheduledStart != null && a.ScheduledStart.Value.TimeOfDay <= ts);
+        }
 
-            AppointmentStatus.CheckedIn,
+        if (!string.IsNullOrWhiteSpace(status) && !status.Equals("All", StringComparison.OrdinalIgnoreCase))
+        {
+            if (status.Equals("CheckedIn", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(a => a.Status == AppointmentStatus.CheckedIn || a.Status == AppointmentStatus.Waiting || a.Status == AppointmentStatus.Called);
+            }
+            else if (status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(a => a.Status == AppointmentStatus.Cancelled || a.Status == AppointmentStatus.Rejected || a.Status == AppointmentStatus.Withdrawn || a.Status == AppointmentStatus.NoShow);
+            }
+            else
+            {
+                query = query.Where(a => a.Status == status);
+            }
+        }
+        else
+        {
+            var visibleStatuses = new[]
+            {
+                AppointmentStatus.Confirmed,
+                AppointmentStatus.CheckedIn,
+                AppointmentStatus.Waiting,
+                AppointmentStatus.Called,
+                AppointmentStatus.InService,
+                AppointmentStatus.Completed,
+                AppointmentStatus.Cancelled
+            };
+            query = query.Where(a => visibleStatuses.Contains(a.Status));
+        }
 
-            AppointmentStatus.Waiting,
+        if (roomId.HasValue && roomId.Value > 0)
+        {
+            query = query.Where(a => a.RoomId == roomId.Value);
+        }
 
-            AppointmentStatus.Called,
+        if (dentalChairId.HasValue && dentalChairId.Value > 0)
+        {
+            query = query.Where(a => a.DentalChairId == dentalChairId.Value);
+        }
 
-            AppointmentStatus.InService,
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.Trim().ToLower();
+            query = query.Where(a =>
+                a.AppointmentCode.ToLower().Contains(term) ||
+                (a.PatientUser != null && (
+                    a.PatientUser.FullName.ToLower().Contains(term) ||
+                    a.PatientUser.PatientCode.ToLower().Contains(term) ||
+                    (a.PatientUser.User != null && a.PatientUser.User.PhoneNumber != null && a.PatientUser.User.PhoneNumber.Contains(term))
+                ))
+            );
+        }
 
-            AppointmentStatus.Completed
-
-        };
-
-        var finalQuery = query
-            .Where(a => visibleStatuses.Contains(a.Status))
-            .OrderBy(a => a.ScheduledStart);
-
+        var finalQuery = query.OrderBy(a => a.ScheduledStart);
         var list = await MapToDtoListAsync(finalQuery, ct);
         return ApiResponse<List<AppointmentDto>>.Ok(list);
+    }
 
+    public async Task<ApiResponse<List<RoomOptionDto>>> GetDentistRoomsAsync(long dentistUserId, CancellationToken ct = default)
+    {
+        var deptIds = await _dbContext.DentistDepartments
+            .AsNoTracking()
+            .Where(dd => dd.DentistUserId == dentistUserId)
+            .Select(dd => dd.DepartmentId)
+            .ToListAsync(ct);
+
+        var query = _dbContext.Rooms.AsNoTracking().Where(r => r.Status == "Active");
+        if (deptIds.Any())
+        {
+            query = query.Where(r => r.DepartmentId.HasValue && deptIds.Contains(r.DepartmentId.Value));
+        }
+
+        var rooms = await query
+            .OrderBy(r => r.RoomName)
+            .Select(r => new RoomOptionDto
+            {
+                RoomId = r.RoomId,
+                RoomCode = r.RoomCode,
+                RoomName = r.RoomName,
+                DepartmentId = r.DepartmentId,
+                Status = r.Status
+            })
+            .ToListAsync(ct);
+
+        return ApiResponse<List<RoomOptionDto>>.Ok(rooms);
     }
 
     public async Task<ApiResponse<StartAppointmentResultDto>> DentistStartAppointmentAsync(

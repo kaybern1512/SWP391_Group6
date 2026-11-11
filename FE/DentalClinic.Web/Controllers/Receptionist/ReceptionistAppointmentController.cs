@@ -595,7 +595,7 @@ public class ReceptionistAppointmentController : Controller
         var result = await _disruptionApi!.ReceptionistResolveDisruptionAsync(id, req);
         if (result.IsSuccess)
         {
-            TempData["SuccessMessage"] = "Äiá»u phá»‘i vÃ  xá»­ lÃ½ giÃ¡n Ä‘oáº¡n lá»‹ch háº¹n thÃ nh cÃ´ng!";
+            TempData["SuccessMessage"] = "Điều phối và xử lý gián đoạn lịch hẹn thành công!";
         }
         else
         {

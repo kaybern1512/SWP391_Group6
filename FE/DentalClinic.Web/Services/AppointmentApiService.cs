@@ -250,13 +250,33 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendGetAsync<List<AppointmentDto>>("/api/dentist/today-appointments");
     }
 
-    public async Task<ApiResult<List<AppointmentDto>>> GetDentistAppointmentsAsync(DateOnly? fromDate = null, DateOnly? toDate = null)
+    public async Task<ApiResult<List<AppointmentDto>>> GetDentistAppointmentsAsync(
+        DateOnly? fromDate = null,
+        DateOnly? toDate = null,
+        TimeOnly? fromTime = null,
+        TimeOnly? toTime = null,
+        string? status = null,
+        long? roomId = null,
+        long? dentalChairId = null,
+        string? searchTerm = null)
     {
         var query = new List<string>();
         if (fromDate.HasValue) query.Add($"fromDate={fromDate.Value:yyyy-MM-dd}");
         if (toDate.HasValue) query.Add($"toDate={toDate.Value:yyyy-MM-dd}");
+        if (fromTime.HasValue) query.Add($"fromTime={fromTime.Value:HH:mm}");
+        if (toTime.HasValue) query.Add($"toTime={toTime.Value:HH:mm}");
+        if (!string.IsNullOrWhiteSpace(status)) query.Add($"status={Uri.EscapeDataString(status)}");
+        if (roomId.HasValue && roomId.Value > 0) query.Add($"roomId={roomId.Value}");
+        if (dentalChairId.HasValue && dentalChairId.Value > 0) query.Add($"dentalChairId={dentalChairId.Value}");
+        if (!string.IsNullOrWhiteSpace(searchTerm)) query.Add($"searchTerm={Uri.EscapeDataString(searchTerm)}");
+
         var qs = query.Count > 0 ? "?" + string.Join("&", query) : "";
         return await SendGetAsync<List<AppointmentDto>>($"/api/dentist/appointments{qs}");
+    }
+
+    public async Task<ApiResult<List<RoomOptionDto>>> GetDentistRoomsAsync()
+    {
+        return await SendGetAsync<List<RoomOptionDto>>("/api/dentist/rooms");
     }
 
     public async Task<ApiResult<StartAppointmentResultDto>> DentistStartAppointmentAsync(long id)

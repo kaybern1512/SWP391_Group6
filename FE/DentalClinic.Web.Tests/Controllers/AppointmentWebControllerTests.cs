@@ -1687,7 +1687,7 @@ public class AppointmentWebControllerTests
 
             {
 
-                new() { DepartmentId = 1, Name = "Khoa RÄƒng Tá»•ng QuÃ¡t" }
+                new() { DepartmentId = 1, Name = "Khoa Răng Tổng Quát" }
 
             }));
 
@@ -1761,7 +1761,7 @@ public class AppointmentWebControllerTests
 
             ScheduledStart = DateTime.Today.AddDays(1).AddHours(9),
 
-            ReasonForVisit = "Äau nhá»©c rÄƒng hÃ m"
+            ReasonForVisit = "Đau nhức răng hàm"
 
         };
 
