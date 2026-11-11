@@ -204,7 +204,8 @@ public class RealDatabaseEndToEndSmokeTests
         var confirmResult = await apptService.ManagerConfirmAsync(apptId, managerUserId, confirmReq);
         Assert.True(confirmResult.Success, confirmResult.Message);
         Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data!.Status);
-        Assert.Null(confirmResult.Data.QueueNumber);
+        Assert.False(string.IsNullOrWhiteSpace(confirmResult.Data.QueueNumber));
+        var allocatedQueue = confirmResult.Data.QueueNumber;
 
         // Step 4: Receptionist checks in patient upon arrival
         var checkInResult = await apptService.ReceptionistCheckInAsync(apptId, receptionistUserId, "Bệnh nhân đã tới quầy làm thủ tục");
@@ -212,6 +213,7 @@ public class RealDatabaseEndToEndSmokeTests
 
         var apptAfterCheckIn = await db.Appointments.FindAsync(apptId);
         Assert.Equal(AppointmentStatus.CheckedIn, apptAfterCheckIn!.Status);
+        Assert.Equal(allocatedQueue, apptAfterCheckIn.QueueNumber);
 
         // Step 5: Dentist starts examination
         var startResult = await apptService.DentistStartAppointmentAsync(apptId, dentistUserId);
@@ -379,7 +381,19 @@ public class RealDatabaseEndToEndSmokeTests
         var mockApptLogger = new Mock<ILogger<AppointmentService>>();
         var apptService = new AppointmentService(db, mockNotification.Object, mockApptLogger.Object);
 
-        var slotStart = (await GetValidTestWorkDateAsync(db, 3, 2, 9, 4, 1));
+        // Find a date where both Dentist 3 and Dentist 6 have scheduled shifts in Department 1
+        var minDate = DateOnly.FromDateTime(DateTime.Today).AddDays(2);
+        var commonDate = await (from s3 in db.DentistWorkSchedules.AsNoTracking()
+                                join s6 in db.DentistWorkSchedules.AsNoTracking() on s3.WorkDate equals s6.WorkDate
+                                where s3.DentistUserId == 3 && s6.DentistUserId == 6 &&
+                                      s3.DepartmentId == 1 && s6.DepartmentId == 1 &&
+                                      s3.Status == "Scheduled" && s6.Status == "Scheduled" &&
+                                      s3.WorkDate >= minDate && s3.WorkDate <= minDate.AddDays(30)
+                                orderby s3.WorkDate
+                                select s3.WorkDate).FirstOrDefaultAsync();
+
+        if (commonDate == default) commonDate = minDate;
+        var slotStart = commonDate.ToDateTime(new TimeOnly(10, 0));
         var slotEnd = slotStart.AddMinutes(45);
         await CleanDayTestAppointmentsAsync(db, slotStart, 13, 14, 15);
 
@@ -640,12 +654,14 @@ public class RealDatabaseEndToEndSmokeTests
                 ScheduledEnd = appt.ScheduledEnd
             });
             if (!confRes.Success) return null;
+            Assert.False(string.IsNullOrWhiteSpace(confRes.Data!.QueueNumber));
 
-            // QueueNumber is strictly issued upon Receptionist Check-in
+            // QueueNumber is preserved upon Receptionist Check-in
             var checkInRes = await s.ReceptionistCheckInAsync(appt.AppointmentId, 10);
             if (!checkInRes.Success) return null;
 
             var checkedInAppt = await db.Appointments.AsNoTracking().FirstOrDefaultAsync(a => a.AppointmentId == appt.AppointmentId);
+            Assert.Equal(confRes.Data.QueueNumber, checkedInAppt?.QueueNumber);
             return checkedInAppt?.QueueNumber;
         }
 

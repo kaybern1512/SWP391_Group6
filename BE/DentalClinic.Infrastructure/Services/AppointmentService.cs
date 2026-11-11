@@ -1328,8 +1328,8 @@ public class AppointmentService : IAppointmentService
 
                 }
 
-                // 8. Monotonic Queue Number Allocation ONLY when auto-checking in upon walk-in arrival
-                if (request.AutoCheckIn)
+                // 8. Monotonic Queue Number Allocation when confirmed (or auto check in)
+                if (shouldConfirm)
                 {
                     var existingQueueNumbers = await _dbContext.Appointments
                         .Where(a => a.DepartmentId == request.DepartmentId &&
@@ -1387,7 +1387,7 @@ public class AppointmentService : IAppointmentService
 
                 BookingSource = BookingSource.Receptionist,
 
-                QueueNumber = (request.AutoCheckIn && shouldConfirm) ? queueNumber : null,
+                QueueNumber = shouldConfirm ? queueNumber : null,
 
                 Status = (request.AutoCheckIn && shouldConfirm) ? AppointmentStatus.CheckedIn : (shouldConfirm ? AppointmentStatus.Confirmed : AppointmentStatus.PendingReceptionReview),
                 CheckedInAt = (request.AutoCheckIn && shouldConfirm) ? now : null,
@@ -1416,7 +1416,7 @@ public class AppointmentService : IAppointmentService
 
                 Note = shouldConfirm
 
-                    ? (request.AutoCheckIn ? $"Tiếp đón vãng lai và check-in trực tiếp tại quầy. Số thứ tự: {queueNumber}." : "Lễ tân tiếp nhận, phân bổ tài nguyên và xác nhận lịch hẹn tại quầy.")
+                    ? (request.AutoCheckIn ? $"Tiếp đón vãng lai và check-in trực tiếp tại quầy. Số thứ tự: {queueNumber}." : $"Lễ tân tiếp nhận, phân bổ tài nguyên và xác nhận lịch hẹn tại quầy. Số thứ tự: {queueNumber}.")
 
                     : "Lễ tân tiếp nhận và tạo yêu cầu đặt lịch hẹn tại quầy.",
 
@@ -1456,7 +1456,7 @@ public class AppointmentService : IAppointmentService
 
             return ApiResponse<AppointmentDto>.Ok(dto!, shouldConfirm
 
-                ? (request.AutoCheckIn ? $"Tiếp nhận, phân bổ tài nguyên và check-in thành công (STT: {queueNumber})." : "Tiếp nhận, phân bổ tài nguyên và xác nhận lịch hẹn tại quầy thành công.")
+                ? (request.AutoCheckIn ? $"Tiếp nhận, phân bổ tài nguyên và check-in thành công (STT: {queueNumber})." : $"Tiếp nhận, phân bổ tài nguyên và xác nhận lịch hẹn tại quầy thành công (STT: {queueNumber}).")
 
                 : "Tiếp nhận và tạo lịch hẹn tại quầy thành công.");
 
@@ -4391,6 +4391,13 @@ public class AppointmentService : IAppointmentService
 
             }
 
+            // Idempotent retry: Nếu lịch hẹn đã được xác nhận trước đó, trả về thành công với số thứ tự hiện tại (Retry không tạo lại số)
+            if (appointment.Status == AppointmentStatus.Confirmed)
+            {
+                var existingDto = await MapToDtoAsync(appointmentId, ct);
+                return ApiResponse<AppointmentDto>.Ok(existingDto!, "Lịch hẹn đã được xác nhận trước đó.");
+            }
+
             if (appointment.Status != AppointmentStatus.PendingDepartmentReview && appointment.Status != AppointmentStatus.PendingReceptionReview)
 
             {
@@ -4790,6 +4797,48 @@ public class AppointmentService : IAppointmentService
 
             }
 
+            // 4. GENERATE MONOTONIC QUEUE NUMBER (max sequence + 1 per department and target date)
+            // Retry không tạo lại số: Bảo toàn QueueNumber nếu cùng chuyên khoa và ngày khám
+            var deptId = appointment.DepartmentId;
+
+            string queueNumber;
+            bool canReuseExistingQueue = !string.IsNullOrWhiteSpace(appointment.QueueNumber) &&
+                                         appointment.DepartmentId == deptId &&
+                                         appointment.ScheduledStart.HasValue &&
+                                         appointment.ScheduledStart.Value.Date == targetDate;
+
+            if (canReuseExistingQueue)
+            {
+                queueNumber = appointment.QueueNumber!;
+            }
+            else
+            {
+                var existingQueueNumbers = await _dbContext.Appointments
+                    .Where(a => a.DepartmentId == deptId &&
+                                a.ScheduledStart != null &&
+                                a.ScheduledStart.Value.Date == targetDate &&
+                                a.QueueNumber != null &&
+                                a.QueueNumber != "")
+                    .Select(a => a.QueueNumber!)
+                    .ToListAsync(ct);
+
+                int maxSeq = 0;
+                foreach (var qn in existingQueueNumbers)
+                {
+                    if (string.IsNullOrWhiteSpace(qn)) continue;
+                    var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
+                    if (match.Success && int.TryParse(match.Value, out int num))
+                    {
+                        if (num > maxSeq) maxSeq = num;
+                    }
+                }
+                var dept = deptId.HasValue
+                    ? await _dbContext.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == deptId.Value, ct)
+                    : null;
+                var deptCode = GetDepartmentCode(dept?.Name, deptId);
+                queueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
+            }
+
             var oldStatus = appointment.Status;
 
             appointment.AssignedDentistUserId = request.AssignedDentistUserId;
@@ -4802,7 +4851,7 @@ public class AppointmentService : IAppointmentService
 
             appointment.ScheduledEnd = finalEnd.Value;
 
-            appointment.QueueNumber = null;
+            appointment.QueueNumber = queueNumber;
 
             appointment.Status = AppointmentStatus.Confirmed;
 
@@ -4822,7 +4871,7 @@ public class AppointmentService : IAppointmentService
 
                 ChangedByUserId = managerUserId,
 
-                Note = "Trưởng khoa xác nhận lịch hẹn.",
+                Note = $"Trưởng khoa/Lễ tân xác nhận lịch hẹn. Số thứ tự: {queueNumber}.",
 
                 ChangedAt = DateTime.UtcNow
 
@@ -4872,7 +4921,7 @@ public class AppointmentService : IAppointmentService
 
                     "Lịch khám đã được xác nhận!",
 
-                    $"Lịch khám mã {appointment.AppointmentCode} đã được Trưởng khoa xác nhận thành công.",
+                    $"Lịch khám mã {appointment.AppointmentCode} đã được Trưởng khoa/Lễ tân xác nhận thành công. Số thứ tự khám của bạn là {queueNumber}.",
 
                     ct);
 
@@ -4978,7 +5027,7 @@ public class AppointmentService : IAppointmentService
 
                             appointment.AppointmentCode,
 
-                            null,
+                            queueNumber,
 
                             serviceName,
 

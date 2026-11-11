@@ -685,7 +685,8 @@ public class Stage4FinalSystemAcceptanceE2ETests
         var confirmResult = await apptService.ManagerConfirmAsync(appointmentId, receptionistUserId, confirmReq);
         Assert.True(confirmResult.Success, confirmResult.Message);
         Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data!.Status);
-        Assert.Null(confirmResult.Data.QueueNumber);
+        Assert.False(string.IsNullOrWhiteSpace(confirmResult.Data.QueueNumber));
+        string allocatedQueueNumber = confirmResult.Data.QueueNumber;
 
         // ---------------------------------------------------------------------
         // STEP 3: RECEPTIONIST CHECKS IN PATIENT UPON ARRIVAL
@@ -695,7 +696,8 @@ public class Stage4FinalSystemAcceptanceE2ETests
 
         var apptCheckedIn = await db.Appointments.FindAsync(appointmentId);
         Assert.Equal(AppointmentStatus.CheckedIn, apptCheckedIn!.Status);
-        Assert.False(string.IsNullOrWhiteSpace(apptCheckedIn.QueueNumber));
+        // QueueNumber must be preserved upon Check-in
+        Assert.Equal(allocatedQueueNumber, apptCheckedIn.QueueNumber);
 
         // ---------------------------------------------------------------------
         // STEP 4: DENTIST STARTS CONSULTATION (InService)

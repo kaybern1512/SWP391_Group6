@@ -143,8 +143,8 @@ public class EmailService : IEmailService
         CancellationToken ct = default)
     {
         var subject = string.IsNullOrWhiteSpace(queueNumber)
-            ? $"[DentalCare] Xác nhận lịch hẹn khám #{appointmentCode}"
-            : $"[DentalCare] Xác nhận lịch hẹn khám #{appointmentCode} - STT {queueNumber}";
+            ? $"[DentalCare] Xác nhận lịch khám #{appointmentCode}"
+            : $"[DentalCare] Xác nhận lịch khám – Số thứ tự {queueNumber}";
         var frontendUrl = _configuration["Frontend:BaseUrl"] ?? "https://localhost:7129";
         var appointmentUrl = $"{frontendUrl.TrimEnd('/')}/Patient/Appointment";
 
@@ -152,7 +152,7 @@ public class EmailService : IEmailService
 
         var queueDisplayHtml = !string.IsNullOrWhiteSpace(queueNumber)
             ? $@"<span style=""font-size: 32px; font-weight: 800; color: #0066cc; letter-spacing: 2px;"">{WebUtility.HtmlEncode(queueNumber)}</span>"
-            : @"<span style=""font-size: 15px; font-weight: 600; color: #0284c7; background-color: #e0f2fe; padding: 6px 14px; border-radius: 20px; display: inline-block;"">Sẽ được cấp tại Quầy Tiếp Đón khi Check-in</span>";
+            : $@"<span style=""font-size: 20px; font-weight: 700; color: #0066cc;"">#{WebUtility.HtmlEncode(appointmentCode)}</span>";
 
         var htmlBody = $@"
 <div style=""font-family: 'Segoe UI', Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff; color: #1e293b;"">
@@ -207,9 +207,10 @@ public class EmailService : IEmailService
     <div style=""background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 16px; margin-bottom: 24px;"">
         <h4 style=""margin: 0 0 10px; color: #92400e; font-size: 14px;"">📌 Hướng dẫn khi đến khám:</h4>
         <ul style=""margin: 0; padding-left: 20px; font-size: 13px; color: #78350f; line-height: 1.6;"">
-            <li>Quý khách vui lòng có mặt trước giờ hẹn <strong>10 - 15 phút</strong> tại Quầy Tiếp Đón để làm thủ tục tiếp nhận.</li>
-            <li>Xuất trình mã lịch hẹn hoặc đọc Họ tên và Số điện thoại cho nhân viên tiếp tân.</li>
-            <li>Nếu có triệu chứng bất thường hoặc cần hỗ trợ dời lịch, vui lòng báo trước qua hotline ít nhất 2 giờ.</li>
+            <li>Quý khách vui lòng có mặt trước giờ hẹn <strong>10 - 15 phút</strong> tại Quầy Tiếp Đón để làm thủ tục Check-in và vào khám theo số thứ tự <strong>{(string.IsNullOrWhiteSpace(queueNumber) ? appointmentCode : WebUtility.HtmlEncode(queueNumber))}</strong>.</li>
+            <li>Xuất trình mã lịch hẹn <strong>#{WebUtility.HtmlEncode(appointmentCode)}</strong> hoặc số thứ tự khám cho nhân viên lễ tân khi đến nơi.</li>
+            <li>Lưu ý: Số thứ tự đã được hệ thống cấp trước. Sau khi hoàn tất thủ tục Check-in tại quầy, Quý khách sẽ được đưa vào hàng đợi khám thực tế.</li>
+            <li>Nếu cần hỗ trợ đổi lịch, vui lòng thao tác trên hệ thống hoặc liên hệ hotline 1900 6868 ít nhất 2 giờ trước giờ hẹn.</li>
         </ul>
     </div>
 
