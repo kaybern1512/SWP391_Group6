@@ -1,8 +1,7 @@
 ﻿-- =========================================================================================
 -- DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)
--- FULL MASTER DATABASE SCRIPT: SCHEMA + COMPLETE SEED DATASET (68 TABLES)
+-- FULL MASTER DATABASE SCRIPT: SCHEMA + COMPLETE SEED DATASET (69 TABLES)
 -- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
--- Database Name: DentalClinicManagementDB
 -- Shared Demo Password for ALL Accounts: Password123@
 -- Official 4 Roles: Patient, Receptionist, Dentist, SystemAdministrator
 -- Key Demo Accounts:
@@ -10,7 +9,7 @@
 --   Receptionist:          receptionist@dentalcare.com
 --   Dentist:               dentist1@dentalcare.com / dentist.hung@dentalcare.com
 --   Patient:               patient1@dentalcare.com / patient.tuan@gmail.com
--- Generated: 2026-11-11 23:13:29
+-- Generated: 2026-11-12 01:16:11
 -- =========================================================================================
 
 -- =========================================================================================
@@ -18,13 +17,14 @@
 -- Drops foreign keys, views, stored procedures, and tables if they already exist,
 -- ensuring safe, conflict-free re-runs on any machine or existing database.
 -- =========================================================================================
-IF DB_ID(N'DentalClinicManagementDB') IS NULL
+-- Target Database Safety Guard:
+-- Prevents accidental execution against system databases (master, tempdb, model, msdb).
+-- The script executes within the caller's target database context (e.g. sqlcmd -d TargetDatabase -i ...).
+IF DB_NAME() IN (N'master', N'tempdb', N'model', N'msdb')
 BEGIN
-    CREATE DATABASE DentalClinicManagementDB COLLATE SQL_Latin1_General_CP1_CI_AS;
+    DECLARE @errMsg NVARCHAR(500) = N'FATAL SAFETY ERROR: Script cannot be executed against system database [' + DB_NAME() + N']. Please specify a valid target database: sqlcmd -d <TargetDatabase> -i <script.sql>';
+    RAISERROR(@errMsg, 20, 1) WITH LOG;
 END;
-GO
-
-USE DentalClinicManagementDB;
 GO
 
 SET ANSI_NULLS ON;
@@ -60,15 +60,28 @@ IF LEN(@dropSpSql) > 0 EXEC sp_executesql @dropSpSql;
 DECLARE @dropTableSql NVARCHAR(MAX) = N'';
 SELECT @dropTableSql += N'DROP TABLE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name) + N';' + CHAR(13)
 FROM sys.tables t
-JOIN sys.schemas s ON t.schema_id = s.schema_id
-WHERE t.name <> N'__EFMigrationsHistory';
+JOIN sys.schemas s ON t.schema_id = s.schema_id;
 IF LEN(@dropTableSql) > 0 EXEC sp_executesql @dropTableSql;
 GO
 
 -- =========================================================================================
--- PART 1: 68 DDL TABLE SCHEMAS, CONSTRAINTS & INDEXES
+-- PART 1: 69 DDL TABLE SCHEMAS, CONSTRAINTS & INDEXES
 -- =========================================================================================
 
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[__EFMigrationsHistory](
+	[MigrationId] [nvarchar](150) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ProductVersion] [nvarchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+ CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY CLUSTERED 
+(
+	[MigrationId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -4168,7 +4181,7 @@ END;
 GO
 
 -- =========================================================================================
--- PART 4: COMPLETE SYSTEM DATASET SEEDING (68 TABLES, UTF-8 ACCENTED VIETNAMESE)
+-- PART 4: COMPLETE SYSTEM DATASET SEEDING (69 TABLES, UTF-8 ACCENTED VIETNAMESE)
 -- =========================================================================================
 
 -- Disable foreign key checks during data loading
@@ -18421,5 +18434,5 @@ GO
 EXEC sp_msforeachtable 'ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all';
 GO
 
-PRINT N'>>> DENTAL CLINIC DATABASE & DATA SUCCESSFULLY INITIALIZED 100% (68 TABLES)!';
+PRINT N'>>> DENTAL CLINIC DATABASE & DATA SUCCESSFULLY INITIALIZED 100% (69 TABLES)!';
 GO

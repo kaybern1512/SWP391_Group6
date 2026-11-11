@@ -81,13 +81,14 @@ $idempotentCleanupSql = @"
 -- Drops foreign keys, views, stored procedures, and tables if they already exist,
 -- ensuring safe, conflict-free re-runs on any machine or existing database.
 -- =========================================================================================
-IF DB_ID(N'DentalClinicManagementDB') IS NULL
+-- Target Database Safety Guard:
+-- Prevents accidental execution against system databases (master, tempdb, model, msdb).
+-- The script executes within the caller's target database context (e.g. sqlcmd -d TargetDatabase -i ...).
+IF DB_NAME() IN (N'master', N'tempdb', N'model', N'msdb')
 BEGIN
-    CREATE DATABASE DentalClinicManagementDB COLLATE SQL_Latin1_General_CP1_CI_AS;
+    DECLARE @errMsg NVARCHAR(500) = N'FATAL SAFETY ERROR: Script cannot be executed against system database [' + DB_NAME() + N']. Please specify a valid target database: sqlcmd -d <TargetDatabase> -i <script.sql>';
+    RAISERROR(@errMsg, 20, 1) WITH LOG;
 END;
-GO
-
-USE DentalClinicManagementDB;
 GO
 
 SET ANSI_NULLS ON;
