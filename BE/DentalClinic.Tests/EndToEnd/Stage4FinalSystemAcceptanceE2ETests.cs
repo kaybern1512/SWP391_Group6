@@ -696,7 +696,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
 
         var apptCheckedIn = await db.Appointments.FindAsync(appointmentId);
         Assert.Equal(AppointmentStatus.CheckedIn, apptCheckedIn!.Status);
-        // QueueNumber must NOT change or duplicate
+        // QueueNumber must be preserved upon Check-in
         Assert.Equal(allocatedQueueNumber, apptCheckedIn.QueueNumber);
 
         // ---------------------------------------------------------------------

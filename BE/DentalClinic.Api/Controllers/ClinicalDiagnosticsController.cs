@@ -24,15 +24,18 @@ public class ClinicalDiagnosticsController : ControllerBase
     private readonly IImagingService _imagingService;
     private readonly IMedicalImagingStorageService _imagingStorageService;
     private readonly DentalClinicDbContext _dbContext;
+    private readonly IXrayRosterService _xrayRosterService;
 
     public ClinicalDiagnosticsController(
         IImagingService imagingService,
         IMedicalImagingStorageService imagingStorageService,
-        DentalClinicDbContext dbContext)
+        DentalClinicDbContext dbContext,
+        IXrayRosterService xrayRosterService)
     {
         _imagingService = imagingService;
         _imagingStorageService = imagingStorageService;
         _dbContext = dbContext;
+        _xrayRosterService = xrayRosterService;
     }
 
     private long GetCurrentUserId()
@@ -482,6 +485,146 @@ public class ClinicalDiagnosticsController : ControllerBase
         catch (Exception ex)
         {
             return BadRequest(ApiResponse<ClinicalConsultationDto>.Fail(ex.Message));
+        }
+    }
+
+    // =========================================================================
+    // DEDICATED X-RAY DENTIST ROSTER ENDPOINTS
+    // =========================================================================
+
+    [HttpGet("roster")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<List<XrayDentistRosterDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetRosters(
+        [FromQuery] DateOnly? workDate,
+        [FromQuery] long? roomId,
+        [FromQuery] long? dentistUserId,
+        [FromQuery] string? status,
+        CancellationToken ct)
+    {
+        try
+        {
+            var filter = new XrayRosterFilterRequest
+            {
+                WorkDate = workDate,
+                RoomId = roomId,
+                DentistUserId = dentistUserId,
+                Status = status
+            };
+            var result = await _xrayRosterService.GetRostersAsync(filter, ct);
+            return Ok(ApiResponse<List<XrayDentistRosterDto>>.Ok(result));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<List<XrayDentistRosterDto>>.Fail(ex.Message));
+        }
+    }
+
+    [HttpGet("roster/qualified-dentists")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<List<QualifiedDentistDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetQualifiedDentists(CancellationToken ct)
+    {
+        try
+        {
+            var result = await _xrayRosterService.GetQualifiedDentistsAsync(ct);
+            return Ok(ApiResponse<List<QualifiedDentistDto>>.Ok(result));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<List<QualifiedDentistDto>>.Fail(ex.Message));
+        }
+    }
+
+    [HttpGet("roster/{id}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<XrayDentistRosterDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetRosterById(long id, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _xrayRosterService.GetRosterByIdAsync(id, ct);
+            if (result == null)
+                return NotFound(ApiResponse<XrayDentistRosterDto>.Fail("Không tìm thấy phân công trực phòng X-quang."));
+
+            return Ok(ApiResponse<XrayDentistRosterDto>.Ok(result));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<XrayDentistRosterDto>.Fail(ex.Message));
+        }
+    }
+
+    [HttpPost("roster")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<XrayDentistRosterDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> AssignRoster([FromBody] AssignXrayRosterRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var adminUserId = GetCurrentUserId();
+            var result = await _xrayRosterService.AssignRosterAsync(request, adminUserId, ct);
+            return Ok(ApiResponse<XrayDentistRosterDto>.Ok(result, "Phân công bác sĩ trực phòng X-quang thành công."));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<XrayDentistRosterDto>.Fail(ex.Message));
+        }
+    }
+
+    [HttpPost("roster/{id}/replace")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<XrayDentistRosterDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ReplaceDentist(long id, [FromBody] ReplaceXrayDentistRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var adminUserId = GetCurrentUserId();
+            var result = await _xrayRosterService.ReplaceDentistAsync(id, request, adminUserId, ct);
+            return Ok(ApiResponse<XrayDentistRosterDto>.Ok(result, "Điều chuyển bác sĩ trực phòng X-quang thành công."));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<XrayDentistRosterDto>.Fail(ex.Message));
+        }
+    }
+
+    [HttpDelete("roster/{id}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CancelRoster(long id, [FromQuery] string? reason, CancellationToken ct)
+    {
+        try
+        {
+            var adminUserId = GetCurrentUserId();
+            var result = await _xrayRosterService.CancelRosterAsync(id, reason ?? "Quản trị viên hủy phân công trực", adminUserId, ct);
+            return Ok(ApiResponse<bool>.Ok(result, "Hủy phân công trực phòng X-quang thành công."));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<bool>.Fail(ex.Message));
+        }
+    }
+
+    [HttpGet("roster/my-duty")]
+    [Authorize(Roles = UserRole.Dentist)]
+    [ProducesResponseType(typeof(ApiResponse<List<XrayDentistRosterDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyXrayDuty(
+        [FromQuery] DateOnly? fromDate,
+        [FromQuery] DateOnly? toDate,
+        CancellationToken ct)
+    {
+        try
+        {
+            var dentistUserId = GetCurrentUserId();
+            var from = fromDate ?? DateOnly.FromDateTime(DateTime.Today);
+            var to = toDate ?? from.AddDays(7);
+            var result = await _xrayRosterService.GetDentistXrayScheduleAsync(dentistUserId, from, to, ct);
+            return Ok(ApiResponse<List<XrayDentistRosterDto>>.Ok(result));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<List<XrayDentistRosterDto>>.Fail(ex.Message));
         }
     }
 }

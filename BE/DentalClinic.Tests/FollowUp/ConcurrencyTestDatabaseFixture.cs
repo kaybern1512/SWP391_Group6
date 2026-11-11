@@ -11,7 +11,7 @@ namespace DentalClinic.Tests.FollowUp;
 
 public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
 {
-    public string ServerName { get; } = Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? ".\\SQLEXPRESS";
+    public string ServerName { get; } = Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS";
     public string RunId { get; } = Guid.NewGuid().ToString("N")[..8];
     public string DatabaseName { get; private set; } = null!;
     public string ConnectionString { get; private set; } = null!;
@@ -28,6 +28,7 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
     private const string StaffAttendanceMigrationRelativePath = @"DB\migrations\20261110_Add_Staff_Attendance_And_Operations_Tables.sql";
     private const string ServiceCombosMigrationRelativePath = @"DB\20261110_Add_ServiceCombos_And_Appointment_Combo_Tracking.sql";
     private const string CareEpisodesMigrationRelativePath = @"DB\20261111_Add_CareEpisodes_ServiceTasks_And_SingleInvoiceAggregation.sql";
+    private const string XrayRosterMigrationRelativePath = @"DB\migrations\20261112_Add_Dedicated_Xray_Dentist_Roster.sql";
 
     public async Task InitializeAsync()
     {
@@ -54,7 +55,7 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = "SELECT CAST(ISNULL(SERVERPROPERTY('InstanceDefaultDataPath'), 'C:\\Program Files\\Microsoft SQL Server\\MSSQL16.SQLEXPRESS\\MSSQL\\DATA\\') AS VARCHAR(260));";
-            dataPath = (string)(await cmd.ExecuteScalarAsync() ?? @"C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER01\MSSQL\DATA\");
+            dataPath = (string)(await cmd.ExecuteScalarAsync() ?? @"C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\DATA\");
         }
 
         var mdfPath = Path.Combine(dataPath, $"{DatabaseName}.mdf");
@@ -136,6 +137,11 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
         if (File.Exists(episodePath))
         {
             await ApplyMigrationFileAsync(episodePath, DatabaseName, ConnectionString);
+        }
+        var xrayRosterPath = Path.Combine(repoRoot, XrayRosterMigrationRelativePath);
+        if (File.Exists(xrayRosterPath))
+        {
+            await ApplyMigrationFileAsync(xrayRosterPath, DatabaseName, ConnectionString);
         }
     }
 

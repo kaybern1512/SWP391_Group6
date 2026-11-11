@@ -184,6 +184,7 @@ public partial class DentalClinicDbContext : DbContext
     public virtual DbSet<ImagingSession> ImagingSessions { get; set; }
     public virtual DbSet<DiagnosticResult> DiagnosticResults { get; set; }
     public virtual DbSet<ClinicalConsultation> ClinicalConsultations { get; set; }
+    public virtual DbSet<XrayDentistRoster> XrayDentistRosters { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1363,6 +1364,46 @@ public partial class DentalClinicDbContext : DbContext
                 .HasForeignKey(d => d.ConsultedDentistUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_ClinicalConsultations_ConsultedDentist");
+        });
+
+        modelBuilder.Entity<XrayDentistRoster>(entity =>
+        {
+            entity.HasKey(e => e.RosterId);
+            entity.ToTable("XrayDentistRosters");
+            entity.Property(e => e.ShiftType).HasMaxLength(20).HasDefaultValue("Morning");
+            entity.Property(e => e.Status).HasMaxLength(30).HasDefaultValue("Active");
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.Property(e => e.CreatedAtUtc).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.Room)
+                .WithMany()
+                .HasForeignKey(d => d.RoomId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_XrayDentistRosters_Room");
+
+            entity.HasOne(d => d.Equipment)
+                .WithMany()
+                .HasForeignKey(d => d.EquipmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_XrayDentistRosters_Equipment");
+
+            entity.HasOne(d => d.DentistUser)
+                .WithMany()
+                .HasForeignKey(d => d.DentistUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_XrayDentistRosters_Dentist");
+
+            entity.HasOne(d => d.BackupDentistUser)
+                .WithMany()
+                .HasForeignKey(d => d.BackupDentistUserId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_XrayDentistRosters_BackupDentist");
+
+            entity.HasOne(d => d.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.CreatedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_XrayDentistRosters_CreatedBy");
         });
 
         modelBuilder.Entity<StaffProfile>(entity =>
