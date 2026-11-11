@@ -38,7 +38,7 @@ public class DentistXrayQueueController : Controller
         ViewBag.AllDuties = dutyRes?.Data ?? new();
         ViewBag.TargetRoomId = targetRoomId;
 
-        return View(queueRes?.Data);
+        return View("~/Views/Dentist/XrayQueue/Index.cshtml", queueRes?.Data);
     }
 
     [HttpPost("Start/{sessionId:long}")]

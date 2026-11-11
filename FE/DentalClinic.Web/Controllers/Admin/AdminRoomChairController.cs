@@ -9,6 +9,7 @@ namespace DentalClinic.Web.Controllers.Admin;
 
 [Authorize(Roles = "SystemAdministrator")]
 [Route("Admin/Rooms")]
+[Route("Admin/RoomChair")]
 public class AdminRoomChairController : Controller
 {
     private readonly IAdminApiService _adminApi;

@@ -26,8 +26,8 @@ test.describe.serial('Dedicated X-Ray Dentist Workflow & Roster Management', () 
     await expect(xrayTab).toHaveClass(/active/);
 
     // Verify table headers
-    await expect(page.locator('text=Trực Phòng X-Quang')).toBeVisible();
-    await expect(page.locator('text=Phân công ca trực mới')).toBeVisible();
+    await expect(page.locator('text=Trực Phòng X-Quang').first()).toBeVisible();
+    await expect(page.locator('text=Phân công ca trực mới').first()).toBeVisible();
 
     // Open Assign Modal
     await page.locator('button:has-text("Phân công ca trực mới")').click();
@@ -56,7 +56,7 @@ test.describe.serial('Dedicated X-Ray Dentist Workflow & Roster Management', () 
   });
 
   test('TC03: Dentist Portal has X-Ray Duty navigation and dedicated queue view', async ({ page }) => {
-    await loginAs(page, 'hung.tran@dentalcare.com');
+    await loginAs(page, 'dentist@dentalcare.com');
 
     // Verify navigation sidebar has link
     const sidebarLink = page.locator('a:has-text("Ca Trực Phòng X-Quang")');
@@ -67,10 +67,10 @@ test.describe.serial('Dedicated X-Ray Dentist Workflow & Roster Management', () 
     await page.waitForLoadState('domcontentloaded');
 
     // Verify title and layout
-    await expect(page.locator('text=Ca Trực Phòng X-Quang')).toBeVisible();
-    await expect(page.locator('text=Đang Chờ Chụp')).toBeVisible();
-    await expect(page.locator('text=Đang Thực Hiện')).toBeVisible();
-    await expect(page.locator('text=Ca Đang Thực Hiện Tại Phòng Chụp')).toBeVisible();
-    await expect(page.locator('text=Bệnh Nhân Chờ Chụp X-Quang')).toBeVisible();
+    await expect(page.locator('h1:has-text("Ca Trực Phòng X-Quang")')).toBeVisible();
+    await expect(page.locator('text=Đang Chờ Chụp').first()).toBeVisible();
+    await expect(page.locator('text=Đang Thực Hiện').first()).toBeVisible();
+    await expect(page.locator('text=Ca Đang Thực Hiện Tại Phòng Chụp').first()).toBeVisible();
+    await expect(page.locator('text=Bệnh Nhân Chờ Chụp X-Quang').first()).toBeVisible();
   });
 });
