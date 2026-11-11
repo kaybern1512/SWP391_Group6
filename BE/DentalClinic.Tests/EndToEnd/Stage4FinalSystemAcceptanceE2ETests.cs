@@ -27,7 +27,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private DentalClinicDbContext CreateDbContext()
     {
@@ -685,8 +685,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
         var confirmResult = await apptService.ManagerConfirmAsync(appointmentId, receptionistUserId, confirmReq);
         Assert.True(confirmResult.Success, confirmResult.Message);
         Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data!.Status);
-        Assert.False(string.IsNullOrWhiteSpace(confirmResult.Data.QueueNumber));
-        string allocatedQueueNumber = confirmResult.Data.QueueNumber;
+        Assert.Null(confirmResult.Data.QueueNumber);
 
         // ---------------------------------------------------------------------
         // STEP 3: RECEPTIONIST CHECKS IN PATIENT UPON ARRIVAL
@@ -696,8 +695,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
 
         var apptCheckedIn = await db.Appointments.FindAsync(appointmentId);
         Assert.Equal(AppointmentStatus.CheckedIn, apptCheckedIn!.Status);
-        // QueueNumber must NOT change or duplicate
-        Assert.Equal(allocatedQueueNumber, apptCheckedIn.QueueNumber);
+        Assert.False(string.IsNullOrWhiteSpace(apptCheckedIn.QueueNumber));
 
         // ---------------------------------------------------------------------
         // STEP 4: DENTIST STARTS CONSULTATION (InService)

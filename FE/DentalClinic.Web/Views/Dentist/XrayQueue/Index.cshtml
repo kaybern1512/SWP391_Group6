@@ -1,0 +1,387 @@
+@model DentalClinic.Web.Models.ApiDtos.ImagingQueueSummaryDto
+@{
+    ViewData["Title"] = "Ca Trực Phòng X-Quang & Hàng Đợi Chụp";
+    var activeDuty = ViewBag.ActiveDuty as DentalClinic.Web.Models.ApiDtos.XrayDentistRosterDto;
+    var allDuties = ViewBag.AllDuties as List<DentalClinic.Web.Models.ApiDtos.XrayDentistRosterDto> ?? new();
+    long targetRoomId = ViewBag.TargetRoomId != null ? (long)ViewBag.TargetRoomId : 9;
+}
+
+<div class="container-fluid px-0">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-1">
+                <i class="bi bi-camera-fill text-primary me-2"></i>Ca Trực Phòng X-Quang
+            </h1>
+            <p class="text-muted mb-0">
+                Thực hiện chẩn đoán hình ảnh kỹ thuật số &bull; Phòng: <span class="badge bg-primary fs-6">@(Model?.RoomCode ?? "XRAY-01") - @(Model?.RoomName ?? "Phòng X-quang KTS")</span>
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="@Url.Action("Index", "DentistXrayQueue", new { roomId = targetRoomId })" class="btn btn-outline-secondary shadow-sm">
+                <i class="bi bi-arrow-clockwise me-1"></i> Làm mới
+            </a>
+        </div>
+    </div>
+
+    <!-- Alert Messages -->
+    <partial name="_AlertMessage" />
+
+    <!-- Duty Status Banner -->
+    @if (activeDuty != null)
+    {
+        <div class="card shadow-sm border-0 bg-success-subtle border-start border-4 border-success mb-4">
+            <div class="card-body py-3">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="p-2 rounded-circle bg-success text-white">
+                            <i class="bi bi-shield-check fs-4"></i>
+                        </div>
+                        <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-success text-white"><i class="bi bi-check-circle me-1"></i>ĐANG TRỰC PHÒNG X-QUANG</span>
+                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
+                                    ATBX: @(string.IsNullOrEmpty(activeDuty.RadiationCertNumber) ? "Đã kiểm định" : activeDuty.RadiationCertNumber)
+                                </span>
+                            </div>
+                            <div class="mt-1">
+                                <strong>Phòng trực:</strong> @activeDuty.RoomCode (@activeDuty.RoomName) &bull;
+                                <strong>Ca trực:</strong> @activeDuty.ShiftType (@activeDuty.StartTime.ToString("HH:mm") - @activeDuty.EndTime.ToString("HH:mm")) &bull;
+                                <strong>Thiết bị:</strong> @activeDuty.EquipmentCode
+                            </div>
+                            @if (!string.IsNullOrEmpty(activeDuty.BackupDentistFullName))
+                            {
+                                <div class="small text-muted mt-1">
+                                    <i class="bi bi-person-badge me-1"></i>Bác sĩ dự phòng: <strong>BS. @activeDuty.BackupDentistFullName</strong>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge bg-light text-dark border p-2">
+                            <i class="bi bi-calendar3 me-1"></i>@activeDuty.WorkDate.ToString("dd/MM/yyyy")
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0 bg-warning-subtle border-start border-4 border-warning mb-4">
+            <div class="card-body py-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-2 rounded-circle bg-warning text-dark">
+                        <i class="bi bi-exclamation-triangle fs-4"></i>
+                    </div>
+                    <div>
+                        <h6 class="fw-bold mb-1 text-warning-emphasis">Bạn hiện không có lịch phân công trực phòng X-quang hôm nay</h6>
+                        <p class="small text-muted mb-0">
+                            Theo quy định An toàn bức xạ và Quy chuẩn vận hành phòng khám, chỉ Bác sĩ được phân công trực phòng X-quang trong ca mới có quyền tiếp nhận và thực hiện ca chụp tại phòng @(Model?.RoomCode ?? "XRAY-01").
+                            Nếu bạn cần phân công trực thay, vui lòng liên hệ Quản trị viên để được điều chuyển ca trực trên hệ thống.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Quick Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body d-flex align-items-center">
+                    <div class="bg-primary-subtle text-primary p-3 rounded-circle me-3">
+                        <i class="bi bi-people-fill fs-3"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small fw-semibold">Đang Chờ Chụp</div>
+                        <h3 class="fw-bold mb-0">@(Model?.CurrentWaitingCount ?? 0)</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body d-flex align-items-center">
+                    <div class="bg-warning-subtle text-warning p-3 rounded-circle me-3">
+                        <i class="bi bi-hourglass-split fs-3"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small fw-semibold">Đang Thực Hiện</div>
+                        <h3 class="fw-bold mb-0">@(Model?.CurrentInProgressCount ?? 0)</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-12 col-xl-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body d-flex align-items-center">
+                    <div class="bg-info-subtle text-info p-3 rounded-circle me-3">
+                        <i class="bi bi-clock-history fs-3"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small fw-semibold">Thời Gian Chờ Dự Kiến</div>
+                        <h3 class="fw-bold mb-0">@(Model?.EstimatedNextWaitMinutes ?? 0) <span class="fs-6 fw-normal text-muted">phút</span></h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active In-Progress Sessions -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold text-dark mb-0">
+                <i class="bi bi-play-circle-fill text-warning me-2"></i>Ca Đang Thực Hiện Tại Phòng Chụp (@(Model?.ActiveSessions?.Count ?? 0))
+            </h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">Mã Ca / STT</th>
+                        <th>Bệnh nhân</th>
+                        <th>Chỉ định chụp</th>
+                        <th>Bắt đầu lúc</th>
+                        <th>Trạng thái</th>
+                        <th class="text-end pe-3">Thao tác xử lý</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model?.ActiveSessions != null && Model.ActiveSessions.Any())
+                    {
+                        foreach (var session in Model.ActiveSessions)
+                        {
+                            <tr>
+                                <td class="ps-3">
+                                    <div class="fw-bold">#@session.ImagingSessionId</div>
+                                    @if (!string.IsNullOrEmpty(session.QueueNumber))
+                                    {
+                                        <span class="badge bg-secondary">STT: @session.QueueNumber</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">@session.PatientName</div>
+                                    <span class="small text-muted">Mã BN: @(session.PatientCode ?? $"PAT-{session.PatientUserId}")</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                        @session.DiagnosticType
+                                    </span>
+                                    <div class="small text-muted mt-1">@session.EquipmentName</div>
+                                </td>
+                                <td>
+                                    <div>@(session.ActualStartUtc.HasValue ? session.ActualStartUtc.Value.ToLocalTime().ToString("HH:mm:ss") : "--:--")</div>
+                                    <span class="small text-muted">Dự kiến: @session.ScheduledStartUtc.ToLocalTime().ToString("HH:mm")</span>
+                                </td>
+                                <td>
+                                    @if (session.Status == "ImageAcquired")
+                                    {
+                                        <span class="badge bg-info text-white">
+                                            <i class="bi bi-camera me-1"></i>Đã chụp hình
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-hourglass-split me-1"></i>Đang thực hiện
+                                        </span>
+                                    }
+                                </td>
+                                <td class="text-end pe-3">
+                                    <div class="btn-group">
+                                        @if (session.Status == "InProgress")
+                                        {
+                                            <form asp-controller="DentistXrayQueue" asp-action="AcquireImage" asp-route-sessionId="@session.ImagingSessionId" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="roomId" value="@targetRoomId" />
+                                                <button type="submit" class="btn btn-sm btn-outline-info" title="Xác nhận đã chụp hình X-quang">
+                                                    <i class="bi bi-camera me-1"></i>Đã chụp
+                                                </button>
+                                            </form>
+                                        }
+                                        <button type="button" class="btn btn-sm btn-dc-primary btn-open-upload"
+                                                data-session-id="@session.ImagingSessionId"
+                                                data-order-id="@session.DiagnosticOrderId"
+                                                data-patient="@session.PatientName"
+                                                data-type="@session.DiagnosticType"
+                                                data-equipment="@session.EquipmentId">
+                                            <i class="bi bi-file-earmark-medical me-1"></i>Nhập kết quả & Hoàn tất
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">
+                                <i class="bi bi-check-circle fs-3 d-block mb-1 text-success"></i>
+                                Hiện tại không có ca chụp nào đang diễn ra trong phòng chụp.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Waiting Queue -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold text-dark mb-0">
+                <i class="bi bi-list-check text-primary me-2"></i>Bệnh Nhân Chờ Chụp X-Quang (@(Model?.WaitingQueue?.Count ?? 0))
+            </h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">STT / Hàng Đợi</th>
+                        <th>Bệnh nhân</th>
+                        <th>Loại chỉ định</th>
+                        <th>Mức ưu tiên</th>
+                        <th>Lịch hẹn</th>
+                        <th class="text-end pe-3">Tiếp nhận ca</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model?.WaitingQueue != null && Model.WaitingQueue.Any())
+                    {
+                        foreach (var session in Model.WaitingQueue)
+                        {
+                            <tr>
+                                <td class="ps-3">
+                                    <span class="badge bg-primary fs-6">
+                                        @(string.IsNullOrEmpty(session.QueueNumber) ? $"#{session.ImagingSessionId}" : session.QueueNumber)
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">@session.PatientName</div>
+                                    <span class="small text-muted">Mã BN: @(session.PatientCode ?? $"PAT-{session.PatientUserId}")</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark border">@session.DiagnosticType</span>
+                                </td>
+                                <td>
+                                    @if (session.Priority == "Stat")
+                                    {
+                                        <span class="badge bg-danger text-white">Khẩn cấp (Stat)</span>
+                                    }
+                                    else if (session.Priority == "Urgent")
+                                    {
+                                        <span class="badge bg-warning text-dark">Ưu tiên (Urgent)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light text-muted border">Bình thường</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div>@session.ScheduledStartUtc.ToLocalTime().ToString("HH:mm")</div>
+                                    <span class="small text-muted">@session.ScheduledStartUtc.ToLocalTime().ToString("dd/MM/yyyy")</span>
+                                </td>
+                                <td class="text-end pe-3">
+                                    <form asp-controller="DentistXrayQueue" asp-action="StartSession" asp-route-sessionId="@session.ImagingSessionId" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="roomId" value="@targetRoomId" />
+                                        <button type="submit" class="btn btn-sm btn-primary">
+                                            <i class="bi bi-box-arrow-in-right me-1"></i>Tiếp nhận & Bắt đầu chụp
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">
+                                <i class="bi bi-inbox fs-3 d-block mb-1"></i>
+                                Hàng đợi trống. Không có bệnh nhân nào đang chờ chụp X-quang.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nhập Kết Quả & Hoàn Tất Ca Chụp -->
+<div class="modal fade" id="uploadResultModal" tabindex="-1" aria-labelledby="uploadResultLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form asp-controller="DentistXrayQueue" asp-action="UploadResult" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="sessionId" id="modalSessionId" />
+                <input type="hidden" name="diagnosticOrderId" id="modalOrderId" />
+                <input type="hidden" name="equipmentId" id="modalEquipmentId" />
+                <input type="hidden" name="roomId" value="@targetRoomId" />
+
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="uploadResultLabel">
+                        <i class="bi bi-file-earmark-medical-fill text-dc-primary me-2"></i>Nhập Kết Quả Chẩn Đoán Hình Ảnh
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-light border mb-3">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <span class="text-muted small">Bệnh nhân:</span>
+                                <div class="fw-bold fs-6" id="modalPatientName"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted small">Chỉ định chụp:</span>
+                                <div class="fw-bold fs-6 text-primary" id="modalDiagnosticType"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Kết luận chẩn đoán hình ảnh (Findings) <span class="text-danger">*</span></label>
+                        <textarea name="findings" class="form-control" rows="4" required placeholder="Ghi nhận cấu trúc xương hàm, hệ thống răng, các tổn thương nghi ngờ sâu răng, nang quanh chóp hoặc mọc lệch..."></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Đường dẫn file ảnh chẩn đoán (File URL / DICOM / JPEG)</label>
+                        <input type="text" name="fileUrl" class="form-control" value="/uploads/xray/sample_digital_panoramic.jpg" />
+                        <div class="form-text small text-muted">
+                            Hệ thống tự động đồng bộ từ máy chụp kỹ thuật số Vatech Pax-i hoặc PACS lưu trữ nội bộ.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">
+                        <i class="bi bi-check-circle me-1"></i>Lưu Kết Quả & Hoàn Tất Ca Chụp
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const uploadModalEl = document.getElementById('uploadResultModal');
+            if (uploadModalEl) {
+                const uploadModal = new bootstrap.Modal(uploadModalEl);
+                document.querySelectorAll('.btn-open-upload').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        document.getElementById('modalSessionId').value = this.dataset.sessionId;
+                        document.getElementById('modalOrderId').value = this.dataset.orderId;
+                        document.getElementById('modalEquipmentId').value = this.dataset.equipment;
+                        document.getElementById('modalPatientName').textContent = this.dataset.patient;
+                        document.getElementById('modalDiagnosticType').textContent = this.dataset.type;
+                        uploadModal.show();
+                    });
+                });
+            }
+        });
+    </script>
+}

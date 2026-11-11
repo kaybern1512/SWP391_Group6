@@ -425,6 +425,35 @@ public class ImagingService : IImagingService
         if (session.Status != ImagingSessionStatus.Waiting && session.Status != ImagingSessionStatus.CheckedIn)
             throw new InvalidOperationException($"Chỉ có thể bắt đầu phiên chụp khi bệnh nhân đang chờ (Trạng thái: '{session.Status}').");
 
+        // Dedicated X-ray Duty Dentist Enforcement
+        var vnZone = TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? "SE Asia Standard Time" : "Asia/Ho_Chi_Minh");
+        var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, vnZone);
+        var today = DateOnly.FromDateTime(localNow);
+        var nowTime = TimeOnly.FromDateTime(localNow);
+
+        var activeRoster = await _dbContext.XrayDentistRosters
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.RoomId == session.ImagingRoomId &&
+                                      r.WorkDate == today &&
+                                      r.Status == "Active" &&
+                                      r.StartTime <= nowTime &&
+                                      r.EndTime >= nowTime, ct);
+
+        if (activeRoster != null)
+        {
+            var user = await _dbContext.UserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == operatorUserId, ct);
+            var isAdmin = user != null && user.Role == UserRole.SystemAdministrator;
+
+            if (operatorUserId != activeRoster.DentistUserId &&
+                operatorUserId != activeRoster.BackupDentistUserId &&
+                !isAdmin)
+            {
+                var dutyDentist = await _dbContext.StaffProfiles.AsNoTracking().FirstOrDefaultAsync(s => s.UserId == activeRoster.DentistUserId, ct);
+                var dutyName = dutyDentist?.FullName ?? $"Bác sĩ #{activeRoster.DentistUserId}";
+                throw new InvalidOperationException($"Chỉ bác sĩ trực phòng X-quang trong ca này ({dutyName}) mới có quyền bắt đầu phiên chụp.");
+            }
+        }
+
         var lockKeys = new[]
         {
             SqlAppLockHelper.ImagingEquipmentKey(session.EquipmentId),
@@ -687,6 +716,44 @@ public class ImagingService : IImagingService
         var hasDelayWarning = estimatedNextWait >= room.TargetMaxWaitMinutes;
         var hasEscalationAlert = estimatedNextWait >= room.EscalationWaitMinutes;
 
+        // Query active dedicated X-ray roster for this room
+        var vnZone = TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? "SE Asia Standard Time" : "Asia/Ho_Chi_Minh");
+        var localNow = TimeZoneInfo.ConvertTimeFromUtc(now, vnZone);
+        var today = DateOnly.FromDateTime(localNow);
+        var nowTime = TimeOnly.FromDateTime(localNow);
+
+        var activeRoster = await _dbContext.XrayDentistRosters
+            .AsNoTracking()
+            .Include(r => r.DentistUser)
+                .ThenInclude(u => u.StaffProfile)
+                    .ThenInclude(s => s!.DentistProfile)
+            .Include(r => r.BackupDentistUser)
+                .ThenInclude(u => u!.StaffProfile)
+            .FirstOrDefaultAsync(r => r.RoomId == roomId &&
+                                      r.WorkDate == today &&
+                                      r.Status == "Active" &&
+                                      r.StartTime <= nowTime &&
+                                      r.EndTime >= nowTime, ct);
+
+        long? dutyDentistId = activeRoster?.DentistUserId;
+        string? dutyDentistName = activeRoster?.DentistUser?.StaffProfile?.FullName ?? activeRoster?.DentistUser?.Email;
+        string? dutyDentistShift = activeRoster?.ShiftType;
+        string? dutyDentistCert = activeRoster?.DentistUser?.StaffProfile?.DentistProfile?.RadiationCertNumber;
+        long? backupDentistId = activeRoster?.BackupDentistUserId;
+        string? backupDentistName = activeRoster?.BackupDentistUser?.StaffProfile?.FullName;
+        bool hasDutyDentist = activeRoster != null;
+        bool isDutyOnLeave = false;
+
+        if (activeRoster != null)
+        {
+            isDutyOnLeave = await _dbContext.DentistLeaveRequests
+                .AsNoTracking()
+                .AnyAsync(l => l.DentistUserId == activeRoster.DentistUserId &&
+                               l.Status == "Approved" &&
+                               l.StartDate <= today &&
+                               l.EndDate >= today, ct);
+        }
+
         return new ImagingQueueSummaryDto
         {
             RoomId = room.RoomId,
@@ -701,7 +768,15 @@ public class ImagingService : IImagingService
             HasDelayWarning = hasDelayWarning,
             HasEscalationAlert = hasEscalationAlert,
             ActiveSessions = activeDtos,
-            WaitingQueue = waitingDtos
+            WaitingQueue = waitingDtos,
+            OnDutyDentistUserId = dutyDentistId,
+            OnDutyDentistName = dutyDentistName,
+            OnDutyDentistShift = dutyDentistShift,
+            OnDutyDentistRadiationCert = dutyDentistCert,
+            BackupDentistUserId = backupDentistId,
+            BackupDentistName = backupDentistName,
+            HasOnDutyDentist = hasDutyDentist,
+            IsDentistOnLeave = isDutyOnLeave
         };
     }
 

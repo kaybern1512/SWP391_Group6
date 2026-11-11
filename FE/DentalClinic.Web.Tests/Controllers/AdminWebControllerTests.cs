@@ -203,7 +203,7 @@ public class AdminWebControllerTests
                 new() { DentalChairId = 1, RoomId = 1, ChairCode = "G01", Status = "Active" }
             }));
 
-        var controller = new AdminRoomChairController(_apiMock.Object)
+        var controller = new AdminRoomChairController(_apiMock.Object, Mock.Of<IImagingApiService>())
         {
             ControllerContext = CreateAdminContext()
         };

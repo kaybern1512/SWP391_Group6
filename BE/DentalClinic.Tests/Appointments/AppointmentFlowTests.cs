@@ -416,8 +416,13 @@ public class AppointmentFlowTests
         Assert.True(confirmResult.Success);
         Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data!.Status);
         Assert.Equal(401, confirmResult.Data.AssignedDentistUserId);
-        Assert.NotNull(confirmResult.Data.QueueNumber);
-        Assert.StartsWith("Q", confirmResult.Data.QueueNumber);
+        Assert.Null(confirmResult.Data.QueueNumber); // QueueNumber is only issued upon Check-in!
+
+        var checkInResult = await service.ReceptionistCheckInAsync(apptId, 201);
+        Assert.True(checkInResult.Success);
+        var apptInDb = await db.Appointments.FindAsync(apptId);
+        Assert.NotNull(apptInDb!.QueueNumber);
+        Assert.StartsWith("Q", apptInDb.QueueNumber);
     }
     [Fact]
     public async Task Test07_ManagerAssignsDifferentDentistWhenPatientRequestedSpecific_RejectedWithoutProposal()
@@ -1253,7 +1258,7 @@ public class AppointmentFlowTests
             "patient1@dentalcare.com",
             "Nguyễn Văn Bệnh Nhân 1",
             It.Is<string>(code => !string.IsNullOrEmpty(code)),
-            It.Is<string>(q => q.StartsWith("Q")),
+            It.Is<string?>(q => q == null),
             It.IsAny<string>(),
             It.IsAny<string>(),
             It.IsAny<string>(),
@@ -1638,9 +1643,14 @@ public class AppointmentFlowTests
             ScheduledEnd = targetDate.AddHours(14).AddMinutes(30)
         });
         Assert.True(confirmResult.Success);
+        Assert.Null(confirmResult.Data!.QueueNumber); // QueueNumber not allocated until Check-in
+
+        var checkInResult = await service.ReceptionistCheckInAsync(apptId, 201);
+        Assert.True(checkInResult.Success);
+        var apptInDb = await db.Appointments.FindAsync(apptId);
         // Even though active count was 1, monotonic queue number should be Q003!
-        Assert.True(confirmResult.Data!.QueueNumber.EndsWith("003"), $"Expected queue number to end with 003, got {confirmResult.Data.QueueNumber}");
-        Assert.StartsWith("Q", confirmResult.Data.QueueNumber);
+        Assert.True(apptInDb!.QueueNumber!.EndsWith("003"), $"Expected queue number to end with 003, got {apptInDb.QueueNumber}");
+        Assert.StartsWith("Q", apptInDb.QueueNumber);
     }
 
     [Fact]
@@ -1989,10 +1999,16 @@ public class AppointmentFlowTests
         Assert.NotNull(confirmResult.Data);
         Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data.Status);
 
-        // 2. Database state must be confirmed properly with queue number
+        // 2. Database state must be confirmed properly without queue number (only issued upon Check-in)
         var apptDb = await db.Appointments.FindAsync(apptId);
         Assert.Equal(AppointmentStatus.Confirmed, apptDb!.Status);
-        Assert.NotNull(apptDb.QueueNumber);
+        Assert.Null(apptDb.QueueNumber);
+
+        // 3. Check-in must generate queue number
+        var checkInRes = await service.ReceptionistCheckInAsync(apptId, 201);
+        Assert.True(checkInRes.Success);
+        var apptCheckedInDb = await db.Appointments.FindAsync(apptId);
+        Assert.NotNull(apptCheckedInDb!.QueueNumber);
     }
 
     [Fact]
@@ -2235,5 +2251,93 @@ public class AppointmentFlowTests
         Assert.Single(result.Data);
         Assert.Equal("COMBO_CARE", result.Data[0].ComboCode);
         Assert.Equal(350000, result.Data[0].ComboPrice);
+    }
+
+    [Fact]
+    public async Task Test_QueueNumber_StrictCheckInIssuanceRule_Verified()
+    {
+        using var db = CreateDbContext(nameof(Test_QueueNumber_StrictCheckInIssuanceRule_Verified));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+        var targetDate = DateTime.Today.AddDays(2);
+
+        // 1. Patient booking: QueueNumber must be null
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            RequestedDentistUserId = 401,
+            ScheduledStart = targetDate.AddHours(9),
+            ReasonForVisit = "Khám răng định kỳ"
+        });
+        Assert.True(bookResult.Success);
+        var apptId = bookResult.Data!.AppointmentId;
+        Assert.Null(bookResult.Data.QueueNumber);
+
+        // 2. Manager confirmation: QueueNumber MUST REMAIN NULL
+        await service.ReceptionistForwardAsync(apptId, 201, "OK");
+        var confirmResult = await service.ManagerConfirmAsync(apptId, 301, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = targetDate.AddHours(9),
+            ScheduledEnd = targetDate.AddHours(9).AddMinutes(30)
+        });
+        Assert.True(confirmResult.Success);
+        Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data!.Status);
+        Assert.Null(confirmResult.Data.QueueNumber);
+
+        var dbAfterConfirm = await db.Appointments.FindAsync(apptId);
+        Assert.Null(dbAfterConfirm!.QueueNumber);
+
+        // 3. Check-In: QueueNumber MUST be issued monotonically
+        var checkInResult = await service.ReceptionistCheckInAsync(apptId, 201);
+        Assert.True(checkInResult.Success);
+        var apptInDb = await db.Appointments.FindAsync(apptId);
+        Assert.NotNull(apptInDb!.QueueNumber);
+        Assert.StartsWith("Q", apptInDb.QueueNumber);
+        var issuedQueueNumber = apptInDb.QueueNumber;
+
+        // 4. Repeat Check-In fails because already checked-in, but retains existing QueueNumber
+        var repeatCheckIn = await service.ReceptionistCheckInAsync(apptId, 201);
+        Assert.False(repeatCheckIn.Success);
+        var apptRepeatDb = await db.Appointments.FindAsync(apptId);
+        Assert.Equal(issuedQueueNumber, apptRepeatDb!.QueueNumber);
+
+        // 5. Walk-in WITHOUT auto-check-in: QueueNumber MUST be null
+        var walkInNoCheckIn = await service.CreateReceptionistAppointmentAsync(201, new CreateReceptionistAppointmentRequest
+        {
+            PatientUserId = 101,
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = targetDate.AddHours(10),
+            AutoConfirm = true,
+            AutoCheckIn = false
+        });
+        Assert.True(walkInNoCheckIn.Success);
+        Assert.Equal(AppointmentStatus.Confirmed, walkInNoCheckIn.Data!.Status);
+        Assert.Null(walkInNoCheckIn.Data.QueueNumber);
+
+        // 6. Walk-in WITH auto-check-in: QueueNumber MUST be allocated
+        var walkInWithCheckIn = await service.CreateReceptionistAppointmentAsync(201, new CreateReceptionistAppointmentRequest
+        {
+            PatientUserId = 101,
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = targetDate.AddHours(11),
+            AutoConfirm = true,
+            AutoCheckIn = true
+        });
+        Assert.True(walkInWithCheckIn.Success);
+        Assert.Equal(AppointmentStatus.CheckedIn, walkInWithCheckIn.Data!.Status);
+        Assert.NotNull(walkInWithCheckIn.Data.QueueNumber);
+        Assert.StartsWith("Q", walkInWithCheckIn.Data.QueueNumber);
     }
 }

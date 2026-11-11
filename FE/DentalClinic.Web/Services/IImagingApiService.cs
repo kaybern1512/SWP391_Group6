@@ -32,4 +32,12 @@ public interface IImagingApiService
     Task<ApiResult<List<ClinicalConsultationDto>>> GetDentistConsultationsAsync(string? type = null);
     Task<ApiResult<List<ClinicalConsultationDto>>> GetAppointmentConsultationsAsync(long appointmentId);
     Task<ApiResult<ClinicalConsultationDto>> GetConsultationByIdAsync(long consultationId);
+
+    // Dedicated X-Ray Dentist Roster
+    Task<ApiResult<List<XrayDentistRosterDto>>> GetRostersAsync(DateOnly? workDate = null, long? roomId = null, long? dentistUserId = null, string? status = null);
+    Task<ApiResult<List<QualifiedDentistDto>>> GetQualifiedDentistsAsync();
+    Task<ApiResult<XrayDentistRosterDto>> AssignRosterAsync(AssignXrayRosterRequest request);
+    Task<ApiResult<XrayDentistRosterDto>> ReplaceDentistAsync(long rosterId, ReplaceXrayDentistRequest request);
+    Task<ApiResult<bool>> CancelRosterAsync(long rosterId, string? reason = null);
+    Task<ApiResult<List<XrayDentistRosterDto>>> GetMyXrayDutyAsync(DateOnly? fromDate = null, DateOnly? toDate = null);
 }

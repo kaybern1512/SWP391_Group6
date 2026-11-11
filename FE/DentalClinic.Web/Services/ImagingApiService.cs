@@ -152,6 +152,20 @@ public class ImagingApiService : IImagingApiService
         }
     }
 
+    private async Task<ApiResult<T>> SendDeleteAsync<T>(string url)
+    {
+        try
+        {
+            var response = await _httpClient.DeleteAsync(url);
+            return await HandleApiResponseAsync<T>(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "HTTP DELETE failed for {Url}", url);
+            return ApiResult<T>.Failure("Không thể kết nối đến máy chủ.");
+        }
+    }
+
     private async Task<ApiResult<T>> HandleApiResponseAsync<T>(HttpResponseMessage response)
     {
         var rawContent = await response.Content.ReadAsStringAsync();
@@ -220,5 +234,48 @@ public class ImagingApiService : IImagingApiService
     public async Task<ApiResult<ClinicalConsultationDto>> GetConsultationByIdAsync(long consultationId)
     {
         return await SendGetAsync<ClinicalConsultationDto>($"/api/clinical-diagnostics/consultations/{consultationId}");
+    }
+
+    public async Task<ApiResult<List<XrayDentistRosterDto>>> GetRostersAsync(DateOnly? workDate = null, long? roomId = null, long? dentistUserId = null, string? status = null)
+    {
+        var query = new List<string>();
+        if (workDate.HasValue) query.Add($"workDate={workDate.Value:yyyy-MM-dd}");
+        if (roomId.HasValue) query.Add($"roomId={roomId.Value}");
+        if (dentistUserId.HasValue) query.Add($"dentistUserId={dentistUserId.Value}");
+        if (!string.IsNullOrWhiteSpace(status)) query.Add($"status={Uri.EscapeDataString(status)}");
+
+        var qs = query.Count > 0 ? "?" + string.Join("&", query) : "";
+        return await SendGetAsync<List<XrayDentistRosterDto>>($"/api/clinical-diagnostics/roster{qs}");
+    }
+
+    public async Task<ApiResult<List<QualifiedDentistDto>>> GetQualifiedDentistsAsync()
+    {
+        return await SendGetAsync<List<QualifiedDentistDto>>("/api/clinical-diagnostics/roster/qualified-dentists");
+    }
+
+    public async Task<ApiResult<XrayDentistRosterDto>> AssignRosterAsync(AssignXrayRosterRequest request)
+    {
+        return await SendPostAsync<XrayDentistRosterDto>("/api/clinical-diagnostics/roster", request);
+    }
+
+    public async Task<ApiResult<XrayDentistRosterDto>> ReplaceDentistAsync(long rosterId, ReplaceXrayDentistRequest request)
+    {
+        return await SendPostAsync<XrayDentistRosterDto>($"/api/clinical-diagnostics/roster/{rosterId}/replace", request);
+    }
+
+    public async Task<ApiResult<bool>> CancelRosterAsync(long rosterId, string? reason = null)
+    {
+        var qs = string.IsNullOrWhiteSpace(reason) ? "" : $"?reason={Uri.EscapeDataString(reason)}";
+        return await SendDeleteAsync<bool>($"/api/clinical-diagnostics/roster/{rosterId}{qs}");
+    }
+
+    public async Task<ApiResult<List<XrayDentistRosterDto>>> GetMyXrayDutyAsync(DateOnly? fromDate = null, DateOnly? toDate = null)
+    {
+        var query = new List<string>();
+        if (fromDate.HasValue) query.Add($"fromDate={fromDate.Value:yyyy-MM-dd}");
+        if (toDate.HasValue) query.Add($"toDate={toDate.Value:yyyy-MM-dd}");
+
+        var qs = query.Count > 0 ? "?" + string.Join("&", query) : "";
+        return await SendGetAsync<List<XrayDentistRosterDto>>($"/api/clinical-diagnostics/roster/my-duty{qs}");
     }
 }

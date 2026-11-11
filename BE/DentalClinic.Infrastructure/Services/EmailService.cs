@@ -133,7 +133,7 @@ public class EmailService : IEmailService
         string toEmail,
         string patientName,
         string appointmentCode,
-        string queueNumber,
+        string? queueNumber,
         string serviceName,
         string departmentName,
         string dentistName,
@@ -142,11 +142,17 @@ public class EmailService : IEmailService
         DateTime scheduledEnd,
         CancellationToken ct = default)
     {
-        var subject = $"[DentalCare] Xác nhận lịch hẹn khám #{appointmentCode} - STT {queueNumber}";
+        var subject = string.IsNullOrWhiteSpace(queueNumber)
+            ? $"[DentalCare] Xác nhận lịch hẹn khám #{appointmentCode}"
+            : $"[DentalCare] Xác nhận lịch hẹn khám #{appointmentCode} - STT {queueNumber}";
         var frontendUrl = _configuration["Frontend:BaseUrl"] ?? "https://localhost:7129";
         var appointmentUrl = $"{frontendUrl.TrimEnd('/')}/Patient/Appointment";
 
         var formattedTime = $"{scheduledStart:HH:mm} - {scheduledEnd:HH:mm}, Ngày {scheduledStart:dd/MM/yyyy}";
+
+        var queueDisplayHtml = !string.IsNullOrWhiteSpace(queueNumber)
+            ? $@"<span style=""font-size: 32px; font-weight: 800; color: #0066cc; letter-spacing: 2px;"">{WebUtility.HtmlEncode(queueNumber)}</span>"
+            : @"<span style=""font-size: 15px; font-weight: 600; color: #0284c7; background-color: #e0f2fe; padding: 6px 14px; border-radius: 20px; display: inline-block;"">Sẽ được cấp tại Quầy Tiếp Đón khi Check-in</span>";
 
         var htmlBody = $@"
 <div style=""font-family: 'Segoe UI', Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff; color: #1e293b;"">
@@ -167,7 +173,7 @@ public class EmailService : IEmailService
     <div style=""background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 20px; margin-bottom: 24px;"">
         <div style=""text-align: center; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px dashed #cbd5e1;"">
             <span style=""font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px;"">Số Thứ Tự Khám</span>
-            <span style=""font-size: 32px; font-weight: 800; color: #0066cc; letter-spacing: 2px;"">{WebUtility.HtmlEncode(queueNumber)}</span>
+            {queueDisplayHtml}
         </div>
 
         <table style=""width: 100%; border-collapse: collapse; font-size: 14px;"">
@@ -228,7 +234,7 @@ public class EmailService : IEmailService
         string patientName,
         string appointmentCode,
         string reminderType,
-        string queueNumber,
+        string? queueNumber,
         string serviceName,
         string departmentName,
         string dentistName,

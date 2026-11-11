@@ -127,6 +127,7 @@ public class SecurityAndBusinessGapIntegrationTests
             RoomId = 1,
             DentalChairId = 11,
             ScheduledStart = testDate,
+            AutoCheckIn = true,
             ReasonForVisit = "Walk-in khám tổng quát"
         };
 
@@ -134,7 +135,7 @@ public class SecurityAndBusinessGapIntegrationTests
 
         Assert.True(result.Success);
         Assert.NotNull(result.Data);
-        Assert.Equal(AppointmentStatus.Confirmed, result.Data.Status);
+        Assert.Equal(AppointmentStatus.CheckedIn, result.Data.Status);
         Assert.True(result.Data.QueueNumber.EndsWith("001"), $"Expected queue number to end with 001, got {result.Data.QueueNumber}");
         Assert.StartsWith("Q", result.Data.QueueNumber);
         Assert.NotNull(result.Data.ConfirmedAt);

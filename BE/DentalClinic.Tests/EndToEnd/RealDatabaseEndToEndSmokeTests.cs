@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.Appointments.DTOs;
 using DentalClinic.Application.Features.Billing.DTOs;
 using DentalClinic.Application.Features.MedicalRecords.DTOs;
@@ -203,7 +204,7 @@ public class RealDatabaseEndToEndSmokeTests
         var confirmResult = await apptService.ManagerConfirmAsync(apptId, managerUserId, confirmReq);
         Assert.True(confirmResult.Success, confirmResult.Message);
         Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data!.Status);
-        Assert.False(string.IsNullOrWhiteSpace(confirmResult.Data.QueueNumber));
+        Assert.Null(confirmResult.Data.QueueNumber);
 
         // Step 4: Receptionist checks in patient upon arrival
         var checkInResult = await apptService.ReceptionistCheckInAsync(apptId, receptionistUserId, "Bệnh nhân đã tới quầy làm thủ tục");
@@ -624,13 +625,13 @@ public class RealDatabaseEndToEndSmokeTests
             await setupDb.SaveChangesAsync();
         }
 
-        var qTasks = qAppts.Select((appt, idx) => Task.Run(async () =>
+        async Task<string?> ConfirmAndCheckInAsync(Appointment appt, int idx)
         {
             using var db = CreateDbContext();
             var s = new AppointmentService(db, Mock.Of<INotificationService>(), Mock.Of<ILogger<AppointmentService>>());
             long chair = (idx % 2 == 0) ? 1 : 2;
             long dentist = (idx % 2 == 0) ? 3 : 6;
-            return await s.ManagerConfirmAsync(appt.AppointmentId, 10, new ManagerConfirmRequest
+            var confRes = await s.ManagerConfirmAsync(appt.AppointmentId, 10, new ManagerConfirmRequest
             {
                 AssignedDentistUserId = dentist,
                 RoomId = 1,
@@ -638,10 +639,20 @@ public class RealDatabaseEndToEndSmokeTests
                 ScheduledStart = appt.ScheduledStart,
                 ScheduledEnd = appt.ScheduledEnd
             });
-        })).ToList();
+            if (!confRes.Success) return null;
+
+            // QueueNumber is strictly issued upon Receptionist Check-in
+            var checkInRes = await s.ReceptionistCheckInAsync(appt.AppointmentId, 10);
+            if (!checkInRes.Success) return null;
+
+            var checkedInAppt = await db.Appointments.AsNoTracking().FirstOrDefaultAsync(a => a.AppointmentId == appt.AppointmentId);
+            return checkedInAppt?.QueueNumber;
+        }
+
+        var qTasks = qAppts.Select((appt, idx) => ConfirmAndCheckInAsync(appt, idx)).ToList();
 
         var qResults = await Task.WhenAll(qTasks);
-        var successfulQueueNumbers = qResults.Where(r => r.Success).Select(r => r.Data!.QueueNumber).ToList();
+        var successfulQueueNumbers = qResults.Where(q => !string.IsNullOrEmpty(q)).ToList();
         Assert.NotEmpty(successfulQueueNumbers);
         // All issued QueueNumbers must be distinct
         Assert.Equal(successfulQueueNumbers.Count, successfulQueueNumbers.Distinct().Count());

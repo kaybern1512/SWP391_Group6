@@ -29,6 +29,73 @@
     <!-- Alert Messages -->
     <partial name="_AlertMessage" />
 
+    <!-- Dedicated X-Ray Dentist On-Duty Banner -->
+    <div class="card shadow-sm border-0 mb-4 @(Model.IsDentistOnLeave ? "bg-danger-subtle border-start border-4 border-danger" : (!Model.HasOnDutyDentist ? "bg-warning-subtle border-start border-4 border-warning" : "bg-primary-subtle border-start border-4 border-primary"))">
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-2 rounded-circle @(Model.IsDentistOnLeave ? "bg-danger text-white" : (!Model.HasOnDutyDentist ? "bg-warning text-dark" : "bg-primary text-white"))">
+                        <i class="bi bi-person-badge fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-uppercase small fw-bold text-muted">Bác sĩ phụ trách phòng X-quang ca hiện tại</div>
+                        @if (Model.HasOnDutyDentist)
+                        {
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="h5 fw-bold text-dark mb-0">BS. @Model.OnDutyDentistName</span>
+                                @if (Model.IsDentistOnLeave)
+                                {
+                                    <span class="badge bg-danger text-white"><i class="bi bi-calendar-x me-1"></i>ĐANG NGHỈ PHÉP</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success text-white"><i class="bi bi-check-circle me-1"></i>Đang trực ca</span>
+                                }
+                                @if (!string.IsNullOrEmpty(Model.OnDutyDentistRadiationCert))
+                                {
+                                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
+                                        <i class="bi bi-shield-check me-1"></i>ATBX: @Model.OnDutyDentistRadiationCert
+                                    </span>
+                                }
+                            </div>
+                            <div class="small text-muted mt-1">
+                                Ca trực: <strong class="text-dark">@(Model.OnDutyDentistShift ?? "Hiện hành")</strong>
+                                @if (!string.IsNullOrEmpty(Model.BackupDentistName))
+                                {
+                                    <span class="ms-3">Bác sĩ dự phòng: <strong class="text-dark">BS. @Model.BackupDentistName</strong></span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="fw-bold text-warning-emphasis">
+                                <i class="bi bi-exclamation-triangle me-1"></i>Chưa có Bác sĩ trực phòng X-quang được phân công cho ca hiện tại.
+                            </div>
+                            <div class="small text-muted">
+                                Vui lòng liên hệ Quản trị viên để phân công ca trực nhằm đảm bảo an toàn bức xạ trước khi bắt đầu chụp.
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div>
+                    @if (User.IsInRole("Admin"))
+                    {
+                        <a href="@Url.Action("Index", "AdminRoomChair", new { tab = "xray-roster" })" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-calendar-check me-1"></i>Quản lý phân công trực
+                        </a>
+                    }
+                </div>
+            </div>
+            @if (Model.IsDentistOnLeave)
+            {
+                <div class="alert alert-danger mb-0 mt-3 py-2 small">
+                    <i class="bi bi-exclamation-circle-fill me-1"></i>
+                    <strong>Cảnh báo vắng mặt:</strong> Bác sĩ trực chính đang trong thời gian nghỉ phép đã duyệt. Bác sĩ dự phòng hoặc Quản trị viên cần tiếp quản hoặc điều chuyển ca trực để tránh gián đoạn dịch vụ.
+                </div>
+            }
+        </div>
+    </div>
+
     <!-- Escalation / Delay Warning Banners -->
     @if (Model.HasEscalationAlert)
     {

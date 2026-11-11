@@ -315,8 +315,22 @@ public class SqlServerConcurrencyIntegrationTests
         Assert.True(results[0].Success, results[0].Message);
         Assert.True(results[1].Success, results[1].Message);
 
-        // Queue numbers should be distinct and monotonic
-        Assert.NotEqual(results[0].Data!.QueueNumber, results[1].Data!.QueueNumber);
+        // Queue numbers are null at confirmation, strictly issued upon check-in
+        Assert.Null(results[0].Data!.QueueNumber);
+        Assert.Null(results[1].Data!.QueueNumber);
+
+        using var dbCheckIn = CreateSqlServerDbContext();
+        var serviceCheckIn = new AppointmentService(dbCheckIn, mockNotif.Object, mockLogger.Object);
+        var ci1 = await serviceCheckIn.ReceptionistCheckInAsync(appt1.AppointmentId, seed.MgrId);
+        var ci2 = await serviceCheckIn.ReceptionistCheckInAsync(appt2.AppointmentId, seed.MgrId);
+        Assert.True(ci1.Success, ci1.Message);
+        Assert.True(ci2.Success, ci2.Message);
+
+        var refreshedAppt1 = await dbCheckIn.Appointments.AsNoTracking().FirstAsync(a => a.AppointmentId == appt1.AppointmentId);
+        var refreshedAppt2 = await dbCheckIn.Appointments.AsNoTracking().FirstAsync(a => a.AppointmentId == appt2.AppointmentId);
+        Assert.NotNull(refreshedAppt1.QueueNumber);
+        Assert.NotNull(refreshedAppt2.QueueNumber);
+        Assert.NotEqual(refreshedAppt1.QueueNumber, refreshedAppt2.QueueNumber);
 
         await db.Database.EnsureDeletedAsync();
     }
