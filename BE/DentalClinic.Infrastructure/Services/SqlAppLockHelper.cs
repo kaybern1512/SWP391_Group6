@@ -76,6 +76,15 @@ public static class SqlAppLockHelper
     /// <summary>Lock key for monthly attendance period reconciliation/closure.</summary>
     public static string AttendancePeriodKey(int year, int month) => $"Lock_AttendancePeriod_{year}_{month:D2}";
 
+    /// <summary>Lock key for a care episode entity.</summary>
+    public static string CareEpisodeKey(long careEpisodeId) => $"Lock_CareEpisode_{careEpisodeId}";
+
+    /// <summary>Lock key for single consolidated invoice creation/modification under a care episode.</summary>
+    public static string CareEpisodeInvoiceKey(long careEpisodeId) => $"Lock_CareEpisode_Invoice_{careEpisodeId}";
+
+    /// <summary>Lock key for care episode referral coordination and status transitions.</summary>
+    public static string CareEpisodeReferralKey(long referralId) => $"Lock_CareEpisode_Referral_{referralId}";
+
     #endregion
 
     /// <summary>

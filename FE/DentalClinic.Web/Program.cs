@@ -244,6 +244,15 @@ builder.Services.AddHttpClient<IBillingApiService, BillingApiService>(client =>
 .AddHttpMessageHandler<ApiAuthorizationHandler>()
 .ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
 
+// CareEpisode API client with ApiAuthorizationHandler
+builder.Services.AddHttpClient<ICareEpisodeApiService, CareEpisodeApiService>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddHttpMessageHandler<ApiAuthorizationHandler>()
+.ConfigurePrimaryHttpMessageHandler(CreatePrimaryHttpHandler);
+
 // Report API client with ApiAuthorizationHandler
 builder.Services.AddHttpClient<IReportApiService, ReportApiService>(client =>
 {

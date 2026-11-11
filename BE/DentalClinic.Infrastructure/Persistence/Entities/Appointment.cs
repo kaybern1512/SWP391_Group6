@@ -29,6 +29,8 @@ public partial class Appointment
 
     public long? ComboId { get; set; }
 
+    public long? CareEpisodeId { get; set; }
+
     public DateTime? ScheduledStart { get; set; }
 
     public DateTime? ScheduledEnd { get; set; }
@@ -103,4 +105,6 @@ public partial class Appointment
     public virtual ICollection<DepartmentReferral> OutgoingReferrals { get; set; } = new List<DepartmentReferral>();
 
     public virtual ServiceCombo? Combo { get; set; }
+    public virtual CareEpisode? CareEpisode { get; set; }
+    public virtual ICollection<EpisodeServiceTask> ServiceTasks { get; set; } = new List<EpisodeServiceTask>();
 }
