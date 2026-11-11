@@ -57,6 +57,8 @@ compile_commands.json
 *.log
 *.bak
 !DB/*.bak
+!DB/*.bak
+!DB/*.bak
 *.swp
 
 # vcpkg
@@ -96,6 +98,7 @@ appsettings*.Local.json
 
 cookies.txt
 *.bak
+!DB/*.bak
 
 # Node & Playwright
 node_modules/

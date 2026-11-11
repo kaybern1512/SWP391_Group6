@@ -1,28 +1,33 @@
 # THƯ MỤC CƠ SỞ DỮ LIỆU - DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)
 
-Thư mục này chứa toàn bộ cấu trúc cơ sở dữ liệu (**44 bảng, Views, Stored Procedures khớp 100% với EF Core DbContext**), file backup nén `.bak` và dữ liệu mẫu chuẩn hóa UTF-8 tiếng Việt hoàn chỉnh (toàn bộ 26 tài khoản demo đại diện 5 vai trò, lịch hẹn, hồ sơ bệnh án EMR, sơ đồ răng Odontogram, phác đồ điều trị, đơn thuốc, cấp phát dược phẩm, quản lý kho thuốc & hạn sử dụng, hóa đơn, thanh toán, tin tức bài viết, tin nhắn tư vấn và nhật ký kiểm toán) phục vụ kiểm thử và bảo vệ đồ án.
+Thư mục này chứa toàn bộ cấu trúc cơ sở dữ liệu (**69 bảng, Views, Stored Procedures khớp 100% với kiến trúc phát hành chính thức**), file backup SQL Server `.bak` và dữ liệu mẫu chuẩn hóa UTF-8 tiếng Việt hoàn chỉnh phục vụ kiểm thử, nghiệm thu và bảo vệ đồ án.
+
+Hệ thống hoạt động theo **mô hình phân quyền 4 vai trò chính thức**:
+1. `Patient`
+2. `Receptionist`
+3. `Dentist`
+4. `SystemAdministrator`
 
 ---
 
-## 📦 Danh Sách Các Tệp Chuẩn Hóa Cốt Lõi
+## 📦 Danh Sách Các Tệp Phát Hành Cốt Lõi
 
 | Tên Tệp | Ý Nghĩa / Mục Đích Sử Dụng | Cách Dùng |
 | :--- | :--- | :--- |
-| **`DentalClinic_Full_Database_And_Data.sql`** | **Script TỔNG HỢP TOÀN DIỆN (1 BƯỚC KHUYÊN DÙNG)**: Tự động khởi tạo database, toàn bộ 44 bảng, ràng buộc khóa ngoại, indexes, views, stored procedures và nạp đầy đủ dữ liệu mẫu chuẩn UTF-8 (không lỗi font). Có cơ chế **Idempotent** tự làm sạch an toàn khi chạy lại nhiều lần. | Chạy 1 lần duy nhất trong SSMS hoặc PowerShell. |
-| **`DentalClinicManagementDB.bak`** | **File Backup SQL Server chuẩn nén (2.0 MB)**: Chứa toàn bộ 44 bảng và dữ liệu hoàn chỉnh, backup trực tiếp từ SQL Server. Phù hợp cho giảng viên/thành viên nhóm muốn khôi phục tức thì. | Dùng tính năng *Restore Database* trong SSMS hoặc lệnh `RESTORE DATABASE`. |
-| **`Dental_Clinic_Final_Database_Clean.sql`** | Script tạo cấu trúc database sạch (Schema Only: 44 Bảng, Views, Stored Procedures, Ràng buộc, Computed Columns, Indexes). | Dành cho môi trường muốn tự khởi tạo database rỗng (production/staging). |
-| **`Generate_Standardized_DB_Files.ps1`** | Script PowerShell tự động xuất khẩu Schema, Full Data và Backup `.bak` từ Database đang chạy bằng SQL Server Management Objects (SMO). | Chạy khi cập nhật cấu trúc DB để tự động đồng bộ lại 3 tệp master trên. |
-| **`legacy_patches_and_seeds/`** | Thư mục lưu trữ lịch sử các bản vá (migration patches) và kịch bản nạp dữ liệu thành phần trong quá trình phát triển (đã được gộp vào file master). | Lưu trữ đối chiếu (archive). |
+| **`DentalClinic_Full_Database_Release.sql`** / **`DentalClinic_Full_Database_And_Data.sql`** | **Script TỔNG HỢP TOÀN DIỆN (1 BƯỚC KHUYÊN DÙNG)**: Tự động khởi tạo database, toàn bộ 69 bảng, ràng buộc khóa ngoại, indexes, views, stored procedures và nạp đầy đủ dữ liệu mẫu chuẩn UTF-8. Tích hợp cơ chế **Idempotent** tự động làm sạch an toàn khi chạy lại nhiều lần. | Chạy 1 lần duy nhất trong SSMS hoặc qua `sqlcmd`. |
+| **`DentalClinic_Release_Final.bak`** / **`DentalClinicManagementDB.bak`** | **File Backup SQL Server chuẩn phát hành (22.8 MB)**: Chứa toàn bộ 69 bảng và dữ liệu demo 4 vai trò hoàn chỉnh, backup trực tiếp từ SQL Server. Khuyên dùng cho hội đồng chấm thi và thành viên nhóm để khôi phục tức thì. | Dùng tính năng *Restore Database* trong SSMS hoặc lệnh `RESTORE DATABASE`. |
+| **`Dental_Clinic_Final_Database_Clean.sql`** | Script tạo cấu trúc database sạch (Schema Only: 69 Bảng, Views, Stored Procedures, Ràng buộc, Computed Columns, Indexes). | Dành cho môi trường muốn tự khởi tạo database rỗng (Production/Staging). |
+| **`DentalClinicManagementDB_legacy_backup.bak`** | Bản sao lưu trữ an toàn của file backup cũ trước khi tích hợp CareEpisode, X-ray Roster & Role Cleanup. | Lưu trữ đối chiếu (Archive). |
 
 ---
 
 ## 🚀 Hướng Dẫn Khôi Phục Nhanh (Chọn 1 trong 2 cách)
 
-### Cách 1: Chạy Script SQL Tổng Hợp (Khuyên dùng - Nhanh nhất & Tự động)
-Chạy lệnh sau trên terminal PowerShell tại thư mục gốc của dự án (thay `.\MSSQLSERVER01` bằng instance SQL Server của bạn nếu dùng `.\SQLEXPRESS` hoặc `(localdb)\mssqllocaldb`):
+### Cách 1: Chạy Script SQL Tổng Hợp
+Chạy lệnh sau trên terminal PowerShell tại thư mục gốc của dự án:
 
 ```powershell
-sqlcmd -S .\MSSQLSERVER01 -E -f 65001 -i "DB\DentalClinic_Full_Database_And_Data.sql"
+sqlcmd -S .\SQLEXPRESS -E -f 65001 -i "DB\DentalClinic_Full_Database_Release.sql"
 ```
 
 > [!NOTE]
@@ -30,120 +35,68 @@ sqlcmd -S .\MSSQLSERVER01 -E -f 65001 -i "DB\DentalClinic_Full_Database_And_Data
 
 ---
 
-### Cách 2: Restore từ file Backup (`DentalClinicManagementDB.bak`)
+### Cách 2: Restore từ file Backup (`DentalClinic_Release_Final.bak` hoặc `DentalClinicManagementDB.bak`)
 Chạy lệnh PowerShell:
 ```powershell
-sqlcmd -S .\MSSQLSERVER01 -E -Q "RESTORE DATABASE DentalClinicManagementDB FROM DISK = '$(Get-Location)\DB\DentalClinicManagementDB.bak' WITH REPLACE;"
+sqlcmd -S .\SQLEXPRESS -E -Q "RESTORE DATABASE DentalClinicManagementDB FROM DISK = '$(Get-Location)\DB\DentalClinic_Release_Final.bak' WITH REPLACE;"
 ```
 
 Hoặc qua giao diện đồ họa **SQL Server Management Studio (SSMS)**:
 1. Chuột phải vào mục **Databases** $\rightarrow$ chọn **Restore Database...**
-2. Chọn **Device** $\rightarrow$ click nút `...` $\rightarrow$ chọn **Add** $\rightarrow$ duyệt đến file `DentalClinicManagementDB.bak` trong thư mục `DB/`.
+2. Chọn **Device** $\rightarrow$ click nút `...` $\rightarrow$ chọn **Add** $\rightarrow$ duyệt đến file `DentalClinic_Release_Final.bak` (hoặc `DentalClinicManagementDB.bak`) trong thư mục `DB/`.
 3. Trong mục **Files**, kiểm tra đường dẫn lưu trữ `.mdf` và `.ldf`.
 4. Trong mục **Options**, tích chọn **Overwrite the existing database (WITH REPLACE)** và **Close existing connections**.
 5. Nhấn **OK** để khôi phục.
 
 ---
 
-## 🏗️ Cấu Trúc 44 Bảng Dữ Liệu Phân Theo Phân Hệ Nghiệp Vụ
-
-```mermaid
-graph TD
-    subgraph Auth_Admin ["1. Quản Trị & Người Dùng"]
-        CP[ClinicProfile]
-        UA[UserAccounts]
-        PP[PatientProfiles]
-        SP[StaffProfiles]
-        DP[DentistProfiles]
-    end
-
-    subgraph Clinic_Structure ["2. Cơ Cấu & Lịch Trình"]
-        DEP[Departments]
-        DDEP[DentistDepartments]
-        DWS[DepartmentWorkSchedules]
-        DTWS[DentistWorkSchedules]
-        DA[DentistAvailability]
-        RM[Rooms]
-        DC[DentalChairs]
-        DS[DepartmentServices]
-    end
-
-    subgraph Scheduling ["3. Lịch Hẹn & Chăm Sóc"]
-        APT[Appointments]
-        ACP[AppointmentChangeProposals]
-        ASH[AppointmentStatusHistories]
-        ARJ[AppointmentReminderJobs]
-        NOTIF[Notifications]
-        SCM[SupportChatMessages]
-        REF[DepartmentReferrals]
-        FUS[FollowUpSchedules]
-    end
-
-    subgraph Clinical_EMR ["4. Hồ Sơ Bệnh Án & Điều Trị"]
-        DMR[DentalMedicalRecords]
-        CE[ClinicalEntries]
-        ODE[OdontogramEntries]
-        IR[ImagingRecords]
-        TP[TreatmentPlans]
-        TPI[TreatmentPlanItems]
-        TS[TreatmentSessions]
-        PS[PerformedServices]
-        PRE[Prescriptions]
-        PRI[PrescriptionItems]
-        VF[VisitFeedback]
-    end
-
-    subgraph Pharmacy_Stock ["5. Dược Phẩm & Kho Thuốc"]
-        MED[Medicines]
-        MB[MedicineBatches]
-        MST[MedicineStockTransactions]
-        MDS[MedicineDispensations]
-        MDI[MedicineDispensationItems]
-    end
-
-    subgraph Financial_Audit ["6. Tài Chính, Truyền Thông & Audit"]
-        INV[Invoices]
-        IVI[InvoiceItems]
-        PAY[Payments]
-        BC[BlogCategories]
-        BP[BlogPosts]
-        BPM[BlogPostMedia]
-        AL[AuditLogs]
-    end
-
-    UA --> PP & SP & DP
-    DEP --> DDEP & DS & DWS
-    APT --> ARJ & ASH & DMR & MDS & INV
-    DMR --> CE & ODE & TP
-    TP --> TPI --> TS --> PS & PRE
-    PRE --> PRI & MDS
-    MED --> MB --> MST & MDI
-    MDS --> MDI
-    INV --> IVI & PAY
-```
-
-| Phân Hệ | Danh Sách Bảng | Chức Năng Cốt Lõi |
-| :--- | :--- | :--- |
-| **1. Quản trị & Nhân sự** | `ClinicProfile`, `UserAccounts`, `PatientProfiles`, `StaffProfiles`, `DentistProfiles` | Hồ sơ phòng khám, tài khoản 5 vai trò, xác thực mật khẩu PBKDF2, thông tin chi tiết bệnh nhân, nhân viên và nha sĩ. |
-| **2. Cơ cấu cơ sở** | `Departments`, `DentistDepartments`, `DepartmentWorkSchedules`, `DentistWorkSchedules`, `DentistAvailability`, `Rooms`, `DentalChairs`, `DepartmentServices` | Quản lý chuyên khoa, ghế khám, phòng điều trị, bảng giá dịch vụ và phân ca trực tuần của bác sĩ. |
-| **3. Lịch hẹn & Chăm sóc** | `Appointments`, `AppointmentChangeProposals`, `AppointmentStatusHistories`, `AppointmentReminderJobs`, `Notifications`, `SupportChatMessages`, `DepartmentReferrals`, `FollowUpSchedules` | Luồng đặt hẹn bệnh nhân - lễ tân, nhắc hẹn tự động T-24h & T-8h (WF-12), chuyển tuyến liên khoa (WF-13), tái khám định kỳ (WF-11). |
-| **4. Bệnh án EMR & Điều trị** | `DentalMedicalRecords`, `ClinicalEntries`, `OdontogramEntries`, `ImagingRecords`, `TreatmentPlans`, `TreatmentPlanItems`, `TreatmentSessions`, `PerformedServices`, `Prescriptions`, `PrescriptionItems`, `VisitFeedback` | Bệnh án điện tử, sơ đồ răng FDI, hình ảnh X-quang/CT, phác đồ điều trị đa giai đoạn, phiên điều trị thực tế, kê đơn thuốc và khảo sát hài lòng. |
-| **5. Kho thuốc & Cấp phát** | `Medicines`, `MedicineBatches`, `MedicineStockTransactions`, `MedicineDispensations`, `MedicineDispensationItems` | Quản lý danh mục thuốc nội bộ, quản lý theo số lô và hạn sử dụng (WF-15), bác sĩ cấp phát thuốc trực tiếp (WF-16), lịch sử xuất nhập tồn kiểm toán kho. |
-| **6. Tài chính & Truyền thông** | `Invoices`, `InvoiceItems`, `Payments`, `BlogCategories`, `BlogPosts`, `BlogPostMedia`, `AuditLogs` | Tích hợp lập hóa đơn tự động gồm dịch vụ đã thực hiện và thuốc cấp phát (WF-17), thanh toán đa kênh, truyền thông tin tức bài viết chuẩn SEO (WF-20, WF-21), nhật ký kiểm toán hệ thống. |
-
----
-
-## 🔑 Thông Tin Đăng Nhập Mẫu Sẵn Có
+## 🔑 Thông Tin Đăng Nhập Mẫu (Chuẩn 4 Vai Trò)
 
 * **Mật khẩu dùng chung cho TOÀN BỘ tài khoản:** `Password123@`
 
-| Vai trò | Email đăng nhập | Tên người dùng đại diện | Ghi chú tài khoản |
+| Vai trò | Email đăng nhập | Tên người dùng đại diện | Quyền hạn chính |
 | :--- | :--- | :--- | :--- |
-| **SystemAdministrator** | `admin@dentalcare.com` | Quản Trị Hệ Thống | Toàn quyền kiểm soát tài khoản, danh mục, kho thuốc, kiểm duyệt bài viết. |
-| **DepartmentManager** | `manager@dentalcare.com` | BS.CKII Lê Hoàng Nam | Trưởng khoa Răng Tổng Quát, quản lý phân ca, soạn thảo bài viết truyền thông. |
-| **DepartmentManager** | `manager1@dentalcare.com` | BS.CKI Nguyễn Văn A | Trưởng khoa Răng Trẻ Em. |
-| **Dentist** | `dentist@dentalcare.com` | BS. Trần Văn Hùng | Bác sĩ điều trị chính, lập phác đồ, cấp phát thuốc, kê đơn. |
-| **Dentist** | `dentist2@dentalcare.com` | BS. Phương Thảo | Bác sĩ Chỉnh nha - Niềng răng. |
-| **Receptionist** | `receptionist@dentalcare.com` | Trần Thị Mai Anh | Tiếp đón, điều phối hàng đợi, xác nhận lịch hẹn, thu ngân thanh toán hóa đơn. |
-| **Patient** | `patient1@dentalcare.com` | Trần Mai Chi | Bệnh nhân demo đặt lịch hẹn, xem tiến trình điều trị và lịch sử hóa đơn. |
-| **Patient** | `patient.tuan@gmail.com` | Nguyễn Tuấn Kiệt | Bệnh nhân mẫu có đơn thuốc và cấp phát thuốc hoàn chỉnh. |
+| **SystemAdministrator** | `admin@dentalcare.com` | Quản Trị Hệ Thống | Toàn quyền kiểm soát tài khoản, nhân sự, lịch trực X-quang, kho thuốc, kiểm duyệt bài viết, báo cáo doanh thu. |
+| **Receptionist** | `receptionist@dentalcare.com` | Trần Thị Mai Anh | Tiếp đón, điều phối hàng đợi lâm sàng, xác nhận lịch hẹn (cấp QueueNumber ngay khi Confirmed), thu ngân và thanh toán hóa đơn. |
+| **Dentist** | `dentist@dentalcare.com` (hoặc `dentist1@dentalcare.com`) | BS. Trần Văn Hùng | Khám lâm sàng, chỉ định dịch vụ trong đợt khám (CareEpisode), hội chẩn chuyên khoa, cấp phát thuốc, trực phòng X-quang theo ca. |
+| **Dentist** | `dentist2@dentalcare.com` | BS. Phương Thảo | Bác sĩ Chỉnh nha - Tiếp nhận bệnh nhân chuyển khoa từ Bác sĩ Hùng trong cùng CareEpisode. |
+| **Patient** | `patient1@dentalcare.com` | Trần Mai Chi | Đặt lịch hẹn trực tuyến, nhận email xác nhận kèm QueueNumber, theo dõi tiến trình khám và thanh toán hóa đơn VietQR. |
+
+---
+
+## 🛠️ Cấu Hình Chuỗi Kết Nối Mẫu (Sample Connection Strings)
+
+Không lưu thông tin mật khẩu nhạy cảm trực tiếp trong mã nguồn. Dưới đây là cấu hình mẫu:
+
+### 1. Windows Authentication (Môi trường cục bộ / Local Dev)
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=.\\SQLEXPRESS;Database=DentalClinicManagementDB;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;"
+  }
+}
+```
+
+### 2. SQL Server Authentication (Môi trường Server / Staging)
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=YOUR_SERVER_HOST;Database=DentalClinicManagementDB;User Id=YOUR_DB_USER;Password=YOUR_SECURE_PASSWORD;MultipleActiveResultSets=true;TrustServerCertificate=True;"
+  }
+}
+```
+
+---
+
+## 📋 Danh Sách Các Bản Nâng Cấp Schema (Database Migrations)
+
+| Thời Gian | File Migration | Nội Dung Nghiệp Vụ Tích Hợp |
+| :--- | :--- | :--- |
+| **2026-11-09** | `20261109_Phase0_Database_Standardization_4Roles.sql` | Chuẩn hóa hệ thống về đúng 4 roles: `Patient`, `Receptionist`, `Dentist`, `SystemAdministrator`. Ràng buộc `CK_UserAccounts_Role`. |
+| **2026-11-09** | `20261109_Add_DoctorLeave_And_AppointmentDisruption.sql` | Quản lý nghỉ phép bác sĩ, tự động phát hiện và xử lý gián đoạn lịch hẹn (`AppointmentDisruptions`). |
+| **2026-11-10** | `20261110_Add_Imaging_Room_Equipment_And_Queue_Schema.sql` | Phân hệ chẩn đoán hình ảnh: phòng chụp, thiết bị, phiên chụp X-quang/CT. |
+| **2026-11-10** | `20261110_Receptionist_Shift_Leave_Workforce_Schema.sql` | Quản lý ca trực, xin nghỉ và đổi ca cho nhân sự Lễ tân. |
+| **2026-11-10** | `20261110_Add_Staff_Attendance_And_Operations_Tables.sql` | Quản lý chấm công, bảng công và chính sách chấm công nhân sự. |
+| **2026-11-10** | `20261110_Add_ServiceCombos_And_Appointment_Combo_Tracking.sql` | Gói dịch vụ nha khoa (ServiceCombos) và theo dõi dịch vụ combo trong lịch hẹn. |
+| **2026-11-11** | `20261111_Add_CareEpisodes_ServiceTasks_And_SingleInvoiceAggregation.sql` | Quản lý đợt khám tập trung (`CareEpisodes`), tác vụ điều trị bổ sung (`EpisodeServiceTasks`) và gộp một hóa đơn tổng thanh toán. |
+| **2026-11-12** | `20261112_Add_Dedicated_Xray_Dentist_Roster.sql` | Lịch trực bác sĩ chuyên trách phòng X-quang theo ca (`XrayDentistRosters`). |
