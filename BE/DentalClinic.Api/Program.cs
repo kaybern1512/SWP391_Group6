@@ -36,11 +36,20 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(optio
 });
 
 // 3. Add Controllers with JsonOptions
+var supportedCultures = new[] { new System.Globalization.CultureInfo("vi-VN") };
+builder.Services.Configure<RequestLocalizationOptions>(options =>
+{
+    options.DefaultRequestCulture = new Microsoft.AspNetCore.Localization.RequestCulture("vi-VN");
+    options.SupportedCultures = supportedCultures;
+    options.SupportedUICultures = supportedCultures;
+});
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+        options.JsonSerializerOptions.Encoder = System.Text.Encodings.Web.JavaScriptEncoder.Create(System.Text.Unicode.UnicodeRanges.All);
     });
 
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
@@ -203,7 +212,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.UseRequestLocalization();
 app.MapHub<LiveChatHub>("/hubs/livechat");
+app.MapHub<ClinicQueueHub>("/hubs/clinic-queue");
+app.MapHub<ClinicQueueHub>("/hubs/clinicqueue");
 app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.Run();

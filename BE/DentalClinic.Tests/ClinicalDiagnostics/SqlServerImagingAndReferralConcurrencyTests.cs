@@ -20,7 +20,7 @@ namespace DentalClinic.Tests.ClinicalDiagnostics;
 [Collection("SqlServerConcurrency")]
 public class SqlServerImagingAndReferralConcurrencyTests
 {
-    private const string ConnectionString = "Server=.\\SQLEXPRESS;Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+    private const string ConnectionString = "Server=.\\MSSQLSERVER01;Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private DentalClinicDbContext CreateDbContext()
     {
@@ -631,5 +631,14 @@ public class SqlServerImagingAndReferralConcurrencyTests
         await using var verifyDb = CreateDbContext();
         var invoices = await verifyDb.Invoices.Where(i => i.AppointmentId == appt.AppointmentId).ToListAsync();
         Assert.Single(invoices);
+
+        // Clean up appointment status so dentist is not left InService
+        var apptInDb = await verifyDb.Appointments.FindAsync(appt.AppointmentId);
+        if (apptInDb != null)
+        {
+            apptInDb.Status = AppointmentStatus.Completed;
+            apptInDb.CompletedAt = DateTime.UtcNow;
+            await verifyDb.SaveChangesAsync();
+        }
     }
 }

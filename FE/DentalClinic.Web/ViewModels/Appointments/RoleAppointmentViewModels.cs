@@ -18,6 +18,14 @@ public class ReceptionistTodayCheckInViewModel
     public List<AppointmentDto> ConfirmedAppointments { get; set; } = new();
     public string? SearchQuery { get; set; }
     public string? StatusFilter { get; set; }
+    public DateTime? FromDate { get; set; }
+    public DateTime? ToDate { get; set; }
+    public string? Shift { get; set; }
+    public long? DepartmentId { get; set; }
+    public long? DentistId { get; set; }
+    public string DateFilterMode { get; set; } = "today";
+    public List<DepartmentDto> Departments { get; set; } = new();
+    public List<DentistOptionDto> Dentists { get; set; } = new();
 }
 
 public class DepartmentRequestsViewModel

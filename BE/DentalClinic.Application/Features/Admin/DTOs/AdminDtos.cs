@@ -283,6 +283,9 @@ public class AdminUserDto
     public string? PhoneNumber { get; set; }
     public string FullName { get; set; } = string.Empty;
     public string? Code { get; set; }
+    public string? NationalId { get; set; }
+    public DateOnly? DateOfBirth { get; set; }
+    public string? Gender { get; set; }
     public string Role { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string? Specialty { get; set; }

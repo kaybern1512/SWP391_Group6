@@ -238,7 +238,7 @@ public class AppointmentsController : ControllerBase
     public async Task<IActionResult> RegisterWalkInPatient([FromBody] RegisterWalkInPatientRequest request, CancellationToken ct)
     {
         var staffUserId = GetCurrentUserId();
-        if (staffUserId <= 0) return Unauthorized(ApiResponse.Fail("KhÃ´ng thá»ƒ xÃ¡c Ä‘á»‹nh danh tÃ­nh nhÃ¢n viÃªn tiáº¿p Ä‘Ã³n."));
+        if (staffUserId <= 0) return Unauthorized(ApiResponse.Fail("Không thể xác định danh tính nhân viên tiếp đón."));
 
         var result = await _appointmentService.RegisterWalkInPatientAsync(staffUserId, request, ct);
         if (!result.Success)
@@ -307,9 +307,17 @@ public class AppointmentsController : ControllerBase
     [HttpGet("api/receptionist/today-appointments")]
     [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<List<AppointmentDto>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetReceptionistTodayConfirmed([FromQuery] string? search, CancellationToken ct)
+    public async Task<IActionResult> GetReceptionistTodayConfirmed(
+        [FromQuery] string? search,
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate,
+        [FromQuery] string? shift,
+        [FromQuery] long? departmentId,
+        [FromQuery] long? dentistId,
+        [FromQuery] string? status,
+        CancellationToken ct)
     {
-        var result = await _appointmentService.GetReceptionistTodayConfirmedAsync(search, ct);
+        var result = await _appointmentService.GetReceptionistTodayConfirmedAsync(search, fromDate, toDate, shift, departmentId, dentistId, status, ct);
         return Ok(result);
     }
 

@@ -34,7 +34,14 @@ public interface IAppointmentApiService
     Task<ApiResult<List<AppointmentDto>>> GetReceptionistRequestsAsync();
     Task<ApiResult> ReceptionistForwardAsync(long id, string? note = null);
     Task<ApiResult> ReceptionistRejectAsync(long id, string reason);
-    Task<ApiResult<List<AppointmentDto>>> GetReceptionistTodayConfirmedAsync(string? search = null);
+    Task<ApiResult<List<AppointmentDto>>> GetReceptionistTodayConfirmedAsync(
+        string? search = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? shift = null,
+        long? departmentId = null,
+        long? dentistId = null,
+        string? status = null);
     Task<ApiResult> ReceptionistCheckInAsync(long id, string? note = null);
     Task<ApiResult> ReceptionistMarkNoShowAsync(long id, string? note = null);
     Task<ApiResult> ReceptionistCancelAsync(long id, string reason);

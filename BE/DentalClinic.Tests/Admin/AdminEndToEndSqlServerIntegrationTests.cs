@@ -20,7 +20,7 @@ public class AdminEndToEndSqlServerIntegrationTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
 
     private static DentalClinicDbContext CreateRealDbContext()
     {
@@ -256,6 +256,16 @@ public class AdminEndToEndSqlServerIntegrationTests
             .Include(a => a.PatientUser)
             .Include(a => a.AssignedDentistUser)
             .FirstOrDefaultAsync();
+
+        if (appt != null)
+        {
+            var oldFb = await db.VisitFeedbacks.FirstOrDefaultAsync(f => f.AppointmentId == appt.AppointmentId);
+            if (oldFb != null)
+            {
+                db.VisitFeedbacks.Remove(oldFb);
+                await db.SaveChangesAsync();
+            }
+        }
 
         if (appt != null && appt.AssignedDentistUserId.HasValue)
         {

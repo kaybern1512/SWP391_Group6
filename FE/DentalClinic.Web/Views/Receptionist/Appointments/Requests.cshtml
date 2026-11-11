@@ -149,30 +149,6 @@
                                         </button>
                                     </div>
 
-                                    <!-- Forward Modal -->
-                                    <div class="modal fade text-start" id="forwardModal-@req.AppointmentId" tabindex="-1">
-                                        <div class="modal-dialog">
-                                            <form asp-action="Forward" asp-route-id="@req.AppointmentId" method="post" class="modal-content">
-                                                @Html.AntiForgeryToken()
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title">Chuyển Tiếp Yêu Cầu Sang Trưởng Khoa</h5>
-                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                </div>
-                                                <div class="modal-body">
-                                                    <p>Chuyển yêu cầu <strong>@req.AppointmentCode</strong> của bệnh nhân <strong>@req.PatientName</strong> sang Khoa <strong>@req.DepartmentName</strong> để phân bổ Bác sĩ và Ghế điều trị.</p>
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Ghi chú của Lễ tân (Tùy chọn):</label>
-                                                        <textarea name="note" class="form-control" rows="3" placeholder="Ghi chú thêm cho Trưởng khoa nếu có..."></textarea>
-                                                    </div>
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
-                                                    <button type="submit" class="btn btn-success">Xác Nhận Chuyển Khoa</button>
-                                                </div>
-                                            </form>
-                                        </div>
-                                    </div>
-
                                     <!-- Reject Modal -->
                                     <div class="modal fade text-start" id="rejectModal-@req.AppointmentId" tabindex="-1">
                                         <div class="modal-dialog">

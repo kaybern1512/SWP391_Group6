@@ -54,6 +54,7 @@ public class DentistOptionDto
     private long _dentistUserId;
 
     public string FullName { get; set; } = string.Empty;
+    public string DentistName => FullName;
     public string? EmployeeCode { get; set; }
     public string? Specialization { get; set; }
     public string? Qualification { get; set; }
@@ -109,6 +110,7 @@ public class CreateReceptionistAppointmentRequest
     public long? RoomId { get; set; }
     public long? DentalChairId { get; set; }
     public bool AutoConfirm { get; set; } = false;
+    public bool AutoCheckIn { get; set; } = false;
     public DateTime ScheduledStart { get; set; }
     public string? ReasonForVisit { get; set; }
 }
@@ -197,6 +199,7 @@ public class AppointmentDto
     public DateTime CreatedAt { get; set; }
     public DateTime? ConfirmedAt { get; set; }
     public DateTime? CheckedInAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
     public DateTime? CancelledAt { get; set; }
     public string? CancellationReason { get; set; }
 
@@ -348,6 +351,7 @@ public class RegisterWalkInPatientRequest
     public string FullName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
+    public string? NationalId { get; set; }
     public DateTime? DateOfBirth { get; set; }
     public string? Gender { get; set; }
 }

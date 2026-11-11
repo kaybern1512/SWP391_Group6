@@ -2571,6 +2571,9 @@ public class FollowUpConcurrencyIntegrationTests
         await EnsureDoctorScheduleAsync(setupDb, doctorId, targetDate, 1);
 
         var leaveStart = DateTime.Today.AddDays(1);
+        var existingConflicts = await setupDb.Appointments.Where(a => (a.AssignedDentistUserId == doctorId || a.RequestedDentistUserId == doctorId) && a.ScheduledStart >= leaveStart).ToListAsync();
+        foreach (var conflict in existingConflicts) conflict.Status = AppointmentStatus.Cancelled;
+        if (existingConflicts.Count > 0) await setupDb.SaveChangesAsync();
 
         // Doctor registers indefinite leave (EndDateTime = null)
         using var leaveDb = _fixture.CreateDbContext();

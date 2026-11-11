@@ -1,75 +1,100 @@
-@model DentalClinic.Web.ViewModels.Appointments.ReceptionistTodayCheckInViewModel
+﻿@model DentalClinic.Web.ViewModels.Appointments.ReceptionistTodayCheckInViewModel
 @{
-    ViewData["Title"] = "Thủ tục Check-in Bệnh nhân Hôm nay";
+    ViewData["Title"] = "Bàn Tiếp Đón & Điều Phối Lâm Sàng Thời Gian Thực";
+    var allAppts = Model.ConfirmedAppointments;
+    var totalCount = allAppts.Count;
+    var unCheckInCount = allAppts.Count(a => a.Status == "Confirmed");
+    var checkedInCount = allAppts.Count(a => a.Status == "CheckedIn" || a.Status == "Waiting");
+    var inServiceCount = allAppts.Count(a => a.Status == "InService");
+    var completedCount = allAppts.Count(a => a.Status == "Completed");
+    var noShowCount = allAppts.Count(a => a.Status == "NoShow");
+
+    var isMultiDay = Model.FromDate.HasValue && Model.ToDate.HasValue && (Model.ToDate.Value.Date - Model.FromDate.Value.Date).TotalDays >= 1;
 }
 
 <div class="container-fluid px-0">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <!-- Header & SignalR Realtime Indicator -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 pb-2 border-bottom">
         <div>
-            <h1 class="h3 fw-bold text-dark mb-1">
-                <i class="bi bi-person-lines-fill text-primary me-2"></i>Bàn Tiếp Đón & Quản Lý Ca Khám Hôm Nay
-            </h1>
-            <p class="text-muted mb-0">Ngày: <strong class="text-primary">@DateTime.Today.ToString("dd/MM/yyyy")</strong> &bull; Theo dõi tiến trình ca khám: Chưa check-in, Đã check-in, Đang khám và Chờ thu phí</p>
+            <div class="d-flex align-items-center gap-2">
+                <h1 class="h3 fw-bold text-dark mb-0">
+                    <i class="bi bi-hospital text-primary me-2"></i>Bàn Tiếp Đón &amp; Điều Phối Lâm Sàng
+                </h1>
+                <span id="signalrStatusBadge" class="badge bg-secondary shadow-sm">
+                    <i class="bi bi-wifi-off me-1"></i>SignalR: Đang kết nối...
+                </span>
+            </div>
+            <p class="text-muted small mb-0 mt-1">
+                Kỳ khám: <strong class="text-primary">@(Model.FromDate?.ToString("dd/MM/yyyy") ?? DateTime.Today.ToString("dd/MM/yyyy"))</strong>
+                @if (isMultiDay)
+                {
+                    <span> đến <strong class="text-primary">@Model.ToDate?.ToString("dd/MM/yyyy")</strong></span>
+                }
+                &bull; Đồng bộ thời gian thực SignalR &bull; Tự động cảnh báo quá giờ chờ khám &gt; 20 phút
+            </p>
         </div>
-        <div class="d-flex gap-2">
-            <a asp-controller="ReceptionistBilling" asp-action="Index" asp-route-tab="billable" class="btn btn-outline-success fw-semibold shadow-sm">
-                <i class="bi bi-receipt-cutoff me-1"></i> Thu Viện Phí & Hóa Đơn
+
+        <!-- Compact Quick Action Bar -->
+        <div class="d-flex flex-wrap gap-2 mt-2 mt-md-0">
+            <button type="button" class="btn btn-primary fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#walkInModal">
+                <i class="bi bi-person-plus-fill me-1"></i>+ Tiếp Đón Khách Vãng Lai
+            </button>
+            <a asp-action="Requests" class="btn btn-outline-warning text-dark fw-semibold shadow-sm" title="Xem danh sách đặt lịch hẹn online">
+                <i class="bi bi-inbox me-1"></i>Sổ Đặt Lịch
             </a>
-            <a asp-action="Requests" class="btn btn-outline-secondary">
-                <i class="bi bi-inbox me-1"></i> Yêu cầu mới chờ duyệt
+            <a asp-controller="ReceptionistBilling" asp-action="Index" asp-route-tab="billable" class="btn btn-outline-success fw-semibold shadow-sm" title="Danh sách ca khám hoàn tất chờ thu viện phí">
+                <i class="bi bi-credit-card me-1"></i>Danh Sách Thu Phí
+            </a>
+            <a asp-action="TodayCheckIn" class="btn btn-outline-secondary" title="Làm mới dữ liệu">
+                <i class="bi bi-arrow-repeat me-1"></i>Làm Mới
             </a>
         </div>
     </div>
 
-    @{
-        var allAppts = Model.ConfirmedAppointments;
-        var totalCount = allAppts.Count;
-        var unCheckInCount = allAppts.Count(a => a.Status == "Confirmed");
-        var checkedInCount = allAppts.Count(a => a.Status == "CheckedIn" || a.Status == "Waiting");
-        var inServiceCount = allAppts.Count(a => a.Status == "InService");
-        var completedCount = allAppts.Count(a => a.Status == "Completed");
-        var noShowCount = allAppts.Count(a => a.Status == "NoShow");
-    }
-
-    <!-- 4 Operational KPI Stat Cards -->
+    <!-- 4 Interactive 1-Click KPI Cards -->
     <div class="row g-3 mb-4">
+        <!-- KPI 1: Chờ Duyệt Lịch Online -->
         <div class="col-6 col-lg-3">
-            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-info h-100 kpi-card" style="cursor: pointer;" onclick="filterTableByStatus('Confirmed')">
+            <a asp-action="Requests" class="text-decoration-none">
+                <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-warning h-100 kpi-card" style="transition: transform 0.2s; cursor: pointer;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small text-uppercase fw-semibold">Chờ Duyệt Online</div>
+                            <h3 class="fw-bold text-warning mb-0 mt-1">🟡 Xem Sổ</h3>
+                            <div class="text-muted small mt-1"><i class="bi bi-inbox"></i> Yêu cầu đặt lịch mới</div>
+                        </div>
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-3 text-warning">
+                            <i class="bi bi-clock-history fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- KPI 2: Tất Cả Ca Khám Trong Kỳ -->
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-info h-100 kpi-card" style="transition: transform 0.2s; cursor: pointer;" onclick="dcFilterTableByStatus('all')">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <div class="text-muted small text-uppercase fw-semibold">Chưa Check-in</div>
-                        <h3 class="fw-bold text-info mb-0 mt-1">@unCheckInCount</h3>
-                        <div class="text-muted small mt-1"><i class="bi bi-clock"></i> Chờ bệnh nhân đến</div>
+                        <div class="text-muted small text-uppercase fw-semibold">Tổng Ca Trong Kỳ</div>
+                        <h3 class="fw-bold text-info mb-0 mt-1">@totalCount</h3>
+                        <div class="text-muted small mt-1"><i class="bi bi-calendar-event"></i> Chưa đến: @unCheckInCount</div>
                     </div>
                     <div class="rounded-circle bg-info bg-opacity-10 p-3 text-info">
-                        <i class="bi bi-hourglass fs-4"></i>
+                        <i class="bi bi-people fs-4"></i>
                     </div>
                 </div>
             </div>
         </div>
 
+        <!-- KPI 3: Đang Khám Tại Ghế -->
         <div class="col-6 col-lg-3">
-            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-success h-100 kpi-card" style="cursor: pointer;" onclick="filterTableByStatus('CheckedIn')">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small text-uppercase fw-semibold">Đã Check-in</div>
-                        <h3 class="fw-bold text-success mb-0 mt-1">@checkedInCount</h3>
-                        <div class="text-muted small mt-1"><i class="bi bi-check2-circle"></i> Đang chờ vào ghế</div>
-                    </div>
-                    <div class="rounded-circle bg-success bg-opacity-10 p-3 text-success">
-                        <i class="bi bi-person-check fs-4"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-6 col-lg-3">
-            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-primary h-100 kpi-card" style="cursor: pointer;" onclick="filterTableByStatus('InService')">
+            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-primary h-100 kpi-card" style="transition: transform 0.2s; cursor: pointer;" onclick="dcFilterTableByStatus('InService')">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <div class="text-muted small text-uppercase fw-semibold">Đang Khám Tại Ghế</div>
                         <h3 class="fw-bold text-primary mb-0 mt-1">@inServiceCount</h3>
-                        <div class="text-muted small mt-1"><i class="bi bi-heart-pulse"></i> Bác sĩ đang điều trị</div>
+                        <div class="text-muted small mt-1"><i class="bi bi-heart-pulse"></i> Đang điều trị</div>
                     </div>
                     <div class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary">
                         <i class="bi bi-activity fs-4"></i>
@@ -78,15 +103,16 @@
             </div>
         </div>
 
+        <!-- KPI 4: Khám Xong (Chờ Thu Phí) -->
         <div class="col-6 col-lg-3">
-            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-warning h-100 kpi-card" style="cursor: pointer;" onclick="filterTableByStatus('Completed')">
+            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-success h-100 kpi-card" style="transition: transform 0.2s; cursor: pointer;" onclick="dcFilterTableByStatus('Completed')">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <div class="text-muted small text-uppercase fw-semibold">Khám Xong (Chờ Thu Phí)</div>
-                        <h3 class="fw-bold text-warning mb-0 mt-1">@completedCount</h3>
+                        <div class="text-muted small text-uppercase fw-semibold">Khám Xong Chờ Thu</div>
+                        <h3 class="fw-bold text-success mb-0 mt-1">@completedCount</h3>
                         <div class="text-muted small mt-1"><i class="bi bi-receipt"></i> Cần xuất hóa đơn</div>
                     </div>
-                    <div class="rounded-circle bg-warning bg-opacity-10 p-3 text-warning">
+                    <div class="rounded-circle bg-success bg-opacity-10 p-3 text-success">
                         <i class="bi bi-receipt-cutoff fs-4"></i>
                     </div>
                 </div>
@@ -94,26 +120,83 @@
         </div>
     </div>
 
-    <!-- Search Form -->
+    <!-- Multi-Tier Filter Toolbar -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3">
-            <form asp-action="TodayCheckIn" method="get" class="row g-2 align-items-center">
-                <div class="col-md-9">
-                    <div class="input-group">
-                        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
-                        <input type="text" name="search" value="@Model.SearchQuery" class="form-control form-control-lg" placeholder="Tìm theo Mã hẹn, Mã bệnh nhân, Họ tên hoặc Số điện thoại..." />
+            <form asp-action="TodayCheckIn" method="get" id="filterForm">
+                <!-- Row 1: Date Filter & Shift Filter -->
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 pb-3 border-bottom">
+                    <!-- Date Presets -->
+                    <div class="d-flex flex-wrap align-items-center gap-1">
+                        <span class="text-muted small fw-semibold me-2"><i class="bi bi-calendar3 me-1"></i>Ngày:</span>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <a asp-action="TodayCheckIn" asp-route-dateFilterMode="today" class="btn @(Model.DateFilterMode == "today" ? "btn-primary" : "btn-outline-secondary")">Hôm nay</a>
+                            <a asp-action="TodayCheckIn" asp-route-dateFilterMode="tomorrow" class="btn @(Model.DateFilterMode == "tomorrow" ? "btn-primary" : "btn-outline-secondary")">Ngày mai</a>
+                            <a asp-action="TodayCheckIn" asp-route-dateFilterMode="7days" class="btn @(Model.DateFilterMode == "7days" ? "btn-primary" : "btn-outline-secondary")">7 ngày tới</a>
+                        </div>
+                    </div>
+
+                    <!-- Shift Presets -->
+                    <div class="d-flex flex-wrap align-items-center gap-1">
+                        <span class="text-muted small fw-semibold me-2"><i class="bi bi-clock me-1"></i>Ca làm việc:</span>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <a asp-action="TodayCheckIn" asp-route-dateFilterMode="@Model.DateFilterMode" asp-route-fromDate="@(Model.FromDate?.ToString("yyyy-MM-dd"))" asp-route-toDate="@(Model.ToDate?.ToString("yyyy-MM-dd"))" asp-route-shift="" class="btn @(string.IsNullOrEmpty(Model.Shift) ? "btn-dark" : "btn-outline-secondary")">Cả ngày</a>
+                            <a asp-action="TodayCheckIn" asp-route-dateFilterMode="@Model.DateFilterMode" asp-route-fromDate="@(Model.FromDate?.ToString("yyyy-MM-dd"))" asp-route-toDate="@(Model.ToDate?.ToString("yyyy-MM-dd"))" asp-route-shift="Morning" class="btn @(Model.Shift == "Morning" ? "btn-dark" : "btn-outline-secondary")">Sáng (07-12h)</a>
+                            <a asp-action="TodayCheckIn" asp-route-dateFilterMode="@Model.DateFilterMode" asp-route-fromDate="@(Model.FromDate?.ToString("yyyy-MM-dd"))" asp-route-toDate="@(Model.ToDate?.ToString("yyyy-MM-dd"))" asp-route-shift="Afternoon" class="btn @(Model.Shift == "Afternoon" ? "btn-dark" : "btn-outline-secondary")">Chiều (12-17h)</a>
+                            <a asp-action="TodayCheckIn" asp-route-dateFilterMode="@Model.DateFilterMode" asp-route-fromDate="@(Model.FromDate?.ToString("yyyy-MM-dd"))" asp-route-toDate="@(Model.ToDate?.ToString("yyyy-MM-dd"))" asp-route-shift="Evening" class="btn @(Model.Shift == "Evening" ? "btn-dark" : "btn-outline-secondary")">Tối (17-21h)</a>
+                        </div>
                     </div>
                 </div>
-                <div class="col-md-3 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary btn-lg flex-grow-1">
-                        Tìm kiếm
-                    </button>
-                    @if (!string.IsNullOrWhiteSpace(Model.SearchQuery))
-                    {
-                        <a asp-action="TodayCheckIn" class="btn btn-light btn-lg">
-                            <i class="bi bi-x-lg"></i>
-                        </a>
-                    }
+
+                <!-- Row 2: Cascading Filters & Search -->
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Khoa chuyên môn:</label>
+                        <select name="departmentId" id="filterDepartmentSelect" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">-- Tất cả các khoa --</option>
+                            @foreach (var dept in Model.Departments)
+                            {
+                                <option value="@dept.DepartmentId" selected="@(Model.DepartmentId == dept.DepartmentId ? "selected" : null)">
+                                    @dept.Name
+                                </option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Bác sĩ phụ trách:</label>
+                        <select name="dentistId" id="filterDentistSelect" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">-- Tất cả bác sĩ --</option>
+                            @foreach (var doc in Model.Dentists)
+                            {
+                                <option value="@doc.UserId" selected="@(Model.DentistId == doc.UserId ? "selected" : null)">
+                                    BS. @doc.FullName
+                                </option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted mb-1">Tìm kiếm nhanh:</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                            <input type="text" name="search" value="@Model.SearchQuery" class="form-control" placeholder="Mã hẹn, Mã BN, Tên, SĐT, STT..." />
+                        </div>
+                    </div>
+
+                    <div class="col-md-2 d-flex align-items-end gap-1 mt-auto">
+                        <input type="hidden" name="dateFilterMode" value="@Model.DateFilterMode" />
+                        <input type="hidden" name="shift" value="@Model.Shift" />
+                        <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+                            Lọc
+                        </button>
+                        @if (!string.IsNullOrWhiteSpace(Model.SearchQuery) || Model.DepartmentId.HasValue || Model.DentistId.HasValue || !string.IsNullOrEmpty(Model.Shift))
+                        {
+                            <a asp-action="TodayCheckIn" class="btn btn-light btn-sm" title="Xóa bộ lọc">
+                                <i class="bi bi-x-lg"></i>
+                            </a>
+                        }
+                    </div>
                 </div>
             </form>
         </div>
@@ -122,24 +205,24 @@
     <!-- Quick Status Filter Pills -->
     <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
         <span class="text-muted small fw-semibold me-1"><i class="bi bi-funnel me-1"></i>Lọc trạng thái:</span>
-        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold filter-pill active" data-filter="all" onclick="filterTableByStatus('all')">
+        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold filter-pill active" data-filter="all" onclick="dcFilterTableByStatus('all')">
             Tất Cả (@totalCount)
         </button>
-        <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="Confirmed" onclick="filterTableByStatus('Confirmed')">
+        <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="Confirmed" onclick="dcFilterTableByStatus('Confirmed')">
             <i class="bi bi-clock me-1"></i>Chưa Check-in (@unCheckInCount)
         </button>
-        <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="CheckedIn" onclick="filterTableByStatus('CheckedIn')">
-            <i class="bi bi-person-check me-1"></i>Đã Check-in (@checkedInCount)
+        <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="CheckedIn" onclick="dcFilterTableByStatus('CheckedIn')">
+            <i class="bi bi-person-check me-1"></i>Đã Check-in / Chờ khám (@checkedInCount)
         </button>
-        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="InService" onclick="filterTableByStatus('InService')">
+        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="InService" onclick="dcFilterTableByStatus('InService')">
             <i class="bi bi-heart-pulse-fill me-1"></i>Đang Khám Tại Ghế (@inServiceCount)
         </button>
-        <button type="button" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="Completed" onclick="filterTableByStatus('Completed')">
+        <button type="button" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="Completed" onclick="dcFilterTableByStatus('Completed')">
             <i class="bi bi-check-circle-fill me-1"></i>Khám Xong (Chờ Thu Phí) (@completedCount)
         </button>
         @if (noShowCount > 0)
         {
-            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="NoShow" onclick="filterTableByStatus('NoShow')">
+            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-semibold filter-pill" data-filter="NoShow" onclick="dcFilterTableByStatus('NoShow')">
                 <i class="bi bi-person-x me-1"></i>Vắng Mặt (@noShowCount)
             </button>
         }
@@ -152,8 +235,8 @@
                 <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px;">
                     <i class="bi bi-calendar-check fs-2 text-muted"></i>
                 </div>
-                <h5 class="fw-bold text-dark">Chưa có lịch khám nào cho ngày hôm nay</h5>
-                <p class="text-muted mb-0">Không tìm thấy bệnh nhân nào có lịch khám đã xác nhận trong ngày hôm nay.</p>
+                <h5 class="fw-bold text-dark">Chưa có lịch khám nào trong kỳ đã chọn</h5>
+                <p class="text-muted mb-0">Không tìm thấy bệnh nhân nào có lịch khám phù hợp với các tiêu chí tìm kiếm.</p>
             </div>
         </div>
     }
@@ -162,48 +245,58 @@
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <h5 class="card-title mb-0 fw-bold text-dark">
-                    <i class="bi bi-list-check me-2 text-primary"></i>Danh Sách Ca Khám Trong Ngày (@Model.ConfirmedAppointments.Count lượt khám)
+                    <i class="bi bi-list-check me-2 text-primary"></i>Hàng Đợi Khám Lâm Sàng (@Model.ConfirmedAppointments.Count lượt khám)
                 </h5>
                 <span class="badge bg-light text-muted border px-2 py-1 small">
-                    <i class="bi bi-arrow-repeat me-1"></i>Tự động phân nhóm trạng thái
+                    <i class="bi bi-arrow-repeat me-1"></i>Đồng bộ tự động SignalR
                 </span>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0" id="todayAppointmentsTable">
                     <thead class="table-light">
                         <tr>
-                            <th class="ps-3 text-center" style="width: 90px;">STT</th>
+                            <th class="ps-3 text-center" style="width: 130px;">STT Hàng Đợi</th>
+                            @if (isMultiDay)
+                            {
+                                <th>Ngày Khám</th>
+                            }
                             <th>Mã Hẹn</th>
                             <th>Bệnh Nhân</th>
-                            <th>Dịch Vụ & Khoa</th>
+                            <th>Dịch Vụ &amp; Khoa</th>
                             <th>Khung Giờ</th>
-                            <th>Bác Sĩ & Ghế</th>
-                            <th>Tiến Trình Ca Khám</th>
+                            <th>Bác Sĩ &amp; Ghế</th>
+                            <th>Tiến Trình &amp; Chờ Đợi</th>
                             <th class="text-end pe-3">Thao Tác</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr id="noFilterResultsRow" style="display: none;">
-                            <td colspan="8" class="text-center py-5 text-muted">
+                            <td colspan="@(isMultiDay ? 9 : 8)" class="text-center py-5 text-muted">
                                 <i class="bi bi-inbox fs-2 text-muted d-block mb-2"></i>
                                 <span class="fw-semibold">Không tìm thấy ca khám nào thuộc phân loại trạng thái này.</span>
                             </td>
                         </tr>
                         @foreach (var appt in Model.ConfirmedAppointments)
                         {
-                            <tr class="appointment-row" data-status="@appt.Status">
+                            <tr class="appointment-row" data-status="@appt.Status" id="appt-row-@appt.AppointmentId">
                                 <td class="ps-3 text-center">
                                     @if (!string.IsNullOrEmpty(appt.QueueNumber))
                                     {
-                                        <div class="badge bg-primary fs-5 px-3 py-2 font-monospace shadow-sm">
+                                        <div class="badge bg-primary fs-6 px-3 py-2 font-monospace shadow-sm">
                                             @appt.QueueNumber
                                         </div>
                                     }
                                     else
                                     {
-                                        <span class="text-muted">--</span>
+                                        <span class="badge bg-light text-muted border">Chưa cấp</span>
                                     }
                                 </td>
+                                @if (isMultiDay)
+                                {
+                                    <td class="fw-bold text-dark">
+                                        @(appt.ScheduledStart?.ToString("dd/MM/yyyy") ?? "--")
+                                    </td>
+                                }
                                 <td>
                                     <span class="fw-bold font-monospace text-dark">@appt.AppointmentCode</span>
                                 </td>
@@ -228,32 +321,34 @@
                                     </div>
                                 </td>
                                 <td>
-                                    @if (appt.Status == "CheckedIn")
+                                    @if (appt.Status == "CheckedIn" || appt.Status == "Waiting")
                                     {
                                         <span class="badge bg-success px-3 py-2">
                                             <i class="bi bi-check-all me-1"></i>Đã Check-in
                                         </span>
-                                        <div class="text-muted small mt-1">
-                                            Lúc: @(appt.CheckedInAt?.ToString("HH:mm") ?? "--")
+                                        <div class="mt-1" data-timer-type="waiting" data-checkin-time="@(appt.CheckedInAt?.ToString("o") ?? appt.CreatedAt.ToString("o"))">
+                                            <span class="text-muted small"><i class="bi bi-clock me-1"></i>Đang chờ...</span>
                                         </div>
-                                    }
-                                    else if (appt.Status == "Waiting")
-                                    {
-                                        <span class="badge bg-warning text-dark px-3 py-2">
-                                            <i class="bi bi-hourglass-split me-1"></i>Đang chờ vào khám
-                                        </span>
+                                        <div class="waiting-alert-badge mt-1"></div>
                                     }
                                     else if (appt.Status == "InService")
                                     {
                                         <span class="badge bg-primary px-3 py-2">
-                                            <i class="bi bi-heart-pulse-fill me-1"></i>Đang điều trị tại ghế
+                                            <i class="bi bi-heart-pulse-fill me-1"></i>Đang khám tại ghế
                                         </span>
+                                        <div class="mt-1" data-timer-type="inservice" data-start-time="@(appt.ScheduledStart?.ToString("o"))" data-duration="@(appt.DurationMinutes ?? 30)">
+                                            <span class="text-muted small">Bắt đầu: @(appt.ScheduledStart?.ToString("HH:mm") ?? "--")</span>
+                                        </div>
+                                        <div class="overrun-alert-badge mt-1"></div>
                                     }
                                     else if (appt.Status == "Completed")
                                     {
                                         <span class="badge bg-success-subtle text-success border border-success px-3 py-2 fw-bold">
-                                            <i class="bi bi-check-circle-fill me-1"></i>Khám xong - Chờ thu phí
+                                            <i class="bi bi-check-circle-fill me-1"></i>Khám xong - Chờ thu
                                         </span>
+                                        <div class="text-muted small mt-1">
+                                            Xong lúc: @(appt.CompletedAt?.ToString("HH:mm") ?? "--")
+                                        </div>
                                     }
                                     else if (appt.Status == "NoShow")
                                     {
@@ -264,7 +359,7 @@
                                     else
                                     {
                                         <span class="badge bg-info text-dark px-3 py-2">
-                                            <i class="bi bi-clock me-1"></i>Chờ đến phòng khám
+                                            <i class="bi bi-clock me-1"></i>Chờ đến khám
                                         </span>
                                     }
                                 </td>
@@ -276,10 +371,10 @@
                                                 <i class="bi bi-person-check-fill me-1"></i> Check-in
                                             </button>
                                             <button type="button" class="btn btn-outline-warning text-dark btn-sm px-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#cancelModal-@appt.AppointmentId" title="Hủy lịch hẹn (0 gậy phạt)">
-                                                <i class="bi bi-x-circle me-1"></i> Hủy Hẹn
+                                                <i class="bi bi-x-circle me-1"></i> Hủy
                                             </button>
                                             <button type="button" class="btn btn-outline-danger btn-sm px-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#noShowModal-@appt.AppointmentId" title="Đánh dấu bệnh nhân vắng mặt">
-                                                <i class="bi bi-person-x me-1"></i> Vắng mặt
+                                                <i class="bi bi-person-x me-1"></i> Vắng
                                             </button>
                                         </div>
 
@@ -288,32 +383,32 @@
                                             <div class="modal-dialog">
                                                 <form asp-action="CheckIn" asp-route-id="@appt.AppointmentId" method="post" class="modal-content">
                                                     @Html.AntiForgeryToken()
-                                                    <div class="modal-header">
-                                                        <h5 class="modal-title">Xác Nhận Check-in Bệnh Nhân</h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    <div class="modal-header bg-success text-white">
+                                                        <h5 class="modal-title"><i class="bi bi-person-check-fill me-2"></i>Xác Nhận Check-in Bệnh Nhân</h5>
+                                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                                     </div>
                                                     <div class="modal-body">
                                                         <div class="p-3 bg-light rounded mb-3">
-                                                            <div class="d-flex justify-content-between mb-2">
-                                                                <span class="text-muted">Số thứ tự:</span>
-                                                                <span class="fw-bold fs-5 text-primary">@appt.QueueNumber</span>
-                                                            </div>
                                                             <div class="d-flex justify-content-between mb-2">
                                                                 <span class="text-muted">Bệnh nhân:</span>
                                                                 <span class="fw-bold">@appt.PatientName (@appt.PatientCode)</span>
                                                             </div>
                                                             <div class="d-flex justify-content-between mb-2">
-                                                                <span class="text-muted">Dịch vụ:</span>
-                                                                <span>@appt.ServiceName</span>
+                                                                <span class="text-muted">Dịch vụ &amp; Khoa:</span>
+                                                                <span>@appt.ServiceName &bull; @appt.DepartmentName</span>
                                                             </div>
                                                             <div class="d-flex justify-content-between">
-                                                                <span class="text-muted">Bác sĩ & Phòng:</span>
-                                                                <span class="fw-semibold">@appt.AssignedDentistName &bull; @appt.RoomName</span>
+                                                                <span class="text-muted">Bác sĩ &amp; Phòng:</span>
+                                                                <span class="fw-semibold">@appt.AssignedDentistName &bull; @appt.RoomName (Ghế @appt.DentalChairName)</span>
                                                             </div>
+                                                        </div>
+                                                        <div class="alert alert-info small mb-3">
+                                                            <i class="bi bi-info-circle me-1"></i>
+                                                            Sau khi bấm hoàn tất, hệ thống sẽ tự động cấp số thứ tự hàng đợi <strong>Q-[Khoa]-[###]</strong> và đồng bộ thời gian thực đến phòng khám của Bác sĩ.
                                                         </div>
                                                         <div class="mb-3">
                                                             <label class="form-label">Ghi chú tiếp đón:</label>
-                                                            <input type="text" name="note" class="form-control" placeholder="Bệnh nhân đã đến sảnh, sẵn sàng vào phòng khám..." />
+                                                            <input type="text" name="note" class="form-control" placeholder="Bệnh nhân đã đến sảnh, sẵn sàng vào khám..." />
                                                         </div>
                                                     </div>
                                                     <div class="modal-footer">
@@ -330,43 +425,14 @@
                                                 <form asp-action="Cancel" asp-route-id="@appt.AppointmentId" method="post" class="modal-content">
                                                     @Html.AntiForgeryToken()
                                                     <div class="modal-header bg-warning text-dark">
-                                                        <h5 class="modal-title"><i class="bi bi-x-circle me-2"></i>Hủy Lịch Hẹn (Lễ Tân / Phòng Khám)</h5>
+                                                        <h5 class="modal-title"><i class="bi bi-x-circle me-2"></i>Hủy Lịch Hẹn</h5>
                                                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                     </div>
                                                     <div class="modal-body">
-                                                        <div class="p-3 bg-light rounded mb-3">
-                                                            <div class="d-flex justify-content-between mb-2">
-                                                                <span class="text-muted">Mã lịch hẹn:</span>
-                                                                <span class="fw-bold font-monospace">@appt.AppointmentCode</span>
-                                                            </div>
-                                                            <div class="d-flex justify-content-between mb-2">
-                                                                <span class="text-muted">Bệnh nhân:</span>
-                                                                <span class="fw-bold">@appt.PatientName (@appt.PatientCode)</span>
-                                                            </div>
-                                                            <div class="d-flex justify-content-between mb-2">
-                                                                <span class="text-muted">Khung giờ:</span>
-                                                                <span class="fw-semibold text-primary">@(appt.ScheduledStart?.ToString("HH:mm") ?? "--") - @(appt.ScheduledEnd?.ToString("HH:mm") ?? "--")</span>
-                                                            </div>
-                                                            <div class="d-flex justify-content-between">
-                                                                <span class="text-muted">Bác sĩ:</span>
-                                                                <span class="fw-semibold">@(appt.AssignedDentistName ?? "Chưa phân bổ")</span>
-                                                            </div>
-                                                        </div>
-                                                        <div class="alert alert-info border-info small mb-3">
-                                                            <i class="bi bi-shield-check me-1 text-primary"></i>
-                                                            <strong>Chính sách công bằng:</strong> Khi Lễ tân hỗ trợ hủy lịch hẹn do bệnh nhân gọi điện xin hủy trước hoặc do phòng khám điều chỉnh, bệnh nhân <strong>KHÔNG</strong> bị tính điểm phạt gậy vi phạm.
-                                                        </div>
+                                                        <p>Hủy lịch hẹn của bệnh nhân <strong>@appt.PatientName</strong> (@appt.AppointmentCode).</p>
                                                         <div class="mb-3">
                                                             <label class="form-label fw-semibold">Lý do hủy hẹn <span class="text-danger">*</span>:</label>
-                                                            <select class="form-select mb-2" onchange="document.getElementById('customReason-@appt.AppointmentId').value = this.value">
-                                                                <option value="">-- Chọn lý do thường gặp --</option>
-                                                                <option value="Bệnh nhân gọi điện báo bận đột xuất, xin hủy hẹn">Bệnh nhân gọi điện báo bận đột xuất, xin hủy hẹn</option>
-                                                                <option value="Bệnh nhân xin dời lịch sang ngày khác">Bệnh nhân xin dời lịch sang ngày khác</option>
-                                                                <option value="Bác sĩ có lịch cấp cứu / phẫu thuật đột xuất">Bác sĩ có lịch cấp cứu / phẫu thuật đột xuất</option>
-                                                                <option value="Phòng khám bảo trì trang thiết bị chuyên khoa">Phòng khám bảo trì trang thiết bị chuyên khoa</option>
-                                                                <option value="Bệnh nhân có triệu chứng không phù hợp điều trị hôm nay">Bệnh nhân có triệu chứng không phù hợp điều trị hôm nay</option>
-                                                            </select>
-                                                            <textarea id="customReason-@appt.AppointmentId" name="reason" class="form-control" rows="2" required placeholder="Hoặc nhập chi tiết lý do hủy lịch tại đây..."></textarea>
+                                                            <input type="text" name="reason" class="form-control" required placeholder="Nhập lý do hủy..." />
                                                         </div>
                                                     </div>
                                                     <div class="modal-footer">
@@ -383,35 +449,16 @@
                                                 <form asp-action="NoShow" asp-route-id="@appt.AppointmentId" method="post" class="modal-content">
                                                     @Html.AntiForgeryToken()
                                                     <div class="modal-header bg-danger text-white">
-                                                        <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Đánh Dấu Vắng Mặt (No-Show)</h5>
+                                                        <h5 class="modal-title"><i class="bi bi-person-x me-2"></i>Đánh Dấu Vắng Mặt (No-Show)</h5>
                                                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                                     </div>
                                                     <div class="modal-body">
-                                                        <div class="p-3 bg-light rounded mb-3">
-                                                            <div class="d-flex justify-content-between mb-2">
-                                                                <span class="text-muted">Mã lịch hẹn:</span>
-                                                                <span class="fw-bold font-monospace">@appt.AppointmentCode</span>
-                                                            </div>
-                                                            <div class="d-flex justify-content-between mb-2">
-                                                                <span class="text-muted">Bệnh nhân:</span>
-                                                                <span class="fw-bold">@appt.PatientName (@appt.PatientCode)</span>
-                                                            </div>
-                                                            <div class="d-flex justify-content-between mb-2">
-                                                                <span class="text-muted">Khung giờ:</span>
-                                                                <span class="fw-semibold text-primary">@(appt.ScheduledStart?.ToString("HH:mm") ?? "--") - @(appt.ScheduledEnd?.ToString("HH:mm") ?? "--")</span>
-                                                            </div>
-                                                            <div class="d-flex justify-content-between">
-                                                                <span class="text-muted">Bác sĩ:</span>
-                                                                <span class="fw-semibold">@(appt.AssignedDentistName ?? "Chưa phân bổ")</span>
-                                                            </div>
-                                                        </div>
-                                                        <div class="alert alert-warning border-warning small mb-3">
-                                                            <i class="bi bi-info-circle me-1"></i>
-                                                            Đánh dấu <strong>Vắng mặt (No-Show)</strong> sẽ giải phóng chỗ của bác sĩ và tính <strong>1 gậy vi phạm</strong> cho tài khoản bệnh nhân theo chính sách phòng khám.
+                                                        <div class="alert alert-warning small mb-3">
+                                                            Bệnh nhân sẽ bị tính 1 gậy vi phạm lịch hẹn theo quy định phòng khám.
                                                         </div>
                                                         <div class="mb-3">
-                                                            <label class="form-label">Lý do / Ghi chú vắng mặt:</label>
-                                                            <input type="text" name="note" class="form-control" placeholder="Ví dụ: Gọi điện không nghe máy, quá giờ hẹn 30 phút..." />
+                                                            <label class="form-label">Ghi chú vắng mặt:</label>
+                                                            <input type="text" name="note" class="form-control" placeholder="Quá giờ hẹn 30 phút, gọi không liên lạc được..." />
                                                         </div>
                                                     </div>
                                                     <div class="modal-footer">
@@ -422,15 +469,27 @@
                                             </div>
                                         </div>
                                     }
-                                    else if (appt.Status == "NoShow")
+                                    else if (appt.Status == "Completed")
                                     {
-                                        <span class="text-danger small"><i class="bi bi-person-x me-1"></i>Đã báo vắng</span>
+                                        <div class="d-flex justify-content-end gap-1">
+                                            <a asp-controller="ReceptionistBilling" asp-action="Create" asp-route-appointmentId="@appt.AppointmentId" class="btn btn-success btn-sm shadow-sm fw-bold px-3 py-2 text-nowrap" title="Xuất hóa đơn viện phí và thanh toán trực tiếp">
+                                                <i class="bi bi-receipt-cutoff me-1"></i> Xuất Hóa Đơn
+                                            </a>
+                                        </div>
                                     }
-                                    else if (appt.Status == "Waiting")
+                                    else if (appt.Status == "InService")
                                     {
-                                        <div class="d-flex gap-2 justify-content-end">
-                                            <button type="button" class="btn btn-outline-warning text-dark btn-sm px-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#cancelModal-@appt.AppointmentId" title="Hủy lịch hẹn (0 gậy phạt)">
-                                                <i class="bi bi-x-circle me-1"></i> Hủy Hẹn
+                                        <div class="d-flex justify-content-end gap-1">
+                                            <span class="badge bg-light text-muted border px-3 py-2 small" title="Bác sĩ đang thực hiện ca khám tại ghế">
+                                                <i class="bi bi-heart-pulse text-danger me-1"></i>Đang trên ghế khám
+                                            </span>
+                                        </div>
+                                    }
+                                    else if (appt.Status == "Waiting" || appt.Status == "CheckedIn")
+                                    {
+                                        <div class="d-flex justify-content-end gap-1">
+                                            <button type="button" class="btn btn-outline-warning text-dark btn-sm px-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#cancelModal-@appt.AppointmentId" title="Hủy lịch hẹn">
+                                                <i class="bi bi-x-circle me-1"></i> Hủy
                                             </button>
                                             <a asp-controller="ReceptionistBilling" asp-action="Create" asp-route-appointmentId="@appt.AppointmentId" class="btn btn-outline-primary btn-sm" title="Lập hóa đơn viện phí">
                                                 <i class="bi bi-receipt me-1"></i>Viện phí
@@ -447,7 +506,7 @@
                                                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                     </div>
                                                     <div class="modal-body">
-                                                        <p>Bệnh nhân <strong>@appt.PatientName</strong> đã check-in nhưng cần hủy hẹn và rời khỏi phòng khám.</p>
+                                                        <p>Bệnh nhân <strong>@appt.PatientName</strong> đã check-in nhưng cần hủy hẹn và rời phòng khám.</p>
                                                         <div class="mb-3">
                                                             <label class="form-label fw-semibold">Lý do hủy hẹn <span class="text-danger">*</span>:</label>
                                                             <textarea name="reason" class="form-control" rows="2" required placeholder="Nhập lý do bệnh nhân hủy hẹn..."></textarea>
@@ -461,29 +520,9 @@
                                             </div>
                                         </div>
                                     }
-                                    else if (appt.Status == "Completed")
-                                    {
-                                        <div class="d-flex justify-content-end gap-1">
-                                            <a asp-controller="ReceptionistBilling" asp-action="Create" asp-route-appointmentId="@appt.AppointmentId" class="btn btn-success btn-sm shadow-sm fw-bold px-3 py-2 text-nowrap" title="Xuất hóa đơn viện phí và thu tiền">
-                                                <i class="bi bi-receipt-cutoff me-1"></i> Xuất Hóa Đơn
-                                            </a>
-                                        </div>
-                                    }
-                                    else if (appt.Status == "InService")
-                                    {
-                                        <div class="d-flex justify-content-end gap-1">
-                                            <span class="badge bg-light text-muted border px-3 py-2 small" title="Bác sĩ đang thực hiện ca khám tại ghế">
-                                                <i class="bi bi-heart-pulse text-danger me-1"></i>Đang trên ghế khám
-                                            </span>
-                                        </div>
-                                    }
                                     else
                                     {
-                                        <div class="d-flex justify-content-end gap-1">
-                                            <a asp-controller="ReceptionistBilling" asp-action="Create" asp-route-appointmentId="@appt.AppointmentId" class="btn btn-outline-primary btn-sm" title="Lập hóa đơn viện phí">
-                                                <i class="bi bi-receipt me-1"></i>Viện phí
-                                            </a>
-                                        </div>
+                                        <span class="text-muted small">--</span>
                                     }
                                 </td>
                             </tr>
@@ -495,67 +534,130 @@
     }
 </div>
 
+<!-- ========================================== -->
+<!-- MODAL: TIẾP ĐÓN KHÁCH VÃNG LAI (WALK-IN)  -->
+<!-- ========================================== -->
+<div class="modal fade" id="walkInModal" tabindex="-1" aria-labelledby="walkInModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <form asp-action="WalkInCheckIn" method="post" class="modal-content" id="walkInForm">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="PatientUserId" id="walkInPatientId" value="" />
+
+            <div class="modal-header bg-primary text-white py-3">
+                <h5 class="modal-title fw-bold" id="walkInModalLabel">
+                    <i class="bi bi-person-plus-fill me-2"></i>Tiếp Đón &amp; Cấp Số Thứ Tự Khách Vãng Lai
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng"></button>
+            </div>
+
+            <div class="modal-body p-4">
+                <!-- Step 1: Tra cứu nhanh SĐT / CCCD -->
+                <div class="card border border-primary bg-primary bg-opacity-10 mb-4">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold text-primary small">
+                                <i class="bi bi-search me-1"></i>BƯỚC 1: TRA CỨU HỒ SƠ BỆNH NHÂN (SĐT HOẶC CCCD)
+                            </span>
+                            <span id="walkInPatientStatusBadge" class="badge bg-info text-dark">
+                                <i class="bi bi-person-plus me-1"></i>Khách vãng lai mới
+                            </span>
+                        </div>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="bi bi-telephone text-muted"></i></span>
+                            <input type="text" id="walkInLookupInput" class="form-control" placeholder="Nhập Số điện thoại (10 số) hoặc CCCD (12 số) để kiểm tra..." autocomplete="off" />
+                            <button type="button" id="walkInClearPatientBtn" class="btn btn-outline-secondary" style="display: none;">
+                                <i class="bi bi-x-circle me-1"></i>Nhập mới
+                            </button>
+                        </div>
+                        <div id="walkInLookupResults" class="list-group shadow-sm mt-1" style="display: none; max-height: 200px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Thông tin hành chính bệnh nhân -->
+                <h6 class="fw-bold text-dark border-start border-4 border-primary ps-2 mb-3">Thông Tin Bệnh Nhân</h6>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Họ và Tên <span class="text-danger">*</span>:</label>
+                        <input type="text" name="FullName" id="walkInFullName" class="form-control" required placeholder="Ví dụ: Nguyễn Văn An" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Số Điện Thoại <span class="text-danger">*</span>:</label>
+                        <input type="tel" name="PhoneNumber" id="walkInPhone" class="form-control" required placeholder="0901234567 (10 số)" maxlength="10" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Số CCCD / Mã định danh:</label>
+                        <input type="text" name="NationalId" id="walkInCccd" class="form-control" placeholder="12 số căn cước" maxlength="12" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Ngày sinh:</label>
+                        <input type="date" name="DateOfBirth" id="walkInDob" class="form-control" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Giới tính:</label>
+                        <select name="Gender" id="walkInGender" class="form-select">
+                            <option value="Nam">Nam</option>
+                            <option value="Nữ">Nữ</option>
+                            <option value="Khác">Khác</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Step 3: Phân bổ lâm sàng (Khoa, Dịch vụ, Bác sĩ, Phòng, Ghế) -->
+                <h6 class="fw-bold text-dark border-start border-4 border-success ps-2 mb-3">Điều Phối Khám Lâm Sàng</h6>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Khoa Điều Trị <span class="text-danger">*</span>:</label>
+                        <select name="DepartmentId" id="walkInDeptSelect" class="form-select" required>
+                            <option value="">-- Chọn khoa điều trị --</option>
+                            @foreach (var dept in Model.Departments)
+                            {
+                                <option value="@dept.DepartmentId">@dept.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Dịch Vụ Tiếp Đón <span class="text-danger">*</span>:</label>
+                        <select name="RequestedServiceId" id="walkInServiceSelect" class="form-select" required>
+                            <option value="">-- Chọn khoa trước để xem dịch vụ --</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Bác Sĩ Tiếp Nhận <span class="text-danger">*</span>:</label>
+                        <select name="AssignedDentistUserId" id="walkInDentistSelect" class="form-select" required>
+                            <option value="">-- Chọn bác sĩ --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Phòng Khám <span class="text-danger">*</span>:</label>
+                        <select name="RoomId" id="walkInRoomSelect" class="form-select" required>
+                            <option value="">-- Chọn phòng khám --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Ghế Nha Khoa <span class="text-danger">*</span>:</label>
+                        <select name="DentalChairId" id="walkInChairSelect" class="form-select" required>
+                            <option value="">-- Chọn ghế điều trị --</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Lý do đến khám / Triệu chứng ban đầu:</label>
+                        <input type="text" name="ReasonForVisit" class="form-control" placeholder="Đau răng, kiểm tra tổng quát, nhổ răng..." />
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer bg-light py-3">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="submit" class="btn btn-primary fw-bold px-4 shadow-sm">
+                    <i class="bi bi-check2-circle me-1"></i>Tiếp Đón &amp; Cấp STT Check-In Ngay
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 @section Scripts {
-<script>
-function filterTableByStatus(status) {
-    const rows = document.querySelectorAll('#todayAppointmentsTable tbody tr.appointment-row');
-    const pills = document.querySelectorAll('.filter-pill');
-    
-    pills.forEach(p => {
-        if (p.getAttribute('data-filter') === status) {
-            p.classList.add('active');
-            p.classList.remove('btn-outline-secondary', 'btn-outline-info', 'btn-outline-success', 'btn-outline-primary', 'btn-outline-warning', 'btn-outline-danger');
-            if (status === 'Confirmed') p.classList.add('btn-info', 'text-white');
-            else if (status === 'CheckedIn') p.classList.add('btn-success', 'text-white');
-            else if (status === 'InService') p.classList.add('btn-primary', 'text-white');
-            else if (status === 'Completed') p.classList.add('btn-warning', 'text-dark');
-            else if (status === 'NoShow') p.classList.add('btn-danger', 'text-white');
-            else p.classList.add('btn-secondary', 'text-white');
-        } else {
-            p.classList.remove('active', 'btn-info', 'btn-success', 'btn-primary', 'btn-warning', 'btn-danger', 'btn-secondary', 'text-white');
-            const f = p.getAttribute('data-filter');
-            if (f === 'Confirmed') p.classList.add('btn-outline-info');
-            else if (f === 'CheckedIn') p.classList.add('btn-outline-success');
-            else if (f === 'InService') p.classList.add('btn-outline-primary');
-            else if (f === 'Completed') p.classList.add('btn-outline-warning', 'text-dark');
-            else if (f === 'NoShow') p.classList.add('btn-outline-danger');
-            else p.classList.add('btn-outline-secondary');
-        }
-    });
-
-    let visibleCount = 0;
-    rows.forEach(row => {
-        const rowStatus = row.getAttribute('data-status');
-        if (status === 'all') {
-            row.style.display = '';
-            visibleCount++;
-        } else if (status === 'CheckedIn') {
-            if (rowStatus === 'CheckedIn' || rowStatus === 'Waiting') {
-                row.style.display = '';
-                visibleCount++;
-            } else {
-                row.style.display = 'none';
-            }
-        } else if (rowStatus === status) {
-            row.style.display = '';
-            visibleCount++;
-        } else {
-            row.style.display = 'none';
-        }
-    });
-
-    const noMatchRow = document.getElementById('noFilterResultsRow');
-    if (noMatchRow) {
-        noMatchRow.style.display = visibleCount === 0 ? '' : 'none';
-    }
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const initialStatus = urlParams.get('status') || '@(Model.StatusFilter ?? "")';
-    if (initialStatus) {
-        filterTableByStatus(initialStatus);
-    }
-});
-</script>
+    <script src="~/js/receptionist-queue.js" asp-append-version="true"></script>
 }

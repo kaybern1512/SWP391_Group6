@@ -11,7 +11,7 @@ namespace DentalClinic.Tests.FollowUp;
 
 public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
 {
-    public string ServerName { get; } = Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? ".\\SQLEXPRESS";
+    public string ServerName { get; } = Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? ".\\MSSQLSERVER01";
     public string RunId { get; } = Guid.NewGuid().ToString("N")[..8];
     public string DatabaseName { get; private set; } = null!;
     public string ConnectionString { get; private set; } = null!;
@@ -62,6 +62,7 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
         // 2. RESTORE isolated test database
         await using (var cmd = conn.CreateCommand())
         {
+            cmd.CommandTimeout = 180;
             cmd.CommandText = $@"
 RESTORE DATABASE [{DatabaseName}] 
 FROM DISK = N'{backupPath}' 
@@ -215,6 +216,7 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
             if (string.IsNullOrWhiteSpace(trimmed)) continue;
 
             await using var batchCmd = dbConn.CreateCommand();
+            batchCmd.CommandTimeout = 120;
             batchCmd.CommandText = trimmed;
             await batchCmd.ExecuteNonQueryAsync();
         }
