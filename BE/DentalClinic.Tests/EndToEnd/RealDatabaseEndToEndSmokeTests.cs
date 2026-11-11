@@ -440,8 +440,9 @@ public class RealDatabaseEndToEndSmokeTests
         db.Appointments.AddRange(appt1, appt2);
         await db.SaveChangesAsync();
 
-        // Manager 10 confirms Appt1 on Chair 1
-        var conf1 = await apptService.ManagerConfirmAsync(appt1.AppointmentId, 10, new ManagerConfirmRequest
+        // Receptionist 2 confirms Appt1 on Chair 1
+        var receptionistUserId = 2L;
+        var conf1 = await apptService.ManagerConfirmAsync(appt1.AppointmentId, receptionistUserId, new ManagerConfirmRequest
         {
             AssignedDentistUserId = 3,
             RoomId = 1,
@@ -451,8 +452,8 @@ public class RealDatabaseEndToEndSmokeTests
         });
         Assert.True(conf1.Success, conf1.Message);
 
-        // Manager 10 confirms Appt2 on Chair 2 in the same room (ROOM-101) with Dentist 6 -> BOTH SUCCEED
-        var conf2 = await apptService.ManagerConfirmAsync(appt2.AppointmentId, 10, new ManagerConfirmRequest
+        // Receptionist 2 confirms Appt2 on Chair 2 in the same room (ROOM-101) with Dentist 6 -> BOTH SUCCEED
+        var conf2 = await apptService.ManagerConfirmAsync(appt2.AppointmentId, receptionistUserId, new ManagerConfirmRequest
         {
             AssignedDentistUserId = 6,
             RoomId = 1,
@@ -479,7 +480,7 @@ public class RealDatabaseEndToEndSmokeTests
         db.Appointments.Add(appt3);
         await db.SaveChangesAsync();
 
-        var conf3 = await apptService.ManagerConfirmAsync(appt3.AppointmentId, 10, new ManagerConfirmRequest
+        var conf3 = await apptService.ManagerConfirmAsync(appt3.AppointmentId, receptionistUserId, new ManagerConfirmRequest
         {
             AssignedDentistUserId = 46,
             RoomId = 1,
@@ -490,7 +491,7 @@ public class RealDatabaseEndToEndSmokeTests
         Assert.False(conf3.Success);
         Assert.Contains("Ghế", conf3.Message);
 
-        // PART 3: Exclusive Room (ROOM-202, IsExclusive=true in Dept 3, Chair 13, Manager 4)
+        // PART 3: Exclusive Room (ROOM-202, IsExclusive=true in Dept 3, Chair 13, Receptionist confirms)
         var slotExStart = (await GetValidTestWorkDateAsync(db, 3, 2, 13, 2, 3));
         var slotExEnd = slotExStart.AddMinutes(45);
         await CleanDayTestAppointmentsAsync(db, slotExStart, 13, 14, 15);
@@ -524,8 +525,8 @@ public class RealDatabaseEndToEndSmokeTests
         db.Appointments.AddRange(apptEx1, apptEx2);
         await db.SaveChangesAsync();
 
-        // Confirm ApptEx1 in exclusive room 5 (ROOM-202, Chair 13) by Manager 4
-        var confEx1 = await apptService.ManagerConfirmAsync(apptEx1.AppointmentId, 4, new ManagerConfirmRequest
+        // Confirm ApptEx1 in exclusive room 5 (ROOM-202, Chair 13) by Receptionist
+        var confEx1 = await apptService.ManagerConfirmAsync(apptEx1.AppointmentId, receptionistUserId, new ManagerConfirmRequest
         {
             AssignedDentistUserId = 3,
             RoomId = 5,
@@ -536,7 +537,7 @@ public class RealDatabaseEndToEndSmokeTests
         Assert.True(confEx1.Success, confEx1.Message);
 
         // Second confirmation on ROOM-202 must be REJECTED because ROOM-202 is exclusive!
-        var confEx2 = await apptService.ManagerConfirmAsync(apptEx2.AppointmentId, 4, new ManagerConfirmRequest
+        var confEx2 = await apptService.ManagerConfirmAsync(apptEx2.AppointmentId, receptionistUserId, new ManagerConfirmRequest
         {
             AssignedDentistUserId = 4,
             RoomId = 5,
@@ -593,7 +594,7 @@ public class RealDatabaseEndToEndSmokeTests
             {
                 using var db1 = CreateDbContext();
                 var s = new AppointmentService(db1, Mock.Of<INotificationService>(), Mock.Of<ILogger<AppointmentService>>());
-                return await s.ManagerConfirmAsync(a1.AppointmentId, 10, new ManagerConfirmRequest
+                return await s.ManagerConfirmAsync(a1.AppointmentId, 2, new ManagerConfirmRequest
                 {
                     AssignedDentistUserId = 3,
                     RoomId = 1,
@@ -607,7 +608,7 @@ public class RealDatabaseEndToEndSmokeTests
             {
                 using var db2 = CreateDbContext();
                 var s = new AppointmentService(db2, Mock.Of<INotificationService>(), Mock.Of<ILogger<AppointmentService>>());
-                return await s.ManagerConfirmAsync(a2.AppointmentId, 10, new ManagerConfirmRequest
+                return await s.ManagerConfirmAsync(a2.AppointmentId, 2, new ManagerConfirmRequest
                 {
                     AssignedDentistUserId = 3, // SAME DENTIST
                     RoomId = 1,
@@ -659,7 +660,7 @@ public class RealDatabaseEndToEndSmokeTests
             var s = new AppointmentService(db, Mock.Of<INotificationService>(), Mock.Of<ILogger<AppointmentService>>());
             long chair = (idx % 2 == 0) ? 1 : 2;
             long dentist = (idx % 2 == 0) ? 3 : 6;
-            var confRes = await s.ManagerConfirmAsync(appt.AppointmentId, 10, new ManagerConfirmRequest
+            var confRes = await s.ManagerConfirmAsync(appt.AppointmentId, 2, new ManagerConfirmRequest
             {
                 AssignedDentistUserId = dentist,
                 RoomId = 1,
@@ -671,7 +672,7 @@ public class RealDatabaseEndToEndSmokeTests
             Assert.False(string.IsNullOrWhiteSpace(confRes.Data!.QueueNumber));
 
             // QueueNumber is preserved upon Receptionist Check-in
-            var checkInRes = await s.ReceptionistCheckInAsync(appt.AppointmentId, 10);
+            var checkInRes = await s.ReceptionistCheckInAsync(appt.AppointmentId, 2);
             if (!checkInRes.Success) return null;
 
             var checkedInAppt = await db.Appointments.AsNoTracking().FirstOrDefaultAsync(a => a.AppointmentId == appt.AppointmentId);

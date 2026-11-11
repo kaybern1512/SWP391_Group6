@@ -120,6 +120,27 @@ public class Stage4FinalSystemAcceptanceE2ETests
         long chair2Id = 2;
 
         var slotTime = await GetAvailableSlotForDentistAsync(db, dentistUserId, offsetDays: 20, defaultHour: 10);
+        var targetDateOnly1 = DateOnly.FromDateTime(slotTime.Date);
+        if (!await db.DentistWorkSchedules.AnyAsync(ws => ws.DentistUserId == dentistUserId && ws.WorkDate == targetDateOnly1 && ws.Status == "Scheduled"))
+        {
+            db.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistUserId = dentistUserId,
+                DepartmentId = departmentId,
+                WorkDate = targetDateOnly1,
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(18, 0),
+                Status = "Scheduled"
+            });
+            await db.SaveChangesAsync();
+        }
+        var slotEnd1 = slotTime.AddMinutes(30);
+        var leftovers1 = await db.Appointments
+            .Where(a => a.ScheduledStart < slotEnd1 && (a.ScheduledEnd ?? a.ScheduledStart.Value.AddMinutes(30)) > slotTime &&
+                        (a.AssignedDentistUserId == dentistUserId || a.PatientUserId == 13 || a.PatientUserId == 14 || a.DentalChairId == chair1Id || a.DentalChairId == chair2Id))
+            .ToListAsync();
+        foreach (var l in leftovers1) l.Status = AppointmentStatus.Cancelled;
+        if (leftovers1.Count > 0) await db.SaveChangesAsync();
 
         var task1 = Task.Run(async () =>
         {
@@ -181,6 +202,40 @@ public class Stage4FinalSystemAcceptanceE2ETests
         long targetChair = 2; // CHAIR-101-B
 
         var slotTime = await GetAvailableSlotForDentistAsync(db, dentist1, offsetDays: 25, defaultHour: 11);
+        var targetDateOnly2 = DateOnly.FromDateTime(slotTime.Date);
+        if (!await db.DentistWorkSchedules.AnyAsync(ws => ws.DentistUserId == dentist1 && ws.WorkDate == targetDateOnly2 && ws.Status == "Scheduled"))
+        {
+            db.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistUserId = dentist1,
+                DepartmentId = departmentId,
+                WorkDate = targetDateOnly2,
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(18, 0),
+                Status = "Scheduled"
+            });
+        }
+        if (!await db.DentistWorkSchedules.AnyAsync(ws => ws.DentistUserId == dentist2 && ws.WorkDate == targetDateOnly2 && ws.Status == "Scheduled"))
+        {
+            db.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistUserId = dentist2,
+                DepartmentId = departmentId,
+                WorkDate = targetDateOnly2,
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(18, 0),
+                Status = "Scheduled"
+            });
+        }
+        await db.SaveChangesAsync();
+
+        var slotEnd2 = slotTime.AddMinutes(30);
+        var leftovers2 = await db.Appointments
+            .Where(a => a.ScheduledStart < slotEnd2 && (a.ScheduledEnd ?? a.ScheduledStart.Value.AddMinutes(30)) > slotTime &&
+                        (a.AssignedDentistUserId == dentist1 || a.AssignedDentistUserId == dentist2 || a.PatientUserId == 13 || a.PatientUserId == 14 || a.DentalChairId == targetChair))
+            .ToListAsync();
+        foreach (var l in leftovers2) l.Status = AppointmentStatus.Cancelled;
+        if (leftovers2.Count > 0) await db.SaveChangesAsync();
 
         var task1 = Task.Run(async () =>
         {
