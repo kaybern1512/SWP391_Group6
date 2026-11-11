@@ -738,7 +738,7 @@ public class RealDatabaseEndToEndSmokeTests
         long chairId = 2;        // CHAIR-101-B
 
         var testDate = (await GetValidTestWorkDateAsync(db, dentistUserId, 14, 9));
-        await CleanDayTestAppointmentsAsync(db, testDate, patientUserId);
+        await CleanDayTestAppointmentsAsync(db, testDate, patientUserId, 14, 15);
 
         // Step 1: Patient books root canal service in Department 1
         var createReq = new CreateAppointmentRequest
