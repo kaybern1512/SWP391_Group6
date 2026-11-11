@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.Appointments.DTOs;
 using DentalClinic.Application.Features.Billing.DTOs;
 using DentalClinic.Application.Features.MedicalRecords.DTOs;
@@ -22,7 +23,7 @@ public class RealDatabaseEndToEndSmokeTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database={Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Integration_Dev"};Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database={Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Integration_Dev"};Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private static async Task<bool> IsDatabaseAvailableAsync(DentalClinicDbContext db)
     {
@@ -33,6 +34,27 @@ public class RealDatabaseEndToEndSmokeTests
         catch
         {
             return false;
+        }
+    }
+
+    private static async Task CleanDayTestAppointmentsAsync(DentalClinicDbContext db, DateTime testDate, params long[] patientUserIds)
+    {
+        var dayStart = testDate.Date;
+        var dayEnd = dayStart.AddDays(1);
+        var targetPatients = patientUserIds.Length > 0 ? patientUserIds : new long[] { 13, 14, 15, 5 };
+        var stale = await db.Appointments
+            .Where(a => (targetPatients.Contains(a.PatientUserId) || (a.AssignedDentistUserId.HasValue && (a.AssignedDentistUserId.Value == 3 || a.AssignedDentistUserId.Value == 6))) && a.ScheduledStart.HasValue &&
+                        a.ScheduledStart.Value >= dayStart && a.ScheduledStart.Value < dayEnd &&
+                        a.Status != AppointmentStatus.Cancelled && a.Status != AppointmentStatus.Withdrawn)
+            .ToListAsync();
+        foreach (var pa in stale)
+        {
+            pa.Status = AppointmentStatus.Cancelled;
+            pa.CancellationReason = "Test setup cleanup";
+        }
+        if (stale.Count > 0)
+        {
+            await db.SaveChangesAsync();
         }
     }
 
@@ -129,7 +151,6 @@ public class RealDatabaseEndToEndSmokeTests
 
         long patientUserId = 13; // Trần Mai Chi (patient1@dentalcare.com)
         long receptionistUserId = 2; // Lễ tân (receptionist@dentalcare.com)
-        long managerUserId = 10; // Trưởng khoa 1 (manager1@dentalcare.com)
         long dentistUserId = 3; // BS. Trần Văn Hùng (dentist@dentalcare.com)
         long departmentId = 1; // General Dentistry
         long roomId = 1; // ROOM-101 (Shared)
@@ -147,6 +168,7 @@ public class RealDatabaseEndToEndSmokeTests
             s.CompletedAt = DateTime.UtcNow;
         }
         if (staleInServiceA.Count > 0) await db.SaveChangesAsync();
+        await CleanDayTestAppointmentsAsync(db, testDate, patientUserId);
 
         // Step 1: Patient creates appointment
         var createReq = new CreateAppointmentRequest
@@ -169,7 +191,7 @@ public class RealDatabaseEndToEndSmokeTests
         var apptAfterFwd = await db.Appointments.FindAsync(apptId);
         Assert.Equal(AppointmentStatus.PendingDepartmentReview, apptAfterFwd!.Status);
 
-        // Step 3: DepartmentManager confirms and assigns resources
+        // Step 3: Receptionist confirms and assigns resources
         var confirmReq = new ManagerConfirmRequest
         {
             AssignedDentistUserId = dentistUserId,
@@ -178,10 +200,11 @@ public class RealDatabaseEndToEndSmokeTests
             ScheduledStart = testDate,
             ScheduledEnd = testDate.AddMinutes(45)
         };
-        var confirmResult = await apptService.ManagerConfirmAsync(apptId, managerUserId, confirmReq);
+        var confirmResult = await apptService.ManagerConfirmAsync(apptId, receptionistUserId, confirmReq);
         Assert.True(confirmResult.Success, confirmResult.Message);
         Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data!.Status);
         Assert.False(string.IsNullOrWhiteSpace(confirmResult.Data.QueueNumber));
+        var allocatedQueue = confirmResult.Data.QueueNumber;
 
         // Step 4: Receptionist checks in patient upon arrival
         var checkInResult = await apptService.ReceptionistCheckInAsync(apptId, receptionistUserId, "Bệnh nhân đã tới quầy làm thủ tục");
@@ -189,6 +212,7 @@ public class RealDatabaseEndToEndSmokeTests
 
         var apptAfterCheckIn = await db.Appointments.FindAsync(apptId);
         Assert.Equal(AppointmentStatus.CheckedIn, apptAfterCheckIn!.Status);
+        Assert.Equal(allocatedQueue, apptAfterCheckIn.QueueNumber);
 
         // Step 5: Dentist starts examination
         var startResult = await apptService.DentistStartAppointmentAsync(apptId, dentistUserId);
@@ -275,7 +299,6 @@ public class RealDatabaseEndToEndSmokeTests
 
         long patientUserId = 14; // Patient 2 (patient2@dentalcare.com)
         long receptionistUserId = 2; // Receptionist
-        long managerUserId = 10; // Manager of Dept 1
         long dentistUserId = 3; // Dentist
         long departmentId = 1;
         long roomId = 4; // ROOM-102 (Shared)
@@ -293,6 +316,7 @@ public class RealDatabaseEndToEndSmokeTests
             s.CompletedAt = DateTime.UtcNow;
         }
         if (staleInServiceB.Count > 0) await db.SaveChangesAsync();
+        await CleanDayTestAppointmentsAsync(db, slotTime, patientUserId);
 
         // Step 1: Receptionist creates walk-in appointment
         var walkInReq = new CreateReceptionistAppointmentRequest
@@ -314,7 +338,7 @@ public class RealDatabaseEndToEndSmokeTests
         Assert.Equal(patientUserId, savedAppt.PatientUserId);
         Assert.Equal(AppointmentStatus.PendingReceptionReview, savedAppt.Status);
 
-        // Step 2: DepartmentManager confirms
+        // Step 2: Receptionist confirms
         var confirmReq = new ManagerConfirmRequest
         {
             AssignedDentistUserId = dentistUserId,
@@ -323,7 +347,7 @@ public class RealDatabaseEndToEndSmokeTests
             ScheduledStart = slotTime,
             ScheduledEnd = slotTime.AddMinutes(30)
         };
-        var confirmResult = await apptService.ManagerConfirmAsync(apptId, managerUserId, confirmReq);
+        var confirmResult = await apptService.ManagerConfirmAsync(apptId, receptionistUserId, confirmReq);
         Assert.True(confirmResult.Success, confirmResult.Message);
         Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data!.Status);
 
@@ -355,8 +379,36 @@ public class RealDatabaseEndToEndSmokeTests
         var mockApptLogger = new Mock<ILogger<AppointmentService>>();
         var apptService = new AppointmentService(db, mockNotification.Object, mockApptLogger.Object);
 
-        var slotStart = (await GetValidTestWorkDateAsync(db, 3, 2, 9, 4, 1));
+        // Find a date where both Dentist 3 and Dentist 6 have scheduled shifts in Department 1
+        var minDate = DateOnly.FromDateTime(DateTime.Today).AddDays(2);
+        var commonDate = await (from s3 in db.DentistWorkSchedules.AsNoTracking()
+                                join s6 in db.DentistWorkSchedules.AsNoTracking() on s3.WorkDate equals s6.WorkDate
+                                where s3.DentistUserId == 3 && s6.DentistUserId == 6 &&
+                                      s3.DepartmentId == 1 && s6.DepartmentId == 1 &&
+                                      s3.Status == "Scheduled" && s6.Status == "Scheduled" &&
+                                      s3.WorkDate >= minDate && s3.WorkDate <= minDate.AddDays(30)
+                                orderby s3.WorkDate
+                                select s3.WorkDate).FirstOrDefaultAsync();
+
+        if (commonDate == default) commonDate = minDate;
+        var slotStart = commonDate.ToDateTime(new TimeOnly(10, 0));
         var slotEnd = slotStart.AddMinutes(45);
+        await CleanDayTestAppointmentsAsync(db, slotStart, 13, 14, 15);
+
+        var workDate = DateOnly.FromDateTime(slotStart);
+        if (!await db.DentistWorkSchedules.AnyAsync(s => s.DentistUserId == 6 && s.WorkDate == workDate))
+        {
+            db.DentistWorkSchedules.Add(new DentistWorkSchedule
+            {
+                DentistUserId = 6,
+                DepartmentId = 1,
+                WorkDate = workDate,
+                StartTime = new TimeOnly(7, 0, 0),
+                EndTime = new TimeOnly(20, 0, 0),
+                Status = "Scheduled"
+            });
+            await db.SaveChangesAsync();
+        }
 
         // PART 1: Shared Room (ROOM-101, IsExclusive=false in Dept 1)
         var appt1 = new Appointment
@@ -388,8 +440,9 @@ public class RealDatabaseEndToEndSmokeTests
         db.Appointments.AddRange(appt1, appt2);
         await db.SaveChangesAsync();
 
-        // Manager 10 confirms Appt1 on Chair 1
-        var conf1 = await apptService.ManagerConfirmAsync(appt1.AppointmentId, 10, new ManagerConfirmRequest
+        // Receptionist 2 confirms Appt1 on Chair 1
+        var receptionistUserId = 2L;
+        var conf1 = await apptService.ManagerConfirmAsync(appt1.AppointmentId, receptionistUserId, new ManagerConfirmRequest
         {
             AssignedDentistUserId = 3,
             RoomId = 1,
@@ -399,8 +452,8 @@ public class RealDatabaseEndToEndSmokeTests
         });
         Assert.True(conf1.Success, conf1.Message);
 
-        // Manager 10 confirms Appt2 on Chair 2 in the same room (ROOM-101) with Dentist 6 -> BOTH SUCCEED
-        var conf2 = await apptService.ManagerConfirmAsync(appt2.AppointmentId, 10, new ManagerConfirmRequest
+        // Receptionist 2 confirms Appt2 on Chair 2 in the same room (ROOM-101) with Dentist 6 -> BOTH SUCCEED
+        var conf2 = await apptService.ManagerConfirmAsync(appt2.AppointmentId, receptionistUserId, new ManagerConfirmRequest
         {
             AssignedDentistUserId = 6,
             RoomId = 1,
@@ -427,7 +480,7 @@ public class RealDatabaseEndToEndSmokeTests
         db.Appointments.Add(appt3);
         await db.SaveChangesAsync();
 
-        var conf3 = await apptService.ManagerConfirmAsync(appt3.AppointmentId, 10, new ManagerConfirmRequest
+        var conf3 = await apptService.ManagerConfirmAsync(appt3.AppointmentId, receptionistUserId, new ManagerConfirmRequest
         {
             AssignedDentistUserId = 46,
             RoomId = 1,
@@ -438,9 +491,10 @@ public class RealDatabaseEndToEndSmokeTests
         Assert.False(conf3.Success);
         Assert.Contains("Ghế", conf3.Message);
 
-        // PART 3: Exclusive Room (ROOM-202, IsExclusive=true in Dept 3, Chair 13, Manager 4)
+        // PART 3: Exclusive Room (ROOM-202, IsExclusive=true in Dept 3, Chair 13, Receptionist confirms)
         var slotExStart = (await GetValidTestWorkDateAsync(db, 3, 2, 13, 2, 3));
         var slotExEnd = slotExStart.AddMinutes(45);
+        await CleanDayTestAppointmentsAsync(db, slotExStart, 13, 14, 15);
 
         var apptEx1 = new Appointment
         {
@@ -471,8 +525,8 @@ public class RealDatabaseEndToEndSmokeTests
         db.Appointments.AddRange(apptEx1, apptEx2);
         await db.SaveChangesAsync();
 
-        // Confirm ApptEx1 in exclusive room 5 (ROOM-202, Chair 13) by Manager 4
-        var confEx1 = await apptService.ManagerConfirmAsync(apptEx1.AppointmentId, 4, new ManagerConfirmRequest
+        // Confirm ApptEx1 in exclusive room 5 (ROOM-202, Chair 13) by Receptionist
+        var confEx1 = await apptService.ManagerConfirmAsync(apptEx1.AppointmentId, receptionistUserId, new ManagerConfirmRequest
         {
             AssignedDentistUserId = 3,
             RoomId = 5,
@@ -483,7 +537,7 @@ public class RealDatabaseEndToEndSmokeTests
         Assert.True(confEx1.Success, confEx1.Message);
 
         // Second confirmation on ROOM-202 must be REJECTED because ROOM-202 is exclusive!
-        var confEx2 = await apptService.ManagerConfirmAsync(apptEx2.AppointmentId, 4, new ManagerConfirmRequest
+        var confEx2 = await apptService.ManagerConfirmAsync(apptEx2.AppointmentId, receptionistUserId, new ManagerConfirmRequest
         {
             AssignedDentistUserId = 4,
             RoomId = 5,
@@ -540,7 +594,7 @@ public class RealDatabaseEndToEndSmokeTests
             {
                 using var db1 = CreateDbContext();
                 var s = new AppointmentService(db1, Mock.Of<INotificationService>(), Mock.Of<ILogger<AppointmentService>>());
-                return await s.ManagerConfirmAsync(a1.AppointmentId, 10, new ManagerConfirmRequest
+                return await s.ManagerConfirmAsync(a1.AppointmentId, 2, new ManagerConfirmRequest
                 {
                     AssignedDentistUserId = 3,
                     RoomId = 1,
@@ -554,7 +608,7 @@ public class RealDatabaseEndToEndSmokeTests
             {
                 using var db2 = CreateDbContext();
                 var s = new AppointmentService(db2, Mock.Of<INotificationService>(), Mock.Of<ILogger<AppointmentService>>());
-                return await s.ManagerConfirmAsync(a2.AppointmentId, 10, new ManagerConfirmRequest
+                return await s.ManagerConfirmAsync(a2.AppointmentId, 2, new ManagerConfirmRequest
                 {
                     AssignedDentistUserId = 3, // SAME DENTIST
                     RoomId = 1,
@@ -600,13 +654,13 @@ public class RealDatabaseEndToEndSmokeTests
             await setupDb.SaveChangesAsync();
         }
 
-        var qTasks = qAppts.Select((appt, idx) => Task.Run(async () =>
+        async Task<string?> ConfirmAndCheckInAsync(Appointment appt, int idx)
         {
             using var db = CreateDbContext();
             var s = new AppointmentService(db, Mock.Of<INotificationService>(), Mock.Of<ILogger<AppointmentService>>());
             long chair = (idx % 2 == 0) ? 1 : 2;
             long dentist = (idx % 2 == 0) ? 3 : 6;
-            return await s.ManagerConfirmAsync(appt.AppointmentId, 10, new ManagerConfirmRequest
+            var confRes = await s.ManagerConfirmAsync(appt.AppointmentId, 2, new ManagerConfirmRequest
             {
                 AssignedDentistUserId = dentist,
                 RoomId = 1,
@@ -614,10 +668,22 @@ public class RealDatabaseEndToEndSmokeTests
                 ScheduledStart = appt.ScheduledStart,
                 ScheduledEnd = appt.ScheduledEnd
             });
-        })).ToList();
+            if (!confRes.Success) return null;
+            Assert.False(string.IsNullOrWhiteSpace(confRes.Data!.QueueNumber));
+
+            // QueueNumber is preserved upon Receptionist Check-in
+            var checkInRes = await s.ReceptionistCheckInAsync(appt.AppointmentId, 2);
+            if (!checkInRes.Success) return null;
+
+            var checkedInAppt = await db.Appointments.AsNoTracking().FirstOrDefaultAsync(a => a.AppointmentId == appt.AppointmentId);
+            Assert.Equal(confRes.Data.QueueNumber, checkedInAppt?.QueueNumber);
+            return checkedInAppt?.QueueNumber;
+        }
+
+        var qTasks = qAppts.Select((appt, idx) => ConfirmAndCheckInAsync(appt, idx)).ToList();
 
         var qResults = await Task.WhenAll(qTasks);
-        var successfulQueueNumbers = qResults.Where(r => r.Success).Select(r => r.Data!.QueueNumber).ToList();
+        var successfulQueueNumbers = qResults.Where(q => !string.IsNullOrEmpty(q)).ToList();
         Assert.NotEmpty(successfulQueueNumbers);
         // All issued QueueNumbers must be distinct
         Assert.Equal(successfulQueueNumbers.Count, successfulQueueNumbers.Distinct().Count());
@@ -679,7 +745,6 @@ public class RealDatabaseEndToEndSmokeTests
 
         long patientUserId = 13;
         long receptionistUserId = 2;
-        long managerUserId = 10; // Manager of Dept 1 (Khoa Răng Tổng Quát & Nội Nha)
         long dentistUserId = 6;  // BS. Nguyễn Thị Phương Thảo (in Dept 1)
         long departmentId = 1;   // General Dentistry & Endodontics
         long serviceId = 11;     // Điều trị tủy răng hàm nhiều chân phức tạp
@@ -687,6 +752,7 @@ public class RealDatabaseEndToEndSmokeTests
         long chairId = 2;        // CHAIR-101-B
 
         var testDate = (await GetValidTestWorkDateAsync(db, dentistUserId, 14, 9));
+        await CleanDayTestAppointmentsAsync(db, testDate, patientUserId, 14, 15);
 
         // Step 1: Patient books root canal service in Department 1
         var createReq = new CreateAppointmentRequest
@@ -716,7 +782,7 @@ public class RealDatabaseEndToEndSmokeTests
             ScheduledStart = testDate,
             ScheduledEnd = testDate.AddMinutes(45)
         };
-        var missingChairResult = await apptService.ManagerConfirmAsync(apptId, managerUserId, missingChairReq);
+        var missingChairResult = await apptService.ManagerConfirmAsync(apptId, receptionistUserId, missingChairReq);
         Assert.False(missingChairResult.Success);
         Assert.NotNull(missingChairResult.Message);
         Assert.Contains("ghế nha khoa", missingChairResult.Message.ToLowerInvariant());
@@ -730,7 +796,7 @@ public class RealDatabaseEndToEndSmokeTests
             ScheduledStart = testDate,
             ScheduledEnd = testDate.AddMinutes(45)
         };
-        var confirmResult = await apptService.ManagerConfirmAsync(apptId, managerUserId, validConfirmReq);
+        var confirmResult = await apptService.ManagerConfirmAsync(apptId, receptionistUserId, validConfirmReq);
         Assert.True(confirmResult.Success, confirmResult.Message);
         Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data!.Status);
         Assert.Equal(chairId, confirmResult.Data.DentalChairId);

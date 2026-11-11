@@ -572,7 +572,7 @@ public class DentistScheduleService : IDentistScheduleService
         }
 
         long targetDentistId = currentUserId;
-        if (request.DentistUserId.HasValue && (currentUserRole == UserRole.SystemAdministrator || currentUserRole == UserRole.DepartmentManager))
+        if (request.DentistUserId.HasValue && currentUserRole == UserRole.SystemAdministrator)
         {
             targetDentistId = request.DentistUserId.Value;
         }
@@ -699,7 +699,7 @@ public class DentistScheduleService : IDentistScheduleService
             return ApiResponse<DentistAvailabilityDto>.Fail("Không tìm thấy bản ghi trạng thái khả dụng.");
         }
 
-        if (da.DentistUserId != currentUserId && currentUserRole != UserRole.SystemAdministrator && currentUserRole != UserRole.DepartmentManager)
+        if (da.DentistUserId != currentUserId && currentUserRole != UserRole.SystemAdministrator)
         {
             return ApiResponse<DentistAvailabilityDto>.Fail("Bạn không có quyền chỉnh sửa trạng thái của bác sĩ khác.");
         }
@@ -799,7 +799,7 @@ public class DentistScheduleService : IDentistScheduleService
             return ApiResponse<bool>.Fail("Không tìm thấy bản ghi trạng thái cần xóa.");
         }
 
-        if (da.DentistUserId != currentUserId && currentUserRole != UserRole.SystemAdministrator && currentUserRole != UserRole.DepartmentManager)
+        if (da.DentistUserId != currentUserId && currentUserRole != UserRole.SystemAdministrator)
         {
             return ApiResponse<bool>.Fail("Bạn không có quyền xóa trạng thái của bác sĩ khác.");
         }

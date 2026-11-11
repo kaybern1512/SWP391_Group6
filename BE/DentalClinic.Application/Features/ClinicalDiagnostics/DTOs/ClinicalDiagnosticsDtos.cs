@@ -177,6 +177,16 @@ public class ImagingQueueSummaryDto
     public bool HasEscalationAlert { get; set; }
     public List<ImagingSessionDto> ActiveSessions { get; set; } = new();
     public List<ImagingSessionDto> WaitingQueue { get; set; } = new();
+
+    // Dedicated X-ray Duty Dentist Information
+    public long? OnDutyDentistUserId { get; set; }
+    public string? OnDutyDentistName { get; set; }
+    public string? OnDutyDentistShift { get; set; }
+    public string? OnDutyDentistRadiationCert { get; set; }
+    public long? BackupDentistUserId { get; set; }
+    public string? BackupDentistName { get; set; }
+    public bool HasOnDutyDentist { get; set; }
+    public bool IsDentistOnLeave { get; set; }
 }
 
 public class CreateConsultationRequest

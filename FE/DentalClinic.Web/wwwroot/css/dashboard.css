@@ -53,7 +53,7 @@
 }
 
 .clinic-name {
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: var(--dc-font-heading);
   font-size: 1.125rem;
   font-weight: 700;
   color: #ffffff;

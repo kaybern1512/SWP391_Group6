@@ -22,7 +22,7 @@ Thư mục này chứa toàn bộ cấu trúc cơ sở dữ liệu (**44 bảng,
 Chạy lệnh sau trên terminal PowerShell tại thư mục gốc của dự án (thay `.\MSSQLSERVER01` bằng instance SQL Server của bạn nếu dùng `.\SQLEXPRESS` hoặc `(localdb)\mssqllocaldb`):
 
 ```powershell
-sqlcmd -S .\MSSQLSERVER01 -E -i "DB\DentalClinic_Full_Database_And_Data.sql"
+sqlcmd -S .\MSSQLSERVER01 -E -f 65001 -i "DB\DentalClinic_Full_Database_And_Data.sql"
 ```
 
 > [!NOTE]

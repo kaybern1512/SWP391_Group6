@@ -57,6 +57,62 @@ public class DepartmentReviewViewModel
 
 public class DentistTodayAppointmentsViewModel
 {
-    public DateOnly SelectedDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+    // Filter parameters
+    public string DatePreset { get; set; } = "today";
+    public DateOnly FromDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+    public DateOnly ToDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+    public TimeOnly? FromTime { get; set; }
+    public TimeOnly? ToTime { get; set; }
+    public string? Status { get; set; }
+    public long? RoomId { get; set; }
+    public long? DentalChairId { get; set; }
+    public string? SearchTerm { get; set; }
+
+    // Backward compatibility for existing views/tests
+    public DateOnly SelectedDate
+    {
+        get => FromDate;
+        set
+        {
+            FromDate = value;
+            ToDate = value;
+        }
+    }
+
+    // Appointment data
     public List<AppointmentDto> Appointments { get; set; } = new();
+
+    // Available room/chair options for filter dropdowns
+    public List<RoomOptionDto> AvailableRooms { get; set; } = new();
+
+    // Validation state
+    public string? ValidationError { get; set; }
+
+    // Computed presentation helpers
+    public bool IsMultiDay => FromDate != ToDate;
+
+    public IEnumerable<IGrouping<DateOnly, AppointmentDto>> GroupedAppointments =>
+        Appointments
+            .Where(a => a.ScheduledStart.HasValue)
+            .GroupBy(a => DateOnly.FromDateTime(a.ScheduledStart!.Value))
+            .OrderBy(g => g.Key);
+
+    // Dynamic KPI statistics based on filtered dataset
+    public int TotalCount => Appointments.Count;
+    public int ConfirmedCount => Appointments.Count(a => a.Status == "Confirmed");
+    public int CheckedInCount => Appointments.Count(a => a.Status == "CheckedIn" || a.Status == "Waiting" || a.Status == "Called");
+    public int InServiceCount => Appointments.Count(a => a.Status == "InService");
+    public int CompletedCount => Appointments.Count(a => a.Status == "Completed");
+    public int CancelledCount => Appointments.Count(a => a.Status == "Cancelled" || a.Status == "Rejected" || a.Status == "Withdrawn" || a.Status == "NoShow");
+
+    public bool HasActiveFilters =>
+        DatePreset != "today" ||
+        FromDate != DateOnly.FromDateTime(DateTime.Today) ||
+        ToDate != DateOnly.FromDateTime(DateTime.Today) ||
+        FromTime.HasValue ||
+        ToTime.HasValue ||
+        (!string.IsNullOrWhiteSpace(Status) && Status != "All") ||
+        (RoomId.HasValue && RoomId.Value > 0) ||
+        (DentalChairId.HasValue && DentalChairId.Value > 0) ||
+        !string.IsNullOrWhiteSpace(SearchTerm);
 }

@@ -162,15 +162,11 @@ public class PostCareService : IPostCareService
         string? status = null,
         CancellationToken ct = default)
     {
-        var managedDepartmentIds = await _dbContext.Departments
-            .AsNoTracking()
-            .Where(d => d.ManagerUserId == managerUserId)
-            .Select(d => d.DepartmentId)
-            .ToListAsync(ct);
-
-        if (!managedDepartmentIds.Any())
+        var caller = await _dbContext.UserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == managerUserId, ct);
+        bool isStaff = caller != null && (caller.Role == UserRole.Receptionist || caller.Role == UserRole.SystemAdministrator);
+        if (!isStaff)
         {
-            return ApiResponse<List<DepartmentReferralDto>>.Ok(new List<DepartmentReferralDto>());
+            return ApiResponse<List<DepartmentReferralDto>>.Forbidden("Bạn không có quyền xem danh sách yêu cầu chuyển khoa.");
         }
 
         var query = _dbContext.DepartmentReferrals
@@ -187,7 +183,7 @@ public class PostCareService : IPostCareService
                 .ThenInclude(s => s.TreatmentPlanItem)
                     .ThenInclude(i => i.TreatmentPlan)
                         .ThenInclude(p => p.PatientUser)
-            .Where(r => managedDepartmentIds.Contains(r.ToDepartmentId));
+            .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(status))
         {
@@ -226,8 +222,10 @@ public class PostCareService : IPostCareService
         if (referral == null)
             return ApiResponse<DepartmentReferralDto>.Fail("Không tìm thấy yêu cầu chuyển khoa.");
 
-        if (referral.ToDepartment.ManagerUserId != managerUserId)
-            return ApiResponse<DepartmentReferralDto>.Forbidden("Bạn không có quyền duyệt ca chuyển khoa đến chuyên khoa này.");
+        var caller = await _dbContext.UserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == managerUserId, ct);
+        bool isStaff = caller != null && (caller.Role == UserRole.Receptionist || caller.Role == UserRole.SystemAdministrator);
+        if (!isStaff)
+            return ApiResponse<DepartmentReferralDto>.Forbidden("Bạn không có quyền duyệt ca chuyển khoa. Chỉ Lễ tân hoặc Quản trị viên mới có quyền duyệt và điều phối ca chuyển khoa.");
 
         if (referral.Status != "Pending")
             return ApiResponse<DepartmentReferralDto>.Fail($"Ca chuyển khoa này đã được xử lý trước đó (Trạng thái: {referral.Status}).");
@@ -573,20 +571,10 @@ public class PostCareService : IPostCareService
         else if (caller.Role == UserRole.Dentist)
         {
             bool isTreatingDentist = dentistUserId.HasValue && caller.UserId == dentistUserId.Value;
-            bool isDeptManager = deptId.HasValue && await _dbContext.Departments.AnyAsync(d => d.DepartmentId == deptId.Value && d.ManagerUserId == caller.UserId, ct);
 
-            if (!isTreatingDentist && !isDeptManager)
+            if (!isTreatingDentist)
             {
-                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bác sĩ không có quyền cập nhật lịch tái khám không do mình điều trị hoặc không thuộc chuyên khoa quản lý.");
-            }
-        }
-        else if (caller.Role == UserRole.DepartmentManager)
-        {
-            bool isDeptManager = deptId.HasValue && await _dbContext.Departments.AnyAsync(d => d.DepartmentId == deptId.Value && d.ManagerUserId == caller.UserId, ct);
-
-            if (!isDeptManager)
-            {
-                return ApiResponse<FollowUpScheduleDto>.Forbidden("Trưởng khoa không có quyền cập nhật lịch tái khám không thuộc chuyên khoa quản lý.");
+                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bác sĩ không có quyền cập nhật lịch tái khám không do mình điều trị.");
             }
         }
         else if (caller.Role == UserRole.Receptionist || caller.Role == UserRole.SystemAdministrator)
@@ -716,7 +704,6 @@ public class PostCareService : IPostCareService
             var noteTag = caller.Role switch
             {
                 UserRole.Dentist => "Bác sĩ",
-                UserRole.DepartmentManager => "Trưởng khoa",
                 UserRole.SystemAdministrator => "Quản trị viên",
                 _ => "CSKH"
             };
@@ -782,18 +769,18 @@ public class PostCareService : IPostCareService
         return new DepartmentReferralDto
         {
             ReferralId = r.ReferralId,
-            TreatmentSessionId = r.TreatmentSessionId,
-            PatientUserId = r.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUserId,
-            PatientName = r.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.FullName,
-            PatientCode = r.TreatmentSession.TreatmentPlanItem.TreatmentPlan.PatientUser.PatientCode,
+            TreatmentSessionId = r.TreatmentSessionId.GetValueOrDefault(),
+            PatientUserId = r.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.PatientUserId ?? r.SourceAppointment?.PatientUserId ?? 0,
+            PatientName = r.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.PatientUser?.FullName ?? r.SourceAppointment?.PatientUser?.FullName ?? "Bệnh nhân",
+            PatientCode = r.TreatmentSession?.TreatmentPlanItem?.TreatmentPlan?.PatientUser?.PatientCode ?? r.SourceAppointment?.PatientUser?.PatientCode ?? string.Empty,
             FromDepartmentId = r.FromDepartmentId,
             FromDepartmentName = r.FromDepartment.Name,
             ToDepartmentId = r.ToDepartmentId,
             ToDepartmentName = r.ToDepartment.Name,
-            ReferringDentistUserId = r.TreatmentSession.DentistUserId,
-            ReferringDentistName = r.TreatmentSession.DentistUser.User.FullName,
+            ReferringDentistUserId = r.TreatmentSession?.DentistUserId ?? r.SourceAppointment?.AssignedDentistUserId ?? 0,
+            ReferringDentistName = r.TreatmentSession?.DentistUser?.User?.FullName ?? r.SourceAppointment?.AssignedDentistUser?.User?.FullName ?? "Bác sĩ",
             AssignedDentistUserId = r.AssignedDentistUserId,
-            AssignedDentistName = r.AssignedDentistUser?.User.FullName,
+            AssignedDentistName = r.AssignedDentistUser?.User?.FullName,
             ReviewedByUserId = r.ReviewedByUserId,
             ReviewedByName = r.ReviewedByUser?.FullName,
             Reason = r.Reason,

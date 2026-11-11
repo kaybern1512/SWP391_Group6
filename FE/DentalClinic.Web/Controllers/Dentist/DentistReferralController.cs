@@ -83,7 +83,7 @@ public class DentistReferralController : Controller
         }
         else
         {
-            TempData["SuccessMessage"] = "Đã gửi phiếu yêu cầu chuyển chuyên khoa và thông báo đến Trưởng khoa tiếp nhận.";
+            TempData["SuccessMessage"] = "Đã gửi phiếu yêu cầu chuyển chuyên khoa để Lễ tân điều phối tiếp nhận.";
         }
 
         return RedirectToAction(nameof(Index), new { tab = "referrals" });

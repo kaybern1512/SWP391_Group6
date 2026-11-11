@@ -1,6 +1,10 @@
 @model RoomChairManageViewModel
 @{
-    ViewData["Title"] = "Quản lý Phòng khám & Ghế nha khoa";
+    ViewData["Title"] = "Quản lý Phòng khám, Ghế & Trực X-Quang";
+    var xrayRosters = ViewBag.XrayRosters as List<DentalClinic.Web.Models.ApiDtos.XrayDentistRosterDto> ?? new();
+    var qualifiedDentists = ViewBag.QualifiedDentists as List<DentalClinic.Web.Models.ApiDtos.QualifiedDentistDto> ?? new();
+    var equipments = ViewBag.Equipments as List<DentalClinic.Web.Models.ApiDtos.ImagingEquipmentDto> ?? new();
+    var rosterDate = ViewBag.RosterDate as string ?? DateTime.Today.ToString("yyyy-MM-dd");
 }
 
 <div class="container-fluid p-0">
@@ -14,12 +18,15 @@
                 <span class="text-muted small">&bull;</span>
                 <span class="badge-dc badge-role-systemadministrator">Cơ sở vật chất</span>
             </div>
-            <h1 class="page-title">Quản lý Phòng khám & Ghế nha khoa</h1>
-            <p class="page-subtitle">Quản trị phân bổ không gian khám chữa bệnh, trạng thái vận hành và bảo trì thiết bị ghế</p>
+            <h1 class="page-title">Quản lý Phòng khám, Ghế & Trực X-Quang</h1>
+            <p class="page-subtitle">Quản trị phân bổ không gian khám chữa bệnh, trạng thái vận hành ghế và phân công bác sĩ trực phòng X-quang</p>
         </div>
         <div class="page-actions d-flex gap-2">
             <button type="button" class="btn btn-dc-outline" data-bs-toggle="modal" data-bs-target="#createRoomModal">
                 <i class="bi bi-door-open me-1"></i> Thêm Phòng Khám
+            </button>
+            <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#assignXrayModal">
+                <i class="bi bi-camera me-1"></i> Phân công Bác sĩ X-Quang
             </button>
             <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createChairModal">
                 <i class="bi bi-plus-lg me-1"></i> Thêm Ghế Nha Khoa
@@ -37,6 +44,11 @@
         <li class="nav-item" role="presentation">
             <button class="nav-link @(Model.ActiveTab == "chairs" ? "active" : "") fw-semibold" id="chairs-tab" data-bs-toggle="tab" data-bs-target="#chairs-pane" type="button" role="tab">
                 <i class="bi bi-grid-3x3-gap me-1"></i> Ghế nha khoa (@Model.Chairs.Count)
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(Model.ActiveTab == "xray-roster" ? "active" : "") fw-semibold" id="xray-roster-tab" data-bs-toggle="tab" data-bs-target="#xray-roster-pane" type="button" role="tab">
+                <i class="bi bi-camera me-1"></i> Trực Phòng X-Quang (@xrayRosters.Count)
             </button>
         </li>
     </ul>
@@ -336,6 +348,198 @@
                 </div>
             </div>
         </div>
+
+        <!-- PANE 3: TRỰC PHÒNG X-QUANG -->
+        <div class="tab-pane fade @(Model.ActiveTab == "xray-roster" ? "show active" : "")" id="xray-roster-pane" role="tabpanel">
+            <!-- Filter by Date for X-Ray Rosters -->
+            <div class="card-dc mb-4">
+                <div class="card-dc-body p-3">
+                    <form asp-controller="AdminRoomChair" asp-action="Index" method="get" class="row g-2 align-items-center">
+                        <input type="hidden" name="tab" value="xray-roster" />
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-muted mb-1">Ngày trực ca phòng X-quang</label>
+                            <input type="date" name="rosterDate" class="form-control form-control-sm" value="@rosterDate" onchange="this.form.submit()" />
+                        </div>
+                        <div class="col-md-5 pt-3">
+                            <button type="submit" class="btn btn-sm btn-outline-primary me-2">
+                                <i class="bi bi-funnel me-1"></i> Xem lịch ngày này
+                            </button>
+                            <a asp-controller="AdminRoomChair" asp-action="Index" asp-route-tab="xray-roster" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-calendar-event me-1"></i> Hôm nay
+                            </a>
+                        </div>
+                        <div class="col-md-3 text-end pt-3">
+                            <button type="button" class="btn btn-sm btn-dc-primary" data-bs-toggle="modal" data-bs-target="#assignXrayModal">
+                                <i class="bi bi-plus-lg me-1"></i> Phân công ca trực mới
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card-dc">
+                <div class="card-dc-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-camera text-primary"></i>
+                        <span class="fw-bold">Lịch phân công Bác sĩ trực phòng X-quang (@xrayRosters.Count ca)</span>
+                    </div>
+                    <span class="badge bg-light text-dark border">
+                        <i class="bi bi-calendar3 me-1"></i>Ngày: @(DateOnly.TryParse(rosterDate, out var dt) ? dt.ToString("dd/MM/yyyy") : rosterDate)
+                    </span>
+                </div>
+                <div class="card-dc-body p-0">
+                    <div class="table-responsive">
+                        <table class="table-dc mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;">#</th>
+                                    <th>Ca trực & Khung giờ</th>
+                                    <th>Phòng & Thiết bị</th>
+                                    <th>Bác sĩ trực chính (Có chứng chỉ ATBX)</th>
+                                    <th>Bác sĩ dự phòng</th>
+                                    <th>Trạng thái</th>
+                                    <th>Ghi chú</th>
+                                    <th class="text-end">Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (xrayRosters.Any())
+                                {
+                                    int rIdx = 1;
+                                    foreach (var roster in xrayRosters)
+                                    {
+                                        <tr>
+                                            <td class="text-muted fw-bold">@(rIdx++)</td>
+                                            <td>
+                                                @{
+                                                    var shiftBadge = roster.ShiftType switch
+                                                    {
+                                                        "Morning" => "bg-primary text-white",
+                                                        "Afternoon" => "bg-warning text-dark",
+                                                        "Evening" => "bg-info text-dark",
+                                                        _ => "bg-secondary text-white"
+                                                    };
+                                                    var shiftLabel = roster.ShiftType switch
+                                                    {
+                                                        "Morning" => "Ca Sáng",
+                                                        "Afternoon" => "Ca Chiều",
+                                                        "Evening" => "Ca Tối",
+                                                        _ => roster.ShiftType
+                                                    };
+                                                }
+                                                <span class="badge @shiftBadge mb-1">@shiftLabel</span>
+                                                <div class="fw-bold text-dark font-monospace">
+                                                    @roster.StartTime.ToString(@"hh\:mm") - @roster.EndTime.ToString(@"hh\:mm")
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="fw-bold text-dark">
+                                                    <i class="bi bi-door-open text-primary me-1"></i>@roster.RoomCode - @roster.RoomName
+                                                </div>
+                                                <div class="text-muted small">
+                                                    <i class="bi bi-cpu me-1"></i>@roster.EquipmentName (@roster.EquipmentCode)
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="fw-bold text-dark">
+                                                    <i class="bi bi-person-badge text-teal me-1"></i>@roster.DentistFullName
+                                                </div>
+                                                @if (roster.HasRadiationSafetyCert)
+                                                {
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle small">
+                                                        <i class="bi bi-shield-check me-1"></i>ATBX: @(roster.RadiationCertNumber ?? "Đã cấp")
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle small">
+                                                        <i class="bi bi-exclamation-triangle me-1"></i>Chưa có ATBX
+                                                    </span>
+                                                }
+                                                @if (roster.IsDentistOnLeave)
+                                                {
+                                                    <div class="mt-1">
+                                                        <span class="badge bg-danger text-white">
+                                                            <i class="bi bi-calendar-x me-1"></i>ĐANG NGHỈ PHÉP
+                                                        </span>
+                                                    </div>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(roster.BackupDentistFullName))
+                                                {
+                                                    <div class="text-dark">
+                                                        <i class="bi bi-person me-1"></i>@roster.BackupDentistFullName
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small">-- Không có --</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (roster.Status == "Active")
+                                                {
+                                                    <span class="badge bg-success text-white">Đang áp dụng</span>
+                                                }
+                                                else if (roster.Status == "Replaced")
+                                                {
+                                                    <span class="badge bg-info text-white">Đã điều chuyển</span>
+                                                }
+                                                else if (roster.Status == "Cancelled")
+                                                {
+                                                    <span class="badge bg-secondary text-white">Đã hủy</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-light text-dark border">@roster.Status</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="small text-muted">@(string.IsNullOrWhiteSpace(roster.Notes) ? "--" : roster.Notes)</span>
+                                            </td>
+                                            <td class="text-end">
+                                                @if (roster.Status == "Active")
+                                                {
+                                                    <div class="btn-group">
+                                                        <button type="button" class="btn btn-sm btn-outline-primary btn-replace-xray"
+                                                                data-id="@roster.RosterId"
+                                                                data-dentist="@roster.DentistFullName"
+                                                                data-room="@roster.RoomCode"
+                                                                data-shift="@shiftLabel"
+                                                                data-date="@roster.WorkDate.ToString("yyyy-MM-dd")">
+                                                            <i class="bi bi-arrow-left-right me-1"></i> Điều chuyển
+                                                        </button>
+                                                        <form asp-controller="AdminRoomChair" asp-action="CancelXrayRoster" method="post" class="d-inline"
+                                                              onsubmit="return confirm('Bạn có chắc chắn muốn hủy ca trực phòng X-quang này?');">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="rosterId" value="@roster.RosterId" />
+                                                            <input type="hidden" name="rosterDate" value="@rosterDate" />
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Hủy ca trực">
+                                                                <i class="bi bi-x-circle"></i>
+                                                            </button>
+                                                        </form>
+                                                    </div>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="8" class="text-center py-4 text-muted">
+                                            <i class="bi bi-calendar-x fs-3 d-block mb-1"></i>
+                                            Chưa có ca trực phòng X-quang nào được phân công trong ngày này.
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -533,6 +737,182 @@
     </div>
 </div>
 
+<!-- Modal Phân công Trực Phòng X-quang -->
+<div class="modal fade" id="assignXrayModal" tabindex="-1" aria-labelledby="assignXrayLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form asp-controller="AdminRoomChair" asp-action="AssignXrayRoster" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="assignXrayLabel">
+                        <i class="bi bi-camera-fill text-dc-primary me-2"></i>Phân Công Bác Sĩ Trực Phòng X-Quang
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Phòng X-quang <span class="text-danger">*</span></label>
+                            <select name="roomId" id="assignRoomId" class="form-select" required>
+                                @foreach (var rm in Model.Rooms.Where(r => r.RoomCode.Contains("XRAY", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(r.RoomName) && r.RoomName.Contains("X-quang", StringComparison.OrdinalIgnoreCase))))
+                                {
+                                    <option value="@rm.RoomId" selected="@(rm.RoomCode == "XRAY-01")">Phòng @rm.RoomCode - @rm.RoomName</option>
+                                }
+                                @if (!Model.Rooms.Any(r => r.RoomCode.Contains("XRAY", StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    @foreach (var rm in Model.Rooms)
+                                    {
+                                        <option value="@rm.RoomId">Phòng @rm.RoomCode - @rm.RoomName</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Thiết bị chụp <span class="text-danger">*</span></label>
+                            <select name="equipmentId" id="assignEquipmentId" class="form-select" required>
+                                @if (equipments.Any())
+                                {
+                                    foreach (var eq in equipments)
+                                    {
+                                        <option value="@eq.EquipmentId" selected="@(eq.EquipmentCode == "XRAY-MACH-01")">@eq.EquipmentCode - @eq.EquipmentName</option>
+                                    }
+                                }
+                                else
+                                {
+                                    <option value="1">XRAY-MACH-01 - Máy chụp X-quang KTS Vatech Pax-i</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Ngày trực <span class="text-danger">*</span></label>
+                            <input type="date" name="workDate" class="form-control" value="@rosterDate" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Ca làm việc <span class="text-danger">*</span></label>
+                            <select name="shiftType" id="assignShiftType" class="form-select" required>
+                                <option value="Morning" selected>Ca Sáng (07:30 - 11:30)</option>
+                                <option value="Afternoon">Ca Chiều (13:30 - 17:30)</option>
+                                <option value="Evening">Ca Tối (17:30 - 20:30)</option>
+                                <option value="Custom">Khung giờ tùy chọn</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Bắt đầu</label>
+                            <input type="time" name="startTime" id="assignStartTime" class="form-control" value="07:30" required />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Kết thúc</label>
+                            <input type="time" name="endTime" id="assignEndTime" class="form-control" value="11:30" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Bác sĩ phụ trách chính <span class="text-danger">*</span></label>
+                            <select name="dentistUserId" class="form-select" required>
+                                <option value="">-- Chọn bác sĩ có chứng chỉ ATBX --</option>
+                                @foreach (var d in qualifiedDentists)
+                                {
+                                    <option value="@d.UserId">
+                                        BS. @d.FullName (@(string.IsNullOrEmpty(d.RadiationCertNumber) ? "Có chứng chỉ ATBX" : d.RadiationCertNumber))
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text small text-muted">
+                                <i class="bi bi-shield-check text-success me-1"></i>Chỉ bác sĩ có chứng chỉ An toàn bức xạ mới được phân công.
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Bác sĩ dự phòng (Tùy chọn)</label>
+                            <select name="backupDentistUserId" class="form-select">
+                                <option value="">-- Không phân công bác sĩ dự phòng --</option>
+                                @foreach (var d in qualifiedDentists)
+                                {
+                                    <option value="@d.UserId">
+                                        BS. @d.FullName (@(string.IsNullOrEmpty(d.RadiationCertNumber) ? "Có chứng chỉ ATBX" : d.RadiationCertNumber))
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text small text-muted">
+                                Tiếp quản ca trực khi bác sĩ chính nghỉ phép hoặc vắng mặt đột xuất.
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Ghi chú vận hành</label>
+                            <textarea name="notes" class="form-control" rows="2" placeholder="Ghi chú phân công, thiết bị bàn giao hoặc yêu cầu lâm sàng..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">
+                        <i class="bi bi-check-lg me-1"></i>Lưu Phân Công
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Điều chuyển Bác Sĩ Trực X-Quang -->
+<div class="modal fade" id="replaceXrayModal" tabindex="-1" aria-labelledby="replaceXrayLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="AdminRoomChair" asp-action="ReplaceXrayDentist" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="rosterId" id="replaceRosterId" />
+                <input type="hidden" name="rosterDate" value="@rosterDate" />
+                <div class="modal-header">
+                    <h5 class="modal-title font-heading" id="replaceXrayLabel">
+                        <i class="bi bi-arrow-left-right text-primary me-2"></i>Điều Chuyển Bác Sĩ Trực Phòng X-Quang
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-light border mb-3">
+                        <div class="small text-muted mb-1">Ca trực cần điều chuyển:</div>
+                        <div><strong id="replaceCurrentDentist"></strong></div>
+                        <div class="small text-secondary mt-1">
+                            Phòng: <span id="replaceCurrentRoom" class="fw-semibold"></span> | 
+                            Ca: <span id="replaceCurrentShift" class="fw-semibold"></span> | 
+                            Ngày: <span id="replaceCurrentDate" class="fw-semibold"></span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Bác sĩ thay thế mới <span class="text-danger">*</span></label>
+                        <select name="newDentistUserId" class="form-select" required>
+                            <option value="">-- Chọn bác sĩ có chứng chỉ ATBX --</option>
+                            @foreach (var d in qualifiedDentists)
+                            {
+                                <option value="@d.UserId">
+                                    BS. @d.FullName (@(string.IsNullOrEmpty(d.RadiationCertNumber) ? "Có ATBX" : d.RadiationCertNumber))
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Bác sĩ dự phòng mới (Tùy chọn)</label>
+                        <select name="newBackupDentistUserId" class="form-select">
+                            <option value="">-- Không thay đổi / Không có dự phòng --</option>
+                            @foreach (var d in qualifiedDentists)
+                            {
+                                <option value="@d.UserId">BS. @d.FullName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lý do điều chuyển <span class="text-danger">*</span></label>
+                        <textarea name="reason" class="form-control" rows="2" required placeholder="Nhập lý do điều chuyển (ví dụ: Bác sĩ xin nghỉ đột xuất, tăng cường nhân sự...)"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-arrow-repeat me-1"></i>Xác Nhận Điều Chuyển
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -561,6 +941,45 @@
                     editChairModal.show();
                 });
             });
+
+            // Shift selector time sync
+            const shiftSelect = document.getElementById('assignShiftType');
+            const startTimeInput = document.getElementById('assignStartTime');
+            const endTimeInput = document.getElementById('assignEndTime');
+            if (shiftSelect && startTimeInput && endTimeInput) {
+                shiftSelect.addEventListener('change', function () {
+                    switch (this.value) {
+                        case 'Morning':
+                            startTimeInput.value = '07:30';
+                            endTimeInput.value = '11:30';
+                            break;
+                        case 'Afternoon':
+                            startTimeInput.value = '13:30';
+                            endTimeInput.value = '17:30';
+                            break;
+                        case 'Evening':
+                            startTimeInput.value = '17:30';
+                            endTimeInput.value = '20:30';
+                            break;
+                    }
+                });
+            }
+
+            // Replace Xray Doctor modal
+            const replaceXrayModalEl = document.getElementById('replaceXrayModal');
+            if (replaceXrayModalEl) {
+                const replaceXrayModal = new bootstrap.Modal(replaceXrayModalEl);
+                document.querySelectorAll('.btn-replace-xray').forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        document.getElementById('replaceRosterId').value = this.dataset.id;
+                        document.getElementById('replaceCurrentDentist').textContent = this.dataset.dentist || '';
+                        document.getElementById('replaceCurrentRoom').textContent = this.dataset.room || '';
+                        document.getElementById('replaceCurrentShift').textContent = this.dataset.shift || '';
+                        document.getElementById('replaceCurrentDate').textContent = this.dataset.date || '';
+                        replaceXrayModal.show();
+                    });
+                });
+            }
         });
     </script>
 }

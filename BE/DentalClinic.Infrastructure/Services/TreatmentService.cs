@@ -441,18 +441,8 @@ public class TreatmentService : ITreatmentService
         {
             managedDeptIds = await _dbContext.Departments
                 .AsNoTracking()
-                .Where(d => d.ManagerUserId == managerUserId)
                 .Select(d => d.DepartmentId)
                 .ToListAsync(ct);
-
-            if (!managedDeptIds.Any())
-            {
-                // Fallback nếu tài khoản admin hoặc chưa gán trưởng khoa rõ ràng: lấy tất cả các khoa
-                managedDeptIds = await _dbContext.Departments
-                    .AsNoTracking()
-                    .Select(d => d.DepartmentId)
-                    .ToListAsync(ct);
-            }
         }
 
         var query = _dbContext.TreatmentPlans

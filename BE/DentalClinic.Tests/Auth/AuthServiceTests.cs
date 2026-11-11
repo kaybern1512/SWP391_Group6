@@ -368,7 +368,6 @@ public class AuthServiceTests
     [InlineData("admin@dentalcare.com", UserRole.SystemAdministrator, "EMP-ADM-001", "Admin Quản Trị")]
     [InlineData("receptionist@dentalcare.com", UserRole.Receptionist, "EMP-REC-001", "Lễ Tân Mai")]
     [InlineData("dentist@dentalcare.com", UserRole.Dentist, "EMP-DEN-001", "Bác Sĩ Hùng")]
-    [InlineData("manager@dentalcare.com", UserRole.DepartmentManager, "EMP-MGR-001", "Trưởng Khoa Nam")]
     public async Task LoginAsync_StaffRoles_ReturnsCorrectRoleAndEmployeeCode(string email, string role, string empCode, string fullName)
     {
         using var db = CreateDbContext("StaffLogin_" + role);

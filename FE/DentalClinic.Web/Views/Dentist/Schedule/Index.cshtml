@@ -345,8 +345,8 @@
                                         <!-- Leave Indicator -->
                     @if (day.IsOnLeave)
                     {
-                        <div class="leave-pill text-truncate" title="Nghá»‰ phÃ©p: @day.LeaveReason">
-                            <i class="bi bi-calendar-x me-1"></i><strong>Nghá»‰ (@day.LeaveType)</strong>
+                        <div class="leave-pill text-truncate" title="Nghỉ phép: @day.LeaveReason">
+                            <i class="bi bi-calendar-x me-1"></i><strong>Nghỉ (@day.LeaveType)</strong>
                         </div>
                     }
 
@@ -563,7 +563,7 @@
 </div>
 
 <!-- ========================================== -->
-<!-- MODAL: XIN NGHá»ˆ PHÃ‰P (DENTIST LEAVE REQUEST) -->
+<!-- MODAL: XIN NGHỈ PHÉP (DENTIST LEAVE REQUEST) -->
 <!-- ========================================== -->
 <div class="modal fade" id="createLeaveModal" tabindex="-1" aria-labelledby="createLeaveModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -572,61 +572,61 @@
                 @Html.AntiForgeryToken()
                 <div class="modal-header bg-warning text-dark py-3">
                     <h5 class="modal-title fw-bold mb-0" id="createLeaveModalLabel">
-                        <i class="bi bi-calendar-plus me-1"></i> Gá»­i ÄÆ¡n Xin Nghá»‰ PhÃ©p
+                        <i class="bi bi-calendar-plus me-1"></i> Gửi Đơn Xin Nghỉ Phép
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
                     <div class="alert alert-info py-2 small mb-3">
                         <i class="bi bi-info-circle me-1"></i>
-                        ÄÆ¡n xin nghá»‰ sáº½ Ä‘Æ°á»£c gá»­i Ä‘áº¿n Quáº£n trá»‹ viÃªn Ä‘á»ƒ xÃ©t duyá»‡t. Há»‡ thá»‘ng sáº½ tá»± Ä‘á»™ng quÃ©t vÃ  kÃ­ch hoáº¡t quy trÃ¬nh chuyá»ƒn Ä‘á»•i / báº£o lÆ°u cho cÃ¡c lá»‹ch háº¹n bá»‹ áº£nh hÆ°á»Ÿng náº¿u Ä‘Æ¡n Ä‘Æ°á»£c duyá»‡t.
+                        Đơn xin nghỉ sẽ được gửi đến Quản trị viên để xét duyệt. Hệ thống sẽ tự động quét và kích hoạt quy trình chuyển đổi / bảo lưu cho các lịch hẹn bị ảnh hưởng nếu đơn được duyệt.
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Loáº¡i Nghá»‰ PhÃ©p <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">Loại Nghỉ Phép <span class="text-danger">*</span></label>
                         <select name="LeaveType" class="form-select" required>
-                            <option value="AnnualLeave">Nghá»‰ phÃ©p thÆ°á»ng niÃªn (Annual Leave)</option>
-                            <option value="SickLeave">Nghá»‰ á»‘m / KhÃ¡m chá»¯a bá»‡nh (Sick Leave)</option>
-                            <option value="Personal">Viá»‡c riÃªng cÃ¡ nhÃ¢n (Personal)</option>
-                            <option value="Emergency">Kháº©n cáº¥p / Äá»™t xuáº¥t (Emergency)</option>
-                            <option value="Other">LÃ½ do khÃ¡c (Other)</option>
+                            <option value="AnnualLeave">Nghỉ phép thường niên (Annual Leave)</option>
+                            <option value="SickLeave">Nghỉ ốm / Khám chữa bệnh (Sick Leave)</option>
+                            <option value="Personal">Việc riêng cá nhân (Personal)</option>
+                            <option value="Emergency">Khẩn cấp / Đột xuất (Emergency)</option>
+                            <option value="Other">Lý do khác (Other)</option>
                         </select>
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">NgÃ y Báº¯t Äáº§u <span class="text-danger">*</span></label>
+                            <label class="form-label fw-semibold">Ngày Bắt Đầu <span class="text-danger">*</span></label>
                             <input type="date" name="StartDate" class="form-control" 
                                    value="@DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd")" required />
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Giá» Báº¯t Äáº§u</label>
+                            <label class="form-label fw-semibold">Giờ Bắt Đầu</label>
                             <input type="time" name="StartTime" class="form-control" value="08:00" />
                         </div>
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">NgÃ y Káº¿t ThÃºc <span class="text-danger">*</span></label>
+                            <label class="form-label fw-semibold">Ngày Kết Thúc <span class="text-danger">*</span></label>
                             <input type="date" name="EndDate" class="form-control" 
                                    value="@DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd")" required />
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Giá» Káº¿t ThÃºc</label>
+                            <label class="form-label fw-semibold">Giờ Kết Thúc</label>
                             <input type="time" name="EndTime" class="form-control" value="17:00" />
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">LÃ½ Do Nghá»‰ PhÃ©p (Báº£o máº­t ná»™i bá»™) <span class="text-danger">*</span></label>
-                        <textarea name="Reason" class="form-control" rows="3" required placeholder="Nháº­p lÃ½ do xin nghá»‰ phÃ©p cá»¥ thá»ƒ..."></textarea>
-                        <div class="form-text text-muted">LÃ½ do nÃ y chá»‰ hiá»ƒn thá»‹ vá»›i Quáº£n trá»‹ viÃªn Ä‘á»ƒ xÃ©t duyá»‡t, tuyá»‡t Ä‘á»‘i khÃ´ng gá»­i cho Bá»‡nh nhÃ¢n.</div>
+                        <label class="form-label fw-semibold">Lý Do Nghỉ Phép (Bảo mật nội bộ) <span class="text-danger">*</span></label>
+                        <textarea name="Reason" class="form-control" rows="3" required placeholder="Nhập lý do xin nghỉ phép cụ thể..."></textarea>
+                        <div class="form-text text-muted">Lý do này chỉ hiển thị với Quản trị viên để xét duyệt, tuyệt đối không gửi cho Bệnh nhân.</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Ghi ChÃº BÃ n Giao ThÃªm (KhÃ´ng báº¯t buá»™c)</label>
-                        <textarea name="Notes" class="form-control" rows="2" placeholder="Ghi chÃº vá» há»“ sÆ¡, bá»‡nh nhÃ¢n cáº§n lÆ°u Ã½..."></textarea>
+                        <label class="form-label fw-semibold">Ghi Chú Bàn Giao Thêm (Không bắt buộc)</label>
+                        <textarea name="Notes" class="form-control" rows="2" placeholder="Ghi chú về hồ sơ, bệnh nhân cần lưu ý..."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer bg-light py-2">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ÄÃ³ng</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
                     <button type="submit" class="btn btn-warning fw-semibold text-dark">
-                        <i class="bi bi-send me-1"></i> Ná»™p ÄÆ¡n Xin Nghá»‰
+                        <i class="bi bi-send me-1"></i> Nộp Đơn Xin Nghỉ
                     </button>
                 </div>
             </form>
@@ -635,14 +635,14 @@
 </div>
 
 <!-- ========================================== -->
-<!-- MODAL: DANH SÃCH ÄÆ N NGHá»ˆ Cá»¦A TÃ”I -->
+<!-- MODAL: DANH SÁCH ĐƠN NGHỈ CỦA TÔI -->
 <!-- ========================================== -->
 <div class="modal fade" id="myLeavesModal" tabindex="-1" aria-labelledby="myLeavesModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-dark text-white py-3">
                 <h5 class="modal-title fw-bold mb-0" id="myLeavesModalLabel">
-                    <i class="bi bi-card-checklist me-1"></i> Lá»‹ch Sá»­ ÄÆ¡n Xin Nghá»‰ PhÃ©p Cá»§a TÃ´i
+                    <i class="bi bi-card-checklist me-1"></i> Lịch Sử Đơn Xin Nghỉ Phép Của Tôi
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -651,7 +651,7 @@
                 {
                     <div class="text-center py-4 text-muted">
                         <i class="bi bi-journal-check fs-1 text-secondary mb-2 d-block"></i>
-                        <span>Báº¡n chÆ°a gá»­i Ä‘Æ¡n xin nghá»‰ phÃ©p nÃ o.</span>
+                        <span>Bạn chưa gửi đơn xin nghỉ phép nào.</span>
                     </div>
                 }
                 else
@@ -660,12 +660,12 @@
                         <table class="table table-hover align-middle mb-0 fs-13">
                             <thead class="table-light text-uppercase">
                                 <tr>
-                                    <th>MÃ£ ÄÆ¡n</th>
-                                    <th>Loáº¡i Nghá»‰</th>
-                                    <th>Khoáº£ng Thá»i Gian</th>
-                                    <th>LÃ½ Do</th>
-                                    <th>Tráº¡ng ThÃ¡i</th>
-                                    <th class="text-end">Thao TÃ¡c</th>
+                                    <th>Mã Đơn</th>
+                                    <th>Loại Nghỉ</th>
+                                    <th>Khoảng Thời Gian</th>
+                                    <th>Lý Do</th>
+                                    <th>Trạng Thái</th>
+                                    <th class="text-end">Thao Tác</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -675,34 +675,34 @@
                                         <td class="fw-bold">#@leave.LeaveRequestId</td>
                                         <td><span class="badge bg-light text-dark border">@(leave.LeaveTypeDisplay ?? leave.LeaveType)</span></td>
                                         <td>
-                                            <div><strong>Tá»«:</strong> @leave.StartDate.ToString("dd/MM/yyyy") @(leave.StartTime.HasValue ? leave.StartTime.Value.ToString("HH:mm") : "08:00")</div>
-                                            <div><strong>Äáº¿n:</strong> @leave.EndDate.ToString("dd/MM/yyyy") @(leave.EndTime.HasValue ? leave.EndTime.Value.ToString("HH:mm") : "17:00")</div>
+                                            <div><strong>Từ:</strong> @leave.StartDate.ToString("dd/MM/yyyy") @(leave.StartTime.HasValue ? leave.StartTime.Value.ToString("HH:mm") : "08:00")</div>
+                                            <div><strong>Đến:</strong> @leave.EndDate.ToString("dd/MM/yyyy") @(leave.EndTime.HasValue ? leave.EndTime.Value.ToString("HH:mm") : "17:00")</div>
                                         </td>
                                         <td>
                                             <div class="text-truncate" style="max-width: 180px;" title="@leave.Reason">@leave.Reason</div>
                                             @if (!string.IsNullOrEmpty(leave.RejectionReason))
                                             {
                                                 <div class="small text-danger mt-1">
-                                                    <i class="bi bi-x-circle me-1"></i>LÃ½ do tá»« chá»‘i: @leave.RejectionReason
+                                                    <i class="bi bi-x-circle me-1"></i>Lý do từ chối: @leave.RejectionReason
                                                 </div>
                                             }
                                         </td>
                                         <td>
                                             @if (leave.Status == "Pending")
                                             {
-                                                <span class="badge bg-warning text-dark border border-warning">Chá» duyá»‡t</span>
+                                                <span class="badge bg-warning text-dark border border-warning">Chờ duyệt</span>
                                             }
                                             else if (leave.Status == "Approved")
                                             {
-                                                <span class="badge bg-success">ÄÃ£ duyá»‡t</span>
+                                                <span class="badge bg-success">Đã duyệt</span>
                                             }
                                             else if (leave.Status == "Rejected")
                                             {
-                                                <span class="badge bg-danger">Tá»« chá»‘i</span>
+                                                <span class="badge bg-danger">Từ chối</span>
                                             }
                                             else if (leave.Status == "Withdrawn")
                                             {
-                                                <span class="badge bg-secondary">ÄÃ£ rÃºt</span>
+                                                <span class="badge bg-secondary">Đã rút</span>
                                             }
                                             else
                                             {
@@ -712,16 +712,16 @@
                                         <td class="text-end">
                                             @if (leave.Status == "Pending")
                                             {
-                                                <form asp-controller="DentistSchedule" asp-action="WithdrawLeaveRequest" asp-route-id="@leave.LeaveRequestId" method="post" class="d-inline" onsubmit="return confirm('Báº¡n cÃ³ cháº¯c cháº¯n muá»‘n rÃºt Ä‘Æ¡n xin nghá»‰ phÃ©p nÃ y khÃ´ng?');">
+                                                <form asp-controller="DentistSchedule" asp-action="WithdrawLeaveRequest" asp-route-id="@leave.LeaveRequestId" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn rút đơn xin nghỉ phép này không?');">
                                                     @Html.AntiForgeryToken()
                                                     <button type="submit" class="btn btn-outline-danger btn-sm py-1 px-2">
-                                                        <i class="bi bi-x-lg"></i> RÃºt Ä‘Æ¡n
+                                                        <i class="bi bi-x-lg"></i> Rút đơn
                                                     </button>
                                                 </form>
                                             }
                                             else
                                             {
-                                                <span class="text-muted">â€”</span>
+                                                <span class="text-muted">—</span>
                                             }
                                         </td>
                                     </tr>
@@ -732,7 +732,7 @@
                 }
             </div>
             <div class="modal-footer bg-light py-2">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ÄÃ³ng</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
             </div>
         </div>
     </div>

@@ -17,15 +17,18 @@ public class ReceptionistReferralController : Controller
     private readonly IPostCareApiService _postCareApi;
     private readonly IAppointmentApiService _appointmentApi;
     private readonly ITreatmentApiService _treatmentApi;
+    private readonly ICareEpisodeApiService? _careEpisodeApi;
 
     public ReceptionistReferralController(
         IPostCareApiService postCareApi,
         IAppointmentApiService appointmentApi,
-        ITreatmentApiService treatmentApi)
+        ITreatmentApiService treatmentApi,
+        ICareEpisodeApiService? careEpisodeApi = null)
     {
         _postCareApi = postCareApi;
         _appointmentApi = appointmentApi;
         _treatmentApi = treatmentApi;
+        _careEpisodeApi = careEpisodeApi;
     }
 
     [HttpGet("")]
@@ -102,5 +105,55 @@ public class ReceptionistReferralController : Controller
             return NotFound(result.Message ?? "Không tìm thấy thông tin ca chuyển khoa.");
         }
         return Json(result.Data);
+    }
+
+    [HttpPost("CoordinateEpisodeReferral")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CoordinateEpisodeReferral(CoordinateCareEpisodeReferralRequest request)
+    {
+        if (_careEpisodeApi == null)
+            return RedirectToAction(nameof(Index));
+
+        var result = await _careEpisodeApi.CoordinateReferralAsync(request);
+        if (!result.IsSuccess)
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể điều phối ca khám chuyển khoa.";
+        }
+        else
+        {
+            TempData["SuccessMessage"] = "Điều phối ca khám chuyển khoa thành công! Ca khám Trạm B đang ở trạng thái Confirmed và chờ bệnh nhân đến làm thủ tục Check-in.";
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost("StationBCheckIn")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StationBCheckIn(StationBCheckInRequest request, string? returnUrl = null)
+    {
+        if (_careEpisodeApi == null)
+            return RedirectToAction(nameof(Index));
+
+        var result = await _careEpisodeApi.StationBCheckInAsync(request);
+        if (!result.IsSuccess)
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể Check-in Trạm B.";
+        }
+        else
+        {
+            TempData["SuccessMessage"] = $"Bệnh nhân đã Check-in Trạm B thành công! Số thứ tự cấp: {result.Data?.QueueNumber}. Bác sĩ Trạm B có thể bắt đầu khám.";
+        }
+
+        if (!string.IsNullOrEmpty(returnUrl)) return LocalRedirect(returnUrl);
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpGet("EligibleDentists/{referralId:long}")]
+    public async Task<IActionResult> GetEligibleDentists(long referralId, [FromQuery] DateTime? date = null)
+    {
+        if (_careEpisodeApi == null)
+            return Json(new { success = false, message = "Dịch vụ không khả dụng" });
+
+        var result = await _careEpisodeApi.GetEligibleDentistsForReferralAsync(referralId, date);
+        return Json(new { success = result.IsSuccess, data = result.Data, message = result.Message });
     }
 }

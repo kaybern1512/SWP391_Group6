@@ -104,7 +104,7 @@ public class TreatmentController : ControllerBase
     }
 
     [HttpPut("plans/{id:long}/status")]
-    [Authorize(Roles = "Dentist,DepartmentManager,SystemAdministrator")]
+    [Authorize(Roles = "Dentist,SystemAdministrator")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdatePlanStatus(long id, [FromBody] UpdateTreatmentPlanStatusRequest request, CancellationToken ct)
@@ -118,7 +118,7 @@ public class TreatmentController : ControllerBase
     }
 
     [HttpPut("items/{itemId:long}/status")]
-    [Authorize(Roles = "Dentist,DepartmentManager,SystemAdministrator")]
+    [Authorize(Roles = "Dentist,SystemAdministrator")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateItemStatus(long itemId, [FromBody] UpdateTreatmentPlanStatusRequest request, CancellationToken ct)
     {
@@ -131,7 +131,7 @@ public class TreatmentController : ControllerBase
     }
 
     [HttpGet("sessions")]
-    [Authorize(Roles = "Dentist,DepartmentManager,SystemAdministrator")]
+    [Authorize(Roles = "Dentist,SystemAdministrator")]
     [ProducesResponseType(typeof(ApiResponse<List<TreatmentSessionDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetTreatmentSessions([FromQuery] string? search, CancellationToken ct)
     {
@@ -166,11 +166,11 @@ public class TreatmentController : ControllerBase
     }
 
     // ==========================================
-    // DEPARTMENT MANAGER ENDPOINTS
+    // DEPARTMENT / ADMIN PROGRESS ENDPOINTS
     // ==========================================
 
     [HttpGet("department/progress")]
-    [Authorize(Roles = "DepartmentManager,SystemAdministrator")]
+    [Authorize(Roles = "SystemAdministrator")]
     [ProducesResponseType(typeof(ApiResponse<TreatmentProgressSummaryDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDepartmentTreatmentProgress(
         [FromQuery] long? departmentId, [FromQuery] string? search, CancellationToken ct)
@@ -181,7 +181,7 @@ public class TreatmentController : ControllerBase
     }
 
     [HttpPost("items/{itemId:long}/assign-dentist")]
-    [Authorize(Roles = "DepartmentManager,SystemAdministrator")]
+    [Authorize(Roles = "SystemAdministrator")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> AssignPhaseDentist(long itemId, [FromBody] AssignPhaseDentistRequest request, CancellationToken ct)
@@ -214,7 +214,7 @@ public class TreatmentController : ControllerBase
     // ==========================================
 
     [HttpGet("options/patients")]
-    [Authorize(Roles = "Dentist,DepartmentManager,SystemAdministrator")]
+    [Authorize(Roles = "Dentist,SystemAdministrator")]
     [ProducesResponseType(typeof(ApiResponse<List<TreatmentPatientOptionDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPatientOptions(CancellationToken ct)
     {
@@ -232,7 +232,7 @@ public class TreatmentController : ControllerBase
     }
 
     [HttpGet("options/dentists")]
-    [Authorize(Roles = "Dentist,DepartmentManager,SystemAdministrator")]
+    [Authorize(Roles = "Dentist,SystemAdministrator")]
     [ProducesResponseType(typeof(ApiResponse<List<TreatmentDentistOptionDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDentistOptions([FromQuery] long? departmentId, CancellationToken ct)
     {
@@ -242,7 +242,7 @@ public class TreatmentController : ControllerBase
 
     /// <summary>
     /// WF-11: Bác sĩ lập lịch hẹn tái khám trực tiếp từ Phác đồ điều trị.
-    /// Lịch hẹn đi thẳng trạng thái PendingDepartmentReview để Trưởng khoa phân bổ phòng/ghế.
+    /// Lịch hẹn chuyển sang Lễ tân xác nhận điều phối phòng/ghế.
     /// </summary>
     [HttpPost("plans/{id:long}/follow-up-appointment")]
     [Authorize(Roles = "Dentist,SystemAdministrator")]

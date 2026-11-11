@@ -293,11 +293,11 @@ public class AdminDentistScheduleController : Controller
         var result = await _leaveApi!.ApproveLeaveRequestAsync(id, new ApproveDentistLeaveRequest { AdminNotes = adminNotes });
         if (result.IsSuccess)
         {
-            TempData["SuccessMessage"] = "PhÃª duyá»‡t Ä‘Æ¡n xin nghá»‰ phÃ©p thÃ nh cÃ´ng. Há»‡ thá»‘ng Ä‘Ã£ tá»± Ä‘á»™ng táº¡o sá»± cá»‘ giÃ¡n Ä‘oáº¡n vÃ  gá»­i thÃ´ng bÃ¡o khÃ´i phá»¥c lá»‹ch cho bá»‡nh nhÃ¢n.";
+            TempData["SuccessMessage"] = "Phê duyệt đơn xin nghỉ phép thành công. Hệ thống đã tự động tạo sự cố gián đoạn và gửi thông báo khôi phục lịch cho bệnh nhân.";
         }
         else
         {
-            TempData["ErrorMessage"] = result.Message ?? "KhÃ´ng thá»ƒ phÃª duyá»‡t Ä‘Æ¡n nghá»‰ phÃ©p.";
+            TempData["ErrorMessage"] = result.Message ?? "Không thể phê duyệt đơn nghỉ phép.";
         }
         return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
     }
@@ -308,18 +308,18 @@ public class AdminDentistScheduleController : Controller
     {
         if (string.IsNullOrWhiteSpace(rejectionReason))
         {
-            TempData["ErrorMessage"] = "Vui lÃ²ng nháº­p lÃ½ do tá»« chá»‘i Ä‘Æ¡n xin nghá»‰ phÃ©p.";
+            TempData["ErrorMessage"] = "Vui lòng nhập lý do từ chối đơn xin nghỉ phép.";
             return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
         }
 
         var result = await _leaveApi!.RejectLeaveRequestAsync(id, new RejectDentistLeaveRequest { RejectionReason = rejectionReason });
         if (result.IsSuccess)
         {
-            TempData["SuccessMessage"] = "ÄÃ£ tá»« chá»‘i Ä‘Æ¡n xin nghá»‰ phÃ©p.";
+            TempData["SuccessMessage"] = "Đã từ chối đơn xin nghỉ phép.";
         }
         else
         {
-            TempData["ErrorMessage"] = result.Message ?? "KhÃ´ng thá»ƒ tá»« chá»‘i Ä‘Æ¡n nghá»‰ phÃ©p.";
+            TempData["ErrorMessage"] = result.Message ?? "Không thể từ chối đơn nghỉ phép.";
         }
         return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
     }

@@ -68,6 +68,7 @@ public static class DependencyInjection
         services.AddScoped<IPrescriptionService, PrescriptionService>();
         services.AddScoped<ITreatmentService, TreatmentService>();
         services.AddScoped<IBillingService, BillingService>();
+        services.AddScoped<ICareEpisodeService, CareEpisodeService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IPostCareService, PostCareService>();
         services.AddScoped<IFollowUpSchedulingService, FollowUpSchedulingService>();
@@ -91,6 +92,7 @@ services.AddScoped<IReceptionistCoverageService, ReceptionistCoverageService>();
 
         // Clinical Diagnostics & Imaging Services
         services.AddScoped<IImagingService, ImagingService>();
+        services.AddScoped<IXrayRosterService, XrayRosterService>();
         services.AddHostedService<AppointmentReminderBackgroundWorker>();
         services.AddHostedService<AppointmentDisruptionBackgroundWorker>();
 

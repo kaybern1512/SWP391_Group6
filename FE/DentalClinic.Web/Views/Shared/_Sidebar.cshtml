@@ -173,7 +173,7 @@
             <div class="nav-group-title">Khám & Điều Trị Lâm Sàng</div>
             <a class="sidebar-link @(currentCtrl == "DentistAppointment" ? "active" : "")" asp-controller="DentistAppointment" asp-action="Today">
                 <i class="bi bi-calendar-check"></i>
-                <span>Ca Khám Hôm Nay</span>
+                <span>Lịch Trình Khám & Điều Trị</span>
             </a>
             <a class="sidebar-link @(currentCtrl == "DentistMedicalRecord" ? "active" : "")" asp-controller="DentistMedicalRecord" asp-action="Index">
                 <i class="bi bi-journal-medical"></i>
@@ -214,6 +214,10 @@
             <a class="sidebar-link @(currentCtrl == "AttendanceWeb" ? "active" : "")" asp-controller="AttendanceWeb" asp-action="Index">
                 <i class="bi bi-clock-history"></i>
                 <span>Chấm Công Ca Trực</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "DentistXrayQueue" ? "active" : "")" asp-controller="DentistXrayQueue" asp-action="Index">
+                <i class="bi bi-camera"></i>
+                <span>Ca Trực Phòng X-Quang</span>
             </a>
 
 

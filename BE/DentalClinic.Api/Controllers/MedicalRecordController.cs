@@ -44,7 +44,7 @@ public class MedicalRecordController : ControllerBase
     }
 
     [HttpGet("patient/{patientUserId:long}")]
-    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.Receptionist},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.Receptionist}")]
     [ProducesResponseType(typeof(ApiResponse<MedicalRecordDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetByPatientId(long patientUserId, CancellationToken ct)
     {
@@ -125,7 +125,7 @@ public class MedicalRecordController : ControllerBase
     }
 
     [HttpPost("clinical-entries/{id:long}/imaging")]
-    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(ApiResponse<ImagingRecordMetadataDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<ImagingRecordMetadataDto>), StatusCodes.Status400BadRequest)]
@@ -197,7 +197,7 @@ public class MedicalRecordController : ControllerBase
     }
 
     [HttpGet("clinical-entries/{id:long}/imaging")]
-    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Patient},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Patient},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<List<ImagingRecordDto>>), StatusCodes.Status401Unauthorized)]
@@ -241,7 +241,7 @@ public class MedicalRecordController : ControllerBase
     }
 
     [HttpGet("imaging/{imagingRecordId:long}")]
-    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Patient},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Patient},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<ImagingRecordDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<ImagingRecordDto>), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiResponse<ImagingRecordDto>), StatusCodes.Status403Forbidden)]
@@ -279,7 +279,7 @@ public class MedicalRecordController : ControllerBase
     }
 
     [HttpGet("imaging/{imagingRecordId:long}/content")]
-    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Patient},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Patient},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status403Forbidden)]
@@ -319,7 +319,7 @@ public class MedicalRecordController : ControllerBase
     }
 
     [HttpDelete("imaging/{imagingRecordId:long}")]
-    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status403Forbidden)]
@@ -357,7 +357,7 @@ public class MedicalRecordController : ControllerBase
     }
 
     [HttpDelete("clinical-entries/{id:long}/imaging/{imagingRecordId:long}")]
-    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status403Forbidden)]

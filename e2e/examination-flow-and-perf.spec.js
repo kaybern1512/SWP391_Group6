@@ -5,7 +5,7 @@ const { execSync } = require('child_process');
 
 function resetTestAppointment() {
   try {
-    execSync('sqlcmd -S .\\SQLEXPRESS -d DentalCare_Performance_QA -Q "SET QUOTED_IDENTIFIER ON; UPDATE Appointments SET Status = \'CheckedIn\', DentalChairId = 1, RoomId = 1, AssignedDentistUserId = 3 WHERE AppointmentCode = \'APP-PERF-TEST-01\';"');
+    execSync('sqlcmd -S .\\SQLEXPRESS -d DentalCare_Performance_QA -Q "SET QUOTED_IDENTIFIER ON; UPDATE Appointments SET Status = \'CheckedIn\', DentalChairId = 1, RoomId = 1, AssignedDentistUserId = 3, ScheduledStart = DATEADD(hour, 10, CAST(CAST(GETDATE() AS DATE) AS DATETIME)), ScheduledEnd = DATEADD(hour, 11, CAST(CAST(GETDATE() AS DATE) AS DATETIME)) WHERE AppointmentCode = \'APP-PERF-TEST-01\';"');
   } catch (err) {
     console.error('Failed to reset test appointment:', err);
   }

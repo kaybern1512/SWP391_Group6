@@ -1190,7 +1190,7 @@ public class BlogService : IBlogService
                 return name;
             }
 
-            return (user.Role == UserRole.Dentist || user.Role == UserRole.DepartmentManager)
+            return (user.Role == UserRole.Dentist)
                 ? $"BS. {name}"
                 : name;
         }

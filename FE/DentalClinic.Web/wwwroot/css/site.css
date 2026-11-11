@@ -45,6 +45,43 @@
   --dc-shadow-subtle: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
   --dc-shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 2px 4px -1px rgb(0 0 0 / 0.03);
   --dc-shadow-hover: 0 4px 12px -2px rgb(0 0 0 / 0.08), 0 2px 6px -2px rgb(0 0 0 / 0.04);
+
+  /* ==========================================================================
+     Standardized Typography System
+     ========================================================================== */
+  --dc-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --dc-font-heading: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --dc-font-mono: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+  /* Standard Font Weights */
+  --dc-fw-light: 300;
+  --dc-fw-regular: 400;
+  --dc-fw-medium: 500;
+  --dc-fw-semibold: 600;
+  --dc-fw-bold: 700;
+  --dc-fw-extrabold: 800;
+
+  /* Standard Line Heights */
+  --dc-lh-tight: 1.25;
+  --dc-lh-snug: 1.375;
+  --dc-lh-base: 1.55;
+  --dc-lh-relaxed: 1.65;
+
+  /* Standard Letter Spacing */
+  --dc-tracking-tight: -0.025em;
+  --dc-tracking-snug: -0.0125em;
+  --dc-tracking-normal: 0em;
+  --dc-tracking-wide: 0.04em;
+  --dc-tracking-wider: 0.08em;
+
+  /* Bootstrap 5 Framework Typography Bridges */
+  --bs-body-font-family: var(--dc-font-sans);
+  --bs-font-sans-serif: var(--dc-font-sans);
+  --bs-font-monospace: var(--dc-font-mono);
+  --bs-body-font-size: 0.9375rem;
+  --bs-body-line-height: var(--dc-lh-base);
+  --bs-body-color: var(--dc-text-main);
+  --bs-heading-color: var(--dc-navy-primary);
 }
 
 /* Base Document Typography & Layout */
@@ -52,24 +89,90 @@
   box-sizing: border-box;
 }
 
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  font-size: 0.9375rem; /* 15px */
-  line-height: 1.55;
-  color: var(--dc-text-main);
-  background-color: var(--dc-bg);
-  min-height: 100vh;
+html {
+  font-family: var(--dc-font-sans);
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4, h5, h6,
-.font-heading {
-  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-weight: 700;
+body {
+  font-family: var(--dc-font-sans);
+  font-size: 0.9375rem; /* 15px */
+  line-height: var(--dc-lh-base);
+  font-weight: 400;
   color: var(--dc-text-main);
-  letter-spacing: -0.02em;
+  background-color: var(--dc-bg);
+  min-height: 100vh;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+button, input, optgroup, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6,
+.font-heading,
+.navbar-brand,
+.modal-title,
+.offcanvas-title {
+  font-family: var(--dc-font-heading);
+  font-weight: 700;
+  color: var(--dc-navy-primary);
+  letter-spacing: var(--dc-tracking-tight);
+  line-height: var(--dc-lh-tight);
+}
+
+h1, .h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; }
+h2, .h2 { font-size: 1.625rem; font-weight: 700; letter-spacing: -0.025em; }
+h3, .h3 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
+h4, .h4 { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.015em; }
+h5, .h5 { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
+h6, .h6 { font-size: 0.875rem; font-weight: 600; letter-spacing: 0; }
+
+p {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  line-height: var(--dc-lh-base);
+}
+
+.lead {
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: var(--dc-lh-relaxed);
+  color: var(--dc-text-muted);
+}
+
+small, .small {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+/* Typography Utility Classes */
+.font-heading { font-family: var(--dc-font-heading) !important; }
+.font-sans { font-family: var(--dc-font-sans) !important; }
+.font-mono { font-family: var(--dc-font-mono) !important; }
+
+.fw-light { font-weight: var(--dc-fw-light) !important; }
+.fw-normal { font-weight: var(--dc-fw-regular) !important; }
+.fw-medium { font-weight: var(--dc-fw-medium) !important; }
+.fw-semibold { font-weight: var(--dc-fw-semibold) !important; }
+.fw-bold { font-weight: var(--dc-fw-bold) !important; }
+.fw-extrabold { font-weight: var(--dc-fw-extrabold) !important; }
+
+.tracking-tight { letter-spacing: var(--dc-tracking-tight) !important; }
+.tracking-snug { letter-spacing: var(--dc-tracking-snug) !important; }
+.tracking-normal { letter-spacing: var(--dc-tracking-normal) !important; }
+.tracking-wide { letter-spacing: var(--dc-tracking-wide) !important; }
+.tracking-wider { letter-spacing: var(--dc-tracking-wider) !important; }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
@@ -232,7 +335,7 @@ h1, h2, h3, h4, h5, h6,
    Button System
    ========================================================================== */
 .btn {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--dc-font-sans);
   font-weight: 600;
   letter-spacing: -0.01em;
   padding: 0.55rem 1.15rem;
@@ -318,7 +421,6 @@ h1, h2, h3, h4, h5, h6,
 .badge-role-patient { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
 .badge-role-dentist { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
 .badge-role-receptionist { background-color: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe; }
-.badge-role-departmentmanager { background-color: #ccfbf1; color: #0f766e; border: 1px solid #99f6e4; }
 .badge-role-systemadministrator { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
 
 /* Status Badges */

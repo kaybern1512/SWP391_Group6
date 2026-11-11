@@ -1,0 +1,188 @@
+@model DentalClinic.Web.Models.ApiDtos.AppointmentDto
+@{
+    var currentDate = ViewData["CurrentDate"] as string ?? (Model.ScheduledStart?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"));
+    var returnUrl = ViewData["ReturnUrl"] as string ?? "";
+    var isExamining = Model.Status == "InService";
+}
+
+<tr>
+    <td class="ps-3 text-center">
+        @if (!string.IsNullOrEmpty(Model.QueueNumber))
+        {
+            <div class="badge bg-primary fs-5 px-3 py-2 font-monospace shadow-sm">
+                @Model.QueueNumber
+            </div>
+        }
+        else
+        {
+            <span class="text-muted font-monospace">--</span>
+        }
+    </td>
+    <td>
+        <span class="fw-bold font-monospace text-dark">@Model.AppointmentCode</span>
+        @if (Model.ScheduledStart.HasValue)
+        {
+            <div class="text-muted small">@Model.ScheduledStart.Value.ToString("dd/MM/yyyy")</div>
+        }
+    </td>
+    <td>
+        <div class="fw-bold text-dark">@Model.PatientName</div>
+        <div class="text-muted small">Mã: @Model.PatientCode &bull; SĐT: @(Model.PatientPhone ?? "N/A")</div>
+    </td>
+    <td>
+        <div class="fw-semibold text-primary">@Model.ServiceName</div>
+        <div class="text-muted small">@Model.DepartmentName</div>
+    </td>
+    <td>
+        <div class="fw-bold text-success fs-6">
+            @(Model.ScheduledStart?.ToString("HH:mm") ?? "--") - @(Model.ScheduledEnd?.ToString("HH:mm") ?? "--")
+        </div>
+        <div class="text-muted small">Thời lượng: @(Model.DurationMinutes ?? 30) phút</div>
+    </td>
+    <td>
+        <div class="fw-semibold text-dark"><i class="bi bi-geo-alt me-1 text-danger"></i>@(Model.RoomName ?? "--")</div>
+        @if (Model.DentalChairId.HasValue && !string.IsNullOrWhiteSpace(Model.DentalChairName))
+        {
+            <div class="text-success small fw-semibold d-flex align-items-center gap-1 mt-1">
+                <i class="bi bi-check-circle"></i> Ghế: @Model.DentalChairName
+                @if (Model.Status != "Completed" && Model.Status != "Cancelled")
+                {
+                    <button type="button" class="btn btn-link p-0 text-muted ms-1" style="font-size: 0.75rem;" title="Đổi ghế khác" onclick="openPickChairModal(@Model.AppointmentId, '@Model.PatientName', '@(Model.RoomName ?? "")', @Model.DentalChairId.Value)">
+                        <i class="bi bi-arrow-repeat"></i>
+                    </button>
+                }
+                else
+                {
+                    <span class="text-muted ms-1 small" title="Ca khám đã hoàn tất, vị trí ghế đã được khóa"><i class="bi bi-lock-fill"></i></span>
+                }
+            </div>
+        }
+        else
+        {
+            @if (Model.Status != "Completed" && Model.Status != "Cancelled")
+            {
+                <div class="mt-1">
+                    <button type="button" class="btn btn-sm btn-outline-warning text-dark py-0 px-2 d-inline-flex align-items-center gap-1 shadow-sm" style="font-size: 0.78rem;" onclick="openPickChairModal(@Model.AppointmentId, '@Model.PatientName', '@(Model.RoomName ?? "")', 0)">
+                        <i class="bi bi-pin-map text-warning"></i> <strong>Pick Ghế</strong>
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="text-muted small mt-1"><em>(Chưa gán ghế)</em></div>
+            }
+        }
+    </td>
+    <td style="max-width: 200px;">
+        <div class="small text-truncate" title="@Model.ReasonForVisit">
+            @(string.IsNullOrWhiteSpace(Model.ReasonForVisit) ? "--" : Model.ReasonForVisit)
+        </div>
+    </td>
+    <td>
+        @switch (Model.Status)
+        {
+            case "CheckedIn":
+                <span class="badge bg-success px-3 py-2">
+                    <i class="bi bi-person-check me-1"></i>Đã Check-in
+                </span>
+                break;
+            case "Confirmed":
+                <span class="badge bg-info text-dark px-3 py-2">
+                    <i class="bi bi-clock me-1"></i>Chờ đến phòng khám
+                </span>
+                break;
+            case "InService":
+                <span class="badge bg-primary px-3 py-2">
+                    <i class="bi bi-heart-pulse-fill me-1"></i>Đang điều trị
+                </span>
+                break;
+            case "Completed":
+                <span class="badge bg-secondary px-3 py-2">
+                    <i class="bi bi-check-all me-1"></i>Đã xong
+                </span>
+                break;
+            case "Cancelled":
+            case "Rejected":
+                <span class="badge bg-danger px-3 py-2">
+                    <i class="bi bi-x-circle me-1"></i>@(Model.Status == "Rejected" ? "Từ chối" : "Đã hủy")
+                </span>
+                break;
+            case "PendingReceptionReview":
+            case "PendingDepartmentReview":
+                <span class="badge bg-warning text-dark px-3 py-2">
+                    <i class="bi bi-hourglass-split me-1"></i>Chờ duyệt
+                </span>
+                break;
+            default:
+                <span class="badge bg-light text-dark border px-3 py-2">@Model.Status</span>
+                break;
+        }
+    </td>
+    <td class="text-end pe-3">
+        <div class="d-flex align-items-center justify-content-end gap-1 flex-wrap">
+            @if (Model.Status == "CheckedIn" || Model.Status == "Waiting")
+            {
+                @if (Model.DentalChairId.HasValue && Model.DentalChairId.Value > 0)
+                {
+                    <form asp-controller="DentistAppointment" asp-action="Start" asp-route-id="@Model.AppointmentId" method="post" class="d-inline start-exam-form">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="date" value="@currentDate" />
+                        <input type="hidden" name="returnUrl" value="@returnUrl" />
+                        <button type="submit" class="btn btn-sm btn-primary fw-semibold shadow-sm text-nowrap btn-start-exam" title="Tiếp nhận bệnh nhân vào ghế và bắt đầu khám bệnh">
+                            <i class="bi bi-box-arrow-in-right me-1"></i>Vào Khám
+                        </button>
+                    </form>
+                }
+                else
+                {
+                    <button type="button" class="btn btn-sm btn-warning text-dark fw-semibold shadow-sm text-nowrap" onclick="openPickChairModal(@Model.AppointmentId, '@Model.PatientName', '@(Model.RoomName ?? "")', 0)" title="Vui lòng chọn ghế nha khoa trước khi vào khám">
+                        <i class="bi bi-pin-map-fill me-1"></i>Chọn Ghế Để Khám
+                    </button>
+                }
+            }
+            else if (Model.Status == "Confirmed")
+            {
+                <span class="badge bg-secondary-subtle text-secondary border px-2 py-1 small" title="Chờ bệnh nhân làm thủ tục check-in tại quầy tiếp đón">
+                    <i class="bi bi-hourglass me-1"></i>Chờ Check-in
+                </span>
+            }
+            else if (Model.Status == "InService")
+            {
+                <a asp-controller="DentistMedicalRecord" asp-action="Index" 
+                   asp-route-patientId="@Model.PatientUserId" 
+                   asp-route-appointmentId="@Model.AppointmentId" 
+                   asp-route-isExamining="true" 
+                   class="btn btn-sm btn-success fw-semibold shadow-sm text-nowrap pulse-btn" 
+                   title="Mở hồ sơ bệnh án và tiếp tục buổi khám & điều trị">
+                    <i class="bi bi-heart-pulse-fill me-1"></i>Tiếp Tục Khám
+                </a>
+            }
+
+            <a asp-controller="DentistMedicalRecord" asp-action="Index" asp-route-patientId="@Model.PatientUserId" asp-route-appointmentId="@Model.AppointmentId" class="btn btn-sm btn-outline-primary" title="Xem trước hồ sơ bệnh án & Sơ đồ răng">
+                <i class="bi bi-journal-medical me-1"></i> Bệnh Án
+            </a>
+            <a asp-controller="DentistTreatmentPlan" asp-action="Create" asp-route-patientId="@Model.PatientUserId" class="btn btn-sm btn-outline-info" title="Lập phác đồ & kế hoạch điều trị cho bệnh nhân">
+                <i class="bi bi-diagram-3 me-1"></i>Phác Đồ
+            </a>
+            @if (Model.Status == "InService" || Model.Status == "Completed")
+            {
+                <a asp-controller="DentistPrescription" 
+                   asp-action="Index" 
+                   asp-route-appointmentId="@Model.AppointmentId" 
+                   asp-route-search="@Model.PatientCode" 
+                   asp-route-autoOpen="true" 
+                   asp-route-returnUrl="@returnUrl" 
+                   class="btn btn-sm btn-outline-success fw-medium" 
+                   title="Kê đơn thuốc trực tiếp cho ca khám này">
+                    <i class="bi bi-capsule me-1"></i>Đơn Thuốc
+                </a>
+            }
+            else
+            {
+                <button type="button" class="btn btn-sm btn-outline-secondary opacity-50" disabled title="Bác sĩ cần vào khám và chẩn đoán trước khi kê đơn thuốc">
+                    <i class="bi bi-capsule me-1"></i>Đơn Thuốc
+                </button>
+            }
+        </div>
+    </td>
+</tr>

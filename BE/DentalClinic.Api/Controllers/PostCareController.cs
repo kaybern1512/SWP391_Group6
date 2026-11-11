@@ -72,7 +72,7 @@ public class PostCareController : ControllerBase
     }
 
     [HttpGet("referrals/department")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<List<DepartmentReferralDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDepartmentReferrals([FromQuery] string? status, CancellationToken ct)
     {
@@ -82,7 +82,7 @@ public class PostCareController : ControllerBase
     }
 
     [HttpPost("referrals/{id:long}/review")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<DepartmentReferralDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<DepartmentReferralDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ReviewReferral(long id, [FromBody] ReviewReferralRequest request, CancellationToken ct)
@@ -156,7 +156,7 @@ public class PostCareController : ControllerBase
     }
 
     [HttpPatch("follow-ups/{id:long}/status")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.Patient},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.Dentist},{UserRole.SystemAdministrator},{UserRole.Patient}")]
     [ProducesResponseType(typeof(ApiResponse<FollowUpScheduleDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<FollowUpScheduleDto>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<FollowUpScheduleDto>), StatusCodes.Status403Forbidden)]

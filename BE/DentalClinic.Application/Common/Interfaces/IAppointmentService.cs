@@ -39,7 +39,7 @@ public interface IAppointmentService
         long? dentistId = null,
         string? status = null,
         CancellationToken ct = default);
-    Task<ApiResponse> ReceptionistCheckInAsync(long appointmentId, long staffUserId, string? note, CancellationToken ct = default);
+    Task<ApiResponse> ReceptionistCheckInAsync(long appointmentId, long staffUserId, string? note = null, CancellationToken ct = default);
     Task<ApiResponse> ReceptionistMarkNoShowAsync(long appointmentId, long staffUserId, string? note = null, CancellationToken ct = default);
     Task<ApiResponse> StaffCancelAppointmentAsync(long appointmentId, long staffUserId, string reason, CancellationToken ct = default);
     Task<ApiResponse<AppointmentDto>> ReceptionistConfirmAsync(long appointmentId, long receptionistUserId, ManagerConfirmRequest request, CancellationToken ct = default);
@@ -54,7 +54,22 @@ public interface IAppointmentService
 
     // Dentist Operations
     Task<ApiResponse<List<AppointmentDto>>> GetDentistTodayAppointmentsAsync(long dentistUserId, CancellationToken ct = default);
-    Task<ApiResponse<List<AppointmentDto>>> GetDentistAppointmentsAsync(long dentistUserId, DateOnly? fromDate = null, DateOnly? toDate = null, CancellationToken ct = default);
+    Task<ApiResponse<List<AppointmentDto>>> GetDentistAppointmentsAsync(
+        long dentistUserId,
+        DateOnly? fromDate = null,
+        DateOnly? toDate = null,
+        TimeOnly? fromTime = null,
+        TimeOnly? toTime = null,
+        string? status = null,
+        long? roomId = null,
+        long? dentalChairId = null,
+        string? searchTerm = null,
+        CancellationToken ct = default);
+    Task<ApiResponse<List<AppointmentDto>>> GetDentistAppointmentsAsync(
+        long dentistUserId,
+        DentistAppointmentFilterQuery filter,
+        CancellationToken ct = default);
+    Task<ApiResponse<List<RoomOptionDto>>> GetDentistRoomsAsync(long dentistUserId, CancellationToken ct = default);
     Task<ApiResponse<StartAppointmentResultDto>> DentistStartAppointmentAsync(long appointmentId, long dentistUserId, CancellationToken ct = default);
     Task<ApiResponse> DentistCompleteAppointmentAsync(long appointmentId, long dentistUserId, string? notes = null, CancellationToken ct = default);
     Task<ApiResponse<List<ChairOptionDto>>> GetDentistRoomChairsAsync(long appointmentId, long dentistUserId, CancellationToken ct = default);

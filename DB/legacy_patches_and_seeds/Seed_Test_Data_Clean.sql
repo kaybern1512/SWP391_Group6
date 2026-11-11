@@ -119,30 +119,7 @@ BEGIN TRY
     END;
 
     ---------------------------------------------------------------------
-    -- 6. DEPARTMENT MANAGER
-    -- Email: manager@dentalcare.com / Password123@
-    ---------------------------------------------------------------------
-    DECLARE @ManagerUserId BIGINT;
-    IF NOT EXISTS (SELECT 1 FROM UserAccounts WHERE Email = 'manager@dentalcare.com')
-    BEGIN
-        INSERT INTO UserAccounts (Email, PhoneNumber, PasswordHash, Role, Status, EmailVerifiedAt, CreatedAt)
-        VALUES ('manager@dentalcare.com', '0900000004', @PasswordHash, 'DepartmentManager', 'Active', @Now, @Now);
-
-        SET @ManagerUserId = SCOPE_IDENTITY();
-
-        INSERT INTO StaffProfiles (UserId, EmployeeCode, FullName, EmploymentStatus, CreatedAt)
-        VALUES (@ManagerUserId, 'EMP-MGR-001', N'Trưởng Khoa Lê Hoàng Nam', 'Active', @Now);
-
-        IF @ImplantDeptId IS NOT NULL
-        BEGIN
-            UPDATE Departments
-            SET ManagerUserId = @ManagerUserId
-            WHERE DepartmentId = @ImplantDeptId;
-        END;
-    END;
-
-    ---------------------------------------------------------------------
-    -- 7. PATIENT
+    -- 6. PATIENT
     -- Email: lehoangminh.test@dentalcare.com / Password123@
     ---------------------------------------------------------------------
     DECLARE @PatientUserId BIGINT;

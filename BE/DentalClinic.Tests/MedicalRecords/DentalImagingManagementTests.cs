@@ -241,7 +241,7 @@ public class DentalImagingManagementTests
     }
 
     [Fact]
-    public async Task GetImagingRecordsByClinicalEntryIdAsync_WhenAdminOrManager_ReturnsSuccess()
+    public async Task GetImagingRecordsByClinicalEntryIdAsync_WhenAdmin_ReturnsSuccess()
     {
         using var db = CreateDbContext(Guid.NewGuid().ToString());
         var (_, entry) = await SeedClinicalEntryAsync(db, patientUserId: 1, dentistUserId: 10, clinicalEntryId: 207);
@@ -251,9 +251,6 @@ public class DentalImagingManagementTests
 
         var adminResponse = await service.GetImagingRecordsByClinicalEntryIdAsync(888, UserRole.SystemAdministrator, entry.ClinicalEntryId);
         Assert.True(adminResponse.Success);
-
-        var managerResponse = await service.GetImagingRecordsByClinicalEntryIdAsync(999, UserRole.DepartmentManager, entry.ClinicalEntryId);
-        Assert.True(managerResponse.Success);
     }
 
     [Fact]

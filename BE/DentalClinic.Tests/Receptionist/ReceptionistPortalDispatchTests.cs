@@ -239,7 +239,7 @@ public class ReceptionistPortalDispatchTests
         var db = CreateInMemoryDb(Guid.NewGuid().ToString());
         await SeedDepartmentsAndDentistsAsync(db);
 
-        var today = ClinicTimeHelper.Today.Date;
+        var testDate = ClinicTimeHelper.Today.Date.AddDays(1);
         var service = new AppointmentService(db, _mockNotification.Object, null, null, _mockLogger.Object, _mockHubContext.Object);
 
         // Walk-in 1 on Dept 1: Khoa Răng Tổng Quát -> "TQ"
@@ -251,7 +251,7 @@ public class ReceptionistPortalDispatchTests
             AssignedDentistUserId = 301,
             RoomId = 1,
             DentalChairId = 1,
-            ScheduledStart = today.AddHours(9),
+            ScheduledStart = testDate.AddHours(9),
             AutoConfirm = true,
             AutoCheckIn = true
         });
@@ -269,7 +269,7 @@ public class ReceptionistPortalDispatchTests
             AssignedDentistUserId = 301,
             RoomId = 1,
             DentalChairId = 1,
-            ScheduledStart = today.AddHours(9).AddMinutes(30),
+            ScheduledStart = testDate.AddHours(9).AddMinutes(30),
             AutoConfirm = true,
             AutoCheckIn = true
         });
@@ -286,7 +286,7 @@ public class ReceptionistPortalDispatchTests
             AssignedDentistUserId = 301,
             RoomId = 2,
             DentalChairId = 2,
-            ScheduledStart = today.AddHours(10),
+            ScheduledStart = testDate.AddHours(10),
             AutoConfirm = true,
             AutoCheckIn = true
         });
@@ -303,7 +303,7 @@ public class ReceptionistPortalDispatchTests
             AssignedDentistUserId = 301,
             RoomId = 3,
             DentalChairId = 3,
-            ScheduledStart = today.AddHours(11),
+            ScheduledStart = testDate.AddHours(11),
             AutoConfirm = true,
             AutoCheckIn = true
         });

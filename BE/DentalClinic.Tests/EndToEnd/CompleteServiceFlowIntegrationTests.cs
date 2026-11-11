@@ -31,7 +31,7 @@ public class CompleteServiceFlowIntegrationTests
 
             var server = Environment.GetEnvironmentVariable("TEST_SQL_SERVER")
                          ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE")
-                         ?? ".\\MSSQLSERVER01";
+                         ?? ".\\SQLEXPRESS";
             var dbName = Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Integration_Dev";
             return $"Server={server};Database={dbName};Trusted_Connection=True;TrustServerCertificate=True;";
         }
@@ -157,7 +157,7 @@ public class CompleteServiceFlowIntegrationTests
             ScheduledStart = testDate,
             ScheduledEnd = testDate.AddMinutes(60)
         };
-        var confirmRes = await apptService.ManagerConfirmAsync(apptId, managerUserId, confirmReq);
+        var confirmRes = await apptService.ManagerConfirmAsync(apptId, receptionistUserId, confirmReq);
         Assert.True(confirmRes.Success, confirmRes.Message);
         _output.WriteLine($"[BƯỚC 3] Trưởng khoa duyệt ca & cấp STT: {confirmRes.Data!.QueueNumber} - Bác sĩ phụ trách: BS. Trần Văn Hùng");
 

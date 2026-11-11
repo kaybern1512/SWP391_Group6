@@ -91,7 +91,7 @@ public class FeedbackController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<FeedbackPagedResultDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetFeedbacks([FromQuery] FeedbackFilterRequest request, CancellationToken ct)
     {

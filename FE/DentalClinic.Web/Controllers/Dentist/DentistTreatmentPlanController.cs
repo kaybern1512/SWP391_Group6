@@ -219,7 +219,7 @@ public class DentistTreatmentPlanController : Controller
             return RedirectToAction(nameof(Detail), new { id });
         }
 
-        TempData["SuccessMessage"] = $"Lập lịch tái khám phác đồ thành công (Mã: {result.Data?.AppointmentCode})! Yêu cầu đã chuyển thẳng tới Trưởng khoa để phê duyệt phòng/ghế.";
+        TempData["SuccessMessage"] = $"Lập lịch tái khám phác đồ thành công (Mã: {result.Data?.AppointmentCode})! Lễ tân sẽ xác nhận điều phối phòng/ghế.";
         return RedirectToAction(nameof(Detail), new { id });
     }
 }

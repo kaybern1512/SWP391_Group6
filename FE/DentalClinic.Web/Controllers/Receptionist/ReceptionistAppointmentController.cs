@@ -179,7 +179,7 @@ public class ReceptionistAppointmentController : Controller
         var result = await _appointmentApiService.CreateReceptionistAppointmentAsync(request);
         if (result.IsSuccess)
         {
-            TempData["SuccessMessage"] = $"Tạo lịch hẹn thành công! Mã lịch: {result.Data?.AppointmentCode}. Lịch hẹn đã chuyển tiếp cho Trưởng khoa xếp phòng & bác sĩ.";
+            TempData["SuccessMessage"] = $"Tạo lịch hẹn thành công! Mã lịch: {result.Data?.AppointmentCode}.";
             return RedirectToAction(nameof(Requests));
         }
 
@@ -301,7 +301,7 @@ public class ReceptionistAppointmentController : Controller
         var result = await _appointmentApiService.ReceptionistForwardAsync(id, note);
         if (result.IsSuccess)
         {
-            TempData["SuccessMessage"] = "Đã chuyển tiếp yêu cầu đặt lịch cho Trưởng khoa xử lý.";
+            TempData["SuccessMessage"] = "Đã chuyển tiếp yêu cầu đặt lịch để xác nhận điều phối.";
         }
         else
         {
@@ -595,7 +595,7 @@ public class ReceptionistAppointmentController : Controller
         var result = await _disruptionApi!.ReceptionistResolveDisruptionAsync(id, req);
         if (result.IsSuccess)
         {
-            TempData["SuccessMessage"] = "Äiá»u phá»‘i vÃ  xá»­ lÃ½ giÃ¡n Ä‘oáº¡n lá»‹ch háº¹n thÃ nh cÃ´ng!";
+            TempData["SuccessMessage"] = "Điều phối và xử lý gián đoạn lịch hẹn thành công!";
         }
         else
         {

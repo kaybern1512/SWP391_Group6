@@ -24,7 +24,7 @@ public class CombinedCrossFeatureLifecycleIntegrationTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("TEST_SQL_CONNECTION")
-        ?? "Server=.\\MSSQLSERVER01;Database=DentalCare_Combined_Leave_QA;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database={Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Combined_Leave_QA"};Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
 
     private static DentalClinicDbContext CreateDbContext()
     {
@@ -39,6 +39,16 @@ public class CombinedCrossFeatureLifecycleIntegrationTests
         using var db = CreateDbContext();
         var dtStart = testDate.ToDateTime(new TimeOnly(0, 0));
         var dtEnd = testDate.ToDateTime(new TimeOnly(23, 59, 59));
+
+        // 0. Clean stale InService appointments for test chair or dentists
+        var staleInService = await db.Appointments
+            .Where(a => a.Status == AppointmentStatus.InService && (a.DentalChairId == 1 || a.AssignedDentistUserId == 3 || a.AssignedDentistUserId == 6))
+            .ToListAsync();
+        foreach (var s in staleInService)
+        {
+            s.Status = AppointmentStatus.Completed;
+            s.CompletedAt = DateTime.UtcNow;
+        }
 
         // 1. Clean disruptions
         var disruptions = await db.AppointmentDisruptions

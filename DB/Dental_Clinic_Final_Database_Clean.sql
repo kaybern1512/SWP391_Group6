@@ -3,7 +3,7 @@
 -- MASTER CLEAN DATABASE SCHEMA (44 TABLES, VIEWS, STORED PROCEDURES)
 -- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
 -- Database Name: DentalClinicManagementDB
--- Generated: 2026-11-09 23:24:39
+-- Generated: 2026-11-11 19:38:47
 -- =========================================================================================
 
 -- =========================================================================================
@@ -340,6 +340,11 @@ CREATE TABLE [dbo].[Rooms](
 	[Status] [varchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[DepartmentId] [bigint] NULL,
 	[IsExclusive] [bit] NOT NULL,
+	[RoomType] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[MaxConcurrentPatients] [int] NOT NULL,
+	[MaxWaitingPatients] [int] NOT NULL,
+	[TargetMaxWaitMinutes] [int] NOT NULL,
+	[EscalationWaitMinutes] [int] NOT NULL,
 PRIMARY KEY CLUSTERED 
 (
 	[RoomId] ASC
@@ -443,6 +448,8 @@ CREATE TABLE [dbo].[Appointments](
 	[UpdatedAt] [datetime2](7) NULL,
 	[ScheduledDate]  AS (CONVERT([date],[ScheduledStart])) PERSISTED,
 	[TreatmentPlanItemId] [bigint] NULL,
+	[ComboCode] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[ComboId] [bigint] NULL,
 PRIMARY KEY CLUSTERED 
 (
 	[AppointmentId] ASC
@@ -820,6 +827,8 @@ CREATE TABLE [dbo].[DepartmentReferrals](
 	[ReviewedAt] [datetime2](7) NULL,
 	[Urgency] [varchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[ClinicalInstructions] [nvarchar](2000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[SourceAppointmentId] [bigint] NULL,
+	[DestinationAppointmentId] [bigint] NULL,
 PRIMARY KEY CLUSTERED 
 (
 	[ReferralId] ASC
@@ -1572,6 +1581,16 @@ ALTER TABLE [dbo].[Rooms] ADD  DEFAULT ('Active') FOR [Status]
 GO
 ALTER TABLE [dbo].[Rooms] ADD  CONSTRAINT [DF_Rooms_IsExclusive]  DEFAULT ((0)) FOR [IsExclusive]
 GO
+ALTER TABLE [dbo].[Rooms] ADD  CONSTRAINT [DF_Rooms_RoomType]  DEFAULT ('Treatment') FOR [RoomType]
+GO
+ALTER TABLE [dbo].[Rooms] ADD  CONSTRAINT [DF_Rooms_MaxConcurrentPatients]  DEFAULT ((1)) FOR [MaxConcurrentPatients]
+GO
+ALTER TABLE [dbo].[Rooms] ADD  CONSTRAINT [DF_Rooms_MaxWaitingPatients]  DEFAULT ((3)) FOR [MaxWaitingPatients]
+GO
+ALTER TABLE [dbo].[Rooms] ADD  CONSTRAINT [DF_Rooms_TargetMaxWaitMinutes]  DEFAULT ((20)) FOR [TargetMaxWaitMinutes]
+GO
+ALTER TABLE [dbo].[Rooms] ADD  CONSTRAINT [DF_Rooms_EscalationWaitMinutes]  DEFAULT ((30)) FOR [EscalationWaitMinutes]
+GO
 ALTER TABLE [dbo].[DentalChairs] ADD  DEFAULT ('Active') FOR [Status]
 GO
 ALTER TABLE [dbo].[DepartmentServices] ADD  DEFAULT ('Active') FOR [Status]
@@ -1793,6 +1812,11 @@ REFERENCES [dbo].[DepartmentServices] ([DepartmentServiceId])
 GO
 ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [FK_Appointments_Service]
 GO
+ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD  CONSTRAINT [FK_Appointments_ServiceCombos] FOREIGN KEY([ComboId])
+REFERENCES [dbo].[ServiceCombos] ([ComboId])
+GO
+ALTER TABLE [dbo].[Appointments] CHECK CONSTRAINT [FK_Appointments_ServiceCombos]
+GO
 ALTER TABLE [dbo].[Appointments]  WITH CHECK ADD  CONSTRAINT [FK_Appointments_TreatmentPlanItems_TreatmentPlanItemId] FOREIGN KEY([TreatmentPlanItemId])
 REFERENCES [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId])
 GO
@@ -1950,6 +1974,11 @@ REFERENCES [dbo].[DentistProfiles] ([UserId])
 GO
 ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [FK_DepartmentReferrals_AssignedDentist]
 GO
+ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [FK_DepartmentReferrals_DestinationAppointment] FOREIGN KEY([DestinationAppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+GO
+ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [FK_DepartmentReferrals_DestinationAppointment]
+GO
 ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [FK_DepartmentReferrals_FromDepartment] FOREIGN KEY([FromDepartmentId])
 REFERENCES [dbo].[Departments] ([DepartmentId])
 GO
@@ -1959,6 +1988,11 @@ ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [FK_Departme
 REFERENCES [dbo].[StaffProfiles] ([UserId])
 GO
 ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [FK_DepartmentReferrals_ReviewedByUser]
+GO
+ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [FK_DepartmentReferrals_SourceAppointment] FOREIGN KEY([SourceAppointmentId])
+REFERENCES [dbo].[Appointments] ([AppointmentId])
+GO
+ALTER TABLE [dbo].[DepartmentReferrals] CHECK CONSTRAINT [FK_DepartmentReferrals_SourceAppointment]
 GO
 ALTER TABLE [dbo].[DepartmentReferrals]  WITH CHECK ADD  CONSTRAINT [FK_DepartmentReferrals_ToDepartment] FOREIGN KEY([ToDepartmentId])
 REFERENCES [dbo].[Departments] ([DepartmentId])

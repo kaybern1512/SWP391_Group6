@@ -133,7 +133,7 @@ public class EmailService : IEmailService
         string toEmail,
         string patientName,
         string appointmentCode,
-        string queueNumber,
+        string? queueNumber,
         string serviceName,
         string departmentName,
         string dentistName,
@@ -142,11 +142,17 @@ public class EmailService : IEmailService
         DateTime scheduledEnd,
         CancellationToken ct = default)
     {
-        var subject = $"[DentalCare] Xác nhận lịch hẹn khám #{appointmentCode} - STT {queueNumber}";
+        var subject = string.IsNullOrWhiteSpace(queueNumber)
+            ? $"[DentalCare] Xác nhận lịch khám #{appointmentCode}"
+            : $"[DentalCare] Xác nhận lịch khám – Số thứ tự {queueNumber}";
         var frontendUrl = _configuration["Frontend:BaseUrl"] ?? "https://localhost:7129";
         var appointmentUrl = $"{frontendUrl.TrimEnd('/')}/Patient/Appointment";
 
         var formattedTime = $"{scheduledStart:HH:mm} - {scheduledEnd:HH:mm}, Ngày {scheduledStart:dd/MM/yyyy}";
+
+        var queueDisplayHtml = !string.IsNullOrWhiteSpace(queueNumber)
+            ? $@"<span style=""font-size: 32px; font-weight: 800; color: #0066cc; letter-spacing: 2px;"">{WebUtility.HtmlEncode(queueNumber)}</span>"
+            : $@"<span style=""font-size: 20px; font-weight: 700; color: #0066cc;"">#{WebUtility.HtmlEncode(appointmentCode)}</span>";
 
         var htmlBody = $@"
 <div style=""font-family: 'Segoe UI', Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff; color: #1e293b;"">
@@ -167,7 +173,7 @@ public class EmailService : IEmailService
     <div style=""background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 20px; margin-bottom: 24px;"">
         <div style=""text-align: center; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px dashed #cbd5e1;"">
             <span style=""font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px;"">Số Thứ Tự Khám</span>
-            <span style=""font-size: 32px; font-weight: 800; color: #0066cc; letter-spacing: 2px;"">{WebUtility.HtmlEncode(queueNumber)}</span>
+            {queueDisplayHtml}
         </div>
 
         <table style=""width: 100%; border-collapse: collapse; font-size: 14px;"">
@@ -201,9 +207,10 @@ public class EmailService : IEmailService
     <div style=""background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 16px; margin-bottom: 24px;"">
         <h4 style=""margin: 0 0 10px; color: #92400e; font-size: 14px;"">📌 Hướng dẫn khi đến khám:</h4>
         <ul style=""margin: 0; padding-left: 20px; font-size: 13px; color: #78350f; line-height: 1.6;"">
-            <li>Quý khách vui lòng có mặt trước giờ hẹn <strong>10 - 15 phút</strong> tại Quầy Tiếp Đón để làm thủ tục tiếp nhận.</li>
-            <li>Xuất trình mã lịch hẹn hoặc đọc Họ tên và Số điện thoại cho nhân viên tiếp tân.</li>
-            <li>Nếu có triệu chứng bất thường hoặc cần hỗ trợ dời lịch, vui lòng báo trước qua hotline ít nhất 2 giờ.</li>
+            <li>Quý khách vui lòng có mặt trước giờ hẹn <strong>10 - 15 phút</strong> tại Quầy Tiếp Đón để làm thủ tục Check-in và vào khám theo số thứ tự <strong>{(string.IsNullOrWhiteSpace(queueNumber) ? appointmentCode : WebUtility.HtmlEncode(queueNumber))}</strong>.</li>
+            <li>Xuất trình mã lịch hẹn <strong>#{WebUtility.HtmlEncode(appointmentCode)}</strong> hoặc số thứ tự khám cho nhân viên lễ tân khi đến nơi.</li>
+            <li>Lưu ý: Số thứ tự đã được hệ thống cấp trước. Sau khi hoàn tất thủ tục Check-in tại quầy, Quý khách sẽ được đưa vào hàng đợi khám thực tế.</li>
+            <li>Nếu cần hỗ trợ đổi lịch, vui lòng thao tác trên hệ thống hoặc liên hệ hotline 1900 6868 ít nhất 2 giờ trước giờ hẹn.</li>
         </ul>
     </div>
 
@@ -228,7 +235,7 @@ public class EmailService : IEmailService
         string patientName,
         string appointmentCode,
         string reminderType,
-        string queueNumber,
+        string? queueNumber,
         string serviceName,
         string departmentName,
         string dentistName,
@@ -326,56 +333,56 @@ public class EmailService : IEmailService
         string actionUrl,
         CancellationToken ct = default)
     {
-        var subject = $"[DentalCare] ThÃ´ng bÃ¡o thay Ä‘á»•i lá»‹ch khÃ¡m nha khoa - MÃ£ {appointmentCode}";
+        var subject = $"[DentalCare] Thông báo thay đổi lịch khám nha khoa - Mã {appointmentCode}";
         var formattedDate = scheduledStart.ToString("dd/MM/yyyy");
         var formattedTime = scheduledStart.ToString("HH:mm");
 
         var htmlBody = $@"
 <div style=""font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;"">
     <div style=""text-align: center; margin-bottom: 24px;"">
-        <h2 style=""color: #0d9488; margin: 0; font-size: 22px;"">ðŸ¦· Nha Khoa Ä a ChuyÃªn Khoa DentalCare</h2>
-        <p style=""color: #64748b; font-size: 13px; margin: 4px 0 0;"">ChÄƒm sÃ³c ná»¥ cÆ°á» i toÃ n diá»‡n - TiÃªu chuáº©n quá»‘c táº¿</p>
+        <h2 style=""color: #0d9488; margin: 0; font-size: 22px;"">🦷 Nha Khoa Đa Chuyên Khoa DentalCare</h2>
+        <p style=""color: #64748b; font-size: 13px; margin: 4px 0 0;"">Chăm sóc nụ cười toàn diện - Tiêu chuẩn quốc tế</p>
     </div>
 
     <div style=""background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; border-radius: 8px; padding: 18px 24px; margin-bottom: 24px;"">
-        <h3 style=""margin: 0 0 6px; font-size: 17px;"">âš  ThÃ´ng BÃ¡o Thay Ä á»•i Lá»‹ch KhÃ¡m Nha Khoa</h3>
+        <h3 style=""margin: 0 0 6px; font-size: 17px;"">⚠️ Thông Báo Thay Đổi Lịch Khám Nha Khoa</h3>
         <p style=""margin: 0; font-size: 13px; opacity: 0.95;"">
-            KÃ­nh gá»­i QuÃ½ khÃ¡ch <strong>{WebUtility.HtmlEncode(patientName)}</strong>
+            Kính gửi Quý khách <strong>{WebUtility.HtmlEncode(patientName)}</strong>
         </p>
     </div>
 
     <div style=""color: #334155; line-height: 1.6; font-size: 14px; margin-bottom: 20px;"">
         <p>
-            DentalCare xin thÃ´ng bÃ¡o ráº±ng bÃ¡c sÄ© phá»¥ trÃ¡ch lá»‹ch háº¹n <strong>{WebUtility.HtmlEncode(appointmentCode)}</strong> (dá»‹ch vá»¥: <em>{WebUtility.HtmlEncode(serviceName)}</em>) cá»§a QuÃ½ khÃ¡ch vÃ o ngÃ y <strong>{formattedDate}</strong> lÃºc <strong>{formattedTime}</strong> hiá»‡n khÃ´ng thá»ƒ tiáº¿p tá»¥c lá»‹ch khÃ¡m theo káº¿ hoáº¡ch do cÃ³ thay Ä‘á»•i vá»  lá»‹ch cÃ´ng tÃ¡c.
+            DentalCare xin thông báo rằng bác sĩ phụ trách lịch hẹn <strong>{WebUtility.HtmlEncode(appointmentCode)}</strong> (dịch vụ: <em>{WebUtility.HtmlEncode(serviceName)}</em>) của Quý khách vào ngày <strong>{formattedDate}</strong> lúc <strong>{formattedTime}</strong> hiện không thể tiếp tục lịch khám theo kế hoạch do có thay đổi về lịch công tác.
         </p>
         <p>
-            ChÃºng tÃ´i thÃ nh tháº­t xin lá»—i vÃ¬ sá»± báº¥t tiá»‡n nÃ y.
+            Chúng tôi thành thật xin lỗi vì sự bất tiện này.
         </p>
         <p>
-            Ä á»ƒ báº£o Ä‘áº£m viá»‡c thÄƒm khÃ¡m cá»§a QuÃ½ khÃ¡ch diá»…n ra thuáº­n lá»£i nháº¥t, QuÃ½ khÃ¡ch cÃ³ thá»ƒ lá»±a chá» n má»™t trong hai phÆ°Æ¡ng Ã¡n sau:
+            Để bảo đảm việc thăm khám của Quý khách diễn ra thuận lợi nhất, Quý khách có thể lựa chọn một trong hai phương án sau:
         </p>
         <div style=""background-color: #f8fafc; border-left: 4px solid #0d9488; padding: 12px 16px; margin: 12px 0; border-radius: 0 8px 8px 0;"">
-            <strong style=""color: #0f766e;"">PhÆ°Æ¡ng Ã¡n 1 â€“ Ä á»•i bÃ¡c sÄ©:</strong><br/>
-            Giá»¯ nguyÃªn ngÃ y giá»  khÃ¡m vÃ  lá»±a chá» n bÃ¡c sÄ© khÃ¡c cÃ³ chuyÃªn mÃ´n tÆ°Æ¡ng Ä‘Æ°Æ¡ng trong cÃ¹ng chuyÃªn khoa.
+            <strong style=""color: #0f766e;"">Phương án 1 – Đổi bác sĩ:</strong><br/>
+            Giữ nguyên ngày giờ khám và lựa chọn bác sĩ khác có chuyên môn tương đương trong cùng chuyên khoa.
         </div>
         <div style=""background-color: #f8fafc; border-left: 4px solid #0284c7; padding: 12px 16px; margin: 12px 0; border-radius: 0 8px 8px 0;"">
-            <strong style=""color: #0369a1;"">PhÆ°Æ¡ng Ã¡n 2 â€“ Dá» i lá»‹ch khÃ¡m:</strong><br/>
-            Giá»¯ nguyÃªn bÃ¡c sÄ© Ä‘ang phá»¥ trÃ¡ch vÃ  lá»±a chá» n ngÃ y giá»  khÃ¡m má»›i phÃ¹ há»£p sau khi bÃ¡c sÄ© trá»Ÿ láº¡i lÃ m viá»‡c.
+            <strong style=""color: #0369a1;"">Phương án 2 – Dời lịch khám:</strong><br/>
+            Giữ nguyên bác sĩ đang phụ trách và lựa chọn ngày giờ khám mới phù hợp sau khi bác sĩ trở lại làm việc.
         </div>
         <p style=""font-size: 13px; color: #64748b;"">
-            Náº¿u hai phÆ°Æ¡ng Ã¡n trÃªn chÆ°a thuáº­n tiá»‡n, QuÃ½ khÃ¡ch cÃ³ thá»ƒ liÃªn há»‡ bá»™ pháº­n lá»… tÃ¢n qua hotline phÃ²ng khÃ¡m Ä‘á»ƒ Ä‘Æ°á»£c há»— trá»£ trá»±c tiáº¿p.
+            Nếu hai phương án trên chưa thuận tiện, Quý khách có thể liên hệ bộ phận lễ tân qua hotline phòng khám để được hỗ trợ trực tiếp.
         </p>
     </div>
 
     <div style=""text-align: center; margin: 28px 0;"">
         <a href=""{actionUrl}"" style=""background-color: #0d9488; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 15px; padding: 14px 28px; border-radius: 8px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(13, 148, 136, 0.3);"">
-            âž¡ï¸  Chá» n PhÆ°Æ¡ng Ã¡n Xá»­ LÃ½ Lá»‹ch Háº¹n
+            ➡️ Chọn Phương Án Xử Lý Lịch Hẹn
         </a>
     </div>
 
     <div style=""text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 16px;"">
-        <p style=""margin: 0 0 4px;"">TrÃ¢n trá» ng,<br/><strong>Ä á»™i ngÅ© Nha Khoa DentalCare</strong></p>
-        <p style=""margin: 0;"">Ä Ã¢y lÃ  email thÃ´ng bÃ¡o tá»± Ä‘á»™ng, vui lÃ²ng khÃ´ng tráº£ lá» i trá»±c tiáº¿p email nÃ y.</p>
+        <p style=""margin: 0 0 4px;"">Trân trọng,<br/><strong>Đội ngũ Nha Khoa DentalCare</strong></p>
+        <p style=""margin: 0;"">Đây là email thông báo tự động, vui lòng không trả lời trực tiếp email này.</p>
     </div>
 </div>";
 
@@ -392,39 +399,39 @@ public class EmailService : IEmailService
         string dentistName,
         CancellationToken ct = default)
     {
-        var subject = $"[DentalCare] XÃ¡c nháº­n Ä‘iá» u chá»‰nh lá»‹ch khÃ¡m thÃ nh cÃ´ng - MÃ£ {appointmentCode}";
-        var formattedTime = $"{appointmentTime:HH:mm}, ngÃ y {appointmentTime:dd/MM/yyyy}";
+        var subject = $"[DentalCare] Xác nhận điều chỉnh lịch khám thành công - Mã {appointmentCode}";
+        var formattedTime = $"{appointmentTime:HH:mm}, ngày {appointmentTime:dd/MM/yyyy}";
 
         var htmlBody = $@"
 <div style=""font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;"">
     <div style=""text-align: center; margin-bottom: 24px;"">
-        <h2 style=""color: #0d9488; margin: 0; font-size: 22px;"">ðŸ¦· Nha Khoa Ä a ChuyÃªn Khoa DentalCare</h2>
+        <h2 style=""color: #0d9488; margin: 0; font-size: 22px;"">🦷 Nha Khoa Đa Chuyên Khoa DentalCare</h2>
     </div>
 
     <div style=""background: #10b981; color: #ffffff; border-radius: 8px; padding: 18px 24px; margin-bottom: 24px; text-align: center;"">
-        <h3 style=""margin: 0 0 6px; font-size: 18px;"">âœ… Ä iá» u Chá»‰nh Lá»‹ch KhÃ¡m ThÃ nh CÃ´ng</h3>
+        <h3 style=""margin: 0 0 6px; font-size: 18px;"">✅ Điều Chỉnh Lịch Khám Thành Công</h3>
         <p style=""margin: 0; font-size: 14px; opacity: 0.95;"">
-            Cáº£m Æ¡n QuÃ½ khÃ¡ch <strong>{WebUtility.HtmlEncode(patientName)}</strong> Ä‘Ã£ xÃ¡c nháº­n phÆ°Æ¡ng Ã¡n xá»­ lÃ½.
+            Cảm ơn Quý khách <strong>{WebUtility.HtmlEncode(patientName)}</strong> đã xác nhận phương án xử lý.
         </p>
     </div>
 
     <div style=""background-color: #f8fafc; border-radius: 8px; padding: 20px; margin-bottom: 20px;"">
         <p style=""margin: 0 0 10px; font-size: 14px; color: #334155;"">
-            <strong>Káº¿t quáº£ Ä‘iá» u chá»‰nh:</strong> {WebUtility.HtmlEncode(resolutionSummary)}
+            <strong>Kết quả điều chỉnh:</strong> {WebUtility.HtmlEncode(resolutionSummary)}
         </p>
         <p style=""margin: 0 0 10px; font-size: 14px; color: #334155;"">
-            <strong>MÃ£ lá»‹ch háº¹n:</strong> <span style=""color: #0d9488; font-weight: 700;"">{WebUtility.HtmlEncode(appointmentCode)}</span>
+            <strong>Mã lịch hẹn:</strong> <span style=""color: #0d9488; font-weight: 700;"">{WebUtility.HtmlEncode(appointmentCode)}</span>
         </p>
         <p style=""margin: 0 0 10px; font-size: 14px; color: #334155;"">
-            <strong>Thá» i gian khÃ¡m:</strong> <span style=""color: #0284c7; font-weight: 600;"">{formattedTime}</span>
+            <strong>Thời gian khám:</strong> <span style=""color: #0284c7; font-weight: 600;"">{formattedTime}</span>
         </p>
         <p style=""margin: 0; font-size: 14px; color: #334155;"">
-            <strong>BÃ¡c sÄ© phá»¥ trÃ¡ch:</strong> {WebUtility.HtmlEncode(dentistName)}
+            <strong>Bác sĩ phụ trách:</strong> {WebUtility.HtmlEncode(dentistName)}
         </p>
     </div>
 
     <div style=""text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 16px;"">
-        <p style=""margin: 0;"">TrÃ¢n trá» ng,<br/><strong>Nha Khoa DentalCare</strong></p>
+        <p style=""margin: 0;"">Trân trọng,<br/><strong>Nha Khoa DentalCare</strong></p>
     </div>
 </div>";
 
