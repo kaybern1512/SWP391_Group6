@@ -561,8 +561,7 @@ public class MedicalRecordService : IMedicalRecordService
                     "Bác sĩ không có quyền thao tác tải lên phim chụp cho đợt khám của bác sĩ khác.");
             }
         }
-        else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(currentUserRole, UserRole.DepartmentManager, StringComparison.OrdinalIgnoreCase))
+        else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase))
         {
             return ApiResponse<ImagingRecordMetadataDto>.Fail(
                 "Bạn không có quyền thực hiện thao tác tải lên hình ảnh y tế.");
@@ -705,8 +704,7 @@ public class MedicalRecordService : IMedicalRecordService
                         "Bệnh nhân không có quyền truy cập hồ sơ hình ảnh của bệnh nhân khác.");
                 }
             }
-            else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase) &&
-                     !string.Equals(currentUserRole, UserRole.DepartmentManager, StringComparison.OrdinalIgnoreCase))
+            else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase))
             {
                 return ApiResponse<List<ImagingRecordDto>>.Fail(
                     "Bạn không có quyền truy cập danh sách hình ảnh y tế.");
@@ -786,8 +784,7 @@ public class MedicalRecordService : IMedicalRecordService
                     "Bệnh nhân không có quyền truy cập hồ sơ hình ảnh của bệnh nhân khác.");
             }
         }
-        else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(currentUserRole, UserRole.DepartmentManager, StringComparison.OrdinalIgnoreCase))
+        else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase))
         {
             return ApiResponse<ImagingRecordDto>.Fail(
                 "Bạn không có quyền truy cập hồ sơ hình ảnh y tế.");
@@ -861,8 +858,7 @@ public class MedicalRecordService : IMedicalRecordService
                     "Bệnh nhân không có quyền truy cập hồ sơ hình ảnh của bệnh nhân khác.");
             }
         }
-        else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(currentUserRole, UserRole.DepartmentManager, StringComparison.OrdinalIgnoreCase))
+        else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase))
         {
             return ApiResponse<DentalImageStreamResult>.Fail(
                 "Bạn không có quyền truy cập hồ sơ hình ảnh y tế.");
@@ -957,8 +953,7 @@ public class MedicalRecordService : IMedicalRecordService
                 return ApiResponse<bool>.Fail("Bác sĩ không có quyền thao tác xóa hình ảnh của đợt khám của bác sĩ khác.");
             }
         }
-        else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(currentUserRole, UserRole.DepartmentManager, StringComparison.OrdinalIgnoreCase))
+        else if (!string.Equals(currentUserRole, UserRole.SystemAdministrator, StringComparison.OrdinalIgnoreCase))
         {
             return ApiResponse<bool>.Fail("Bạn không có quyền thực hiện thao tác xóa hình ảnh y tế.");
         }

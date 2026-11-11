@@ -11,7 +11,6 @@ public static class RoleRouteHelper
             "Patient" => new RoleRoute("Dashboard", "PatientDashboard", "/Patient/Dashboard"),
             "Receptionist" => new RoleRoute("Dashboard", "ReceptionistDashboard", "/Receptionist/Dashboard"),
             "Dentist" => new RoleRoute("Dashboard", "DentistDashboard", "/Dentist/Dashboard"),
-            "DepartmentManager" => new RoleRoute("Dashboard", "DepartmentDashboard", "/Department/Dashboard"),
             "SystemAdministrator" => new RoleRoute("Dashboard", "AdminDashboard", "/Admin/Dashboard"),
             _ => new RoleRoute("Index", "Home", "/")
         };

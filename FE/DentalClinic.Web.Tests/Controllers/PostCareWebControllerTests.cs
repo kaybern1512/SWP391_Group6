@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using DentalClinic.Web.Controllers.Dentist;
-using DentalClinic.Web.Controllers.Department;
 using DentalClinic.Web.Controllers.Patient;
 using DentalClinic.Web.Controllers.Receptionist;
 using DentalClinic.Web.Models.Api;
@@ -111,52 +110,6 @@ public class PostCareWebControllerTests
         };
 
         var result = await controller.CreateFollowUp(req);
-
-        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
-        redirect.ActionName.Should().Be("Index");
-        controller.TempData["SuccessMessage"].Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task DepartmentReferralController_Index_ReturnsViewWithData()
-    {
-        var referrals = new List<DepartmentReferralDto> { new() { ReferralId = 1, Status = "Pending" } };
-        var depts = new List<AdminDepartmentDto> { new() { DepartmentId = 3, Name = "Khoa Chỉnh Nha", ManagerUserId = 102 } };
-        var dentists = new List<TreatmentDentistOptionDto> { new() { DentistUserId = 30, FullName = "BS C" } };
-
-        _postCareApiMock.Setup(x => x.GetDepartmentReferralsAsync(null)).ReturnsAsync(ApiResult<List<DepartmentReferralDto>>.Success(referrals));
-        _adminApiMock.Setup(x => x.GetDepartmentsAsync()).ReturnsAsync(ApiResult<List<AdminDepartmentDto>>.Success(depts));
-        _treatmentApiMock.Setup(x => x.GetDentistOptionsAsync(3)).ReturnsAsync(ApiResult<List<TreatmentDentistOptionDto>>.Success(dentists));
-
-        var controller = new DepartmentReferralController(_postCareApiMock.Object, _adminApiMock.Object, _treatmentApiMock.Object)
-        {
-            ControllerContext = CreateContextWithUser(102, "DepartmentManager", "Trưởng Khoa"),
-            TempData = CreateTempData()
-        };
-
-        var result = await controller.Index();
-
-        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
-        var model = viewResult.Model.Should().BeOfType<DepartmentReferralIndexViewModel>().Subject;
-        model.Referrals.Should().HaveCount(1);
-        model.Dentists.Should().HaveCount(1);
-    }
-
-    [Fact]
-    public async Task DepartmentReferralController_Review_Success_Redirects()
-    {
-        var req = new ReviewReferralRequest { Status = "Accepted", AssignedDentistUserId = 30 };
-        var dto = new DepartmentReferralDto { ReferralId = 1, Status = "Assigned" };
-
-        _postCareApiMock.Setup(x => x.ReviewReferralAsync(1, req)).ReturnsAsync(ApiResult<DepartmentReferralDto>.Success(dto));
-
-        var controller = new DepartmentReferralController(_postCareApiMock.Object, _adminApiMock.Object, _treatmentApiMock.Object)
-        {
-            ControllerContext = CreateContextWithUser(102, "DepartmentManager"),
-            TempData = CreateTempData()
-        };
-
-        var result = await controller.Review(1, req);
 
         var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
         redirect.ActionName.Should().Be("Index");

@@ -129,7 +129,7 @@ public class AppointmentDisruptionService : IAppointmentDisruptionService
             disruption.Appointment.AssignedDentistUserId != currentUserId)
             return ApiResponse<AppointmentDisruptionDto>.Fail("Bạn không có quyền xem thông tin gián đoạn của ca khám này.");
 
-        var allowedRoles = new[] { UserRole.SystemAdministrator, UserRole.DepartmentManager, UserRole.Receptionist, UserRole.Patient, UserRole.Dentist };
+        var allowedRoles = new[] { UserRole.SystemAdministrator, UserRole.Receptionist, UserRole.Patient, UserRole.Dentist };
         if (!allowedRoles.Contains(currentRole))
             return ApiResponse<AppointmentDisruptionDto>.Fail("Bạn không có quyền xem thông tin lịch hẹn này.");
 

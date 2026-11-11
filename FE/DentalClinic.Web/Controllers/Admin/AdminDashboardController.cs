@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DentalClinic.Web.Controllers.Admin;
 
-[Authorize(Roles = "SystemAdministrator,DepartmentManager")]
+[Authorize(Roles = "SystemAdministrator")]
 [Route("Admin")]
 public class AdminDashboardController : Controller
 {

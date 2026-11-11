@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using DentalClinic.Web.Controllers.Dentist;
-using DentalClinic.Web.Controllers.Department;
 using DentalClinic.Web.Controllers.Patient;
 using DentalClinic.Web.Models.Api;
 using DentalClinic.Web.Models.ApiDtos;
@@ -109,35 +108,6 @@ public class TreatmentWebControllerTests
         var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
         redirect.ActionName.Should().Be("Detail");
         redirect.RouteValues!["id"].Should().Be(99L);
-    }
-
-    [Fact]
-    public async Task DepartmentTreatmentController_Index_ReturnsViewWithSummary()
-    {
-        _apiMock.Setup(x => x.GetDepartmentTreatmentProgressAsync(null, null))
-            .ReturnsAsync(ApiResult<TreatmentProgressSummaryDto>.Success(new TreatmentProgressSummaryDto
-            {
-                TotalPlans = 3,
-                ActivePlans = 2,
-                CompletedPlans = 1,
-                PendingPhases = 4
-            }));
-        _apiMock.Setup(x => x.GetDentistOptionsAsync(null))
-            .ReturnsAsync(ApiResult<List<TreatmentDentistOptionDto>>.Success(new List<TreatmentDentistOptionDto>()));
-        _adminApiMock.Setup(x => x.GetDepartmentsAsync())
-            .ReturnsAsync(ApiResult<List<AdminDepartmentDto>>.Success(new List<AdminDepartmentDto>()));
-
-        var controller = new DepartmentTreatmentController(_apiMock.Object, _adminApiMock.Object)
-        {
-            ControllerContext = CreateContextWithUser(30, "DepartmentManager")
-        };
-
-        var result = await controller.Index(null, null);
-
-        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
-        var vm = viewResult.Model.Should().BeOfType<DepartmentTreatmentProgressViewModel>().Subject;
-        vm.Summary.TotalPlans.Should().Be(3);
-        vm.Summary.ActivePlans.Should().Be(2);
     }
 
     [Fact]

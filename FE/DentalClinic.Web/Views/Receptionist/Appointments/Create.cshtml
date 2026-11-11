@@ -128,7 +128,7 @@
                                 Bác Sĩ Mong Muốn <span class="text-muted fw-normal">(Không bắt buộc)</span>
                             </label>
                             <select asp-for="RequestedDentistUserId" class="form-select" id="dentistSelect" disabled>
-                                <option value="">-- Không yêu cầu bác sĩ cụ thể (Hệ thống/Trưởng khoa xếp) --</option>
+                                <option value="">-- Không yêu cầu bác sĩ cụ thể (Hệ thống/Lễ tân xếp) --</option>
                             </select>
                             <span asp-validation-for="RequestedDentistUserId" class="text-danger small"></span>
                         </div>
@@ -252,7 +252,7 @@
 
                 // Load Dentists
                 $.get('@Url.Action("GetDentists", "ReceptionistAppointment")', { departmentId: deptId }, function (dentists) {
-                    $('#dentistSelect').empty().append('<option value="">-- Không yêu cầu bác sĩ cụ thể (Hệ thống/Trưởng khoa xếp) --</option>');
+                    $('#dentistSelect').empty().append('<option value="">-- Không yêu cầu bác sĩ cụ thể (Hệ thống/Lễ tân xếp) --</option>');
                     if (dentists && dentists.length > 0) {
                         $.each(dentists, function (i, item) {
                             var spec = item.specialty ? ' - ' + item.specialty : '';

@@ -50,7 +50,7 @@ public class SqlServerConcurrencyIntegrationTests
         // 1. UserAccounts
         var patientUser1 = new UserAccount { Email = "patient1@test.com", Role = UserRole.Patient, Status = AccountStatus.Active, CreatedAt = DateTime.UtcNow };
         var patientUser2 = new UserAccount { Email = "patient2@test.com", Role = UserRole.Patient, Status = AccountStatus.Active, CreatedAt = DateTime.UtcNow };
-        var mgrUser = new UserAccount { Email = "mgr1@test.com", Role = UserRole.DepartmentManager, Status = AccountStatus.Active, CreatedAt = DateTime.UtcNow };
+        var mgrUser = new UserAccount { Email = "mgr1@test.com", Role = UserRole.Receptionist, Status = AccountStatus.Active, CreatedAt = DateTime.UtcNow };
         var dentistUser1 = new UserAccount { Email = "dentist1@test.com", Role = UserRole.Dentist, Status = AccountStatus.Active, CreatedAt = DateTime.UtcNow };
         var dentistUser2 = new UserAccount { Email = "dentist2@test.com", Role = UserRole.Dentist, Status = AccountStatus.Active, CreatedAt = DateTime.UtcNow };
 

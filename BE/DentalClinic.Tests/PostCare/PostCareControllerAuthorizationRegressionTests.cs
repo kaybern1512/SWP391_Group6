@@ -33,7 +33,7 @@ public class PostCareControllerAuthorizationRegressionTests
         Assert.Contains(UserRole.Dentist, roles);
         Assert.Contains(UserRole.SystemAdministrator, roles);
         Assert.Contains(UserRole.Patient, roles);
-        Assert.Contains(UserRole.DepartmentManager, roles);
+        Assert.DoesNotContain("DepartmentManager", roles);
     }
 
     [Fact]

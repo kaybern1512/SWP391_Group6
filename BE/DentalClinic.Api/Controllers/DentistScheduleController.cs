@@ -68,7 +68,7 @@ public class DentistScheduleController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<DentistWorkScheduleDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> CreateSchedule([FromBody] CreateDentistScheduleRequest request, CancellationToken ct)
     {
@@ -82,7 +82,7 @@ public class DentistScheduleController : ControllerBase
     }
 
     [HttpPut("{id:long}")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<DentistWorkScheduleDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateSchedule(long id, [FromBody] UpdateDentistScheduleRequest request, CancellationToken ct)
     {
@@ -96,7 +96,7 @@ public class DentistScheduleController : ControllerBase
     }
 
     [HttpPut("{id:long}/cancel")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> CancelSchedule(long id, CancellationToken ct)
     {
@@ -114,7 +114,7 @@ public class DentistScheduleController : ControllerBase
     // ==========================================
 
     [HttpGet("monthly")]
-    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.Dentist},{UserRole.Receptionist},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.Dentist},{UserRole.Receptionist}")]
     [ProducesResponseType(typeof(ApiResponse<MonthlyDentistScheduleDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMonthlySchedule([FromQuery] MonthlyDentistScheduleFilterRequest request, CancellationToken ct)
     {

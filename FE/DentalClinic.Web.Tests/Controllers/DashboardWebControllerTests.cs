@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Security.Claims;
 using DentalClinic.Web.Controllers.Dentist;
-using DentalClinic.Web.Controllers.Department;
 using DentalClinic.Web.Controllers.Patient;
 using DentalClinic.Web.Controllers.Receptionist;
 using DentalClinic.Web.ViewModels.Dashboard;
@@ -146,41 +145,6 @@ public class DashboardWebControllerTests
         model.Cards.Should().Contain(c => c.ActionUrl == "/Receptionist/Patients" && c.Title == "Sổ Quản Lý Bệnh Nhân");
         model.Cards.Should().Contain(c => c.ActionUrl == "/Receptionist/Appointments/TodayCheckIn");
         model.Cards.Should().Contain(c => c.ActionUrl == "/Receptionist/Appointments/Requests");
-        model.Cards.Should().Contain(c => c.ActionUrl == "/Notification");
-    }
-
-    [Fact]
-    public void DepartmentDashboard_ShouldReturnLocalizedModel_AndValidRoutes()
-    {
-        // Arrange
-        var controller = new DepartmentDashboardController
-        {
-            ControllerContext = CreateContextWithUser(401, "DepartmentManager", "Nguyen Van Truong", "KHOA-01")
-        };
-
-        // Act
-        var result = controller.Dashboard();
-
-        // Assert
-        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
-        var model = viewResult.Model.Should().BeOfType<DashboardViewModel>().Subject;
-
-        model.Role.Should().Be("DepartmentManager");
-        model.FullName.Should().Be("Nguyen Van Truong");
-        model.Title.Should().Be("Bàn Quản Lý Chuyên Khoa");
-        model.StatCards.Should().HaveCount(4);
-
-        model.Cards.Should().NotBeEmpty();
-        foreach (var card in model.Cards)
-        {
-            card.ActionUrl.Should().NotBeNullOrWhiteSpace();
-            card.ActionUrl.Should().NotBe("#");
-            card.ActionUrl.Should().StartWith("/");
-        }
-
-        model.Cards.Should().Contain(c => c.ActionUrl == "/Department/Appointments/Requests");
-        model.Cards.Should().Contain(c => c.ActionUrl == "/Department/TreatmentProgress");
-        model.Cards.Should().Contain(c => c.ActionUrl == "/Department/Schedule");
         model.Cards.Should().Contain(c => c.ActionUrl == "/Notification");
     }
 }

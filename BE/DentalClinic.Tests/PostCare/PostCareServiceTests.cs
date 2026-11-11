@@ -100,13 +100,13 @@ public class PostCareServiceTests
             AssignedAt = DateTime.UtcNow
         });
 
-        // Department Managers
-        var dept1MgrUser = new UserAccount { UserId = 101, Email = "mgr_general@test.com", Role = UserRole.DepartmentManager, Status = AccountStatus.Active };
+        // Lead Dentists
+        var dept1MgrUser = new UserAccount { UserId = 101, Email = "mgr_general@test.com", Role = UserRole.Dentist, Status = AccountStatus.Active };
         var dept1MgrStaff = new StaffProfile { UserId = 101, EmployeeCode = "M001", FullName = "Trưởng Khoa Răng Tổng Quát", EmploymentStatus = "Active" };
         db.UserAccounts.Add(dept1MgrUser);
         db.StaffProfiles.Add(dept1MgrStaff);
 
-        var dept2MgrUser = new UserAccount { UserId = 102, Email = "mgr_ortho@test.com", Role = UserRole.DepartmentManager, Status = AccountStatus.Active };
+        var dept2MgrUser = new UserAccount { UserId = 102, Email = "mgr_ortho@test.com", Role = UserRole.Dentist, Status = AccountStatus.Active };
         var dept2MgrStaff = new StaffProfile { UserId = 102, EmployeeCode = "M002", FullName = "Trưởng Khoa Chỉnh Nha", EmploymentStatus = "Active" };
         db.UserAccounts.Add(dept2MgrUser);
         db.StaffProfiles.Add(dept2MgrStaff);
@@ -265,20 +265,25 @@ public class PostCareServiceTests
         var createRes = await service.CreateReferralAsync(20, req);
         Assert.True(createRes.Success);
 
-        // Manager reviews
+        // Dentist attempts to review referral - must be rejected
         var reviewReq = new ReviewReferralRequest
         {
             Status = "Accepted",
             AssignedDentistUserId = 30 // BS C in Ortho
         };
 
-        var reviewRes = await service.ReviewReferralAsync(102, createRes.Data!.ReferralId, reviewReq);
+        var dentistForbiddenRes = await service.ReviewReferralAsync(102, createRes.Data!.ReferralId, reviewReq);
+        Assert.False(dentistForbiddenRes.Success);
+        Assert.Equal("FORBIDDEN", dentistForbiddenRes.ErrorCode);
+
+        // Receptionist reviews and coordinates referral - succeeds
+        var reviewRes = await service.ReviewReferralAsync(50, createRes.Data!.ReferralId, reviewReq);
 
         Assert.True(reviewRes.Success);
         Assert.NotNull(reviewRes.Data);
         Assert.Equal("Assigned", reviewRes.Data.Status);
         Assert.Equal(30, reviewRes.Data.AssignedDentistUserId);
-        Assert.Equal("Trưởng Khoa Chỉnh Nha", reviewRes.Data.ReviewedByName);
+        Assert.Equal("Lễ Tân 1", reviewRes.Data.ReviewedByName);
     }
 
     [Fact]
@@ -295,7 +300,7 @@ public class PostCareServiceTests
         });
         Assert.True(referral.Success);
 
-        var result = await service.ReviewReferralAsync(102, referral.Data!.ReferralId, new ReviewReferralRequest
+        var result = await service.ReviewReferralAsync(50, referral.Data!.ReferralId, new ReviewReferralRequest
         {
             Status = "Accepted",
             AssignedDentistUserId = 20
@@ -621,7 +626,7 @@ public class PostCareServiceTests
         });
 
         Assert.False(res.Success);
-        Assert.Contains("không do mình điều trị hoặc không thuộc chuyên khoa", res.Message);
+        Assert.Contains("không do mình điều trị", res.Message);
     }
 
     [Fact]
@@ -654,7 +659,7 @@ public class PostCareServiceTests
     }
 
     [Fact]
-    public async Task UpdateFollowUpStatus_DeptManager_ManagingDepartment_Succeeds()
+    public async Task UpdateFollowUpStatus_Receptionist_Succeeds()
     {
         var dbName = Guid.NewGuid().ToString();
         using var db = CreateDbContext(dbName);
@@ -672,18 +677,18 @@ public class PostCareServiceTests
 
         var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
 
-        // Manager of Dept 1 (UserId 101) updates follow up
-        var res = await service.UpdateFollowUpStatusAsync(101, 910, new UpdateFollowUpStatusRequest
+        // Receptionist (UserId 50) updates follow up
+        var res = await service.UpdateFollowUpStatusAsync(50, 910, new UpdateFollowUpStatusRequest
         {
-            Note = "Trưởng khoa ghi chú theo dõi"
+            Note = "Lễ tân ghi chú theo dõi"
         });
 
         Assert.True(res.Success);
-        Assert.Contains("Trưởng khoa ghi chú theo dõi", res.Data!.Reason);
+        Assert.Contains("Lễ tân ghi chú theo dõi", res.Data!.Reason);
     }
 
     [Fact]
-    public async Task UpdateFollowUpStatus_DeptManager_OtherDepartment_Fails()
+    public async Task UpdateFollowUpStatus_NonTreatingDentist_Fails()
     {
         var dbName = Guid.NewGuid().ToString();
         using var db = CreateDbContext(dbName);
@@ -692,7 +697,7 @@ public class PostCareServiceTests
         var followUp = new FollowUpSchedule
         {
             FollowUpId = 911,
-            TreatmentSessionId = 401, // Dept 1
+            TreatmentSessionId = 401, // Dept 1, treated by Dentist 20
             RecommendedDate = DateTime.UtcNow.AddDays(7),
             Status = "Pending"
         };
@@ -701,14 +706,14 @@ public class PostCareServiceTests
 
         var service = new PostCareService(db, Mock.Of<INotificationService>(), NullLogger<PostCareService>.Instance);
 
-        // Manager of Dept 2 (UserId 102) tries to modify Dept 1's follow up
-        var res = await service.UpdateFollowUpStatusAsync(102, 911, new UpdateFollowUpStatusRequest
+        // Dentist 30 (not the treating dentist) tries to modify Dentist 20's follow up
+        var res = await service.UpdateFollowUpStatusAsync(30, 911, new UpdateFollowUpStatusRequest
         {
-            Note = "Cross-dept unauthorized update"
+            Note = "Cross-dentist unauthorized update"
         });
 
         Assert.False(res.Success);
-        Assert.Contains("không thuộc chuyên khoa quản lý", res.Message);
+        Assert.Contains("không do mình điều trị", res.Message);
     }
 
     [Fact]

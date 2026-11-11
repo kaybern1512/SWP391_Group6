@@ -37,7 +37,7 @@ public class ReportController : ControllerBase
     }
 
     [HttpGet("department/{departmentId:long}/performance")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<DepartmentPerformanceReportDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<DepartmentPerformanceReportDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetDepartmentPerformance(
@@ -55,7 +55,7 @@ public class ReportController : ControllerBase
     }
 
     [HttpGet("dentists/performance")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<List<DentistPerformanceDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDentistsPerformance(
         [FromQuery] long? departmentId = null,
@@ -82,7 +82,7 @@ public class ReportController : ControllerBase
     }
 
     [HttpGet("dentists/export-csv")]
-    [Authorize(Roles = $"{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [Produces("text/csv")]
     public async Task<IActionResult> ExportDentistPerformanceCsv(
         [FromQuery] long? departmentId = null,

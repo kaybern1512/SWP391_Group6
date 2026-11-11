@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using DentalClinic.Web.Controllers.Dentist;
-using DentalClinic.Web.Controllers.Department;
 using DentalClinic.Web.Controllers.Patient;
 using DentalClinic.Web.Models.Api;
 using DentalClinic.Web.Models.ApiDtos;
@@ -51,114 +50,6 @@ public class DentistScheduleWebControllerTests
     private static TempDataDictionary CreateTempData()
     {
         return new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>());
-    }
-
-    // ==========================================
-    // DEPARTMENT SCHEDULE CONTROLLER TESTS
-    // ==========================================
-
-    [Fact]
-    public async Task DepartmentSchedule_Index_ReturnsViewWithData()
-    {
-        _adminApiMock.Setup(x => x.GetDepartmentsAsync())
-            .ReturnsAsync(ApiResult<List<AdminDepartmentDto>>.Success(new List<AdminDepartmentDto>
-            {
-                new() { DepartmentId = 1, Name = "Khoa Răng Tổng Quát" }
-            }));
-
-        _adminApiMock.Setup(x => x.GetUsersAsync(It.IsAny<string?>(), It.IsAny<string?>()))
-            .ReturnsAsync(ApiResult<List<AdminUserDto>>.Success(new List<AdminUserDto>
-            {
-                new() { UserId = 10, FullName = "Dr. John" }
-            }));
-
-        _scheduleApiMock.Setup(x => x.GetSchedulesAsync(It.IsAny<DentistScheduleFilterRequest>()))
-            .ReturnsAsync(ApiResult<List<DentistWorkScheduleDto>>.Success(new List<DentistWorkScheduleDto>
-            {
-                new() { DentistScheduleId = 1, DentistUserId = 10, DentistName = "Dr. John", Status = "Scheduled" }
-            }));
-
-        var controller = new DepartmentScheduleController(_scheduleApiMock.Object, _adminApiMock.Object)
-        {
-            ControllerContext = CreateContext(2, "DepartmentManager")
-        };
-
-        var result = await controller.Index();
-
-        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
-        var model = viewResult.Model.Should().BeOfType<DepartmentScheduleManageViewModel>().Subject;
-        model.Departments.Should().HaveCount(1);
-        model.Dentists.Should().HaveCount(1);
-        model.Schedules.Should().HaveCount(1);
-    }
-
-    [Fact]
-    public async Task DepartmentSchedule_Create_ValidForm_RedirectsWithSuccess()
-    {
-        _scheduleApiMock.Setup(x => x.CreateScheduleAsync(It.IsAny<CreateDentistScheduleRequest>()))
-            .ReturnsAsync(ApiResult<DentistWorkScheduleDto>.Success(new DentistWorkScheduleDto { DentistScheduleId = 99 }));
-
-        var controller = new DepartmentScheduleController(_scheduleApiMock.Object, _adminApiMock.Object)
-        {
-            ControllerContext = CreateContext(2, "DepartmentManager"),
-            TempData = CreateTempData()
-        };
-
-        var form = new CreateScheduleFormModel
-        {
-            DentistUserId = 10,
-            DepartmentId = 1,
-            WorkDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
-            StartTime = new TimeOnly(8, 0),
-            EndTime = new TimeOnly(12, 0)
-        };
-
-        var result = await controller.Create(form);
-
-        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
-        redirect.ActionName.Should().Be("Index");
-        controller.TempData["SuccessMessage"]?.ToString().Should().Contain("thành công");
-    }
-
-    [Fact]
-    public async Task DepartmentSchedule_Create_InvalidModel_RedirectsWithError()
-    {
-        var controller = new DepartmentScheduleController(_scheduleApiMock.Object, _adminApiMock.Object)
-        {
-            ControllerContext = CreateContext(2, "DepartmentManager"),
-            TempData = CreateTempData()
-        };
-        controller.ModelState.AddModelError("DentistUserId", "Required");
-
-        var form = new CreateScheduleFormModel
-        {
-            WorkDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1))
-        };
-
-        var result = await controller.Create(form);
-
-        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
-        redirect.ActionName.Should().Be("Index");
-        controller.TempData["ErrorMessage"]?.ToString().Should().NotBeNullOrEmpty();
-    }
-
-    [Fact]
-    public async Task DepartmentSchedule_Cancel_CallsApiAndRedirects()
-    {
-        _scheduleApiMock.Setup(x => x.CancelScheduleAsync(5))
-            .ReturnsAsync(ApiResult.Success());
-
-        var controller = new DepartmentScheduleController(_scheduleApiMock.Object, _adminApiMock.Object)
-        {
-            ControllerContext = CreateContext(2, "DepartmentManager"),
-            TempData = CreateTempData()
-        };
-
-        var result = await controller.Cancel(5, 1, "2026-10-15");
-
-        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
-        redirect.ActionName.Should().Be("Index");
-        controller.TempData["SuccessMessage"]?.ToString().Should().Contain("hủy ca trực");
     }
 
     // ==========================================

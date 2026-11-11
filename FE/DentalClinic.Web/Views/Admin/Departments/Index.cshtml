@@ -63,7 +63,6 @@
                             <th style="width: 50px;">#</th>
                             <th>Tên Chuyên khoa</th>
                             <th>Mô tả chức năng</th>
-                            <th>Trưởng khoa phụ trách</th>
                             <th class="text-center">Số dịch vụ</th>
                             <th class="text-center">Số bác sĩ</th>
                             <th>Trạng thái</th>
@@ -84,22 +83,6 @@
                                     </td>
                                     <td>
                                         <span class="text-muted small">@(string.IsNullOrEmpty(dept.Description) ? "Chưa có mô tả" : dept.Description)</span>
-                                    </td>
-                                    <td>
-                                        @if (!string.IsNullOrEmpty(dept.ManagerName))
-                                        {
-                                            <div class="d-flex align-items-center gap-2">
-                                                <i class="bi bi-person-badge text-primary"></i>
-                                                <div>
-                                                    <div class="fw-semibold text-dark">@dept.ManagerName</div>
-                                                    <div class="text-muted small">@(dept.ManagerEmployeeCode ?? "Bác sĩ trưởng khoa")</div>
-                                                </div>
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-light text-muted border">Chưa phân công</span>
-                                        }
                                     </td>
                                     <td class="text-center">
                                         <a asp-controller="AdminService" asp-action="Index" asp-route-departmentId="@dept.DepartmentId" class="badge bg-info-subtle text-info border text-decoration-none">
@@ -183,16 +166,6 @@
                         <textarea name="Description" class="form-control" rows="3" placeholder="Mô tả phạm vi và nhiệm vụ của chuyên khoa..." maxlength="500"></textarea>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Trưởng khoa phụ trách</label>
-                        <select name="ManagerUserId" class="form-select">
-                            <option value="">-- Chưa chỉ định trưởng khoa --</option>
-                            @foreach (var user in Model.PotentialManagers)
-                            {
-                                <option value="@user.UserId">@user.FullName (@user.Role - @(user.Code ?? user.Email))</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="mb-3">
                         <label class="form-label fw-semibold">Trạng thái ban đầu</label>
                         <select name="Status" class="form-select">
                             <option value="Active">Đang hoạt động (Active)</option>
@@ -232,16 +205,6 @@
                         <textarea name="Description" id="editDeptDesc" class="form-control" rows="3" maxlength="500"></textarea>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Trưởng khoa phụ trách</label>
-                        <select name="ManagerUserId" id="editDeptManager" class="form-select">
-                            <option value="">-- Chưa chỉ định trưởng khoa --</option>
-                            @foreach (var user in Model.PotentialManagers)
-                            {
-                                <option value="@user.UserId">@user.FullName (@user.Role - @(user.Code ?? user.Email))</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="mb-3">
                         <label class="form-label fw-semibold">Trạng thái</label>
                         <select name="Status" id="editDeptStatus" class="form-select">
                             <option value="Active">Đang hoạt động (Active)</option>
@@ -267,7 +230,6 @@
                     document.getElementById('editDeptId').value = this.dataset.id;
                     document.getElementById('editDeptName').value = this.dataset.name;
                     document.getElementById('editDeptDesc').value = this.dataset.desc || '';
-                    document.getElementById('editDeptManager').value = this.dataset.manager || '';
                     document.getElementById('editDeptStatus').value = this.dataset.status || 'Active';
                     editModal.show();
                 });

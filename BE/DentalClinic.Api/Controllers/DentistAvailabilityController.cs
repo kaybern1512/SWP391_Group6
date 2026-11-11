@@ -56,7 +56,7 @@ public class DentistAvailabilityController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<DentistAvailabilityDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> CreateAvailability([FromBody] CreateDentistAvailabilityRequest request, CancellationToken ct)
     {
@@ -71,7 +71,7 @@ public class DentistAvailabilityController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<DentistAvailabilityDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateAvailability(long id, [FromBody] UpdateDentistAvailabilityRequest request, CancellationToken ct)
     {
@@ -86,7 +86,7 @@ public class DentistAvailabilityController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.DepartmentManager},{UserRole.SystemAdministrator}")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteAvailability(long id, CancellationToken ct)
     {

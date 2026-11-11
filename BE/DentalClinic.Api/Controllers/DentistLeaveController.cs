@@ -69,7 +69,7 @@ public class DentistLeaveController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager},{UserRole.Receptionist}")]
+    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.Receptionist}")]
     [ProducesResponseType(typeof(ApiResponse<List<DentistLeaveRequestDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllLeaveRequests([FromQuery] DentistLeaveFilterRequest filter, CancellationToken ct)
     {
@@ -78,7 +78,7 @@ public class DentistLeaveController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager},{UserRole.Dentist},{UserRole.Receptionist}")]
+    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.Dentist},{UserRole.Receptionist}")]
     [ProducesResponseType(typeof(ApiResponse<DentistLeaveRequestDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLeaveRequestDetail(long id, CancellationToken ct)
     {
@@ -92,7 +92,7 @@ public class DentistLeaveController : ControllerBase
     }
 
     [HttpGet("{id}/impact-analysis")]
-    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<DentistLeaveImpactAnalysisDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLeaveImpactAnalysis(long id, CancellationToken ct)
     {

@@ -36,7 +36,7 @@ public class AdminControllerAuthorizationRegressionTests
 
         var allowedRoles = authAttr.Roles.Split(',', StringSplitOptions.TrimEntries);
         Assert.Contains(UserRole.SystemAdministrator, allowedRoles);
-        Assert.Contains(UserRole.DepartmentManager, allowedRoles);
+        Assert.DoesNotContain("DepartmentManager", allowedRoles);
         Assert.DoesNotContain(UserRole.Receptionist, allowedRoles);
         Assert.DoesNotContain(UserRole.Dentist, allowedRoles);
         Assert.DoesNotContain(UserRole.Patient, allowedRoles);
@@ -109,7 +109,7 @@ public class AdminControllerAuthorizationRegressionTests
         var roles = authAttr.Roles.Split(',', StringSplitOptions.TrimEntries);
         Assert.Contains(UserRole.Receptionist, roles);
         Assert.Contains(UserRole.SystemAdministrator, roles);
-        Assert.DoesNotContain(UserRole.DepartmentManager, roles);
+        Assert.DoesNotContain("DepartmentManager", roles);
         Assert.DoesNotContain(UserRole.Dentist, roles);
         Assert.DoesNotContain(UserRole.Patient, roles);
     }
@@ -127,7 +127,6 @@ public class AdminControllerAuthorizationRegressionTests
         // Seed Users with various roles
         dbContext.UserAccounts.AddRange(
             new UserAccount { UserId = 1, Email = "admin@clinic.vn", Role = UserRole.SystemAdministrator, Status = AccountStatus.Active },
-            new UserAccount { UserId = 2, Email = "manager@clinic.vn", Role = UserRole.DepartmentManager, Status = AccountStatus.Active },
             new UserAccount { UserId = 3, Email = "dentist@clinic.vn", Role = UserRole.Dentist, Status = AccountStatus.Active },
             new UserAccount { UserId = 4, Email = "receptionist@clinic.vn", Role = UserRole.Receptionist, Status = AccountStatus.Active },
             new UserAccount
@@ -166,7 +165,7 @@ public class AdminControllerAuthorizationRegressionTests
         // Ensure every returned user is strictly a Patient
         Assert.All(result.Data, u => Assert.Equal(UserRole.Patient, u.Role));
         Assert.DoesNotContain(result.Data, u => u.Role == UserRole.SystemAdministrator);
-        Assert.DoesNotContain(result.Data, u => u.Role == UserRole.DepartmentManager);
+        Assert.DoesNotContain(result.Data, u => u.Role == "DepartmentManager");
         Assert.DoesNotContain(result.Data, u => u.Role == UserRole.Dentist);
         Assert.DoesNotContain(result.Data, u => u.Role == UserRole.Receptionist);
 

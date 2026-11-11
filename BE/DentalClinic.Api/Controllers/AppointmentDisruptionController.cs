@@ -48,7 +48,7 @@ public class AppointmentDisruptionController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    [Authorize(Roles = $"{UserRole.Patient},{UserRole.Dentist},{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Patient},{UserRole.Dentist},{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<AppointmentDisruptionDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDisruptionDetail(long id, [FromQuery] string? token, CancellationToken ct)
     {
@@ -62,7 +62,7 @@ public class AppointmentDisruptionController : ControllerBase
     }
 
     [HttpGet("by-appointment/{appointmentId}")]
-    [Authorize(Roles = $"{UserRole.Patient},{UserRole.Dentist},{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Patient},{UserRole.Dentist},{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<AppointmentDisruptionDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDisruptionByAppointmentId(long appointmentId, CancellationToken ct)
     {
@@ -113,7 +113,7 @@ public class AppointmentDisruptionController : ControllerBase
     }
 
     [HttpGet("coordinator")]
-    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<List<AppointmentDisruptionDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetReceptionistDisruptions([FromQuery] string? status, [FromQuery] bool? urgentOnly, CancellationToken ct)
     {

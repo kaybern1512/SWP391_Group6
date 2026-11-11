@@ -10,8 +10,6 @@ using System.Threading.Tasks;
 
 using DentalClinic.Web.Controllers.Dentist;
 
-using DentalClinic.Web.Controllers.Department;
-
 using DentalClinic.Web.Controllers.Patient;
 
 using DentalClinic.Web.Controllers.Receptionist;
@@ -723,70 +721,6 @@ public class AppointmentWebControllerTests
         redirect.ActionName.Should().Be("Requests");
 
         controller.TempData["SuccessMessage"].Should().NotBeNull();
-
-    }
-
-
-
-    [Fact]
-
-    public async Task Department_Confirm_Valid_RedirectsToRequestsWithSuccessMessage()
-
-    {
-
-        _apiMock.Setup(x => x.ManagerConfirmAsync(10, It.IsAny<ManagerConfirmRequest>()))
-
-            .ReturnsAsync(ApiResult<AppointmentDto>.Success(new AppointmentDto
-
-            {
-
-                AppointmentId = 10,
-
-                QueueNumber = "Q001"
-
-            }));
-
-
-
-        var controller = new DepartmentAppointmentController(_apiMock.Object)
-
-        {
-
-            ControllerContext = CreateContextWithUser(301, "DepartmentManager"),
-
-            TempData = new TempDataDictionary(new DefaultHttpContext(), Mock.Of<ITempDataProvider>())
-
-        };
-
-
-
-        var model = new DepartmentReviewViewModel
-
-        {
-
-            AssignedDentistUserId = 401,
-
-            RoomId = 1,
-
-            DentalChairId = 11,
-
-            ScheduledStart = DateTime.Today.AddDays(1).AddHours(9),
-
-            ScheduledEnd = DateTime.Today.AddDays(1).AddHours(9).AddMinutes(30)
-
-        };
-
-
-
-        var result = await controller.Confirm(10, model);
-
-
-
-        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
-
-        redirect.ActionName.Should().Be("Requests");
-
-        controller.TempData["SuccessMessage"]?.ToString().Should().Contain("Q001");
 
     }
 
