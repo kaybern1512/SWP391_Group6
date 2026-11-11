@@ -1,68 +1,69 @@
 ﻿-- =========================================================================================
 -- DENTAL CLINIC MANAGEMENT SYSTEM (SWP391 GROUP 6)
--- MASTER CLEAN DATABASE SCHEMA (68 TABLES, VIEWS, STORED PROCEDURES)
+-- MASTER CLEAN DATABASE SCHEMA (69 TABLES, VIEWS, STORED PROCEDURES)
 -- Target: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
--- Database Name: DentalClinicManagementDB
 -- Roles: Patient, Receptionist, Dentist, SystemAdministrator (Strict 4 Roles)
--- Generated: 2026-11-11 23:13:21
+-- Generated: 2026-11-12 01:16:02
 -- =========================================================================================
 
 -- =========================================================================================
--- IDEMPOTENT INITIALIZATION & SAFE CLEANUP
--- Drops foreign keys, views, stored procedures, and tables if they already exist,
--- ensuring safe, conflict-free re-runs on any machine or existing database.
+-- TARGET DATABASE SAFETY GUARD
+-- Strict safety controls to prevent accidental overwriting or data loss:
+-- 1. Prevents execution against system databases (master, tempdb, model, msdb).
+-- 2. Prevents execution against protected production & QA databases.
+-- 3. Prevents execution against non-empty databases (must NOT automatically drop tables/data).
+-- 4. Fails fast with severity 20 (terminating connection immediately).
 -- =========================================================================================
-IF DB_ID(N'DentalClinicManagementDB') IS NULL
+IF DB_NAME() IN (N'master', N'tempdb', N'model', N'msdb')
 BEGIN
-    CREATE DATABASE DentalClinicManagementDB COLLATE SQL_Latin1_General_CP1_CI_AS;
+    DECLARE @sysErr NVARCHAR(500) = N'FATAL SAFETY ERROR: Script cannot be executed against system database [' + DB_NAME() + N']. Please specify a valid empty target database: sqlcmd -d <TargetDatabase> -b -i <script.sql>';
+    RAISERROR(@sysErr, 20, 1) WITH LOG;
 END;
-GO
 
-USE DentalClinicManagementDB;
+IF LOWER(DB_NAME()) IN (
+    N'dentalclinicmanagementdb',
+    N'dentalcare_integration_dev',
+    N'dentalcare_release_clean_qa',
+    N'dentalcare_restore_verification_qa'
+)
+BEGIN
+    DECLARE @protErr NVARCHAR(500) = N'FATAL SAFETY ERROR: Target database [' + DB_NAME() + N'] is a protected database. Direct execution of SQL Master installation script against protected databases is strictly prohibited to prevent data loss.';
+    RAISERROR(@protErr, 20, 1) WITH LOG;
+END;
+
+IF EXISTS (SELECT 1 FROM sys.tables WHERE is_ms_shipped = 0)
+BEGIN
+    DECLARE @tblCount INT;
+    SELECT @tblCount = COUNT(*) FROM sys.tables WHERE is_ms_shipped = 0;
+    DECLARE @nonEmptyErr NVARCHAR(500) = N'FATAL SAFETY ERROR: Target database [' + DB_NAME() + N'] is not empty (contains ' + CAST(@tblCount AS NVARCHAR(10)) + N' existing user tables). SQL Master installation requires an empty target database and will never automatically drop tables or data on a non-empty database. Please create a clean empty database or specify an empty database: sqlcmd -d <EmptyDatabase> -b -i <script.sql>';
+    RAISERROR(@nonEmptyErr, 20, 1) WITH LOG;
+END;
 GO
 
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
 SET NOCOUNT ON;
-GO
-
--- 1. Drop all Foreign Key Constraints
-DECLARE @dropFkSql NVARCHAR(MAX) = N'';
-SELECT @dropFkSql += N'ALTER TABLE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name) + N' DROP CONSTRAINT ' + QUOTENAME(fk.name) + N';' + CHAR(13)
-FROM sys.foreign_keys fk
-JOIN sys.tables t ON fk.parent_object_id = t.object_id
-JOIN sys.schemas s ON t.schema_id = s.schema_id;
-IF LEN(@dropFkSql) > 0 EXEC sp_executesql @dropFkSql;
-
--- 2. Drop all Views
-DECLARE @dropViewSql NVARCHAR(MAX) = N'';
-SELECT @dropViewSql += N'DROP VIEW ' + QUOTENAME(s.name) + N'.' + QUOTENAME(v.name) + N';' + CHAR(13)
-FROM sys.views v
-JOIN sys.schemas s ON v.schema_id = s.schema_id
-WHERE v.is_ms_shipped = 0;
-IF LEN(@dropViewSql) > 0 EXEC sp_executesql @dropViewSql;
-
--- 3. Drop all Stored Procedures
-DECLARE @dropSpSql NVARCHAR(MAX) = N'';
-SELECT @dropSpSql += N'DROP PROCEDURE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(p.name) + N';' + CHAR(13)
-FROM sys.procedures p
-JOIN sys.schemas s ON p.schema_id = s.schema_id
-WHERE p.is_ms_shipped = 0;
-IF LEN(@dropSpSql) > 0 EXEC sp_executesql @dropSpSql;
-
--- 4. Drop all Tables
-DECLARE @dropTableSql NVARCHAR(MAX) = N'';
-SELECT @dropTableSql += N'DROP TABLE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name) + N';' + CHAR(13)
-FROM sys.tables t
-JOIN sys.schemas s ON t.schema_id = s.schema_id
-WHERE t.name <> N'__EFMigrationsHistory';
-IF LEN(@dropTableSql) > 0 EXEC sp_executesql @dropTableSql;
+SET XACT_ABORT ON;
 GO
 
 -- =========================================================================================
--- PART 1: 68 DDL TABLE SCHEMAS, CONSTRAINTS & INDEXES
+-- PART 1: 69 DDL TABLE SCHEMAS, CONSTRAINTS & INDEXES
 -- =========================================================================================
 
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[__EFMigrationsHistory](
+	[MigrationId] [nvarchar](150) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ProductVersion] [nvarchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+ CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY CLUSTERED 
+(
+	[MigrationId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -4161,5 +4162,5 @@ END;
 
 GO
 
-PRINT N'>>> DENTAL CLINIC CLEAN SCHEMA INITIALIZED SUCCESSFULLY (68 TABLES, VIEWS & PROCEDURES)!';
+PRINT N'>>> DENTAL CLINIC CLEAN SCHEMA INITIALIZED SUCCESSFULLY (69 TABLES, VIEWS & PROCEDURES)!';
 GO

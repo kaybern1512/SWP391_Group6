@@ -1314,6 +1314,79 @@ public class AppointmentFlowTests
             It.IsAny<DateTime>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task Test25B_QueueNumberConsistency_FullLifecycle_Confirmed_Email_CheckIn()
+    {
+        using var db = CreateDbContext(nameof(Test25B_QueueNumberConsistency_FullLifecycle_Confirmed_Email_CheckIn));
+        await SeedBasicDataAsync(db);
+        var mockEmail = new Mock<IEmailService>();
+        string? emailQueue = null;
+        mockEmail.Setup(e => e.SendAppointmentConfirmedEmailAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string?>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<DateTime>(),
+            It.IsAny<DateTime>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<string, string, string, string?, string, string, string, string, DateTime, DateTime, CancellationToken>(
+                (to, name, code, q, svc, dept, doc, rm, st, en, ct) => emailQueue = q)
+            .Returns(Task.CompletedTask);
+
+        var service = new AppointmentService(db, _mockNotification.Object, mockEmail.Object, _mockLogger.Object);
+
+        // 1. Patient Books: Status PendingReceptionReview, QueueNumber is NULL
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(14),
+            ReasonForVisit = "Kiểm tra QueueNumber lifecycle"
+        });
+        Assert.True(bookResult.Success, bookResult.Message);
+        var apptId = bookResult.Data!.AppointmentId;
+
+        var pendingAppt = await db.Appointments.FindAsync(apptId);
+        Assert.Equal(AppointmentStatus.PendingReceptionReview, pendingAppt!.Status);
+        Assert.Null(pendingAppt.QueueNumber);
+
+        // 2. Receptionist Confirms: Status Confirmed, QueueNumber Allocated immediately
+        var confirmRequest = new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(14),
+            ScheduledEnd = DateTime.Today.AddDays(2).AddHours(14).AddMinutes(30)
+        };
+        var confirmResult = await service.ManagerConfirmAsync(apptId, 201, confirmRequest);
+        Assert.True(confirmResult.Success, confirmResult.Message);
+        Assert.Equal(AppointmentStatus.Confirmed, confirmResult.Data!.Status);
+
+        var allocatedQueue = confirmResult.Data.QueueNumber;
+        Assert.NotNull(allocatedQueue);
+        Assert.StartsWith("Q-", allocatedQueue);
+
+        // 3. Email Test Transport receives the EXACT same QueueNumber
+        Assert.Equal(allocatedQueue, emailQueue);
+
+        // 4. Patient & Receptionist views query the exact same QueueNumber
+        var reloadedConfirmed = await db.Appointments.FindAsync(apptId);
+        Assert.Equal(allocatedQueue, reloadedConfirmed!.QueueNumber);
+
+        // 5. Receptionist CheckIn: Status CheckedIn, QueueNumber PRESERVED (not re-allocated)
+        var checkInResult = await service.ReceptionistCheckInAsync(apptId, 201, "Check-in tại quầy");
+        Assert.True(checkInResult.Success, checkInResult.Message);
+
+        var reloadedCheckedIn = await db.Appointments.FindAsync(apptId);
+        Assert.Equal(AppointmentStatus.CheckedIn, reloadedCheckedIn!.Status);
+        Assert.Equal(allocatedQueue, reloadedCheckedIn!.QueueNumber);
+    }
     [Fact]
     public async Task Test29_PatientCancelPendingAppointment_WithdrawsCleanlyWithZeroStrike()
     {

@@ -14,7 +14,7 @@ Hệ thống hoạt động theo **mô hình phân quyền 4 vai trò chính th�
 
 | Tên Tệp | Ý Nghĩa / Mục Đích Sử Dụng | Cách Dùng |
 | :--- | :--- | :--- |
-| **`DentalClinic_Full_Database_Release.sql`** / **`DentalClinic_Full_Database_And_Data.sql`** | **Script TỔNG HỢP TOÀN DIỆN (1 BƯỚC KHUYÊN DÙNG)**: Tự động khởi tạo database, toàn bộ 69 bảng, ràng buộc khóa ngoại, indexes, views, stored procedures và nạp đầy đủ dữ liệu mẫu chuẩn UTF-8. Tích hợp cơ chế **Idempotent** tự động làm sạch an toàn khi chạy lại nhiều lần. | Chạy 1 lần duy nhất trong SSMS hoặc qua `sqlcmd`. |
+| **`DentalClinic_Full_Database_Release.sql`** / **`DentalClinic_Full_Database_And_Data.sql`** | **Script TỔNG HỢP TOÀN DIỆN (1 BƯỚC KHUYÊN DÙNG)**: Khởi tạo toàn bộ 69 bảng, ràng buộc khóa ngoại, indexes, views, stored procedures và nạp đầy đủ dữ liệu mẫu chuẩn UTF-8 vào database đích rỗng. Tích hợp cơ chế **Target Database Safety Guard** ngăn chặn hoàn toàn việc chạy nhầm vào database hệ thống, database đang sử dụng hoặc database có dữ liệu sẵn có. | Chỉ định database rỗng và chạy qua `sqlcmd -b` hoặc SSMS. |
 | **`DentalClinic_Release_Final.bak`** / **`DentalClinicManagementDB.bak`** | **File Backup SQL Server chuẩn phát hành (22.8 MB)**: Chứa toàn bộ 69 bảng và dữ liệu demo 4 vai trò hoàn chỉnh, backup trực tiếp từ SQL Server. Khuyên dùng cho hội đồng chấm thi và thành viên nhóm để khôi phục tức thì. | Dùng tính năng *Restore Database* trong SSMS hoặc lệnh `RESTORE DATABASE`. |
 | **`Dental_Clinic_Final_Database_Clean.sql`** | Script tạo cấu trúc database sạch (Schema Only: 69 Bảng, Views, Stored Procedures, Ràng buộc, Computed Columns, Indexes). | Dành cho môi trường muốn tự khởi tạo database rỗng (Production/Staging). |
 | **`DentalClinicManagementDB_legacy_backup.bak`** | Bản sao lưu trữ an toàn của file backup cũ trước khi tích hợp CareEpisode, X-ray Roster & Role Cleanup. | Lưu trữ đối chiếu (Archive). |
@@ -23,22 +23,30 @@ Hệ thống hoạt động theo **mô hình phân quyền 4 vai trò chính th�
 
 ## 🚀 Hướng Dẫn Khôi Phục Nhanh (Chọn 1 trong 2 cách)
 
-### Cách 1: Chạy Script SQL Tổng Hợp
-Chạy lệnh sau trên terminal PowerShell tại thư mục gốc của dự án:
+### Cách 1: Chạy Script SQL Tổng Hợp Vào Database Rỗng
+Chạy các lệnh sau trên terminal PowerShell tại thư mục gốc của dự án:
 
 ```powershell
-sqlcmd -S .\SQLEXPRESS -E -f 65001 -i "DB\DentalClinic_Full_Database_Release.sql"
+# Bước 1: Tạo database rỗng mới cho DentalCare (ví dụ: DentalCare_Release_DB)
+sqlcmd -S .\SQLEXPRESS -E -b -Q "CREATE DATABASE DentalCare_Release_DB COLLATE SQL_Latin1_General_CP1_CI_AS;"
+
+# Bước 2: Thực thi script SQL Master vào database rỗng (-b để fail-fast dừng ngay lập tức nếu gặp lỗi)
+sqlcmd -S .\SQLEXPRESS -E -d DentalCare_Release_DB -b -f 65001 -i "DB\DentalClinic_Full_Database_Release.sql"
 ```
 
-> [!NOTE]
-> Script đã được tích hợp khối **Idempotent Teardown**: Nếu database `DentalClinicManagementDB` đã tồn tại từ trước, script sẽ tự động gỡ bỏ các ràng buộc và bảng cũ để tái thiết lập trạng thái sạch 100%, không bao giờ phát sinh lỗi trùng khóa hay "Object already exists".
+> [!IMPORTANT]
+> **Cơ Chế Bảo Vệ An Toàn (Target Database Safety Guard):**
+> - **Chặn database hệ thống:** Tuyệt đối không cho phép thực thi script vào các database hệ thống (`master`, `tempdb`, `model`, `msdb`).
+> - **Chặn database đang hoạt động/được bảo vệ:** Ngăn chặn tuyệt đối việc ghi đè lên các database được bảo vệ: `DentalClinicManagementDB`, `DentalCare_Integration_Dev`, `DentalCare_Release_Clean_QA`, `DentalCare_Restore_Verification_QA`.
+> - **Chống xóa dữ liệu database không rỗng:** Script sẽ **từ chối thực thi ngay lập tức (fail-fast)** nếu database đích chứa bất kỳ bảng người dùng nào sẵn có, tuyệt đối không tự động xóa bảng hoặc xóa dữ liệu cũ.
+> - **Tham số `-b` bắt buộc:** Đảm bảo `sqlcmd` dừng ngay lập tức khi gặp bất kỳ lỗi nào, không tiếp tục chạy các batch còn lại.
 
 ---
 
 ### Cách 2: Restore từ file Backup (`DentalClinic_Release_Final.bak` hoặc `DentalClinicManagementDB.bak`)
 Chạy lệnh PowerShell:
 ```powershell
-sqlcmd -S .\SQLEXPRESS -E -Q "RESTORE DATABASE DentalClinicManagementDB FROM DISK = '$(Get-Location)\DB\DentalClinic_Release_Final.bak' WITH REPLACE;"
+sqlcmd -S .\SQLEXPRESS -E -b -Q "RESTORE DATABASE DentalClinicManagementDB FROM DISK = '$(Get-Location)\DB\DentalClinic_Release_Final.bak' WITH REPLACE;"
 ```
 
 Hoặc qua giao diện đồ họa **SQL Server Management Studio (SSMS)**:
