@@ -840,7 +840,54 @@ public class AppointmentFlowTests
             DentalChairId = 11
         });
         Assert.False(confirmResult.Success);
-        Assert.True(!confirmResult.Success && (confirmResult.Message!.Contains("Bạn không phải Trưởng khoa") || confirmResult.Message.Contains("Bạn không có quyền xác nhận")));
+        Assert.Contains("Bạn không có quyền xác nhận", confirmResult.Message);
+    }
+
+    [Fact]
+    public async Task Test17b_DentistCannotConfirmAppointment_EvenIfMatchesDepartmentManagerUserId()
+    {
+        using var db = CreateDbContext(nameof(Test17b_DentistCannotConfirmAppointment_EvenIfMatchesDepartmentManagerUserId));
+        await SeedBasicDataAsync(db);
+        var service = new AppointmentService(db, _mockNotification.Object, _mockLogger.Object);
+
+        // Book appointment
+        var bookResult = await service.CreatePatientAppointmentAsync(101, new CreateAppointmentRequest
+        {
+            DepartmentId = 1,
+            RequestedServiceId = 10,
+            ScheduledStart = DateTime.Today.AddDays(2).AddHours(9),
+            ReasonForVisit = "Khám răng định kỳ"
+        });
+        Assert.True(bookResult.Success, bookResult.Message);
+        var apptId = bookResult.Data!.AppointmentId;
+
+        // Set department ManagerUserId to Dentist 401
+        var dept = await db.Departments.FindAsync(1L);
+        dept!.ManagerUserId = 401;
+        await db.SaveChangesAsync();
+
+        // Dentist (401) tries to call ManagerConfirmAsync
+        var confirmResult = await service.ManagerConfirmAsync(apptId, 401, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11
+        });
+
+        // MUST be rejected - Dentist has NO authority to confirm appointments
+        Assert.False(confirmResult.Success);
+        Assert.Contains("Bạn không có quyền xác nhận lịch hẹn này", confirmResult.Message);
+
+        // Receptionist (201) can confirm successfully
+        var recConfirmResult = await service.ManagerConfirmAsync(apptId, 201, new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = 401,
+            RoomId = 1,
+            DentalChairId = 11
+        });
+        Assert.True(recConfirmResult.Success, recConfirmResult.Message);
+        Assert.Equal(AppointmentStatus.Confirmed, recConfirmResult.Data!.Status);
+        Assert.NotNull(recConfirmResult.Data.QueueNumber);
     }
     [Fact]
     public async Task Test18_PatientAccessesAnotherPatientsAppointment_Forbidden()

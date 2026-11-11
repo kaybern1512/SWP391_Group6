@@ -3933,29 +3933,21 @@ public class AppointmentService : IAppointmentService
 
     {
 
-        var managedDepartmentIds = await _dbContext.Departments
+        var caller = await _dbContext.UserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == managerUserId, ct);
 
-            .AsNoTracking()
+        bool isStaff = caller != null && (caller.Role == UserRole.Receptionist || caller.Role == UserRole.SystemAdministrator);
 
-            .Where(d => d.ManagerUserId == managerUserId)
-
-            .Select(d => d.DepartmentId)
-
-            .ToListAsync(ct);
-
-        if (!managedDepartmentIds.Any())
+        if (!isStaff)
 
         {
 
-            return ApiResponse<List<AppointmentDto>>.Ok(new List<AppointmentDto>(), "Bạn chưa được chỉ định làm Trưởng khoa.");
+            return ApiResponse<List<AppointmentDto>>.Forbidden("Bạn không có quyền truy cập danh sách yêu cầu lịch hẹn.");
 
         }
 
         var query = _dbContext.Appointments
             .AsNoTracking()
-            .Where(a => a.DepartmentId != null &&
-                        managedDepartmentIds.Contains(a.DepartmentId.Value) &&
-                        a.Status == AppointmentStatus.PendingDepartmentReview)
+            .Where(a => a.Status == AppointmentStatus.PendingReceptionReview || a.Status == AppointmentStatus.PendingDepartmentReview)
             .OrderBy(a => a.ScheduledStart);
 
         var list = await MapToDtoListAsync(query, ct);
@@ -4381,11 +4373,11 @@ public class AppointmentService : IAppointmentService
 
             bool isPrivileged = callerUser != null && (callerUser.Role == UserRole.Receptionist || callerUser.Role == UserRole.SystemAdministrator);
 
-            if (!isPrivileged && appointment.Department?.ManagerUserId != managerUserId)
+            if (!isPrivileged)
 
             {
 
-                return ApiResponse<AppointmentDto>.Fail("Bạn không có quyền xác nhận lịch hẹn này.");
+                return ApiResponse<AppointmentDto>.Fail("Bạn không có quyền xác nhận lịch hẹn này. Chỉ Lễ tân hoặc Quản trị viên mới có quyền xác nhận lịch hẹn.");
 
             }
 
@@ -5093,11 +5085,11 @@ public class AppointmentService : IAppointmentService
 
         bool isPrivileged = callerUser != null && (callerUser.Role == UserRole.Receptionist || callerUser.Role == UserRole.SystemAdministrator);
 
-        if (!isPrivileged && appointment.Department?.ManagerUserId != managerUserId)
+        if (!isPrivileged)
 
         {
 
-            return ApiResponse.Fail("Bạn không có quyền đề xuất thay đổi cho lịch hẹn này.");
+            return ApiResponse.Fail("Bạn không có quyền đề xuất thay đổi cho lịch hẹn này. Chỉ Lễ tân hoặc Quản trị viên mới có quyền đề xuất thay đổi.");
 
         }
 

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using DentalClinic.Web.Controllers;
 using DentalClinic.Web.Controllers.Admin;
-using DentalClinic.Web.Controllers.Dentist;
 using DentalClinic.Web.Models.Api;
 using DentalClinic.Web.Models.ApiDtos;
 using DentalClinic.Web.Services;
@@ -108,80 +107,6 @@ public class BlogWebControllerTests
     // DENTIST BLOG CONTROLLER
     // ==========================================
 
-    [Fact]
-    public async Task DentistBlog_Index_ReturnsViewWithMyPosts()
-    {
-        _mockBlogApi.Setup(x => x.GetMyPostsAsync(It.IsAny<BlogFilterRequest>()))
-            .ReturnsAsync(ApiResult<BlogPostPagedResultDto>.Success(new BlogPostPagedResultDto
-            {
-                Items = new List<BlogPostListItemDto>
-                {
-                    new() { BlogPostId = 10, Title = "Bản nháp 1", Status = "Draft" }
-                },
-                TotalCount = 1,
-                Page = 1,
-                PageSize = 10
-            }));
-
-        _mockBlogApi.Setup(x => x.GetCategoriesAsync())
-            .ReturnsAsync(ApiResult<List<BlogCategoryDto>>.Success(new List<BlogCategoryDto>()));
-
-        var controller = new DentistBlogController(_mockBlogApi.Object);
-
-        var result = await controller.Index(null, null, 1);
-
-        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
-        var vm = viewResult.Model.Should().BeOfType<DentistBlogIndexViewModel>().Subject;
-        vm.PagedResult.Items.Should().HaveCount(1);
-    }
-
-    [Fact]
-    public async Task DentistBlog_Create_ValidModel_RedirectsToIndexWithSuccess()
-    {
-        _mockBlogApi.Setup(x => x.GetCategoriesAsync())
-            .ReturnsAsync(ApiResult<List<BlogCategoryDto>>.Success(new List<BlogCategoryDto>()));
-
-        _mockBlogApi.Setup(x => x.CreatePostAsync(It.IsAny<CreateBlogPostRequest>()))
-            .ReturnsAsync(ApiResult<BlogPostDto>.Success(new BlogPostDto { BlogPostId = 1 }));
-
-        var controller = new DentistBlogController(_mockBlogApi.Object)
-        {
-            TempData = CreateTempData()
-        };
-
-        var model = new DentistBlogEditViewModel
-        {
-            CategoryId = 1,
-            Title = "Bài viết mới của bác sĩ",
-            Content = "<p>Nội dung</p>",
-            Status = "PendingReview"
-        };
-
-        var result = await controller.Create(model, null);
-
-        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
-        redirect.ActionName.Should().Be(nameof(DentistBlogController.Index));
-        controller.TempData["SuccessMessage"].Should().Be("Bài viết đã được gửi duyệt thành công!");
-    }
-
-    [Fact]
-    public async Task DentistBlog_Delete_CallsApiAndRedirects()
-    {
-        _mockBlogApi.Setup(x => x.DeletePostAsync(5))
-            .ReturnsAsync(ApiResult<bool>.Success(true, "Xóa bài viết thành công."));
-
-        var controller = new DentistBlogController(_mockBlogApi.Object)
-        {
-            TempData = CreateTempData()
-        };
-
-        var result = await controller.Delete(5);
-
-        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
-        redirect.ActionName.Should().Be(nameof(DentistBlogController.Index));
-        controller.TempData["SuccessMessage"].Should().Be("Xóa bài viết thành công!");
-    }
-
     // ==========================================
     // ADMIN BLOG CONTROLLER
     // ==========================================
@@ -259,58 +184,8 @@ public class BlogWebControllerTests
     }
 
     // ==========================================
-    // MEDIA UPLOAD & DELETE (DENTIST & ADMIN)
+    // MEDIA UPLOAD & DELETE (ADMIN)
     // ==========================================
-
-    [Fact]
-    public async Task DentistBlog_UploadMedia_ValidFile_ReturnsJsonWithUrl()
-    {
-        var fileMock = new Mock<IFormFile>();
-        fileMock.Setup(f => f.Length).Returns(1024);
-        fileMock.Setup(f => f.FileName).Returns("video.mp4");
-
-        _mockBlogApi.Setup(x => x.UploadMediaAsync(fileMock.Object, "Video", null))
-            .ReturnsAsync(ApiResult<BlogMediaDto>.Success(new BlogMediaDto
-            {
-                MediaId = 1,
-                FileUrl = "https://res.cloudinary.com/demo/video/upload/sample.mp4",
-                ThumbnailUrl = "https://res.cloudinary.com/demo/video/upload/sample.jpg",
-                MediaType = "Video",
-                SizeBytes = 1024
-            }));
-
-        var controller = new DentistBlogController(_mockBlogApi.Object);
-
-        var result = await controller.UploadMedia(fileMock.Object, "Video", null);
-
-        var jsonResult = result.Should().BeOfType<JsonResult>().Subject;
-        jsonResult.Value.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task DentistBlog_UploadMedia_EmptyFile_ReturnsFailureJson()
-    {
-        var controller = new DentistBlogController(_mockBlogApi.Object);
-
-        var result = await controller.UploadMedia(null!, null, null);
-
-        var jsonResult = result.Should().BeOfType<JsonResult>().Subject;
-        jsonResult.Value.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task DentistBlog_DeleteMedia_ValidId_ReturnsSuccessJson()
-    {
-        _mockBlogApi.Setup(x => x.DeleteMediaAsync(10))
-            .ReturnsAsync(ApiResult<bool>.Success(true, "Xóa media thành công."));
-
-        var controller = new DentistBlogController(_mockBlogApi.Object);
-
-        var result = await controller.DeleteMedia(10);
-
-        var jsonResult = result.Should().BeOfType<JsonResult>().Subject;
-        jsonResult.Value.Should().NotBeNull();
-    }
 
     [Fact]
     public async Task AdminBlog_UploadMedia_ValidFile_ReturnsJsonWithUrl()

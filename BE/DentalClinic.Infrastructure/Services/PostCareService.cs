@@ -162,15 +162,11 @@ public class PostCareService : IPostCareService
         string? status = null,
         CancellationToken ct = default)
     {
-        var managedDepartmentIds = await _dbContext.Departments
-            .AsNoTracking()
-            .Where(d => d.ManagerUserId == managerUserId)
-            .Select(d => d.DepartmentId)
-            .ToListAsync(ct);
-
-        if (!managedDepartmentIds.Any())
+        var caller = await _dbContext.UserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == managerUserId, ct);
+        bool isStaff = caller != null && (caller.Role == UserRole.Receptionist || caller.Role == UserRole.SystemAdministrator);
+        if (!isStaff)
         {
-            return ApiResponse<List<DepartmentReferralDto>>.Ok(new List<DepartmentReferralDto>());
+            return ApiResponse<List<DepartmentReferralDto>>.Forbidden("Bạn không có quyền xem danh sách yêu cầu chuyển khoa.");
         }
 
         var query = _dbContext.DepartmentReferrals
@@ -187,7 +183,7 @@ public class PostCareService : IPostCareService
                 .ThenInclude(s => s.TreatmentPlanItem)
                     .ThenInclude(i => i.TreatmentPlan)
                         .ThenInclude(p => p.PatientUser)
-            .Where(r => managedDepartmentIds.Contains(r.ToDepartmentId));
+            .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(status))
         {
@@ -226,8 +222,10 @@ public class PostCareService : IPostCareService
         if (referral == null)
             return ApiResponse<DepartmentReferralDto>.Fail("Không tìm thấy yêu cầu chuyển khoa.");
 
-        if (referral.ToDepartment.ManagerUserId != managerUserId)
-            return ApiResponse<DepartmentReferralDto>.Forbidden("Bạn không có quyền duyệt ca chuyển khoa đến chuyên khoa này.");
+        var caller = await _dbContext.UserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == managerUserId, ct);
+        bool isStaff = caller != null && (caller.Role == UserRole.Receptionist || caller.Role == UserRole.SystemAdministrator);
+        if (!isStaff)
+            return ApiResponse<DepartmentReferralDto>.Forbidden("Bạn không có quyền duyệt ca chuyển khoa. Chỉ Lễ tân hoặc Quản trị viên mới có quyền duyệt và điều phối ca chuyển khoa.");
 
         if (referral.Status != "Pending")
             return ApiResponse<DepartmentReferralDto>.Fail($"Ca chuyển khoa này đã được xử lý trước đó (Trạng thái: {referral.Status}).");

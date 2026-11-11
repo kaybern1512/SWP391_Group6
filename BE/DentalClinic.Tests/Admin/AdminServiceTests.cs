@@ -39,7 +39,7 @@ public class AdminServiceTests
         var managerUser = new UserAccount
         {
             UserId = 10,
-            Email = "manager@dentalcare.com",
+            Email = "nam.le@dentalcare.com",
             Role = UserRole.Dentist,
             Status = AccountStatus.Active
         };
@@ -47,7 +47,7 @@ public class AdminServiceTests
         {
             UserId = 10,
             EmployeeCode = "EMP-010",
-            FullName = "Trưởng Khoa Lê Hoàng Nam",
+            FullName = "Bác Sĩ Lê Hoàng Nam",
             EmploymentStatus = "Active"
         };
         db.UserAccounts.Add(managerUser);
@@ -108,7 +108,7 @@ public class AdminServiceTests
         Assert.True(result.Success);
         Assert.NotEmpty(result.Data!);
         Assert.Equal("Khoa Răng Tổng Quát", result.Data![0].Name);
-        Assert.Equal("Trưởng Khoa Lê Hoàng Nam", result.Data![0].ManagerName);
+        Assert.Equal("Bác Sĩ Lê Hoàng Nam", result.Data![0].ManagerName);
     }
 
     [Fact]

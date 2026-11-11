@@ -124,7 +124,7 @@ public class AdminService : IAdminService
 
             if (!staffExists)
             {
-                return ApiResponse<AdminDepartmentDto>.Fail("Trưởng khoa được chỉ định không tồn tại trong danh sách nhân sự.");
+                return ApiResponse<AdminDepartmentDto>.Fail("Nhân sự được chỉ định không tồn tại trong danh sách nhân sự.");
             }
         }
 
@@ -183,7 +183,7 @@ public class AdminService : IAdminService
 
             if (!staffExists)
             {
-                return ApiResponse<AdminDepartmentDto>.Fail("Trưởng khoa được chỉ định không tồn tại.");
+                return ApiResponse<AdminDepartmentDto>.Fail("Nhân sự được chỉ định không tồn tại.");
             }
         }
 

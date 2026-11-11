@@ -7,7 +7,7 @@ class BlogEditorManager {
     constructor(options) {
         this.quillContainerSelector = options.quillContainerSelector || '#quillEditorContainer';
         this.hiddenContentSelector = options.hiddenContentSelector || '#hiddenContent';
-        this.uploadUrl = options.uploadUrl || '/Dentist/Blog/UploadMedia';
+        this.uploadUrl = options.uploadUrl || '/Admin/Blog/UploadMedia';
         this.blogPostId = options.blogPostId || null;
         this.activeXhr = null;
 

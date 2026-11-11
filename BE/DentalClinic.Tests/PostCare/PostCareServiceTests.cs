@@ -265,20 +265,25 @@ public class PostCareServiceTests
         var createRes = await service.CreateReferralAsync(20, req);
         Assert.True(createRes.Success);
 
-        // Manager reviews
+        // Dentist attempts to review referral - must be rejected
         var reviewReq = new ReviewReferralRequest
         {
             Status = "Accepted",
             AssignedDentistUserId = 30 // BS C in Ortho
         };
 
-        var reviewRes = await service.ReviewReferralAsync(102, createRes.Data!.ReferralId, reviewReq);
+        var dentistForbiddenRes = await service.ReviewReferralAsync(102, createRes.Data!.ReferralId, reviewReq);
+        Assert.False(dentistForbiddenRes.Success);
+        Assert.Equal("FORBIDDEN", dentistForbiddenRes.ErrorCode);
+
+        // Receptionist reviews and coordinates referral - succeeds
+        var reviewRes = await service.ReviewReferralAsync(50, createRes.Data!.ReferralId, reviewReq);
 
         Assert.True(reviewRes.Success);
         Assert.NotNull(reviewRes.Data);
         Assert.Equal("Assigned", reviewRes.Data.Status);
         Assert.Equal(30, reviewRes.Data.AssignedDentistUserId);
-        Assert.Equal("Trưởng Khoa Chỉnh Nha", reviewRes.Data.ReviewedByName);
+        Assert.Equal("Lễ Tân 1", reviewRes.Data.ReviewedByName);
     }
 
     [Fact]
@@ -295,7 +300,7 @@ public class PostCareServiceTests
         });
         Assert.True(referral.Success);
 
-        var result = await service.ReviewReferralAsync(102, referral.Data!.ReferralId, new ReviewReferralRequest
+        var result = await service.ReviewReferralAsync(50, referral.Data!.ReferralId, new ReviewReferralRequest
         {
             Status = "Accepted",
             AssignedDentistUserId = 20
