@@ -21,7 +21,7 @@ test.describe('DentalCare Care Episode, Additional Services & Internal Referral 
     await expect(page.locator('body')).toBeVisible();
 
     // 2. Dentist
-    await loginAs(page, 'dentist1@dentalcare.com');
+    await loginAs(page, 'dentist@dentalcare.com');
     await page.goto('/Dentist/Appointments/Today');
     await expect(page).toHaveURL(/.*\/Dentist\/.*/i);
     await expect(page.locator('body')).toBeVisible();
@@ -45,7 +45,7 @@ test.describe('DentalCare Care Episode, Additional Services & Internal Referral 
   // E2E-02: DENTIST EXAMINATION & ADDITIONAL SERVICE (CASE A - SAME DOCTOR)
   // =========================================================================
   test('E2E-02: Dentist In-Service Examination & Additional Service Task Modal', async ({ page }) => {
-    await loginAs(page, 'dentist1@dentalcare.com');
+    await loginAs(page, 'dentist@dentalcare.com');
 
     await page.goto('/Dentist/MedicalRecords');
     await page.waitForLoadState('domcontentloaded');
@@ -77,7 +77,7 @@ test.describe('DentalCare Care Episode, Additional Services & Internal Referral 
   // E2E-03: DENTIST CROSS-DEPARTMENT REFERRAL / HANDOFF (CASE B)
   // =========================================================================
   test('E2E-03: Dentist Referral Dashboard & Internal Department Referral View', async ({ page }) => {
-    await loginAs(page, 'dentist1@dentalcare.com');
+    await loginAs(page, 'dentist@dentalcare.com');
 
     await page.goto('/Dentist/Referrals');
     await page.waitForLoadState('domcontentloaded');
@@ -154,7 +154,7 @@ test.describe('DentalCare Care Episode, Additional Services & Internal Referral 
       await page.waitForLoadState('domcontentloaded');
 
       await expect(page.locator('h1, h2, h3, h4').filter({ hasText: /Hóa Đơn Viện Phí/i })).toBeVisible();
-      await expect(page.locator('table')).toBeVisible();
+      await expect(page.locator('table').first()).toBeVisible();
     }
 
     expect(errors).toEqual([]);

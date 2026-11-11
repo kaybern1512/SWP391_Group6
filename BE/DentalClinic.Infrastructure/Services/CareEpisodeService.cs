@@ -428,19 +428,21 @@ public class CareEpisodeService : ICareEpisodeService
         if (sourceAppt == null)
             return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Không tìm thấy ca khám nguồn.");
 
-        var targetDept = await _dbContext.Departments.FirstOrDefaultAsync(d => d.DepartmentId == request.ToDepartmentId && d.Status == "Active", ct);
-        if (targetDept == null)
-            return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Chuyên khoa chuyển đến không tồn tại hoặc đã ngừng hoạt động.");
-
         DepartmentService? requestedService = null;
         if (request.RequestedServiceId > 0)
         {
             requestedService = await _dbContext.DepartmentServices
-                .FirstOrDefaultAsync(s => s.DepartmentServiceId == request.RequestedServiceId && s.DepartmentId == request.ToDepartmentId && s.Status == "Active", ct);
+                .FirstOrDefaultAsync(s => s.DepartmentServiceId == request.RequestedServiceId && s.Status == "Active", ct);
 
             if (requestedService == null)
-                return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Dịch vụ yêu cầu không thuộc chuyên khoa tiếp nhận.");
+                return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Dịch vụ yêu cầu không tồn tại hoặc đã ngừng hoạt động.");
+
+            request.ToDepartmentId = requestedService.DepartmentId;
         }
+
+        var targetDept = await _dbContext.Departments.FirstOrDefaultAsync(d => d.DepartmentId == request.ToDepartmentId && d.Status == "Active", ct);
+        if (targetDept == null)
+            return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Chuyên khoa chuyển đến không tồn tại hoặc đã ngừng hoạt động.");
 
         // Ensure episode exists
         if (!sourceAppt.CareEpisodeId.HasValue)
@@ -467,7 +469,7 @@ public class CareEpisodeService : ICareEpisodeService
             RequestedServiceId = request.RequestedServiceId > 0 ? request.RequestedServiceId : null,
             AssignedDentistUserId = request.PreferredDentistUserId,
             Reason = request.Reason.Trim(),
-            Urgency = string.IsNullOrWhiteSpace(request.Urgency) ? "Normal" : request.Urgency.Trim(),
+            Urgency = string.Equals(request.Urgency?.Trim(), "Urgent", StringComparison.OrdinalIgnoreCase) ? "Urgent" : "Normal",
             Status = "Pending",
             ClinicalInstructions = request.ClinicalInstructions?.Trim(),
             CreatedAt = DateTime.UtcNow
@@ -705,7 +707,7 @@ public class CareEpisodeService : ICareEpisodeService
             Status = AppointmentStatus.Confirmed,
             QueueNumber = null, // Strictly null until patient checks in at Station B
             CareEpisodeId = episodeId,
-            BookingSource = "InternalReferral",
+            BookingSource = BookingSource.Receptionist,
             ReasonForVisit = $"Chuyển chuyên khoa từ ca khám #{referral.SourceAppointment?.AppointmentCode}: {referral.Reason}",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow

@@ -440,8 +440,8 @@ public class DentistMedicalRecordController : Controller
             }
         }
 
-        // Section 6: Ghi nhận đúng PerformedServices thực tế tại ghế điều trị
-        if (_treatmentApi != null && appointmentId > 0)
+        // Section 6: Ghi nhận đúng PerformedServices thực tế tại ghế điều trị khi bác sĩ tự thực hiện
+        if (executionMode != "delegate" && _treatmentApi != null && appointmentId > 0)
         {
             var req = new AddPerformedServiceToAppointmentRequest
             {
