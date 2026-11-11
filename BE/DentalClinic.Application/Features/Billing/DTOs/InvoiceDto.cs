@@ -30,6 +30,8 @@ public class InvoiceDto
     public DateTime CreatedAt { get; set; }
     public DateTime? AppointmentDate { get; set; }
     public string? ReasonForVisit { get; set; }
+    public long? CareEpisodeId { get; set; }
+    public string? CareEpisodeCode { get; set; }
 
     // Clinic Info (for printing and receipt layout)
     public string ClinicName { get; set; } = "Nha Khoa Đa Chuyên Khoa DentalCare";

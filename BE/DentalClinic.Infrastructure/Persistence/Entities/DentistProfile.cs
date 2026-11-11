@@ -15,6 +15,12 @@ public partial class DentistProfile
 
     public string? Biography { get; set; }
 
+    public bool HasRadiationSafetyCert { get; set; } = false;
+
+    public string? RadiationCertNumber { get; set; }
+
+    public DateOnly? RadiationCertExpiryDate { get; set; }
+
     public virtual ICollection<Appointment> AppointmentAssignedDentistUsers { get; set; } = new List<Appointment>();
 
     public virtual ICollection<AppointmentChangeProposal> AppointmentChangeProposals { get; set; } = new List<AppointmentChangeProposal>();

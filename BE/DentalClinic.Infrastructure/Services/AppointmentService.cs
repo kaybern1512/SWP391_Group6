@@ -1244,6 +1244,24 @@ public class AppointmentService : IAppointmentService
 
                 }
 
+                var xrayTargetDate = DateOnly.FromDateTime(requestedStart);
+                var startT = TimeOnly.FromDateTime(requestedStart);
+                var endT = TimeOnly.FromDateTime(scheduledEnd);
+
+                bool xrayConflict = await _dbContext.XrayDentistRosters
+                    .AsNoTracking()
+                    .AnyAsync(r => r.DentistUserId == assignedDentistId &&
+                                   r.WorkDate == xrayTargetDate &&
+                                   r.Status == "Active" &&
+                                   r.StartTime < endT &&
+                                   r.EndTime > startT, ct);
+
+                if (xrayConflict)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return ApiResponse<AppointmentDto>.Fail("Bác sĩ đã được phân công trực phòng X-quang trong khoảng thời gian này, không thể nhận lịch khám lâm sàng.");
+                }
+
                 bool patientConflict = await _dbContext.Appointments
 
                     .AnyAsync(a => a.PatientUserId == request.PatientUserId &&
@@ -1310,37 +1328,32 @@ public class AppointmentService : IAppointmentService
 
                 }
 
-                // 8. Monotonic Queue Number Allocation
-
-                var existingQueueNumbers = await _dbContext.Appointments
-
-                    .Where(a => a.DepartmentId == request.DepartmentId &&
-
-                                a.ScheduledStart != null &&
-
-                                a.ScheduledStart.Value.Date == targetDate &&
-
-                                a.QueueNumber != null &&
-
-                                a.QueueNumber != "")
-
-                    .Select(a => a.QueueNumber!)
-
-                    .ToListAsync(ct);
-
-                int maxSeq = 0;
-                foreach (var qn in existingQueueNumbers)
+                // 8. Monotonic Queue Number Allocation when confirmed (or auto check in)
+                if (shouldConfirm)
                 {
-                    if (string.IsNullOrWhiteSpace(qn)) continue;
-                    var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
-                    if (match.Success && int.TryParse(match.Value, out int num))
+                    var existingQueueNumbers = await _dbContext.Appointments
+                        .Where(a => a.DepartmentId == request.DepartmentId &&
+                                    a.ScheduledStart != null &&
+                                    a.ScheduledStart.Value.Date == targetDate &&
+                                    a.QueueNumber != null &&
+                                    a.QueueNumber != "")
+                        .Select(a => a.QueueNumber!)
+                        .ToListAsync(ct);
+
+                    int maxSeq = 0;
+                    foreach (var qn in existingQueueNumbers)
                     {
-                        if (num > maxSeq) maxSeq = num;
+                        if (string.IsNullOrWhiteSpace(qn)) continue;
+                        var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
+                        if (match.Success && int.TryParse(match.Value, out int num))
+                        {
+                            if (num > maxSeq) maxSeq = num;
+                        }
                     }
+                    var dept = await _dbContext.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == request.DepartmentId, ct);
+                    var deptCode = GetDepartmentCode(dept?.Name, request.DepartmentId);
+                    queueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
                 }
-                var dept = await _dbContext.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == request.DepartmentId, ct);
-                var deptCode = GetDepartmentCode(dept?.Name, request.DepartmentId);
-                queueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
 
             }
 
@@ -1443,7 +1456,7 @@ public class AppointmentService : IAppointmentService
 
             return ApiResponse<AppointmentDto>.Ok(dto!, shouldConfirm
 
-                ? $"Tiếp nhận, phân bổ tài nguyên và xác nhận lịch hẹn tại quầy thành công (STT: {queueNumber})."
+                ? (request.AutoCheckIn ? $"Tiếp nhận, phân bổ tài nguyên và check-in thành công (STT: {queueNumber})." : $"Tiếp nhận, phân bổ tài nguyên và xác nhận lịch hẹn tại quầy thành công (STT: {queueNumber}).")
 
                 : "Tiếp nhận và tạo lịch hẹn tại quầy thành công.");
 
@@ -3140,7 +3153,7 @@ public class AppointmentService : IAppointmentService
 
         long staffUserId,
 
-        string? note,
+        string? note = null,
 
         CancellationToken ct = default)
 
@@ -3386,7 +3399,7 @@ public class AppointmentService : IAppointmentService
 
         long staffUserId,
 
-        string? note,
+        string? note = null,
 
         CancellationToken ct = default)
 
@@ -4378,6 +4391,13 @@ public class AppointmentService : IAppointmentService
 
             }
 
+            // Idempotent retry: Nếu lịch hẹn đã được xác nhận trước đó, trả về thành công với số thứ tự hiện tại (Retry không tạo lại số)
+            if (appointment.Status == AppointmentStatus.Confirmed)
+            {
+                var existingDto = await MapToDtoAsync(appointmentId, ct);
+                return ApiResponse<AppointmentDto>.Ok(existingDto!, "Lịch hẹn đã được xác nhận trước đó.");
+            }
+
             if (appointment.Status != AppointmentStatus.PendingDepartmentReview && appointment.Status != AppointmentStatus.PendingReceptionReview)
 
             {
@@ -4682,6 +4702,23 @@ public class AppointmentService : IAppointmentService
 
             }
 
+            var xrayTargetDate = DateOnly.FromDateTime(finalStart.Value);
+            var startT = TimeOnly.FromDateTime(finalStart.Value);
+            var endT = TimeOnly.FromDateTime(finalEnd.Value);
+
+            bool xrayConflict = await _dbContext.XrayDentistRosters
+                .AsNoTracking()
+                .AnyAsync(r => r.DentistUserId == request.AssignedDentistUserId &&
+                               r.WorkDate == xrayTargetDate &&
+                               r.Status == "Active" &&
+                               r.StartTime < endT &&
+                               r.EndTime > startT, ct);
+
+            if (xrayConflict)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Bác sĩ đã được phân công trực phòng X-quang trong khoảng thời gian này, không thể nhận lịch khám lâm sàng.");
+            }
+
             // 2. REVALIDATE PATIENT CONFLICT (Across all dentists and departments)
 
             bool patientConflict = await _dbContext.Appointments
@@ -4761,38 +4798,46 @@ public class AppointmentService : IAppointmentService
             }
 
             // 4. GENERATE MONOTONIC QUEUE NUMBER (max sequence + 1 per department and target date)
+            // Retry không tạo lại số: Bảo toàn QueueNumber nếu cùng chuyên khoa và ngày khám
+            var deptId = appointment.DepartmentId;
 
-            var existingQueueNumbers = await _dbContext.Appointments
+            string queueNumber;
+            bool canReuseExistingQueue = !string.IsNullOrWhiteSpace(appointment.QueueNumber) &&
+                                         appointment.DepartmentId == deptId &&
+                                         appointment.ScheduledStart.HasValue &&
+                                         appointment.ScheduledStart.Value.Date == targetDate;
 
-                .Where(a => a.DepartmentId == appointment.DepartmentId &&
-
-                            a.ScheduledStart != null &&
-
-                            a.ScheduledStart.Value.Date == targetDate &&
-
-                            a.QueueNumber != null &&
-
-                            a.QueueNumber != "")
-
-                .Select(a => a.QueueNumber!)
-
-                .ToListAsync(ct);
-
-            int maxSeq = 0;
-            foreach (var qn in existingQueueNumbers)
+            if (canReuseExistingQueue)
             {
-                if (string.IsNullOrWhiteSpace(qn)) continue;
-                var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
-                if (match.Success && int.TryParse(match.Value, out int num))
-                {
-                    if (num > maxSeq) maxSeq = num;
-                }
+                queueNumber = appointment.QueueNumber!;
             }
-            var dept = appointment.DepartmentId.HasValue
-                ? await _dbContext.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == appointment.DepartmentId.Value, ct)
-                : null;
-            var deptCode = GetDepartmentCode(dept?.Name, appointment.DepartmentId);
-            var queueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
+            else
+            {
+                var existingQueueNumbers = await _dbContext.Appointments
+                    .Where(a => a.DepartmentId == deptId &&
+                                a.ScheduledStart != null &&
+                                a.ScheduledStart.Value.Date == targetDate &&
+                                a.QueueNumber != null &&
+                                a.QueueNumber != "")
+                    .Select(a => a.QueueNumber!)
+                    .ToListAsync(ct);
+
+                int maxSeq = 0;
+                foreach (var qn in existingQueueNumbers)
+                {
+                    if (string.IsNullOrWhiteSpace(qn)) continue;
+                    var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
+                    if (match.Success && int.TryParse(match.Value, out int num))
+                    {
+                        if (num > maxSeq) maxSeq = num;
+                    }
+                }
+                var dept = deptId.HasValue
+                    ? await _dbContext.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == deptId.Value, ct)
+                    : null;
+                var deptCode = GetDepartmentCode(dept?.Name, deptId);
+                queueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
+            }
 
             var oldStatus = appointment.Status;
 
@@ -4826,7 +4871,7 @@ public class AppointmentService : IAppointmentService
 
                 ChangedByUserId = managerUserId,
 
-                Note = $"Trưởng khoa xác nhận lịch hẹn. Số thứ tự khám: {queueNumber}.",
+                Note = $"Trưởng khoa/Lễ tân xác nhận lịch hẹn. Số thứ tự: {queueNumber}.",
 
                 ChangedAt = DateTime.UtcNow
 
@@ -4876,7 +4921,7 @@ public class AppointmentService : IAppointmentService
 
                     "Lịch khám đã được xác nhận!",
 
-                    $"Lịch khám mã {appointment.AppointmentCode} đã được Trưởng khoa xác nhận thành công. Số thứ tự tiếp đón của bạn là {queueNumber}.",
+                    $"Lịch khám mã {appointment.AppointmentCode} đã được Trưởng khoa/Lễ tân xác nhận thành công. Số thứ tự khám của bạn là {queueNumber}.",
 
                     ct);
 

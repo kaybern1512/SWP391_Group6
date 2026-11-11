@@ -39,7 +39,7 @@ public interface IAppointmentService
         long? dentistId = null,
         string? status = null,
         CancellationToken ct = default);
-    Task<ApiResponse> ReceptionistCheckInAsync(long appointmentId, long staffUserId, string? note, CancellationToken ct = default);
+    Task<ApiResponse> ReceptionistCheckInAsync(long appointmentId, long staffUserId, string? note = null, CancellationToken ct = default);
     Task<ApiResponse> ReceptionistMarkNoShowAsync(long appointmentId, long staffUserId, string? note = null, CancellationToken ct = default);
     Task<ApiResponse> StaffCancelAppointmentAsync(long appointmentId, long staffUserId, string reason, CancellationToken ct = default);
     Task<ApiResponse<AppointmentDto>> ReceptionistConfirmAsync(long appointmentId, long receptionistUserId, ManagerConfirmRequest request, CancellationToken ct = default);

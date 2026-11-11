@@ -27,7 +27,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private DentalClinicDbContext CreateDbContext()
     {
@@ -696,7 +696,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
 
         var apptCheckedIn = await db.Appointments.FindAsync(appointmentId);
         Assert.Equal(AppointmentStatus.CheckedIn, apptCheckedIn!.Status);
-        // QueueNumber must NOT change or duplicate
+        // QueueNumber must be preserved upon Check-in
         Assert.Equal(allocatedQueueNumber, apptCheckedIn.QueueNumber);
 
         // ---------------------------------------------------------------------

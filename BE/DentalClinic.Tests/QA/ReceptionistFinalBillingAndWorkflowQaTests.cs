@@ -665,6 +665,12 @@ public class ReceptionistFinalBillingAndWorkflowQaTests
         Assert.Equal(101, confRes.Data.DentalChairId);
         Assert.NotNull(confRes.Data.QueueNumber);
         Assert.StartsWith("Q", confRes.Data.QueueNumber);
+
+        // Check-in preserves QueueNumber
+        var checkInRes = await apptService.ReceptionistCheckInAsync(bookRes.Data.AppointmentId, staffId, "Check-in");
+        Assert.True(checkInRes.Success);
+        var dbAppt = await db.Appointments.FindAsync(bookRes.Data.AppointmentId);
+        Assert.Equal(confRes.Data.QueueNumber, dbAppt!.QueueNumber);
     }
 
     [Fact]

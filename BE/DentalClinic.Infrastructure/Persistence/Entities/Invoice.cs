@@ -11,6 +11,8 @@ public partial class Invoice
 
     public long AppointmentId { get; set; }
 
+    public long? CareEpisodeId { get; set; }
+
     public long GeneratedByUserId { get; set; }
 
     public decimal TotalAmount { get; set; }
@@ -20,6 +22,8 @@ public partial class Invoice
     public DateTime CreatedAt { get; set; }
 
     public virtual Appointment Appointment { get; set; } = null!;
+
+    public virtual CareEpisode? CareEpisode { get; set; }
 
     public virtual StaffProfile GeneratedByUser { get; set; } = null!;
 

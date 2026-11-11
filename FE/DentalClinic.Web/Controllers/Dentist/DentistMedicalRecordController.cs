@@ -24,6 +24,7 @@ public class DentistMedicalRecordController : Controller
     private readonly ITreatmentApiService? _treatmentApi;
     private readonly IPrescriptionApiService? _prescriptionApi;
     private readonly IMedicineApiService? _medicineApi;
+    private readonly ICareEpisodeApiService? _careEpisodeApi;
 
     [ActivatorUtilitiesConstructor]
     public DentistMedicalRecordController(
@@ -32,7 +33,8 @@ public class DentistMedicalRecordController : Controller
         IPostCareApiService postCareApi,
         ITreatmentApiService treatmentApi,
         IPrescriptionApiService prescriptionApi,
-        IMedicineApiService medicineApi)
+        IMedicineApiService medicineApi,
+        ICareEpisodeApiService? careEpisodeApi = null)
     {
         _medicalRecordApi = medicalRecordApi;
         _appointmentApiService = appointmentApiService;
@@ -40,6 +42,7 @@ public class DentistMedicalRecordController : Controller
         _treatmentApi = treatmentApi;
         _prescriptionApi = prescriptionApi;
         _medicineApi = medicineApi;
+        _careEpisodeApi = careEpisodeApi;
     }
 
     public DentistMedicalRecordController(
@@ -408,8 +411,37 @@ public class DentistMedicalRecordController : Controller
             return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
         }
 
-        // Section 6: Ghi nhận đúng PerformedServices thực tế tại ghế điều trị
-        if (_treatmentApi != null && appointmentId > 0)
+        // CareEpisode Synchronization: Same Doctor task vs Cross-Doctor handoff
+        if (_careEpisodeApi != null && appointmentId > 0)
+        {
+            if (executionMode == "delegate")
+            {
+                var apptDetail = _appointmentApiService != null ? await _appointmentApiService.GetAppointmentDetailAsync(appointmentId) : null;
+                var toDeptId = apptDetail?.Data?.DepartmentId ?? 1;
+                await _careEpisodeApi.CreateInternalReferralAsync(new CreateCareEpisodeReferralRequest
+                {
+                    SourceAppointmentId = appointmentId,
+                    RequestedServiceId = serviceId,
+                    ToDepartmentId = toDeptId,
+                    PreferredDentistUserId = targetDentistUserId,
+                    Reason = notes ?? "Chuyển tiếp dịch vụ trong đợt khám",
+                    Urgency = "Standard"
+                });
+            }
+            else
+            {
+                await _careEpisodeApi.AddServiceTaskAsync(new CreateEpisodeServiceTaskRequest
+                {
+                    AppointmentId = appointmentId,
+                    DepartmentServiceId = serviceId,
+                    Quantity = quantity > 0 ? quantity : 1,
+                    Notes = notes
+                });
+            }
+        }
+
+        // Section 6: Ghi nhận đúng PerformedServices thực tế tại ghế điều trị khi bác sĩ tự thực hiện
+        if (executionMode != "delegate" && _treatmentApi != null && appointmentId > 0)
         {
             var req = new AddPerformedServiceToAppointmentRequest
             {

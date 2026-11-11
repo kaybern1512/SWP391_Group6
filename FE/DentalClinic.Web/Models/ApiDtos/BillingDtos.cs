@@ -12,6 +12,12 @@ public class InvoiceItemDto
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal Amount { get; set; }
+    public long? AppointmentId { get; set; }
+    public string? AppointmentCode { get; set; }
+    public long? PerformingDentistUserId { get; set; }
+    public string? PerformingDentistName { get; set; }
+    public long? ServiceTaskId { get; set; }
+    public string? SourceType { get; set; }
 }
 
 public class PaymentDto
@@ -56,6 +62,8 @@ public class InvoiceDto
     public DateTime CreatedAt { get; set; }
     public DateTime? AppointmentDate { get; set; }
     public string? ReasonForVisit { get; set; }
+    public long? CareEpisodeId { get; set; }
+    public string? CareEpisodeCode { get; set; }
 
     public string ClinicName { get; set; } = "Nha Khoa Đa Chuyên Khoa DentalCare";
     public string ClinicAddress { get; set; } = "123 Đường Nguyễn Tri Phương, Quận 10, TP. Hồ Chí Minh";
@@ -106,6 +114,8 @@ public class AppointmentBillingPreparationDto
     public string? DepartmentName { get; set; }
     public DateTime? ScheduledStart { get; set; }
     public string? ReasonForVisit { get; set; }
+    public long? CareEpisodeId { get; set; }
+    public string? CareEpisodeCode { get; set; }
     public string Status { get; set; } = string.Empty;
     public bool HasInvoice { get; set; }
     public long? ExistingInvoiceId { get; set; }

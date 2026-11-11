@@ -7,11 +7,15 @@ public partial class DepartmentReferral
 {
     public long ReferralId { get; set; }
 
-    public long TreatmentSessionId { get; set; }
+    public long? TreatmentSessionId { get; set; }
 
     public long? SourceAppointmentId { get; set; }
 
     public long? DestinationAppointmentId { get; set; }
+
+    public long? CareEpisodeId { get; set; }
+
+    public long? RequestedServiceId { get; set; }
 
     public long FromDepartmentId { get; set; }
 
@@ -27,6 +31,8 @@ public partial class DepartmentReferral
 
     public string Status { get; set; } = null!;
 
+    public string? ClinicalInstructions { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? ReviewedAt { get; set; }
@@ -39,9 +45,13 @@ public partial class DepartmentReferral
 
     public virtual Department ToDepartment { get; set; } = null!;
 
-    public virtual TreatmentSession TreatmentSession { get; set; } = null!;
+    public virtual TreatmentSession? TreatmentSession { get; set; }
 
     public virtual Appointment? SourceAppointment { get; set; }
 
     public virtual Appointment? DestinationAppointment { get; set; }
+
+    public virtual CareEpisode? CareEpisode { get; set; }
+
+    public virtual DepartmentService? RequestedService { get; set; }
 }

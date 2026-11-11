@@ -145,6 +145,16 @@
                                                     <i class="bi bi-calendar-plus me-1"></i>Đặt lịch
                                                 </button>
                                             }
+                                            @if (r.DestinationAppointmentId.HasValue)
+                                            {
+                                                <form asp-action="StationBCheckIn" method="post" class="d-inline ms-1">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="AppointmentId" value="@r.DestinationAppointmentId.Value" />
+                                                    <button type="submit" class="btn btn-success btn-sm" title="Bệnh nhân đã đến Trạm B - Check-in cấp STT">
+                                                        <i class="bi bi-person-check-fill me-1"></i>Check-in Trạm B
+                                                    </button>
+                                                </form>
+                                            }
                                         </div>
                                     </td>
                                 </tr>

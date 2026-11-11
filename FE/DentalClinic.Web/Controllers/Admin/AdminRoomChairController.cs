@@ -9,17 +9,21 @@ namespace DentalClinic.Web.Controllers.Admin;
 
 [Authorize(Roles = "SystemAdministrator")]
 [Route("Admin/Rooms")]
+[Route("Admin/RoomChair")]
 public class AdminRoomChairController : Controller
 {
     private readonly IAdminApiService _adminApi;
+    private readonly IImagingApiService _imagingApi;
 
-    public AdminRoomChairController(IAdminApiService adminApi)
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public AdminRoomChairController(IAdminApiService adminApi, IImagingApiService imagingApi)
     {
         _adminApi = adminApi;
+        _imagingApi = imagingApi;
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index(long? roomId = null, string tab = "rooms")
+    public async Task<IActionResult> Index(long? roomId = null, string tab = "rooms", string? rosterDate = null)
     {
         var roomsResult = await _adminApi.GetRoomsAsync();
         var chairsResult = await _adminApi.GetChairsAsync(roomId);
@@ -28,6 +32,16 @@ public class AdminRoomChairController : Controller
         var rooms = roomsResult?.IsSuccess == true && roomsResult.Data != null ? roomsResult.Data : new();
         var chairs = chairsResult?.IsSuccess == true && chairsResult.Data != null ? chairsResult.Data : new();
         var depts = deptsResult?.IsSuccess == true && deptsResult.Data != null ? deptsResult.Data : new();
+
+        DateOnly targetRosterDate = DateOnly.TryParse(rosterDate, out var parsedDate) ? parsedDate : DateOnly.FromDateTime(DateTime.Today);
+        var xrayRostersRes = await _imagingApi.GetRostersAsync(workDate: targetRosterDate);
+        var qualifiedDentistsRes = await _imagingApi.GetQualifiedDentistsAsync();
+        var equipmentsRes = await _imagingApi.GetAllEquipmentsAsync();
+
+        ViewBag.XrayRosters = xrayRostersRes?.Data ?? new();
+        ViewBag.QualifiedDentists = qualifiedDentistsRes?.Data ?? new();
+        ViewBag.Equipments = equipmentsRes?.Data ?? new();
+        ViewBag.RosterDate = targetRosterDate.ToString("yyyy-MM-dd");
 
         var vm = new RoomChairManageViewModel
         {
@@ -195,5 +209,98 @@ public class AdminRoomChairController : Controller
         }
 
         return RedirectToAction(nameof(Index), new { tab = "chairs", roomId });
+    }
+
+    [HttpPost("AssignXrayRoster")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AssignXrayRoster(
+        long roomId,
+        long equipmentId,
+        long dentistUserId,
+        long? backupDentistUserId,
+        string workDate,
+        string shiftType,
+        string startTime,
+        string endTime,
+        string? notes)
+    {
+        if (!DateOnly.TryParse(workDate, out var parsedDate) ||
+            !TimeOnly.TryParse(startTime, out var startT) ||
+            !TimeOnly.TryParse(endTime, out var endT))
+        {
+            TempData["ErrorMessage"] = "Thông tin ngày hoặc giờ trực không hợp lệ.";
+            return RedirectToAction(nameof(Index), new { tab = "xray-roster" });
+        }
+
+        var req = new AssignXrayRosterRequest
+        {
+            RoomId = roomId,
+            EquipmentId = equipmentId,
+            DentistUserId = dentistUserId,
+            BackupDentistUserId = backupDentistUserId,
+            WorkDate = parsedDate,
+            ShiftType = shiftType,
+            StartTime = startT,
+            EndTime = endT,
+            Notes = notes
+        };
+
+        var result = await _imagingApi.AssignRosterAsync(req);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Phân công bác sĩ trực phòng X-quang thành công.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể phân công bác sĩ trực.";
+        }
+
+        return RedirectToAction(nameof(Index), new { tab = "xray-roster", rosterDate = workDate });
+    }
+
+    [HttpPost("ReplaceXrayDentist")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReplaceXrayDentist(
+        long rosterId,
+        long newDentistUserId,
+        long? newBackupDentistUserId,
+        string reason,
+        string? rosterDate)
+    {
+        var req = new ReplaceXrayDentistRequest
+        {
+            NewDentistUserId = newDentistUserId,
+            NewBackupDentistUserId = newBackupDentistUserId,
+            Reason = string.IsNullOrWhiteSpace(reason) ? "Điều chuyển theo yêu cầu vận hành phòng khám" : reason.Trim()
+        };
+
+        var result = await _imagingApi.ReplaceDentistAsync(rosterId, req);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Điều chuyển bác sĩ trực phòng X-quang thành công.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể điều chuyển bác sĩ trực.";
+        }
+
+        return RedirectToAction(nameof(Index), new { tab = "xray-roster", rosterDate });
+    }
+
+    [HttpPost("CancelXrayRoster")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CancelXrayRoster(long rosterId, string? reason, string? rosterDate)
+    {
+        var result = await _imagingApi.CancelRosterAsync(rosterId, reason ?? "Quản trị viên hủy ca trực");
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đã hủy ca trực phòng X-quang thành công.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể hủy ca trực.";
+        }
+
+        return RedirectToAction(nameof(Index), new { tab = "xray-roster", rosterDate });
     }
 }
