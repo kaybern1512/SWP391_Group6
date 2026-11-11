@@ -432,7 +432,8 @@ public class CareEpisodeLifecycleAndConcurrencyTests
         Assert.True(result.Success);
         Assert.NotNull(result.Data);
         Assert.Equal(AppointmentStatus.Confirmed, result.Data.Status);
-        Assert.Null(result.Data.QueueNumber); // CRITICAL: Queue number MUST NOT be assigned yet!
+        Assert.NotNull(result.Data.QueueNumber); // POLICY ALIGNMENT: Queue number allocated immediately upon Confirmed
+        Assert.StartsWith("Q-ORT-", result.Data.QueueNumber);
 
         // Verify referral updated
         var referral = await db.DepartmentReferrals.FindAsync(referralId);
@@ -441,9 +442,9 @@ public class CareEpisodeLifecycleAndConcurrencyTests
     }
 
     [Fact]
-    public async Task Scenario08_CaseB_StationBQueueIsolation_QueueAssignedOnlyOnCheckIn()
+    public async Task Scenario08_CaseB_StationBQueuePolicy_QueueAssignedOnConfirmedAndPreservedOnCheckIn()
     {
-        var db = CreateDbContext(nameof(Scenario08_CaseB_StationBQueueIsolation_QueueAssignedOnlyOnCheckIn));
+        var db = CreateDbContext(nameof(Scenario08_CaseB_StationBQueuePolicy_QueueAssignedOnConfirmedAndPreservedOnCheckIn));
         await SeedBaseDataAsync(db);
         var service = new CareEpisodeService(db, _mockLogger.Object, _mockNotification.Object);
 
@@ -462,6 +463,10 @@ public class CareEpisodeLifecycleAndConcurrencyTests
         });
         var apptBId = coordRes.Data!.AppointmentId;
 
+        // Verify QueueNumber allocated upon Confirmed
+        Assert.NotNull(coordRes.Data.QueueNumber);
+        Assert.StartsWith("Q-ORT-", coordRes.Data.QueueNumber);
+
         // Complete Station A first so Station B is unblocked
         var apptA = await db.Appointments.FindAsync(5001L);
         apptA!.Status = AppointmentStatus.Completed;
@@ -477,8 +482,8 @@ public class CareEpisodeLifecycleAndConcurrencyTests
         Assert.True(checkInRes.Success);
         Assert.NotNull(checkInRes.Data);
         Assert.Equal(AppointmentStatus.CheckedIn, checkInRes.Data.Status);
-        Assert.NotNull(checkInRes.Data.QueueNumber);
-        Assert.StartsWith("Q-ORT-", checkInRes.Data.QueueNumber);
+        // Preserves exact QueueNumber allocated upon Confirmed
+        Assert.Equal(coordRes.Data.QueueNumber, checkInRes.Data.QueueNumber);
     }
 
     [Fact]

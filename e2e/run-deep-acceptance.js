@@ -171,15 +171,15 @@ async function run() {
   console.log(`[PASS] Referral Coordinated: Success = ${coordData.success}, DestinationAppointmentId = ${coordData.data?.appointmentId}, Message = "${coordData.message}"`);
   const apptBId = coordData.data?.appointmentId;
 
-  // Verify Station B Queue Isolation Invariant in SQL
+  // Verify Queue Policy Alignment: QueueNumber allocated immediately upon Confirmed
   const sqlApptB = runSqlMulti(`SELECT AppointmentId, CareEpisodeId, AssignedDentistUserId, DentalChairId, Status, ISNULL(QueueNumber, 'NULL') AS QueueNumber FROM Appointments WHERE AppointmentId = ${apptBId};`);
   console.log(`[SQL INVARIANT] Appointment B details: ${sqlApptB}`);
 
   const queueNumB = runSql(`SELECT ISNULL(QueueNumber, 'NULL') FROM Appointments WHERE AppointmentId = ${apptBId};`);
-  if (queueNumB === 'NULL') {
-    console.log('[PASS] INVARIANT VERIFIED: Station B QueueNumber IS NULL before Check-In (Queue Isolation preserved).');
+  if (queueNumB !== 'NULL' && queueNumB.length > 0) {
+    console.log(`[PASS] INVARIANT VERIFIED: Station B QueueNumber = "${queueNumB}" allocated immediately upon Confirmed (Queue Policy Alignment).`);
   } else {
-    throw new Error(`INVARIANT VIOLATION: QueueNumber should be NULL but was ${queueNumB}`);
+    throw new Error(`INVARIANT VIOLATION: QueueNumber should NOT be NULL upon Confirmed but was ${queueNumB}`);
   }
 
   // -------------------------------------------------------------------------
@@ -206,6 +206,13 @@ async function run() {
   });
   const validCheckInData = await validCheckInRes.json();
   console.log(`[PASS] Station B Check-In Succeeded: Success = ${validCheckInData.success}, QueueNumber = ${validCheckInData.data?.queueNumber}`);
+
+  // Invariant: QueueNumber must be preserved from Confirmed state, not reallocated
+  if (validCheckInData.data?.queueNumber === queueNumB) {
+    console.log(`[PASS] INVARIANT VERIFIED: QueueNumber "${queueNumB}" preserved identically on Station B Check-In without re-allocation.`);
+  } else {
+    throw new Error(`INVARIANT VIOLATION: QueueNumber changed upon Check-In from "${queueNumB}" to "${validCheckInData.data?.queueNumber}"`);
+  }
 
   // Dentist B starts and completes Appointment B & Task B
   runSql(`UPDATE Appointments SET Status = 'InService', UpdatedAt = SYSUTCDATETIME() WHERE AppointmentId = ${apptBId};`);

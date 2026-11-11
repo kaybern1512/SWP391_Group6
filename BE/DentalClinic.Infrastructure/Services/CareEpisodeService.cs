@@ -692,7 +692,30 @@ public class CareEpisodeService : ICareEpisodeService
 
         var apptCode = await GenerateUniqueAppointmentCodeAsync(ct);
 
-        // CREATE APPOINTMENT B: Status = Confirmed, QueueNumber = NULL (Station B Isolation Invariant)
+        // Allocate Monotonic Queue Number for Department B on scheduled date (Policy: Allocated on Confirmed)
+        var targetDate = scheduledStart.Date;
+        var existingQueueNumbers = await _dbContext.Appointments
+            .Where(a => a.DepartmentId == referral.ToDepartmentId &&
+                        a.ScheduledStart.HasValue &&
+                        a.ScheduledStart.Value.Date == targetDate &&
+                        !string.IsNullOrEmpty(a.QueueNumber))
+            .Select(a => a.QueueNumber!)
+            .ToListAsync(ct);
+
+        int maxSeq = 0;
+        foreach (var qn in existingQueueNumbers)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
+            if (match.Success && int.TryParse(match.Value, out int num))
+            {
+                if (num > maxSeq) maxSeq = num;
+            }
+        }
+
+        var deptCode = GetDepartmentCode(referral.ToDepartment?.Name, referral.ToDepartmentId);
+        var queueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
+
+        // CREATE APPOINTMENT B: Status = Confirmed, QueueNumber allocated immediately upon Confirmed
         var apptB = new Appointment
         {
             AppointmentCode = apptCode,
@@ -705,7 +728,7 @@ public class CareEpisodeService : ICareEpisodeService
             ScheduledStart = scheduledStart,
             ScheduledEnd = scheduledEnd,
             Status = AppointmentStatus.Confirmed,
-            QueueNumber = null, // Strictly null until patient checks in at Station B
+            QueueNumber = queueNumber,
             CareEpisodeId = episodeId,
             BookingSource = BookingSource.Receptionist,
             ReasonForVisit = $"Chuyển chuyên khoa từ ca khám #{referral.SourceAppointment?.AppointmentCode}: {referral.Reason}",
@@ -715,6 +738,17 @@ public class CareEpisodeService : ICareEpisodeService
 
         _dbContext.Appointments.Add(apptB);
         await _dbContext.SaveChangesAsync(ct);
+
+        // Record status history for Appointment B Confirmed
+        _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+        {
+            AppointmentId = apptB.AppointmentId,
+            OldStatus = null,
+            NewStatus = AppointmentStatus.Confirmed,
+            ChangedByUserId = receptionistUserId,
+            Note = $"Tạo và xác nhận ca khám chuyển tiếp #{apptB.AppointmentCode}. Cấp số thứ tự: {queueNumber}.",
+            ChangedAt = DateTime.UtcNow
+        });
 
         // Update referral
         referral.DestinationAppointmentId = apptB.AppointmentId;
@@ -748,8 +782,45 @@ public class CareEpisodeService : ICareEpisodeService
 
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Điều phối ca khám đích #{ApptCode} (ID: {ApptId}) cho ca chuyển khoa #{ReferralId} bởi lễ tân {ReceptionistUserId}",
-            apptB.AppointmentCode, apptB.AppointmentId, referral.ReferralId, receptionistUserId);
+        // Post-commit notifications for Patient & Dentist (Idempotent notification contract)
+        if (_notificationService != null && apptB.PatientUserId > 0)
+        {
+            try
+            {
+                await _notificationService.CreateNotificationAsync(
+                    apptB.PatientUserId,
+                    apptB.AppointmentId,
+                    "AppointmentConfirmed",
+                    $"Xác nhận lịch hẹn chuyển chuyên khoa #{apptB.AppointmentCode}",
+                    $"Lịch khám chuyển chuyên khoa của bạn tại {referral.ToDepartment?.Name ?? "phòng khám"} đã được xác nhận. Số thứ tự: {queueNumber}. Vui lòng đến đúng giờ.",
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lỗi gửi thông báo lịch hẹn cho bệnh nhân {PatientUserId}", apptB.PatientUserId);
+            }
+        }
+
+        if (_notificationService != null && request.AssignedDentistUserId > 0)
+        {
+            try
+            {
+                await _notificationService.CreateNotificationAsync(
+                    request.AssignedDentistUserId,
+                    apptB.AppointmentId,
+                    "AppointmentAssigned",
+                    $"Phân công ca khám chuyển khoa #{apptB.AppointmentCode}",
+                    $"Bạn được phân công tiếp nhận ca khám chuyển khoa #{apptB.AppointmentCode} ({referral.ToDepartment?.Name}). Bệnh nhân có STT: {queueNumber}.",
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lỗi gửi thông báo phân công cho bác sĩ {DentistUserId}", request.AssignedDentistUserId);
+            }
+        }
+
+        _logger.LogInformation("Điều phối ca khám đích #{ApptCode} (ID: {ApptId}) cho ca chuyển khoa #{ReferralId} với STT {QueueNumber} bởi lễ tân {ReceptionistUserId}",
+            apptB.AppointmentCode, apptB.AppointmentId, referral.ReferralId, queueNumber, receptionistUserId);
 
         var assignedDentist = await _dbContext.DentistProfiles
             .Include(d => d.User)
@@ -780,7 +851,7 @@ public class CareEpisodeService : ICareEpisodeService
             ReasonForVisit = apptB.ReasonForVisit
         };
 
-        return ApiResponse<CareEpisodeAppointmentSummaryDto>.Ok(dto, "Điều phối ca khám chuyển khoa thành công. Ca khám đang ở trạng thái Confirmed và chờ bệnh nhân đến Trạm B để Check-in.");
+        return ApiResponse<CareEpisodeAppointmentSummaryDto>.Ok(dto, $"Điều phối ca khám chuyển khoa thành công. Ca khám đang ở trạng thái Confirmed với số thứ tự: {queueNumber}.");
     }
 
     public async Task<ApiResponse<CareEpisodeAppointmentSummaryDto>> StationBCheckInAsync(long receptionistUserId, StationBCheckInRequest request, CancellationToken ct = default)
@@ -819,32 +890,38 @@ public class CareEpisodeService : ICareEpisodeService
             }
         }
 
-        // Allocate Monotonic Queue Number for Department B on today
-        var targetDate = DateTime.UtcNow.Date;
-        var existingQueueNumbers = await _dbContext.Appointments
-            .Where(a => a.DepartmentId == appt.DepartmentId &&
-                        a.ScheduledStart.HasValue &&
-                        a.ScheduledStart.Value.Date == targetDate &&
-                        !string.IsNullOrEmpty(a.QueueNumber))
-            .Select(a => a.QueueNumber!)
-            .ToListAsync(ct);
-
-        int maxSeq = 0;
-        foreach (var qn in existingQueueNumbers)
+        // PRESERVE QueueNumber if already allocated upon Confirmed (Policy Alignment)
+        var queueNumber = appt.QueueNumber;
+        if (string.IsNullOrEmpty(queueNumber))
         {
-            var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
-            if (match.Success && int.TryParse(match.Value, out int num))
-            {
-                if (num > maxSeq) maxSeq = num;
-            }
-        }
+            // Safe fallback for legacy records missing QueueNumber
+            var targetDate = (appt.ScheduledStart ?? DateTime.UtcNow).Date;
+            var existingQueueNumbers = await _dbContext.Appointments
+                .Where(a => a.DepartmentId == appt.DepartmentId &&
+                            a.ScheduledStart.HasValue &&
+                            a.ScheduledStart.Value.Date == targetDate &&
+                            !string.IsNullOrEmpty(a.QueueNumber))
+                .Select(a => a.QueueNumber!)
+                .ToListAsync(ct);
 
-        var deptCode = GetDepartmentCode(appt.Department?.Name, appt.DepartmentId);
-        var queueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
+            int maxSeq = 0;
+            foreach (var qn in existingQueueNumbers)
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
+                if (match.Success && int.TryParse(match.Value, out int num))
+                {
+                    if (num > maxSeq) maxSeq = num;
+                }
+            }
+
+            var deptCode = GetDepartmentCode(appt.Department?.Name, appt.DepartmentId);
+            queueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
+            appt.QueueNumber = queueNumber;
+            _logger.LogWarning("Ca khám #{ApptCode} thiếu QueueNumber lúc Confirmed. Đã cấp fallback: {QueueNumber}", appt.AppointmentCode, queueNumber);
+        }
 
         var oldStatus = appt.Status;
         appt.Status = AppointmentStatus.CheckedIn;
-        appt.QueueNumber = queueNumber;
         appt.CheckedInAt = DateTime.UtcNow;
         appt.UpdatedAt = DateTime.UtcNow;
 
@@ -854,13 +931,13 @@ public class CareEpisodeService : ICareEpisodeService
             OldStatus = oldStatus,
             NewStatus = AppointmentStatus.CheckedIn,
             ChangedByUserId = receptionistUserId,
-            Note = $"Bệnh nhân đã đến Trạm B và hoàn tất Check-in. Số thứ tự: {queueNumber}.",
+            Note = $"Bệnh nhân đã đến Trạm B và hoàn tất Check-in. Giữ nguyên số thứ tự: {queueNumber}.",
             ChangedAt = DateTime.UtcNow
         });
 
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Lễ tân {UserId} hoàn tất Check-in Trạm B cho ca #{ApptCode}, cấp STT: {QueueNumber}",
+        _logger.LogInformation("Lễ tân {UserId} hoàn tất Check-in Trạm B cho ca #{ApptCode}, giữ nguyên STT: {QueueNumber}",
             receptionistUserId, appt.AppointmentCode, queueNumber);
 
         var dto = new CareEpisodeAppointmentSummaryDto
@@ -882,7 +959,7 @@ public class CareEpisodeService : ICareEpisodeService
             ReasonForVisit = appt.ReasonForVisit
         };
 
-        return ApiResponse<CareEpisodeAppointmentSummaryDto>.Ok(dto, $"Check-in Trạm B thành công. Số thứ tự cấp: {queueNumber}.");
+        return ApiResponse<CareEpisodeAppointmentSummaryDto>.Ok(dto, $"Check-in Trạm B thành công. Giữ nguyên số thứ tự: {queueNumber}.");
     }
 
     #endregion
