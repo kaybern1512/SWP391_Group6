@@ -82,19 +82,19 @@ public class AppointmentFlowTests
         };
         db.UserAccounts.Add(userReceptionist);
         db.StaffProfiles.Add(staffRec);
-        // Department Manager
+        // Receptionist Coordinator
         var userManager = new UserAccount
         {
             UserId = 301,
             Email = "mgr@dentalcare.com",
-            Role = UserRole.DepartmentManager,
+            Role = UserRole.Receptionist,
             Status = AccountStatus.Active
         };
         var staffMgr = new StaffProfile
         {
             UserId = 301,
             EmployeeCode = "EMP-MGR-01",
-            FullName = "Trưởng Khoa Nam",
+            FullName = "Điều Phối Viên Nam",
             EmploymentStatus = "Active",
             User = userManager
         };

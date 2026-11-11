@@ -9,7 +9,6 @@ public class RoleRouteHelperTests
     [InlineData("Patient", "Dashboard", "PatientDashboard", "/Patient/Dashboard")]
     [InlineData("Receptionist", "Dashboard", "ReceptionistDashboard", "/Receptionist/Dashboard")]
     [InlineData("Dentist", "Dashboard", "DentistDashboard", "/Dentist/Dashboard")]
-    [InlineData("DepartmentManager", "Dashboard", "DepartmentDashboard", "/Department/Dashboard")]
     [InlineData("SystemAdministrator", "Dashboard", "AdminDashboard", "/Admin/Dashboard")]
     public void GetDashboardRoute_KnownRole_ReturnsExpectedRoute(string role, string expectedAction, string expectedController, string expectedUrl)
     {
@@ -25,6 +24,7 @@ public class RoleRouteHelperTests
     [InlineData("")]
     [InlineData("UnknownRole")]
     [InlineData("Guest")]
+    [InlineData("DepartmentManager")]
     public void GetDashboardRoute_UnknownOrNullRole_ReturnsHomeIndex(string? role)
     {
         var route = RoleRouteHelper.GetDashboardRoute(role);
@@ -40,7 +40,7 @@ public class RoleRouteHelperTests
         Assert.Equal("/Patient/Dashboard", RoleRouteHelper.GetDashboardUrl("Patient"));
         Assert.Equal("/Receptionist/Dashboard", RoleRouteHelper.GetDashboardUrl("Receptionist"));
         Assert.Equal("/Dentist/Dashboard", RoleRouteHelper.GetDashboardUrl("Dentist"));
-        Assert.Equal("/Department/Dashboard", RoleRouteHelper.GetDashboardUrl("DepartmentManager"));
+        Assert.Equal("/", RoleRouteHelper.GetDashboardUrl("DepartmentManager"));
         Assert.Equal("/Admin/Dashboard", RoleRouteHelper.GetDashboardUrl("SystemAdministrator"));
         Assert.Equal("/", RoleRouteHelper.GetDashboardUrl(null));
     }

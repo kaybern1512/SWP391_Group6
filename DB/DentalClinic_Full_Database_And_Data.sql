@@ -2064,7 +2064,7 @@ ALTER TABLE [dbo].[UserAccounts]  WITH CHECK ADD CHECK  (([FailedLoginCount]>=(0
 GO
 ALTER TABLE [dbo].[UserAccounts]  WITH CHECK ADD CHECK  (([Status]='Inactive' OR [Status]='Locked' OR [Status]='Active' OR [Status]='Unverified'))
 GO
-ALTER TABLE [dbo].[UserAccounts]  WITH CHECK ADD CHECK  (([Role]='SystemAdministrator' OR [Role]='DepartmentManager' OR [Role]='Dentist' OR [Role]='Receptionist' OR [Role]='Patient'))
+ALTER TABLE [dbo].[UserAccounts]  WITH CHECK ADD CHECK  (([Role]='SystemAdministrator' OR [Role]='Dentist' OR [Role]='Receptionist' OR [Role]='Patient'))
 GO
 ALTER TABLE [dbo].[PatientProfiles]  WITH CHECK ADD CHECK  (([Gender] IS NULL OR ([Gender]='Other' OR [Gender]='Female' OR [Gender]='Male')))
 GO

@@ -119,19 +119,22 @@ BEGIN TRY
     END;
 
     ---------------------------------------------------------------------
-    -- 6. DEPARTMENT MANAGER
+    -- 6. SENIOR DENTIST (LEAD DOCTOR)
     -- Email: manager@dentalcare.com / Password123@
     ---------------------------------------------------------------------
     DECLARE @ManagerUserId BIGINT;
     IF NOT EXISTS (SELECT 1 FROM UserAccounts WHERE Email = 'manager@dentalcare.com')
     BEGIN
         INSERT INTO UserAccounts (Email, PhoneNumber, PasswordHash, Role, Status, EmailVerifiedAt, CreatedAt)
-        VALUES ('manager@dentalcare.com', '0900000004', @PasswordHash, 'DepartmentManager', 'Active', @Now, @Now);
+        VALUES ('manager@dentalcare.com', '0900000004', @PasswordHash, 'Dentist', 'Active', @Now, @Now);
 
         SET @ManagerUserId = SCOPE_IDENTITY();
 
         INSERT INTO StaffProfiles (UserId, EmployeeCode, FullName, EmploymentStatus, CreatedAt)
-        VALUES (@ManagerUserId, 'EMP-MGR-001', N'Trưởng Khoa Lê Hoàng Nam', 'Active', @Now);
+        VALUES (@ManagerUserId, 'EMP-MGR-001', N'Bác Sĩ Phụ Trách Lê Hoàng Nam', 'Active', @Now);
+
+        INSERT INTO DentistProfiles (UserId, Specialization, Qualifications, YearsOfExperience, Bio, CreatedAt)
+        VALUES (@ManagerUserId, N'Phẫu thuật & Implant', N'Bác sĩ CKI RHM', 10, N'Bác sĩ phụ trách khoa', @Now);
 
         IF @ImplantDeptId IS NOT NULL
         BEGIN

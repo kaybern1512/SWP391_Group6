@@ -13,7 +13,7 @@ namespace DentalClinic.Api.Controllers;
 
 [ApiController]
 [Route("api/admin")]
-[Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+[Authorize(Roles = UserRole.SystemAdministrator)]
 public class AdminController : ControllerBase
 {
     private readonly IAdminService _adminService;
@@ -44,7 +44,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("reports/revenue")]
-    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<RevenueReportDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetRevenueReport([FromQuery] int? year, CancellationToken ct)
     {
@@ -53,7 +53,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpGet("reports/appointments")]
-    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<AppointmentReportDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAppointmentReport(CancellationToken ct)
     {
@@ -311,7 +311,7 @@ public class AdminController : ControllerBase
     // ==========================================
 
     [HttpGet("users")]
-    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<System.Collections.Generic.List<AdminUserDto>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetUsers([FromQuery] string? role, [FromQuery] string? search, CancellationToken ct)
     {
@@ -344,7 +344,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("dentist-allocations")]
-    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse<DentistDepartmentAllocationDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<DentistDepartmentAllocationDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> AssignDentistToDepartment([FromBody] AssignDentistDepartmentRequest request, CancellationToken ct)
@@ -356,7 +356,7 @@ public class AdminController : ControllerBase
     }
 
     [HttpPost("dentist-allocations/{id:long}/toggle-status")]
-    [Authorize(Roles = $"{UserRole.SystemAdministrator},{UserRole.DepartmentManager}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ToggleDentistAllocationStatus(long id, CancellationToken ct)

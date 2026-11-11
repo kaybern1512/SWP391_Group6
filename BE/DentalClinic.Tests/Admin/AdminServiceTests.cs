@@ -40,7 +40,7 @@ public class AdminServiceTests
         {
             UserId = 10,
             Email = "manager@dentalcare.com",
-            Role = UserRole.DepartmentManager,
+            Role = UserRole.Dentist,
             Status = AccountStatus.Active
         };
         var managerStaff = new StaffProfile

@@ -157,7 +157,7 @@ public class CompleteServiceFlowIntegrationTests
             ScheduledStart = testDate,
             ScheduledEnd = testDate.AddMinutes(60)
         };
-        var confirmRes = await apptService.ManagerConfirmAsync(apptId, managerUserId, confirmReq);
+        var confirmRes = await apptService.ManagerConfirmAsync(apptId, receptionistUserId, confirmReq);
         Assert.True(confirmRes.Success, confirmRes.Message);
         _output.WriteLine($"[BƯỚC 3] Trưởng khoa duyệt ca & cấp STT: {confirmRes.Data!.QueueNumber} - Bác sĩ phụ trách: BS. Trần Văn Hùng");
 

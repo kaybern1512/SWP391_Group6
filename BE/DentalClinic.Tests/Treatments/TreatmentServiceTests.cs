@@ -240,7 +240,7 @@ public class TreatmentServiceTests
     }
 
     [Fact]
-    public async Task GetDepartmentTreatmentProgressAsync_ReturnsSummaryForDepartmentManager()
+    public async Task GetDepartmentTreatmentProgressAsync_ReturnsSummaryForDepartment()
     {
         var db = CreateDbContext(Guid.NewGuid().ToString());
         await SeedBasicDataAsync(db);

@@ -30,10 +30,10 @@ public class AdminDepartmentController : Controller
             departments = departments.Where(d => d.Status.Equals(status, System.StringComparison.OrdinalIgnoreCase)).ToList();
         }
 
-        // Fetch managers (users with role DepartmentManager or Dentist) to assign
+        // Fetch dentists to assign as department lead
         var usersResult = await _adminApi.GetUsersAsync();
         var potentialManagers = usersResult.IsSuccess && usersResult.Data != null
-            ? usersResult.Data.Where(u => u.Role == "DepartmentManager" || u.Role == "Dentist").ToList()
+            ? usersResult.Data.Where(u => u.Role == "Dentist").ToList()
             : new();
 
         var vm = new DepartmentManageViewModel

@@ -45,14 +45,14 @@ public class FollowUpAndReminderServiceTests
         {
             UserId = 201,
             Email = "manager.followup@test.com",
-            Role = UserRole.DepartmentManager,
+            Role = UserRole.Receptionist,
             Status = AccountStatus.Active
         };
         var managerStaff = new StaffProfile
         {
             UserId = 201,
             EmployeeCode = "MGR-201",
-            FullName = "Trưởng Khoa Phẫu Thuật",
+            FullName = "Điều Phối Viên Phẫu Thuật",
             EmploymentStatus = "Active"
         };
 

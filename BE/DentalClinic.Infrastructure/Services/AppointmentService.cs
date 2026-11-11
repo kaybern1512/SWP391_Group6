@@ -1610,15 +1610,6 @@ public class AppointmentService : IAppointmentService
 
         }
 
-        if (currentRole == UserRole.DepartmentManager && appointment.Department?.ManagerUserId != currentUserId)
-
-        {
-
-            // Allow if manager manages this department
-
-            return ApiResponse<AppointmentDto>.Fail("Bạn không quản lý chuyên khoa của lịch hẹn này.");
-
-        }
 
         var dto = await MapToDtoAsync(appointmentId, ct);
 
@@ -4388,7 +4379,7 @@ public class AppointmentService : IAppointmentService
 
             var callerUser = await _dbContext.UserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == managerUserId, ct);
 
-            bool isPrivileged = callerUser != null && (callerUser.Role == UserRole.Receptionist || callerUser.Role == UserRole.SystemAdministrator || callerUser.Role == UserRole.DepartmentManager);
+            bool isPrivileged = callerUser != null && (callerUser.Role == UserRole.Receptionist || callerUser.Role == UserRole.SystemAdministrator);
 
             if (!isPrivileged && appointment.Department?.ManagerUserId != managerUserId)
 
@@ -5100,7 +5091,7 @@ public class AppointmentService : IAppointmentService
 
         var callerUser = await _dbContext.UserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == managerUserId, ct);
 
-        bool isPrivileged = callerUser != null && (callerUser.Role == UserRole.Receptionist || callerUser.Role == UserRole.SystemAdministrator || callerUser.Role == UserRole.DepartmentManager);
+        bool isPrivileged = callerUser != null && (callerUser.Role == UserRole.Receptionist || callerUser.Role == UserRole.SystemAdministrator);
 
         if (!isPrivileged && appointment.Department?.ManagerUserId != managerUserId)
 
@@ -6373,7 +6364,7 @@ public class AppointmentService : IAppointmentService
 
             var user = await _dbContext.UserAccounts.FirstOrDefaultAsync(u => u.UserId == dentistUserId, ct);
 
-            var isStaffOrAdmin = user != null && (user.Role == UserRole.SystemAdministrator || user.Role == UserRole.DepartmentManager);
+            var isStaffOrAdmin = user != null && user.Role == UserRole.SystemAdministrator;
 
             if (!isStaffOrAdmin)
 

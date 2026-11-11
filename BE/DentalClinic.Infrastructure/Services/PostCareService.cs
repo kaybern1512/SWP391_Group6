@@ -573,20 +573,10 @@ public class PostCareService : IPostCareService
         else if (caller.Role == UserRole.Dentist)
         {
             bool isTreatingDentist = dentistUserId.HasValue && caller.UserId == dentistUserId.Value;
-            bool isDeptManager = deptId.HasValue && await _dbContext.Departments.AnyAsync(d => d.DepartmentId == deptId.Value && d.ManagerUserId == caller.UserId, ct);
 
-            if (!isTreatingDentist && !isDeptManager)
+            if (!isTreatingDentist)
             {
-                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bác sĩ không có quyền cập nhật lịch tái khám không do mình điều trị hoặc không thuộc chuyên khoa quản lý.");
-            }
-        }
-        else if (caller.Role == UserRole.DepartmentManager)
-        {
-            bool isDeptManager = deptId.HasValue && await _dbContext.Departments.AnyAsync(d => d.DepartmentId == deptId.Value && d.ManagerUserId == caller.UserId, ct);
-
-            if (!isDeptManager)
-            {
-                return ApiResponse<FollowUpScheduleDto>.Forbidden("Trưởng khoa không có quyền cập nhật lịch tái khám không thuộc chuyên khoa quản lý.");
+                return ApiResponse<FollowUpScheduleDto>.Forbidden("Bác sĩ không có quyền cập nhật lịch tái khám không do mình điều trị.");
             }
         }
         else if (caller.Role == UserRole.Receptionist || caller.Role == UserRole.SystemAdministrator)
@@ -716,7 +706,6 @@ public class PostCareService : IPostCareService
             var noteTag = caller.Role switch
             {
                 UserRole.Dentist => "Bác sĩ",
-                UserRole.DepartmentManager => "Trưởng khoa",
                 UserRole.SystemAdministrator => "Quản trị viên",
                 _ => "CSKH"
             };
