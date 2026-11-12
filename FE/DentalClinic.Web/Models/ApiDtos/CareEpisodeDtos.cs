@@ -77,6 +77,9 @@ public class EpisodeServiceTaskDto
     public long? ClinicalRecordId { get; set; }
     public long? AppliedWorkflowId { get; set; }
     public int? AppliedWorkflowVersion { get; set; }
+    public string WorkflowStatusText => AppliedWorkflowId.HasValue 
+        ? $"Version {AppliedWorkflowVersion}" 
+        : "Workflow Not Configured / Pending Clinical Review";
     public string? Notes { get; set; }
 }
 
@@ -118,6 +121,9 @@ public class UpdateServiceTaskStatusRequest
     public long? ClinicalRecordId { get; set; }
     public long? AppliedWorkflowId { get; set; }
     public int? AppliedWorkflowVersion { get; set; }
+    public string WorkflowStatusText => AppliedWorkflowId.HasValue 
+        ? $"Version {AppliedWorkflowVersion}" 
+        : "Workflow Not Configured / Pending Clinical Review";
     public string? Notes { get; set; }
 }
 
