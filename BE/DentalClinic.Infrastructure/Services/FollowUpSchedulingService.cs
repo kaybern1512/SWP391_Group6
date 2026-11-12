@@ -1523,9 +1523,9 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         foreach (var f in followUps)
         {
             TreatmentSession? session = null;
-            if (f.Appointment == null && f.TreatmentSessionId > 0)
+            if (f.Appointment == null && f.TreatmentSessionId.HasValue && f.TreatmentSessionId.Value > 0)
             {
-                sessionLookup.TryGetValue(f.TreatmentSessionId, out session);
+                sessionLookup.TryGetValue(f.TreatmentSessionId.Value, out session);
             }
 
             var patientUser = f.Appointment?.PatientUser ?? session?.TreatmentPlanItem?.TreatmentPlan?.PatientUser;

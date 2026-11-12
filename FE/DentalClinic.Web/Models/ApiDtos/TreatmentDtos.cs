@@ -16,6 +16,11 @@ public class TreatmentPlanDto
     public string CreatedByDentistName { get; set; } = string.Empty;
     public string Status { get; set; } = "Active";
     public decimal? EstimatedTotal { get; set; }
+    public string? Notes { get; set; }
+    public string? CancellationReason { get; set; }
+    public string? DiagnosisSummary { get; set; }
+    public DateTime? ActivatedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public int TotalItemsCount { get; set; }
@@ -39,6 +44,10 @@ public class TreatmentPlanItemDto
     public DateOnly? ExpectedDate { get; set; }
     public decimal? EstimatedCost { get; set; }
     public string Status { get; set; } = "Pending";
+    public string? StageName { get; set; }
+    public string? ResultSummary { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public string? SkippedReason { get; set; }
     public string? Note { get; set; }
 
     public List<TreatmentSessionDto> Sessions { get; set; } = new();
@@ -47,7 +56,7 @@ public class TreatmentPlanItemDto
 public class TreatmentSessionDto
 {
     public long TreatmentSessionId { get; set; }
-    public long TreatmentPlanItemId { get; set; }
+    public long? TreatmentPlanItemId { get; set; }
     public long AppointmentId { get; set; }
     public string? AppointmentCode { get; set; }
     public long DentistUserId { get; set; }
@@ -92,12 +101,16 @@ public class CreateTreatmentPlanItemInput
     public DateOnly? ExpectedDate { get; set; }
     public decimal? EstimatedCost { get; set; }
     public string Status { get; set; } = "Pending";
+    public string? StageName { get; set; }
+    public string? ResultSummary { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public string? SkippedReason { get; set; }
     public string? Note { get; set; }
 }
 
 public class CreateTreatmentSessionRequest
 {
-    public long TreatmentPlanItemId { get; set; }
+    public long? TreatmentPlanItemId { get; set; }
     public long AppointmentId { get; set; }
     public DateTime SessionDate { get; set; } = DateTime.UtcNow;
     public string? TreatmentResult { get; set; }
@@ -124,6 +137,15 @@ public class AddPerformedServiceToAppointmentRequest
 public class UpdateTreatmentPlanStatusRequest
 {
     public string Status { get; set; } = "Active";
+    public string? CancellationReason { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class UpdateTreatmentPlanStageStatusRequest
+{
+    public string Status { get; set; } = "Completed";
+    public string? ResultSummary { get; set; }
+    public string? SkippedReason { get; set; }
 }
 
 public class AssignPhaseDentistRequest

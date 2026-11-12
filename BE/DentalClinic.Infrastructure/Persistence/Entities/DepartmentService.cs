@@ -29,6 +29,10 @@ public partial class DepartmentService
 
     public string? BookingInstructions { get; set; }
 
+    public bool RequiresTreatmentPlan { get; set; } = false;
+
+    public bool RequiresFollowUp { get; set; } = false;
+
     public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
 
     public virtual Department Department { get; set; } = null!;

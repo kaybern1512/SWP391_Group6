@@ -24,7 +24,7 @@ public class CombinedCrossFeatureLifecycleIntegrationTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("TEST_SQL_CONNECTION")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database={Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Combined_Leave_QA"};Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database={Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_Combined_Leave_QA"};Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
 
     private static DentalClinicDbContext CreateDbContext()
     {

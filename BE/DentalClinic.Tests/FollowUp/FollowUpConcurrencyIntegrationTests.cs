@@ -2225,7 +2225,7 @@ public class FollowUpConcurrencyIntegrationTests
         var appt = new Appointment
         {
             AppointmentCode = $"APT-CONCUR-B25-{Guid.NewGuid().ToString("N")[..6]}",
-            PatientUserId = 6L,
+            PatientUserId = 7L,
             DepartmentId = 1,
             AssignedDentistUserId = doctorId,
             ScheduledStart = targetDate.AddHours(9),

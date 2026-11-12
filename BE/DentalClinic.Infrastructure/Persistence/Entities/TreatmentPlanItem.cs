@@ -23,6 +23,14 @@ public partial class TreatmentPlanItem
 
     public string Status { get; set; } = null!;
 
+    public string? StageName { get; set; }
+
+    public string? ResultSummary { get; set; }
+
+    public DateTime? CompletedAt { get; set; }
+
+    public string? SkippedReason { get; set; }
+
     public string? Note { get; set; }
 
     public virtual DentistProfile? AssignedDentistUser { get; set; }

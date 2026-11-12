@@ -7,7 +7,7 @@ public partial class TreatmentSession
 {
     public long TreatmentSessionId { get; set; }
 
-    public long TreatmentPlanItemId { get; set; }
+    public long? TreatmentPlanItemId { get; set; }
 
     public long AppointmentId { get; set; }
 
@@ -31,5 +31,5 @@ public partial class TreatmentSession
 
     public virtual Prescription? Prescription { get; set; }
 
-    public virtual TreatmentPlanItem TreatmentPlanItem { get; set; } = null!;
+    public virtual TreatmentPlanItem? TreatmentPlanItem { get; set; }
 }

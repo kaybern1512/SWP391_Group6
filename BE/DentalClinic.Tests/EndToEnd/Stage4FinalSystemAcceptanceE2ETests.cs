@@ -27,7 +27,7 @@ public class Stage4FinalSystemAcceptanceE2ETests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private DentalClinicDbContext CreateDbContext()
     {
@@ -594,9 +594,9 @@ public class Stage4FinalSystemAcceptanceE2ETests
         var existingSession = await db.TreatmentSessions.AsNoTracking().FirstAsync();
         var testDate = await GetAvailableSlotForDentistAsync(db, 3, offsetDays: 5, defaultHour: 10);
 
-        // Clean any conflicting appointments for patient 13 on that date
+        // Clean any conflicting appointments for patient 13 or doctor 3 on that date
         var sameDayAppts = await db.Appointments
-            .Where(a => a.PatientUserId == 13 && a.ScheduledStart.HasValue && a.ScheduledStart.Value.Date == testDate.Date)
+            .Where(a => (a.PatientUserId == 13 || a.AssignedDentistUserId == 3) && a.ScheduledStart.HasValue && a.ScheduledStart.Value.Date == testDate.Date)
             .ToListAsync();
         foreach (var a in sameDayAppts)
         {

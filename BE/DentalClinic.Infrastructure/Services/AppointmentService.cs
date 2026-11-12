@@ -5550,111 +5550,231 @@ public class AppointmentService : IAppointmentService
     }
 
     public async Task<ApiResponse> DentistCompleteAppointmentAsync(
-
         long appointmentId,
-
         long dentistUserId,
-
         string? notes = null,
-
+        string? followUpReason = null,
+        DateTime? recommendedFollowUpDate = null,
+        string? followUpReasonCategory = null,
         CancellationToken ct = default)
-
     {
-
-        var appointment = await _dbContext.Appointments.FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+        // =========================================================================
+        // GUARD 1 – Quyền & Trạng thái: InService và đúng Bác sĩ phụ trách (hoặc Admin)
+        // =========================================================================
+        var appointment = await _dbContext.Appointments
+            .Include(a => a.RequestedService)
+            .Include(a => a.TreatmentSessions)
+                .ThenInclude(ts => ts.PerformedServices)
+                    .ThenInclude(ps => ps.DepartmentService)
+            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
 
         if (appointment == null)
-
         {
-
             return ApiResponse.Fail("Không tìm thấy thông tin lịch hẹn.");
-
         }
 
-        if (appointment.AssignedDentistUserId != dentistUserId)
+        var user = await _dbContext.UserAccounts.FirstOrDefaultAsync(u => u.UserId == dentistUserId, ct);
+        var isAdmin = user != null && user.Role == UserRole.SystemAdministrator;
 
+        if (appointment.AssignedDentistUserId != dentistUserId && !isAdmin)
         {
-
             return ApiResponse.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
-
         }
 
         if (appointment.Status != AppointmentStatus.InService)
-
         {
-
             if (appointment.Status == AppointmentStatus.CheckedIn)
-
             {
-
                 return ApiResponse.Fail("Không thể hoàn thành ca khám khi chưa bắt đầu. Bác sĩ cần bấm 'Bắt đầu khám' (InService) trước khi hoàn tất.");
-
             }
-
             return ApiResponse.Fail($"Không thể hoàn thành ca khám ở trạng thái '{appointment.Status}'. Ca khám phải đang trong quá trình thực hiện (InService).");
-
         }
 
+        // =========================================================================
+        // GUARD 2 – Dữ liệu lâm sàng tối thiểu (ClinicalEntry / Examination)
+        // =========================================================================
+        var clinicalEntries = await _dbContext.ClinicalEntries
+            .Where(ce => ce.AppointmentId == appointmentId)
+            .ToListAsync(ct);
+
+        if (clinicalEntries.Any())
+        {
+            var hasValidClinicalData = clinicalEntries.Any(ce =>
+                !string.IsNullOrWhiteSpace(ce.Diagnosis) &&
+                (!string.IsNullOrWhiteSpace(ce.Symptoms) || !string.IsNullOrWhiteSpace(ce.ClinicalFindings) || !string.IsNullOrWhiteSpace(ce.ClinicalNotes)));
+
+            if (!hasValidClinicalData && string.IsNullOrWhiteSpace(notes))
+            {
+                return ApiResponse.Fail("Bản ghi lâm sàng thiếu thông tin chẩn đoán hoặc kết quả khám bắt buộc. Vui lòng hoàn thiện thông tin trước khi hoàn tất.");
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(notes))
+        {
+            return ApiResponse.Fail("Bác sĩ chưa ghi nhận thông tin chẩn đoán lâm sàng. Vui lòng cập nhật hồ sơ bệnh án trước khi hoàn thành ca khám.");
+        }
+
+        // =========================================================================
+        // GUARD 3 – Ràng buộc Phác đồ điều trị (RequiresTreatmentPlan flag)
+        // =========================================================================
+        var requiresPlan = (appointment.RequestedService != null && appointment.RequestedService.RequiresTreatmentPlan)
+            || appointment.TreatmentSessions.SelectMany(ts => ts.PerformedServices).Any(ps => ps.DepartmentService != null && ps.DepartmentService.RequiresTreatmentPlan);
+
+        TreatmentPlan? linkedPlan = null;
+        if (appointment.TreatmentPlanItemId.HasValue)
+        {
+            var planItem = await _dbContext.TreatmentPlanItems
+                .Include(tpi => tpi.TreatmentPlan)
+                    .ThenInclude(tp => tp.TreatmentPlanItems)
+                .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanItemId == appointment.TreatmentPlanItemId.Value, ct);
+            linkedPlan = planItem?.TreatmentPlan;
+        }
+        else
+        {
+            linkedPlan = await _dbContext.TreatmentPlans
+                .Include(tp => tp.TreatmentPlanItems)
+                .Where(tp => tp.PatientUserId == appointment.PatientUserId && (tp.Status == "Active" || tp.Status == "InProgress" || tp.Status == "Planned" || tp.Status == "Cancelled"))
+                .OrderByDescending(tp => tp.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (requiresPlan)
+        {
+            if (linkedPlan == null)
+            {
+                return ApiResponse.Fail("Dịch vụ này yêu cầu phải có phác đồ điều trị. Vui lòng lập phác đồ điều trị cho bệnh nhân trước khi hoàn thành ca khám.");
+            }
+
+            if (linkedPlan.Status != "Active" && linkedPlan.Status != "InProgress" && linkedPlan.Status != "Planned" && linkedPlan.Status != "Cancelled")
+            {
+                return ApiResponse.Fail($"Phác đồ điều trị đang ở trạng thái '{linkedPlan.Status}'. Cần kích hoạt phác đồ (Active) hoặc ghi nhận hủy (Cancelled) trước khi hoàn tất.");
+            }
+        }
+
+        // =========================================================================
+        // GUARD 4 – Tính độc lập liệu trình & Cập nhật giai đoạn (TreatmentPlanStage)
+        // =========================================================================
+        if (appointment.TreatmentPlanItemId.HasValue)
+        {
+            var currentStage = await _dbContext.TreatmentPlanItems
+                .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanItemId == appointment.TreatmentPlanItemId.Value, ct);
+
+            if (currentStage != null)
+            {
+                currentStage.Status = "Completed";
+                currentStage.CompletedAt = DateTime.UtcNow;
+                if (!string.IsNullOrWhiteSpace(notes))
+                {
+                    currentStage.ResultSummary = notes.Trim();
+                }
+
+                // Check all mandatory stages in the linked plan
+                var allStages = await _dbContext.TreatmentPlanItems
+                    .Where(tpi => tpi.TreatmentPlanId == currentStage.TreatmentPlanId)
+                    .ToListAsync(ct);
+
+                var nonSkippedStages = allStages.Where(s => s.Status != "Skipped").ToList();
+                var allCompleted = nonSkippedStages.Any() && nonSkippedStages.All(s => s.Status == "Completed");
+
+                var plan = await _dbContext.TreatmentPlans.FirstOrDefaultAsync(tp => tp.TreatmentPlanId == currentStage.TreatmentPlanId, ct);
+                if (plan != null)
+                {
+                    if (allCompleted)
+                    {
+                        plan.Status = "Completed";
+                        plan.CompletedAt = DateTime.UtcNow;
+                        plan.UpdatedAt = DateTime.UtcNow;
+                    }
+                    else if (plan.Status != "Cancelled" && plan.Status != "Paused")
+                    {
+                        plan.Status = "Active";
+                        plan.UpdatedAt = DateTime.UtcNow;
+                    }
+                }
+            }
+        }
+
+        // =========================================================================
+        // GUARD 5 – Kiểm soát tái khám (RequiresFollowUp flag)
+        // =========================================================================
+        var requiresFollowUp = (appointment.RequestedService != null && appointment.RequestedService.RequiresFollowUp)
+            || appointment.TreatmentSessions.SelectMany(ts => ts.PerformedServices).Any(ps => ps.DepartmentService != null && ps.DepartmentService.RequiresFollowUp);
+
+        if (requiresFollowUp)
+        {
+            var hasFutureAppt = await _dbContext.Appointments.AnyAsync(a =>
+                a.PatientUserId == appointment.PatientUserId &&
+                a.AppointmentId != appointment.AppointmentId &&
+                a.ScheduledStart > appointment.ScheduledStart &&
+                (a.Status == AppointmentStatus.Confirmed || a.Status == AppointmentStatus.PendingReceptionReview || a.Status == "PendingManagerReview"), ct);
+
+            if (!hasFutureAppt)
+            {
+                if (!string.IsNullOrWhiteSpace(followUpReason) || recommendedFollowUpDate.HasValue)
+                {
+                    var fuSchedule = new FollowUpSchedule
+                    {
+                        PatientUserId = appointment.PatientUserId,
+                        DentistUserId = dentistUserId,
+                        AppointmentId = appointment.AppointmentId,
+                        TreatmentPlanId = linkedPlan?.TreatmentPlanId,
+                        TreatmentPlanStageId = appointment.TreatmentPlanItemId,
+                        RecommendedDate = recommendedFollowUpDate ?? DateTime.UtcNow.AddDays(7),
+                        Reason = string.IsNullOrWhiteSpace(followUpReason) ? "Tái khám theo dõi định kỳ sau thủ thuật" : followUpReason.Trim(),
+                        FollowUpReasonCategory = string.IsNullOrWhiteSpace(followUpReasonCategory) ? "PendingPatientConfirmation" : followUpReasonCategory.Trim(),
+                        Status = "Pending",
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _dbContext.FollowUpSchedules.Add(fuSchedule);
+                }
+                else
+                {
+                    return ApiResponse.Fail("Dịch vụ này yêu cầu theo dõi tái khám. Vui lòng đặt lịch tái khám hoặc ghi nhận lý do chưa hẹn ngày trước khi hoàn thành ca khám.");
+                }
+            }
+        }
+
+        // =========================================================================
+        // ATOMIC TRANSACTION: Cập nhật Appointment, giải phóng ghế, đồng bộ lịch sử
+        // =========================================================================
         var oldStatus = appointment.Status;
-
         appointment.Status = AppointmentStatus.Completed;
-
         appointment.CompletedAt = DateTime.UtcNow;
-
         appointment.UpdatedAt = DateTime.UtcNow;
 
+        // Trạng thái ca khám chuyển sang Completed giải phóng sự chiếm dụng ghế (theo activeStatuses)
+        // đồng thời bảo toàn DentalChairId để phục vụ truy vết lịch sử điều trị.
+
         _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
-
         {
-
             AppointmentId = appointment.AppointmentId,
-
             OldStatus = oldStatus,
-
             NewStatus = AppointmentStatus.Completed,
-
             ChangedByUserId = dentistUserId,
-
             Note = string.IsNullOrWhiteSpace(notes) ? "Bác sĩ đã hoàn tất ca khám và điều trị." : notes.Trim(),
-
             ChangedAt = DateTime.UtcNow
-
         });
 
-        // P2: Chuyển trạng thái FollowUpSchedule sang Completed khi ca khám hoàn tất
-
+        // P2: Chuyển trạng thái FollowUpSchedule sang Completed nếu lịch khám này là buổi tái khám
         var linkedFollowUp = await _dbContext.FollowUpSchedules
-
             .FirstOrDefaultAsync(f => f.AppointmentId == appointment.AppointmentId, ct);
-
         if (linkedFollowUp != null)
-
         {
-
             linkedFollowUp.Status = "Completed";
-
         }
 
         await _dbContext.SaveChangesAsync(ct);
 
         await _notificationService.CreateNotificationAsync(
-
             appointment.PatientUserId,
-
             appointment.AppointmentId,
-
             "AppointmentCompleted",
-
             "Ca khám đã hoàn tất",
-
             $"Ca khám mã {appointment.AppointmentCode} đã hoàn thành. Quý khách vui lòng để lại đánh giá dịch vụ để chúng tôi phục vụ tốt hơn!",
-
             ct);
 
         var queueDto = await MapToDtoAsync(appointment.AppointmentId, ct);
         if (_queueHubContext != null && queueDto != null) { _ = _queueHubContext.Clients.All.ReceiveTreatmentCompleted(queueDto); }
         return ApiResponse.Ok("Đã hoàn thành ca khám thành công.");
-
     }
 
     private async Task<string> GenerateUniqueAppointmentCodeAsync(CancellationToken ct)
@@ -6537,109 +6657,20 @@ public class AppointmentService : IAppointmentService
         var deptId = appt.DepartmentId ?? 1;
 
         // Get or create TreatmentSession for this appointment
-
         var session = appt.TreatmentSessions.FirstOrDefault();
-
         if (session == null)
-
         {
-
-            var appointmentNote = $"Đợt khám {appt.AppointmentCode}";
-
-            var plan = await _dbContext.TreatmentPlans
-
-                .FirstOrDefaultAsync(tp => tp.PatientUserId == appt.PatientUserId &&
-
-                                           tp.DepartmentId == deptId &&
-
-                                           tp.TreatmentPlanItems.Any(tpi => tpi.Note == appointmentNote), ct);
-
-            if (plan == null)
-
-            {
-
-                plan = new TreatmentPlan
-
-                {
-
-                    PatientUserId = appt.PatientUserId,
-
-                    DepartmentId = deptId,
-
-                    CreatedByDentistUserId = dentistUserId,
-
-                    Status = "Completed",
-
-                    CreatedAt = now
-
-                };
-
-                _dbContext.TreatmentPlans.Add(plan);
-
-                await _dbContext.SaveChangesAsync(ct);
-
-            }
-
-            var item = await _dbContext.TreatmentPlanItems
-
-                .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId && tpi.Note == appointmentNote, ct);
-
-            if (item == null)
-
-            {
-
-                var maxSeq = await _dbContext.TreatmentPlanItems
-
-                    .Where(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId)
-
-                    .Select(tpi => (int?)tpi.SequenceNo)
-
-                    .MaxAsync(ct) ?? 0;
-
-                item = new TreatmentPlanItem
-
-                {
-
-                    TreatmentPlanId = plan.TreatmentPlanId,
-
-                    SequenceNo = maxSeq + 1,
-
-                    Status = "Completed",
-
-                    AssignedDentistUserId = dentistUserId,
-
-                    Note = appointmentNote
-
-                };
-
-                _dbContext.TreatmentPlanItems.Add(item);
-
-                await _dbContext.SaveChangesAsync(ct);
-
-            }
-
             session = new TreatmentSession
-
             {
-
-                TreatmentPlanItemId = item.TreatmentPlanItemId,
-
+                TreatmentPlanItemId = appt.TreatmentPlanItemId,
                 AppointmentId = appointmentId,
-
                 DentistUserId = dentistUserId,
-
                 SessionDate = now,
-
                 TreatmentResult = "Thực hiện dịch vụ nha khoa",
-
                 ClinicalNote = $"Phiên điều trị cho ca khám {appt.AppointmentCode}"
-
             };
-
             _dbContext.TreatmentSessions.Add(session);
-
             await _dbContext.SaveChangesAsync(ct);
-
         }
 
         // If session.PerformedServices is empty and appt.RequestedService exists, add requested service as base

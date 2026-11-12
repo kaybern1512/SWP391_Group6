@@ -11,7 +11,7 @@ namespace DentalClinic.Tests.FollowUp;
 
 public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
 {
-    public string ServerName { get; } = Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS";
+    public string ServerName { get; } = Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01";
     public string RunId { get; } = Guid.NewGuid().ToString("N")[..8];
     public string DatabaseName { get; private set; } = null!;
     public string ConnectionString { get; private set; } = null!;
@@ -29,6 +29,7 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
     private const string ServiceCombosMigrationRelativePath = @"DB\20261110_Add_ServiceCombos_And_Appointment_Combo_Tracking.sql";
     private const string CareEpisodesMigrationRelativePath = @"DB\20261111_Add_CareEpisodes_ServiceTasks_And_SingleInvoiceAggregation.sql";
     private const string XrayRosterMigrationRelativePath = @"DB\migrations\20261112_Add_Dedicated_Xray_Dentist_Roster.sql";
+    private const string ClinicalWorkflowMigrationRelativePath = @"DB\migrations\20261113_Dentist_Clinical_Workflow_TreatmentPlan_And_Guards.sql";
 
     public async Task InitializeAsync()
     {
@@ -142,6 +143,24 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
         if (File.Exists(xrayRosterPath))
         {
             await ApplyMigrationFileAsync(xrayRosterPath, DatabaseName, ConnectionString);
+        }
+        var clinicalWorkflowPath = Path.Combine(repoRoot, ClinicalWorkflowMigrationRelativePath);
+        if (File.Exists(clinicalWorkflowPath))
+        {
+            await ApplyMigrationFileAsync(clinicalWorkflowPath, DatabaseName, ConnectionString);
+        }
+
+        // Ensure PatientProfile for test patient IDs (e.g. UserId = 6) used across concurrency test suites
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = $@"
+USE [{DatabaseName}];
+IF NOT EXISTS (SELECT 1 FROM PatientProfiles WHERE UserId = 6)
+BEGIN
+    INSERT INTO PatientProfiles (UserId, PatientCode, FullName, DateOfBirth, Gender, CreatedAt)
+    VALUES (6, 'PAT-TEST-0006', N'Bệnh Nhân Test 06', '1995-01-01', 'Female', SYSDATETIME());
+END;";
+            await cmd.ExecuteNonQueryAsync();
         }
     }
 
