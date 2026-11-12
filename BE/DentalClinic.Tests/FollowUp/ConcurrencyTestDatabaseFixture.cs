@@ -30,6 +30,7 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
     private const string CareEpisodesMigrationRelativePath = @"DB\20261111_Add_CareEpisodes_ServiceTasks_And_SingleInvoiceAggregation.sql";
     private const string XrayRosterMigrationRelativePath = @"DB\migrations\20261112_Add_Dedicated_Xray_Dentist_Roster.sql";
     private const string ClinicalWorkflowMigrationRelativePath = @"DB\migrations\20261113_Dentist_Clinical_Workflow_TreatmentPlan_And_Guards.sql";
+    private const string ServiceWorkflowMigrationRelativePath = @"DB\migrations\20261113_Add_Service_Code_And_Workflow_Configuration.sql";
 
     public async Task InitializeAsync()
     {
@@ -148,6 +149,11 @@ VALUES ('{RunId}', 'FollowUpConcurrencyIntegrationTests', HOST_NAME(), SUSER_SNA
         if (File.Exists(clinicalWorkflowPath))
         {
             await ApplyMigrationFileAsync(clinicalWorkflowPath, DatabaseName, ConnectionString);
+        }
+        var serviceWorkflowPath = Path.Combine(repoRoot, ServiceWorkflowMigrationRelativePath);
+        if (File.Exists(serviceWorkflowPath))
+        {
+            await ApplyMigrationFileAsync(serviceWorkflowPath, DatabaseName, ConnectionString);
         }
 
         // Ensure PatientProfile for test patient IDs (e.g. UserId = 6) used across concurrency test suites

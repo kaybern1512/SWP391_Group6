@@ -36,6 +36,10 @@ public partial class EpisodeServiceTask
 
     public long? ClinicalRecordId { get; set; }
 
+    public long? AppliedWorkflowId { get; set; }
+
+    public int? AppliedWorkflowVersion { get; set; }
+
     public string? Notes { get; set; }
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

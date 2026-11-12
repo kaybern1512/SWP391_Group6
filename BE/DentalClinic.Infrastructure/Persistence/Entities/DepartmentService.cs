@@ -7,6 +7,8 @@ public partial class DepartmentService
 {
     public long DepartmentServiceId { get; set; }
 
+    public string? ServiceCode { get; set; }
+
     public long DepartmentId { get; set; }
 
     public string ServiceName { get; set; } = null!;
@@ -40,4 +42,6 @@ public partial class DepartmentService
     public virtual ICollection<PerformedService> PerformedServices { get; set; } = new List<PerformedService>();
 
     public virtual ICollection<TreatmentPlanItem> TreatmentPlanItems { get; set; } = new List<TreatmentPlanItem>();
+
+    public virtual ICollection<ServiceWorkflow> Workflows { get; set; } = new List<ServiceWorkflow>();
 }

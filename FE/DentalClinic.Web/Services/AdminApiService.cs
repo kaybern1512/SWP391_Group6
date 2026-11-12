@@ -105,6 +105,21 @@ public class AdminApiService : IAdminApiService
         return await SendPostActionAsync($"/api/admin/services/{id}/toggle-status", new { });
     }
 
+    public async Task<ApiResult<ServiceWorkflowDto>> GetWorkflowAsync(long serviceId, int? version = null)
+    {
+        var url = $"/api/admin/services/{serviceId}/workflow";
+        if (version.HasValue)
+        {
+            url += $"?version={version.Value}";
+        }
+        return await SendGetAsync<ServiceWorkflowDto>(url);
+    }
+
+    public async Task<ApiResult<ServiceWorkflowDto>> ConfigureWorkflowAsync(long serviceId, ConfigureWorkflowRequest request)
+    {
+        return await SendPostAsync<ConfigureWorkflowRequest, ServiceWorkflowDto>($"/api/admin/services/{serviceId}/workflow", request);
+    }
+
     // ==========================================
     // ROOMS
     // ==========================================

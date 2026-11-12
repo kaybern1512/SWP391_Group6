@@ -457,11 +457,31 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
                 vm.RequestedServiceId = first.ServiceId;
             }
         }
-        else if (departmentId.HasValue && serviceId.HasValue)
+        else if (serviceId.HasValue && serviceId.Value > 0)
+        {
+            var matchedSrv = filteredServices.FirstOrDefault(s => s.DepartmentServiceId == serviceId.Value);
+            if (matchedSrv != null)
+            {
+                vm.BookingCategory = "SingleService";
+                vm.DepartmentId = matchedSrv.DepartmentId;
+                vm.RequestedServiceId = matchedSrv.DepartmentServiceId;
+            }
+            else
+            {
+                vm.BookingCategory = "SingleService";
+                vm.DepartmentId = departmentId ?? 1;
+                vm.RequestedServiceId = serviceId.Value;
+            }
+        }
+        else if (departmentId.HasValue && departmentId.Value > 0)
         {
             vm.BookingCategory = "SingleService";
             vm.DepartmentId = departmentId.Value;
-            vm.RequestedServiceId = serviceId.Value;
+            var firstSrv = filteredServices.FirstOrDefault(s => s.DepartmentId == departmentId.Value);
+            if (firstSrv != null)
+            {
+                vm.RequestedServiceId = firstSrv.DepartmentServiceId;
+            }
         }
         else
         {
@@ -603,6 +623,17 @@ return Json(slots);
             if (matchedCombo != null && !reasonToSubmit.Contains($"[Gói Combo: {matchedCombo.Title}]"))
             {
                 reasonToSubmit = $"[Gói Combo: {matchedCombo.Title}] {(string.IsNullOrWhiteSpace(reasonToSubmit) ? "Đăng ký khám trọn gói combo." : reasonToSubmit)}";
+            }
+        }
+
+        // Service -> Department integrity safeguard: ensure department matches the selected service
+        if (model.RequestedServiceId > 0)
+        {
+            var catalog = await GetAllowedBookingCatalogAsync();
+            var chosenService = catalog.Services.FirstOrDefault(s => s.DepartmentServiceId == model.RequestedServiceId);
+            if (chosenService != null && chosenService.DepartmentId != model.DepartmentId)
+            {
+                model.DepartmentId = chosenService.DepartmentId;
             }
         }
 

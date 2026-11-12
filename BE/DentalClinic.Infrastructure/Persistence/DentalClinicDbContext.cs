@@ -115,6 +115,8 @@ public partial class DentalClinicDbContext : DbContext
     public virtual DbSet<DepartmentReferral> DepartmentReferrals { get; set; }
 
     public virtual DbSet<DepartmentService> DepartmentServices { get; set; }
+    public virtual DbSet<ServiceWorkflow> ServiceWorkflows { get; set; }
+    public virtual DbSet<ServiceWorkflowStep> ServiceWorkflowSteps { get; set; }
     public virtual DbSet<ServiceCombo> ServiceCombos { get; set; }
     public virtual DbSet<CareEpisode> CareEpisodes { get; set; }
     public virtual DbSet<EpisodeServiceTask> EpisodeServiceTasks { get; set; }
@@ -841,6 +843,7 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasIndex(e => new { e.DepartmentId, e.ServiceName }, "UQ_DepartmentServices").IsUnique();
 
+            entity.Property(e => e.ServiceCode).HasMaxLength(50);
             entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.Price).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.ServiceName).HasMaxLength(200);
@@ -853,6 +856,39 @@ public partial class DentalClinicDbContext : DbContext
                 .HasForeignKey(d => d.DepartmentId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_DepartmentServices_Department");
+        });
+
+        modelBuilder.Entity<ServiceWorkflow>(entity =>
+        {
+            entity.HasKey(e => e.WorkflowId);
+            entity.Property(e => e.WorkflowName).HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.Version).HasDefaultValue(1);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+
+            entity.HasOne(d => d.DepartmentService)
+                .WithMany(p => p.Workflows)
+                .HasForeignKey(d => d.DepartmentServiceId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ServiceWorkflows_DepartmentServices");
+        });
+
+        modelBuilder.Entity<ServiceWorkflowStep>(entity =>
+        {
+            entity.HasKey(e => e.StepId);
+            entity.Property(e => e.StepName).HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.CompletionRequirement).HasMaxLength(500);
+            entity.Property(e => e.ExpectedDataType).HasMaxLength(50).HasDefaultValue("None");
+            entity.Property(e => e.IsRequired).HasDefaultValue(true);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+
+            entity.HasOne(d => d.Workflow)
+                .WithMany(p => p.Steps)
+                .HasForeignKey(d => d.WorkflowId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ServiceWorkflowSteps_ServiceWorkflows");
         });
 
         modelBuilder.Entity<DepartmentWorkSchedule>(entity =>

@@ -23,6 +23,7 @@ public class AdminService : IAdminService
     private readonly ILogger<AdminService> _logger;
     private readonly IPasswordHasherService _passwordHasher;
 
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
     public AdminService(
         DentalClinicDbContext dbContext,
         IAuditLogService auditLogService,
@@ -266,21 +267,48 @@ public class AdminService : IAdminService
             .ThenBy(s => s.DepartmentServiceId)
             .ToListAsync(ct);
 
-        var dtos = services.Select(s => new AdminDepartmentServiceDto
+        var dtos = services.Select(s =>
         {
-            DepartmentServiceId = s.DepartmentServiceId,
-            DepartmentId = s.DepartmentId,
-            DepartmentName = s.Department?.Name ?? string.Empty,
-            ServiceName = s.ServiceName,
-            Description = s.Description,
-            DurationMinutes = s.DurationMinutes,
-            Price = s.Price,
-            Status = s.Status,
-            ServiceType = s.ServiceType ?? "Treatment",
-            RequiresExclusiveRoom = s.RequiresExclusiveRoom,
-            RequiresConsultationFirst = s.RequiresConsultationFirst,
-            MinLeadTimeHours = s.MinLeadTimeHours,
-            BookingInstructions = s.BookingInstructions
+            var activeWf = s.Workflows?.FirstOrDefault(w => w.IsActive);
+            return new AdminDepartmentServiceDto
+            {
+                DepartmentServiceId = s.DepartmentServiceId,
+                ServiceCode = s.ServiceCode ?? $"SRV-{s.DepartmentId}-{s.DepartmentServiceId:D3}",
+                DepartmentId = s.DepartmentId,
+                DepartmentName = s.Department?.Name ?? string.Empty,
+                ServiceName = s.ServiceName,
+                Description = s.Description,
+                DurationMinutes = s.DurationMinutes,
+                Price = s.Price,
+                Status = s.Status,
+                ServiceType = s.ServiceType ?? "Treatment",
+                RequiresExclusiveRoom = s.RequiresExclusiveRoom,
+                RequiresConsultationFirst = s.RequiresConsultationFirst,
+                MinLeadTimeHours = s.MinLeadTimeHours,
+                BookingInstructions = s.BookingInstructions,
+                WorkflowStepCount = activeWf?.Steps?.Count ?? 0,
+                HasActiveWorkflow = activeWf != null && activeWf.Steps.Any(),
+                ActiveWorkflow = activeWf != null ? new ServiceWorkflowDto
+                {
+                    WorkflowId = activeWf.WorkflowId,
+                    DepartmentServiceId = activeWf.DepartmentServiceId,
+                    WorkflowName = activeWf.WorkflowName,
+                    Version = activeWf.Version,
+                    IsActive = activeWf.IsActive,
+                    Description = activeWf.Description,
+                    Steps = activeWf.Steps.OrderBy(st => st.StepOrder).Select(st => new ServiceWorkflowStepDto
+                    {
+                        StepId = st.StepId,
+                        WorkflowId = st.WorkflowId,
+                        StepName = st.StepName,
+                        Description = st.Description,
+                        StepOrder = st.StepOrder,
+                        IsRequired = st.IsRequired,
+                        CompletionRequirement = st.CompletionRequirement,
+                        ExpectedDataType = st.ExpectedDataType
+                    }).ToList()
+                } : null
+            };
         }).ToList();
 
         return ApiResponse<List<AdminDepartmentServiceDto>>.Ok(dtos);
@@ -291,6 +319,9 @@ public class AdminService : IAdminService
         var s = await _dbContext.DepartmentServices
             .AsNoTracking()
             .Include(s => s.Department)
+            .Include(s => s.Workflows.Where(w => w.IsActive))
+                .ThenInclude(w => w.Steps)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(s => s.DepartmentServiceId == serviceId, ct);
 
         if (s == null)
@@ -298,9 +329,12 @@ public class AdminService : IAdminService
             return ApiResponse<AdminDepartmentServiceDto>.Fail("Không tìm thấy dịch vụ.");
         }
 
+        var activeWf = s.Workflows?.FirstOrDefault(w => w.IsActive);
+
         var dto = new AdminDepartmentServiceDto
         {
             DepartmentServiceId = s.DepartmentServiceId,
+            ServiceCode = s.ServiceCode ?? $"SRV-{s.DepartmentId}-{s.DepartmentServiceId:D3}",
             DepartmentId = s.DepartmentId,
             DepartmentName = s.Department?.Name ?? string.Empty,
             ServiceName = s.ServiceName,
@@ -312,7 +346,29 @@ public class AdminService : IAdminService
             RequiresExclusiveRoom = s.RequiresExclusiveRoom,
             RequiresConsultationFirst = s.RequiresConsultationFirst,
             MinLeadTimeHours = s.MinLeadTimeHours,
-            BookingInstructions = s.BookingInstructions
+            BookingInstructions = s.BookingInstructions,
+            WorkflowStepCount = activeWf?.Steps?.Count ?? 0,
+            HasActiveWorkflow = activeWf != null && activeWf.Steps.Any(),
+            ActiveWorkflow = activeWf != null ? new ServiceWorkflowDto
+            {
+                WorkflowId = activeWf.WorkflowId,
+                DepartmentServiceId = activeWf.DepartmentServiceId,
+                WorkflowName = activeWf.WorkflowName,
+                Version = activeWf.Version,
+                IsActive = activeWf.IsActive,
+                Description = activeWf.Description,
+                Steps = activeWf.Steps.OrderBy(st => st.StepOrder).Select(st => new ServiceWorkflowStepDto
+                {
+                    StepId = st.StepId,
+                    WorkflowId = st.WorkflowId,
+                    StepName = st.StepName,
+                    Description = st.Description,
+                    StepOrder = st.StepOrder,
+                    IsRequired = st.IsRequired,
+                    CompletionRequirement = st.CompletionRequirement,
+                    ExpectedDataType = st.ExpectedDataType
+                }).ToList()
+            } : null
         };
 
         return ApiResponse<AdminDepartmentServiceDto>.Ok(dto);
@@ -330,12 +386,17 @@ public class AdminService : IAdminService
             return ApiResponse<AdminDepartmentServiceDto>.Fail("Giá dịch vụ không được nhỏ hơn 0.");
         }
 
-        var deptExists = await _dbContext.Departments
-            .AnyAsync(d => d.DepartmentId == request.DepartmentId, ct);
-
-        if (!deptExists)
+        if (!request.DurationMinutes.HasValue || request.DurationMinutes.Value <= 0)
         {
-            return ApiResponse<AdminDepartmentServiceDto>.Fail("Chuyên khoa không tồn tại.");
+            return ApiResponse<AdminDepartmentServiceDto>.Fail("Thời lượng dự kiến phải lớn hơn 0 phút.");
+        }
+
+        var dept = await _dbContext.Departments
+            .FirstOrDefaultAsync(d => d.DepartmentId == request.DepartmentId, ct);
+
+        if (dept == null || dept.Status != "Active")
+        {
+            return ApiResponse<AdminDepartmentServiceDto>.Fail("Khoa được chọn không tồn tại hoặc đã ngưng hoạt động.");
         }
 
         var trimmedName = request.ServiceName.Trim();
@@ -347,15 +408,59 @@ public class AdminService : IAdminService
             return ApiResponse<AdminDepartmentServiceDto>.Fail($"Dịch vụ '{trimmedName}' đã tồn tại trong chuyên khoa này.");
         }
 
+        // Validate ServiceCode
+        string serviceCode;
+        if (!string.IsNullOrWhiteSpace(request.ServiceCode))
+        {
+            serviceCode = request.ServiceCode.Trim().ToUpperInvariant();
+            var codeExists = await _dbContext.DepartmentServices
+                .AnyAsync(s => s.ServiceCode != null && s.ServiceCode.ToUpper() == serviceCode, ct);
+            if (codeExists)
+            {
+                return ApiResponse<AdminDepartmentServiceDto>.Fail($"Mã dịch vụ '{serviceCode}' đã tồn tại trong hệ thống. Vui lòng chọn mã khác.");
+            }
+        }
+        else
+        {
+            var prefix = dept.DepartmentId switch
+            {
+                1 => "GEN",
+                2 => "ORTHO",
+                3 => "SURG",
+                4 => "PED",
+                _ => $"D{dept.DepartmentId}"
+            };
+            var num = await _dbContext.DepartmentServices.CountAsync(s => s.DepartmentId == dept.DepartmentId, ct) + 1;
+            do
+            {
+                serviceCode = $"SRV-{prefix}-{num:D3}";
+                num++;
+            } while (await _dbContext.DepartmentServices.AnyAsync(s => s.ServiceCode == serviceCode, ct));
+        }
+
+        // Validate Workflow Steps if provided
+        if (request.WorkflowSteps != null && request.WorkflowSteps.Any())
+        {
+            if (request.WorkflowSteps.Any(st => string.IsNullOrWhiteSpace(st.StepName)))
+            {
+                return ApiResponse<AdminDepartmentServiceDto>.Fail("Tên các bước quy trình không được để trống.");
+            }
+            if (request.WorkflowSteps.Select(st => st.StepOrder).Distinct().Count() != request.WorkflowSteps.Count)
+            {
+                return ApiResponse<AdminDepartmentServiceDto>.Fail("Thứ tự các bước quy trình không được trùng nhau.");
+            }
+        }
+
         var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric", "Implant", "Orthodontics", "General", "Endodontics", "Periodontics", "Examination" };
         var serviceType = validTypes.Contains(request.ServiceType, StringComparer.OrdinalIgnoreCase) ? request.ServiceType : "Treatment";
 
         var service = new DepartmentService
         {
+            ServiceCode = serviceCode,
             DepartmentId = request.DepartmentId,
             ServiceName = trimmedName,
             Description = request.Description?.Trim(),
-            DurationMinutes = request.DurationMinutes.HasValue && request.DurationMinutes.Value > 0 ? request.DurationMinutes.Value : 30,
+            DurationMinutes = request.DurationMinutes.Value,
             Price = request.Price,
             Status = string.Equals(request.Status, "Inactive", StringComparison.OrdinalIgnoreCase) ? "Inactive" : "Active",
             ServiceType = serviceType,
@@ -368,13 +473,46 @@ public class AdminService : IAdminService
         _dbContext.DepartmentServices.Add(service);
         await _dbContext.SaveChangesAsync(ct);
 
+        // Add initial workflow if steps provided
+        if (request.WorkflowSteps != null && request.WorkflowSteps.Any())
+        {
+            var wf = new ServiceWorkflow
+            {
+                DepartmentServiceId = service.DepartmentServiceId,
+                WorkflowName = $"Quy trình: {service.ServiceName}",
+                Version = 1,
+                IsActive = true,
+                Description = service.Description,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByUserId = adminUserId
+            };
+
+            int order = 1;
+            foreach (var st in request.WorkflowSteps.OrderBy(s => s.StepOrder))
+            {
+                wf.Steps.Add(new ServiceWorkflowStep
+                {
+                    StepName = st.StepName.Trim(),
+                    Description = st.Description?.Trim(),
+                    StepOrder = order++,
+                    IsRequired = st.IsRequired,
+                    CompletionRequirement = st.CompletionRequirement?.Trim(),
+                    ExpectedDataType = string.IsNullOrWhiteSpace(st.ExpectedDataType) ? "None" : st.ExpectedDataType.Trim(),
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            _dbContext.ServiceWorkflows.Add(wf);
+            await _dbContext.SaveChangesAsync(ct);
+        }
+
         await _auditLogService.LogAsync(
             adminUserId,
             "CREATE",
             "DepartmentService",
             service.DepartmentServiceId.ToString(),
             null,
-            JsonSerializer.Serialize(new { service.ServiceName, service.DepartmentId, service.Price, service.Status }),
+            JsonSerializer.Serialize(new { service.ServiceCode, service.ServiceName, service.DepartmentId, service.Price, service.Status }),
             ct);
 
         return await GetServiceByIdAsync(service.DepartmentServiceId, ct);
@@ -383,6 +521,8 @@ public class AdminService : IAdminService
     public async Task<ApiResponse<AdminDepartmentServiceDto>> UpdateServiceAsync(long serviceId, UpdateDepartmentServiceRequest request, long? adminUserId = null, CancellationToken ct = default)
     {
         var service = await _dbContext.DepartmentServices
+            .Include(s => s.Workflows)
+                .ThenInclude(w => w.Steps)
             .FirstOrDefaultAsync(s => s.DepartmentServiceId == serviceId, ct);
 
         if (service == null)
@@ -400,12 +540,17 @@ public class AdminService : IAdminService
             return ApiResponse<AdminDepartmentServiceDto>.Fail("Giá dịch vụ không được nhỏ hơn 0.");
         }
 
-        var deptExists = await _dbContext.Departments
-            .AnyAsync(d => d.DepartmentId == request.DepartmentId, ct);
-
-        if (!deptExists)
+        if (!request.DurationMinutes.HasValue || request.DurationMinutes.Value <= 0)
         {
-            return ApiResponse<AdminDepartmentServiceDto>.Fail("Chuyên khoa không tồn tại.");
+            return ApiResponse<AdminDepartmentServiceDto>.Fail("Thời lượng dự kiến phải lớn hơn 0 phút.");
+        }
+
+        var dept = await _dbContext.Departments
+            .FirstOrDefaultAsync(d => d.DepartmentId == request.DepartmentId, ct);
+
+        if (dept == null || dept.Status != "Active")
+        {
+            return ApiResponse<AdminDepartmentServiceDto>.Fail("Khoa được chọn không tồn tại hoặc đã ngưng hoạt động.");
         }
 
         var trimmedName = request.ServiceName.Trim();
@@ -417,7 +562,20 @@ public class AdminService : IAdminService
             return ApiResponse<AdminDepartmentServiceDto>.Fail($"Tên dịch vụ '{trimmedName}' đã được sử dụng trong chuyên khoa này.");
         }
 
-        var oldValues = JsonSerializer.Serialize(new { service.ServiceName, service.DepartmentId, service.Price, service.Status });
+        // Validate ServiceCode
+        if (!string.IsNullOrWhiteSpace(request.ServiceCode))
+        {
+            var reqCode = request.ServiceCode.Trim().ToUpperInvariant();
+            var codeConflict = await _dbContext.DepartmentServices
+                .AnyAsync(s => s.DepartmentServiceId != serviceId && s.ServiceCode != null && s.ServiceCode.ToUpper() == reqCode, ct);
+            if (codeConflict)
+            {
+                return ApiResponse<AdminDepartmentServiceDto>.Fail($"Mã dịch vụ '{reqCode}' đã được sử dụng bởi dịch vụ khác.");
+            }
+            service.ServiceCode = reqCode;
+        }
+
+        var oldValues = JsonSerializer.Serialize(new { service.ServiceCode, service.ServiceName, service.DepartmentId, service.Price, service.Status });
 
         var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric", "Implant", "Orthodontics", "General", "Endodontics", "Periodontics", "Examination" };
         if (!string.IsNullOrWhiteSpace(request.ServiceType) && validTypes.Contains(request.ServiceType, StringComparer.OrdinalIgnoreCase))
@@ -427,7 +585,7 @@ public class AdminService : IAdminService
         service.DepartmentId = request.DepartmentId;
         service.ServiceName = trimmedName;
         service.Description = request.Description?.Trim();
-        service.DurationMinutes = request.DurationMinutes.HasValue && request.DurationMinutes.Value > 0 ? request.DurationMinutes.Value : 30;
+        service.DurationMinutes = request.DurationMinutes.Value;
         service.Price = request.Price;
         service.Status = string.Equals(request.Status, "Inactive", StringComparison.OrdinalIgnoreCase) ? "Inactive" : "Active";
         service.RequiresExclusiveRoom = request.RequiresExclusiveRoom;
@@ -435,9 +593,59 @@ public class AdminService : IAdminService
         service.MinLeadTimeHours = request.MinLeadTimeHours >= 0 ? request.MinLeadTimeHours : 2;
         service.BookingInstructions = request.BookingInstructions?.Trim();
 
+        // Handle Workflow Steps with Versioning
+        if (request.WorkflowSteps != null && request.WorkflowSteps.Any())
+        {
+            if (request.WorkflowSteps.Any(st => string.IsNullOrWhiteSpace(st.StepName)))
+            {
+                return ApiResponse<AdminDepartmentServiceDto>.Fail("Tên các bước quy trình không được để trống.");
+            }
+            if (request.WorkflowSteps.Select(st => st.StepOrder).Distinct().Count() != request.WorkflowSteps.Count)
+            {
+                return ApiResponse<AdminDepartmentServiceDto>.Fail("Thứ tự các bước quy trình không được trùng nhau.");
+            }
+
+            var activeWf = service.Workflows.FirstOrDefault(w => w.IsActive);
+            int newVersion = 1;
+            if (activeWf != null)
+            {
+                activeWf.IsActive = false;
+                activeWf.UpdatedAt = DateTime.UtcNow;
+                newVersion = activeWf.Version + 1;
+            }
+
+            var newWf = new ServiceWorkflow
+            {
+                DepartmentServiceId = service.DepartmentServiceId,
+                WorkflowName = $"Quy trình: {service.ServiceName} (v{newVersion})",
+                Version = newVersion,
+                IsActive = true,
+                Description = service.Description,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByUserId = adminUserId
+            };
+
+            int order = 1;
+            foreach (var st in request.WorkflowSteps.OrderBy(s => s.StepOrder))
+            {
+                newWf.Steps.Add(new ServiceWorkflowStep
+                {
+                    StepName = st.StepName.Trim(),
+                    Description = st.Description?.Trim(),
+                    StepOrder = order++,
+                    IsRequired = st.IsRequired,
+                    CompletionRequirement = st.CompletionRequirement?.Trim(),
+                    ExpectedDataType = string.IsNullOrWhiteSpace(st.ExpectedDataType) ? "None" : st.ExpectedDataType.Trim(),
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            _dbContext.ServiceWorkflows.Add(newWf);
+        }
+
         await _dbContext.SaveChangesAsync(ct);
 
-        var newValues = JsonSerializer.Serialize(new { service.ServiceName, service.DepartmentId, service.Price, service.Status });
+        var newValues = JsonSerializer.Serialize(new { service.ServiceCode, service.ServiceName, service.DepartmentId, service.Price, service.Status });
 
         await _auditLogService.LogAsync(
             adminUserId,
@@ -449,6 +657,133 @@ public class AdminService : IAdminService
             ct);
 
         return await GetServiceByIdAsync(serviceId, ct);
+    }
+
+    public async Task<ApiResponse<ServiceWorkflowDto>> GetWorkflowAsync(long serviceId, int? version = null, CancellationToken ct = default)
+    {
+        var query = _dbContext.ServiceWorkflows
+            .AsNoTracking()
+            .Include(w => w.Steps)
+            .Where(w => w.DepartmentServiceId == serviceId);
+
+        if (version.HasValue)
+        {
+            query = query.Where(w => w.Version == version.Value);
+        }
+        else
+        {
+            query = query.Where(w => w.IsActive).OrderByDescending(w => w.Version);
+        }
+
+        var wf = await query.FirstOrDefaultAsync(ct);
+        if (wf == null)
+        {
+            return ApiResponse<ServiceWorkflowDto>.Fail("Không tìm thấy quy trình cho dịch vụ này.");
+        }
+
+        var dto = new ServiceWorkflowDto
+        {
+            WorkflowId = wf.WorkflowId,
+            DepartmentServiceId = wf.DepartmentServiceId,
+            WorkflowName = wf.WorkflowName,
+            Version = wf.Version,
+            IsActive = wf.IsActive,
+            Description = wf.Description,
+            Steps = wf.Steps.OrderBy(s => s.StepOrder).Select(s => new ServiceWorkflowStepDto
+            {
+                StepId = s.StepId,
+                WorkflowId = s.WorkflowId,
+                StepName = s.StepName,
+                Description = s.Description,
+                StepOrder = s.StepOrder,
+                IsRequired = s.IsRequired,
+                CompletionRequirement = s.CompletionRequirement,
+                ExpectedDataType = s.ExpectedDataType
+            }).ToList()
+        };
+
+        return ApiResponse<ServiceWorkflowDto>.Ok(dto);
+    }
+
+    public async Task<ApiResponse<ServiceWorkflowDto>> ConfigureWorkflowAsync(long serviceId, ConfigureWorkflowRequest request, long? adminUserId = null, CancellationToken ct = default)
+    {
+        var service = await _dbContext.DepartmentServices
+            .Include(s => s.Workflows)
+                .ThenInclude(w => w.Steps)
+            .FirstOrDefaultAsync(s => s.DepartmentServiceId == serviceId, ct);
+
+        if (service == null)
+        {
+            return ApiResponse<ServiceWorkflowDto>.Fail("Không tìm thấy dịch vụ cần cấu hình quy trình.");
+        }
+
+        if (request.Steps == null || !request.Steps.Any())
+        {
+            return ApiResponse<ServiceWorkflowDto>.Fail("Quy trình phải có ít nhất một bước thực hiện.");
+        }
+
+        if (request.Steps.Any(st => string.IsNullOrWhiteSpace(st.StepName)))
+        {
+            return ApiResponse<ServiceWorkflowDto>.Fail("Tên các bước quy trình không được để trống.");
+        }
+
+        if (request.Steps.Select(st => st.StepOrder).Distinct().Count() != request.Steps.Count)
+        {
+            return ApiResponse<ServiceWorkflowDto>.Fail("Thứ tự các bước quy trình không được trùng nhau.");
+        }
+
+        var activeWf = service.Workflows.FirstOrDefault(w => w.IsActive);
+        int newVersion = 1;
+        if (activeWf != null)
+        {
+            activeWf.IsActive = false;
+            activeWf.UpdatedAt = DateTime.UtcNow;
+            newVersion = activeWf.Version + 1;
+        }
+
+        var workflowName = !string.IsNullOrWhiteSpace(request.WorkflowName)
+            ? request.WorkflowName.Trim()
+            : $"Quy trình: {service.ServiceName} (v{newVersion})";
+
+        var newWf = new ServiceWorkflow
+        {
+            DepartmentServiceId = service.DepartmentServiceId,
+            WorkflowName = workflowName,
+            Version = newVersion,
+            IsActive = true,
+            Description = request.Description?.Trim() ?? service.Description,
+            CreatedAt = DateTime.UtcNow,
+            CreatedByUserId = adminUserId
+        };
+
+        int order = 1;
+        foreach (var st in request.Steps.OrderBy(s => s.StepOrder))
+        {
+            newWf.Steps.Add(new ServiceWorkflowStep
+            {
+                StepName = st.StepName.Trim(),
+                Description = st.Description?.Trim(),
+                StepOrder = order++,
+                IsRequired = st.IsRequired,
+                CompletionRequirement = st.CompletionRequirement?.Trim(),
+                ExpectedDataType = string.IsNullOrWhiteSpace(st.ExpectedDataType) ? "None" : st.ExpectedDataType.Trim(),
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        _dbContext.ServiceWorkflows.Add(newWf);
+        await _dbContext.SaveChangesAsync(ct);
+
+        await _auditLogService.LogAsync(
+            adminUserId,
+            "CONFIGURE",
+            "ServiceWorkflow",
+            newWf.WorkflowId.ToString(),
+            activeWf != null ? JsonSerializer.Serialize(new { activeWf.WorkflowId, activeWf.Version }) : null,
+            JsonSerializer.Serialize(new { newWf.WorkflowId, newWf.Version, StepCount = newWf.Steps.Count }),
+            ct);
+
+        return await GetWorkflowAsync(serviceId, newVersion, ct);
     }
 
     public async Task<ApiResponse> ToggleServiceStatusAsync(long serviceId, long? adminUserId = null, CancellationToken ct = default)

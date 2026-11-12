@@ -269,6 +269,10 @@ public class CareEpisodeService : ICareEpisodeService
             appointment.CareEpisodeId = epRes.Data.CareEpisodeId;
         }
 
+        var activeWorkflow = await _dbContext.ServiceWorkflows
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.DepartmentServiceId == service.DepartmentServiceId && w.IsActive, ct);
+
         var taskCode = await GenerateTaskCodeAsync(ct);
         var task = new EpisodeServiceTask
         {
@@ -281,6 +285,8 @@ public class CareEpisodeService : ICareEpisodeService
             Quantity = request.Quantity > 0 ? request.Quantity : 1,
             UnitPriceSnapshot = service.Price,
             EstimatedDurationMinutes = service.DurationMinutes ?? 30,
+            AppliedWorkflowId = activeWorkflow?.WorkflowId,
+            AppliedWorkflowVersion = activeWorkflow?.Version,
             PlannedAtUtc = DateTime.UtcNow,
             Notes = request.Notes?.Trim(),
             CreatedAtUtc = DateTime.UtcNow
@@ -314,6 +320,8 @@ public class CareEpisodeService : ICareEpisodeService
             Quantity = task.Quantity,
             UnitPriceSnapshot = task.UnitPriceSnapshot,
             EstimatedDurationMinutes = task.EstimatedDurationMinutes,
+            AppliedWorkflowId = task.AppliedWorkflowId,
+            AppliedWorkflowVersion = task.AppliedWorkflowVersion,
             PlannedAtUtc = task.PlannedAtUtc,
             Notes = task.Notes
         };
@@ -396,6 +404,8 @@ public class CareEpisodeService : ICareEpisodeService
             CancelledAtUtc = task.CancelledAtUtc,
             CancellationReason = task.CancellationReason,
             ClinicalRecordId = task.ClinicalRecordId,
+            AppliedWorkflowId = task.AppliedWorkflowId,
+            AppliedWorkflowVersion = task.AppliedWorkflowVersion,
             Notes = task.Notes
         };
 
@@ -762,6 +772,10 @@ public class CareEpisodeService : ICareEpisodeService
             var srv = await _dbContext.DepartmentServices.FirstOrDefaultAsync(s => s.DepartmentServiceId == referral.RequestedServiceId.Value, ct);
             if (srv != null)
             {
+                var activeWf = await _dbContext.ServiceWorkflows
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(w => w.DepartmentServiceId == srv.DepartmentServiceId && w.IsActive, ct);
+
                 var taskCode = await GenerateTaskCodeAsync(ct);
                 _dbContext.EpisodeServiceTasks.Add(new EpisodeServiceTask
                 {
@@ -774,6 +788,8 @@ public class CareEpisodeService : ICareEpisodeService
                     Quantity = 1,
                     UnitPriceSnapshot = srv.Price,
                     EstimatedDurationMinutes = srv.DurationMinutes ?? 30,
+                    AppliedWorkflowId = activeWf?.WorkflowId,
+                    AppliedWorkflowVersion = activeWf?.Version,
                     PlannedAtUtc = DateTime.UtcNow,
                     Notes = $"Dịch vụ chỉ định theo ca chuyển tiếp #{referral.ReferralId}"
                 });
@@ -1340,6 +1356,8 @@ public class CareEpisodeService : ICareEpisodeService
             CancelledAtUtc = t.CancelledAtUtc,
             CancellationReason = t.CancellationReason,
             ClinicalRecordId = t.ClinicalRecordId,
+            AppliedWorkflowId = t.AppliedWorkflowId,
+            AppliedWorkflowVersion = t.AppliedWorkflowVersion,
             Notes = t.Notes
         }).OrderBy(t => t.ServiceTaskId).ToList();
 

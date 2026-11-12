@@ -75,6 +75,8 @@ public class EpisodeServiceTaskDto
     public DateTime? CancelledAtUtc { get; set; }
     public string? CancellationReason { get; set; }
     public long? ClinicalRecordId { get; set; }
+    public long? AppliedWorkflowId { get; set; }
+    public int? AppliedWorkflowVersion { get; set; }
     public string? Notes { get; set; }
 }
 
@@ -114,6 +116,8 @@ public class UpdateServiceTaskStatusRequest
     public string Status { get; set; } = "Completed";
     public string? CancellationReason { get; set; }
     public long? ClinicalRecordId { get; set; }
+    public long? AppliedWorkflowId { get; set; }
+    public int? AppliedWorkflowVersion { get; set; }
     public string? Notes { get; set; }
 }
 
