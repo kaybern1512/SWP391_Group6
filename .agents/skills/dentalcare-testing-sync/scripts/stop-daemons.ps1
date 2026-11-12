@@ -7,14 +7,24 @@ param()
 
 Write-Host "==> [Stop-Daemons] Scanning for active DentalClinic processes and MSBuild nodes..." -ForegroundColor Cyan
 
-# Terminate dotnet processes running DentalClinic projects or MSBuild
+# Terminate dotnet processes and DentalClinic host executables running DentalClinic projects or MSBuild
+$stoppedCount = 0
+
+# 1. Stop dedicated executables if running
+$clinicProcs = Get-Process -Name "DentalClinic.Api", "DentalClinic.Web" -ErrorAction SilentlyContinue
+foreach ($p in $clinicProcs) {
+    Write-Host "  Stopping $($p.ProcessName) PID $($p.Id)..." -ForegroundColor Yellow
+    Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+    $stoppedCount++
+}
+
+# 2. Stop dotnet processes matching DentalClinic or MSBuild
 $dotnetProcs = @()
 try {
     $dotnetProcs = Get-CimInstance Win32_Process -Filter "Name = 'dotnet.exe'" -ErrorAction Stop
 } catch {
     $dotnetProcs = @()
 }
-$stoppedCount = 0
 
 foreach ($proc in $dotnetProcs) {
     if ($proc.CommandLine -match "DentalClinic" -or $proc.CommandLine -match "MSBuild.dll") {
