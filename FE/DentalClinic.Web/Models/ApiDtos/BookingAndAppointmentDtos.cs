@@ -16,6 +16,10 @@ public class DepartmentDto
     public int MinLeadTimeHours { get; set; } = 2;
 
     public string? BookingInstructions { get; set; }
+
+    public bool RequiresTreatmentPlan { get; set; } = false;
+
+    public bool RequiresFollowUp { get; set; } = false;
 }
 
 public class DepartmentServiceDto
@@ -34,6 +38,10 @@ public class DepartmentServiceDto
     public int MinLeadTimeHours { get; set; } = 2;
 
     public string? BookingInstructions { get; set; }
+
+    public bool RequiresTreatmentPlan { get; set; } = false;
+
+    public bool RequiresFollowUp { get; set; } = false;
 }
 
 public class DentistOptionDto
@@ -202,6 +210,10 @@ public class AppointmentDto
     public DateTime? CompletedAt { get; set; }
     public DateTime? CancelledAt { get; set; }
     public string? CancellationReason { get; set; }
+    public bool RequiresTreatmentPlan { get; set; } = false;
+    public bool RequiresFollowUp { get; set; } = false;
+    public long? TreatmentPlanId { get; set; }
+    public long? TreatmentPlanItemId { get; set; }
 
     public AppointmentChangeProposalDto? ActiveProposal { get; set; }
     public List<StatusHistoryDto> StatusHistories { get; set; } = new();
@@ -339,6 +351,9 @@ public class ReceptionistNoShowRequest
 public class CompleteAppointmentRequest
 {
     public string? Notes { get; set; }
+    public string? FollowUpReason { get; set; }
+    public DateTime? RecommendedFollowUpDate { get; set; }
+    public string? FollowUpReasonCategory { get; set; }
 }
 
 public class StaffCancelAppointmentRequest

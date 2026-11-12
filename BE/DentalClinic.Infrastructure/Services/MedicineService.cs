@@ -711,12 +711,27 @@ public class MedicineService : IMedicineService
                         currentRequestPrescriptionAllocations[item.PrescriptionItemId.Value] = currentBatchSum + item.Quantity;
                     }
                 }
-                var batch = await _context.MedicineBatches
-                    .Include(b => b.Medicine)
-                    .FirstOrDefaultAsync(b => b.MedicineBatchId == item.MedicineBatchId, ct);
+                MedicineBatch? batch = null;
+                if (item.MedicineBatchId > 0)
+                {
+                    batch = await _context.MedicineBatches
+                        .Include(b => b.Medicine)
+                        .FirstOrDefaultAsync(b => b.MedicineBatchId == item.MedicineBatchId, ct);
+                }
+                else if (item.MedicineId > 0)
+                {
+                    // Auto-select nearest expiry batch by FEFO (First-Expiring, First-Out)
+                    batch = await _context.MedicineBatches
+                        .Include(b => b.Medicine)
+                        .Where(b => b.MedicineId == item.MedicineId && b.Status == "Available" && b.ExpiryDate > today && b.QuantityAvailable >= item.Quantity)
+                        .OrderBy(b => b.ExpiryDate)
+                        .FirstOrDefaultAsync(ct);
+                }
 
                 if (batch == null)
-                    throw new KeyNotFoundException($"Không tìm thấy lô thuốc với ID {item.MedicineBatchId}.");
+                    throw new KeyNotFoundException(item.MedicineBatchId > 0
+                        ? $"Không tìm thấy lô thuốc với ID {item.MedicineBatchId}."
+                        : $"Không tìm thấy lô thuốc khả dụng còn hạn và đủ số lượng cho thuốc ID {item.MedicineId} theo quy tắc FEFO.");
 
                 if (batch.Status != "Available" || batch.ExpiryDate <= today)
                     throw new InvalidOperationException($"Lô thuốc '{batch.BatchNumber}' của '{batch.Medicine.MedicineName}' không khả dụng hoặc đã hết hạn (HSD: {batch.ExpiryDate:dd/MM/yyyy}).");

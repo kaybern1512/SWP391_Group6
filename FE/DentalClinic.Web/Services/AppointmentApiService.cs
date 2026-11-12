@@ -284,9 +284,21 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendPostAsync<object, StartAppointmentResultDto>($"/api/dentist/appointments/{id}/start", new object());
     }
 
-    public async Task<ApiResult> DentistCompleteAppointmentAsync(long id, string? notes = null)
+    public async Task<ApiResult> DentistCompleteAppointmentAsync(
+        long id,
+        string? notes = null,
+        string? followUpReason = null,
+        DateTime? recommendedFollowUpDate = null,
+        string? followUpReasonCategory = null)
     {
-        return await SendPostActionAsync($"/api/dentist/appointments/{id}/complete", new CompleteAppointmentRequest { Notes = notes });
+        var body = new CompleteAppointmentRequest
+        {
+            Notes = notes,
+            FollowUpReason = followUpReason,
+            RecommendedFollowUpDate = recommendedFollowUpDate,
+            FollowUpReasonCategory = followUpReasonCategory
+        };
+        return await SendPostActionAsync($"/api/dentist/appointments/{id}/complete", body);
     }
 
     public async Task<ApiResult<List<DentalChairOptionDto>>> GetDentistRoomChairsAsync(long appointmentId)

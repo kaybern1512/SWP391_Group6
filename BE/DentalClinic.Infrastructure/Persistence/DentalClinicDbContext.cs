@@ -887,8 +887,33 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasOne(d => d.TreatmentSession).WithMany(p => p.FollowUpSchedules)
                 .HasForeignKey(d => d.TreatmentSessionId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_FollowUpSchedules_TreatmentSession");
+
+            entity.HasOne(d => d.PatientUser).WithMany()
+                .HasForeignKey(d => d.PatientUserId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_FollowUpSchedules_PatientUser");
+
+            entity.HasOne(d => d.DentistUser).WithMany()
+                .HasForeignKey(d => d.DentistUserId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_FollowUpSchedules_DentistUser");
+
+            entity.HasOne(d => d.TreatmentPlan).WithMany()
+                .HasForeignKey(d => d.TreatmentPlanId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_FollowUpSchedules_TreatmentPlan");
+
+            entity.HasOne(d => d.TreatmentPlanStage).WithMany()
+                .HasForeignKey(d => d.TreatmentPlanStageId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_FollowUpSchedules_TreatmentPlanStage");
         });
 
         modelBuilder.Entity<ImagingRecord>(entity =>
@@ -1508,6 +1533,7 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasOne(d => d.TreatmentPlanItem).WithMany(p => p.TreatmentSessions)
                 .HasForeignKey(d => d.TreatmentPlanItemId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_TreatmentSessions_Item");
         });

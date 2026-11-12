@@ -27,6 +27,8 @@ public class DepartmentServiceDto
     public bool RequiresConsultationFirst { get; set; }
     public int MinLeadTimeHours { get; set; } = 2;
     public string? BookingInstructions { get; set; }
+    public bool RequiresTreatmentPlan { get; set; } = false;
+    public bool RequiresFollowUp { get; set; } = false;
 }
 
 public class DentistOptionDto

@@ -27,7 +27,7 @@ public class AdminOperationsRealDatabaseUatTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("TEST_SQL_CONNECTION")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database={Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_AdminOperations_Dev"};Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database={Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_DB") ?? "DentalCare_AdminOperations_Dev"};Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
 
     private static DentalClinicDbContext CreateRealDbContext()
     {

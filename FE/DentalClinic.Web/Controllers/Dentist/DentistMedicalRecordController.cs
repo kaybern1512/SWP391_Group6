@@ -371,11 +371,23 @@ public class DentistMedicalRecordController : Controller
 
     [HttpPost("CompleteExam")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> CompleteExam(long appointmentId, long patientUserId, string? notes = null)
+    public async Task<IActionResult> CompleteExam(
+        long appointmentId,
+        long patientUserId,
+        string? notes = null,
+        string? followUpReason = null,
+        DateTime? recommendedFollowUpDate = null,
+        string? followUpReasonCategory = null)
     {
         if (_appointmentApiService != null)
         {
-            var result = await _appointmentApiService.DentistCompleteAppointmentAsync(appointmentId, notes);
+            var result = await _appointmentApiService.DentistCompleteAppointmentAsync(
+                appointmentId,
+                notes,
+                followUpReason,
+                recommendedFollowUpDate,
+                followUpReasonCategory);
+
             if (result.IsSuccess)
             {
                 TempData["SuccessMessage"] = result.Message ?? "Đã hoàn thành ca khám và điều trị cho bệnh nhân thành công!";
