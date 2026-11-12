@@ -59,6 +59,7 @@ public class AdminDepartmentServiceDto
     public string? BookingInstructions { get; set; }
     public int WorkflowStepCount { get; set; }
     public bool HasActiveWorkflow { get; set; }
+    public string WorkflowApprovalStatus { get; set; } = "None"; // None, Draft, Approved
     public ServiceWorkflowDto? ActiveWorkflow { get; set; }
 }
 
@@ -103,6 +104,9 @@ public class ServiceWorkflowDto
     public string WorkflowName { get; set; } = string.Empty;
     public int Version { get; set; } = 1;
     public bool IsActive { get; set; } = true;
+    public string ApprovalStatus { get; set; } = "Draft"; // Draft, PendingReview, Approved
+    public long? ApprovedByUserId { get; set; }
+    public DateTime? ApprovedAt { get; set; }
     public string? Description { get; set; }
     public List<ServiceWorkflowStepDto> Steps { get; set; } = new();
 }
@@ -134,6 +138,8 @@ public class ConfigureWorkflowRequest
 {
     public string? WorkflowName { get; set; }
     public string? Description { get; set; }
+    public bool ActivateImmediately { get; set; } = true;
+    public string ApprovalStatus { get; set; } = "Approved";
     public List<ServiceWorkflowStepInputDto> Steps { get; set; } = new();
 }
 

@@ -154,12 +154,24 @@
                                     <td>
                                         @if (srv.WorkflowStepCount > 0)
                                         {
-                                            <button type="button" class="btn btn-sm btn-outline-info py-0 px-2 btn-open-wf"
-                                                    data-id="@srv.DepartmentServiceId"
-                                                    data-name="@srv.ServiceName"
-                                                    title="Xem và chỉnh sửa quy trình @srv.WorkflowStepCount bước">
-                                                <i class="bi bi-diagram-3-fill me-1"></i>@srv.WorkflowStepCount bước chuẩn
-                                            </button>
+                                            if (srv.HasActiveWorkflow)
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-success py-0 px-2 btn-open-wf"
+                                                        data-id="@srv.DepartmentServiceId"
+                                                        data-name="@srv.ServiceName"
+                                                        title="Quy trình đã duyệt đang áp dụng (@srv.WorkflowStepCount bước)">
+                                                    <i class="bi bi-diagram-3-fill me-1"></i>Đang áp dụng (@srv.WorkflowStepCount bước)
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2 btn-open-wf"
+                                                        data-id="@srv.DepartmentServiceId"
+                                                        data-name="@srv.ServiceName"
+                                                        title="Bản thảo tham khảo - Chờ bác sĩ chuyên khoa duyệt (@srv.WorkflowStepCount bước)">
+                                                    <i class="bi bi-clock-history me-1"></i>Bản thảo (@srv.WorkflowStepCount bước)
+                                                </button>
+                                            }
                                         }
                                         else
                                         {
@@ -461,13 +473,25 @@
                     <!-- Tab Editor -->
                     <div class="tab-pane fade show active" id="wfEditorPane" role="tabpanel">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div class="d-flex align-items-center gap-2">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <span class="badge bg-primary-subtle text-primary border" id="wfVersionBadge">Phiên bản hiện tại: v1</span>
+                                <span class="badge bg-warning-subtle text-warning border" id="wfApprovalBadge">Bản thảo (Chờ duyệt)</span>
                                 <span class="text-muted small">Lưu thay đổi sẽ tự động tạo một phiên bản quy trình mới để bảo toàn các ca khám lịch sử.</span>
                             </div>
                             <button type="button" class="btn btn-sm btn-outline-primary" id="btnWfAddStep">
                                 <i class="bi bi-plus-circle me-1"></i>Thêm Bước Mới
                             </button>
+                        </div>
+
+                        <div class="alert alert-warning py-2 mb-3 small d-flex align-items-center justify-content-between" id="wfDraftAlert">
+                            <div>
+                                <i class="bi bi-shield-exclamation me-1"></i>
+                                <strong>Lưu ý thẩm định y khoa:</strong> Bản thảo tham khảo cần Bác sĩ Chuyên khoa thẩm định trước khi phê duyệt áp dụng chính thức.
+                            </div>
+                            <div class="form-check form-switch m-0 ms-3 text-nowrap">
+                                <input class="form-check-input" type="checkbox" id="wfActivateImmediate" checked />
+                                <label class="form-check-label fw-bold text-dark" for="wfActivateImmediate">Phê duyệt & Kích hoạt</label>
+                            </div>
                         </div>
 
                         <div class="table-responsive border rounded-3">
@@ -558,6 +582,7 @@
             const wfPreviewContainer = document.getElementById('wfPreviewContainer');
             const wfStepCountBadge = document.getElementById('wfStepCountBadge');
             const wfVersionBadge = document.getElementById('wfVersionBadge');
+            const wfApprovalBadge = document.getElementById('wfApprovalBadge');
             const wfStatusMsg = document.getElementById('wfStatusMsg');
 
             function getCsrfToken() {
@@ -736,6 +761,19 @@
                         const json = await res.json();
                         if (json.success && json.data) {
                             wfVersionBadge.innerText = `Phiên bản hiện tại: v${json.data.version}`;
+                            const isApproved = (json.data.approvalStatus === 'Approved') || (json.data.isActive);
+                            if (wfApprovalBadge) {
+                                if (isApproved) {
+                                    wfApprovalBadge.className = 'badge bg-success-subtle text-success border';
+                                    wfApprovalBadge.innerText = 'Đang áp dụng';
+                                } else {
+                                    wfApprovalBadge.className = 'badge bg-warning-subtle text-warning border';
+                                    wfApprovalBadge.innerText = 'Bản thảo (Chờ duyệt)';
+                                }
+                            }
+                            const chk = document.getElementById('wfActivateImmediate');
+                            if (chk) chk.checked = true;
+
                             currentWorkflowSteps = (json.data.steps || []).map(s => ({
                                 stepName: s.stepName,
                                 description: s.description,
@@ -745,10 +783,20 @@
                             }));
                         } else {
                             wfVersionBadge.innerText = 'Chưa có phiên bản (sẽ tạo v1)';
+                            if (wfApprovalBadge) {
+                                wfApprovalBadge.className = 'badge bg-secondary-subtle text-secondary border';
+                                wfApprovalBadge.innerText = 'Chưa thiết lập';
+                            }
+                            const chk = document.getElementById('wfActivateImmediate');
+                            if (chk) chk.checked = true;
                             currentWorkflowSteps = [];
                         }
                     } catch (e) {
                         wfVersionBadge.innerText = 'Chưa có quy trình';
+                        if (wfApprovalBadge) {
+                            wfApprovalBadge.className = 'badge bg-secondary-subtle text-secondary border';
+                            wfApprovalBadge.innerText = 'Chưa thiết lập';
+                        }
                         currentWorkflowSteps = [];
                     }
 
@@ -787,9 +835,14 @@
                     }
                 }
 
+                const chk = document.getElementById('wfActivateImmediate');
+                const activateImmediate = chk ? chk.checked : true;
+
                 const payload = {
                     workflowName: `Quy trình ${currentServiceName}`,
                     description: `Cấu hình quy trình lâm sàng chuẩn cho dịch vụ ${currentServiceName}`,
+                    activateImmediately: activateImmediate,
+                    approvalStatus: activateImmediate ? 'Approved' : 'Draft',
                     steps: currentWorkflowSteps.map((st, idx) => ({
                         stepName: st.stepName.trim(),
                         description: st.description ? st.description.trim() : null,

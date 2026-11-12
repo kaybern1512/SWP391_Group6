@@ -864,7 +864,8 @@ public partial class DentalClinicDbContext : DbContext
             entity.Property(e => e.WorkflowName).HasMaxLength(200);
             entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.Version).HasDefaultValue(1);
-            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.IsActive).HasDefaultValue(false);
+            entity.Property(e => e.ApprovalStatus).HasMaxLength(50).HasDefaultValue("Draft");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
 
             entity.HasOne(d => d.DepartmentService)

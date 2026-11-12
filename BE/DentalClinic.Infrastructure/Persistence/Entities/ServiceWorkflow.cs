@@ -15,6 +15,8 @@ public partial class ServiceWorkflow
 
     public bool IsActive { get; set; } = true;
 
+    public string ApprovalStatus { get; set; } = "Draft"; // Draft, PendingReview, Approved
+
     public string? Description { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -22,6 +24,10 @@ public partial class ServiceWorkflow
     public DateTime? UpdatedAt { get; set; }
 
     public long? CreatedByUserId { get; set; }
+
+    public long? ApprovedByUserId { get; set; }
+
+    public DateTime? ApprovedAt { get; set; }
 
     public virtual DepartmentService DepartmentService { get; set; } = null!;
 

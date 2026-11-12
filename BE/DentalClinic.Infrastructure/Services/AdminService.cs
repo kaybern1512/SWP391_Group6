@@ -249,6 +249,9 @@ public class AdminService : IAdminService
         var query = _dbContext.DepartmentServices
             .AsNoTracking()
             .Include(s => s.Department)
+            .Include(s => s.Workflows)
+                .ThenInclude(w => w.Steps)
+            .AsSplitQuery()
             .AsQueryable();
 
         if (departmentId.HasValue && departmentId.Value > 0)
@@ -270,6 +273,11 @@ public class AdminService : IAdminService
         var dtos = services.Select(s =>
         {
             var activeWf = s.Workflows?.FirstOrDefault(w => w.IsActive);
+            var latestWf = activeWf ?? s.Workflows?.OrderByDescending(w => w.Version).FirstOrDefault();
+            var targetWf = activeWf ?? latestWf;
+            var hasActive = activeWf != null && activeWf.Steps.Any();
+            var approvalStatus = activeWf != null ? (activeWf.ApprovalStatus ?? "Approved") : (latestWf != null ? (latestWf.ApprovalStatus ?? "Draft") : "None");
+
             return new AdminDepartmentServiceDto
             {
                 DepartmentServiceId = s.DepartmentServiceId,
@@ -286,17 +294,21 @@ public class AdminService : IAdminService
                 RequiresConsultationFirst = s.RequiresConsultationFirst,
                 MinLeadTimeHours = s.MinLeadTimeHours,
                 BookingInstructions = s.BookingInstructions,
-                WorkflowStepCount = activeWf?.Steps?.Count ?? 0,
-                HasActiveWorkflow = activeWf != null && activeWf.Steps.Any(),
-                ActiveWorkflow = activeWf != null ? new ServiceWorkflowDto
+                WorkflowStepCount = targetWf?.Steps?.Count ?? 0,
+                HasActiveWorkflow = hasActive,
+                WorkflowApprovalStatus = approvalStatus,
+                ActiveWorkflow = targetWf != null ? new ServiceWorkflowDto
                 {
-                    WorkflowId = activeWf.WorkflowId,
-                    DepartmentServiceId = activeWf.DepartmentServiceId,
-                    WorkflowName = activeWf.WorkflowName,
-                    Version = activeWf.Version,
-                    IsActive = activeWf.IsActive,
-                    Description = activeWf.Description,
-                    Steps = activeWf.Steps.OrderBy(st => st.StepOrder).Select(st => new ServiceWorkflowStepDto
+                    WorkflowId = targetWf.WorkflowId,
+                    DepartmentServiceId = targetWf.DepartmentServiceId,
+                    WorkflowName = targetWf.WorkflowName,
+                    Version = targetWf.Version,
+                    IsActive = targetWf.IsActive,
+                    ApprovalStatus = targetWf.ApprovalStatus ?? (targetWf.IsActive ? "Approved" : "Draft"),
+                    ApprovedByUserId = targetWf.ApprovedByUserId,
+                    ApprovedAt = targetWf.ApprovedAt,
+                    Description = targetWf.Description,
+                    Steps = targetWf.Steps.OrderBy(st => st.StepOrder).Select(st => new ServiceWorkflowStepDto
                     {
                         StepId = st.StepId,
                         WorkflowId = st.WorkflowId,
@@ -319,7 +331,7 @@ public class AdminService : IAdminService
         var s = await _dbContext.DepartmentServices
             .AsNoTracking()
             .Include(s => s.Department)
-            .Include(s => s.Workflows.Where(w => w.IsActive))
+            .Include(s => s.Workflows)
                 .ThenInclude(w => w.Steps)
             .AsSplitQuery()
             .FirstOrDefaultAsync(s => s.DepartmentServiceId == serviceId, ct);
@@ -330,6 +342,10 @@ public class AdminService : IAdminService
         }
 
         var activeWf = s.Workflows?.FirstOrDefault(w => w.IsActive);
+        var latestWf = activeWf ?? s.Workflows?.OrderByDescending(w => w.Version).FirstOrDefault();
+        var targetWf = activeWf ?? latestWf;
+        var hasActive = activeWf != null && activeWf.Steps.Any();
+        var approvalStatus = activeWf != null ? (activeWf.ApprovalStatus ?? "Approved") : (latestWf != null ? (latestWf.ApprovalStatus ?? "Draft") : "None");
 
         var dto = new AdminDepartmentServiceDto
         {
@@ -347,17 +363,21 @@ public class AdminService : IAdminService
             RequiresConsultationFirst = s.RequiresConsultationFirst,
             MinLeadTimeHours = s.MinLeadTimeHours,
             BookingInstructions = s.BookingInstructions,
-            WorkflowStepCount = activeWf?.Steps?.Count ?? 0,
-            HasActiveWorkflow = activeWf != null && activeWf.Steps.Any(),
-            ActiveWorkflow = activeWf != null ? new ServiceWorkflowDto
+            WorkflowStepCount = targetWf?.Steps?.Count ?? 0,
+            HasActiveWorkflow = hasActive,
+            WorkflowApprovalStatus = approvalStatus,
+            ActiveWorkflow = targetWf != null ? new ServiceWorkflowDto
             {
-                WorkflowId = activeWf.WorkflowId,
-                DepartmentServiceId = activeWf.DepartmentServiceId,
-                WorkflowName = activeWf.WorkflowName,
-                Version = activeWf.Version,
-                IsActive = activeWf.IsActive,
-                Description = activeWf.Description,
-                Steps = activeWf.Steps.OrderBy(st => st.StepOrder).Select(st => new ServiceWorkflowStepDto
+                WorkflowId = targetWf.WorkflowId,
+                DepartmentServiceId = targetWf.DepartmentServiceId,
+                WorkflowName = targetWf.WorkflowName,
+                Version = targetWf.Version,
+                IsActive = targetWf.IsActive,
+                ApprovalStatus = targetWf.ApprovalStatus ?? (targetWf.IsActive ? "Approved" : "Draft"),
+                ApprovedByUserId = targetWf.ApprovedByUserId,
+                ApprovedAt = targetWf.ApprovedAt,
+                Description = targetWf.Description,
+                Steps = targetWf.Steps.OrderBy(st => st.StepOrder).Select(st => new ServiceWorkflowStepDto
                 {
                     StepId = st.StepId,
                     WorkflowId = st.WorkflowId,
@@ -482,6 +502,9 @@ public class AdminService : IAdminService
                 WorkflowName = $"Quy trình: {service.ServiceName}",
                 Version = 1,
                 IsActive = true,
+                ApprovalStatus = "Approved",
+                ApprovedByUserId = adminUserId,
+                ApprovedAt = DateTime.UtcNow,
                 Description = service.Description,
                 CreatedAt = DateTime.UtcNow,
                 CreatedByUserId = adminUserId
@@ -606,12 +629,11 @@ public class AdminService : IAdminService
             }
 
             var activeWf = service.Workflows.FirstOrDefault(w => w.IsActive);
-            int newVersion = 1;
-            if (activeWf != null)
+            int newVersion = service.Workflows.Any() ? service.Workflows.Max(w => w.Version) + 1 : 1;
+            foreach (var active in service.Workflows.Where(w => w.IsActive))
             {
-                activeWf.IsActive = false;
-                activeWf.UpdatedAt = DateTime.UtcNow;
-                newVersion = activeWf.Version + 1;
+                active.IsActive = false;
+                active.UpdatedAt = DateTime.UtcNow;
             }
 
             var newWf = new ServiceWorkflow
@@ -620,6 +642,9 @@ public class AdminService : IAdminService
                 WorkflowName = $"Quy trình: {service.ServiceName} (v{newVersion})",
                 Version = newVersion,
                 IsActive = true,
+                ApprovalStatus = "Approved",
+                ApprovedByUserId = adminUserId,
+                ApprovedAt = DateTime.UtcNow,
                 Description = service.Description,
                 CreatedAt = DateTime.UtcNow,
                 CreatedByUserId = adminUserId
@@ -672,7 +697,7 @@ public class AdminService : IAdminService
         }
         else
         {
-            query = query.Where(w => w.IsActive).OrderByDescending(w => w.Version);
+            query = query.OrderByDescending(w => w.IsActive).ThenByDescending(w => w.Version);
         }
 
         var wf = await query.FirstOrDefaultAsync(ct);
@@ -688,6 +713,9 @@ public class AdminService : IAdminService
             WorkflowName = wf.WorkflowName,
             Version = wf.Version,
             IsActive = wf.IsActive,
+            ApprovalStatus = wf.ApprovalStatus ?? (wf.IsActive ? "Approved" : "Draft"),
+            ApprovedByUserId = wf.ApprovedByUserId,
+            ApprovedAt = wf.ApprovedAt,
             Description = wf.Description,
             Steps = wf.Steps.OrderBy(s => s.StepOrder).Select(s => new ServiceWorkflowStepDto
             {
@@ -733,12 +761,17 @@ public class AdminService : IAdminService
         }
 
         var activeWf = service.Workflows.FirstOrDefault(w => w.IsActive);
-        int newVersion = 1;
-        if (activeWf != null)
+        int newVersion = service.Workflows.Any() ? service.Workflows.Max(w => w.Version) + 1 : 1;
+        bool activate = request.ActivateImmediately;
+        string approval = !string.IsNullOrWhiteSpace(request.ApprovalStatus) ? request.ApprovalStatus.Trim() : (activate ? "Approved" : "Draft");
+
+        if (activate)
         {
-            activeWf.IsActive = false;
-            activeWf.UpdatedAt = DateTime.UtcNow;
-            newVersion = activeWf.Version + 1;
+            foreach (var active in service.Workflows.Where(w => w.IsActive))
+            {
+                active.IsActive = false;
+                active.UpdatedAt = DateTime.UtcNow;
+            }
         }
 
         var workflowName = !string.IsNullOrWhiteSpace(request.WorkflowName)
@@ -750,7 +783,10 @@ public class AdminService : IAdminService
             DepartmentServiceId = service.DepartmentServiceId,
             WorkflowName = workflowName,
             Version = newVersion,
-            IsActive = true,
+            IsActive = activate,
+            ApprovalStatus = approval,
+            ApprovedByUserId = approval == "Approved" ? adminUserId : null,
+            ApprovedAt = approval == "Approved" ? DateTime.UtcNow : null,
             Description = request.Description?.Trim() ?? service.Description,
             CreatedAt = DateTime.UtcNow,
             CreatedByUserId = adminUserId
