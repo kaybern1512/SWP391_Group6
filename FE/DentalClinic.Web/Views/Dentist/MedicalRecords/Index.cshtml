@@ -405,7 +405,7 @@
                                 var totalTasks = Model.ServiceTasks.Count;
                                 var inProgressTasks = Model.ServiceTasks.Count(t => t.Status == "InProgress");
                                 var completedTasks = Model.ServiceTasks.Count(t => t.Status == "Completed");
-                                var pendingTasks = Model.ServiceTasks.Count(t => t.Status == "Pending");
+                                var pendingTasks = Model.ServiceTasks.Count(t => t.Status == "Pending" || t.Status == "Planned");
                                 var taskProgressPct = totalTasks > 0 ? (int)Math.Round((double)completedTasks * 100 / totalTasks) : 0;
                             }
 
@@ -479,7 +479,7 @@
                                                 </div>
 
                                                 <div class="d-flex align-items-center gap-2">
-                                                    @if (task.Status == "Pending" && isApptActive)
+                                                    @if ((task.Status == "Pending" || task.Status == "Planned") && isApptActive)
                                                     {
                                                         <form asp-action="StartServiceTask" method="post" class="d-inline">
                                                             @Html.AntiForgeryToken()

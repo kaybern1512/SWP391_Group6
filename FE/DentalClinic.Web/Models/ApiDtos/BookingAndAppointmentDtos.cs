@@ -148,11 +148,21 @@ public class AppointmentDto
     public string? PatientPhone { get; set; }
     public long DepartmentId { get; set; }
     public string DepartmentName { get; set; } = string.Empty;
-    public long RequestedServiceId { get; set; }
+
+    [JsonPropertyName("requestedServiceId")]
+    public long? NullableRequestedServiceId { get; set; }
+
+    [JsonIgnore]
+    public long RequestedServiceId
+    {
+        get => NullableRequestedServiceId ?? 0;
+        set => NullableRequestedServiceId = value;
+    }
+
     public string? ComboCode { get; set; }
     public long? ComboId { get; set; }
     public string? ComboTitle { get; set; }
-    public string ServiceName { get; set; } = string.Empty;
+    public string? ServiceName { get; set; }
     private int? _durationMinutes;
 
     [JsonPropertyName("serviceDuration")]
