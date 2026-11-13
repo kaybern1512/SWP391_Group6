@@ -5,159 +5,157 @@
 > **Worktree:** `D:\SWP391\DentalCare-Clean-SQL`  
 > **Branch:** `refactor/clean-standalone-database-sql`  
 > **Base Commit:** `1582902` (Fast-forward to `develop` HEAD `df7c167`)  
-> **Trạng thái:** HOÀN TẤT VÀ XÁC THỰC 100%  
-> **Từ khóa hoàn tất:** `SSMS-READY TWO-FILE DATABASE VERIFIED`  
+> **Trạng thái:** **PARTIALLY VERIFIED** (Cấu trúc T-SQL & Demo Data PASS; Backend EF Core Integration cần đồng bộ schema theo commit `0907342`)  
+> **Từ khóa đánh giá:** `PARTIALLY VERIFIED`  
 
 ---
 
-## A. TỔNG QUAN VÀ MỤC TIÊU ĐẠT ĐƯỢC
+## 1. PHÂN TÍCH LỖI THỰC TẾ TRÊN `AdminEndToEndSqlServerIntegrationTests` VÀ ĐỐI CHIẾU ENTITY / DBCONTEXT / DDL
 
-Toàn bộ hệ thống cơ sở dữ liệu DentalCare SWP391 đã được tái cấu trúc và chuẩn hóa hoàn toàn theo phong cách T-SQL chuyên nghiệp, tương thích 100% với SQL Server Management Studio (SSMS), SQL Server 2017/2019/2022/LocalDB/SQLEXPRESS, và EF Core 8.
-
-### 1. Thống kê cấu trúc đối tượng cơ sở dữ liệu
-- **Tổng số bảng:** **69 bảng** (68 bảng thực thể nghiệp vụ + 1 bảng `__EFMigrationsHistory`).
-- **Tổng số Foreign Key Constraints:** **164 FKs** (163 inlined trực tiếp trong khối `CREATE TABLE`, 1 circular FK được áp dụng qua `ALTER TABLE`).
-- **Tổng số Check Constraints:** **87 Checks** (100% inlined trong khối `CREATE TABLE`).
-- **Tổng số Unique Constraints:** **26 Unique Key Constraints** (+ các filtered unique index nghiệp vụ).
-- **Views:** **1 View** (`dbo.vw_PublishedBlogPosts`).
-- **Stored Procedures:** **2 Stored Procedures** (`dbo.sp_CleanupOrphanBlogPostMedia`, `dbo.sp_IncrementBlogPostView`).
-- **Tổng số dòng dữ liệu demo:** **13,851 rows** phân bổ chính xác trên **57 bảng** có dữ liệu.
-
-### 2. Chuẩn hóa phong cách T-SQL SSMS
-- **Loại bỏ khoảng trắng thừa:** Xóa bỏ toàn bộ các dòng trống đơn lẻ giữa các định nghĩa cột, gom khối `CREATE TABLE` liền mạch, thụt lề 4 space rõ ràng, định danh kiểu dữ liệu thẳng hàng.
-- **Loại bỏ 242 Collation thừa:** Loại bỏ hoàn toàn định nghĩa lặp lại `COLLATE SQL_Latin1_General_CP1_CI_AS` trên từng cột string. Database được tạo ở mức tổng thể với collation chuẩn của SQL Server, các cột tự động kế thừa collation của database.
-- **Inlining tối đa:** Gom toàn bộ `PRIMARY KEY`, `UNIQUE`, `CHECK`, `DEFAULT` và 163 `FOREIGN KEY` vào trực tiếp trong thân lệnh `CREATE TABLE`.
-- **Xử lý Circular FK duy nhất:** Chỉ giữ lại đúng 1 lệnh `ALTER TABLE` ở cuối file Schema cho mối quan hệ phụ thuộc vòng `Appointments.CareEpisodeId -> CareEpisodes.CareEpisodeId`.
-- **Cơ chế Fail-Fast an toàn không ngắt kết nối (SSMS Safe Mode):**
-  - Sử dụng cơ chế `SET NOEXEC ON;` kết hợp kiểm tra context.
-  - Không sử dụng `RAISERROR (..., 20, -1) WITH LOG` (tránh yêu cầu quyền sysadmin và không làm rớt connection trong cửa sổ truy vấn SSMS).
-  - Không sử dụng dynamic SQL toàn bộ gây khó đọc.
-  - Khi phát hiện vi phạm an toàn (database đích đã tồn tại, chạy nhầm database production/dev, hoặc database đã có dữ liệu), script lập tức ngắt quá trình thực thi mà không làm thay đổi dữ liệu hoặc gây lỗi gãy kết nối.
-
----
-
-## B. DANH SÁCH LỖI ĐÃ SỬA THỰC TẾ TRONG DỮ LIỆU DEMO
-
-### 1. Sửa lỗi đếm số dòng dữ liệu Demo (13,957 vs 13,851 rows)
-- **Nguyên nhân gốc:** Header và comment cũ ghi 13,957 dòng do regex đếm dòng cũ đã đếm nhầm 106 câu lệnh `SET IDENTITY_INSERT [dbo].[TableName] ON/OFF` (53 bảng có identity * 2 = 106).
-- **Số liệu chính xác tuyệt đối:** Tổng số dòng dữ liệu thực tế được chèn là **13,851 rows** trên **57 bảng**.
-
-### 2. Sửa triệt để lỗi Encoding tiếng Việt (Mojibake) trên 2,187 dòng
-- **Nguyên nhân gốc:** Dữ liệu demo tiếng Việt trong quá trình export/merge trước đây bị đọc nhầm qua bảng mã Windows-1252 / ISO-8859-1 trước khi nạp lại thành chuỗi UTF-8.
-- **Giải pháp xử lý:** Phát triển bộ giải mã byte-level mapping chính xác (`charToByte` CP1252 to UTF-8 reconstruction), quét và chuyển đổi toàn bộ các chuỗi literal về Unicode N'...' chuẩn.
-- **Bảng thống kê lỗi mojibake đã sửa:**
-  - `DentistProfiles` (cột `Qualification`, `Biography`): Chuyển đổi thành công 10/10 bác sĩ. Mẫu: `BÃ¡c sÄ©` -> `Bác sĩ`, `Äáº¡i há»c Y DÆ°á»£c` -> `Đại học Y Dược TP.HCM`.
-  - `StaffProfiles` (cột `FullName`): Mẫu `Lá»… TÃ¢n Nguyá»…n Thá»‹ Mai` -> `Lễ Tân Nguyễn Thị Mai`.
-  - `VisitFeedback` (cột `Comment`): Chuyển đổi toàn bộ 120 phản hồi bệnh nhân. Mẫu: `Cáº¡o vÃ´i rÄƒng` -> `Cạo vôi răng`, `sáº¡ch bÃ³ng máº£ng bÃ¡m` -> `sạch bóng mảng bám`.
-  - `Departments` (cột `Name`, `Description`): Mẫu `Cáº¥y ghÃ©p Implant` -> `Cấy ghép Implant`.
-  - `Appointments` (cột `ReasonForVisit`): Mẫu `Cáº¥y ghÃ©p trá»¥ Implant Thá»¥y SÄ© vÃ´ trÃ¹ng` -> `Cấy ghép trụ Implant Thụy Sĩ vô trùng`.
-- **Đóng gói UTF-8 with BOM (`\uFEFF`):** File `DentalClinic_Demo_Data.sql` được ghi có BOM để SSMS trên Windows tự động nhận diện đúng bảng mã tiếng Việt khi mở trực tiếp.
-
-### 3. Loại bỏ hoàn toàn `sp_msforeachtable` và Global `NOCHECK CONSTRAINT ALL`
-- **Vấn đề trước đây:** File demo data cũ phải tắt toàn bộ ràng buộc khóa ngoại bằng `sp_msforeachtable "ALTER TABLE ? NOCHECK CONSTRAINT all"` rồi bật lại. Cách này vi phạm quy tắc cơ sở dữ liệu chuẩn và có thể để lại các constraint ở trạng thái untrusted.
-- **Giải pháp triệt để:**
-  - Sắp xếp 57 bảng theo đúng thứ tự topo Directed Acyclic Graph (DAG) cha-trước-con-sau.
-  - Phụ thuộc vòng giữa `Appointments` (chứa `CareEpisodeId = 1`) và `CareEpisodes` (chứa `RootAppointmentId = 2809`) được giải quyết thanh lịch: Appointment 2809 được seed với `CareEpisodeId = NULL`. Sau khi bảng `CareEpisodes` được chèn đầy đủ, một lệnh `UPDATE` duy nhất kích hoạt gán `CareEpisodeId = 1`.
-  - **Kết quả:** Toàn bộ 164 Foreign Keys và 87 Check Constraints **luôn ở trạng thái BẬT VÀ THỰC THI 100% trong suốt quá trình nạp dữ liệu**.
-
-### 4. Gộp Multi-Row INSERT tối ưu hóa hiệu năng
-- Dữ liệu được gom thành các khối `INSERT INTO ... VALUES (...), (...)` với kích thước **500 rows/batch** (thấp hơn giới hạn 1,000 dòng của SQL Server).
-- Thời gian nạp toàn bộ 13,851 dòng giảm từ hơn 60 giây xuống còn **~12 giây**.
-
----
-
-## C. KẾT QUẢ KIỂM THỬ THỰC TẾ TRÊN DATABASE MỚI (DentalCare_SWP391)
-
-### 1. Thực thi Schema và Demo Data
-- **Khởi tạo Schema:**
-  ```powershell
-  sqlcmd -S .\SQLEXPRESS -E -d master -b -f 65001 -i "D:\SWP391\DentalCare-Clean-SQL\DB\DentalClinic_Schema_Full_Standalone.sql"
-  ```
-  - Kết quả: `Exit code 0`. Tạo thành công database `DentalCare_SWP391` với 69 bảng, 164 FKs, 87 Checks, 1 View, 2 SPs trong **0.8 giây**.
-- **Nạp Demo Data:**
-  ```powershell
-  sqlcmd -S .\SQLEXPRESS -E -d DentalCare_SWP391 -b -f 65001 -i "D:\SWP391\DentalCare-Clean-SQL\DB\DentalClinic_Demo_Data.sql"
-  ```
-  - Kết quả: `Exit code 0`. Nạp thành công 13,851 rows trên 57 bảng trong **12.4 giây**.
-
-### 2. Bảng đối soát số lượng đối tượng trước và sau chuẩn hóa
-
-| Đối tượng cơ sở dữ liệu | Baseline trước audit | Database mới (`DentalCare_SWP391`) | Sai lệch | Trạng thái |
-| :--- | :---: | :---: | :---: | :---: |
-| **Tổng số Tables** | 69 | **69** | 0 | KHỚP 100% |
-| **Foreign Keys (FK)** | 164 | **164** | 0 | KHỚP 100% |
-| **Check Constraints (CK)** | 87 | **87** | 0 | KHỚP 100% |
-| **Unique Constraints (UQ)** | 26 | **26** | 0 | KHỚP 100% |
-| **Database Views** | 1 | **1** | 0 | KHỚP 100% |
-| **Stored Procedures** | 2 | **2** | 0 | KHỚP 100% |
-| **Số bảng có dữ liệu** | 57 | **57** | 0 | KHỚP 100% |
-| **Tổng số dòng dữ liệu (Rows)**| 13,851 | **13,851** | 0 | KHỚP 100% |
-
-### 3. Kiểm tra tính toàn vẹn Constraints (Active & Trusted)
-Truy vấn kiểm tra trạng thái ràng buộc:
-```sql
-SELECT 
-    (SELECT COUNT(*) FROM sys.foreign_keys WHERE is_disabled = 1) AS DisabledFKs,
-    (SELECT COUNT(*) FROM sys.foreign_keys WHERE is_not_trusted = 1) AS UntrustedFKs,
-    (SELECT COUNT(*) FROM sys.check_constraints WHERE is_disabled = 1) AS DisabledChecks,
-    (SELECT COUNT(*) FROM sys.check_constraints WHERE is_not_trusted = 1) AS UntrustedChecks;
+### 1.1. Lỗi thực tế và Stack Trace
+Khi thực thi bộ kiểm thử tích hợp thực tế `AdminEndToEndSqlServerIntegrationTests` nhắm vào cơ sở dữ liệu `DentalCare_SWP391`:
+```powershell
+$env:DENTAL_CLINIC_TEST_CONNECTION_STRING = "Server=.\SQLEXPRESS;Database=DentalCare_SWP391;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;"
+dotnet test DentalClinic.Tests.csproj --filter "FullyQualifiedName~AdminEndToEndSqlServerIntegrationTests"
 ```
-**Kết quả:**
-- `DisabledFKs = 0`
-- `UntrustedFKs = 0`
-- `DisabledChecks = 0`
-- `UntrustedChecks = 0`
-=> **100% ràng buộc đang hoạt động và được tin cậy tuyệt đối.**
+**Kết quả:** 2 PASS, 2 FAIL (Exit code 1).
+- **Lỗi 1:** `SqlServer_E2E_FeedbackModeration_PreservesRatingAndExcludesHidden`
+  - *Error Message:* `Microsoft.Data.SqlClient.SqlException : Invalid column name 'RequiresFollowUp'. Invalid column name 'RequiresTreatmentPlan'.`
+  - *Trace:* `FeedbackService.ModerateFeedbackAsync` nạp `Appointment` -> `DepartmentService`. Khi EF Core sinh câu lệnh SQL `SELECT ... [d].[RequiresFollowUp], [d].[RequiresTreatmentPlan] FROM [DepartmentServices] AS [d]`, SQL Server báo lỗi do thiếu cột.
+- **Lỗi 2:** `SqlServer_E2E_ClinicalServiceCustomization_VerifiedReadableByBooking`
+  - *Error Message:* `Microsoft.EntityFrameworkCore.DbUpdateException : An error occurred while saving the entity changes. ---- Microsoft.Data.SqlClient.SqlException : Invalid column name 'RequiresFollowUp'. Invalid column name 'RequiresTreatmentPlan'.`
+  - *Trace:* `AdminService.CreateServiceAsync` gọi `db.DepartmentServices.Add(...)` và `SaveChangesAsync()`. EF Core chèn các cột `RequiresFollowUp` và `RequiresTreatmentPlan` vào bảng `DepartmentServices`, dẫn đến SQL exception.
 
-### 4. Kiểm thử các lớp bảo vệ Fail-Fast
-1. **Chạy Schema khi DB đã tồn tại:**
-   - Thực thi lại file Schema khi `DentalCare_SWP391` đã có sẵn.
-   - Kết quả: Bắt gặp Guard 1, in thông báo `FATAL SAFETY ERROR: Target database [DentalCare_SWP391] already exists!`, kích hoạt `SET NOEXEC ON;`, dừng an toàn không xóa hoặc ghi đè dữ liệu.
-2. **Chạy Demo Data khi dữ liệu đã có sẵn (Idempotency):**
-   - Thực thi lại file Demo Data trên `DentalCare_SWP391`.
-   - Kết quả: Bắt gặp Idempotency Guard, in thông báo `IDEMPOTENCY NOTICE: Demo data appears to be already seeded in [DentalCare_SWP391]. To prevent duplicate key violations, seed execution has been safely bypassed.`, kích hoạt `SET NOEXEC ON;`, kết thúc an toàn với exit code 0 mà không phát sinh lỗi khóa trùng lặp.
-3. **Chạy nhầm trên database được bảo vệ:**
-   - Đặt target DB là `DentalClinicManagementDB` hoặc `DentalCare_Integration_Dev`.
-   - Kết quả: Bắt gặp Guard 2, in thông báo `SAFETY ERROR: Execution of demo data seed against protected databases is strictly prohibited!`, dừng ngay lập tức.
+Tương tự, khi chạy `RealDatabaseEndToEndSmokeTests` trên `DentalCare_SWP391`, 5 test liên quan đến đặt lịch và phân bổ ghế thất bại cùng một nguyên nhân gốc: thiếu cột `RequiresFollowUp` và `RequiresTreatmentPlan` trên `DepartmentServices`, cũng như thiếu các cột stage trên `TreatmentPlanItems` (`StageName`, `ResultSummary`, `CompletedAt`, `SkippedReason`).
 
----
+### 1.2. Đối chiếu chi tiết C# Entities vs DbContext vs DDL Baseline
+Qua quét toàn bộ các lớp thực thể tại `BE/DentalClinic.Infrastructure/Persistence/Entities/*.cs` đối chiếu với metadata của `DentalCare_SWP391` (69 bảng từ `DentalClinic_Schema_Full_Standalone.sql`), phát hiện **chính xác 17 thuộc tính C# không có cột tương ứng trong database DDL**:
 
-## D. TÌNH TRẠNG NHÁNH TÍCH HỢP LIÊN QUAN
+| STT | Entity C# | Bảng Database | Thuộc tính / Cột thiếu | Kiểu dữ liệu | Trạng thái trong DDL |
+| :---: | :--- | :--- | :--- | :--- | :--- |
+| 1 | `DepartmentService` | `DepartmentServices` | `RequiresTreatmentPlan` | `bool (bit)` | **CHƯA CÓ TRONG DDL** |
+| 2 | `DepartmentService` | `DepartmentServices` | `RequiresFollowUp` | `bool (bit)` | **CHƯA CÓ TRONG DDL** |
+| 3 | `FollowUpSchedule` | `FollowUpSchedules` | `PatientUserId` | `long? (bigint)` | **CHƯA CÓ TRONG DDL** |
+| 4 | `FollowUpSchedule` | `FollowUpSchedules` | `DentistUserId` | `long? (bigint)` | **CHƯA CÓ TRONG DDL** |
+| 5 | `FollowUpSchedule` | `FollowUpSchedules` | `TreatmentPlanId` | `long? (bigint)` | **CHƯA CÓ TRONG DDL** |
+| 6 | `FollowUpSchedule` | `FollowUpSchedules` | `TreatmentPlanStageId` | `long? (bigint)` | **CHƯA CÓ TRONG DDL** |
+| 7 | `FollowUpSchedule` | `FollowUpSchedules` | `FollowUpReasonCategory`| `string? (nvarchar)` | **CHƯA CÓ TRONG DDL** |
+| 8 | `FollowUpSchedule` | `FollowUpSchedules` | `CreatedAt` | `DateTime (datetime2)`| **CHƯA CÓ TRONG DDL** |
+| 9 | `TreatmentPlan` | `TreatmentPlans` | `Notes` | `string? (nvarchar)` | **CHƯA CÓ TRONG DDL** |
+| 10 | `TreatmentPlan` | `TreatmentPlans` | `CancellationReason` | `string? (nvarchar)` | **CHƯA CÓ TRONG DDL** |
+| 11 | `TreatmentPlan` | `TreatmentPlans` | `DiagnosisSummary` | `string? (nvarchar)` | **CHƯA CÓ TRONG DDL** |
+| 12 | `TreatmentPlan` | `TreatmentPlans` | `ActivatedAt` | `DateTime? (datetime2)`| **CHƯA CÓ TRONG DDL** |
+| 13 | `TreatmentPlan` | `TreatmentPlans` | `CompletedAt` | `DateTime? (datetime2)`| **CHƯA CÓ TRONG DDL** |
+| 14 | `TreatmentPlanItem`| `TreatmentPlanItems` | `StageName` | `string? (nvarchar)` | **CHƯA CÓ TRONG DDL** |
+| 15 | `TreatmentPlanItem`| `TreatmentPlanItems` | `ResultSummary` | `string? (nvarchar)` | **CHƯA CÓ TRONG DDL** |
+| 16 | `TreatmentPlanItem`| `TreatmentPlanItems` | `CompletedAt` | `DateTime? (datetime2)`| **CHƯA CÓ TRONG DDL** |
+| 17 | `TreatmentPlanItem`| `TreatmentPlanItems` | `SkippedReason` | `string? (nvarchar)` | **CHƯA CÓ TRONG DDL** |
 
-Dự án hiện có nhánh công việc:
-- **Tên nhánh:** `origin/integration/admin-dentist-service-workflows`
-- **Commit mới nhất:** `177d0bd` (cha: `c37c016`, merge-base với develop: `df7c167`).
-- **Trạng thái:** **CHƯA ĐƯỢC MERGE VÀO `develop`.**
-
-**Phân tích chi tiết:**
-- Nhánh `integration/admin-dentist-service-workflows` đang bổ sung 3 bảng mới:
-  1. `dbo.ServiceWorkflows`
-  2. `dbo.ServiceWorkflowSteps`
-  3. `dbo.EpisodeServiceTaskStepProgresses`
-- Theo chỉ thị nghiêm ngặt của Project Owner, tác vụ đóng gói cơ sở dữ liệu hiện tại giữ nguyên 100% schema hiệu lực của baseline chính thức trên `develop` (HEAD `df7c167` / `1582902`), tuyệt đối không tự ý tích hợp trước các bảng của các nhánh tính năng chưa hoàn tất quy trình nghiệm thu.
-- Khi nhánh `integration/admin-dentist-service-workflows` được Project Owner phê duyệt và merge chính thức vào `develop`, 3 bảng nói trên sẽ được bổ sung vào file Standalone Schema theo đúng quy trình.
-
----
-
-## E. DANH MỤC THƯ MỤC BÀN GIAO CUỐI CÙNG
-
-Thư mục bàn giao chính `DB/` tại worktree `D:\SWP391\DentalCare-Clean-SQL\DB` đảm bảo **chỉ chứa đúng 2 file duy nhất**:
-
-1. `DB/DentalClinic_Schema_Full_Standalone.sql` (124,403 bytes):
-   - Chứa toàn bộ cấu trúc 69 bảng, 164 FKs, 87 Checks, 26 UQs, 1 View, 2 SPs.
-   - Không chứa bất kỳ dữ liệu mẫu nào.
-   - Khởi tạo độc lập hoàn toàn chỉ bằng một cú click `Execute` trong SSMS.
-2. `DB/DentalClinic_Demo_Data.sql` (2,955,817 bytes):
-   - Chứa 13,851 dòng dữ liệu mẫu chuẩn trên 57 bảng.
-   - 100% tiếng Việt hiển thị sắc nét, không lỗi font, có UTF-8 BOM.
-   - Nạp tuần tự theo DAG topo, không dùng `NOCHECK`.
-
-Tất cả các tài liệu kiểm toán kiến trúc, file backup `.bak`, các bản nháp migration và script phân tích được lưu trữ gọn gàng và độc lập trong thư mục `DB_Archive/` và `scratch/`.
+### 1.3. Nguồn gốc của sự lệch pha phiên bản (Version Drift)
+- **Commit nguyên nhân:** Commit `0907342c4de41e270b0761f4f2fcedd5643f9451` (`feat(dentist): implement clinical workflow, 5 validation guards, treatment plan and schedule seeding`), được merge vào `develop` tại commit `ed8fb28`.
+- **Migration tương ứng:** File migration `DB_Archive/migrations/20261113_Dentist_Clinical_Workflow_TreatmentPlan_And_Guards.sql`.
+- **Nguyên nhân lệch pha:** 
+  1. Khi task bàn giao Standalone Database Schema bắt đầu (commit `2fb8de7`), file SQL được trích xuất từ database baseline trước khi commit `0907342` được áp dụng rộng rãi.
+  2. Database `DentalCare_Integration_Dev` cũng chưa được chạy migration này (chỉ có database tạm `DentalCare_DentistTask_QA` của agent nha sĩ là có đủ các cột trên).
+  3. Tuân thủ nghiêm ngặt nguyên tắc **"Không tự ý thêm cột hoặc áp dụng migration chưa được Project Owner phê duyệt riêng trong nhiệm vụ Clean SQL"**, chúng tôi giữ nguyên 100% schema baseline và báo cáo chính xác hiện trạng.
 
 ---
 
-## F. KẾT LUẬN
+## 2. KIỂM CHỨNG CƠ CHẾ FAIL-FAST (`RAISERROR` + `SET NOEXEC ON`)
 
-Hai file SQL bàn giao đã vượt qua tất cả các tiêu chuẩn kiểm thử khắt khe về cú pháp T-SQL SSMS, tính toàn vẹn dữ liệu, hiệu năng thực thi và tính tương thích với ASP.NET Core EF Core 8.
+Để loại bỏ hoàn toàn nguy cơ `exit code 0` gây hiểu nhầm khi script bị từ chối thực thi, cả hai file SQL đã được nâng cấp cơ chế phòng hộ kép:
+1. Gọi `RAISERROR (N'...', 16, 1);` để báo lỗi mức độ nghiêm trọng 16.
+2. Ngay sau đó kích hoạt `SET NOEXEC ON;` để vô hiệu hóa việc thực thi toàn bộ các batch tiếp theo.
+3. Cuối file gọi `SET NOEXEC OFF;` để đưa phiên truy vấn về trạng thái bình thường.
 
-**SSMS-READY TWO-FILE DATABASE VERIFIED**
+### Kết quả kiểm nghiệm thực tế:
+- **Kiểm thử 1 (Chạy bằng `sqlcmd -b` khi Database `DentalCare_SWP391` đã tồn tại):**
+  - **Exit Code:** `1` (báo lỗi rõ ràng cho hệ thống tự động/CI/CD).
+  - **Output:**
+    ```text
+    Changed database context to 'master'.
+    ========================================================================================
+    FATAL SAFETY ERROR: Target database [DentalCare_SWP391] already exists!
+    Clean installation requires an empty target database and will never automatically drop
+    or overwrite tables/data on an existing database.
+    Script execution has been safely halted via SET NOEXEC ON.
+    ========================================================================================
+    Msg 50000, Level 16, State 1, Server DESKTOP-1TUBGEU\SQLEXPRESS, Line 15
+    FATAL SAFETY ERROR: Target database [DentalCare_SWP391] already exists! Execution safely halted.
+    ```
+  - **Tác động DB:** Hoàn toàn KHÔNG có bảng, view, hoặc dữ liệu nào bị thay đổi.
+
+- **Kiểm thử 2 (Chạy file Demo Data khi dữ liệu đã có sẵn):**
+  - **Exit Code:** `1`.
+  - **Output:**
+    ```text
+    Changed database context to 'DentalCare_SWP391'.
+    ========================================================================================
+    IDEMPOTENCY NOTICE: Demo data appears to be already seeded in [DentalCare_SWP391].
+    To prevent duplicate key violations, seed execution has been safely bypassed.
+    ========================================================================================
+    Msg 50000, Level 16, State 1, Server DESKTOP-1TUBGEU\SQLEXPRESS, Line 9
+    IDEMPOTENCY NOTICE: Demo data appears to be already seeded in [DentalCare_SWP391]. Seed execution safely bypassed.
+    ```
+  - **Tác động DB:** Không sinh lỗi trùng lặp khóa chính (Primary Key Violation), dữ liệu nguyên vẹn.
+
+- **Kiểm thử 3 (Trạng thái phiên SSMS sau khi từ chối):**
+  - Đã thực thi kịch bản kiểm tra: chạy script bị từ chối, sau đó thực thi ngay câu lệnh `SELECT 999 AS SessionStateCheck;` trong cùng một phiên kết nối.
+  - Kết quả: `SessionStateCheck` trả về giá trị `999` bình thường. Điều này chứng minh lệnh `SET NOEXEC OFF` ở cuối file đã giải phóng phiên làm việc, không làm "đơ" hoặc khóa cửa sổ truy vấn của lập trình viên trong SSMS.
+
+---
+
+## 3. KẾT QUẢ KIỂM THỬ BACKEND THỰC TẾ TRÊN DATABASE MỚI (`DentalCare_SWP391`)
+
+Không chỉ dựa vào `dotnet build`, hệ thống đã thực thi các bộ kiểm thử tích hợp thực tế kết nối trực tiếp đến `DentalCare_SWP391`:
+
+1. **Bộ kiểm thử Quản lý Tồn kho & Dược phẩm (`AdminMedicineInventorySqlServerIntegrationTests`):**
+   - Test `SqlServer_MedicineInventory_ImportBatch_And_AdjustStock_WithAudit`: **PASS** (Tạo thuốc, nhập lô hàng 100 viên, ghi nhật ký kiểm kê, điều chỉnh giảm 5 viên thành công trực tiếp trên SQL Server).
+   - Test `SqlServer_MedicineInventory_Dispense_ReducesAvailableStock`: **PASS** (Xuất kho và giảm tồn kho thực tế thành công).
+
+2. **Bộ kiểm thử Đồng thời Thanh toán (`Stage4FinalSystemAcceptanceE2ETests.AuditRisk_Concurrency_5_ConcurrentPayments`):**
+   - **PASS**: Thực thi ghi nhận thanh toán nhiều luồng đồng thời trên bảng `Invoices` và `Payments` của `DentalCare_SWP391`, đảm bảo không vượt quá số dư còn lại và ghi nhận doanh thu chính xác.
+
+3. **Bộ kiểm thử Phân quyền 4 Role (`FourRoleRbacAuthorizationRegressionTests`):**
+   - **PASS 100% (22/22 tests)**: Xác nhận chặt chẽ 4 vai trò chính thức (`Patient`, `Receptionist`, `Dentist`, `SystemAdministrator`), 0 `DepartmentManager`.
+
+4. **Bộ kiểm thử Giao dịch & An ninh (`SecurityAndBusinessGapIntegrationTests`):**
+   - **PASS 100% (16/16 tests)**.
+
+---
+
+## 4. BÁO CÁO CÔNG CỤ VÀ MÔI TRƯỜNG THỰC THI
+
+- **Phương thức thực thi thực tế:** Tất cả các kiểm thử trong phiên làm việc này được thực thi thông qua tiện ích chính thức `sqlcmd` của Microsoft SQL Server kết nối tới local instance `.\SQLEXPRESS` (port động Local Named Pipes / TCP) và Node.js child processes.
+- **Về giao diện SSMS:** Môi trường agent dòng lệnh không có giao diện tương tác chuột màn hình đồ họa Windows Desktop để "click Execute" bằng tay trên SSMS GUI. Tuy nhiên, các đặc tính T-SQL đã được xây dựng và chứng minh tương thích hoàn toàn với SSMS:
+  - Header file có UTF-8 BOM (`\uFEFF`) để SSMS Windows hiển thị tiếng Việt có dấu chuẩn 100%.
+  - Phân tách lô bằng lệnh `GO` chuẩn.
+  - Sử dụng `RAISERROR (..., 16, 1)` hiển thị thông báo lỗi màu đỏ nổi bật trong tab Messages của SSMS thay vì chỉ in chuỗi thông tin thông thường.
+
+---
+
+## 5. TÌNH TRẠNG CÁC NHÁNH TÍCH HỢP LIÊN QUAN
+
+1. **Nhánh `origin/integration/admin-dentist-service-workflows` (commit `177d0bd` / `c37c016`):**
+   - **CHƯA ĐƯỢC MERGE VÀO `develop`.**
+   - Chứa 3 bảng mới: `ServiceWorkflows`, `ServiceWorkflowSteps`, `EpisodeServiceTaskStepProgresses`.
+   - Giữ đúng cam kết: **TUYỆT ĐỐI KHÔNG TỰ Ý MERGE HOẶC THÊM 3 BẢNG NÀY** vào bản Clean SQL hiện tại.
+
+2. **Các lỗi kiến trúc P0 Billing / Invoice:**
+   - Giữ nguyên thiết kế baseline hiện tại, không tự ý DROP cột `InvoiceId` trên `PerformedServices` hay thay đổi quan hệ 1:N / N:1 theo đúng chỉ thị.
+
+---
+
+## 6. PHƯƠNG ÁN ĐỒNG BỘ SAU KHI ĐƯỢC PHÊ DUYỆT
+
+Sau khi Project Owner duyệt chính thức migration `20261113_Dentist_Clinical_Workflow_TreatmentPlan_And_Guards.sql`, phương án đưa vào bản Clean SQL sẽ gồm 2 bước:
+1. **Bổ sung 17 cột và cập nhật 3 CHECK constraints** trực tiếp vào các khối `CREATE TABLE` tương ứng trong `DentalClinic_Schema_Full_Standalone.sql` (`DepartmentServices`, `TreatmentPlans`, `TreatmentPlanItems`, `FollowUpSchedules`).
+2. **Cập nhật danh sách cột INSERT** của các bảng liên quan trong `DentalClinic_Demo_Data.sql`.
+
+---
+
+## 7. KẾT LUẬN
+
+Bản chuyển giao SQL đã đạt chất lượng cao về chuẩn hóa phong cách T-SQL SSMS, an toàn Fail-Fast và tính toàn vẹn của dữ liệu demo tiếng Việt. Tuy nhiên, do có sự lệch pha phiên bản giữa mã nguồn C# Backend (commit `0907342`) và database baseline ban đầu, trạng thái nghiệm thu hiện tại được xác nhận chính xác là:
+
+**PARTIALLY VERIFIED**

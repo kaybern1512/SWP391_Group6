@@ -26,6 +26,7 @@ BEGIN
     PRINT N'SAFETY ERROR: Demo data script must be executed inside target database [DentalCare_SWP391].';
     PRINT N'Current database context is [' + DB_NAME() + N']. Execution safely halted via SET NOEXEC ON.';
     PRINT N'========================================================================================';
+    RAISERROR(N'SAFETY ERROR: Demo data script must be executed inside target database [DentalCare_SWP391]. Execution halted.', 16, 1);
     SET NOEXEC ON;
 END
 GO
@@ -41,6 +42,7 @@ BEGIN
     PRINT N'SAFETY ERROR: Execution of demo data seed against protected databases is strictly prohibited!';
     PRINT N'Execution safely halted via SET NOEXEC ON.';
     PRINT N'========================================================================================';
+    RAISERROR(N'SAFETY ERROR: Execution of demo data seed against protected databases is strictly prohibited! Execution halted.', 16, 1);
     SET NOEXEC ON;
 END
 GO
@@ -52,6 +54,7 @@ BEGIN
     PRINT N'IDEMPOTENCY NOTICE: Demo data appears to be already seeded in [DentalCare_SWP391].';
     PRINT N'To prevent duplicate key violations, seed execution has been safely bypassed.';
     PRINT N'========================================================================================';
+    RAISERROR(N'IDEMPOTENCY NOTICE: Demo data appears to be already seeded in [DentalCare_SWP391]. Seed execution safely bypassed.', 16, 1);
     SET NOEXEC ON;
 END
 GO

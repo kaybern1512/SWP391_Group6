@@ -25,6 +25,7 @@ BEGIN
         PRINT N'or overwrite tables/data on an existing database.';
         PRINT N'Script execution has been safely halted via SET NOEXEC ON.';
         PRINT N'========================================================================================';
+        RAISERROR(N'FATAL SAFETY ERROR: Target database [DentalCare_SWP391] already exists! Execution safely halted.', 16, 1);
         SET NOEXEC ON;
     END
     ELSE
@@ -52,6 +53,7 @@ BEGIN
     PRINT N'FATAL SAFETY ERROR: Target database [' + DB_NAME() + N'] is invalid, protected, or contains existing user tables!';
     PRINT N'Standalone schema requires an empty target database. Script execution halted via SET NOEXEC ON.';
     PRINT N'========================================================================================';
+    RAISERROR(N'FATAL SAFETY ERROR: Target database is invalid, protected, or contains existing user tables! Execution safely halted.', 16, 1);
     SET NOEXEC ON;
 END
 GO
