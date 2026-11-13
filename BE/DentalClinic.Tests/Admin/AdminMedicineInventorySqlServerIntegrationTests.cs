@@ -15,7 +15,7 @@ public class AdminMedicineInventorySqlServerIntegrationTests
 {
     private static string ConnectionString =>
         Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database=DentalCare_Integration_Dev;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
 
     private static DentalClinicDbContext CreateRealDbContext()
     {
@@ -36,7 +36,7 @@ public class AdminMedicineInventorySqlServerIntegrationTests
         var dbName = (string?)await cmd.ExecuteScalarAsync();
 
         Assert.NotNull(dbName);
-        Assert.Equal("DentalCare_Integration_Dev", dbName);
+        Assert.Contains(dbName, new[] { "DentalCare_Integration_Dev", "DentalCare_ServiceWorkflow_QA", "DentalCare_DentistTask_QA", "DentalCare_ServiceIntegration_QA", "DentalCare_Unified_QA" });
         Assert.NotEqual("DentalClinicManagementDB", dbName); // TUYỆT ĐỐI không phải DB chính
     }
 

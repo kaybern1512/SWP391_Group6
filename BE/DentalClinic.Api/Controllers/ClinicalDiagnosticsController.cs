@@ -16,6 +16,17 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DentalClinic.Api.Controllers;
 
+public class DiagnosticResultUploadForm
+{
+    public IFormFile? File { get; set; }
+    public long DiagnosticOrderId { get; set; }
+    public long ImagingSessionId { get; set; }
+    public long? EquipmentId { get; set; }
+    public string? BodyPart { get; set; }
+    public string? Findings { get; set; }
+    public string? ReviewNotes { get; set; }
+}
+
 [ApiController]
 [Route("api/clinical-diagnostics")]
 [Authorize]
@@ -325,20 +336,16 @@ public class ClinicalDiagnosticsController : ControllerBase
     }
 
     [HttpPost("results/upload-file")]
+    [Consumes("multipart/form-data")]
     [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<DiagnosticResultDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> UploadResultFile(
-        [FromForm] IFormFile file,
-        [FromForm] long diagnosticOrderId,
-        [FromForm] long imagingSessionId,
-        [FromForm] long? equipmentId,
-        [FromForm] string? bodyPart,
-        [FromForm] string? findings,
-        [FromForm] string? reviewNotes,
+        [FromForm] DiagnosticResultUploadForm form,
         CancellationToken ct)
     {
         try
         {
+            var file = form.File;
             if (file == null || file.Length == 0)
                 return BadRequest(ApiResponse<DiagnosticResultDto>.Fail("Vui lòng đính kèm tệp hình ảnh chẩn đoán hợp lệ."));
 
@@ -351,13 +358,13 @@ public class ClinicalDiagnosticsController : ControllerBase
 
             var request = new UploadDiagnosticResultRequest
             {
-                DiagnosticOrderId = diagnosticOrderId,
-                ImagingSessionId = imagingSessionId,
-                EquipmentId = equipmentId,
+                DiagnosticOrderId = form.DiagnosticOrderId,
+                ImagingSessionId = form.ImagingSessionId,
+                EquipmentId = form.EquipmentId,
                 FileUrl = uploadResult.Url,
                 ThumbnailUrl = uploadResult.Url,
                 ImageFormat = System.IO.Path.GetExtension(file.FileName).TrimStart('.').ToUpperInvariant(),
-                Findings = findings,
+                Findings = form.Findings,
                 PerformedAtUtc = DateTime.UtcNow
             };
 

@@ -47,7 +47,7 @@ public class ReviewReferralRequest
 public class FollowUpScheduleDto
 {
     public long FollowUpId { get; set; }
-    public long TreatmentSessionId { get; set; }
+    public long? TreatmentSessionId { get; set; }
     public long PatientUserId { get; set; }
     public string PatientName { get; set; } = string.Empty;
     public string? PatientCode { get; set; }
@@ -56,6 +56,9 @@ public class FollowUpScheduleDto
     public string DentistName { get; set; } = string.Empty;
     public long? DepartmentId { get; set; }
     public string DepartmentName { get; set; } = string.Empty;
+    public long? TreatmentPlanId { get; set; }
+    public long? TreatmentPlanStageId { get; set; }
+    public string? FollowUpReasonCategory { get; set; }
     public DateTime RecommendedDate { get; set; }
     public string? Reason { get; set; }
     public string Status { get; set; } = "Pending";
@@ -65,7 +68,12 @@ public class FollowUpScheduleDto
 
 public class CreateFollowUpRequest
 {
-    public long TreatmentSessionId { get; set; }
+    public long? TreatmentSessionId { get; set; }
+    public long? PatientUserId { get; set; }
+    public long? DentistUserId { get; set; }
+    public long? TreatmentPlanId { get; set; }
+    public long? TreatmentPlanStageId { get; set; }
+    public string? FollowUpReasonCategory { get; set; }
     public DateTime RecommendedDate { get; set; }
     public string? Reason { get; set; }
 }

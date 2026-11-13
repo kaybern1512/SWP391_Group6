@@ -25,6 +25,8 @@ public interface IAdminService
     Task<ApiResponse<AdminDepartmentServiceDto>> CreateServiceAsync(CreateDepartmentServiceRequest request, long? adminUserId = null, CancellationToken ct = default);
     Task<ApiResponse<AdminDepartmentServiceDto>> UpdateServiceAsync(long serviceId, UpdateDepartmentServiceRequest request, long? adminUserId = null, CancellationToken ct = default);
     Task<ApiResponse> ToggleServiceStatusAsync(long serviceId, long? adminUserId = null, CancellationToken ct = default);
+    Task<ApiResponse<ServiceWorkflowDto>> GetWorkflowAsync(long serviceId, int? version = null, CancellationToken ct = default);
+    Task<ApiResponse<ServiceWorkflowDto>> ConfigureWorkflowAsync(long serviceId, ConfigureWorkflowRequest request, long? adminUserId = null, CancellationToken ct = default);
 
     // ==========================================
     // ROOMS (Phase 0 Extended)

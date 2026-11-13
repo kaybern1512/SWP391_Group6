@@ -296,4 +296,81 @@ public class AdminWebControllerTests
         model.PagedLogs.TotalCount.Should().Be(1);
         model.PagedLogs.Items[0].Action.Should().Be("CREATE");
     }
+
+    [Fact]
+    public async Task Services_Create_WithServiceCode_And_Workflow_Success()
+    {
+        // Arrange
+        CreateDepartmentServiceRequest? capturedReq = null;
+        _apiMock.Setup(x => x.CreateServiceAsync(It.IsAny<CreateDepartmentServiceRequest>()))
+            .Callback<CreateDepartmentServiceRequest>(r => capturedReq = r)
+            .ReturnsAsync(ApiResult<AdminDepartmentServiceDto>.Success(new AdminDepartmentServiceDto
+            {
+                DepartmentServiceId = 99,
+                ServiceName = "Tẩy trắng răng Laser Whitening",
+                ServiceCode = "SRV-COSM-099",
+                WorkflowStepCount = 2
+            }));
+
+        var controller = new AdminServiceController(_apiMock.Object)
+        {
+            ControllerContext = CreateAdminContext(),
+            TempData = CreateTempData()
+        };
+
+        var form = new ServiceFormModel
+        {
+            DepartmentId = 2,
+            ServiceCode = "SRV-COSM-099",
+            ServiceName = "Tẩy trắng răng Laser Whitening",
+            DurationMinutes = 60,
+            Price = 2500000m,
+            WorkflowStepsJson = "[{\"stepName\":\"Cách ly nướu\",\"stepOrder\":1,\"isRequired\":true,\"completionRequirement\":\"Che phủ nướu an toàn\"},{\"stepName\":\"Bôi thuốc và chiếu Laser\",\"stepOrder\":2,\"isRequired\":true,\"completionRequirement\":\"Răng lên 2-3 tông màu\"}]"
+        };
+
+        // Act
+        var result = await controller.Create(form);
+
+        // Assert
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["SuccessMessage"].Should().NotBeNull();
+
+        capturedReq.Should().NotBeNull();
+        capturedReq!.ServiceCode.Should().Be("SRV-COSM-099");
+        capturedReq.WorkflowSteps.Should().NotBeNull();
+        capturedReq.WorkflowSteps!.Should().HaveCount(2);
+        capturedReq.WorkflowSteps![0].StepName.Should().Be("Cách ly nướu");
+    }
+
+    [Fact]
+    public async Task Services_GetWorkflow_ReturnsJsonResult()
+    {
+        // Arrange
+        _apiMock.Setup(x => x.GetWorkflowAsync(5, null))
+            .ReturnsAsync(ApiResult<ServiceWorkflowDto>.Success(new ServiceWorkflowDto
+            {
+                WorkflowId = 10,
+                DepartmentServiceId = 5,
+                WorkflowName = "Quy trình Trám răng",
+                Version = 1,
+                IsActive = true,
+                Steps = new List<ServiceWorkflowStepDto>
+                {
+                    new() { StepId = 1, StepName = "Khám và sửa soạn xoang", StepOrder = 1, IsRequired = true, CompletionRequirement = "Sạch ngà mủn" }
+                }
+            }));
+
+        var controller = new AdminServiceController(_apiMock.Object)
+        {
+            ControllerContext = CreateAdminContext()
+        };
+
+        // Act
+        var result = await controller.GetWorkflow(5, null);
+
+        // Assert
+        var jsonResult = result.Should().BeOfType<JsonResult>().Subject;
+        jsonResult.Value.Should().NotBeNull();
+    }
 }

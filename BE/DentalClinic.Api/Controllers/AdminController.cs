@@ -177,6 +177,28 @@ public class AdminController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("services/{id:long}/workflow")]
+    [ProducesResponseType(typeof(ApiResponse<ServiceWorkflowDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<ServiceWorkflowDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetServiceWorkflow(long id, [FromQuery] int? version, CancellationToken ct)
+    {
+        var result = await _adminService.GetWorkflowAsync(id, version, ct);
+        if (!result.Success) return NotFound(result);
+        return Ok(result);
+    }
+
+    [HttpPost("services/{id:long}/workflow")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<ServiceWorkflowDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<ServiceWorkflowDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ConfigureServiceWorkflow(long id, [FromBody] ConfigureWorkflowRequest request, CancellationToken ct)
+    {
+        var adminId = GetCurrentUserId();
+        var result = await _adminService.ConfigureWorkflowAsync(id, request, adminId, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
     // ==========================================
     // ROOMS
     // ==========================================

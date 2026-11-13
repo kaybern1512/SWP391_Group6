@@ -75,6 +75,10 @@ public class AppointmentDto
     public string? ComboCode { get; set; }
     public long? ComboId { get; set; }
     public string? ComboTitle { get; set; }
+    public bool RequiresTreatmentPlan { get; set; } = false;
+    public bool RequiresFollowUp { get; set; } = false;
+    public long? TreatmentPlanId { get; set; }
+    public long? TreatmentPlanItemId { get; set; }
 
     public List<AppointmentChangeProposalDto> Proposals { get; set; } = new();
     public List<StatusHistoryDto> StatusHistories { get; set; } = new();
@@ -231,6 +235,9 @@ public class ReceptionistNoShowRequest
 public class CompleteAppointmentRequest
 {
     public string? Notes { get; set; }
+    public string? FollowUpReason { get; set; }
+    public DateTime? RecommendedFollowUpDate { get; set; }
+    public string? FollowUpReasonCategory { get; set; }
 }
 
 public class AssignChairRequest

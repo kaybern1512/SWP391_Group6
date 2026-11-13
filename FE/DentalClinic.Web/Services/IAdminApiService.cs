@@ -25,6 +25,8 @@ public interface IAdminApiService
     Task<ApiResult<AdminDepartmentServiceDto>> CreateServiceAsync(CreateDepartmentServiceRequest request);
     Task<ApiResult<AdminDepartmentServiceDto>> UpdateServiceAsync(long id, UpdateDepartmentServiceRequest request);
     Task<ApiResult> ToggleServiceStatusAsync(long id);
+    Task<ApiResult<ServiceWorkflowDto>> GetWorkflowAsync(long serviceId, int? version = null);
+    Task<ApiResult<ServiceWorkflowDto>> ConfigureWorkflowAsync(long serviceId, ConfigureWorkflowRequest request);
 
     // Rooms
     Task<ApiResult<List<AdminRoomDto>>> GetRoomsAsync();

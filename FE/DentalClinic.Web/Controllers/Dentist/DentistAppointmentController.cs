@@ -245,7 +245,14 @@ public class DentistAppointmentController : Controller
 
     [HttpPost("{id:long}/Complete")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Complete(long id, [FromForm] string? notes, [FromForm] string? date = null, [FromForm] string? returnUrl = null)
+    public async Task<IActionResult> Complete(
+        long id,
+        [FromForm] string? notes,
+        [FromForm] string? date = null,
+        [FromForm] string? returnUrl = null,
+        [FromForm] string? followUpReason = null,
+        [FromForm] DateTime? recommendedFollowUpDate = null,
+        [FromForm] string? followUpReasonCategory = null)
     {
         IActionResult RedirectTarget()
         {
@@ -256,7 +263,12 @@ public class DentistAppointmentController : Controller
             return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
         }
 
-        var result = await _appointmentApiService.DentistCompleteAppointmentAsync(id, notes);
+        var result = await _appointmentApiService.DentistCompleteAppointmentAsync(
+            id,
+            notes,
+            followUpReason,
+            recommendedFollowUpDate,
+            followUpReasonCategory);
         if (result.IsSuccess)
         {
             TempData["SuccessMessage"] = result.Message ?? "Đã hoàn thành buổi khám và điều trị.";

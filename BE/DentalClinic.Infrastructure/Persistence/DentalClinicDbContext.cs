@@ -115,9 +115,12 @@ public partial class DentalClinicDbContext : DbContext
     public virtual DbSet<DepartmentReferral> DepartmentReferrals { get; set; }
 
     public virtual DbSet<DepartmentService> DepartmentServices { get; set; }
+    public virtual DbSet<ServiceWorkflow> ServiceWorkflows { get; set; }
+    public virtual DbSet<ServiceWorkflowStep> ServiceWorkflowSteps { get; set; }
     public virtual DbSet<ServiceCombo> ServiceCombos { get; set; }
     public virtual DbSet<CareEpisode> CareEpisodes { get; set; }
     public virtual DbSet<EpisodeServiceTask> EpisodeServiceTasks { get; set; }
+    public virtual DbSet<EpisodeServiceTaskStepProgress> EpisodeServiceTaskStepProgresses { get; set; }
 
     public virtual DbSet<DepartmentWorkSchedule> DepartmentWorkSchedules { get; set; }
 
@@ -522,6 +525,74 @@ public partial class DentalClinicDbContext : DbContext
                 .HasForeignKey(d => d.PerformingDentistUserId)
                 .OnDelete(DeleteBehavior.NoAction)
                 .HasConstraintName("FK_EpisodeServiceTasks_DentistUser");
+
+            entity.HasOne(d => d.AppliedWorkflow).WithMany()
+                .HasForeignKey(d => d.AppliedWorkflowId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_EpisodeServiceTasks_ServiceWorkflows");
+        });
+
+        modelBuilder.Entity<ServiceWorkflow>(entity =>
+        {
+            entity.HasKey(e => e.WorkflowId);
+            entity.Property(e => e.WorkflowName).HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.Version).HasDefaultValue(1);
+            entity.Property(e => e.IsActive).HasDefaultValue(false);
+            entity.Property(e => e.ApprovalStatus).HasMaxLength(50).HasDefaultValue("Draft");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+
+            entity.HasOne(d => d.DepartmentService)
+                .WithMany(p => p.Workflows)
+                .HasForeignKey(d => d.DepartmentServiceId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ServiceWorkflows_DepartmentServices");
+        });
+
+        modelBuilder.Entity<ServiceWorkflowStep>(entity =>
+        {
+            entity.HasKey(e => e.StepId);
+            entity.Property(e => e.StepName).HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.CompletionRequirement).HasMaxLength(500);
+            entity.Property(e => e.ExpectedDataType).HasMaxLength(50).HasDefaultValue("None");
+            entity.Property(e => e.IsRequired).HasDefaultValue(true);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+
+            entity.HasOne(d => d.Workflow)
+                .WithMany(p => p.Steps)
+                .HasForeignKey(d => d.WorkflowId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ServiceWorkflowSteps_ServiceWorkflows");
+        });
+
+        modelBuilder.Entity<EpisodeServiceTaskStepProgress>(entity =>
+        {
+            entity.HasKey(e => e.ProgressId);
+            entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Pending");
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.EvidenceUrl).HasMaxLength(500);
+            entity.Property(e => e.CreatedAtUtc).HasDefaultValueSql("(sysutcdatetime())");
+
+            entity.HasOne(d => d.ServiceTask)
+                .WithMany(p => p.StepProgresses)
+                .HasForeignKey(d => d.ServiceTaskId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_StepProgress_ServiceTasks");
+
+            entity.HasOne(d => d.Step)
+                .WithMany(p => p.StepProgresses)
+                .HasForeignKey(d => d.StepId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_StepProgress_WorkflowSteps");
+
+            entity.HasOne(d => d.CompletedByDentistUser)
+                .WithMany()
+                .HasForeignKey(d => d.CompletedByDentistUserId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_StepProgress_DentistUser");
+
+            entity.HasIndex(e => new { e.ServiceTaskId, e.StepId }, "UQ_StepProgress_Task_Step").IsUnique();
         });
 
         modelBuilder.Entity<ClinicalEntry>(entity =>
@@ -841,6 +912,7 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasIndex(e => new { e.DepartmentId, e.ServiceName }, "UQ_DepartmentServices").IsUnique();
 
+            entity.Property(e => e.ServiceCode).HasMaxLength(50);
             entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.Price).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.ServiceName).HasMaxLength(200);
@@ -887,8 +959,33 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasOne(d => d.TreatmentSession).WithMany(p => p.FollowUpSchedules)
                 .HasForeignKey(d => d.TreatmentSessionId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_FollowUpSchedules_TreatmentSession");
+
+            entity.HasOne(d => d.PatientUser).WithMany()
+                .HasForeignKey(d => d.PatientUserId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_FollowUpSchedules_PatientUser");
+
+            entity.HasOne(d => d.DentistUser).WithMany()
+                .HasForeignKey(d => d.DentistUserId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_FollowUpSchedules_DentistUser");
+
+            entity.HasOne(d => d.TreatmentPlan).WithMany()
+                .HasForeignKey(d => d.TreatmentPlanId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_FollowUpSchedules_TreatmentPlan");
+
+            entity.HasOne(d => d.TreatmentPlanStage).WithMany()
+                .HasForeignKey(d => d.TreatmentPlanStageId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_FollowUpSchedules_TreatmentPlanStage");
         });
 
         modelBuilder.Entity<ImagingRecord>(entity =>
@@ -1508,6 +1605,7 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasOne(d => d.TreatmentPlanItem).WithMany(p => p.TreatmentSessions)
                 .HasForeignKey(d => d.TreatmentPlanItemId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_TreatmentSessions_Item");
         });

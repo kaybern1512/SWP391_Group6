@@ -497,7 +497,14 @@ public class AppointmentsController : ControllerBase
     public async Task<IActionResult> DentistCompleteAppointment(long id, [FromBody] CompleteAppointmentRequest? request, CancellationToken ct)
     {
         var dentistUserId = GetCurrentUserId();
-        var result = await _appointmentService.DentistCompleteAppointmentAsync(id, dentistUserId, request?.Notes, ct);
+        var result = await _appointmentService.DentistCompleteAppointmentAsync(
+            id,
+            dentistUserId,
+            request?.Notes,
+            request?.FollowUpReason,
+            request?.RecommendedFollowUpDate,
+            request?.FollowUpReasonCategory,
+            ct);
         if (!result.Success)
         {
             return BadRequest(result);

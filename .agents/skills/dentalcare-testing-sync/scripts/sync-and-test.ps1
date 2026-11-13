@@ -10,6 +10,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if (Get-Variable -Name "PSNativeCommandUseErrorActionPreference" -ErrorAction SilentlyContinue) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
 $swpRoot = "D:\SWP"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
