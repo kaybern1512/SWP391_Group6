@@ -73,4 +73,33 @@ test.describe.serial('Dedicated X-Ray Dentist Workflow & Roster Management', () 
     await expect(page.locator('text=Ca Đang Thực Hiện Tại Phòng Chụp').first()).toBeVisible();
     await expect(page.locator('text=Bệnh Nhân Chờ Chụp X-Quang').first()).toBeVisible();
   });
+
+  test('TC04: XRAY-E2E-02: BS. Đặng Quốc Khánh (dentist7@) logs in and accesses X-Ray Queue with active duty roster', async ({ page }) => {
+    await loginAs(page, 'dentist7@dentalcare.com');
+
+    await page.goto('/Dentist/XrayQueue');
+    await page.waitForLoadState('domcontentloaded');
+
+    // Verify header and page loaded
+    await expect(page.locator('h1:has-text("Ca Trực Phòng X-Quang")')).toBeVisible();
+    await expect(page.locator('text=Phòng Chụp X-quang 01').first()).toBeVisible();
+    
+    // Verify BS. Đặng Quốc Khánh is logged in
+    const userProfileText = await page.locator('body').innerText();
+    expect(userProfileText).toContain('Đặng Quốc Khánh');
+  });
+
+  test('TC05: XRAY-E2E-01 Booking Constraint: BS. Đặng Quốc Khánh (dentist7@) is hidden from regular patient booking', async ({ page }) => {
+    await loginAs(page, 'patient1@dentalcare.com');
+
+    await page.goto('/Patient/Appointments/Create');
+    await page.waitForLoadState('domcontentloaded');
+
+    // Verify booking wizard loaded
+    await expect(page.locator('body')).toBeVisible();
+
+    // Verify BS. Đặng Quốc Khánh is NOT present in any doctor selection
+    const pageText = await page.locator('body').innerText();
+    expect(pageText).not.toContain('BS. Đặng Quốc Khánh');
+  });
 });
