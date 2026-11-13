@@ -228,6 +228,8 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasIndex(e => e.AppointmentCode, "UQ__Appointm__F67FE26FBAC67A99").IsUnique();
 
+            entity.HasIndex(e => new { e.PatientUserId, e.AppointmentId }, "UQ_Appointments_Patient_Appointment").IsUnique();
+
             entity.HasIndex(e => e.TreatmentPlanItemId, "IX_Appointments_TreatmentPlanItemId").HasFilter("([TreatmentPlanItemId] IS NOT NULL)");
 
             entity.Property(e => e.AppointmentCode)
@@ -473,6 +475,7 @@ public partial class DentalClinicDbContext : DbContext
         {
             entity.HasKey(e => e.CareEpisodeId);
             entity.HasIndex(e => e.EpisodeCode).IsUnique();
+            entity.HasIndex(e => new { e.PatientUserId, e.CareEpisodeId }, "UQ_CareEpisodes_Patient_Episode").IsUnique();
             entity.Property(e => e.EpisodeCode).HasMaxLength(30).IsUnicode(false);
             entity.Property(e => e.Status).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Open");
             entity.Property(e => e.OpenedAtUtc).HasDefaultValueSql("(sysutcdatetime())");
@@ -623,6 +626,7 @@ public partial class DentalClinicDbContext : DbContext
             entity.HasKey(e => e.DentalChairId).HasName("PK__DentalCh__6070B172E58B5977");
 
             entity.HasIndex(e => new { e.RoomId, e.ChairCode }, "UQ_DentalChairs").IsUnique();
+            entity.HasIndex(e => new { e.RoomId, e.DentalChairId }, "UQ_DentalChairs_Room_Chair").IsUnique();
 
             entity.Property(e => e.ChairCode)
                 .HasMaxLength(30)
@@ -911,6 +915,7 @@ public partial class DentalClinicDbContext : DbContext
             entity.HasKey(e => e.DepartmentServiceId).HasName("PK__Departme__D80524D3F37DBA6D");
 
             entity.HasIndex(e => new { e.DepartmentId, e.ServiceName }, "UQ_DepartmentServices").IsUnique();
+            entity.HasIndex(e => new { e.DepartmentId, e.DepartmentServiceId }, "UQ_DepartmentServices_Department_Service").IsUnique();
 
             entity.Property(e => e.ServiceCode).HasMaxLength(50);
             entity.Property(e => e.Description).HasMaxLength(1000);
@@ -1010,8 +1015,15 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasIndex(e => e.InvoiceCode, "UQ__Invoices__0D9D7FF306260EDD").IsUnique();
 
-            entity.HasIndex(e => e.AppointmentId, "UQ__Invoices__8ECDFCC3EE915E62").IsUnique();
+            entity.HasIndex(e => e.AppointmentId, "UQ_Invoices_AppointmentId")
+                .IsUnique()
+                .HasFilter("[AppointmentId] IS NOT NULL AND [CareEpisodeId] IS NULL");
 
+            entity.HasIndex(e => e.CareEpisodeId, "UQ_Invoices_CareEpisodeId")
+                .IsUnique()
+                .HasFilter("[CareEpisodeId] IS NOT NULL");
+
+            entity.Property(e => e.AppointmentId).IsRequired(false);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.InvoiceCode)
                 .HasMaxLength(30)
@@ -1024,6 +1036,7 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasOne(d => d.Appointment).WithOne(p => p.Invoice)
                 .HasForeignKey<Invoice>(d => d.AppointmentId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Invoices_Appointment");
 
@@ -1043,6 +1056,14 @@ public partial class DentalClinicDbContext : DbContext
             entity.HasKey(e => e.InvoiceItemId).HasName("PK__InvoiceI__478FE09C8C832207");
 
             entity.HasIndex(e => e.InvoiceId, "IX_InvoiceItems_Invoice");
+
+            entity.HasIndex(e => e.ServiceTaskId, "UQ_InvoiceItems_ServiceTaskId")
+                .IsUnique()
+                .HasFilter("[ServiceTaskId] IS NOT NULL");
+
+            entity.HasIndex(e => e.PerformedServiceId, "UQ_InvoiceItems_PerformedServiceId")
+                .IsUnique()
+                .HasFilter("[PerformedServiceId] IS NOT NULL");
 
             entity.Property(e => e.Amount)
                 .HasComputedColumnSql("([Quantity]*[UnitPrice])", true)
@@ -1268,6 +1289,7 @@ public partial class DentalClinicDbContext : DbContext
             entity.HasKey(e => e.EquipmentId);
             entity.ToTable("ImagingEquipments");
             entity.HasIndex(e => e.EquipmentCode).IsUnique();
+            entity.HasIndex(e => new { e.RoomId, e.EquipmentId }, "UQ_ImagingEquipments_Room_Equipment").IsUnique();
             entity.Property(e => e.EquipmentCode).HasMaxLength(50).IsUnicode(false);
             entity.Property(e => e.EquipmentName).HasMaxLength(150);
             entity.Property(e => e.EquipmentType).HasMaxLength(50).IsUnicode(false);
@@ -1698,6 +1720,7 @@ public partial class DentalClinicDbContext : DbContext
             entity.HasKey(e => e.MedicineBatchId);
             entity.ToTable("MedicineBatches");
             entity.HasIndex(e => new { e.MedicineId, e.BatchNumber }).IsUnique();
+            entity.HasIndex(e => new { e.MedicineId, e.MedicineBatchId }, "UQ_MedicineBatches_Medicine_BatchId").IsUnique();
             entity.Property(e => e.BatchNumber).HasMaxLength(100);
             entity.Property(e => e.CostPrice).HasColumnType("decimal(18, 2)").HasDefaultValue(0m);
             entity.Property(e => e.Status).HasMaxLength(50).HasDefaultValue("Available");

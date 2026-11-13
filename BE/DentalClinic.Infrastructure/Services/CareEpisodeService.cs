@@ -1461,13 +1461,18 @@ public class CareEpisodeService : ICareEpisodeService
                 return ApiResponse<InvoiceDto>.Fail("Không tìm thấy đợt khám chỉ định.");
             }
 
-            // CRITICAL INVARIANT: Protect Paid invoices from mutation or double invoicing
-            var paidInvoice = episode.Invoices.FirstOrDefault(i => i.Status == "Paid");
-            if (paidInvoice != null)
+            // CRITICAL INVARIANT: Protect existing non-Unpaid invoices from mutation or duplicate invoice creation
+            var existingInvoice = episode.Invoices.FirstOrDefault();
+            if (existingInvoice != null && existingInvoice.Status != "Unpaid")
             {
                 await tx.RollbackAsync(ct);
+                if (existingInvoice.Status == "Paid")
+                {
+                    return ApiResponse<InvoiceDto>.Fail(
+                        $"Đợt khám này đã có hóa đơn #{existingInvoice.InvoiceCode} đã thanh toán (Paid). Để bảo toàn dòng tiền, hóa đơn đã thanh toán không được chỉnh sửa hoặc tạo đè.");
+                }
                 return ApiResponse<InvoiceDto>.Fail(
-                    $"Đợt khám này đã có hóa đơn #{paidInvoice.InvoiceCode} đã thanh toán (Paid). Để bảo toàn dòng tiền, hóa đơn đã thanh toán không được chỉnh sửa hoặc tạo đè.");
+                    $"Đợt khám này đã có hóa đơn #{existingInvoice.InvoiceCode} với trạng thái {existingInvoice.Status}. Để bảo toàn dữ liệu tài chính, không được chỉnh sửa hoặc tạo thêm hóa đơn.");
             }
 
             // Get consolidated billing summary items
@@ -1490,13 +1495,27 @@ public class CareEpisodeService : ICareEpisodeService
             var taxAmount = Math.Round(discountedSubTotal * (taxPercent / 100m), 2);
             var totalAmount = Math.Round(discountedSubTotal + taxAmount, 2);
 
+            // Deduplicate line items by ServiceTaskId within this batch
+            var distinctLineItems = new List<ConsolidatedBillingLineItemDto>();
+            var seenTaskIds = new HashSet<long>();
+            foreach (var item in lineItems)
+            {
+                if (item.ServiceTaskId.HasValue)
+                {
+                    if (!seenTaskIds.Add(item.ServiceTaskId.Value))
+                    {
+                        continue;
+                    }
+                }
+                distinctLineItems.Add(item);
+            }
+
             // Check if there is an existing Unpaid invoice to update, or create a new one
-            var existingUnpaidInvoice = episode.Invoices.FirstOrDefault(i => i.Status == "Unpaid");
             Invoice invoice;
 
-            if (existingUnpaidInvoice != null)
+            if (existingInvoice != null && existingInvoice.Status == "Unpaid")
             {
-                invoice = existingUnpaidInvoice;
+                invoice = existingInvoice;
                 _dbContext.InvoiceItems.RemoveRange(invoice.InvoiceItems);
                 invoice.InvoiceItems.Clear();
                 invoice.TotalAmount = totalAmount;
@@ -1518,8 +1537,25 @@ public class CareEpisodeService : ICareEpisodeService
                 _dbContext.Invoices.Add(invoice);
             }
 
+            // Anti-double-billing: Verify that none of these ServiceTasks are billed in any OTHER invoice
+            var taskIdsToCheck = distinctLineItems.Where(i => i.ServiceTaskId.HasValue).Select(i => i.ServiceTaskId!.Value).ToList();
+            if (taskIdsToCheck.Any())
+            {
+                var alreadyBilledTask = await _dbContext.InvoiceItems
+                    .Where(ii => ii.ServiceTaskId.HasValue && taskIdsToCheck.Contains(ii.ServiceTaskId.Value) && (invoice.InvoiceId == 0 || ii.InvoiceId != invoice.InvoiceId))
+                    .Select(ii => new { ii.ServiceTaskId, ii.Invoice.InvoiceCode })
+                    .FirstOrDefaultAsync(ct);
+
+                if (alreadyBilledTask != null)
+                {
+                    await tx.RollbackAsync(ct);
+                    return ApiResponse<InvoiceDto>.Fail(
+                        $"Dịch vụ chỉ định ID {alreadyBilledTask.ServiceTaskId} đã được lập hóa đơn tại #{alreadyBilledTask.InvoiceCode}. Không thể lập hóa đơn trùng lặp.");
+                }
+            }
+
             // Add consolidated line items
-            foreach (var item in lineItems)
+            foreach (var item in distinctLineItems)
             {
                 invoice.InvoiceItems.Add(new InvoiceItem
                 {

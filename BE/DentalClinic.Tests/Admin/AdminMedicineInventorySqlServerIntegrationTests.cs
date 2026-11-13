@@ -36,7 +36,7 @@ public class AdminMedicineInventorySqlServerIntegrationTests
         var dbName = (string?)await cmd.ExecuteScalarAsync();
 
         Assert.NotNull(dbName);
-        Assert.Contains(dbName, new[] { "DentalCare_Integration_Dev", "DentalCare_ServiceWorkflow_QA", "DentalCare_DentistTask_QA", "DentalCare_ServiceIntegration_QA", "DentalCare_Unified_QA" });
+        Assert.Contains(dbName, new[] { "DentalCare_Integration_Dev", "DentalCare_ServiceWorkflow_QA", "DentalCare_DentistTask_QA", "DentalCare_ServiceIntegration_QA", "DentalCare_Unified_QA", "DentalCare_IntegrityFix_QA" });
         Assert.NotEqual("DentalClinicManagementDB", dbName); // TUYỆT ĐỐI không phải DB chính
     }
 

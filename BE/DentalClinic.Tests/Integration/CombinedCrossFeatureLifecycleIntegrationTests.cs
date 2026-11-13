@@ -67,13 +67,13 @@ public class CombinedCrossFeatureLifecycleIntegrationTests
             var histories = await db.AppointmentStatusHistories.Where(h => apptIds.Contains(h.AppointmentId)).ToListAsync();
             db.AppointmentStatusHistories.RemoveRange(histories);
 
-            var payments = await db.Payments.Where(p => p.Invoice.AppointmentId == 0 || apptIds.Contains(p.Invoice.AppointmentId)).ToListAsync();
+            var payments = await db.Payments.Where(p => p.Invoice.AppointmentId == 0 || (p.Invoice.AppointmentId.HasValue && apptIds.Contains(p.Invoice.AppointmentId.Value))).ToListAsync();
             db.Payments.RemoveRange(payments);
 
-            var invItems = await db.InvoiceItems.Where(i => apptIds.Contains(i.Invoice.AppointmentId)).ToListAsync();
+            var invItems = await db.InvoiceItems.Where(i => i.Invoice.AppointmentId.HasValue && apptIds.Contains(i.Invoice.AppointmentId.Value)).ToListAsync();
             db.InvoiceItems.RemoveRange(invItems);
 
-            var invoices = await db.Invoices.Where(i => apptIds.Contains(i.AppointmentId)).ToListAsync();
+            var invoices = await db.Invoices.Where(i => i.AppointmentId.HasValue && apptIds.Contains(i.AppointmentId.Value)).ToListAsync();
             db.Invoices.RemoveRange(invoices);
 
             var appts = await db.Appointments.Where(a => apptIds.Contains(a.AppointmentId)).ToListAsync();

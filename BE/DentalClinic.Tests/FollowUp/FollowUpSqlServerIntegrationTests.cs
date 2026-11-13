@@ -29,8 +29,16 @@ public class FollowUpSqlServerIntegrationTests
         "DentalClinic_QA",
         "DentalCare_ServiceWorkflow_QA",
         "DentalCare_DentistTask_QA",
-        "DentalCare_ServiceIntegration_QA"
+        "DentalCare_ServiceIntegration_QA",
+        "DentalCare_Unified_QA",
+        "DentalCare_IntegrityFix_QA"
     };
+
+    private static async Task<long> GetValidTreatmentSessionIdAsync(DentalClinicDbContext db)
+    {
+        var id = await db.TreatmentSessions.Select(ts => ts.TreatmentSessionId).FirstOrDefaultAsync();
+        return id > 0 ? id : 3;
+    }
 
     private static string ValidateSafeTestDatabase(string connStr)
     {
@@ -138,7 +146,7 @@ public class FollowUpSqlServerIntegrationTests
             {
                 var followUp = new FollowUpSchedule
                 {
-                    TreatmentSessionId = 1,
+                    TreatmentSessionId = await GetValidTreatmentSessionIdAsync(db),
                     RecommendedDate = DateTime.Today.AddDays(7),
                     Reason = $"Test valid status: {status}",
                     Status = status
@@ -171,7 +179,7 @@ public class FollowUpSqlServerIntegrationTests
             {
                 var followUp = new FollowUpSchedule
                 {
-                    TreatmentSessionId = 1,
+                    TreatmentSessionId = await GetValidTreatmentSessionIdAsync(db),
                     RecommendedDate = DateTime.Today.AddDays(7),
                     Reason = $"Test invalid status: {status}",
                     Status = status
@@ -199,7 +207,7 @@ public class FollowUpSqlServerIntegrationTests
         {
             var followUp = new FollowUpSchedule
             {
-                TreatmentSessionId = 1,
+                TreatmentSessionId = await GetValidTreatmentSessionIdAsync(db),
                 RecommendedDate = DateTime.Today,
                 Reason = "Test live reminder decoupling",
                 Status = "Scheduled"
@@ -249,7 +257,7 @@ public class FollowUpSqlServerIntegrationTests
         {
             var followUp = new FollowUpSchedule
             {
-                TreatmentSessionId = 1,
+                TreatmentSessionId = await GetValidTreatmentSessionIdAsync(db),
                 RecommendedDate = DateTime.Today,
                 Reason = "Cancelled follow up test",
                 Status = "Cancelled"
@@ -292,7 +300,7 @@ public class FollowUpSqlServerIntegrationTests
         {
             var followUp = new FollowUpSchedule
             {
-                TreatmentSessionId = 1,
+                TreatmentSessionId = await GetValidTreatmentSessionIdAsync(db),
                 RecommendedDate = DateTime.Today,
                 Reason = "Completed follow up test",
                 Status = "Completed"
@@ -764,7 +772,7 @@ public class FollowUpSqlServerIntegrationTests
             // FollowUp 1: has authentic AuditLog
             var followUp1 = new FollowUpSchedule
             {
-                TreatmentSessionId = 1,
+                TreatmentSessionId = await GetValidTreatmentSessionIdAsync(db),
                 RecommendedDate = DateTime.Today,
                 Reason = "Case A: Authentic log",
                 Status = "Scheduled"
@@ -793,7 +801,7 @@ public class FollowUpSqlServerIntegrationTests
             // FollowUp 2: legacy orphan row with Reconstructed AuditLog (CalledAt = null, CallerStaffName = null)
             var followUp2 = new FollowUpSchedule
             {
-                TreatmentSessionId = 1,
+                TreatmentSessionId = await GetValidTreatmentSessionIdAsync(db),
                 RecommendedDate = DateTime.Today,
                 Reason = "Case B: Reconstructed legacy",
                 Status = "Scheduled"

@@ -9,7 +9,7 @@ public partial class Invoice
 
     public string InvoiceCode { get; set; } = null!;
 
-    public long AppointmentId { get; set; }
+    public long? AppointmentId { get; set; }
 
     public long? CareEpisodeId { get; set; }
 
@@ -21,7 +21,7 @@ public partial class Invoice
 
     public DateTime CreatedAt { get; set; }
 
-    public virtual Appointment Appointment { get; set; } = null!;
+    public virtual Appointment? Appointment { get; set; }
 
     public virtual CareEpisode? CareEpisode { get; set; }
 

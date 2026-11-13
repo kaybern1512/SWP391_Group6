@@ -352,6 +352,9 @@ CREATE TABLE [dbo].[DentalChairs] (
     CONSTRAINT [UQ_DentalChairs]
         UNIQUE NONCLUSTERED ([RoomId] ASC, [ChairCode] ASC),
 
+    CONSTRAINT [UQ_DentalChairs_Room_Chair]
+        UNIQUE NONCLUSTERED ([RoomId] ASC, [DentalChairId] ASC),
+
     CHECK (([Status]='Maintenance' OR [Status]='Inactive' OR [Status]='Active')),
 
     CONSTRAINT [FK_DentalChairs_Room]
@@ -392,6 +395,9 @@ CREATE TABLE [dbo].[DepartmentServices] (
 
     CONSTRAINT [UQ_DepartmentServices]
         UNIQUE NONCLUSTERED ([DepartmentId] ASC, [ServiceName] ASC),
+
+    CONSTRAINT [UQ_DepartmentServices_Department_Service]
+        UNIQUE NONCLUSTERED ([DepartmentId] ASC, [DepartmentServiceId] ASC),
 
     CHECK (([Status]='Inactive' OR [Status]='Active')),
 
@@ -468,6 +474,9 @@ CREATE TABLE [dbo].[ImagingEquipments] (
 
     CONSTRAINT [UQ_ImagingEquipments_Code]
         UNIQUE NONCLUSTERED ([EquipmentCode] ASC),
+
+    CONSTRAINT [UQ_ImagingEquipments_Room_Equipment]
+        UNIQUE NONCLUSTERED ([RoomId] ASC, [EquipmentId] ASC),
 
     CONSTRAINT [CK_ImagingEquipments_Status]
         CHECK (([OperationalStatus]='OutOfService' OR [OperationalStatus]='Maintenance' OR [OperationalStatus]='Operational')),
@@ -1424,6 +1433,20 @@ CREATE TABLE [dbo].[Appointments] (
     CONSTRAINT [CK_Appointments_Schedule]
         CHECK (([ScheduledEnd] IS NULL OR [ScheduledStart] IS NULL OR [ScheduledEnd]>[ScheduledStart])),
 
+    CONSTRAINT [UQ_Appointments_Patient_Appointment]
+        UNIQUE NONCLUSTERED ([PatientUserId] ASC, [AppointmentId] ASC),
+
+    CONSTRAINT [CK_Appointments_ChairRequiresRoom]
+        CHECK (([DentalChairId] IS NULL OR [RoomId] IS NOT NULL)),
+
+    CONSTRAINT [FK_Appointments_DepartmentService_Composite]
+        FOREIGN KEY ([DepartmentId], [RequestedServiceId])
+        REFERENCES [dbo].[DepartmentServices] ([DepartmentId], [DepartmentServiceId]),
+
+    CONSTRAINT [FK_Appointments_RoomChair_Composite]
+        FOREIGN KEY ([RoomId], [DentalChairId])
+        REFERENCES [dbo].[DentalChairs] ([RoomId], [DentalChairId]),
+
     CONSTRAINT [FK_Appointments_AssignedDentist]
         FOREIGN KEY ([AssignedDentistUserId])
         REFERENCES [dbo].[DentistProfiles] ([UserId]),
@@ -1665,7 +1688,14 @@ CREATE TABLE [dbo].[CareEpisodes] (
 
     CONSTRAINT [FK_CareEpisodes_RootAppointment]
         FOREIGN KEY ([RootAppointmentId])
-        REFERENCES [dbo].[Appointments] ([AppointmentId])
+        REFERENCES [dbo].[Appointments] ([AppointmentId]),
+
+    CONSTRAINT [FK_CareEpisodes_RootAppointment_Patient_Composite]
+        FOREIGN KEY ([PatientUserId], [RootAppointmentId])
+        REFERENCES [dbo].[Appointments] ([PatientUserId], [AppointmentId]),
+
+    CONSTRAINT [UQ_CareEpisodes_Patient_Episode]
+        UNIQUE NONCLUSTERED ([PatientUserId] ASC, [CareEpisodeId] ASC)
 );
 GO
 
@@ -2043,6 +2073,10 @@ CREATE TABLE [dbo].[ImagingSessions] (
         FOREIGN KEY ([EquipmentId])
         REFERENCES [dbo].[ImagingEquipments] ([EquipmentId]),
 
+    CONSTRAINT [FK_ImagingSessions_RoomEquipment_Composite]
+        FOREIGN KEY ([ImagingRoomId], [EquipmentId])
+        REFERENCES [dbo].[ImagingEquipments] ([RoomId], [EquipmentId]),
+
     CONSTRAINT [FK_ImagingSessions_Operator]
         FOREIGN KEY ([AssignedOperatorUserId])
         REFERENCES [dbo].[UserAccounts] ([UserId]),
@@ -2202,6 +2236,9 @@ CREATE TABLE [dbo].[MedicineBatches] (
     CONSTRAINT [UQ_MedicineBatches_Medicine_Batch]
         UNIQUE NONCLUSTERED ([MedicineId] ASC, [BatchNumber] ASC),
 
+    CONSTRAINT [UQ_MedicineBatches_Medicine_BatchId]
+        UNIQUE NONCLUSTERED ([MedicineId] ASC, [MedicineBatchId] ASC),
+
     CONSTRAINT [CHK_MedicineBatches_CostPrice]
         CHECK (([CostPrice]>=(0))),
 
@@ -2351,6 +2388,10 @@ CREATE TABLE [dbo].[MedicineDispensationItems] (
         FOREIGN KEY ([MedicineBatchId])
         REFERENCES [dbo].[MedicineBatches] ([MedicineBatchId]),
 
+    CONSTRAINT [FK_MedicineDispensationItems_MedicineBatch_Composite]
+        FOREIGN KEY ([MedicineId], [MedicineBatchId])
+        REFERENCES [dbo].[MedicineBatches] ([MedicineId], [MedicineBatchId]),
+
     CONSTRAINT [FK_MedicineDispensationItems_Dispensation]
         FOREIGN KEY ([DispensationId])
         REFERENCES [dbo].[MedicineDispensations] ([DispensationId]) ON DELETE CASCADE,
@@ -2376,7 +2417,7 @@ GO
 CREATE TABLE [dbo].[Invoices] (
     [InvoiceId] [bigint] IDENTITY(1,1) NOT NULL,
     [InvoiceCode] [varchar](30) NOT NULL,
-    [AppointmentId] [bigint] NOT NULL,
+    [AppointmentId] [bigint] NULL,
     [GeneratedByUserId] [bigint] NOT NULL,
     [TotalAmount] [decimal](18, 2) NOT NULL,
     [Status] [varchar](30) NOT NULL
@@ -2390,9 +2431,10 @@ CREATE TABLE [dbo].[Invoices] (
 
     UNIQUE NONCLUSTERED ([InvoiceCode] ASC),
 
-    UNIQUE NONCLUSTERED ([AppointmentId] ASC),
-
     CHECK (([Status]='Cancelled' OR [Status]='Paid' OR [Status]='PartiallyPaid' OR [Status]='Unpaid')),
+
+    CONSTRAINT [CK_Invoices_ParentReference]
+        CHECK (([AppointmentId] IS NOT NULL OR [CareEpisodeId] IS NOT NULL)),
 
     CONSTRAINT [CK_Invoices_Total]
         CHECK (([TotalAmount]>=(0))),
@@ -2852,10 +2894,35 @@ ALTER TABLE [dbo].[Appointments] WITH CHECK ADD CONSTRAINT [FK_Appointments_Care
     FOREIGN KEY ([CareEpisodeId]) REFERENCES [dbo].[CareEpisodes] ([CareEpisodeId]);
 GO
 
+ALTER TABLE [dbo].[Appointments] WITH CHECK ADD CONSTRAINT [FK_Appointments_CareEpisode_Patient_Composite]
+    FOREIGN KEY ([PatientUserId], [CareEpisodeId]) REFERENCES [dbo].[CareEpisodes] ([PatientUserId], [CareEpisodeId]);
+GO
+
 
 -- =====================================================================================
 -- 12. PERFORMANCE & FILTERED INDEXES
 -- =====================================================================================
+
+-- Billing Integrity P0 Filtered Unique Indexes
+CREATE UNIQUE NONCLUSTERED INDEX [UQ_Invoices_CareEpisodeId]
+    ON [dbo].[Invoices] ([CareEpisodeId] ASC)
+    WHERE [CareEpisodeId] IS NOT NULL;
+GO
+
+CREATE UNIQUE NONCLUSTERED INDEX [UQ_Invoices_AppointmentId]
+    ON [dbo].[Invoices] ([AppointmentId] ASC)
+    WHERE [AppointmentId] IS NOT NULL AND [CareEpisodeId] IS NULL;
+GO
+
+CREATE UNIQUE NONCLUSTERED INDEX [UQ_InvoiceItems_ServiceTaskId]
+    ON [dbo].[InvoiceItems] ([ServiceTaskId] ASC)
+    WHERE [ServiceTaskId] IS NOT NULL;
+GO
+
+CREATE UNIQUE NONCLUSTERED INDEX [UQ_InvoiceItems_PerformedServiceId]
+    ON [dbo].[InvoiceItems] ([PerformedServiceId] ASC)
+    WHERE [PerformedServiceId] IS NOT NULL;
+GO
 
 CREATE NONCLUSTERED INDEX [IX_AppointmentChangeProposals_Appointment_Status]
     ON [dbo].[AppointmentChangeProposals] ([AppointmentId] ASC, [Status] ASC);

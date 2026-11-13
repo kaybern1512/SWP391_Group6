@@ -39,7 +39,7 @@ public class InvoiceDto
 {
     public long InvoiceId { get; set; }
     public string InvoiceCode { get; set; } = string.Empty;
-    public long AppointmentId { get; set; }
+    public long? AppointmentId { get; set; }
     public string? AppointmentCode { get; set; }
     public long PatientUserId { get; set; }
     public string? PatientCode { get; set; }
@@ -76,7 +76,7 @@ public class InvoiceDto
 
 public class CreateInvoiceRequest
 {
-    public long AppointmentId { get; set; }
+    public long? AppointmentId { get; set; }
     public decimal DiscountAmount { get; set; }
     public decimal TaxPercent { get; set; }
     public string? Note { get; set; }
@@ -102,7 +102,7 @@ public class ProcessPaymentRequest
 
 public class AppointmentBillingPreparationDto
 {
-    public long AppointmentId { get; set; }
+    public long? AppointmentId { get; set; }
     public string AppointmentCode { get; set; } = string.Empty;
     public long PatientUserId { get; set; }
     public string PatientCode { get; set; } = string.Empty;
@@ -145,7 +145,7 @@ public class ClinicServiceOptionDto
 
 public class CompletedAppointmentForBillingDto
 {
-    public long AppointmentId { get; set; }
+    public long? AppointmentId { get; set; }
     public string AppointmentCode { get; set; } = string.Empty;
     public string PatientName { get; set; } = string.Empty;
     public string? PatientPhone { get; set; }

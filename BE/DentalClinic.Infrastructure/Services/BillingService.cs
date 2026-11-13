@@ -110,6 +110,35 @@ public class BillingService : IBillingService
             if (appointment.Invoice != null)
                 return ApiResponse<InvoiceDto>.Fail($"Ca khám này đã được lập hóa đơn mã {appointment.Invoice.InvoiceCode}.");
 
+            if (appointment.CareEpisodeId.HasValue)
+            {
+                var existingEpisodeInvoice = await _dbContext.Invoices
+                    .FirstOrDefaultAsync(i => i.CareEpisodeId == appointment.CareEpisodeId.Value, ct);
+                if (existingEpisodeInvoice != null)
+                {
+                    return ApiResponse<InvoiceDto>.Fail($"Đợt khám này (Mã #{appointment.CareEpisodeId.Value}) đã có hóa đơn tổng hợp mã {existingEpisodeInvoice.InvoiceCode}. Vui lòng thanh toán hóa đơn tổng hợp.");
+                }
+            }
+
+            // Anti-double-billing guards
+            var reqPerfIds = request.Items.Where(i => i.PerformedServiceId.HasValue).Select(i => i.PerformedServiceId!.Value).ToList();
+            if (reqPerfIds.Count != reqPerfIds.Distinct().Count())
+            {
+                return ApiResponse<InvoiceDto>.Fail("Yêu cầu lập hóa đơn chứa dịch vụ đã thực hiện bị lặp lại. Mỗi dịch vụ chỉ được tính phí một lần.");
+            }
+
+            if (reqPerfIds.Any())
+            {
+                var alreadyBilled = await _dbContext.InvoiceItems
+                    .Where(ii => ii.PerformedServiceId.HasValue && reqPerfIds.Contains(ii.PerformedServiceId.Value))
+                    .Select(ii => ii.PerformedServiceId!.Value)
+                    .ToListAsync(ct);
+                if (alreadyBilled.Any())
+                {
+                    return ApiResponse<InvoiceDto>.Fail($"Dịch vụ đã thực hiện (Mã #{alreadyBilled.First()}) đã được tính phí trên hóa đơn khác.");
+                }
+            }
+
             // Validate staff user ID or pick available staff profile
             var validStaffUserId = staffUserId;
             var staffExists = await _dbContext.StaffProfiles.AnyAsync(s => s.UserId == staffUserId, ct);
@@ -144,6 +173,7 @@ public class BillingService : IBillingService
             {
                 InvoiceCode = invoiceCode,
                 AppointmentId = appointment.AppointmentId,
+                CareEpisodeId = appointment.CareEpisodeId,
                 GeneratedByUserId = validStaffUserId,
                 TotalAmount = totalAmount,
                 Status = totalAmount == 0 ? "Paid" : "Unpaid",
