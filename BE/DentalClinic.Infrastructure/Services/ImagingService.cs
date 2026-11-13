@@ -558,6 +558,9 @@ public class ImagingService : IImagingService
         _logger.LogInformation("Uploaded DiagnosticResult #{ResultId} for Order #{OrderId}, Source={Source}",
             result.DiagnosticResultId, order.DiagnosticOrderId, result.SourceType);
 
+        // Synchronize with EMR (MedicalRecord -> ClinicalEntry -> ImagingRecord)
+        await SynchronizeEmrImagingRecordAsync(order, result, ct);
+
         return await MapToResultDtoAsync(result, ct);
     }
 
@@ -616,6 +619,12 @@ public class ImagingService : IImagingService
 
         _logger.LogInformation("Reviewed DiagnosticResult #{ResultId} by Dentist #{DentistId}",
             result.DiagnosticResultId, dentistUserId);
+
+        // Update EMR ImagingRecord with signed findings and impression
+        if (result.DiagnosticOrder != null)
+        {
+            await SynchronizeEmrImagingRecordAsync(result.DiagnosticOrder, result, ct);
+        }
 
         return await MapToResultDtoAsync(result, ct);
     }
@@ -1058,6 +1067,98 @@ public class ImagingService : IImagingService
             .FirstAsync(r => r.DiagnosticResultId == result.DiagnosticResultId, ct);
 
         return MapResultToDto(refreshed);
+    }
+
+    private async Task SynchronizeEmrImagingRecordAsync(DiagnosticOrder order, DiagnosticResult result, CancellationToken ct)
+    {
+        try
+        {
+            var patientId = order.PatientUserId;
+            if (patientId <= 0 && order.Appointment != null)
+            {
+                patientId = order.Appointment.PatientUserId;
+            }
+
+            if (patientId <= 0) return;
+
+            var medicalRecord = await _dbContext.DentalMedicalRecords
+                .FirstOrDefaultAsync(m => m.PatientUserId == patientId, ct);
+
+            if (medicalRecord == null)
+            {
+                medicalRecord = new DentalMedicalRecord
+                {
+                    PatientUserId = patientId,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _dbContext.DentalMedicalRecords.Add(medicalRecord);
+                await _dbContext.SaveChangesAsync(ct);
+            }
+
+            ClinicalEntry? entry = null;
+            if (order.AppointmentId > 0)
+            {
+                entry = await _dbContext.ClinicalEntries
+                    .FirstOrDefaultAsync(c => c.AppointmentId == order.AppointmentId, ct);
+            }
+
+            if (entry == null)
+            {
+                entry = await _dbContext.ClinicalEntries
+                    .Where(c => c.MedicalRecordId == medicalRecord.MedicalRecordId)
+                    .OrderByDescending(c => c.CreatedAt)
+                    .FirstOrDefaultAsync(ct);
+            }
+
+            if (entry == null)
+            {
+                var dentistId = order.DentistUserId > 0 ? order.DentistUserId : (result.UploadedByUserId > 0 ? result.UploadedByUserId : 14);
+                entry = new ClinicalEntry
+                {
+                    MedicalRecordId = medicalRecord.MedicalRecordId,
+                    AppointmentId = order.AppointmentId > 0 ? order.AppointmentId : null,
+                    DentistUserId = dentistId,
+                    Diagnosis = $"Chẩn đoán hình ảnh: {order.DiagnosticType ?? "X-quang"}",
+                    ClinicalFindings = order.ClinicalIndication ?? "Khảo sát chẩn đoán hình ảnh theo chỉ định",
+                    Symptoms = "Chỉ định cận lâm sàng",
+                    CreatedAt = DateTime.UtcNow
+                };
+                _dbContext.ClinicalEntries.Add(entry);
+                await _dbContext.SaveChangesAsync(ct);
+            }
+
+            var summary = !string.IsNullOrWhiteSpace(result.ReviewNotes)
+                ? $"{result.Findings} | Kết luận: {result.ReviewNotes}"
+                : (!string.IsNullOrWhiteSpace(result.Findings) ? result.Findings : "Kết quả chụp X-quang kỹ thuật số");
+
+            var existingImg = await _dbContext.ImagingRecords
+                .FirstOrDefaultAsync(i => i.ClinicalEntryId == entry.ClinicalEntryId && i.FileUrl == result.FileUrl, ct);
+
+            if (existingImg != null)
+            {
+                existingImg.ResultSummary = summary;
+            }
+            else
+            {
+                var imagingRecord = new ImagingRecord
+                {
+                    ClinicalEntryId = entry.ClinicalEntryId,
+                    ImagingType = order.DiagnosticType ?? "Panorama",
+                    FileUrl = result.FileUrl,
+                    ResultSummary = summary,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _dbContext.ImagingRecords.Add(imagingRecord);
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
+            _logger.LogInformation("Successfully synchronized EMR ImagingRecord for Order #{OrderId}, Patient #{PatientId}, Entry #{EntryId}",
+                order.DiagnosticOrderId, patientId, entry.ClinicalEntryId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to synchronize EMR ImagingRecord for Order #{OrderId}", order.DiagnosticOrderId);
+        }
     }
 
     #endregion
