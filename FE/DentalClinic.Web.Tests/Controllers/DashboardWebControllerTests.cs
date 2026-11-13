@@ -113,6 +113,41 @@ public class DashboardWebControllerTests
     }
 
     [Fact]
+    public void DentistDashboard_ImagingMode_ShouldReturnImagingWorkspaceModel_AndFourKpiCards()
+    {
+        // Arrange
+        var controller = new DentistDashboardController
+        {
+            ControllerContext = CreateContextWithUser(51, "Dentist", "BS. Dang Quoc Khanh", "ATBX-2026-007")
+        };
+
+        // Act
+        var result = controller.Dashboard(mode: "imaging");
+
+        // Assert
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var model = viewResult.Model.Should().BeOfType<DashboardViewModel>().Subject;
+
+        model.Role.Should().Be("Dentist");
+        model.Title.Should().Be("Không Gian Chẩn Đoán Hình Ảnh");
+        model.Subtitle.Should().Contain("hình ảnh");
+        model.StatCards.Should().HaveCount(4);
+        model.StatCards.Select(s => s.Title).Should().Contain(new[]
+        {
+            "Ca Chờ Chụp",
+            "Đang Chụp",
+            "Ảnh Chờ Đọc",
+            "Kết Quả Chờ Xác Nhận"
+        });
+
+        // Imaging routes in cards
+        model.Cards.Should().Contain(c => c.ActionUrl == "/Dentist/XrayQueue");
+        model.Cards.Should().Contain(c => c.ActionUrl == "/Dentist/XrayQueue?status=InProgress");
+        model.Cards.Should().Contain(c => c.ActionUrl == "/Dentist/XrayQueue?status=Acquired");
+        model.Cards.Should().Contain(c => c.ActionUrl == "/Dentist/MedicalRecords");
+    }
+
+    [Fact]
     public async Task ReceptionistDashboard_ShouldReturnConsolidatedPatientRegistry_AndValidRoutes()
     {
         // Arrange

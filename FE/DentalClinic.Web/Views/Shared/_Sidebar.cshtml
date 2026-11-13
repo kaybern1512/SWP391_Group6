@@ -2,6 +2,8 @@
 @{
     var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "Patient";
     var fullName = User.FindFirst(ClaimTypes.Name)?.Value ?? "User";
+    var email = User.FindFirst(ClaimTypes.Email)?.Value ?? "";
+    var isXraySpecialist = email.Equals("dentist7@dentalcare.com", StringComparison.OrdinalIgnoreCase);
     var avatarUrl = User.FindFirst("AvatarUrl")?.Value;
     if (string.IsNullOrEmpty(avatarUrl) || avatarUrl == "/images/default-avatar.png")
     {
@@ -160,6 +162,58 @@
             <a class="sidebar-link @(currentCtrl == "ReceptionistHandover" ? "active" : "")" asp-controller="ReceptionistHandover" asp-action="Index">
                 <i class="bi bi-arrow-repeat"></i>
                 <span>Bàn Giao Ca Trực</span>
+            </a>
+        }
+        else if (role == "Dentist" && isXraySpecialist)
+        {
+            <div class="nav-group-title">Tổng Quan</div>
+            <a class="sidebar-link @(currentCtrl == "DentistDashboard" ? "active" : "")" asp-controller="DentistDashboard" asp-action="Dashboard">
+                <i class="bi bi-camera"></i>
+                <span>Không Gian Chẩn Đoán KTS</span>
+            </a>
+
+            <div class="nav-group-title">Tiếp Nhận & Hàng Đợi</div>
+            <a class="sidebar-link @(currentCtrl == "DentistXrayQueue" ? "active" : "")" asp-controller="DentistXrayQueue" asp-action="Index">
+                <i class="bi bi-list-check"></i>
+                <span>Hàng Đợi Chụp X-Quang</span>
+            </a>
+            <a class="sidebar-link" href="@Url.Action("Index", "DentistXrayQueue")#duty">
+                <i class="bi bi-shield-check"></i>
+                <span>Lịch Trực Phòng X-Quang</span>
+            </a>
+
+            <div class="nav-group-title">Chẩn Đoán Hình Ảnh</div>
+            <a class="sidebar-link" href="@Url.Action("Index", "DentistXrayQueue", new { status = "InProgress" })">
+                <i class="bi bi-play-circle"></i>
+                <span>Ca Đang Xử Lý</span>
+            </a>
+            <a class="sidebar-link" href="@Url.Action("Index", "DentistXrayQueue", new { status = "Acquired" })">
+                <i class="bi bi-eye"></i>
+                <span>Ảnh Chờ Đọc</span>
+            </a>
+            <a class="sidebar-link" href="@Url.Action("Index", "DentistXrayQueue", new { status = "PendingSignature" })">
+                <i class="bi bi-check2-circle"></i>
+                <span>Kết Quả Chờ Xác Nhận</span>
+            </a>
+
+            <div class="nav-group-title">Hồ Sơ & Tra Cứu</div>
+            <a class="sidebar-link @(currentCtrl == "DentistMedicalRecord" ? "active" : "")" asp-controller="DentistMedicalRecord" asp-action="Index">
+                <i class="bi bi-journal-medical"></i>
+                <span>Thư Viện Ảnh & EMR</span>
+            </a>
+
+            <div class="nav-group-title">Lịch Trình & Ca Trực</div>
+            <a class="sidebar-link @(currentCtrl == "DentistSchedule" && currentAction == "Schedule" ? "active" : "")" asp-controller="DentistSchedule" asp-action="Schedule">
+                <i class="bi bi-calendar-week"></i>
+                <span>Lịch Làm Việc Của Tôi</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "DentistSchedule" && currentAction == "Availability" ? "active" : "")" asp-controller="DentistSchedule" asp-action="Availability">
+                <i class="bi bi-toggle-on"></i>
+                <span>Trạng Thái & Nghỉ Phép</span>
+            </a>
+            <a class="sidebar-link @(currentCtrl == "AttendanceWeb" ? "active" : "")" asp-controller="AttendanceWeb" asp-action="Index">
+                <i class="bi bi-clock-history"></i>
+                <span>Chấm Công Ca Trực</span>
             </a>
         }
         else if (role == "Dentist")
