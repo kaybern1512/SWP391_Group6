@@ -215,6 +215,25 @@ public class DentistMedicalRecordController : Controller
             }
         }
 
+        // CareEpisode & Service-Specific Workflow Tasks
+        CareEpisodeDto? activeCareEpisode = null;
+        var serviceTasks = new List<EpisodeServiceTaskDto>();
+        var internalReferrals = new List<CareEpisodeReferralSummaryDto>();
+
+        if (appointmentId.HasValue && appointmentId.Value > 0 && _careEpisodeApi != null)
+        {
+            var epRes = await _careEpisodeApi.GetEpisodeByAppointmentIdAsync(appointmentId.Value);
+            if (epRes.IsSuccess && epRes.Data != null)
+            {
+                activeCareEpisode = epRes.Data;
+                serviceTasks = epRes.Data.ServiceTasks
+                    .Where(t => t.AppointmentId == appointmentId.Value)
+                    .OrderBy(t => t.ServiceTaskId)
+                    .ToList();
+                internalReferrals = epRes.Data.Referrals ?? new List<CareEpisodeReferralSummaryDto>();
+            }
+        }
+
         var isCompleted = activeAppt != null && (activeAppt.Status == "Completed" || activeAppt.Status == "Cancelled");
         var isCurrentlyExamining = !isCompleted && (isExamining || (activeAppt != null && activeAppt.Status == "InService"));
 
@@ -235,6 +254,9 @@ public class DentistMedicalRecordController : Controller
             ActivePrescription = activePrescription,
             Dispensations = dispensations,
             AvailableMedicines = availableMedicines,
+            ActiveCareEpisode = activeCareEpisode,
+            ServiceTasks = serviceTasks,
+            InternalReferrals = internalReferrals,
             NewEntryForm = new CreateClinicalEntryFormModel
             {
                 PatientUserId = targetPatientId ?? 0,
@@ -379,6 +401,16 @@ public class DentistMedicalRecordController : Controller
         DateTime? recommendedFollowUpDate = null,
         string? followUpReasonCategory = null)
     {
+        if (_careEpisodeApi != null && appointmentId > 0)
+        {
+            var taskValidation = await _careEpisodeApi.ValidateAppointmentTasksCompletedAsync(appointmentId);
+            if (!taskValidation.IsSuccess)
+            {
+                TempData["ErrorMessage"] = taskValidation.Message ?? "Không thể hoàn thành ca khám khi vẫn còn dịch vụ/bước điều trị chưa hoàn tất.";
+                return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+            }
+        }
+
         if (_appointmentApiService != null)
         {
             var result = await _appointmentApiService.DentistCompleteAppointmentAsync(
@@ -402,6 +434,86 @@ public class DentistMedicalRecordController : Controller
 
         TempData["SuccessMessage"] = "Đã hoàn thành ca khám thành công!";
         return RedirectToAction("Today", "DentistAppointment");
+    }
+
+    [HttpPost("StartServiceTask")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StartServiceTask(long serviceTaskId, long appointmentId, long patientUserId)
+    {
+        if (_careEpisodeApi != null)
+        {
+            var result = await _careEpisodeApi.StartServiceTaskAsync(serviceTaskId);
+            if (result.IsSuccess)
+            {
+                TempData["SuccessMessage"] = "Đã bắt đầu thực hiện dịch vụ.";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = result.Message ?? "Không thể bắt đầu dịch vụ.";
+            }
+        }
+        return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+    }
+
+    [HttpPost("CompleteTaskStep")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CompleteTaskStep(
+        long serviceTaskId,
+        long stepId,
+        long appointmentId,
+        long patientUserId,
+        string? resultValue,
+        string? notes,
+        string? evidenceUrl)
+    {
+        if (_careEpisodeApi != null)
+        {
+            var req = new CompleteTaskStepRequest
+            {
+                ResultValue = resultValue,
+                Notes = notes,
+                EvidenceUrl = evidenceUrl
+            };
+            var result = await _careEpisodeApi.CompleteTaskStepAsync(serviceTaskId, stepId, req);
+            if (result.IsSuccess)
+            {
+                TempData["SuccessMessage"] = "Đã hoàn thành bước thực hiện dịch vụ.";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = result.Message ?? "Không thể hoàn thành bước thực hiện.";
+            }
+        }
+        return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
+    }
+
+    [HttpPost("CompleteServiceTask")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CompleteServiceTask(
+        long serviceTaskId,
+        long appointmentId,
+        long patientUserId,
+        string? clinicalFindings,
+        string? notes)
+    {
+        if (_careEpisodeApi != null)
+        {
+            var req = new CompleteServiceTaskRequest
+            {
+                ClinicalFindings = clinicalFindings,
+                Notes = notes
+            };
+            var result = await _careEpisodeApi.CompleteServiceTaskAsync(serviceTaskId, req);
+            if (result.IsSuccess)
+            {
+                TempData["SuccessMessage"] = "Đã hoàn thành toàn bộ dịch vụ điều trị!";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = result.Message ?? "Không thể hoàn thành dịch vụ.";
+            }
+        }
+        return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
     }
 
     [HttpPost("AddAdditionalService")]

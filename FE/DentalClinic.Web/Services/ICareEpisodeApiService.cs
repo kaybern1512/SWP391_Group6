@@ -14,6 +14,10 @@ public interface ICareEpisodeApiService
     Task<ApiResult<List<EpisodeServiceTaskDto>>> GetEligibleServicesForDentistAsync(long appointmentId);
     Task<ApiResult<EpisodeServiceTaskDto>> AddServiceTaskAsync(CreateEpisodeServiceTaskRequest request);
     Task<ApiResult<EpisodeServiceTaskDto>> UpdateServiceTaskStatusAsync(long serviceTaskId, UpdateServiceTaskStatusRequest request);
+    Task<ApiResult<EpisodeServiceTaskDto>> StartServiceTaskAsync(long serviceTaskId);
+    Task<ApiResult<EpisodeTaskStepProgressDto>> CompleteTaskStepAsync(long serviceTaskId, long stepId, CompleteTaskStepRequest request);
+    Task<ApiResult<EpisodeServiceTaskDto>> CompleteServiceTaskAsync(long serviceTaskId, CompleteServiceTaskRequest request);
+    Task<ApiResult<bool>> ValidateAppointmentTasksCompletedAsync(long appointmentId);
     Task<ApiResult<CareEpisodeReferralSummaryDto>> CreateInternalReferralAsync(CreateCareEpisodeReferralRequest request);
     Task<ApiResult<List<CareEpisodeReferralSummaryDto>>> GetPendingReferralsAsync();
     Task<ApiResult<List<AvailableDentistForReferralDto>>> GetEligibleDentistsForReferralAsync(long referralId, DateTime? date = null);

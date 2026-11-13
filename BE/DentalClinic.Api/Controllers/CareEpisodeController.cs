@@ -140,6 +140,61 @@ public class CareEpisodeController : ControllerBase
         return Ok(result);
     }
 
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [HttpPost("tasks/{serviceTaskId:long}/start")]
+    [ProducesResponseType(typeof(ApiResponse<EpisodeServiceTaskDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<EpisodeServiceTaskDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> StartServiceTask(long serviceTaskId, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _careEpisodeService.StartServiceTaskAsync(dentistUserId, serviceTaskId, ct);
+        if (!result.Success)
+            return BadRequest(result);
+
+        return Ok(result);
+    }
+
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [HttpPost("tasks/{serviceTaskId:long}/steps/{stepId:long}/complete")]
+    [ProducesResponseType(typeof(ApiResponse<EpisodeTaskStepProgressDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<EpisodeTaskStepProgressDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CompleteTaskStep(long serviceTaskId, long stepId, [FromBody] CompleteTaskStepRequest request, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _careEpisodeService.CompleteTaskStepAsync(dentistUserId, serviceTaskId, stepId, request, ct);
+        if (!result.Success)
+            return BadRequest(result);
+
+        return Ok(result);
+    }
+
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [HttpPost("tasks/{serviceTaskId:long}/complete")]
+    [ProducesResponseType(typeof(ApiResponse<EpisodeServiceTaskDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<EpisodeServiceTaskDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CompleteServiceTask(long serviceTaskId, [FromBody] CompleteServiceTaskRequest request, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _careEpisodeService.CompleteServiceTaskAsync(dentistUserId, serviceTaskId, request, ct);
+        if (!result.Success)
+            return BadRequest(result);
+
+        return Ok(result);
+    }
+
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [HttpGet("appointments/{appointmentId:long}/validate-tasks-completed")]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ValidateAppointmentTasksCompleted(long appointmentId, CancellationToken ct)
+    {
+        var result = await _careEpisodeService.ValidateAppointmentTasksCompletedAsync(appointmentId, ct);
+        if (!result.Success)
+            return BadRequest(result);
+
+        return Ok(result);
+    }
+
     // ==========================================
     // 3. CASE B: CROSS-DENTIST REFERRAL & HANDOFF
     // ==========================================
