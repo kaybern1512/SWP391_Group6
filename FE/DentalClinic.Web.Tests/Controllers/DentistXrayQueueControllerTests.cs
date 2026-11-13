@@ -214,4 +214,70 @@ public class DentistXrayQueueControllerTests
         redirect.ActionName.Should().Be(nameof(DentistXrayQueueController.Index));
         controller.TempData["SuccessMessage"].Should().NotBeNull();
     }
+
+    [Fact]
+    public async Task UploadResult_Draft_RedirectsWithoutCompletingSession()
+    {
+        var uploadRes = new DiagnosticResultDto
+        {
+            DiagnosticResultId = 401,
+            Findings = "Ban nhap"
+        };
+
+        _imagingApiMock.Setup(x => x.UploadResultAsync(It.IsAny<UploadDiagnosticResultRequest>()))
+            .ReturnsAsync(ApiResult<DiagnosticResultDto>.Success(uploadRes));
+
+        var controller = new DentistXrayQueueController(_imagingApiMock.Object)
+        {
+            ControllerContext = CreateContext(10, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.UploadResult(
+            diagnosticOrderId: 201,
+            sessionId: 301,
+            equipmentId: 1,
+            findings: "Ban nhap ket qua",
+            fileUrl: "/uploads/xray/test.jpg",
+            reviewNotes: null,
+            isDraft: true,
+            roomId: 9);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(DentistXrayQueueController.Index));
+        controller.TempData["SuccessMessage"].ToString().Should().Contain("bản nháp");
+        _imagingApiMock.Verify(x => x.CompleteSessionAsync(It.IsAny<long>()), Times.Never);
+    }
+
+    [Fact]
+    public void RetakeImage_WithReason_SetsSuccessMessage()
+    {
+        var controller = new DentistXrayQueueController(_imagingApiMock.Object)
+        {
+            ControllerContext = CreateContext(10, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var result = controller.RetakeImage(301, "Phim mờ do bệnh nhân cử động", 9);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(DentistXrayQueueController.Index));
+        controller.TempData["SuccessMessage"].ToString().Should().Contain("yêu cầu chụp lại");
+    }
+
+    [Fact]
+    public void RetrySync_RedirectsWithSuccessMessage()
+    {
+        var controller = new DentistXrayQueueController(_imagingApiMock.Object)
+        {
+            ControllerContext = CreateContext(10, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var result = controller.RetrySync(301, 9);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(DentistXrayQueueController.Index));
+        controller.TempData["SuccessMessage"].ToString().Should().Contain("đồng bộ lại");
+    }
 }
