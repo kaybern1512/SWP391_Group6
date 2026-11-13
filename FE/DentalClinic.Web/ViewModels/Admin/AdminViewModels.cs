@@ -51,6 +51,9 @@ public class ServiceFormModel
 {
     public long? DepartmentServiceId { get; set; }
 
+    [StringLength(50, ErrorMessage = "Mã dịch vụ không quá 50 ký tự")]
+    public string? ServiceCode { get; set; }
+
     [Required(ErrorMessage = "Vui lòng chọn chuyên khoa")]
     public long DepartmentId { get; set; }
 
@@ -80,6 +83,8 @@ public class ServiceFormModel
 
     [StringLength(1000, ErrorMessage = "Hướng dẫn chuẩn bị không quá 1000 ký tự")]
     public string? BookingInstructions { get; set; }
+
+    public string? WorkflowStepsJson { get; set; }
 }
 
 public class RoomChairManageViewModel

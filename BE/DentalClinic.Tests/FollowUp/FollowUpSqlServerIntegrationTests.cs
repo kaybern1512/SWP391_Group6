@@ -19,14 +19,17 @@ namespace DentalClinic.Tests.FollowUp;
 public class FollowUpSqlServerIntegrationTests
 {
     private static string ConnectionString =>
-        Environment.GetEnvironmentVariable("DENTAL_CLINIC_TEST_CONNECTION_STRING")
-        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\MSSQLSERVER01"};Database=DentalClinic_FollowUp_QA;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
+        Environment.GetEnvironmentVariable("DENTAL_CLINIC_FOLLOWUP_TEST_CONNECTION_STRING")
+        ?? $"Server={Environment.GetEnvironmentVariable("TEST_SQL_SERVER") ?? Environment.GetEnvironmentVariable("DENTAL_CLINIC_SQL_INSTANCE") ?? ".\\SQLEXPRESS"};Database=DentalClinic_FollowUp_QA;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;";
 
     private static readonly HashSet<string> AllowedQaDatabases = new(StringComparer.OrdinalIgnoreCase)
     {
         "DentalClinic_FollowUp_QA",
         "DentalClinic_Disposable_PreDeployClone",
-        "DentalClinic_QA"
+        "DentalClinic_QA",
+        "DentalCare_ServiceWorkflow_QA",
+        "DentalCare_DentistTask_QA",
+        "DentalCare_ServiceIntegration_QA"
     };
 
     private static string ValidateSafeTestDatabase(string connStr)

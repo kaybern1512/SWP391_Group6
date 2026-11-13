@@ -76,6 +76,53 @@ public class EpisodeServiceTaskDto
     public DateTime? CancelledAtUtc { get; set; }
     public string? CancellationReason { get; set; }
     public long? ClinicalRecordId { get; set; }
+    public long? AppliedWorkflowId { get; set; }
+    public int? AppliedWorkflowVersion { get; set; }
+    public string WorkflowStatusText => AppliedWorkflowId.HasValue 
+        ? $"Version {AppliedWorkflowVersion}" 
+        : "Workflow Not Configured / Pending Clinical Review";
+    public int TotalSteps => StepProgresses?.Count ?? 0;
+    public int CompletedSteps => StepProgresses?.Count(s => s.Status == "Completed") ?? 0;
+    public int ProgressPercentage => TotalSteps > 0 ? (int)Math.Round((double)CompletedSteps / TotalSteps * 100) : (Status == "Completed" ? 100 : 0);
+    public List<EpisodeTaskStepProgressDto> StepProgresses { get; set; } = new();
+    public string? Notes { get; set; }
+    public string DepartmentServiceName => ServiceName;
+    public string DepartmentServiceCode => TaskCode;
+    public string AssignedDentistFullName => PerformingDentistName;
+}
+
+public class EpisodeTaskStepProgressDto
+{
+    public long ProgressId { get; set; }
+    public long ServiceTaskId { get; set; }
+    public long StepId { get; set; }
+    public string StepName { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public int StepOrder { get; set; }
+    public bool IsRequired { get; set; } = true;
+    public string? CompletionRequirement { get; set; }
+    public string ExpectedDataType { get; set; } = "None"; // Text, Number, Boolean, Selection
+    public string Status { get; set; } = "Pending"; // Pending, InProgress, Completed
+    public string? ResultValue { get; set; }
+    public string? Notes { get; set; }
+    public string? EvidenceUrl { get; set; }
+    public long? CompletedByDentistUserId { get; set; }
+    public string? CompletedByDentistName { get; set; }
+    public DateTime? StartedAtUtc { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
+}
+
+public class CompleteTaskStepRequest
+{
+    public string? ResultValue { get; set; }
+    public string? Notes { get; set; }
+    public string? EvidenceUrl { get; set; }
+}
+
+public class CompleteServiceTaskRequest
+{
+    public long? ClinicalRecordId { get; set; }
+    public string? ClinicalFindings { get; set; }
     public string? Notes { get; set; }
 }
 
@@ -86,6 +133,7 @@ public class CareEpisodeReferralSummaryDto
     public string? SourceAppointmentCode { get; set; }
     public long? DestinationAppointmentId { get; set; }
     public string? DestinationAppointmentCode { get; set; }
+    public string? TargetAppointmentCode => DestinationAppointmentCode;
     public long FromDepartmentId { get; set; }
     public string FromDepartmentName { get; set; } = string.Empty;
     public long ToDepartmentId { get; set; }
@@ -94,6 +142,9 @@ public class CareEpisodeReferralSummaryDto
     public string? RequestedServiceName { get; set; }
     public long? AssignedDentistUserId { get; set; }
     public string? AssignedDentistName { get; set; }
+    public string? PreferredDentistName => AssignedDentistName;
+    public int? TargetAppointmentQueueNumber { get; set; }
+    public string? StationBCheckInStatus { get; set; }
     public string Reason { get; set; } = string.Empty;
     public string Urgency { get; set; } = "Standard";
     public string Status { get; set; } = "Pending";
@@ -115,6 +166,11 @@ public class UpdateServiceTaskStatusRequest
     public string Status { get; set; } = "Completed"; // InProgress, Completed, Cancelled
     public string? CancellationReason { get; set; }
     public long? ClinicalRecordId { get; set; }
+    public long? AppliedWorkflowId { get; set; }
+    public int? AppliedWorkflowVersion { get; set; }
+    public string WorkflowStatusText => AppliedWorkflowId.HasValue 
+        ? $"Version {AppliedWorkflowVersion}" 
+        : "Workflow Not Configured / Pending Clinical Review";
     public string? Notes { get; set; }
 }
 

@@ -407,6 +407,36 @@ public class AppointmentWebControllerTests
     }
 
     [Fact]
+    public async Task Patient_Book_Get_WithServiceOnly_ResolvesDepartmentCorrectly_WithoutDefaultingToGeneralCheckup()
+    {
+        _apiMock.Setup(x => x.GetDepartmentsAsync())
+            .ReturnsAsync(ApiResult<List<DepartmentDto>>.Success(new List<DepartmentDto>
+            {
+                new() { DepartmentId = 1, Name = "Khoa Răng Tổng Quát" },
+                new() { DepartmentId = 3, Name = "Khoa Phẫu Thuật Miệng & Implant" }
+            }));
+        _apiMock.Setup(x => x.GetServicesAsync(It.IsAny<long>()))
+            .ReturnsAsync(ApiResult<List<DepartmentServiceDto>>.Success(new List<DepartmentServiceDto>
+            {
+                new() { DepartmentServiceId = 15, DepartmentId = 3, ServiceName = "Cấy ghép Implant Straumann" }
+            }));
+
+        var controller = new PatientAppointmentController(_apiMock.Object, _feedbackApiMock.Object, _disruptionApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(101, "Patient")
+        };
+
+        // Patient clicks link with only serviceId = 15, without departmentId
+        var result = await controller.Book(serviceId: 15);
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var model = viewResult.Model.Should().BeOfType<PatientBookViewModel>().Subject;
+        model.BookingCategory.Should().Be("SingleService");
+        model.DepartmentId.Should().Be(3);
+        model.RequestedServiceId.Should().Be(15);
+    }
+
+    [Fact]
     public async Task Patient_Book_Get_DefaultNoParams_DefaultsToGeneralCheckup()
     {
         _apiMock.Setup(x => x.GetDepartmentsAsync())

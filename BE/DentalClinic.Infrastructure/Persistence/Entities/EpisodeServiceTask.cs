@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
 
@@ -36,6 +37,10 @@ public partial class EpisodeServiceTask
 
     public long? ClinicalRecordId { get; set; }
 
+    public long? AppliedWorkflowId { get; set; }
+
+    public int? AppliedWorkflowVersion { get; set; }
+
     public string? Notes { get; set; }
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
@@ -49,4 +54,8 @@ public partial class EpisodeServiceTask
     public virtual DepartmentService DepartmentService { get; set; } = null!;
 
     public virtual UserAccount PerformingDentistUser { get; set; } = null!;
+
+    public virtual ServiceWorkflow? AppliedWorkflow { get; set; }
+
+    public virtual ICollection<EpisodeServiceTaskStepProgress> StepProgresses { get; set; } = new List<EpisodeServiceTaskStepProgress>();
 }

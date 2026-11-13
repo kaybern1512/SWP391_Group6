@@ -1,4 +1,7 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using DentalClinic.Web.Models.ApiDtos;
 using DentalClinic.Web.Services;
@@ -49,14 +52,30 @@ public class AdminServiceController : Controller
             return RedirectToAction(nameof(Index), new { departmentId = model.DepartmentId });
         }
 
+        List<ServiceWorkflowStepInputDto>? steps = null;
+        if (!string.IsNullOrWhiteSpace(model.WorkflowStepsJson))
+        {
+            try
+            {
+                steps = JsonSerializer.Deserialize<List<ServiceWorkflowStepInputDto>>(model.WorkflowStepsJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch
+            {
+                // Proceed without custom steps if parsing fails
+            }
+        }
+
         var req = new CreateDepartmentServiceRequest
         {
             DepartmentId = model.DepartmentId,
+            ServiceCode = model.ServiceCode?.Trim(),
             ServiceName = model.ServiceName.Trim(),
             Description = model.Description?.Trim(),
             DurationMinutes = model.DurationMinutes,
             Price = model.Price,
-            Status = model.Status ?? "Active"
+            Status = model.Status ?? "Active",
+            WorkflowSteps = steps
         };
 
         var result = await _adminApi.CreateServiceAsync(req);
@@ -82,14 +101,30 @@ public class AdminServiceController : Controller
             return RedirectToAction(nameof(Index));
         }
 
+        List<ServiceWorkflowStepInputDto>? steps = null;
+        if (!string.IsNullOrWhiteSpace(model.WorkflowStepsJson))
+        {
+            try
+            {
+                steps = JsonSerializer.Deserialize<List<ServiceWorkflowStepInputDto>>(model.WorkflowStepsJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch
+            {
+                // Ignore parse errors
+            }
+        }
+
         var req = new UpdateDepartmentServiceRequest
         {
             DepartmentId = model.DepartmentId,
+            ServiceCode = model.ServiceCode?.Trim(),
             ServiceName = model.ServiceName.Trim(),
             Description = model.Description?.Trim(),
             DurationMinutes = model.DurationMinutes,
             Price = model.Price,
-            Status = model.Status ?? "Active"
+            Status = model.Status ?? "Active",
+            WorkflowSteps = steps
         };
 
         var result = await _adminApi.UpdateServiceAsync(model.DepartmentServiceId.Value, req);
@@ -120,5 +155,23 @@ public class AdminServiceController : Controller
         }
 
         return RedirectToAction(nameof(Index));
+    }
+
+    [HttpGet("{id}/Workflow")]
+    public async Task<IActionResult> GetWorkflow(long id, [FromQuery] int? version = null)
+    {
+        var result = await _adminApi.GetWorkflowAsync(id, version);
+        return Json(new { success = result.IsSuccess, data = result.Data, message = result.Message });
+    }
+
+    [HttpPost("{id}/Workflow")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConfigureWorkflow(long id, [FromBody] ConfigureWorkflowRequest request)
+    {
+        if (request == null)
+            return Json(new { success = false, message = "Dữ liệu cấu hình quy trình không hợp lệ." });
+
+        var result = await _adminApi.ConfigureWorkflowAsync(id, request);
+        return Json(new { success = result.IsSuccess, data = result.Data, message = result.Message });
     }
 }

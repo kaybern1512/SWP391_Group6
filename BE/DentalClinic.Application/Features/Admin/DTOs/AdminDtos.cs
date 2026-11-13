@@ -44,6 +44,7 @@ public class UpdateDepartmentRequest
 public class AdminDepartmentServiceDto
 {
     public long DepartmentServiceId { get; set; }
+    public string? ServiceCode { get; set; }
     public long DepartmentId { get; set; }
     public string DepartmentName { get; set; } = string.Empty;
     public string ServiceName { get; set; } = string.Empty;
@@ -56,10 +57,15 @@ public class AdminDepartmentServiceDto
     public bool RequiresConsultationFirst { get; set; }
     public int MinLeadTimeHours { get; set; } = 2;
     public string? BookingInstructions { get; set; }
+    public int WorkflowStepCount { get; set; }
+    public bool HasActiveWorkflow { get; set; }
+    public string WorkflowApprovalStatus { get; set; } = "None"; // None, Draft, Approved
+    public ServiceWorkflowDto? ActiveWorkflow { get; set; }
 }
 
 public class CreateDepartmentServiceRequest
 {
+    public string? ServiceCode { get; set; }
     public long DepartmentId { get; set; }
     public string ServiceName { get; set; } = string.Empty;
     public string? Description { get; set; }
@@ -71,10 +77,12 @@ public class CreateDepartmentServiceRequest
     public bool RequiresConsultationFirst { get; set; }
     public int MinLeadTimeHours { get; set; } = 2;
     public string? BookingInstructions { get; set; }
+    public List<ServiceWorkflowStepInputDto>? WorkflowSteps { get; set; }
 }
 
 public class UpdateDepartmentServiceRequest
 {
+    public string? ServiceCode { get; set; }
     public long DepartmentId { get; set; }
     public string ServiceName { get; set; } = string.Empty;
     public string? Description { get; set; }
@@ -86,6 +94,53 @@ public class UpdateDepartmentServiceRequest
     public bool RequiresConsultationFirst { get; set; }
     public int MinLeadTimeHours { get; set; } = 2;
     public string? BookingInstructions { get; set; }
+    public List<ServiceWorkflowStepInputDto>? WorkflowSteps { get; set; }
+}
+
+public class ServiceWorkflowDto
+{
+    public long WorkflowId { get; set; }
+    public long DepartmentServiceId { get; set; }
+    public string WorkflowName { get; set; } = string.Empty;
+    public int Version { get; set; } = 1;
+    public bool IsActive { get; set; } = true;
+    public string ApprovalStatus { get; set; } = "Draft"; // Draft, PendingReview, Approved
+    public long? ApprovedByUserId { get; set; }
+    public DateTime? ApprovedAt { get; set; }
+    public string? Description { get; set; }
+    public List<ServiceWorkflowStepDto> Steps { get; set; } = new();
+}
+
+public class ServiceWorkflowStepDto
+{
+    public long StepId { get; set; }
+    public long WorkflowId { get; set; }
+    public string StepName { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public int StepOrder { get; set; }
+    public bool IsRequired { get; set; } = true;
+    public string? CompletionRequirement { get; set; }
+    public string ExpectedDataType { get; set; } = "None";
+}
+
+public class ServiceWorkflowStepInputDto
+{
+    public long? StepId { get; set; }
+    public string StepName { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public int StepOrder { get; set; }
+    public bool IsRequired { get; set; } = true;
+    public string? CompletionRequirement { get; set; }
+    public string ExpectedDataType { get; set; } = "None";
+}
+
+public class ConfigureWorkflowRequest
+{
+    public string? WorkflowName { get; set; }
+    public string? Description { get; set; }
+    public bool ActivateImmediately { get; set; } = true;
+    public string ApprovalStatus { get; set; } = "Approved";
+    public List<ServiceWorkflowStepInputDto> Steps { get; set; } = new();
 }
 
 // ==========================================

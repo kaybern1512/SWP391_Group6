@@ -53,6 +53,26 @@ public class CareEpisodeApiService : ICareEpisodeApiService
         return await SendPutAsync<UpdateServiceTaskStatusRequest, EpisodeServiceTaskDto>($"/api/episodes/tasks/{serviceTaskId}/status", request);
     }
 
+    public async Task<ApiResult<EpisodeServiceTaskDto>> StartServiceTaskAsync(long serviceTaskId)
+    {
+        return await SendPostAsync<object?, EpisodeServiceTaskDto>($"/api/episodes/tasks/{serviceTaskId}/start", null);
+    }
+
+    public async Task<ApiResult<EpisodeTaskStepProgressDto>> CompleteTaskStepAsync(long serviceTaskId, long stepId, CompleteTaskStepRequest request)
+    {
+        return await SendPostAsync<CompleteTaskStepRequest, EpisodeTaskStepProgressDto>($"/api/episodes/tasks/{serviceTaskId}/steps/{stepId}/complete", request);
+    }
+
+    public async Task<ApiResult<EpisodeServiceTaskDto>> CompleteServiceTaskAsync(long serviceTaskId, CompleteServiceTaskRequest request)
+    {
+        return await SendPostAsync<CompleteServiceTaskRequest, EpisodeServiceTaskDto>($"/api/episodes/tasks/{serviceTaskId}/complete", request);
+    }
+
+    public async Task<ApiResult<bool>> ValidateAppointmentTasksCompletedAsync(long appointmentId)
+    {
+        return await SendGetAsync<bool>($"/api/episodes/appointments/{appointmentId}/validate-tasks-completed");
+    }
+
     public async Task<ApiResult<CareEpisodeReferralSummaryDto>> CreateInternalReferralAsync(CreateCareEpisodeReferralRequest request)
     {
         return await SendPostAsync<CreateCareEpisodeReferralRequest, CareEpisodeReferralSummaryDto>("/api/episodes/referrals", request);
