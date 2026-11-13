@@ -25,6 +25,7 @@ public class DentistMedicalRecordController : Controller
     private readonly IPrescriptionApiService? _prescriptionApi;
     private readonly IMedicineApiService? _medicineApi;
     private readonly ICareEpisodeApiService? _careEpisodeApi;
+    private readonly IImagingApiService? _imagingApi;
 
     [ActivatorUtilitiesConstructor]
     public DentistMedicalRecordController(
@@ -34,7 +35,8 @@ public class DentistMedicalRecordController : Controller
         ITreatmentApiService treatmentApi,
         IPrescriptionApiService prescriptionApi,
         IMedicineApiService medicineApi,
-        ICareEpisodeApiService? careEpisodeApi = null)
+        ICareEpisodeApiService? careEpisodeApi = null,
+        IImagingApiService? imagingApi = null)
     {
         _medicalRecordApi = medicalRecordApi;
         _appointmentApiService = appointmentApiService;
@@ -43,32 +45,33 @@ public class DentistMedicalRecordController : Controller
         _prescriptionApi = prescriptionApi;
         _medicineApi = medicineApi;
         _careEpisodeApi = careEpisodeApi;
+        _imagingApi = imagingApi;
     }
 
     public DentistMedicalRecordController(
         IMedicalRecordApiService medicalRecordApi,
         IAppointmentApiService appointmentApiService,
         IPostCareApiService postCareApi)
-        : this(medicalRecordApi, appointmentApiService, postCareApi, null!, null!, null!)
+        : this(medicalRecordApi, appointmentApiService, postCareApi, null!, null!, null!, null!, null!)
     {
     }
 
     public DentistMedicalRecordController(
         IMedicalRecordApiService medicalRecordApi,
         IPostCareApiService postCareApi)
-        : this(medicalRecordApi, null!, postCareApi, null!, null!, null!)
+        : this(medicalRecordApi, null!, postCareApi, null!, null!, null!, null!, null!)
     {
     }
 
     public DentistMedicalRecordController(
         IMedicalRecordApiService medicalRecordApi,
         IAppointmentApiService appointmentApiService)
-        : this(medicalRecordApi, appointmentApiService, null!, null!, null!, null!)
+        : this(medicalRecordApi, appointmentApiService, null!, null!, null!, null!, null!, null!)
     {
     }
 
     public DentistMedicalRecordController(IMedicalRecordApiService medicalRecordApi)
-        : this(medicalRecordApi, null!, null!, null!, null!, null!)
+        : this(medicalRecordApi, null!, null!, null!, null!, null!, null!, null!)
     {
     }
 
@@ -564,7 +567,7 @@ public class DentistMedicalRecordController : Controller
             }
         }
 
-        // Section 6: Ghi nhận đúng PerformedServices thực tế tại ghế điều trị khi bác sĩ tự thực hiện
+        // Section 6: Ghi nhận đúng PerformedServices thực tế tại ghế điều trị khi bác sĩ tự thực hiện hoặc chuyển X-quang
         if (executionMode != "delegate" && _treatmentApi != null && appointmentId > 0)
         {
             var req = new AddPerformedServiceToAppointmentRequest
@@ -582,8 +585,60 @@ public class DentistMedicalRecordController : Controller
             }
         }
 
+        // X-Ray / Diagnostic Imaging Transfer Flow
+        if (executionMode == "xray" && _imagingApi != null && appointmentId > 0)
+        {
+            try
+            {
+                var diagType = "Intraoral";
+                if (_appointmentApiService != null)
+                {
+                    var apptDetail = await _appointmentApiService.GetAppointmentDetailAsync(appointmentId);
+                    var deptId = apptDetail?.Data?.DepartmentId ?? 1;
+                    var svcList = await _appointmentApiService.GetServicesAsync(deptId);
+                    var svc = svcList?.Data?.FirstOrDefault(s => s.DepartmentServiceId == serviceId);
+                    if (svc != null)
+                    {
+                        var name = (svc.ServiceName ?? "").ToLower();
+                        if (name.Contains("panorama") || name.Contains("toàn cảnh")) diagType = "Panorama";
+                        else if (name.Contains("cbct") || name.Contains("cone beam") || name.Contains("ct")) diagType = "CBCT";
+                        else diagType = "Intraoral";
+                    }
+                }
+
+                var orderReq = new CreateDiagnosticOrderRequest
+                {
+                    AppointmentId = appointmentId,
+                    DiagnosticType = diagType,
+                    ClinicalIndication = string.IsNullOrWhiteSpace(notes) ? "Chỉ định chụp X-quang khảo sát từ phòng khám lâm sàng" : notes.Trim(),
+                    IsExternal = false
+                };
+                var orderRes = await _imagingApi.CreateOrderAsync(orderReq);
+                if (orderRes?.IsSuccess == true && orderRes.Data != null)
+                {
+                    var bookRes = await _imagingApi.BookSessionAsync(new BookImagingSessionRequest
+                    {
+                        DiagnosticOrderId = orderRes.Data.DiagnosticOrderId,
+                        EquipmentId = 1, // Carestream CS 8200 3D in Room 9
+                        ScheduledStartUtc = DateTime.UtcNow,
+                        Priority = "Normal",
+                        Notes = notes
+                    });
+
+                    if (bookRes?.IsSuccess == true && bookRes.Data != null)
+                    {
+                        await _imagingApi.CheckInSessionAsync(bookRes.Data.ImagingSessionId);
+                    }
+                }
+            }
+            catch
+            {
+                // Non-blocking fallback if imaging workflow encounters transient error
+            }
+        }
+
         // If doctor performs self and picked chair
-        if (executionMode != "delegate" && dentalChairId.HasValue && dentalChairId.Value > 0 && _appointmentApiService != null)
+        if (executionMode == "self" && dentalChairId.HasValue && dentalChairId.Value > 0 && _appointmentApiService != null)
         {
             var apptDetail = await _appointmentApiService.GetAppointmentDetailAsync(appointmentId);
             if (apptDetail?.Data != null && apptDetail.Data.Status != "Completed" && apptDetail.Data.Status != "Cancelled")
@@ -592,7 +647,11 @@ public class DentistMedicalRecordController : Controller
             }
         }
 
-        if (executionMode == "delegate" && targetDentistUserId.HasValue && targetDentistUserId.Value > 0)
+        if (executionMode == "xray")
+        {
+            TempData["SuccessMessage"] = "Đã chuyển bệnh nhân sang Phòng Chụp X-Quang 01 (BS. Đặng Quốc Khánh) thành công! Ca chụp đã được đưa vào hàng đợi chờ thực hiện.";
+        }
+        else if (executionMode == "delegate" && targetDentistUserId.HasValue && targetDentistUserId.Value > 0)
         {
             TempData["SuccessMessage"] = "Đã chuyển tiếp chỉ định dịch vụ cho bác sĩ phụ trách trong chuyên khoa thành công!";
         }

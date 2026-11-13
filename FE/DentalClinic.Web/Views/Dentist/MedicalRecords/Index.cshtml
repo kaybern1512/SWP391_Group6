@@ -328,6 +328,9 @@
                             <button type="button" class="btn btn-warning text-dark btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAddAdditionalService">
                                 <i class="bi bi-plus-circle-fill me-1"></i> Ghi Nhận Dịch Vụ Đã Làm
                             </button>
+                            <button type="button" class="btn btn-outline-primary btn-sm fw-bold shadow-sm bg-white" onclick="openQuickXrayTransfer()">
+                                <i class="bi bi-camera me-1"></i> Chuyển Phòng X-Quang
+                            </button>
                             @if (Model.ActivePrescription == null)
                             {
                                 <button type="button" class="btn btn-outline-success btn-sm bg-white shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#modalQuickPrescription">
@@ -440,9 +443,14 @@
                                 <h6 class="fw-bold text-slate-800 mb-0">Danh Sách Dịch Vụ Đang Thực Hiện</h6>
                                 @if (isApptActive)
                                 {
-                                    <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#modalAddAdditionalService">
-                                        <i class="bi bi-plus-lg me-1"></i> Bổ Sung Dịch Vụ / Chuyển Chuyên Khoa
-                                    </button>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#modalAddAdditionalService">
+                                            <i class="bi bi-plus-lg me-1"></i> Bổ Sung Dịch Vụ
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-bold" onclick="openQuickXrayTransfer()">
+                                            <i class="bi bi-camera me-1"></i> Chỉ Định Chụp X-Quang
+                                        </button>
+                                    </div>
                                 }
                             </div>
 
@@ -1750,10 +1758,16 @@
                                     <i class="bi bi-person-check text-success me-1"></i> Bác sĩ tự thực hiện ngay cho bệnh nhân tại ghế
                                 </label>
                             </div>
-                            <div class="form-check">
+                            <div class="form-check mb-2">
                                 <input class="form-check-input" type="radio" name="executionMode" id="execDelegate" value="delegate" onchange="toggleExecMode()">
                                 <label class="form-check-label fw-bold text-dark" for="execDelegate">
                                     <i class="bi bi-arrow-left-right text-primary me-1"></i> Chuyển giao cho bác sĩ khác trong chuyên khoa đang rảnh
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="executionMode" id="execXray" value="xray" onchange="toggleExecMode()">
+                                <label class="form-check-label fw-bold text-dark" for="execXray">
+                                    <i class="bi bi-camera-fill text-warning me-1"></i> Chuyển bệnh nhân qua Phòng X-Quang (BS. Chuyên trách CĐHA thực hiện)
                                 </label>
                             </div>
                         </div>
@@ -1787,6 +1801,23 @@
                                     <option value="@d.UserId">@d.FullName - @d.Qualification</option>
                                 }
                             </select>
+                        </div>
+
+                        <!-- Panel: Thông tin chuyển qua phòng X-quang -->
+                        <div id="panelXraySelection" class="p-3 bg-warning bg-opacity-10 rounded border border-warning mb-3" style="display: none;">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <div class="bg-warning text-dark rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                                    <i class="bi bi-camera-fill"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-bold text-dark">Chuyển tiếp đến Phòng Chụp X-Quang 01 (Phòng 102)</div>
+                                    <div class="small text-muted">Bác sĩ trực chuyên trách: <strong>BS. Đặng Quốc Khánh</strong> (CĐHA &amp; ATBX-2026-007)</div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-2 rounded border small text-dark">
+                                <div><i class="bi bi-shield-check text-success me-1"></i> Thiết bị: <strong>Máy Carestream CS 8200 3D KTS</strong></div>
+                                <div class="text-muted mt-1"><i class="bi bi-info-circle text-primary me-1"></i> Bệnh nhân sẽ được cấp số thứ tự vào <strong>Hàng Đợi Chụp X-Quang</strong>. Bác sĩ CĐHA sẽ thực hiện ca chụp, đọc kết luận và tự động đồng bộ kết quả phim về bệnh án này.</div>
+                            </div>
                         </div>
 
                         <div class="mb-3">
@@ -2494,10 +2525,51 @@
         }
 
         function toggleExecMode() {
-            const isDelegate = document.getElementById('execDelegate').checked;
-            document.getElementById('panelChairSelection').style.display = isDelegate ? 'none' : 'block';
-            document.getElementById('panelDentistSelection').style.display = isDelegate ? 'block' : 'none';
+            const isDelegate = document.getElementById('execDelegate') && document.getElementById('execDelegate').checked;
+            const isXray = document.getElementById('execXray') && document.getElementById('execXray').checked;
+            const chairPanel = document.getElementById('panelChairSelection');
+            const dentistPanel = document.getElementById('panelDentistSelection');
+            const xrayPanel = document.getElementById('panelXraySelection');
+            if (chairPanel) chairPanel.style.display = (!isDelegate && !isXray) ? 'block' : 'none';
+            if (dentistPanel) dentistPanel.style.display = isDelegate ? 'block' : 'none';
+            if (xrayPanel) xrayPanel.style.display = isXray ? 'block' : 'none';
         }
+
+        function openQuickXrayTransfer() {
+            const modalEl = document.getElementById('modalAddAdditionalService');
+            if (!modalEl) return;
+            const selectEl = modalEl.querySelector('select[name="serviceId"]');
+            if (selectEl) {
+                for (let i = 0; i < selectEl.options.length; i++) {
+                    const text = selectEl.options[i].text.toLowerCase();
+                    if (text.includes('x-quang') || text.includes('panorama') || text.includes('cận chóp')) {
+                        selectEl.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+            const xrayRadio = document.getElementById('execXray');
+            if (xrayRadio) xrayRadio.checked = true;
+            toggleExecMode();
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const svcSelect = document.querySelector('#modalAddAdditionalService select[name="serviceId"]');
+            if (svcSelect) {
+                svcSelect.addEventListener('change', function() {
+                    const selectedText = this.options[this.selectedIndex].text.toLowerCase();
+                    if (selectedText.includes('x-quang') || selectedText.includes('panorama') || selectedText.includes('cận chóp') || selectedText.includes('cbct')) {
+                        const xrayRadio = document.getElementById('execXray');
+                        if (xrayRadio) {
+                            xrayRadio.checked = true;
+                            toggleExecMode();
+                        }
+                    }
+                });
+            }
+        });
 
         function openCompleteExamModal(apptId, patientName, apptCode) {
             document.getElementById('completeAppointmentId').value = apptId;

@@ -953,4 +953,62 @@ public class MedicalRecordWebControllerTests
 
         _apiMock.Verify(x => x.UploadImagingRecordAsync(It.IsAny<long>(), It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Never);
     }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_AddAdditionalService_WithXrayMode_CreatesDiagnosticOrder_AndQueuesSession()
+    {
+        var apptMock = new Mock<IAppointmentApiService>();
+        var treatmentMock = new Mock<ITreatmentApiService>();
+        var imagingMock = new Mock<IImagingApiService>();
+
+        apptMock.Setup(a => a.GetAppointmentDetailAsync(123))
+            .ReturnsAsync(ApiResult<AppointmentDto>.Success(new AppointmentDto { AppointmentId = 123, DepartmentId = 1, Status = "InService" }));
+        apptMock.Setup(a => a.GetServicesAsync(1))
+            .ReturnsAsync(ApiResult<List<DepartmentServiceDto>>.Success(new List<DepartmentServiceDto>
+            {
+                new() { DepartmentServiceId = 96, ServiceName = "Chụp X-quang Toàn Cảnh Panorama (OPG)", Price = 200000m }
+            }));
+
+        treatmentMock.Setup(t => t.AddPerformedServiceToAppointmentAsync(123, It.IsAny<AddPerformedServiceToAppointmentRequest>()))
+            .ReturnsAsync(ApiResult<PerformedServiceDto>.Success(new PerformedServiceDto { PerformedServiceId = 50 }));
+
+        imagingMock.Setup(i => i.CreateOrderAsync(It.IsAny<CreateDiagnosticOrderRequest>()))
+            .ReturnsAsync(ApiResult<DiagnosticOrderDto>.Success(new DiagnosticOrderDto { DiagnosticOrderId = 88, DiagnosticType = "Panorama" }));
+        imagingMock.Setup(i => i.BookSessionAsync(It.IsAny<BookImagingSessionRequest>()))
+            .ReturnsAsync(ApiResult<ImagingSessionDto>.Success(new ImagingSessionDto { ImagingSessionId = 44 }));
+        imagingMock.Setup(i => i.CheckInSessionAsync(44))
+            .ReturnsAsync(ApiResult<ImagingSessionDto>.Success(new ImagingSessionDto { ImagingSessionId = 44, QueueNumber = "XR-013" }));
+
+        var controller = new DentistMedicalRecordController(
+            _apiMock.Object,
+            apptMock.Object,
+            null!,
+            treatmentMock.Object,
+            null!,
+            null!,
+            null!,
+            imagingMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(3, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.AddAdditionalService(
+            appointmentId: 123,
+            patientUserId: 5,
+            serviceId: 96,
+            quantity: 1,
+            unitPrice: 200000m,
+            executionMode: "xray",
+            notes: "Khảo sát xương hàm trước niềng");
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Index");
+        controller.TempData["SuccessMessage"]!.ToString().Should().Contain("Phòng Chụp X-Quang 01 (BS. Đặng Quốc Khánh)");
+
+        treatmentMock.Verify(t => t.AddPerformedServiceToAppointmentAsync(123, It.Is<AddPerformedServiceToAppointmentRequest>(r => r.DepartmentServiceId == 96)), Times.Once);
+        imagingMock.Verify(i => i.CreateOrderAsync(It.Is<CreateDiagnosticOrderRequest>(r => r.DiagnosticType == "Panorama" && r.AppointmentId == 123)), Times.Once);
+        imagingMock.Verify(i => i.BookSessionAsync(It.Is<BookImagingSessionRequest>(r => r.DiagnosticOrderId == 88 && r.EquipmentId == 1)), Times.Once);
+        imagingMock.Verify(i => i.CheckInSessionAsync(44), Times.Once);
+    }
 }
