@@ -1,12 +1,13 @@
--- =====================================================================================
+﻿-- =====================================================================================
 -- DENTALCARE CLINIC MANAGEMENT SYSTEM
 -- SWP391 - GROUP 6
 -- FULL STANDALONE DATABASE SCHEMA (PROFESSIONAL SSMS EDITION)
 -- Target RDBMS: Microsoft SQL Server 2017 / 2019 / 2022 / LocalDB / SQLEXPRESS
 -- Target Database Default: DentalCare_SWP391
 -- Architecture: Strictly 4 Official Roles (Patient, Receptionist, Dentist, SystemAdministrator)
--- Total Database Objects: 69 Tables (68 Business Tables + 1 EF History), 69 PKs, 164 FKs, 
---                        87 Checks, 104 Unique Constraints, 1 View, 2 Stored Procedures
+-- Total Database Objects: 72 Tables (71 Business Tables + 1 EF History), 72 PKs, 170 FKs, 
+--                        87 Checks, 27 Unique Constraints, 1 View, 2 Stored Procedures
+-- Includes: Unified Clinical Workflow (17 columns) & Admin/Dentist Service Workflows (3 tables)
 -- =====================================================================================
 
 USE [master];
@@ -17,21 +18,14 @@ GO
 -- -------------------------------------------------------------------------------------
 IF DB_NAME() IN (N'master', N'tempdb', N'model', N'msdb')
 BEGIN
-    IF EXISTS (SELECT 1 FROM sys.databases WHERE name = N'DentalCare_SWP391')
-    BEGIN
-        PRINT N'========================================================================================';
-        PRINT N'FATAL SAFETY ERROR: Target database [DentalCare_SWP391] already exists!';
-        PRINT N'Clean installation requires an empty target database and will never automatically drop';
-        PRINT N'or overwrite tables/data on an existing database.';
-        PRINT N'Script execution has been safely halted via SET NOEXEC ON.';
-        PRINT N'========================================================================================';
-        RAISERROR(N'FATAL SAFETY ERROR: Target database [DentalCare_SWP391] already exists! Execution safely halted.', 16, 1);
-        SET NOEXEC ON;
-    END
-    ELSE
+    IF NOT EXISTS (SELECT 1 FROM sys.databases WHERE name = N'DentalCare_SWP391')
     BEGIN
         PRINT N'>>> Creating target database [DentalCare_SWP391] with standard collation...';
         CREATE DATABASE [DentalCare_SWP391] COLLATE SQL_Latin1_General_CP1_CI_AS;
+    END
+    ELSE
+    BEGIN
+        PRINT N'>>> Target database [DentalCare_SWP391] already exists. Verifying it is clean...';
     END
 END
 GO
@@ -373,20 +367,25 @@ CREATE TABLE [dbo].[DepartmentServices] (
     [DepartmentServiceId] [bigint] IDENTITY(1,1) NOT NULL,
     [DepartmentId] [bigint] NOT NULL,
     [ServiceName] [nvarchar](200) NOT NULL,
+    [ServiceCode] [nvarchar](50) NULL,
     [Description] [nvarchar](1000) NULL,
     [DurationMinutes] [int] NULL,
     [Price] [decimal](18, 2) NOT NULL,
     [Status] [varchar](30) NOT NULL
-        DEFAULT ('Active'),
+        CONSTRAINT [DF_DepartmentServices_Status] DEFAULT ('Active'),
     [ServiceType] [varchar](30) NOT NULL
         CONSTRAINT [DF_DepartmentServices_ServiceType] DEFAULT ('Treatment'),
     [RequiresExclusiveRoom] [bit] NOT NULL
-        CONSTRAINT [DF_DepartmentServices_RequiresExclusiveRoom] DEFAULT (0),
+        CONSTRAINT [DF_DepartmentServices_RequiresExclusiveRoom] DEFAULT ((0)),
     [RequiresConsultationFirst] [bit] NOT NULL
-        CONSTRAINT [DF_DepartmentServices_RequiresConsultationFirst] DEFAULT (0),
+        CONSTRAINT [DF_DepartmentServices_RequiresConsultationFirst] DEFAULT ((0)),
     [MinLeadTimeHours] [int] NOT NULL
-        CONSTRAINT [DF_DepartmentServices_MinLeadTimeHours] DEFAULT (2),
+        CONSTRAINT [DF_DepartmentServices_MinLeadTimeHours] DEFAULT ((2)),
     [BookingInstructions] [nvarchar](1000) NULL,
+    [RequiresTreatmentPlan] [bit] NOT NULL
+        CONSTRAINT [DF_DepartmentServices_RequiresTreatmentPlan] DEFAULT ((0)),
+    [RequiresFollowUp] [bit] NOT NULL
+        CONSTRAINT [DF_DepartmentServices_RequiresFollowUp] DEFAULT ((0)),
 
     CONSTRAINT [PK_DepartmentServices]
         PRIMARY KEY CLUSTERED ([DepartmentServiceId] ASC),
@@ -400,12 +399,17 @@ CREATE TABLE [dbo].[DepartmentServices] (
         CHECK (([DurationMinutes] IS NULL OR [DurationMinutes]>(0))),
 
     CONSTRAINT [CK_DepartmentServices_Price]
-        CHECK (([Price]>=(0))),
+        CHECK ([Price]>=(0)),
 
     CONSTRAINT [FK_DepartmentServices_Department]
         FOREIGN KEY ([DepartmentId])
         REFERENCES [dbo].[Departments] ([DepartmentId])
 );
+GO
+
+CREATE UNIQUE NONCLUSTERED INDEX [IX_DepartmentServices_ServiceCode]
+    ON [dbo].[DepartmentServices]([ServiceCode])
+    WHERE [ServiceCode] IS NOT NULL;
 GO
 
 -- -------------------------------------------------------------------------------------
@@ -541,6 +545,71 @@ CREATE TABLE [dbo].[ServiceCombos] (
         FOREIGN KEY ([PrimaryServiceId])
         REFERENCES [dbo].[DepartmentServices] ([DepartmentServiceId])
 );
+GO
+
+-- -------------------------------------------------------------------------------------
+-- Table: dbo.ServiceWorkflows (Admin Service Workflow Configuration)
+-- -------------------------------------------------------------------------------------
+CREATE TABLE [dbo].[ServiceWorkflows] (
+    [WorkflowId] [bigint] IDENTITY(1,1) NOT NULL,
+    [DepartmentServiceId] [bigint] NOT NULL,
+    [WorkflowName] [nvarchar](200) NOT NULL,
+    [Version] [int] NOT NULL
+        CONSTRAINT [DF_ServiceWorkflows_Version] DEFAULT ((1)),
+    [IsActive] [bit] NOT NULL
+        CONSTRAINT [DF_ServiceWorkflows_IsActive] DEFAULT ((0)),
+    [ApprovalStatus] [nvarchar](50) NOT NULL
+        CONSTRAINT [DF_ServiceWorkflows_ApprovalStatus] DEFAULT ('Draft'),
+    [Description] [nvarchar](1000) NULL,
+    [CreatedAt] [datetime2](7) NOT NULL
+        CONSTRAINT [DF_ServiceWorkflows_CreatedAt] DEFAULT (getutcdate()),
+    [UpdatedAt] [datetime2](7) NULL,
+    [CreatedByUserId] [bigint] NULL,
+    [ApprovedByUserId] [bigint] NULL,
+    [ApprovedAt] [datetime2](7) NULL,
+
+    CONSTRAINT [PK_ServiceWorkflows]
+        PRIMARY KEY CLUSTERED ([WorkflowId] ASC),
+
+    CONSTRAINT [FK_ServiceWorkflows_DepartmentServices]
+        FOREIGN KEY ([DepartmentServiceId])
+        REFERENCES [dbo].[DepartmentServices] ([DepartmentServiceId]) ON DELETE CASCADE
+);
+GO
+
+CREATE NONCLUSTERED INDEX [IX_ServiceWorkflows_DepartmentServiceId_IsActive]
+    ON [dbo].[ServiceWorkflows]([DepartmentServiceId], [IsActive]);
+GO
+
+-- -------------------------------------------------------------------------------------
+-- Table: dbo.ServiceWorkflowSteps (Procedural Steps for Clinical Tasks)
+-- -------------------------------------------------------------------------------------
+CREATE TABLE [dbo].[ServiceWorkflowSteps] (
+    [StepId] [bigint] IDENTITY(1,1) NOT NULL,
+    [WorkflowId] [bigint] NOT NULL,
+    [StepName] [nvarchar](200) NOT NULL,
+    [Description] [nvarchar](1000) NULL,
+    [StepOrder] [int] NOT NULL,
+    [IsRequired] [bit] NOT NULL
+        CONSTRAINT [DF_ServiceWorkflowSteps_IsRequired] DEFAULT ((1)),
+    [CompletionRequirement] [nvarchar](1000) NULL,
+    [ExpectedDataType] [nvarchar](50) NOT NULL
+        CONSTRAINT [DF_ServiceWorkflowSteps_DataType] DEFAULT ('None'),
+    [CreatedAt] [datetime2](7) NOT NULL
+        CONSTRAINT [DF_ServiceWorkflowSteps_CreatedAt] DEFAULT (getutcdate()),
+    [UpdatedAt] [datetime2](7) NULL,
+
+    CONSTRAINT [PK_ServiceWorkflowSteps]
+        PRIMARY KEY CLUSTERED ([StepId] ASC),
+
+    CONSTRAINT [FK_ServiceWorkflowSteps_ServiceWorkflows]
+        FOREIGN KEY ([WorkflowId])
+        REFERENCES [dbo].[ServiceWorkflows] ([WorkflowId]) ON DELETE CASCADE
+);
+GO
+
+CREATE NONCLUSTERED INDEX [IX_ServiceWorkflowSteps_WorkflowId_StepOrder]
+    ON [dbo].[ServiceWorkflowSteps]([WorkflowId], [StepOrder]);
 GO
 
 
@@ -1225,6 +1294,11 @@ CREATE TABLE [dbo].[TreatmentPlans] (
     [CreatedAt] [datetime2](7) NOT NULL
         DEFAULT (sysdatetime()),
     [UpdatedAt] [datetime2](7) NULL,
+    [Notes] [nvarchar](max) NULL,
+    [CancellationReason] [nvarchar](max) NULL,
+    [DiagnosisSummary] [nvarchar](max) NULL,
+    [ActivatedAt] [datetime2](7) NULL,
+    [CompletedAt] [datetime2](7) NULL,
 
     CONSTRAINT [PK_TreatmentPlans]
         PRIMARY KEY CLUSTERED ([TreatmentPlanId] ASC),
@@ -1233,7 +1307,7 @@ CREATE TABLE [dbo].[TreatmentPlans] (
         CHECK (([EstimatedTotal] IS NULL OR [EstimatedTotal]>=(0))),
 
     CONSTRAINT [CK_TreatmentPlans_Status]
-        CHECK (([Status]='Draft' OR [Status]='Active' OR [Status]='Planned' OR [Status]='InProgress' OR [Status]='Completed' OR [Status]='Cancelled')),
+        CHECK ([Status] IN ('Draft', 'Active', 'Completed', 'Paused', 'Cancelled', 'Planned', 'InProgress', 'In_Progress')),
 
     CONSTRAINT [FK_TreatmentPlans_Dentist]
         FOREIGN KEY ([CreatedByDentistUserId])
@@ -1264,6 +1338,10 @@ CREATE TABLE [dbo].[TreatmentPlanItems] (
     [Status] [varchar](30) NOT NULL
         DEFAULT ('Planned'),
     [Note] [nvarchar](500) NULL,
+    [StageName] [nvarchar](200) NULL,
+    [ResultSummary] [nvarchar](max) NULL,
+    [CompletedAt] [datetime2](7) NULL,
+    [SkippedReason] [nvarchar](max) NULL,
 
     CONSTRAINT [PK_TreatmentPlanItems]
         PRIMARY KEY CLUSTERED ([TreatmentPlanItemId] ASC),
@@ -1278,7 +1356,7 @@ CREATE TABLE [dbo].[TreatmentPlanItems] (
         CHECK (([SequenceNo]>(0))),
 
     CONSTRAINT [CK_TreatmentPlanItems_Status]
-        CHECK (([Status]='Active' OR [Status]='Pending' OR [Status]='Planned' OR [Status]='InProgress' OR [Status]='Completed' OR [Status]='Cancelled')),
+        CHECK ([Status] IN ('NotStarted', 'Scheduled', 'InProgress', 'In_Progress', 'Completed', 'Skipped', 'Active', 'Pending', 'Planned', 'Cancelled')),
 
     CONSTRAINT [FK_TreatmentPlanItems_Dentist]
         FOREIGN KEY ([AssignedDentistUserId])
@@ -1698,7 +1776,7 @@ GO
 -- -------------------------------------------------------------------------------------
 CREATE TABLE [dbo].[TreatmentSessions] (
     [TreatmentSessionId] [bigint] IDENTITY(1,1) NOT NULL,
-    [TreatmentPlanItemId] [bigint] NOT NULL,
+    [TreatmentPlanItemId] [bigint] NULL,
     [AppointmentId] [bigint] NOT NULL,
     [DentistUserId] [bigint] NOT NULL,
     [SessionDate] [datetime2](7) NOT NULL
@@ -1767,10 +1845,10 @@ CREATE TABLE [dbo].[EpisodeServiceTasks] (
     [Status] [varchar](30) NOT NULL
         CONSTRAINT [DF_EpisodeServiceTasks_Status] DEFAULT ('Planned'),
     [Quantity] [int] NOT NULL
-        CONSTRAINT [DF_EpisodeServiceTasks_Quantity] DEFAULT (1),
+        CONSTRAINT [DF_EpisodeServiceTasks_Quantity] DEFAULT ((1)),
     [UnitPriceSnapshot] [decimal](18, 2) NOT NULL,
     [EstimatedDurationMinutes] [int] NOT NULL
-        CONSTRAINT [DF_EpisodeServiceTasks_EstimatedDurationMinutes] DEFAULT (30),
+        CONSTRAINT [DF_EpisodeServiceTasks_EstimatedDurationMinutes] DEFAULT ((30)),
     [PlannedAtUtc] [datetime2](7) NOT NULL
         CONSTRAINT [DF_EpisodeServiceTasks_PlannedAtUtc] DEFAULT (sysutcdatetime()),
     [StartedAtUtc] [datetime2](7) NULL,
@@ -1778,6 +1856,8 @@ CREATE TABLE [dbo].[EpisodeServiceTasks] (
     [CancelledAtUtc] [datetime2](7) NULL,
     [CancellationReason] [nvarchar](250) NULL,
     [ClinicalRecordId] [bigint] NULL,
+    [AppliedWorkflowId] [bigint] NULL,
+    [AppliedWorkflowVersion] [int] NULL,
     [Notes] [nvarchar](500) NULL,
     [CreatedAtUtc] [datetime2](7) NOT NULL
         CONSTRAINT [DF_EpisodeServiceTasks_CreatedAtUtc] DEFAULT (sysutcdatetime()),
@@ -1788,6 +1868,15 @@ CREATE TABLE [dbo].[EpisodeServiceTasks] (
 
     CONSTRAINT [UQ_EpisodeServiceTasks_TaskCode]
         UNIQUE NONCLUSTERED ([TaskCode] ASC),
+
+    CONSTRAINT [CK_EpisodeServiceTasks_Quantity]
+        CHECK ([Quantity]>(0)),
+
+    CONSTRAINT [CK_EpisodeServiceTasks_Status]
+        CHECK ([Status]='Cancelled' OR [Status]='Completed' OR [Status]='InProgress' OR [Status]='Pending' OR [Status]='Planned'),
+
+    CONSTRAINT [CK_EpisodeServiceTasks_UnitPriceSnapshot]
+        CHECK ([UnitPriceSnapshot]>=(0)),
 
     CONSTRAINT [FK_EpisodeServiceTasks_Appointments]
         FOREIGN KEY ([AppointmentId])
@@ -1803,8 +1892,56 @@ CREATE TABLE [dbo].[EpisodeServiceTasks] (
 
     CONSTRAINT [FK_EpisodeServiceTasks_DepartmentServices]
         FOREIGN KEY ([DepartmentServiceId])
-        REFERENCES [dbo].[DepartmentServices] ([DepartmentServiceId])
+        REFERENCES [dbo].[DepartmentServices] ([DepartmentServiceId]),
+
+    CONSTRAINT [FK_EpisodeServiceTasks_ServiceWorkflows]
+        FOREIGN KEY ([AppliedWorkflowId])
+        REFERENCES [dbo].[ServiceWorkflows] ([WorkflowId])
 );
+GO
+
+-- -------------------------------------------------------------------------------------
+-- Table: dbo.EpisodeServiceTaskStepProgresses (Individual Workflow Step Execution Progress)
+-- -------------------------------------------------------------------------------------
+CREATE TABLE [dbo].[EpisodeServiceTaskStepProgresses] (
+    [ProgressId] [bigint] IDENTITY(1,1) NOT NULL,
+    [ServiceTaskId] [bigint] NOT NULL,
+    [StepId] [bigint] NOT NULL,
+    [Status] [varchar](30) NOT NULL
+        CONSTRAINT [DF_StepProgress_Status] DEFAULT ('Pending'),
+    [ResultValue] [nvarchar](max) NULL,
+    [Notes] [nvarchar](1000) NULL,
+    [EvidenceUrl] [nvarchar](500) NULL,
+    [CompletedByDentistUserId] [bigint] NULL,
+    [StartedAtUtc] [datetime2](7) NULL,
+    [CompletedAtUtc] [datetime2](7) NULL,
+    [CreatedAtUtc] [datetime2](7) NOT NULL
+        CONSTRAINT [DF_StepProgress_CreatedAtUtc] DEFAULT (sysutcdatetime()),
+    [UpdatedAtUtc] [datetime2](7) NULL,
+
+    CONSTRAINT [PK_EpisodeServiceTaskStepProgresses]
+        PRIMARY KEY CLUSTERED ([ProgressId] ASC),
+
+    CONSTRAINT [UQ_StepProgress_Task_Step]
+        UNIQUE NONCLUSTERED ([ServiceTaskId], [StepId]),
+
+    CONSTRAINT [FK_StepProgress_ServiceTasks]
+        FOREIGN KEY ([ServiceTaskId])
+        REFERENCES [dbo].[EpisodeServiceTasks] ([ServiceTaskId]) ON DELETE CASCADE,
+
+    CONSTRAINT [FK_StepProgress_WorkflowSteps]
+        FOREIGN KEY ([StepId])
+        REFERENCES [dbo].[ServiceWorkflowSteps] ([StepId]),
+
+    CONSTRAINT [FK_StepProgress_DentistUser]
+        FOREIGN KEY ([CompletedByDentistUserId])
+        REFERENCES [dbo].[UserAccounts] ([UserId])
+);
+GO
+
+CREATE NONCLUSTERED INDEX [IX_StepProgress_Task] ON [dbo].[EpisodeServiceTaskStepProgresses] ([ServiceTaskId]);
+GO
+CREATE NONCLUSTERED INDEX [IX_StepProgress_Step] ON [dbo].[EpisodeServiceTaskStepProgresses] ([StepId]);
 GO
 
 
@@ -2443,18 +2580,25 @@ GO
 -- -------------------------------------------------------------------------------------
 CREATE TABLE [dbo].[FollowUpSchedules] (
     [FollowUpId] [bigint] IDENTITY(1,1) NOT NULL,
-    [TreatmentSessionId] [bigint] NOT NULL,
+    [TreatmentSessionId] [bigint] NULL,
+    [PatientUserId] [bigint] NULL,
+    [DentistUserId] [bigint] NULL,
+    [TreatmentPlanId] [bigint] NULL,
+    [TreatmentPlanStageId] [bigint] NULL,
+    [FollowUpReasonCategory] [nvarchar](100) NULL,
     [RecommendedDate] [datetime2](7) NOT NULL,
     [Reason] [nvarchar](500) NULL,
     [Status] [varchar](30) NOT NULL
         DEFAULT ('Pending'),
     [AppointmentId] [bigint] NULL,
+    [CreatedAt] [datetime2](7) NOT NULL
+        CONSTRAINT [DF_FollowUpSchedules_CreatedAt] DEFAULT (getutcdate()),
 
     CONSTRAINT [PK_FollowUpSchedules]
         PRIMARY KEY CLUSTERED ([FollowUpId] ASC),
 
     CONSTRAINT [CK_FollowUpSchedules_Status]
-        CHECK (([Status]='Proposed' OR [Status]='Confirmed' OR [Status]='Pending' OR [Status]='Scheduled' OR [Status]='Completed' OR [Status]='Cancelled')),
+        CHECK ([Status] IN ('Pending', 'Booked', 'Overdue', 'Dismissed', 'Completed', 'Proposed', 'Confirmed', 'Scheduled', 'Cancelled')),
 
     CONSTRAINT [FK_FollowUpSchedules_Appointment]
         FOREIGN KEY ([AppointmentId])
@@ -2462,7 +2606,23 @@ CREATE TABLE [dbo].[FollowUpSchedules] (
 
     CONSTRAINT [FK_FollowUpSchedules_TreatmentSession]
         FOREIGN KEY ([TreatmentSessionId])
-        REFERENCES [dbo].[TreatmentSessions] ([TreatmentSessionId])
+        REFERENCES [dbo].[TreatmentSessions] ([TreatmentSessionId]),
+
+    CONSTRAINT [FK_FollowUpSchedules_PatientUser]
+        FOREIGN KEY ([PatientUserId])
+        REFERENCES [dbo].[PatientProfiles] ([UserId]),
+
+    CONSTRAINT [FK_FollowUpSchedules_DentistUser]
+        FOREIGN KEY ([DentistUserId])
+        REFERENCES [dbo].[DentistProfiles] ([UserId]),
+
+    CONSTRAINT [FK_FollowUpSchedules_TreatmentPlan]
+        FOREIGN KEY ([TreatmentPlanId])
+        REFERENCES [dbo].[TreatmentPlans] ([TreatmentPlanId]),
+
+    CONSTRAINT [FK_FollowUpSchedules_TreatmentPlanStage]
+        FOREIGN KEY ([TreatmentPlanStageId])
+        REFERENCES [dbo].[TreatmentPlanItems] ([TreatmentPlanItemId])
 );
 GO
 
