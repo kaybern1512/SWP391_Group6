@@ -102,4 +102,61 @@ test.describe.serial('Dedicated X-Ray Dentist Workflow & Roster Management', () 
     const pageText = await page.locator('body').innerText();
     expect(pageText).not.toContain('BS. Đặng Quốc Khánh');
   });
+
+  test('TC06: BA Spec 4.2: Dedicated X-ray Dentist Dashboard transformation for BS. Đặng Quốc Khánh', async ({ page }) => {
+    await loginAs(page, 'dentist7@dentalcare.com');
+
+    await page.goto('/Dentist/Dashboard');
+    await page.waitForLoadState('domcontentloaded');
+
+    // Verify header title: "Không Gian Chẩn Đoán Hình Ảnh"
+    await expect(page.locator('h1:has-text("Không Gian Chẩn Đoán Hình Ảnh")')).toBeVisible();
+
+    // Verify specialized badges
+    await expect(page.locator('text=Bác Sĩ Chẩn Đoán Hình Ảnh')).toBeVisible();
+    await expect(page.locator('text=Carestream CS 8200 3D').first()).toBeVisible();
+
+    // Verify 4 Priority KPI Cards
+    await expect(page.locator('text=Ca Chờ Chụp').first()).toBeVisible();
+    await expect(page.locator('text=Đang Chụp').first()).toBeVisible();
+    await expect(page.locator('text=Ảnh Chờ Đọc').first()).toBeVisible();
+    await expect(page.locator('text=Kết Quả Chờ Xác Nhận').first()).toBeVisible();
+
+    // Verify specialized sidebar
+    await expect(page.locator('.sidebar-nav a:has-text("Không Gian Chẩn Đoán KTS")')).toBeVisible();
+    await expect(page.locator('.sidebar-nav a:has-text("Hàng Đợi Chụp X-Quang")')).toBeVisible();
+    await expect(page.locator('.sidebar-nav a:has-text("Ca Đang Xử Lý")')).toBeVisible();
+  });
+
+  test('TC07: BA Spec 4.4: 3-Panel Imaging Workbench & Digital X-Ray Viewer interaction', async ({ page }) => {
+    await loginAs(page, 'dentist7@dentalcare.com');
+
+    await page.goto('/Dentist/XrayQueue');
+    await page.waitForLoadState('domcontentloaded');
+
+    // Click on "Mở Workbench" or "Đọc Phim / Kết Quả" button
+    const openWbBtn = page.locator('.btn-open-workbench').first();
+    if (await openWbBtn.isVisible()) {
+      await openWbBtn.click();
+
+      // Verify 3-Panel Workbench Modal is visible
+      const modal = page.locator('#imagingWorkbenchModal');
+      await expect(modal).toBeVisible();
+
+      // Verify Left Panel (Patient & Indication)
+      await expect(modal.locator('text=Bệnh Nhân & Chỉ Định')).toBeVisible();
+      await expect(modal.locator('#wbDiagnosticType')).toBeVisible();
+
+      // Verify Center Panel (Image Viewer)
+      await expect(modal.locator('#wbImageViewer')).toBeVisible();
+      await expect(modal.locator('#btnZoomIn')).toBeVisible();
+      await expect(modal.locator('#btnInvert')).toBeVisible();
+
+      // Verify Right Panel (Workflow & Report Form)
+      await expect(modal.locator('text=Quy Trình Xử Lý Ca')).toBeVisible();
+      await expect(modal.locator('textarea[name="findings"]')).toBeVisible();
+      await expect(modal.locator('textarea[name="reviewNotes"]')).toBeVisible();
+      await expect(modal.locator('button:has-text("Ký & Xác Nhận Kết Quả (EMR)")')).toBeVisible();
+    }
+  });
 });

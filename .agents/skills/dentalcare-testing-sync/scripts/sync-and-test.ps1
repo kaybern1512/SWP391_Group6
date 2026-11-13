@@ -23,6 +23,20 @@ if (-not $env:TEST_SQL_SERVER) {
 if (-not $env:DENTAL_CLINIC_SQL_INSTANCE) {
     $env:DENTAL_CLINIC_SQL_INSTANCE = ".\MSSQLSERVER01"
 }
+if (-not $env:DENTAL_CLINIC_TEST_DB) {
+    $env:DENTAL_CLINIC_TEST_DB = "DentalCare_SWP391"
+}
+if (-not $env:DENTAL_CLINIC_TEST_CONNECTION_STRING) {
+    $env:DENTAL_CLINIC_TEST_CONNECTION_STRING = "Server=$($env:TEST_SQL_SERVER);Database=DentalCare_SWP391;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;"
+}
+if (-not $env:DENTAL_CLINIC_CONNECTION_STRING) {
+    $env:DENTAL_CLINIC_CONNECTION_STRING = "Server=$($env:TEST_SQL_SERVER);Database=DentalCare_SWP391;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;"
+}
+if (-not $env:DENTAL_CLINIC_FOLLOWUP_TEST_CONNECTION_STRING) {
+    $env:DENTAL_CLINIC_FOLLOWUP_TEST_CONNECTION_STRING = "Server=$($env:TEST_SQL_SERVER);Database=DentalClinic_FollowUp_QA;Trusted_Connection=True;MultipleActiveResultSets=false;TrustServerCertificate=True;"
+}
+
+$ErrorActionPreference = "Continue"
 
 Write-Host "=================================================================" -ForegroundColor Cyan
 Write-Host " DentalCare SWP391 - Automated Test Synchronization Runner       " -ForegroundColor Cyan
