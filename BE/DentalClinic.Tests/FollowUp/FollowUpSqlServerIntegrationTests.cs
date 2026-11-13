@@ -27,7 +27,9 @@ public class FollowUpSqlServerIntegrationTests
         "DentalClinic_FollowUp_QA",
         "DentalClinic_Disposable_PreDeployClone",
         "DentalClinic_QA",
-        "DentalCare_ServiceWorkflow_QA"
+        "DentalCare_ServiceWorkflow_QA",
+        "DentalCare_DentistTask_QA",
+        "DentalCare_ServiceIntegration_QA"
     };
 
     private static string ValidateSafeTestDatabase(string connStr)
