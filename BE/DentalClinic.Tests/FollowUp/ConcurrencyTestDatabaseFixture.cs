@@ -16,21 +16,21 @@ public class ConcurrencyTestDatabaseFixture : IAsyncLifetime
     public string DatabaseName { get; private set; } = null!;
     public string ConnectionString { get; private set; } = null!;
 
-    private const string BackupRelativePath = @"DB\DentalClinicManagementDB.bak";
-    private const string MigrationRelativePath = @"DB\migrations\20261104_Update_FollowUpSchedules_Status_CheckConstraint.sql";
-    private const string Phase0MigrationRelativePath = @"DB\redesign_migrations\20261109_Phase0_Database_Standardization_4Roles.sql";
-    private const string AddTreatmentPlanItemMigrationRelativePath = @"DB\redesign_migrations\20261109_Add_TreatmentPlanItemId_To_Appointments.sql";
-    private const string UpdateTreatmentPlansMigrationRelativePath = @"DB\redesign_migrations\20261109_Update_TreatmentPlans_Status_CheckConstraint_Add_Active_Pending.sql";
-    private const string ImagingMigrationRelativePath = @"DB\redesign_migrations\20261110_Add_Imaging_Room_Equipment_And_Queue_Schema.sql";
-    private const string ConsultationAndReferralMigrationRelativePath = @"DB\redesign_migrations\20261110_Add_Clinical_Consultation_And_Referral_Linkage.sql";
-    private const string DoctorLeaveMigrationRelativePath = @"DB\redesign_migrations\20261109_Add_DoctorLeave_And_AppointmentDisruption.sql";
-    private const string ReceptionistShiftMigrationRelativePath = @"DB\redesign_migrations\20261110_Receptionist_Shift_Leave_Workforce_Schema.sql";
-    private const string StaffAttendanceMigrationRelativePath = @"DB\migrations\20261110_Add_Staff_Attendance_And_Operations_Tables.sql";
-    private const string ServiceCombosMigrationRelativePath = @"DB\20261110_Add_ServiceCombos_And_Appointment_Combo_Tracking.sql";
-    private const string CareEpisodesMigrationRelativePath = @"DB\20261111_Add_CareEpisodes_ServiceTasks_And_SingleInvoiceAggregation.sql";
-    private const string XrayRosterMigrationRelativePath = @"DB\migrations\20261112_Add_Dedicated_Xray_Dentist_Roster.sql";
-    private const string ClinicalWorkflowMigrationRelativePath = @"DB\migrations\20261113_Dentist_Clinical_Workflow_TreatmentPlan_And_Guards.sql";
-    private const string ServiceWorkflowMigrationRelativePath = @"DB\migrations\20261113_Add_Service_Code_And_Workflow_Configuration.sql";
+    private const string BackupRelativePath = @"DB_Archive\DentalClinicManagementDB.bak";
+    private const string MigrationRelativePath = @"DB_Archive\migrations\20261104_Update_FollowUpSchedules_Status_CheckConstraint.sql";
+    private const string Phase0MigrationRelativePath = @"DB_Archive\redesign_migrations\20261109_Phase0_Database_Standardization_4Roles.sql";
+    private const string AddTreatmentPlanItemMigrationRelativePath = @"DB_Archive\redesign_migrations\20261109_Add_TreatmentPlanItemId_To_Appointments.sql";
+    private const string UpdateTreatmentPlansMigrationRelativePath = @"DB_Archive\redesign_migrations\20261109_Update_TreatmentPlans_Status_CheckConstraint_Add_Active_Pending.sql";
+    private const string ImagingMigrationRelativePath = @"DB_Archive\redesign_migrations\20261110_Add_Imaging_Room_Equipment_And_Queue_Schema.sql";
+    private const string ConsultationAndReferralMigrationRelativePath = @"DB_Archive\redesign_migrations\20261110_Add_Clinical_Consultation_And_Referral_Linkage.sql";
+    private const string DoctorLeaveMigrationRelativePath = @"DB_Archive\redesign_migrations\20261109_Add_DoctorLeave_And_AppointmentDisruption.sql";
+    private const string ReceptionistShiftMigrationRelativePath = @"DB_Archive\redesign_migrations\20261110_Receptionist_Shift_Leave_Workforce_Schema.sql";
+    private const string StaffAttendanceMigrationRelativePath = @"DB_Archive\migrations\20261110_Add_Staff_Attendance_And_Operations_Tables.sql";
+    private const string ServiceCombosMigrationRelativePath = @"DB_Archive\20261110_Add_ServiceCombos_And_Appointment_Combo_Tracking.sql";
+    private const string CareEpisodesMigrationRelativePath = @"DB_Archive\20261111_Add_CareEpisodes_ServiceTasks_And_SingleInvoiceAggregation.sql";
+    private const string XrayRosterMigrationRelativePath = @"DB_Archive\migrations\20261112_Add_Dedicated_Xray_Dentist_Roster.sql";
+    private const string ClinicalWorkflowMigrationRelativePath = @"DB_Archive\migrations\20261113_Dentist_Clinical_Workflow_TreatmentPlan_And_Guards.sql";
+    private const string ServiceWorkflowMigrationRelativePath = @"DB_Archive\migrations\20261113_Add_Service_Code_And_Workflow_Configuration.sql";
 
     public async Task InitializeAsync()
     {
