@@ -20,6 +20,10 @@ public interface ICareEpisodeService
     Task<ApiResponse<List<EpisodeServiceTaskDto>>> GetEligibleServicesForDentistAsync(long appointmentId, long dentistUserId, CancellationToken ct = default);
     Task<ApiResponse<EpisodeServiceTaskDto>> AddServiceTaskAsync(long dentistUserId, CreateEpisodeServiceTaskRequest request, CancellationToken ct = default);
     Task<ApiResponse<EpisodeServiceTaskDto>> UpdateServiceTaskStatusAsync(long dentistUserId, long serviceTaskId, UpdateServiceTaskStatusRequest request, CancellationToken ct = default);
+    Task<ApiResponse<EpisodeServiceTaskDto>> StartServiceTaskAsync(long dentistUserId, long serviceTaskId, CancellationToken ct = default);
+    Task<ApiResponse<EpisodeTaskStepProgressDto>> CompleteTaskStepAsync(long dentistUserId, long serviceTaskId, long stepId, CompleteTaskStepRequest request, CancellationToken ct = default);
+    Task<ApiResponse<EpisodeServiceTaskDto>> CompleteServiceTaskAsync(long dentistUserId, long serviceTaskId, CompleteServiceTaskRequest request, CancellationToken ct = default);
+    Task<ApiResponse<bool>> ValidateAppointmentTasksCompletedAsync(long appointmentId, CancellationToken ct = default);
 
     // Case B: Cross-Dentist Referral & Handoff (Doctor A -> Receptionist -> Doctor B)
     Task<ApiResponse<CareEpisodeReferralSummaryDto>> CreateInternalReferralAsync(long dentistUserId, CreateCareEpisodeReferralRequest request, CancellationToken ct = default);

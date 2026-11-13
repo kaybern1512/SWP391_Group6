@@ -44,6 +44,7 @@ public class CareEpisodeService : ICareEpisodeService
 
         if (appointment.CareEpisodeId.HasValue)
         {
+            await EnsurePrimaryTaskForAppointmentAsync(appointment, appointment.CareEpisodeId.Value, ct);
             return await GetEpisodeByIdAsync(appointment.CareEpisodeId.Value, ct);
         }
 
@@ -61,6 +62,7 @@ public class CareEpisodeService : ICareEpisodeService
             appointment.CareEpisodeId = existingEpisode.CareEpisodeId;
             appointment.UpdatedAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync(ct);
+            await EnsurePrimaryTaskForAppointmentAsync(appointment, existingEpisode.CareEpisodeId, ct);
             return await GetEpisodeByIdAsync(existingEpisode.CareEpisodeId, ct);
         }
 
@@ -83,6 +85,8 @@ public class CareEpisodeService : ICareEpisodeService
         appointment.CareEpisodeId = newEpisode.CareEpisodeId;
         appointment.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
+
+        await EnsurePrimaryTaskForAppointmentAsync(appointment, newEpisode.CareEpisodeId, ct);
 
         _logger.LogInformation("Khởi tạo đợt khám mới {EpisodeCode} cho bệnh nhân {PatientUserId} từ ca khám #{AppointmentId}",
             newEpisode.EpisodeCode, appointment.PatientUserId, appointment.AppointmentId);
@@ -114,6 +118,13 @@ public class CareEpisodeService : ICareEpisodeService
                     .ThenInclude(u => u.StaffProfile)
             .Include(e => e.ServiceTasks)
                 .ThenInclude(t => t.Appointment)
+            .Include(e => e.ServiceTasks)
+                .ThenInclude(t => t.StepProgresses)
+                    .ThenInclude(p => p.Step)
+            .Include(e => e.ServiceTasks)
+                .ThenInclude(t => t.StepProgresses)
+                    .ThenInclude(p => p.CompletedByDentistUser)
+                        .ThenInclude(u => u!.StaffProfile)
             .Include(e => e.DepartmentReferrals)
                 .ThenInclude(r => r.FromDepartment)
             .Include(e => e.DepartmentReferrals)
@@ -151,6 +162,7 @@ public class CareEpisodeService : ICareEpisodeService
 
         if (appointment.CareEpisodeId.HasValue)
         {
+            await EnsurePrimaryTaskForAppointmentAsync(appointment, appointment.CareEpisodeId.Value, ct);
             return await GetEpisodeByIdAsync(appointment.CareEpisodeId.Value, ct);
         }
 
@@ -270,8 +282,9 @@ public class CareEpisodeService : ICareEpisodeService
         }
 
         var activeWorkflow = await _dbContext.ServiceWorkflows
+            .Include(w => w.Steps)
             .AsNoTracking()
-            .FirstOrDefaultAsync(w => w.DepartmentServiceId == service.DepartmentServiceId && w.IsActive, ct);
+            .FirstOrDefaultAsync(w => w.DepartmentServiceId == service.DepartmentServiceId && w.IsActive && w.ApprovalStatus == "Approved", ct);
 
         var taskCode = await GenerateTaskCodeAsync(ct);
         var task = new EpisodeServiceTask
@@ -292,6 +305,19 @@ public class CareEpisodeService : ICareEpisodeService
             CreatedAtUtc = DateTime.UtcNow
         };
 
+        if (activeWorkflow != null && activeWorkflow.Steps != null)
+        {
+            foreach (var step in activeWorkflow.Steps.OrderBy(s => s.StepOrder))
+            {
+                task.StepProgresses.Add(new EpisodeServiceTaskStepProgress
+                {
+                    StepId = step.StepId,
+                    Status = "Pending",
+                    CreatedAtUtc = DateTime.UtcNow
+                });
+            }
+        }
+
         _dbContext.EpisodeServiceTasks.Add(task);
         await _dbContext.SaveChangesAsync(ct);
 
@@ -303,30 +329,315 @@ public class CareEpisodeService : ICareEpisodeService
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.UserId == dentistUserId, ct);
 
-        var dto = new EpisodeServiceTaskDto
+        return ApiResponse<EpisodeServiceTaskDto>.Ok(MapToTaskDto(task, GetUserDisplayName(performingUser)), "Chỉ định dịch vụ bổ sung thành công.");
+    }
+
+    public async Task<ApiResponse<EpisodeServiceTaskDto>> StartServiceTaskAsync(long dentistUserId, long serviceTaskId, CancellationToken ct = default)
+    {
+        var task = await _dbContext.EpisodeServiceTasks
+            .Include(t => t.DepartmentService)
+                .ThenInclude(s => s.Department)
+            .Include(t => t.Appointment)
+            .Include(t => t.PerformingDentistUser)
+                .ThenInclude(u => u.StaffProfile)
+            .Include(t => t.StepProgresses)
+                .ThenInclude(p => p.Step)
+            .Include(t => t.CareEpisode)
+            .FirstOrDefaultAsync(t => t.ServiceTaskId == serviceTaskId, ct);
+
+        if (task == null)
+            return ApiResponse<EpisodeServiceTaskDto>.Fail("Không tìm thấy tác vụ điều trị chỉ định.");
+
+        var isAuthorized = task.PerformingDentistUserId == dentistUserId ||
+            await _dbContext.DentistDepartments.AnyAsync(dd => dd.DentistUserId == dentistUserId && dd.DepartmentId == task.DepartmentService.DepartmentId && dd.Status == "Active", ct);
+
+        if (!isAuthorized)
+            return ApiResponse<EpisodeServiceTaskDto>.Fail("Bạn không có quyền thực hiện tác vụ của chuyên khoa/bác sĩ khác.");
+
+        if (task.Status == "Completed")
+            return ApiResponse<EpisodeServiceTaskDto>.Fail("Tác vụ này đã hoàn thành, không thể bắt đầu lại.");
+
+        if (task.Status == "Cancelled")
+            return ApiResponse<EpisodeServiceTaskDto>.Fail("Tác vụ này đã bị hủy.");
+
+        // Lazy initialize steps if workflow exists but step progresses weren't seeded
+        if (task.AppliedWorkflowId.HasValue && !task.StepProgresses.Any())
         {
-            ServiceTaskId = task.ServiceTaskId,
-            TaskCode = task.TaskCode,
-            CareEpisodeId = task.CareEpisodeId,
-            AppointmentId = task.AppointmentId,
-            AppointmentCode = appointment.AppointmentCode,
-            DepartmentServiceId = service.DepartmentServiceId,
-            ServiceName = service.ServiceName,
-            DepartmentId = service.DepartmentId,
-            DepartmentName = service.Department.Name,
-            PerformingDentistUserId = dentistUserId,
-            PerformingDentistName = GetUserDisplayName(performingUser),
-            Status = task.Status,
-            Quantity = task.Quantity,
-            UnitPriceSnapshot = task.UnitPriceSnapshot,
-            EstimatedDurationMinutes = task.EstimatedDurationMinutes,
-            AppliedWorkflowId = task.AppliedWorkflowId,
-            AppliedWorkflowVersion = task.AppliedWorkflowVersion,
-            PlannedAtUtc = task.PlannedAtUtc,
-            Notes = task.Notes
+            var wfSteps = await _dbContext.ServiceWorkflowSteps
+                .Where(s => s.WorkflowId == task.AppliedWorkflowId.Value)
+                .OrderBy(s => s.StepOrder)
+                .ToListAsync(ct);
+
+            foreach (var step in wfSteps)
+            {
+                var prog = new EpisodeServiceTaskStepProgress
+                {
+                    ServiceTaskId = task.ServiceTaskId,
+                    StepId = step.StepId,
+                    Status = "Pending",
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+                _dbContext.EpisodeServiceTaskStepProgresses.Add(prog);
+                task.StepProgresses.Add(prog);
+            }
+        }
+
+        task.Status = "InProgress";
+        task.StartedAtUtc ??= DateTime.UtcNow;
+        task.UpdatedAtUtc = DateTime.UtcNow;
+
+        var firstStep = task.StepProgresses.OrderBy(p => p.Step?.StepOrder ?? 0).FirstOrDefault();
+        if (firstStep != null && firstStep.Status == "Pending")
+        {
+            firstStep.Status = "InProgress";
+            firstStep.StartedAtUtc = DateTime.UtcNow;
+        }
+
+        await _dbContext.SaveChangesAsync(ct);
+        _logger.LogInformation("Bác sĩ {DentistUserId} đã bắt đầu tác vụ {TaskCode} ({ServiceName})", dentistUserId, task.TaskCode, task.DepartmentService.ServiceName);
+
+        return ApiResponse<EpisodeServiceTaskDto>.Ok(MapToTaskDto(task), "Bắt đầu thực hiện dịch vụ thành công.");
+    }
+
+    public async Task<ApiResponse<EpisodeTaskStepProgressDto>> CompleteTaskStepAsync(
+        long dentistUserId,
+        long serviceTaskId,
+        long stepId,
+        CompleteTaskStepRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null)
+            return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Dữ liệu xác nhận bước không hợp lệ.");
+
+        var task = await _dbContext.EpisodeServiceTasks
+            .Include(t => t.DepartmentService)
+                .ThenInclude(s => s.Department)
+            .Include(t => t.Appointment)
+            .Include(t => t.StepProgresses)
+                .ThenInclude(p => p.Step)
+            .FirstOrDefaultAsync(t => t.ServiceTaskId == serviceTaskId, ct);
+
+        if (task == null)
+            return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Không tìm thấy tác vụ điều trị chỉ định.");
+
+        var isAuthorized = task.PerformingDentistUserId == dentistUserId ||
+            await _dbContext.DentistDepartments.AnyAsync(dd => dd.DentistUserId == dentistUserId && dd.DepartmentId == task.DepartmentService.DepartmentId && dd.Status == "Active", ct);
+
+        if (!isAuthorized)
+            return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Bạn không có quyền cập nhật tiến độ tác vụ của bác sĩ khác.");
+
+        if (task.Status == "Completed")
+            return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Tác vụ này đã hoàn thành.");
+
+        if (task.Status == "Cancelled")
+            return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Tác vụ này đã bị hủy.");
+
+        if (task.Status == "Planned")
+        {
+            task.Status = "InProgress";
+            task.StartedAtUtc = DateTime.UtcNow;
+            task.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        var progress = task.StepProgresses.FirstOrDefault(p => p.StepId == stepId);
+        var stepDef = progress?.Step ?? await _dbContext.ServiceWorkflowSteps.FirstOrDefaultAsync(s => s.StepId == stepId, ct);
+
+        if (stepDef == null)
+            return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Không tìm thấy định nghĩa bước quy trình.");
+
+        if (progress == null)
+        {
+            progress = new EpisodeServiceTaskStepProgress
+            {
+                ServiceTaskId = serviceTaskId,
+                StepId = stepId,
+                Status = "Pending",
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            _dbContext.EpisodeServiceTaskStepProgresses.Add(progress);
+            task.StepProgresses.Add(progress);
+        }
+
+        var inputVal = request.ResultValue?.Trim();
+        if (stepDef.IsRequired && stepDef.ExpectedDataType != "None" && string.IsNullOrWhiteSpace(inputVal))
+        {
+            return ApiResponse<EpisodeTaskStepProgressDto>.Fail($"Bước '{stepDef.StepName}' yêu cầu nhập dữ liệu kết quả ({stepDef.ExpectedDataType}).");
+        }
+
+        if (!string.IsNullOrWhiteSpace(inputVal))
+        {
+            switch (stepDef.ExpectedDataType?.ToUpperInvariant())
+            {
+                case "NUMBER":
+                    if (!decimal.TryParse(inputVal, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _) &&
+                        !decimal.TryParse(inputVal, out _))
+                    {
+                        return ApiResponse<EpisodeTaskStepProgressDto>.Fail($"Dữ liệu bước '{stepDef.StepName}' phải là định dạng số hợp lệ.");
+                    }
+                    break;
+                case "BOOLEAN":
+                    var lower = inputVal.ToLowerInvariant();
+                    if (lower != "true" && lower != "false" && lower != "1" && lower != "0" && lower != "đạt" && lower != "yes" && lower != "no")
+                    {
+                        return ApiResponse<EpisodeTaskStepProgressDto>.Fail($"Dữ liệu bước '{stepDef.StepName}' phải là xác nhận Có/Không (Boolean).");
+                    }
+                    break;
+            }
+        }
+
+        var reqText = (stepDef.CompletionRequirement ?? string.Empty).ToLowerInvariant();
+        var stepNameLower = stepDef.StepName.ToLowerInvariant();
+        if (reqText.Contains("x-quang") || reqText.Contains("xray") || reqText.Contains("chụp phim") ||
+            stepNameLower.Contains("x-quang") || stepNameLower.Contains("xray") || stepNameLower.Contains("chụp phim"))
+        {
+            var hasXrayResult = await _dbContext.DiagnosticResults
+                .Include(r => r.DiagnosticOrder)
+                .AnyAsync(r => (r.DiagnosticOrder.AppointmentId == task.AppointmentId || r.DiagnosticOrder.PatientUserId == task.Appointment.PatientUserId) &&
+                               (r.DiagnosticOrder.Status == "Completed" || r.IsReviewed || !string.IsNullOrWhiteSpace(r.FileUrl)), ct)
+                || !string.IsNullOrWhiteSpace(request.EvidenceUrl);
+
+            if (!hasXrayResult)
+            {
+                return ApiResponse<EpisodeTaskStepProgressDto>.Fail(
+                    $"Bước '{stepDef.StepName}' yêu cầu có kết quả chụp phim/X-quang hoàn tất trước khi xác nhận hoàn thành.");
+            }
+        }
+
+        progress.Status = "Completed";
+        progress.ResultValue = inputVal;
+        progress.Notes = request.Notes?.Trim();
+        progress.EvidenceUrl = request.EvidenceUrl?.Trim();
+        progress.CompletedByDentistUserId = dentistUserId;
+        progress.CompletedAtUtc = DateTime.UtcNow;
+        progress.UpdatedAtUtc = DateTime.UtcNow;
+
+        task.UpdatedAtUtc = DateTime.UtcNow;
+
+        var nextStep = task.StepProgresses
+            .Where(p => (p.Step?.StepOrder ?? 0) > stepDef.StepOrder && p.Status == "Pending")
+            .OrderBy(p => p.Step?.StepOrder ?? 0)
+            .FirstOrDefault();
+
+        if (nextStep != null)
+        {
+            nextStep.Status = "InProgress";
+            nextStep.StartedAtUtc ??= DateTime.UtcNow;
+            nextStep.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        await _dbContext.SaveChangesAsync(ct);
+        _logger.LogInformation("Bác sĩ {DentistUserId} đã hoàn thành bước #{StepOrder} ({StepName}) cho tác vụ {TaskCode}",
+            dentistUserId, stepDef.StepOrder, stepDef.StepName, task.TaskCode);
+
+        var performingUser = await _dbContext.UserAccounts
+            .Include(u => u.StaffProfile)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.UserId == dentistUserId, ct);
+
+        var dto = new EpisodeTaskStepProgressDto
+        {
+            ProgressId = progress.ProgressId,
+            ServiceTaskId = progress.ServiceTaskId,
+            StepId = progress.StepId,
+            StepName = stepDef.StepName,
+            Description = stepDef.Description,
+            StepOrder = stepDef.StepOrder,
+            IsRequired = stepDef.IsRequired,
+            CompletionRequirement = stepDef.CompletionRequirement,
+            ExpectedDataType = stepDef.ExpectedDataType,
+            Status = progress.Status,
+            ResultValue = progress.ResultValue,
+            Notes = progress.Notes,
+            EvidenceUrl = progress.EvidenceUrl,
+            CompletedByDentistUserId = dentistUserId,
+            CompletedByDentistName = GetUserDisplayName(performingUser),
+            StartedAtUtc = progress.StartedAtUtc,
+            CompletedAtUtc = progress.CompletedAtUtc
         };
 
-        return ApiResponse<EpisodeServiceTaskDto>.Ok(dto, "Chỉ định dịch vụ bổ sung thành công.");
+        return ApiResponse<EpisodeTaskStepProgressDto>.Ok(dto, $"Đã xác nhận hoàn thành bước '{stepDef.StepName}'.");
+    }
+
+    public async Task<ApiResponse<EpisodeServiceTaskDto>> CompleteServiceTaskAsync(
+        long dentistUserId,
+        long serviceTaskId,
+        CompleteServiceTaskRequest request,
+        CancellationToken ct = default)
+    {
+        var task = await _dbContext.EpisodeServiceTasks
+            .Include(t => t.DepartmentService)
+                .ThenInclude(s => s.Department)
+            .Include(t => t.Appointment)
+            .Include(t => t.PerformingDentistUser)
+                .ThenInclude(u => u.StaffProfile)
+            .Include(t => t.StepProgresses)
+                .ThenInclude(p => p.Step)
+            .Include(t => t.CareEpisode)
+            .FirstOrDefaultAsync(t => t.ServiceTaskId == serviceTaskId, ct);
+
+        if (task == null)
+            return ApiResponse<EpisodeServiceTaskDto>.Fail("Không tìm thấy tác vụ điều trị chỉ định.");
+
+        var isAuthorized = task.PerformingDentistUserId == dentistUserId ||
+            await _dbContext.DentistDepartments.AnyAsync(dd => dd.DentistUserId == dentistUserId && dd.DepartmentId == task.DepartmentService.DepartmentId && dd.Status == "Active", ct);
+
+        if (!isAuthorized)
+            return ApiResponse<EpisodeServiceTaskDto>.Fail("Bạn không có quyền hoàn thành tác vụ của bác sĩ khác.");
+
+        if (task.Status == "Completed")
+            return ApiResponse<EpisodeServiceTaskDto>.Ok(MapToTaskDto(task), "Tác vụ đã được hoàn thành trước đó.");
+
+        if (task.Status == "Cancelled")
+            return ApiResponse<EpisodeServiceTaskDto>.Fail("Tác vụ này đã bị hủy.");
+
+        var requiredIncompleteSteps = task.StepProgresses
+            .Where(p => (p.Step?.IsRequired ?? true) && p.Status != "Completed")
+            .OrderBy(p => p.Step?.StepOrder ?? 0)
+            .ToList();
+
+        if (requiredIncompleteSteps.Any())
+        {
+            var firstIncomplete = requiredIncompleteSteps.First();
+            return ApiResponse<EpisodeServiceTaskDto>.Fail(
+                $"Chưa thể hoàn thành dịch vụ. Bước bắt buộc số {firstIncomplete.Step?.StepOrder}: '{firstIncomplete.Step?.StepName}' chưa được hoàn thành.");
+        }
+
+        task.Status = "Completed";
+        task.CompletedAtUtc = DateTime.UtcNow;
+        task.ClinicalRecordId = request?.ClinicalRecordId ?? task.ClinicalRecordId;
+        if (!string.IsNullOrWhiteSpace(request?.Notes))
+        {
+            task.Notes = request.Notes.Trim();
+        }
+        task.UpdatedAtUtc = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(ct);
+        _logger.LogInformation("Bác sĩ {DentistUserId} đã hoàn thành toàn bộ dịch vụ cho tác vụ {TaskCode} ({ServiceName})",
+            dentistUserId, task.TaskCode, task.DepartmentService.ServiceName);
+
+        return ApiResponse<EpisodeServiceTaskDto>.Ok(MapToTaskDto(task), $"Đã hoàn thành dịch vụ '{task.DepartmentService.ServiceName}'.");
+    }
+
+    public async Task<ApiResponse<bool>> ValidateAppointmentTasksCompletedAsync(long appointmentId, CancellationToken ct = default)
+    {
+        var tasks = await _dbContext.EpisodeServiceTasks
+            .Include(t => t.DepartmentService)
+            .Include(t => t.StepProgresses)
+                .ThenInclude(p => p.Step)
+            .Where(t => t.AppointmentId == appointmentId && t.Status != "Cancelled")
+            .ToListAsync(ct);
+
+        if (!tasks.Any())
+            return ApiResponse<bool>.Ok(true, "Ca khám không có tác vụ nào cần xử lý.");
+
+        var incompleteTasks = tasks.Where(t => t.Status != "Completed").ToList();
+        if (incompleteTasks.Any())
+        {
+            var names = string.Join(", ", incompleteTasks.Select(t => t.DepartmentService?.ServiceName ?? t.TaskCode));
+            return ApiResponse<bool>.Fail($"Ca khám còn các dịch vụ chưa hoàn thành: {names}. Vui lòng hoàn thành các dịch vụ trước khi kết thúc ca khám.");
+        }
+
+        return ApiResponse<bool>.Ok(true, "Tất cả các dịch vụ thuộc ca khám đã hoàn thành.");
     }
 
     public async Task<ApiResponse<EpisodeServiceTaskDto>> UpdateServiceTaskStatusAsync(long dentistUserId, long serviceTaskId, UpdateServiceTaskStatusRequest request, CancellationToken ct = default)
@@ -340,6 +651,8 @@ public class CareEpisodeService : ICareEpisodeService
             .Include(t => t.Appointment)
             .Include(t => t.PerformingDentistUser)
                 .ThenInclude(u => u.StaffProfile)
+            .Include(t => t.StepProgresses)
+                .ThenInclude(p => p.Step)
             .Include(t => t.CareEpisode)
             .FirstOrDefaultAsync(t => t.ServiceTaskId == serviceTaskId, ct);
 
@@ -360,6 +673,18 @@ public class CareEpisodeService : ICareEpisodeService
         }
         else if (string.Equals(targetStatus, "Completed", StringComparison.OrdinalIgnoreCase))
         {
+            var requiredIncompleteSteps = task.StepProgresses
+                .Where(p => (p.Step?.IsRequired ?? true) && p.Status != "Completed")
+                .OrderBy(p => p.Step?.StepOrder ?? 0)
+                .ToList();
+
+            if (requiredIncompleteSteps.Any())
+            {
+                var firstIncomplete = requiredIncompleteSteps.First();
+                return ApiResponse<EpisodeServiceTaskDto>.Fail(
+                    $"Chưa thể hoàn thành dịch vụ. Bước bắt buộc số {firstIncomplete.Step?.StepOrder}: '{firstIncomplete.Step?.StepName}' chưa được hoàn thành.");
+            }
+
             task.Status = "Completed";
             task.CompletedAtUtc = DateTime.UtcNow;
             task.UpdatedAtUtc = DateTime.UtcNow;
@@ -381,35 +706,7 @@ public class CareEpisodeService : ICareEpisodeService
         _logger.LogInformation("Tác vụ {TaskCode} đã cập nhật sang trạng thái {Status} bởi bác sĩ {DentistUserId}",
             task.TaskCode, task.Status, dentistUserId);
 
-        var dto = new EpisodeServiceTaskDto
-        {
-            ServiceTaskId = task.ServiceTaskId,
-            TaskCode = task.TaskCode,
-            CareEpisodeId = task.CareEpisodeId,
-            AppointmentId = task.AppointmentId,
-            AppointmentCode = task.Appointment.AppointmentCode,
-            DepartmentServiceId = task.DepartmentServiceId,
-            ServiceName = task.DepartmentService.ServiceName,
-            DepartmentId = task.DepartmentService.DepartmentId,
-            DepartmentName = task.DepartmentService.Department.Name,
-            PerformingDentistUserId = task.PerformingDentistUserId,
-            PerformingDentistName = GetUserDisplayName(task.PerformingDentistUser),
-            Status = task.Status,
-            Quantity = task.Quantity,
-            UnitPriceSnapshot = task.UnitPriceSnapshot,
-            EstimatedDurationMinutes = task.EstimatedDurationMinutes,
-            PlannedAtUtc = task.PlannedAtUtc,
-            StartedAtUtc = task.StartedAtUtc,
-            CompletedAtUtc = task.CompletedAtUtc,
-            CancelledAtUtc = task.CancelledAtUtc,
-            CancellationReason = task.CancellationReason,
-            ClinicalRecordId = task.ClinicalRecordId,
-            AppliedWorkflowId = task.AppliedWorkflowId,
-            AppliedWorkflowVersion = task.AppliedWorkflowVersion,
-            Notes = task.Notes
-        };
-
-        return ApiResponse<EpisodeServiceTaskDto>.Ok(dto, "Cập nhật trạng thái dịch vụ thành công.");
+        return ApiResponse<EpisodeServiceTaskDto>.Ok(MapToTaskDto(task), "Cập nhật trạng thái dịch vụ thành công.");
     }
 
     #endregion
@@ -773,11 +1070,12 @@ public class CareEpisodeService : ICareEpisodeService
             if (srv != null)
             {
                 var activeWf = await _dbContext.ServiceWorkflows
+                    .Include(w => w.Steps)
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(w => w.DepartmentServiceId == srv.DepartmentServiceId && w.IsActive, ct);
+                    .FirstOrDefaultAsync(w => w.DepartmentServiceId == srv.DepartmentServiceId && w.IsActive && w.ApprovalStatus == "Approved", ct);
 
                 var taskCode = await GenerateTaskCodeAsync(ct);
-                _dbContext.EpisodeServiceTasks.Add(new EpisodeServiceTask
+                var bTask = new EpisodeServiceTask
                 {
                     TaskCode = taskCode,
                     CareEpisodeId = episodeId.Value,
@@ -791,8 +1089,24 @@ public class CareEpisodeService : ICareEpisodeService
                     AppliedWorkflowId = activeWf?.WorkflowId,
                     AppliedWorkflowVersion = activeWf?.Version,
                     PlannedAtUtc = DateTime.UtcNow,
-                    Notes = $"Dịch vụ chỉ định theo ca chuyển tiếp #{referral.ReferralId}"
-                });
+                    Notes = $"Dịch vụ chỉ định theo ca chuyển tiếp #{referral.ReferralId}",
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+
+                if (activeWf != null && activeWf.Steps != null)
+                {
+                    foreach (var step in activeWf.Steps.OrderBy(s => s.StepOrder))
+                    {
+                        bTask.StepProgresses.Add(new EpisodeServiceTaskStepProgress
+                        {
+                            StepId = step.StepId,
+                            Status = "Pending",
+                            CreatedAtUtc = DateTime.UtcNow
+                        });
+                    }
+                }
+
+                _dbContext.EpisodeServiceTasks.Add(bTask);
             }
         }
 
@@ -1333,33 +1647,10 @@ public class CareEpisodeService : ICareEpisodeService
             ReasonForVisit = a.ReasonForVisit
         }).OrderBy(a => a.AppointmentId).ToList();
 
-        var serviceTasks = ep.ServiceTasks.Select(t => new EpisodeServiceTaskDto
-        {
-            ServiceTaskId = t.ServiceTaskId,
-            TaskCode = t.TaskCode,
-            CareEpisodeId = t.CareEpisodeId,
-            AppointmentId = t.AppointmentId,
-            AppointmentCode = t.Appointment?.AppointmentCode ?? string.Empty,
-            DepartmentServiceId = t.DepartmentServiceId,
-            ServiceName = t.DepartmentService?.ServiceName ?? string.Empty,
-            DepartmentId = t.DepartmentService?.DepartmentId ?? 0,
-            DepartmentName = t.DepartmentService?.Department?.Name ?? string.Empty,
-            PerformingDentistUserId = t.PerformingDentistUserId,
-            PerformingDentistName = GetUserDisplayName(t.PerformingDentistUser),
-            Status = t.Status,
-            Quantity = t.Quantity,
-            UnitPriceSnapshot = t.UnitPriceSnapshot,
-            EstimatedDurationMinutes = t.EstimatedDurationMinutes,
-            PlannedAtUtc = t.PlannedAtUtc,
-            StartedAtUtc = t.StartedAtUtc,
-            CompletedAtUtc = t.CompletedAtUtc,
-            CancelledAtUtc = t.CancelledAtUtc,
-            CancellationReason = t.CancellationReason,
-            ClinicalRecordId = t.ClinicalRecordId,
-            AppliedWorkflowId = t.AppliedWorkflowId,
-            AppliedWorkflowVersion = t.AppliedWorkflowVersion,
-            Notes = t.Notes
-        }).OrderBy(t => t.ServiceTaskId).ToList();
+        var serviceTasks = ep.ServiceTasks
+            .Select(t => MapToTaskDto(t))
+            .OrderBy(t => t.ServiceTaskId)
+            .ToList();
 
         var referrals = ep.DepartmentReferrals.Select(r => new CareEpisodeReferralSummaryDto
         {
@@ -1509,6 +1800,116 @@ public class CareEpisodeService : ICareEpisodeService
             return $"{words[0][0]}{words[1][0]}".ToUpperInvariant();
 
         return deptName.Length >= 3 ? deptName.Substring(0, 3).ToUpperInvariant() : $"D{deptId ?? 1}";
+    }
+
+    private async Task EnsurePrimaryTaskForAppointmentAsync(Appointment appointment, long episodeId, CancellationToken ct)
+    {
+        if (!appointment.RequestedServiceId.HasValue) return;
+
+        var hasExistingTask = await _dbContext.EpisodeServiceTasks.AnyAsync(t => t.AppointmentId == appointment.AppointmentId, ct);
+        if (hasExistingTask) return;
+
+        var srv = await _dbContext.DepartmentServices
+            .Include(s => s.Department)
+            .FirstOrDefaultAsync(s => s.DepartmentServiceId == appointment.RequestedServiceId.Value && s.Status == "Active", ct);
+
+        if (srv == null) return;
+
+        var activeWf = await _dbContext.ServiceWorkflows
+            .Include(w => w.Steps)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.DepartmentServiceId == srv.DepartmentServiceId && w.IsActive && w.ApprovalStatus == "Approved", ct);
+
+        var taskCode = await GenerateTaskCodeAsync(ct);
+        var dentistId = appointment.AssignedDentistUserId ?? appointment.RequestedDentistUserId ?? 0;
+        var initTask = new EpisodeServiceTask
+        {
+            TaskCode = taskCode,
+            CareEpisodeId = episodeId,
+            AppointmentId = appointment.AppointmentId,
+            DepartmentServiceId = srv.DepartmentServiceId,
+            PerformingDentistUserId = dentistId,
+            Status = "Planned",
+            Quantity = 1,
+            UnitPriceSnapshot = srv.Price,
+            EstimatedDurationMinutes = srv.DurationMinutes ?? 30,
+            AppliedWorkflowId = activeWf?.WorkflowId,
+            AppliedWorkflowVersion = activeWf?.Version,
+            PlannedAtUtc = DateTime.UtcNow,
+            Notes = $"Dịch vụ ban đầu của ca khám #{appointment.AppointmentCode}",
+            CreatedAtUtc = DateTime.UtcNow
+        };
+
+        if (activeWf != null && activeWf.Steps != null)
+        {
+            foreach (var step in activeWf.Steps.OrderBy(s => s.StepOrder))
+            {
+                initTask.StepProgresses.Add(new EpisodeServiceTaskStepProgress
+                {
+                    StepId = step.StepId,
+                    Status = "Pending",
+                    CreatedAtUtc = DateTime.UtcNow
+                });
+            }
+        }
+
+        _dbContext.EpisodeServiceTasks.Add(initTask);
+        await _dbContext.SaveChangesAsync(ct);
+    }
+
+    private static EpisodeServiceTaskDto MapToTaskDto(EpisodeServiceTask t, string? performingDentistName = null)
+    {
+        var steps = t.StepProgresses?
+            .OrderBy(p => p.Step?.StepOrder ?? 0)
+            .Select(p => new EpisodeTaskStepProgressDto
+            {
+                ProgressId = p.ProgressId,
+                ServiceTaskId = p.ServiceTaskId,
+                StepId = p.StepId,
+                StepName = p.Step?.StepName ?? string.Empty,
+                Description = p.Step?.Description,
+                StepOrder = p.Step?.StepOrder ?? 0,
+                IsRequired = p.Step?.IsRequired ?? true,
+                CompletionRequirement = p.Step?.CompletionRequirement,
+                ExpectedDataType = p.Step?.ExpectedDataType ?? "None",
+                Status = p.Status,
+                ResultValue = p.ResultValue,
+                Notes = p.Notes,
+                EvidenceUrl = p.EvidenceUrl,
+                CompletedByDentistUserId = p.CompletedByDentistUserId,
+                CompletedByDentistName = p.CompletedByDentistUser?.StaffProfile?.FullName ?? p.CompletedByDentistUser?.Email,
+                StartedAtUtc = p.StartedAtUtc,
+                CompletedAtUtc = p.CompletedAtUtc
+            }).ToList() ?? new List<EpisodeTaskStepProgressDto>();
+
+        return new EpisodeServiceTaskDto
+        {
+            ServiceTaskId = t.ServiceTaskId,
+            TaskCode = t.TaskCode,
+            CareEpisodeId = t.CareEpisodeId,
+            AppointmentId = t.AppointmentId,
+            AppointmentCode = t.Appointment?.AppointmentCode ?? string.Empty,
+            DepartmentServiceId = t.DepartmentServiceId,
+            ServiceName = t.DepartmentService?.ServiceName ?? string.Empty,
+            DepartmentId = t.DepartmentService?.DepartmentId ?? 0,
+            DepartmentName = t.DepartmentService?.Department?.Name ?? string.Empty,
+            PerformingDentistUserId = t.PerformingDentistUserId,
+            PerformingDentistName = performingDentistName ?? GetUserDisplayName(t.PerformingDentistUser),
+            Status = t.Status,
+            Quantity = t.Quantity,
+            UnitPriceSnapshot = t.UnitPriceSnapshot,
+            EstimatedDurationMinutes = t.EstimatedDurationMinutes,
+            PlannedAtUtc = t.PlannedAtUtc,
+            StartedAtUtc = t.StartedAtUtc,
+            CompletedAtUtc = t.CompletedAtUtc,
+            CancelledAtUtc = t.CancelledAtUtc,
+            CancellationReason = t.CancellationReason,
+            ClinicalRecordId = t.ClinicalRecordId,
+            AppliedWorkflowId = t.AppliedWorkflowId,
+            AppliedWorkflowVersion = t.AppliedWorkflowVersion,
+            StepProgresses = steps,
+            Notes = t.Notes
+        };
     }
 
     #endregion

@@ -31,6 +31,11 @@ public class DentistMedicalRecordIndexViewModel
     public PrescriptionDto? ActivePrescription { get; set; }
     public List<MedicineDispensationDto> Dispensations { get; set; } = new();
     public List<MedicineDto> AvailableMedicines { get; set; } = new();
+
+    // CareEpisode & Service-Specific Workflow Tasks (Task Progress, Multi-session, Doctor Handoff)
+    public CareEpisodeDto? ActiveCareEpisode { get; set; }
+    public List<EpisodeServiceTaskDto> ServiceTasks { get; set; } = new();
+    public List<CareEpisodeReferralSummaryDto> InternalReferrals { get; set; } = new();
 }
 
 public class CreateClinicalEntryFormModel

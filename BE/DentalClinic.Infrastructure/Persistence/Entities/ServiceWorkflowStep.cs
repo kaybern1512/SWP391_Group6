@@ -25,4 +25,6 @@ public partial class ServiceWorkflowStep
     public DateTime? UpdatedAt { get; set; }
 
     public virtual ServiceWorkflow Workflow { get; set; } = null!;
+
+    public virtual System.Collections.Generic.ICollection<EpisodeServiceTaskStepProgress> StepProgresses { get; set; } = new System.Collections.Generic.List<EpisodeServiceTaskStepProgress>();
 }
