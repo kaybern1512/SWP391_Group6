@@ -111,6 +111,7 @@ VALUES
 (48, N'patient6@dentalcare.com', N'0912345676', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-10-15T13:21:43.8127730' AS DateTime2), NULL, NULL, 0, NULL, CAST(N'2026-10-15T13:21:43.8127730' AS DateTime2), NULL),
 (49, N'patient7@dentalcare.com', N'0912345677', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-10-15T13:21:43.8127730' AS DateTime2), NULL, NULL, 0, NULL, CAST(N'2026-10-15T13:21:43.8127730' AS DateTime2), NULL),
 (50, N'patient8@dentalcare.com', N'0912345678', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Patient', N'Active', CAST(N'2026-10-15T13:21:43.8127730' AS DateTime2), NULL, NULL, 0, NULL, CAST(N'2026-10-15T13:21:43.8127730' AS DateTime2), NULL),
+(51, N'dentist7@dentalcare.com', N'0901234507', N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Dentist', N'Active', CAST(N'2026-10-15T13:21:43.8127730' AS DateTime2), NULL, NULL, 0, NULL, CAST(N'2026-10-15T13:21:43.8127730' AS DateTime2), NULL),
 (103, N'receptionist4_83b74380fc3341f9abdc124e3990ee91@dentalcare.com', NULL, N'AQAAAAIAAYagAAAAEKNFVvPEaboNSEWXqY2VOK4lrNKfYe8Thy5fY9D6SUEuneWC6dHsBtLz6zm1dG+ohw==', N'Receptionist', N'Active', NULL, NULL, NULL, 0, NULL, CAST(N'2026-11-09T18:38:06.2412716' AS DateTime2), NULL),
 (140, N'e2e.dentist.93dcc792bf8142918ce9a688f34254db@dentalcare.com', N'0968930983', N'HASHED_Password123!', N'Dentist', N'Active', CAST(N'2026-11-11T13:27:15.7322873' AS DateTime2), NULL, NULL, 0, NULL, CAST(N'2026-11-11T13:27:15.7322868' AS DateTime2), NULL);
 GO
@@ -1065,6 +1066,7 @@ VALUES
 (45, N'EMP-REC-003', N'Lễ Tân Trần Minh Quân (CSKH)', N'Active', CAST(N'2026-10-15T13:21:43.8127730' AS DateTime2), NULL),
 (46, N'EMP-DEN-005', N'BS. Hoàng Trọng Nghĩa', N'Active', CAST(N'2026-10-15T13:21:43.8127730' AS DateTime2), NULL),
 (47, N'EMP-DEN-006', N'BS. Vũ Minh Tuấn', N'Active', CAST(N'2026-10-15T13:21:43.8127730' AS DateTime2), NULL),
+(51, N'EMP-DEN-007', N'BS. Đặng Quốc Khánh', N'Active', CAST(N'2026-10-15T13:21:43.8127730' AS DateTime2), NULL),
 (103, N'EMP-REC-103', N'Lễ Tân Test 103', N'Active', CAST(N'2026-11-09T18:38:06.3219702' AS DateTime2), NULL);
 GO
 
@@ -1083,7 +1085,8 @@ VALUES
 (11, N'LIC-VN-2026-MGR2', N'Thạc sĩ Chỉnh nha Thẩm mỹ', 12, N'Chuyên gia Niềng răng khay trong suốt Invisalign và Thẩm mỹ nụ cười toàn diện.', 0, NULL, NULL),
 (12, N'LIC-VN-2026-MGR4', N'Thạc sĩ Nha khoa Trẻ em', 10, N'Bác sĩ chuyên khoa Nha khoa Trẻ em và Tiền chỉnh nha can thiệp sớm cho thanh thiếu niên.', 0, NULL, NULL),
 (46, N'LIC-VN-005', N'Chuyên gia Phục hình Thẩm mỹ DSD', 9, N'Thiết kế nụ cười chuẩn tỷ lệ vàng và dán sứ Veneer thẩm mỹ cao cấp.', 0, NULL, NULL),
-(47, N'LIC-VN-006', N'Bác sĩ Nha khoa Bảo tồn', 5, N'Tận tụy, chuyên sâu lấy cao răng siêu âm và điều trị bảo tồn răng thật.', 0, NULL, NULL);
+(47, N'LIC-VN-006', N'Bác sĩ Nha khoa Bảo tồn', 5, N'Tận tụy, chuyên sâu lấy cao răng siêu âm và điều trị bảo tồn răng thật.', 0, NULL, NULL),
+(51, N'LIC-VN-007', N'Bác sĩ Chuyên khoa Chẩn đoán Hình ảnh & X-Quang Nha khoa', 8, N'Bác sĩ chuyên trách vận hành hệ thống X-quang kỹ thuật số Carestream CS 8200 3D, đọc và phân tích phim Panorama, Cephalo, CBCT.', 1, N'ATBX-2026-007', CAST(N'2028-12-31' AS Date));
 GO
 
 
@@ -2218,7 +2221,11 @@ GO
 INSERT INTO [dbo].[XrayDentistRosters] ([RosterId], [RoomId], [EquipmentId], [DentistUserId], [BackupDentistUserId], [WorkDate], [ShiftType], [StartTime], [EndTime], [Status], [Notes], [CreatedByUserId], [CreatedAtUtc], [UpdatedAtUtc])
 VALUES
 (1, 9, 1, 3, 4, CAST(N'2026-11-11' AS Date), N'Morning', CAST(N'07:30:00' AS Time), CAST(N'11:30:00' AS Time), N'Active', N'Ca sáng - BS. Trần Văn Hùng trực máy CS 8200 3D', 1, CAST(N'2026-11-11T13:27:36.7158521' AS DateTime2), NULL),
-(2, 9, 1, 6, 3, CAST(N'2026-11-11' AS Date), N'Afternoon', CAST(N'13:30:00' AS Time), CAST(N'17:30:00' AS Time), N'Active', N'Ca chiều - BS. Nguyễn Thị Phương Thảo trực máy CS 8200 3D', 1, CAST(N'2026-11-11T13:27:36.7158521' AS DateTime2), NULL);
+(2, 9, 1, 6, 3, CAST(N'2026-11-11' AS Date), N'Afternoon', CAST(N'13:30:00' AS Time), CAST(N'17:30:00' AS Time), N'Active', N'Ca chiều - BS. Nguyễn Thị Phương Thảo trực máy CS 8200 3D', 1, CAST(N'2026-11-11T13:27:36.7158521' AS DateTime2), NULL),
+(3, 9, 1, 51, 3, CAST(N'2026-11-11' AS Date), N'Evening', CAST(N'17:30:00' AS Time), CAST(N'21:00:00' AS Time), N'Active', N'Ca tối - BS. Đặng Quốc Khánh trực máy CS 8200 3D', 1, CAST(N'2026-11-11T13:27:36.7158521' AS DateTime2), NULL),
+(4, 9, 1, 51, 6, CAST(N'2026-11-12' AS Date), N'Morning', CAST(N'07:30:00' AS Time), CAST(N'11:30:00' AS Time), N'Active', N'Ca sáng - BS. Đặng Quốc Khánh trực máy CS 8200 3D', 1, CAST(N'2026-11-11T13:27:36.7158521' AS DateTime2), NULL),
+(5, 9, 1, 51, 3, CAST(N'2026-11-13' AS Date), N'Morning', CAST(N'07:30:00' AS Time), CAST(N'11:30:00' AS Time), N'Active', N'Ca sáng - BS. Đặng Quốc Khánh trực máy CS 8200 3D', 1, CAST(N'2026-11-11T13:27:36.7158521' AS DateTime2), NULL),
+(6, 9, 1, 51, 3, CAST(N'2026-11-14' AS Date), N'Custom', CAST(N'07:00:00' AS Time), CAST(N'23:59:00' AS Time), N'Active', N'Ca chuyên trách - BS. Đặng Quốc Khánh trực máy CS 8200 3D', 1, CAST(N'2026-11-11T13:27:36.7158521' AS DateTime2), NULL);
 GO
 
 SET IDENTITY_INSERT [dbo].[XrayDentistRosters] OFF;
