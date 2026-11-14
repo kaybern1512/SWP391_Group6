@@ -22,18 +22,21 @@ public class AdminService : IAdminService
     private readonly IAuditLogService _auditLogService;
     private readonly ILogger<AdminService> _logger;
     private readonly IPasswordHasherService _passwordHasher;
+    private readonly INotificationService? _notificationService;
 
     [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
     public AdminService(
         DentalClinicDbContext dbContext,
         IAuditLogService auditLogService,
         ILogger<AdminService> logger,
-        IPasswordHasherService? passwordHasher = null)
+        IPasswordHasherService? passwordHasher = null,
+        INotificationService? notificationService = null)
     {
         _dbContext = dbContext;
         _auditLogService = auditLogService;
         _logger = logger;
         _passwordHasher = passwordHasher ?? new PasswordHasherService();
+        _notificationService = notificationService;
     }
 
     // ==========================================
@@ -982,6 +985,7 @@ public class AdminService : IAdminService
     public async Task<ApiResponse> UpdateChairStatusAsync(long chairId, string status, long? adminUserId = null, CancellationToken ct = default)
     {
         var chair = await _dbContext.DentalChairs
+            .Include(c => c.Room)
             .FirstOrDefaultAsync(c => c.DentalChairId == chairId, ct);
 
         if (chair == null)
@@ -999,6 +1003,59 @@ public class AdminService : IAdminService
 
         var oldStatus = chair.Status;
         chair.Status = normalizedStatus;
+        chair.UpdatedAt = DateTime.UtcNow;
+
+        if (string.Equals(normalizedStatus, "Maintenance", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalizedStatus, "Inactive", StringComparison.OrdinalIgnoreCase))
+        {
+            var now = DateTime.UtcNow;
+            var futureAppointments = await _dbContext.AppointmentServices
+                .Where(s => s.DentalChairId == chair.DentalChairId &&
+                            (s.Status == AppointmentStatus.Confirmed || s.Status == AppointmentStatus.PendingReceptionReview || s.Status == AppointmentStatus.PendingDepartmentReview) &&
+                            s.ScheduledStart >= now)
+                .ToListAsync(ct);
+
+            foreach (var svc in futureAppointments)
+            {
+                svc.PendingActionType = "ReassignChair";
+                svc.Notes = $"{svc.Notes} | [Cảnh báo: Ghế {chair.ChairCode} chuyển {normalizedStatus}]".Trim(' ', '|');
+                svc.UpdatedAt = now;
+            }
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var receptionists = await _dbContext.UserAccounts
+                        .AsNoTracking()
+                        .Where(u => u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active)
+                        .Select(u => u.UserId)
+                        .ToListAsync(ct);
+
+                    var roomName = chair.Room?.RoomName ?? $"Phòng #{chair.RoomId}";
+                    var reasonDesc = string.Equals(normalizedStatus, "Maintenance", StringComparison.OrdinalIgnoreCase)
+                        ? "đang trong quá trình bảo trì"
+                        : "đã ngừng hoạt động";
+
+                    var msg = $"Ghế nha khoa {chair.ChairCode} tại {roomName} {reasonDesc}. Vui lòng kiểm tra và điều phối lại các lịch hẹn bị ảnh hưởng ({futureAppointments.Count} ca hẹn).";
+
+                    foreach (var recId in receptionists)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            recId,
+                            null,
+                            "ChairMaintenanceAlert",
+                            "Cảnh báo bảo trì ghế nha khoa",
+                            msg,
+                            ct);
+                    }
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to notify receptionists about chair {ChairId} status update", chairId);
+                }
+            }
+        }
 
         await _dbContext.SaveChangesAsync(ct);
 

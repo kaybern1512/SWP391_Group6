@@ -354,8 +354,15 @@
                     <div class="calendar-day-content flex-grow-1 overflow-hidden" style="max-height: 80px; overflow-y: auto;">
                         @foreach (var shift in day.Shifts)
                         {
-                            <div class="shift-pill text-truncate" title="Trực tại @shift.DepartmentName (@shift.StartTime.ToString("HH:mm") - @shift.EndTime.ToString("HH:mm"))">
-                                <i class="bi bi-clock me-1"></i><strong>@shift.StartTime.ToString("HH:mm")-@shift.EndTime.ToString("HH:mm")</strong> <span class="opacity-75">(@shift.DepartmentName)</span>
+                            var isXrayDuty = (!string.IsNullOrEmpty(shift.Note) && (shift.Note.Contains("X-quang") || shift.Note.Contains("X-ray") || shift.Note.Contains("R003"))) ||
+                                             (!string.IsNullOrEmpty(shift.DepartmentName) && shift.DepartmentName.Contains("X-quang"));
+                            <div class="shift-pill text-truncate @(isXrayDuty ? "border border-warning bg-warning bg-opacity-10 text-dark fw-bold" : "")" title="Trực tại @shift.DepartmentName (@shift.StartTime.ToString("HH:mm") - @shift.EndTime.ToString("HH:mm")) @(string.IsNullOrEmpty(shift.Note) ? "" : $"| {shift.Note}")">
+                                <i class="bi bi-clock me-1"></i><strong>@shift.StartTime.ToString("HH:mm")-@shift.EndTime.ToString("HH:mm")</strong> 
+                                <span class="opacity-75">(@shift.DepartmentName)</span>
+                                @if (isXrayDuty)
+                                {
+                                    <span class="badge bg-danger text-white ms-1 py-0 px-1" style="font-size: 0.7rem;"><i class="bi bi-radioactive"></i> X-quang</span>
+                                }
                             </div>
                         }
 
@@ -460,6 +467,10 @@
                                 </td>
                                 <td>
                                     <span class="badge bg-light text-dark border">@s.DepartmentName</span>
+                                    @if (!string.IsNullOrEmpty(s.Note) && (s.Note.Contains("X-quang") || s.Note.Contains("X-ray") || s.Note.Contains("R003")))
+                                    {
+                                        <span class="badge bg-danger text-white ms-1"><i class="bi bi-radioactive me-1"></i>Trực X-quang</span>
+                                    }
                                     @if (!string.IsNullOrEmpty(s.Note))
                                     {
                                         <div class="small text-muted mt-1">@s.Note</div>
@@ -877,12 +888,17 @@
                     ? `<span class="badge bg-success-subtle text-success border border-success-subtle">Đang lên lịch</span>`
                     : `<span class="badge bg-secondary">Đã hủy</span>`;
 
+                const isXray = (s.note && (s.note.includes("X-quang") || s.note.includes("X-ray") || s.note.includes("R003"))) ||
+                               (s.departmentName && s.departmentName.includes("X-quang"));
+                const xrayBadge = isXray ? `<span class="badge bg-danger text-white ms-1"><i class="bi bi-radioactive me-1"></i>Trực X-quang [R003]</span>` : '';
+
                 shiftsHtml += `
                     <div class="col-md-6">
-                        <div class="card border rounded-3 p-3 bg-light-subtle h-100">
+                        <div class="card border rounded-3 p-3 bg-light-subtle h-100 ${isXray ? 'border-warning' : ''}">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <span class="fw-bold text-primary fs-14">
                                     <i class="bi bi-geo-alt-fill me-1"></i>${s.departmentName || 'Chuyên khoa trực'}
+                                    ${xrayBadge}
                                 </span>
                                 ${statusBadge}
                             </div>

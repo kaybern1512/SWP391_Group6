@@ -93,6 +93,7 @@ services.AddScoped<IReceptionistCoverageService, ReceptionistCoverageService>();
         // Clinical Diagnostics & Imaging Services
         services.AddScoped<IImagingService, ImagingService>();
         services.AddScoped<IXrayRosterService, XrayRosterService>();
+        services.AddScoped<IClinicalStaffAvailabilityService, ClinicalStaffAvailabilityService>();
         services.AddHostedService<AppointmentReminderBackgroundWorker>();
         services.AddHostedService<AppointmentDisruptionBackgroundWorker>();
 

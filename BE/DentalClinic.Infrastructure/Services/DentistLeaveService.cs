@@ -24,6 +24,7 @@ public class DentistLeaveService : IDentistLeaveService
     private readonly INotificationService _notificationService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<DentistLeaveService> _logger;
+    private readonly IClinicalStaffAvailabilityService _clinicalAvailabilityService;
 
     public DentistLeaveService(
         DentalClinicDbContext dbContext,
@@ -31,7 +32,8 @@ public class DentistLeaveService : IDentistLeaveService
         IEmailService emailService,
         INotificationService notificationService,
         IConfiguration configuration,
-        ILogger<DentistLeaveService> logger)
+        ILogger<DentistLeaveService> logger,
+        IClinicalStaffAvailabilityService? clinicalAvailabilityService = null)
     {
         _dbContext = dbContext;
         _reminderService = reminderService;
@@ -39,6 +41,8 @@ public class DentistLeaveService : IDentistLeaveService
         _notificationService = notificationService;
         _configuration = configuration;
         _logger = logger;
+        _clinicalAvailabilityService = clinicalAvailabilityService
+            ?? new ClinicalStaffAvailabilityService(dbContext, Microsoft.Extensions.Logging.Abstractions.NullLogger<ClinicalStaffAvailabilityService>.Instance);
     }
 
     public async Task<ApiResponse<DentistLeaveRequestDto>> SubmitLeaveRequestAsync(
@@ -431,6 +435,7 @@ public class DentistLeaveService : IDentistLeaveService
         var isRelational = _dbContext.Database.IsRelational();
         var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
         IDisposable? lockScope = null;
+        var affectedServices = new List<DentalClinic.Infrastructure.Persistence.Entities.AppointmentService>();
 
         try
         {
@@ -439,6 +444,15 @@ public class DentistLeaveService : IDentistLeaveService
                 SqlAppLockHelper.DentistMasterKey(leave.StaffUserId)
             };
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
+
+            var (canApproveXray, xrayReason) = await _clinicalAvailabilityService.ValidateXrayShiftLeaveCoverageAsync(
+                leave.StaffUserId, leave.StartDate, leave.EndDate, leave.StartTime, leave.EndTime, ct);
+
+            if (!canApproveXray)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<DentistLeaveRequestDto>.Fail(xrayReason ?? "Không thể phê duyệt đơn nghỉ phép: Vi phạm quy định bảo đảm ca trực X-quang.");
+            }
 
             var hasInService = await _dbContext.AppointmentServices
                 .AsNoTracking()
@@ -477,7 +491,7 @@ public class DentistLeaveService : IDentistLeaveService
                 AppointmentStatus.Called
             };
 
-            var affectedServices = await _dbContext.AppointmentServices
+            affectedServices = await _dbContext.AppointmentServices
                 .Include(s => s.Appointment)
                     .ThenInclude(a => a.Patient).ThenInclude(p => p.User)
                 .Include(s => s.DepartmentService)
@@ -545,10 +559,46 @@ public class DentistLeaveService : IDentistLeaveService
                 "Đơn xin nghỉ phép đã được phê duyệt",
                 $"Đơn xin nghỉ phép của bạn từ {leave.StartDate:dd/MM/yyyy} đến {leave.EndDate:dd/MM/yyyy} đã được quản trị viên phê duyệt.",
                 ct);
+
+            var receptionists = await _dbContext.UserAccounts
+                .AsNoTracking()
+                .Where(u => u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active)
+                .Select(u => u.UserId)
+                .ToListAsync(ct);
+
+            var dentistName = dentist.StaffProfile?.FullName ?? $"Bác sĩ #{leave.StaffUserId}";
+
+            var notifiedApptIds = new HashSet<long>();
+            foreach (var svc in affectedServices)
+            {
+                var appt = svc.Appointment;
+                if (appt == null || notifiedApptIds.Contains(appt.AppointmentId)) continue;
+                notifiedApptIds.Add(appt.AppointmentId);
+
+                await _notificationService.CreateNotificationAsync(
+                    appt.PatientUserId,
+                    appt.AppointmentId,
+                    "AppointmentDisrupted",
+                    "Thông báo điều phối lại lịch khám",
+                    $"Lịch khám của bạn vào ngày {svc.ScheduledStart:dd/MM/yyyy HH\\:mm} cần được sắp xếp lại do bác sĩ phụ trách có lịch nghỉ phép đột xuất. Vui lòng liên hệ lễ tân để được hỗ trợ.",
+                    ct);
+
+                var patientIdentifier = appt.Patient?.User?.PhoneNumber ?? $"Bệnh nhân #{appt.PatientUserId}";
+                foreach (var recId in receptionists)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        recId,
+                        appt.AppointmentId,
+                        "AppointmentDisrupted",
+                        "Cảnh báo lịch khám bị gián đoạn",
+                        $"Ca khám #{appt.AppointmentId} của bệnh nhân {patientIdentifier} bị ảnh hưởng do Bác sĩ {dentistName} nghỉ phép từ {leave.StartDate:dd/MM/yyyy} đến {leave.EndDate:dd/MM/yyyy}. Vui lòng điều phối hoặc xếp lại lịch.",
+                        ct);
+                }
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to notify dentist for leave {LeaveId}", leaveRequestId);
+            _logger.LogWarning(ex, "Failed to send notifications for approved leave {LeaveId}", leaveRequestId);
         }
 
         var dto = MapToDto(leave, dentist);

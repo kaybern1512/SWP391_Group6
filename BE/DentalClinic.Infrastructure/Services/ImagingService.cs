@@ -17,11 +17,17 @@ public class ImagingService : IImagingService
 {
     private readonly DentalClinicDbContext _dbContext;
     private readonly ILogger<ImagingService> _logger;
+    private readonly INotificationService? _notificationService;
 
-    public ImagingService(DentalClinicDbContext dbContext, ILogger<ImagingService> logger)
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public ImagingService(
+        DentalClinicDbContext dbContext,
+        ILogger<ImagingService> logger,
+        INotificationService? notificationService = null)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _notificationService = notificationService;
     }
 
     public async Task<DiagnosticOrderDto> CreateDiagnosticOrderAsync(CreateDiagnosticOrderRequest request, long dentistUserId, CancellationToken ct = default)
@@ -281,6 +287,29 @@ public class ImagingService : IImagingService
         diagnostic.CompletedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);
+
+        if (_notificationService != null && diagnostic.OrderingDentistUserId > 0)
+        {
+            try
+            {
+                var appt = diagnostic.AppointmentService?.Appointment;
+                var patientName = appt?.Patient?.User?.PhoneNumber ?? $"Bệnh nhân #{appt?.PatientUserId}";
+                var apptId = appt?.AppointmentId ?? diagnostic.AppointmentServiceId;
+
+                await _notificationService.CreateNotificationAsync(
+                    diagnostic.OrderingDentistUserId,
+                    apptId,
+                    "XrayResultUploaded",
+                    "Kết quả chụp X-quang đã hoàn tất",
+                    $"Kết quả chụp X-quang ({diagnostic.ImagingType ?? "X-quang"}) của bệnh nhân {patientName} (Ca khám #{apptId}) đã hoàn tất. Vui lòng kiểm tra trên hồ sơ bệnh án.",
+                    ct);
+            }
+            catch (Exception notifEx)
+            {
+                _logger.LogWarning(notifEx, "Failed to send notification to ordering dentist {DentistId}", diagnostic.OrderingDentistUserId);
+            }
+        }
+
         return MapResultToDto(diagnostic);
     }
 
