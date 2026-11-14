@@ -30,12 +30,14 @@ DECLARE @TargetDb sysname = DB_NAME();
 
 IF @TargetDb IN (N'master', N'model', N'msdb', N'tempdb', N'DentalCare_SWP391')
 BEGIN
-    RAISERROR(N'FATAL SAFETY ERROR: Execution on database [%s] is STRICTLY PROHIBITED!', 20, 1, @TargetDb) WITH LOG;
+    RAISERROR(N'FATAL SAFETY ERROR: Execution on database [%s] is STRICTLY PROHIBITED!', 16, 1, @TargetDb);
+    RETURN;
 END;
 
-IF @TargetDb <> N'DentalCare_SWP391_Refactor_UAT'
+IF @TargetDb NOT IN (N'DentalCare_SWP391_Refactor_UAT', N'DentalCare_SWP391_Encoding_Rehearsal', N'DentalCare_SWP391_Encoding_TEST')
 BEGIN
-    RAISERROR(N'FATAL SAFETY ERROR: This repair script is strictly restricted to [DentalCare_SWP391_Refactor_UAT]. Current database is [%s]. Aborting.', 20, 1, @TargetDb) WITH LOG;
+    RAISERROR(N'FATAL SAFETY ERROR: This repair script is strictly restricted to approved UAT and Rehearsal databases. Current database is [%s]. Aborting.', 16, 1, @TargetDb);
+    RETURN;
 END;
 
 -- -------------------------------------------------------------------------------------
@@ -48,7 +50,8 @@ PRINT N'STARTING CONTROLLED VIETNAMESE ENCODING REPAIR ON: ' + @TargetDb;
 PRINT N'MODE: ' + CASE WHEN @ExecuteMode = 1 THEN N'LIVE COMMIT' ELSE N'PREVIEW ONLY (ROLLBACK)' END;
 PRINT N'=====================================================================================';
 
-BEGIN TRANSACTION;
+BEGIN TRY
+    BEGIN TRANSACTION;
 
 -- -------------------------------------------------------------------------------------
 -- 1. BACKUP CURRENT TARGET VALUES
@@ -274,15 +277,25 @@ SELECT 'StaffProfiles' AS Entity, UserId AS Id, FullName AS RepairedFullName FRO
 -- -------------------------------------------------------------------------------------
 -- 4. COMMIT OR ROLLBACK
 -- -------------------------------------------------------------------------------------
-IF @ExecuteMode = 1
-BEGIN
-    COMMIT TRANSACTION;
-    PRINT N'>>> TRANSACTION COMMITTED SUCCESSFULLY. UAT database now has clean Vietnamese.';
-END
-ELSE
-BEGIN
-    ROLLBACK TRANSACTION;
-    PRINT N'>>> PREVIEW FINISHED. TRANSACTION ROLLED BACK AS REQUESTED (@ExecuteMode = 0).';
-    PRINT N'    To apply permanently, set @ExecuteMode = 1 and re-run with explicit approval.';
-END;
+    IF @ExecuteMode = 1
+    BEGIN
+        COMMIT TRANSACTION;
+        PRINT N'>>> TRANSACTION COMMITTED SUCCESSFULLY. Database now has clean Vietnamese.';
+    END
+    ELSE
+    BEGIN
+        ROLLBACK TRANSACTION;
+        PRINT N'>>> PREVIEW FINISHED. TRANSACTION ROLLED BACK AS REQUESTED (@ExecuteMode = 0).';
+        PRINT N'    To apply permanently, set @ExecuteMode = 1 and re-run with explicit approval.';
+    END;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0
+        ROLLBACK TRANSACTION;
+
+    DECLARE @ErrMsg NVARCHAR(4000) = ERROR_MESSAGE();
+    DECLARE @ErrSev INT = ERROR_SEVERITY();
+    DECLARE @ErrState INT = ERROR_STATE();
+    RAISERROR(N'REPAIR TRANSACTION FAILED: %s', @ErrSev, @ErrState, @ErrMsg);
+END CATCH;
 GO
