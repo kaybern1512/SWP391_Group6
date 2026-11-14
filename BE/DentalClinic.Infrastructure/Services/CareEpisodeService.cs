@@ -1036,9 +1036,13 @@ public class CareEpisodeService : ICareEpisodeService
         var existingInvoice = appointment.Invoice;
         var discountAmount = existingInvoice?.DiscountAmount ?? 0m;
         var totalAmount = existingInvoice?.FinalAmount ?? Math.Max(0m, subTotal - discountAmount);
-        var paidAmount = existingInvoice != null && existingInvoice.Status == "Paid"
-            ? existingInvoice.FinalAmount
-            : (existingInvoice?.Payments.Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount) ?? 0m);
+        decimal paidAmount = 0m;
+        if (existingInvoice != null)
+        {
+            var incoming = existingInvoice.Payments.Where(p => p.Status == "Successful" && p.PaymentType != "Refund").Sum(p => p.Amount);
+            var refunded = existingInvoice.Payments.Where(p => p.Status == "Successful" && p.PaymentType == "Refund").Sum(p => p.Amount);
+            paidAmount = Math.Max(0m, incoming - refunded);
+        }
 
         var summary = new ConsolidatedEpisodeBillingSummaryDto
         {
@@ -1544,9 +1548,9 @@ public class CareEpisodeService : ICareEpisodeService
 
     private static InvoiceDto MapInvoiceToDto(Invoice invoice, Appointment appointment, string? generatedByName)
     {
-        var paidAmount = invoice.Status == "Paid"
-            ? invoice.FinalAmount
-            : invoice.Payments.Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount);
+        var incoming = invoice.Payments.Where(p => p.Status == "Successful" && p.PaymentType != "Refund").Sum(p => p.Amount);
+        var refunded = invoice.Payments.Where(p => p.Status == "Successful" && p.PaymentType == "Refund").Sum(p => p.Amount);
+        var paidAmount = Math.Max(0m, incoming - refunded);
 
         return new InvoiceDto
         {

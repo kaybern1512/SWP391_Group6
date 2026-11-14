@@ -1325,7 +1325,7 @@ public class SqlServerRefactorIntegrationTests
         Assert.False(overRefundRes.Success);
         Assert.Contains("vượt quá số tiền thực tế có thể hoàn", overRefundRes.Message);
 
-        // 7e. Remaining Refund (1,200,000) -> Invoice becomes Cancelled
+        // 7e. Remaining Refund (1,200,000) -> Net paid becomes 0, Invoice status becomes Unpaid (accounting integrity)
         var refundReq2 = new ProcessRefundRequest
         {
             InvoiceId = invId,
@@ -1335,7 +1335,21 @@ public class SqlServerRefactorIntegrationTests
         };
         var refundRes2 = await billingService.ProcessRefundAsync(fixture.receptionistId, refundReq2);
         Assert.True(refundRes2.Success);
-        Assert.Equal("Cancelled", refundRes2.Data!.Status);
+        Assert.Equal("Unpaid", refundRes2.Data!.Status);
+        Assert.Equal(0m, refundRes2.Data!.PaidAmount);
+        Assert.Equal(1700000m, refundRes2.Data!.RemainingAmount);
+
+        // 7f. Verify subsequent payment can be made now that invoice is Unpaid (not blocked by Cancelled)
+        var rePayReq = new ProcessPaymentRequest
+        {
+            InvoiceId = invId,
+            Amount = 1700000m,
+            Method = "Cash",
+            TransactionReference = "REPAY-003"
+        };
+        var rePayRes = await billingService.ProcessPaymentAsync(fixture.receptionistId, rePayReq);
+        Assert.True(rePayRes.Success);
+        Assert.Equal("Paid", rePayRes.Data!.Status);
 
         var allRefunds = await db.Payments.Where(p => p.InvoiceId == invId && p.PaymentType == "Refund").ToListAsync();
         Assert.Equal(2, allRefunds.Count);

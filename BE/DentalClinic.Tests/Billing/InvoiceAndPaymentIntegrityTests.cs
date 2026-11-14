@@ -378,4 +378,394 @@ public class InvoiceAndPaymentIntegrityTests
     }
 
     #endregion
+
+    #region TEST GROUP 4D: Refund Lifecycle, Net Payment & Financial Integrity
+
+    [Fact]
+    public async Task Test4_1_PartialRefund_RecalculatesNetPaidAndStatus_PartiallyPaid()
+    {
+        var db = CreateInMemoryDbContext();
+        await SeedBillingFixtureAsync(db);
+
+        var appt = new Appointment { AppointmentId = 110, PatientUserId = 2001, Status = AppointmentStatus.InService, CreatedAt = DateTime.UtcNow };
+        var apptSvc = new AppointmentServiceEntity { AppointmentServiceId = 1010, AppointmentId = 110, DepartmentId = 1, DepartmentServiceId = 1, Status = AppointmentStatus.Completed, CreatedAt = DateTime.UtcNow };
+        var session = new TreatmentSession { SessionId = 10010, AppointmentId = 110, AppointmentServiceId = 1010, PatientUserId = 2001, DentistUserId = 1001, SessionDate = DateOnly.FromDateTime(DateTime.UtcNow), CreatedAt = DateTime.UtcNow };
+        var perf = new PerformedService { PerformedServiceId = 5010, TreatmentSessionId = 10010, AppointmentId = 110, AppointmentServiceId = 1010, DepartmentServiceId = 1, Quantity = 1, UnitPrice = 1000000m, CreatedAt = DateTime.UtcNow };
+        db.Appointments.Add(appt);
+        db.AppointmentServices.Add(apptSvc);
+        db.TreatmentSessions.Add(session);
+        db.PerformedServices.Add(perf);
+        await db.SaveChangesAsync();
+
+        var billingService = new BillingService(db, new Mock<INotificationService>().Object, new Mock<ILogger<BillingService>>().Object);
+
+        var invRes = await billingService.CreateInvoiceAsync(1001, new CreateInvoiceRequest
+        {
+            AppointmentId = 110,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new CreateInvoiceItemRequest { PerformedServiceId = 5010, Description = "Điều trị tủy", Quantity = 1, UnitPrice = 1000000m }
+            }
+        });
+        long invId = invRes.Data!.InvoiceId;
+
+        // Pay full 1,000,000
+        var payRes = await billingService.ProcessPaymentAsync(1001, new ProcessPaymentRequest
+        {
+            InvoiceId = invId,
+            Amount = 1000000m,
+            Method = "BankTransfer",
+            TransactionReference = "TXN-FULL-01"
+        });
+        Assert.True(payRes.Success);
+        Assert.Equal("Paid", payRes.Data!.Status);
+        Assert.Equal(1000000m, payRes.Data!.PaidAmount);
+        Assert.Equal(0m, payRes.Data!.RemainingAmount);
+
+        // Refund 300,000 (Partial)
+        var refRes = await billingService.ProcessRefundAsync(1001, new ProcessRefundRequest
+        {
+            InvoiceId = invId,
+            Amount = 300000m,
+            Method = "BankTransfer",
+            Reason = "Hoàn lại tiền thừa do chiết khấu bổ sung"
+        });
+        Assert.True(refRes.Success);
+        Assert.Equal("PartiallyPaid", refRes.Data!.Status);
+        Assert.Equal(700000m, refRes.Data!.PaidAmount);
+        Assert.Equal(300000m, refRes.Data!.RemainingAmount);
+    }
+
+    [Fact]
+    public async Task Test4_2_FullRefund_SetsStatusToUnpaid_AllowsSubsequentPayment()
+    {
+        var db = CreateInMemoryDbContext();
+        await SeedBillingFixtureAsync(db);
+
+        var appt = new Appointment { AppointmentId = 111, PatientUserId = 2001, Status = AppointmentStatus.InService, CreatedAt = DateTime.UtcNow };
+        var apptSvc = new AppointmentServiceEntity { AppointmentServiceId = 1011, AppointmentId = 111, DepartmentId = 1, DepartmentServiceId = 1, Status = AppointmentStatus.Completed, CreatedAt = DateTime.UtcNow };
+        var session = new TreatmentSession { SessionId = 10011, AppointmentId = 111, AppointmentServiceId = 1011, PatientUserId = 2001, DentistUserId = 1001, SessionDate = DateOnly.FromDateTime(DateTime.UtcNow), CreatedAt = DateTime.UtcNow };
+        var perf = new PerformedService { PerformedServiceId = 5011, TreatmentSessionId = 10011, AppointmentId = 111, AppointmentServiceId = 1011, DepartmentServiceId = 1, Quantity = 1, UnitPrice = 500000m, CreatedAt = DateTime.UtcNow };
+        db.Appointments.Add(appt);
+        db.AppointmentServices.Add(apptSvc);
+        db.TreatmentSessions.Add(session);
+        db.PerformedServices.Add(perf);
+        await db.SaveChangesAsync();
+
+        var billingService = new BillingService(db, new Mock<INotificationService>().Object, new Mock<ILogger<BillingService>>().Object);
+
+        var invRes = await billingService.CreateInvoiceAsync(1001, new CreateInvoiceRequest
+        {
+            AppointmentId = 111,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new CreateInvoiceItemRequest { PerformedServiceId = 5011, Description = "Nhổ răng", Quantity = 1, UnitPrice = 500000m }
+            }
+        });
+        long invId = invRes.Data!.InvoiceId;
+
+        // Pay full 500k
+        await billingService.ProcessPaymentAsync(1001, new ProcessPaymentRequest
+        {
+            InvoiceId = invId,
+            Amount = 500000m,
+            Method = "Cash",
+            TransactionReference = "TXN-CASH-01"
+        });
+
+        // Refund full 500k
+        var refRes = await billingService.ProcessRefundAsync(1001, new ProcessRefundRequest
+        {
+            InvoiceId = invId,
+            Amount = 500000m,
+            Method = "Cash",
+            Reason = "Khách muốn đổi hình thức thanh toán thẻ"
+        });
+        Assert.True(refRes.Success);
+        Assert.Equal("Unpaid", refRes.Data!.Status);
+        Assert.Equal(0m, refRes.Data!.PaidAmount);
+        Assert.Equal(500000m, refRes.Data!.RemainingAmount);
+
+        // Crucial test: subsequent payment CAN be made because status is Unpaid, not Cancelled
+        var rePayRes = await billingService.ProcessPaymentAsync(1001, new ProcessPaymentRequest
+        {
+            InvoiceId = invId,
+            Amount = 500000m,
+            Method = "CreditCard",
+            TransactionReference = "TXN-POS-02"
+        });
+        Assert.True(rePayRes.Success);
+        Assert.Equal("Paid", rePayRes.Data!.Status);
+        Assert.Equal(500000m, rePayRes.Data!.PaidAmount);
+        Assert.Equal(0m, rePayRes.Data!.RemainingAmount);
+    }
+
+    [Fact]
+    public async Task Test4_3_RefundOnUnpaidInvoice_Rejected()
+    {
+        var db = CreateInMemoryDbContext();
+        await SeedBillingFixtureAsync(db);
+
+        var appt = new Appointment { AppointmentId = 112, PatientUserId = 2001, Status = AppointmentStatus.InService, CreatedAt = DateTime.UtcNow };
+        var apptSvc = new AppointmentServiceEntity { AppointmentServiceId = 1012, AppointmentId = 112, DepartmentId = 1, DepartmentServiceId = 1, Status = AppointmentStatus.Completed, CreatedAt = DateTime.UtcNow };
+        var session = new TreatmentSession { SessionId = 10012, AppointmentId = 112, AppointmentServiceId = 1012, PatientUserId = 2001, DentistUserId = 1001, SessionDate = DateOnly.FromDateTime(DateTime.UtcNow), CreatedAt = DateTime.UtcNow };
+        var perf = new PerformedService { PerformedServiceId = 5012, TreatmentSessionId = 10012, AppointmentId = 112, AppointmentServiceId = 1012, DepartmentServiceId = 1, Quantity = 1, UnitPrice = 200000m, CreatedAt = DateTime.UtcNow };
+        db.Appointments.Add(appt);
+        db.AppointmentServices.Add(apptSvc);
+        db.TreatmentSessions.Add(session);
+        db.PerformedServices.Add(perf);
+        await db.SaveChangesAsync();
+
+        var billingService = new BillingService(db, new Mock<INotificationService>().Object, new Mock<ILogger<BillingService>>().Object);
+
+        var invRes = await billingService.CreateInvoiceAsync(1001, new CreateInvoiceRequest
+        {
+            AppointmentId = 112,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new CreateInvoiceItemRequest { PerformedServiceId = 5012, Description = "Cạo vôi răng", Quantity = 1, UnitPrice = 200000m }
+            }
+        });
+        long invId = invRes.Data!.InvoiceId;
+
+        // Attempt refund without prior payment
+        var refRes = await billingService.ProcessRefundAsync(1001, new ProcessRefundRequest
+        {
+            InvoiceId = invId,
+            Amount = 100000m,
+            Method = "Cash",
+            Reason = "Thử hoàn tiền khi chưa thanh toán"
+        });
+        Assert.False(refRes.Success);
+        Assert.Contains("chưa có khoản thanh toán thực tế", refRes.Message);
+    }
+
+    [Fact]
+    public async Task Test4_4_RefundExceedingNetPaid_Rejected()
+    {
+        var db = CreateInMemoryDbContext();
+        await SeedBillingFixtureAsync(db);
+
+        var appt = new Appointment { AppointmentId = 113, PatientUserId = 2001, Status = AppointmentStatus.InService, CreatedAt = DateTime.UtcNow };
+        var apptSvc = new AppointmentServiceEntity { AppointmentServiceId = 1013, AppointmentId = 113, DepartmentId = 1, DepartmentServiceId = 1, Status = AppointmentStatus.Completed, CreatedAt = DateTime.UtcNow };
+        var session = new TreatmentSession { SessionId = 10013, AppointmentId = 113, AppointmentServiceId = 1013, PatientUserId = 2001, DentistUserId = 1001, SessionDate = DateOnly.FromDateTime(DateTime.UtcNow), CreatedAt = DateTime.UtcNow };
+        var perf = new PerformedService { PerformedServiceId = 5013, TreatmentSessionId = 10013, AppointmentId = 113, AppointmentServiceId = 1013, DepartmentServiceId = 1, Quantity = 1, UnitPrice = 300000m, CreatedAt = DateTime.UtcNow };
+        db.Appointments.Add(appt);
+        db.AppointmentServices.Add(apptSvc);
+        db.TreatmentSessions.Add(session);
+        db.PerformedServices.Add(perf);
+        await db.SaveChangesAsync();
+
+        var billingService = new BillingService(db, new Mock<INotificationService>().Object, new Mock<ILogger<BillingService>>().Object);
+
+        var invRes = await billingService.CreateInvoiceAsync(1001, new CreateInvoiceRequest
+        {
+            AppointmentId = 113,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new CreateInvoiceItemRequest { PerformedServiceId = 5013, Description = "Trám răng", Quantity = 1, UnitPrice = 300000m }
+            }
+        });
+        long invId = invRes.Data!.InvoiceId;
+
+        // Pay deposit 100,000
+        await billingService.ProcessPaymentAsync(1001, new ProcessPaymentRequest
+        {
+            InvoiceId = invId,
+            Amount = 100000m,
+            Method = "Cash"
+        });
+
+        // Attempt refund 200,000 (exceeds 100k net paid)
+        var refRes = await billingService.ProcessRefundAsync(1001, new ProcessRefundRequest
+        {
+            InvoiceId = invId,
+            Amount = 200000m,
+            Method = "Cash",
+            Reason = "Hoàn vượt số tiền đã thu"
+        });
+        Assert.False(refRes.Success);
+        Assert.Contains("vượt quá số tiền thực tế có thể hoàn", refRes.Message);
+    }
+
+    [Fact]
+    public async Task Test4_5_DuplicateRefundTransactionReference_Rejected()
+    {
+        var db = CreateInMemoryDbContext();
+        await SeedBillingFixtureAsync(db);
+
+        var appt = new Appointment { AppointmentId = 114, PatientUserId = 2001, Status = AppointmentStatus.InService, CreatedAt = DateTime.UtcNow };
+        var apptSvc = new AppointmentServiceEntity { AppointmentServiceId = 1014, AppointmentId = 114, DepartmentId = 1, DepartmentServiceId = 1, Status = AppointmentStatus.Completed, CreatedAt = DateTime.UtcNow };
+        var session = new TreatmentSession { SessionId = 10014, AppointmentId = 114, AppointmentServiceId = 1014, PatientUserId = 2001, DentistUserId = 1001, SessionDate = DateOnly.FromDateTime(DateTime.UtcNow), CreatedAt = DateTime.UtcNow };
+        var perf = new PerformedService { PerformedServiceId = 5014, TreatmentSessionId = 10014, AppointmentId = 114, AppointmentServiceId = 1014, DepartmentServiceId = 1, Quantity = 1, UnitPrice = 800000m, CreatedAt = DateTime.UtcNow };
+        db.Appointments.Add(appt);
+        db.AppointmentServices.Add(apptSvc);
+        db.TreatmentSessions.Add(session);
+        db.PerformedServices.Add(perf);
+        await db.SaveChangesAsync();
+
+        var billingService = new BillingService(db, new Mock<INotificationService>().Object, new Mock<ILogger<BillingService>>().Object);
+
+        var invRes = await billingService.CreateInvoiceAsync(1001, new CreateInvoiceRequest
+        {
+            AppointmentId = 114,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new CreateInvoiceItemRequest { PerformedServiceId = 5014, Description = "Tẩy trắng răng", Quantity = 1, UnitPrice = 800000m }
+            }
+        });
+        long invId = invRes.Data!.InvoiceId;
+
+        // Pay full 800k
+        await billingService.ProcessPaymentAsync(1001, new ProcessPaymentRequest
+        {
+            InvoiceId = invId,
+            Amount = 800000m,
+            Method = "BankTransfer",
+            TransactionReference = "TXN-800"
+        });
+
+        // Refund 200k with reference REF-DUPLICATE
+        var refRes1 = await billingService.ProcessRefundAsync(1001, new ProcessRefundRequest
+        {
+            InvoiceId = invId,
+            Amount = 200000m,
+            Method = "BankTransfer",
+            TransactionReference = "REF-DUPLICATE",
+            Reason = "Đợt 1"
+        });
+        Assert.True(refRes1.Success);
+
+        // Attempt second refund with identical reference
+        var refRes2 = await billingService.ProcessRefundAsync(1001, new ProcessRefundRequest
+        {
+            InvoiceId = invId,
+            Amount = 100000m,
+            Method = "BankTransfer",
+            TransactionReference = "REF-DUPLICATE",
+            Reason = "Đợt 2 lặp mã"
+        });
+        Assert.False(refRes2.Success);
+        Assert.Contains("đã được ghi nhận trước đó", refRes2.Message);
+    }
+
+    [Fact]
+    public async Task Test4_6_RefundAfterDeposit_RecalculatesBalanceAccurately()
+    {
+        var db = CreateInMemoryDbContext();
+        await SeedBillingFixtureAsync(db);
+
+        var appt = new Appointment { AppointmentId = 115, PatientUserId = 2001, Status = AppointmentStatus.InService, CreatedAt = DateTime.UtcNow };
+        var apptSvc = new AppointmentServiceEntity { AppointmentServiceId = 1015, AppointmentId = 115, DepartmentId = 1, DepartmentServiceId = 1, Status = AppointmentStatus.Completed, CreatedAt = DateTime.UtcNow };
+        var session = new TreatmentSession { SessionId = 10015, AppointmentId = 115, AppointmentServiceId = 1015, PatientUserId = 2001, DentistUserId = 1001, SessionDate = DateOnly.FromDateTime(DateTime.UtcNow), CreatedAt = DateTime.UtcNow };
+        var perf = new PerformedService { PerformedServiceId = 5015, TreatmentSessionId = 10015, AppointmentId = 115, AppointmentServiceId = 1015, DepartmentServiceId = 1, Quantity = 1, UnitPrice = 1200000m, CreatedAt = DateTime.UtcNow };
+        db.Appointments.Add(appt);
+        db.AppointmentServices.Add(apptSvc);
+        db.TreatmentSessions.Add(session);
+        db.PerformedServices.Add(perf);
+        await db.SaveChangesAsync();
+
+        var billingService = new BillingService(db, new Mock<INotificationService>().Object, new Mock<ILogger<BillingService>>().Object);
+
+        var invRes = await billingService.CreateInvoiceAsync(1001, new CreateInvoiceRequest
+        {
+            AppointmentId = 115,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new CreateInvoiceItemRequest { PerformedServiceId = 5015, Description = "Làm răng sứ", Quantity = 1, UnitPrice = 1200000m }
+            }
+        });
+        long invId = invRes.Data!.InvoiceId;
+
+        // Deposit 400,000 -> PartiallyPaid
+        var depRes = await billingService.ProcessPaymentAsync(1001, new ProcessPaymentRequest
+        {
+            InvoiceId = invId,
+            Amount = 400000m,
+            Method = "Cash"
+        });
+        Assert.True(depRes.Success);
+        Assert.Equal("PartiallyPaid", depRes.Data!.Status);
+        Assert.Equal(400000m, depRes.Data!.PaidAmount);
+        Assert.Equal(800000m, depRes.Data!.RemainingAmount);
+
+        // Refund 150,000 of the deposit -> Still PartiallyPaid
+        var refRes = await billingService.ProcessRefundAsync(1001, new ProcessRefundRequest
+        {
+            InvoiceId = invId,
+            Amount = 150000m,
+            Method = "Cash",
+            Reason = "Hoàn bớt cọc"
+        });
+        Assert.True(refRes.Success);
+        Assert.Equal("PartiallyPaid", refRes.Data!.Status);
+        Assert.Equal(250000m, refRes.Data!.PaidAmount);
+        Assert.Equal(950000m, refRes.Data!.RemainingAmount);
+
+        // Now pay remaining 950,000 -> Becomes Paid
+        var finalPay = await billingService.ProcessPaymentAsync(1001, new ProcessPaymentRequest
+        {
+            InvoiceId = invId,
+            Amount = 950000m,
+            Method = "Cash"
+        });
+        Assert.True(finalPay.Success);
+        Assert.Equal("Paid", finalPay.Data!.Status);
+        Assert.Equal(1200000m, finalPay.Data!.PaidAmount);
+        Assert.Equal(0m, finalPay.Data!.RemainingAmount);
+    }
+
+    [Fact]
+    public async Task Test4_7_RefundAfterMultiplePayments_CalculatesNetCorrectly()
+    {
+        var db = CreateInMemoryDbContext();
+        await SeedBillingFixtureAsync(db);
+
+        var appt = new Appointment { AppointmentId = 116, PatientUserId = 2001, Status = AppointmentStatus.InService, CreatedAt = DateTime.UtcNow };
+        var apptSvc = new AppointmentServiceEntity { AppointmentServiceId = 1016, AppointmentId = 116, DepartmentId = 1, DepartmentServiceId = 1, Status = AppointmentStatus.Completed, CreatedAt = DateTime.UtcNow };
+        var session = new TreatmentSession { SessionId = 10016, AppointmentId = 116, AppointmentServiceId = 1016, PatientUserId = 2001, DentistUserId = 1001, SessionDate = DateOnly.FromDateTime(DateTime.UtcNow), CreatedAt = DateTime.UtcNow };
+        var perf = new PerformedService { PerformedServiceId = 5016, TreatmentSessionId = 10016, AppointmentId = 116, AppointmentServiceId = 1016, DepartmentServiceId = 1, Quantity = 1, UnitPrice = 1000000m, CreatedAt = DateTime.UtcNow };
+        db.Appointments.Add(appt);
+        db.AppointmentServices.Add(apptSvc);
+        db.TreatmentSessions.Add(session);
+        db.PerformedServices.Add(perf);
+        await db.SaveChangesAsync();
+
+        var billingService = new BillingService(db, new Mock<INotificationService>().Object, new Mock<ILogger<BillingService>>().Object);
+
+        var invRes = await billingService.CreateInvoiceAsync(1001, new CreateInvoiceRequest
+        {
+            AppointmentId = 116,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new CreateInvoiceItemRequest { PerformedServiceId = 5016, Description = "Chỉnh nha đợt 1", Quantity = 1, UnitPrice = 1000000m }
+            }
+        });
+        long invId = invRes.Data!.InvoiceId;
+
+        // Payment 1: 300,000 (Cash)
+        await billingService.ProcessPaymentAsync(1001, new ProcessPaymentRequest { InvoiceId = invId, Amount = 300000m, Method = "Cash" });
+        // Payment 2: 400,000 (BankTransfer)
+        await billingService.ProcessPaymentAsync(1001, new ProcessPaymentRequest { InvoiceId = invId, Amount = 400000m, Method = "BankTransfer" });
+        // Payment 3: 300,000 (CreditCard) -> Paid in full
+        await billingService.ProcessPaymentAsync(1001, new ProcessPaymentRequest { InvoiceId = invId, Amount = 300000m, Method = "CreditCard" });
+
+        // Total payments = 1,000,000
+        var invAfterPaid = await billingService.GetInvoiceByIdAsync(invId);
+        Assert.Equal(1000000m, invAfterPaid.Data!.PaidAmount);
+        Assert.Equal("Paid", invAfterPaid.Data!.Status);
+
+        // Refund 1: 200,000
+        await billingService.ProcessRefundAsync(1001, new ProcessRefundRequest { InvoiceId = invId, Amount = 200000m, Method = "Cash", Reason = "Đợt 1" });
+        // Refund 2: 500,000
+        var refRes2 = await billingService.ProcessRefundAsync(1001, new ProcessRefundRequest { InvoiceId = invId, Amount = 500000m, Method = "BankTransfer", Reason = "Đợt 2" });
+
+        // Net paid = 1,000,000 - 700,000 = 300,000
+        Assert.True(refRes2.Success);
+        Assert.Equal("PartiallyPaid", refRes2.Data!.Status);
+        Assert.Equal(300000m, refRes2.Data!.PaidAmount);
+        Assert.Equal(700000m, refRes2.Data!.RemainingAmount);
+    }
+
+    #endregion
 }

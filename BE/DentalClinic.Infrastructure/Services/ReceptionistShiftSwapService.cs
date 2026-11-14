@@ -151,6 +151,45 @@ public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
         AdminDecideShiftSwapRequest request,
         CancellationToken ct = default)
     {
+        var sourceSchedule = await _dbContext.StaffWorkSchedules
+            .FirstOrDefaultAsync(s => s.WorkScheduleId == swapRequestId && s.StaffRole == "Receptionist", ct);
+
+        if (sourceSchedule == null)
+        {
+            return ApiResponse<bool>.Fail("Không tìm thấy ca làm việc của yêu cầu đổi ca.");
+        }
+
+        if (request.Approve)
+        {
+            var createLog = await _dbContext.AuditLogs
+                .Where(l => l.Action == "CREATE_SHIFT_SWAP_REQUEST" &&
+                            l.EntityName == "StaffWorkSchedule" &&
+                            l.EntityId == swapRequestId.ToString())
+                .OrderByDescending(l => l.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            long targetUserId = 0;
+            if (createLog != null && !string.IsNullOrWhiteSpace(createLog.NewValues))
+            {
+                var parts = createLog.NewValues.Split(';');
+                foreach (var part in parts)
+                {
+                    if (part.StartsWith("Target:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        long.TryParse(part.Substring(7), out targetUserId);
+                        break;
+                    }
+                }
+            }
+
+            if (targetUserId > 0)
+            {
+                sourceSchedule.StaffUserId = targetUserId;
+                sourceSchedule.UpdatedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync(ct);
+            }
+        }
+
         await _auditLogService.LogAsync(
             adminUserId,
             request.Approve ? "APPROVE_SHIFT_SWAP" : "REJECT_SHIFT_SWAP",
@@ -161,21 +200,94 @@ public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
             ct);
 
         return ApiResponse<bool>.Ok(true, request.Approve
-            ? "Đã phê duyệt yêu cầu đổi ca trực thành công."
+            ? "Đã phê duyệt và thực hiện hoán đổi ca trực thành công."
             : "Đã từ chối yêu cầu đổi ca trực.");
     }
 
-    public Task<ApiResponse<List<ReceptionistShiftSwapRequestDto>>> GetSwapRequestsAsync(
+    public async Task<ApiResponse<List<ReceptionistShiftSwapRequestDto>>> GetSwapRequestsAsync(
         ReceptionistSwapFilterRequest request,
         CancellationToken ct = default)
     {
-        return Task.FromResult(ApiResponse<List<ReceptionistShiftSwapRequestDto>>.Ok(new List<ReceptionistShiftSwapRequestDto>()));
+        var logs = await _dbContext.AuditLogs
+            .AsNoTracking()
+            .Where(l => l.EntityName == "StaffWorkSchedule" && l.Action == "CREATE_SHIFT_SWAP_REQUEST")
+            .OrderByDescending(l => l.CreatedAt)
+            .Take(50)
+            .ToListAsync(ct);
+
+        var list = new List<ReceptionistShiftSwapRequestDto>();
+        foreach (var log in logs)
+        {
+            if (!long.TryParse(log.EntityId, out var scheduleId)) continue;
+            var schedule = await _dbContext.StaffWorkSchedules
+                .AsNoTracking()
+                .Include(s => s.StaffUser)
+                .FirstOrDefaultAsync(s => s.WorkScheduleId == scheduleId, ct);
+            if (schedule == null) continue;
+
+            long targetUserId = 0;
+            string reason = string.Empty;
+            if (!string.IsNullOrWhiteSpace(log.NewValues))
+            {
+                var parts = log.NewValues.Split(';');
+                foreach (var part in parts)
+                {
+                    if (part.StartsWith("Target:", StringComparison.OrdinalIgnoreCase))
+                        long.TryParse(part.Substring(7), out targetUserId);
+                    else if (part.StartsWith("Reason:", StringComparison.OrdinalIgnoreCase))
+                        reason = part.Substring(7);
+                }
+            }
+
+            var targetUser = targetUserId > 0
+                ? await _dbContext.StaffProfiles.AsNoTracking().FirstOrDefaultAsync(sp => sp.UserId == targetUserId, ct)
+                : null;
+
+            var latestDecision = await _dbContext.AuditLogs
+                .AsNoTracking()
+                .Where(l => l.EntityName == "StaffWorkSchedule" &&
+                            l.EntityId == scheduleId.ToString() &&
+                            (l.Action == "APPROVE_SHIFT_SWAP" || l.Action == "REJECT_SHIFT_SWAP" || l.Action == "WITHDRAW_SHIFT_SWAP" || l.Action == "DECLINE_SHIFT_SWAP"))
+                .OrderByDescending(l => l.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            string status = latestDecision?.Action switch
+            {
+                "APPROVE_SHIFT_SWAP" => "Approved",
+                "REJECT_SHIFT_SWAP" => "Rejected",
+                "WITHDRAW_SHIFT_SWAP" => "Withdrawn",
+                "DECLINE_SHIFT_SWAP" => "Declined",
+                _ => "PendingAdminApproval"
+            };
+
+            list.Add(new ReceptionistShiftSwapRequestDto
+            {
+                SwapRequestId = schedule.WorkScheduleId,
+                RequestingReceptionistUserId = log.UserId ?? 0,
+                RequestingReceptionistName = schedule.StaffUser?.FullName ?? $"Lễ tân #{log.UserId}",
+                TargetReceptionistUserId = targetUserId,
+                TargetReceptionistName = targetUser?.FullName ?? $"Lễ tân #{targetUserId}",
+                SourceScheduleId = schedule.WorkScheduleId,
+                SourceWorkDate = schedule.WorkDate,
+                SourceStartTime = schedule.StartTime,
+                SourceEndTime = schedule.EndTime,
+                Reason = reason,
+                Status = status,
+                CreatedAt = log.CreatedAt
+            });
+        }
+
+        return ApiResponse<List<ReceptionistShiftSwapRequestDto>>.Ok(list);
     }
 
-    public Task<ApiResponse<List<ReceptionistShiftSwapRequestDto>>> GetMySwapRequestsAsync(
+    public async Task<ApiResponse<List<ReceptionistShiftSwapRequestDto>>> GetMySwapRequestsAsync(
         long receptionistUserId,
         CancellationToken ct = default)
     {
-        return Task.FromResult(ApiResponse<List<ReceptionistShiftSwapRequestDto>>.Ok(new List<ReceptionistShiftSwapRequestDto>()));
+        var all = await GetSwapRequestsAsync(new ReceptionistSwapFilterRequest(), ct);
+        var filtered = (all.Data ?? new List<ReceptionistShiftSwapRequestDto>())
+            .Where(r => r.RequestingReceptionistUserId == receptionistUserId || r.TargetReceptionistUserId == receptionistUserId)
+            .ToList();
+        return ApiResponse<List<ReceptionistShiftSwapRequestDto>>.Ok(filtered);
     }
 }

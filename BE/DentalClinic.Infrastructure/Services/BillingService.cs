@@ -335,9 +335,13 @@ public class BillingService : IBillingService
                 }
             }
 
-            var alreadyPaid = invoice.Payments
-                .Where(p => p.Status == "Successful")
+            var incomingPaid = invoice.Payments
+                .Where(p => p.Status == "Successful" && p.PaymentType != "Refund")
                 .Sum(p => p.Amount);
+            var refundedPaid = invoice.Payments
+                .Where(p => p.Status == "Successful" && p.PaymentType == "Refund")
+                .Sum(p => p.Amount);
+            var alreadyPaid = Math.Max(0, incomingPaid - refundedPaid);
 
             var remaining = Math.Max(0, invoice.FinalAmount - alreadyPaid);
 
@@ -453,11 +457,11 @@ public class BillingService : IBillingService
                 return ApiResponse<InvoiceDto>.Fail("Không tìm thấy hóa đơn cần hoàn tiền.");
 
             var successfulPayments = invoice.Payments
-                .Where(p => (p.Status == "Successful" || p.Status == "Completed") && p.PaymentType != "Refund")
+                .Where(p => p.Status == "Successful" && p.PaymentType != "Refund")
                 .Sum(p => p.Amount);
 
             var alreadyRefunded = invoice.Payments
-                .Where(p => (p.Status == "Successful" || p.Status == "Completed") && p.PaymentType == "Refund")
+                .Where(p => p.Status == "Successful" && p.PaymentType == "Refund")
                 .Sum(p => p.Amount);
 
             var netPaid = successfulPayments - alreadyRefunded;
@@ -469,6 +473,20 @@ public class BillingService : IBillingService
             if (request.Amount > netPaid)
             {
                 return ApiResponse<InvoiceDto>.Fail($"Số tiền hoàn trả ({request.Amount:N0} đ) vượt quá số tiền thực tế có thể hoàn ({netPaid:N0} đ).");
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.TransactionReference))
+            {
+                var trimmedRef = request.TransactionReference.Trim();
+                var isDuplicateTxn = invoice.Payments.Any(p =>
+                    p.Status == "Successful" &&
+                    p.TransactionReference != null &&
+                    p.TransactionReference.Equals(trimmedRef, StringComparison.OrdinalIgnoreCase));
+
+                if (isDuplicateTxn)
+                {
+                    return ApiResponse<InvoiceDto>.Fail($"Mã giao dịch hoàn tiền '{trimmedRef}' đã được ghi nhận trước đó trên hóa đơn này.");
+                }
             }
 
             var normalizedMethod = NormalizeMethod(request.Method);
@@ -495,11 +513,15 @@ public class BillingService : IBillingService
             var newNetPaid = netPaid - request.Amount;
             if (newNetPaid <= 0)
             {
-                invoice.Status = "Cancelled";
+                invoice.Status = "Unpaid";
             }
             else if (newNetPaid < invoice.FinalAmount)
             {
                 invoice.Status = "PartiallyPaid";
+            }
+            else
+            {
+                invoice.Status = "Paid";
             }
             invoice.UpdatedAt = DateTime.UtcNow;
 
@@ -918,10 +940,10 @@ public class BillingService : IBillingService
             .Where(i => !i.Description.StartsWith(taxItemPrefix, StringComparison.OrdinalIgnoreCase))
             .Sum(i => i.Quantity * i.UnitPrice);
         var successfulPayments = invoice.Payments
-            .Where(p => (p.Status == "Successful" || p.Status == "Completed") && p.PaymentType != "Refund")
+            .Where(p => p.Status == "Successful" && p.PaymentType != "Refund")
             .Sum(p => p.Amount);
         var refundedPayments = invoice.Payments
-            .Where(p => (p.Status == "Successful" || p.Status == "Completed") && p.PaymentType == "Refund")
+            .Where(p => p.Status == "Successful" && p.PaymentType == "Refund")
             .Sum(p => p.Amount);
         var paidAmount = Math.Max(0, successfulPayments - refundedPayments);
         var remainingAmount = Math.Max(0, invoice.FinalAmount - paidAmount);

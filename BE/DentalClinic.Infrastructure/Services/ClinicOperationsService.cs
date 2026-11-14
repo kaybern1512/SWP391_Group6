@@ -250,20 +250,25 @@ public class ClinicOperationsService : IClinicOperationsService
 
         var todayPayments = await _dbContext.Payments
             .AsNoTracking()
-            .Where(p => p.PaymentDate >= opDateDateTime && p.PaymentDate < opDateNextDateTime && (p.Status == "Completed" || p.Status == "Paid" || p.Status == "Successful" || p.Status == "Success"))
+            .Where(p => p.PaymentDate >= opDateDateTime && p.PaymentDate < opDateNextDateTime && p.Status == "Successful")
             .ToListAsync(ct);
 
         var monthPayments = await _dbContext.Payments
             .AsNoTracking()
-            .Where(p => p.PaymentDate >= monthStartDateTime && p.PaymentDate < monthEndDateTime && (p.Status == "Completed" || p.Status == "Paid" || p.Status == "Successful" || p.Status == "Success"))
+            .Where(p => p.PaymentDate >= monthStartDateTime && p.PaymentDate < monthEndDateTime && p.Status == "Successful")
             .ToListAsync(ct);
+
+        var todayIncoming = todayPayments.Where(p => p.PaymentType != "Refund").Sum(p => p.Amount);
+        var todayRefunded = todayPayments.Where(p => p.PaymentType == "Refund").Sum(p => p.Amount);
+        var monthIncoming = monthPayments.Where(p => p.PaymentType != "Refund").Sum(p => p.Amount);
+        var monthRefunded = monthPayments.Where(p => p.PaymentType == "Refund").Sum(p => p.Amount);
 
         var financialOps = new FinancialOperationsDto
         {
             TotalInvoicedToday = todayInvoices.Sum(i => i.FinalAmount),
-            TotalCollectedToday = todayPayments.Sum(p => p.Amount),
+            TotalCollectedToday = Math.Max(0m, todayIncoming - todayRefunded),
             TotalInvoicedMonth = monthInvoices.Sum(i => i.FinalAmount),
-            TotalCollectedMonth = monthPayments.Sum(p => p.Amount),
+            TotalCollectedMonth = Math.Max(0m, monthIncoming - monthRefunded),
             UnpaidInvoicesCount = todayInvoices.Count(i => i.Status == "Unpaid" || i.Status == "Pending"),
             PartiallyPaidInvoicesCount = todayInvoices.Count(i => i.Status == "PartiallyPaid")
         };

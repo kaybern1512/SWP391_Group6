@@ -67,7 +67,9 @@ public class ReportService : IReportService
         var invoices = await query.OrderByDescending(i => i.CreatedAt).ThenBy(i => i.InvoiceId).ToListAsync(ct);
 
         var totalRevenue = invoices.Sum(i => i.FinalAmount);
-        var totalPaid = invoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount);
+        var totalIncoming = invoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" && p.PaymentType != "Refund").Sum(p => p.Amount);
+        var totalRefunded = invoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" && p.PaymentType == "Refund").Sum(p => p.Amount);
+        var totalPaid = Math.Max(0, totalIncoming - totalRefunded);
         var totalRemaining = Math.Max(0, totalRevenue - totalPaid);
 
         var dailyMap = new Dictionary<string, (decimal revenue, decimal paid, int count)>();
@@ -82,7 +84,9 @@ public class ReportService : IReportService
             if (dailyMap.ContainsKey(key))
             {
                 var cur = dailyMap[key];
-                var invPaid = inv.Payments.Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount);
+                var invIncoming = inv.Payments.Where(p => p.Status == "Successful" && p.PaymentType != "Refund").Sum(p => p.Amount);
+                var invRefunded = inv.Payments.Where(p => p.Status == "Successful" && p.PaymentType == "Refund").Sum(p => p.Amount);
+                var invPaid = Math.Max(0, invIncoming - invRefunded);
                 dailyMap[key] = (cur.revenue + inv.FinalAmount, cur.paid + invPaid, cur.count + 1);
             }
         }
@@ -111,7 +115,9 @@ public class ReportService : IReportService
             if (deptInvoices.Any() || departmentId == dept.DepartmentId)
             {
                 var rev = deptInvoices.Sum(i => i.FinalAmount);
-                var paid = deptInvoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount);
+                var deptIncoming = deptInvoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" && p.PaymentType != "Refund").Sum(p => p.Amount);
+                var deptRefunded = deptInvoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" && p.PaymentType == "Refund").Sum(p => p.Amount);
+                var paid = Math.Max(0, deptIncoming - deptRefunded);
                 var pct = totalRevenue > 0 ? Math.Round((double)(rev * 100 / totalRevenue), 1) : 0;
                 var dentistCount = await _dbContext.DentistProfiles.CountAsync(d => d.DepartmentId == dept.DepartmentId, ct);
                 var completedAppts = deptInvoices.Count(i => i.Appointment.Status == AppointmentStatus.Completed);
@@ -378,7 +384,9 @@ public class ReportService : IReportService
 
     private static InvoiceDto MapToInvoiceDto(Invoice invoice, ClinicProfile? clinic)
     {
-        var paidAmount = invoice.Payments.Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount);
+        var incoming = invoice.Payments.Where(p => p.Status == "Successful" && p.PaymentType != "Refund").Sum(p => p.Amount);
+        var refunded = invoice.Payments.Where(p => p.Status == "Successful" && p.PaymentType == "Refund").Sum(p => p.Amount);
+        var paidAmount = Math.Max(0, incoming - refunded);
         var remainingAmount = Math.Max(0, invoice.FinalAmount - paidAmount);
         var primaryService = invoice.Appointment?.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
 
