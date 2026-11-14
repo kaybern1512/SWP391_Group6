@@ -204,7 +204,7 @@ public class DentistAppointmentController : Controller
 
     [HttpPost("{id:long}/Start")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Start(long id, [FromForm] string? date = null, [FromForm] string? returnUrl = null)
+    public async Task<IActionResult> Start(long id, [FromForm] long? appointmentServiceId = null, [FromForm] string? date = null, [FromForm] string? returnUrl = null)
     {
         IActionResult RedirectTarget()
         {
@@ -215,8 +215,10 @@ public class DentistAppointmentController : Controller
             return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
         }
 
-        var result = await _appointmentApiService.DentistStartAppointmentAsync(id);
-        if (result.IsSuccess)
+        var result = appointmentServiceId.HasValue
+            ? await _appointmentApiService.DentistStartAppointmentAsync(id, appointmentServiceId.Value)
+            : await _appointmentApiService.DentistStartAppointmentAsync(id);
+        if (result != null && result.IsSuccess)
         {
             TempData["SuccessMessage"] = result.Message ?? "Đã tiếp nhận bệnh nhân vào ghế điều trị và bắt đầu ca khám.";
             var patientId = result.Data?.PatientUserId;
@@ -238,7 +240,7 @@ public class DentistAppointmentController : Controller
         }
         else
         {
-            TempData["ErrorMessage"] = result.Message ?? "Không thể bắt đầu buổi khám.";
+            TempData["ErrorMessage"] = result?.Message ?? "Không thể bắt đầu buổi khám.";
         }
         return RedirectTarget();
     }
@@ -248,6 +250,7 @@ public class DentistAppointmentController : Controller
     public async Task<IActionResult> Complete(
         long id,
         [FromForm] string? notes,
+        [FromForm] long? appointmentServiceId = null,
         [FromForm] string? date = null,
         [FromForm] string? returnUrl = null,
         [FromForm] string? followUpReason = null,
@@ -263,19 +266,27 @@ public class DentistAppointmentController : Controller
             return RedirectToAction(nameof(Today), !string.IsNullOrWhiteSpace(date) ? new { date } : null);
         }
 
-        var result = await _appointmentApiService.DentistCompleteAppointmentAsync(
-            id,
-            notes,
-            followUpReason,
-            recommendedFollowUpDate,
-            followUpReasonCategory);
-        if (result.IsSuccess)
+        var result = appointmentServiceId.HasValue
+            ? await _appointmentApiService.DentistCompleteAppointmentAsync(
+                id,
+                notes,
+                followUpReason,
+                recommendedFollowUpDate,
+                followUpReasonCategory,
+                appointmentServiceId.Value)
+            : await _appointmentApiService.DentistCompleteAppointmentAsync(
+                id,
+                notes,
+                followUpReason,
+                recommendedFollowUpDate,
+                followUpReasonCategory);
+        if (result != null && result.IsSuccess)
         {
             TempData["SuccessMessage"] = result.Message ?? "Đã hoàn thành buổi khám và điều trị.";
         }
         else
         {
-            TempData["ErrorMessage"] = result.Message ?? "Không thể hoàn thành buổi khám.";
+            TempData["ErrorMessage"] = result?.Message ?? "Không thể hoàn thành buổi khám.";
         }
         return RedirectTarget();
     }

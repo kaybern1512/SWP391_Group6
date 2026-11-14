@@ -171,6 +171,7 @@ public class ReceptionistAppointmentController : Controller
             PatientUserId = model.PatientUserId,
             DepartmentId = model.DepartmentId,
             RequestedServiceId = model.RequestedServiceId,
+            AdditionalServiceIds = model.AdditionalServiceIds,
             RequestedDentistUserId = model.RequestedDentistUserId,
             ScheduledStart = model.ScheduledStart!.Value,
             ReasonForVisit = model.ReasonForVisit.Trim()

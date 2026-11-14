@@ -708,4 +708,285 @@ public class SqlServerRefactorIntegrationTests
         var allowedRoles = controllerAuth.Roles!.Split(',', StringSplitOptions.TrimEntries);
         Assert.DoesNotContain(UserRole.Patient, allowedRoles);
     }
+
+    [Fact]
+    public async Task GroupH_FullFrontendToBackendEndToEndFlow_WithRealSqlServerDatabase()
+    {
+        if (!await IsSqlServerAvailableAsync()) return;
+
+        using var db = CreateDbContext();
+        await CleanDatabaseAsync(db);
+        var fixture = await SeedBaseFixtureAsync(db);
+
+        // Also seed a Medicine in stock for dispensing
+        var medicine = new MedicineEntity
+        {
+            MedicineCode = "MED-AMOX-500",
+            MedicineName = "Amoxicillin 500mg",
+            Unit = "Viên",
+            UnitPrice = 5000m,
+            StockQuantity = 100,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Medicines.Add(medicine);
+        await db.SaveChangesAsync();
+
+        var notifMock = new Mock<INotificationService>();
+        var apptService = new AppointmentService(db, notifMock.Object, NullLogger<AppointmentService>.Instance);
+        var treatmentService = new TreatmentService(db);
+        var medicineService = new MedicineService(db);
+        var prescriptionService = new PrescriptionService(db, NullLogger<PrescriptionService>.Instance);
+        var billingService = new BillingService(db, notifMock.Object, NullLogger<BillingService>.Instance);
+        var feedbackService = new FeedbackService(db);
+
+        // -------------------------------------------------------------
+        // Step 1: Patient creates Multi-Service Appointment from Portal
+        // -------------------------------------------------------------
+        var bookingReq = new CreateAppointmentRequest
+        {
+            DepartmentId = fixture.dept1Id,
+            RequestedServiceId = fixture.srv1Id,
+            AdditionalServiceIds = new List<long> { fixture.srv2Id },
+            ServiceItems = new List<BookingServiceItemRequest>
+            {
+                new BookingServiceItemRequest
+                {
+                    DepartmentServiceId = fixture.srv1Id,
+                    RequestedDentistUserId = fixture.dentist1Id,
+                    ScheduledStart = DateTime.Today.AddDays(1).AddHours(9)
+                },
+                new BookingServiceItemRequest
+                {
+                    DepartmentServiceId = fixture.srv2Id,
+                    RequestedDentistUserId = fixture.dentist2Id,
+                    ScheduledStart = DateTime.Today.AddDays(1).AddHours(10)
+                }
+            },
+            ScheduledStart = DateTime.Today.AddDays(1).AddHours(9),
+            ReasonForVisit = "Đau răng cần khám tổng quát và tư vấn chỉnh nha"
+        };
+
+        var bookRes = await apptService.CreatePatientAppointmentAsync(fixture.patientId, bookingReq);
+        Assert.True(bookRes.Success);
+        var apptId = bookRes.Data!.AppointmentId;
+
+        // Verify Appointment is created with status PendingReceptionReview and has 2 services
+        var apptDb = await db.Appointments.Include(a => a.AppointmentServices).FirstAsync(a => a.AppointmentId == apptId);
+        Assert.Equal("PendingReceptionReview", apptDb.Status);
+        Assert.Equal(2, apptDb.AppointmentServices.Count);
+
+        var srvLine1 = apptDb.AppointmentServices.First(s => s.DepartmentServiceId == fixture.srv1Id);
+        var srvLine2 = apptDb.AppointmentServices.First(s => s.DepartmentServiceId == fixture.srv2Id);
+        Assert.Equal("PendingReceptionReview", srvLine1.Status);
+        Assert.Equal("PendingReceptionReview", srvLine2.Status);
+
+        // -------------------------------------------------------------
+        // Step 2: Receptionist Reviews and Confirms with Resources
+        // -------------------------------------------------------------
+        // Allocate resources for service 2 (Chỉnh nha - Dept 2)
+        srvLine2.AssignedDentistUserId = fixture.dentist2Id;
+        srvLine2.RoomId = fixture.room2Id;
+        srvLine2.DentalChairId = fixture.chair2Id;
+        await db.SaveChangesAsync();
+
+        var confirmReq = new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = fixture.dentist1Id,
+            RoomId = fixture.room1Id,
+            DentalChairId = fixture.chair1Id,
+            ScheduledStart = DateTime.Today.AddDays(1).AddHours(9),
+            ScheduledEnd = DateTime.Today.AddDays(1).AddHours(11)
+        };
+
+        var confirmRes = await apptService.ManagerConfirmAsync(apptId, fixture.receptionistId, confirmReq);
+        Assert.True(confirmRes.Success);
+
+        apptDb = await db.Appointments.Include(a => a.AppointmentServices).FirstAsync(a => a.AppointmentId == apptId);
+        Assert.Equal("Confirmed", apptDb.Status);
+        Assert.All(apptDb.AppointmentServices, s => Assert.Equal("Confirmed", s.Status));
+
+        // -------------------------------------------------------------
+        // Step 3: Receptionist Check-in and Queue Numbers Generated
+        // -------------------------------------------------------------
+        var checkinRes = await apptService.ReceptionistCheckInAsync(apptId, fixture.receptionistId);
+        Assert.True(checkinRes.Success);
+
+        apptDb = await db.Appointments.Include(a => a.AppointmentServices).FirstAsync(a => a.AppointmentId == apptId);
+        Assert.Equal("CheckedIn", apptDb.Status);
+        Assert.All(apptDb.AppointmentServices, s => Assert.Equal("CheckedIn", s.Status));
+        Assert.All(apptDb.AppointmentServices, s => Assert.NotNull(s.QueueNumber));
+
+        // -------------------------------------------------------------
+        // Step 4: Dentist 1 Starts and Completes Service 1
+        // -------------------------------------------------------------
+        var start1 = await apptService.DentistStartAppointmentAsync(apptId, fixture.dentist1Id, srvLine1.AppointmentServiceId);
+        Assert.True(start1.Success);
+
+        apptDb = await db.Appointments.Include(a => a.AppointmentServices).FirstAsync(a => a.AppointmentId == apptId);
+        Assert.Equal("InProgress", apptDb.Status);
+        var dbSrv1 = apptDb.AppointmentServices.First(s => s.AppointmentServiceId == srvLine1.AppointmentServiceId);
+        var dbSrv2 = apptDb.AppointmentServices.First(s => s.AppointmentServiceId == srvLine2.AppointmentServiceId);
+        Assert.Equal("InService", dbSrv1.Status);
+        Assert.Equal("CheckedIn", dbSrv2.Status); // Service 2 remains pending in queue!
+
+        // Dentist 1 records PerformedService
+        var perf1 = await treatmentService.AddPerformedServiceToAppointmentAsync(apptId, fixture.dentist1Id, new AddPerformedServiceToAppointmentRequest
+        {
+            AppointmentServiceId = srvLine1.AppointmentServiceId,
+            DepartmentServiceId = fixture.srv1Id,
+            Quantity = 1,
+            UnitPrice = 200000m
+        });
+        Assert.True(perf1.Success);
+
+        // Dentist 1 Prescribes & Dispenses Medicine Directly from Stock during examination
+        var presReq = new CreatePrescriptionRequest
+        {
+            AppointmentId = apptId,
+            Items = new List<CreatePrescriptionItemInput>
+            {
+                new CreatePrescriptionItemInput
+                {
+                    MedicationName = "Amoxicillin 500mg",
+                    Quantity = 10,
+                    Dosage = "1 viên",
+                    Frequency = "Ngày 2 lần"
+                }
+            }
+        };
+
+        var presRes = await prescriptionService.CreatePrescriptionAsync(fixture.dentist1Id, presReq);
+        Assert.True(presRes.Success, presRes.Message);
+        var presId = presRes.Data!.PrescriptionId;
+        var presItem = presRes.Data.Items.First();
+
+        var dispenseReq = new CreateMedicineDispensationRequest
+        {
+            PrescriptionId = presId,
+            Items = new List<DispenseItemInput>
+            {
+                new DispenseItemInput
+                {
+                    PrescriptionItemId = presItem.PrescriptionItemId,
+                    MedicineId = medicine.MedicineId,
+                    Quantity = 10
+                }
+            }
+        };
+
+        var dispenseRes = await medicineService.DispenseMedicineAsync(dispenseReq, fixture.dentist1Id, userRole: "Dentist");
+        Assert.NotNull(dispenseRes);
+        var medAfter = await db.Medicines.AsNoTracking().FirstAsync(m => m.MedicineId == medicine.MedicineId);
+        Assert.Equal(90, medAfter.StockQuantity); // 100 - 10 = 90
+
+        // Dentist 1 completes service 1
+        var comp1 = await apptService.DentistCompleteAppointmentAsync(apptId, fixture.dentist1Id, appointmentServiceId: srvLine1.AppointmentServiceId);
+        Assert.True(comp1.Success);
+
+        apptDb = await db.Appointments.Include(a => a.AppointmentServices).FirstAsync(a => a.AppointmentId == apptId);
+        Assert.Equal("CheckedIn", apptDb.Status); // No service is currently in chair, patient is checked in waiting for service 2!
+        dbSrv1 = apptDb.AppointmentServices.First(s => s.AppointmentServiceId == srvLine1.AppointmentServiceId);
+        Assert.Equal("Completed", dbSrv1.Status);
+
+        // -------------------------------------------------------------
+        // Step 6: Dentist 2 Starts and Completes Service 2
+        // -------------------------------------------------------------
+        var start2 = await apptService.DentistStartAppointmentAsync(apptId, fixture.dentist2Id, srvLine2.AppointmentServiceId);
+        Assert.True(start2.Success);
+
+        var perf2 = await treatmentService.AddPerformedServiceToAppointmentAsync(apptId, fixture.dentist2Id, new AddPerformedServiceToAppointmentRequest
+        {
+            AppointmentServiceId = srvLine2.AppointmentServiceId,
+            DepartmentServiceId = fixture.srv2Id,
+            Quantity = 1,
+            UnitPrice = 1500000m
+        });
+        Assert.True(perf2.Success);
+
+        var comp2 = await apptService.DentistCompleteAppointmentAsync(apptId, fixture.dentist2Id, appointmentServiceId: srvLine2.AppointmentServiceId);
+        Assert.True(comp2.Success);
+
+        apptDb = await db.Appointments.Include(a => a.AppointmentServices).FirstAsync(a => a.AppointmentId == apptId);
+        Assert.Equal("Completed", apptDb.Status); // All services completed, appointment is now Completed!
+
+        // -------------------------------------------------------------
+        // Step 7: Receptionist Prepares Billing & Processes Payment
+        // -------------------------------------------------------------
+        var prepRes = await billingService.GetAppointmentBillingPreparationAsync(apptId);
+        Assert.True(prepRes.Success);
+        Assert.Equal(3, prepRes.Data!.SuggestedItems.Count);
+        Assert.Equal(2, prepRes.Data.SuggestedItems.Count(i => i.PerformedServiceId.HasValue));
+        Assert.Equal(1, prepRes.Data.SuggestedItems.Count(i => i.PrescriptionItemId.HasValue));
+
+        var invoiceReq = new CreateInvoiceRequest
+        {
+            AppointmentId = apptId,
+            DiscountAmount = 50000m,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new CreateInvoiceItemRequest
+                {
+                    PerformedServiceId = perf1.Data!.PerformedServiceId,
+                    Description = "Khám răng tổng quát",
+                    Quantity = 1,
+                    UnitPrice = 200000m
+                },
+                new CreateInvoiceItemRequest
+                {
+                    PerformedServiceId = perf2.Data!.PerformedServiceId,
+                    Description = "Chỉnh nha mắc cài",
+                    Quantity = 1,
+                    UnitPrice = 1500000m
+                },
+                new CreateInvoiceItemRequest
+                {
+                    PrescriptionItemId = presItem.PrescriptionItemId,
+                    Description = "[Thuốc] Amoxicillin 500mg",
+                    Quantity = 10,
+                    UnitPrice = 5000m
+                }
+            }
+        };
+
+        var invoiceRes = await billingService.CreateInvoiceAsync(fixture.receptionistId, invoiceReq);
+        Assert.True(invoiceRes.Success);
+        var invId = invoiceRes.Data!.InvoiceId;
+
+        // SubTotal = 200,000 + 1,500,000 + 50,000 = 1,750,000
+        // TotalAmount = 1,750,000 - 50,000 = 1,700,000
+        Assert.Equal(1750000m, invoiceRes.Data.SubTotal);
+        Assert.Equal(1700000m, invoiceRes.Data.TotalAmount);
+
+        // Process payment
+        var payReq = new ProcessPaymentRequest
+        {
+            InvoiceId = invId,
+            Amount = 1700000m,
+            Method = "Cash"
+        };
+        var payRes = await billingService.ProcessPaymentAsync(fixture.receptionistId, payReq);
+        Assert.True(payRes.Success);
+
+        var invFinal = await db.Invoices.AsNoTracking().FirstAsync(i => i.InvoiceId == invId);
+        Assert.Equal("Paid", invFinal.Status);
+
+        // -------------------------------------------------------------
+        // Step 8: Patient Leaves Visit Feedback for Assigned Dentist
+        // -------------------------------------------------------------
+        var feedbackReq = new CreateFeedbackRequest
+        {
+            AppointmentId = apptId,
+            DentistUserId = fixture.dentist1Id,
+            DentistRating = 5,
+            ClinicRating = 5,
+            Comment = "Bác sĩ Một khám rất nhẹ nhàng, tư vấn rõ ràng!"
+        };
+        var fbRes = await feedbackService.CreateFeedbackAsync(feedbackReq, fixture.patientId);
+        Assert.True(fbRes.Success);
+
+        var fbDb = await db.VisitFeedbacks.AsNoTracking().FirstAsync(f => f.AppointmentId == apptId && f.DentistUserId == fixture.dentist1Id);
+        Assert.Equal(5, fbDb.DentistRating);
+        Assert.Equal(fixture.patientId, fbDb.PatientUserId);
+    }
 }

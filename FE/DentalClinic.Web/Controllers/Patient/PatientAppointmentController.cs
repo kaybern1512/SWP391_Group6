@@ -617,9 +617,10 @@ return Json(slots);
 
         var availableCombos = await GetCombosCatalogAsync();
         var reasonToSubmit = model.ReasonForVisit ?? string.Empty;
+        BookingComboViewModel? matchedCombo = null;
         if (model.BookingCategory == "Combo" && !string.IsNullOrEmpty(model.SelectedComboCode))
         {
-            var matchedCombo = availableCombos.FirstOrDefault(c => c.Code.Equals(model.SelectedComboCode, StringComparison.OrdinalIgnoreCase));
+            matchedCombo = availableCombos.FirstOrDefault(c => c.Code.Equals(model.SelectedComboCode, StringComparison.OrdinalIgnoreCase));
             if (matchedCombo != null && !reasonToSubmit.Contains($"[Gói Combo: {matchedCombo.Title}]"))
             {
                 reasonToSubmit = $"[Gói Combo: {matchedCombo.Title}] {(string.IsNullOrWhiteSpace(reasonToSubmit) ? "Đăng ký khám trọn gói combo." : reasonToSubmit)}";
@@ -637,10 +638,19 @@ return Json(slots);
             }
         }
 
+        var extraServiceIds = model.SelectedServiceIds?
+            .Where(id => id != model.RequestedServiceId && id > 0)
+            .Distinct()
+            .ToList();
+
         var request = new CreateAppointmentRequest
         {
             DepartmentId = model.DepartmentId,
             RequestedServiceId = model.RequestedServiceId,
+            AdditionalServiceIds = (extraServiceIds != null && extraServiceIds.Any()) ? extraServiceIds : null,
+            ServiceItems = (model.ServiceItems != null && model.ServiceItems.Any()) ? model.ServiceItems : null,
+            ComboCode = model.BookingCategory == "Combo" ? model.SelectedComboCode : null,
+            ComboId = model.BookingCategory == "Combo" && matchedCombo != null && matchedCombo.ComboId > 0 ? matchedCombo.ComboId : null,
             RequestedDentistUserId = string.Equals(model.DoctorSelectionMode, "ClinicAssignment", StringComparison.OrdinalIgnoreCase) ? null : model.RequestedDentistUserId,
             ScheduledStart = model.ScheduledStart!.Value,
             ReasonForVisit = reasonToSubmit

@@ -466,23 +466,17 @@
         row.className = "row g-2 align-items-center p-2 bg-light rounded border dispense-row";
         row.id = rowId;
         row.innerHTML = `
-            <div class="col-12 col-md-5">
-                <label class="form-label text-muted small mb-1">Mặt hàng thuốc</label>
-                <select class="form-select form-select-sm sel-med" onchange="onMedicineSelected('${rowId}')">
+            <div class="col-12 col-md-8">
+                <label class="form-label text-muted small mb-1">Mặt hàng thuốc trong kho</label>
+                <select class="form-select form-select-sm sel-med">
                     ${medOptions}
                 </select>
             </div>
-            <div class="col-8 col-md-4">
-                <label class="form-label text-muted small mb-1">Lô thuốc (Hạn dùng)</label>
-                <select class="form-select form-select-sm sel-batch">
-                    <option value="">-- Chọn thuốc trước --</option>
-                </select>
-            </div>
-            <div class="col-3 col-md-2">
+            <div class="col-10 col-md-3">
                 <label class="form-label text-muted small mb-1">Số lượng cấp</label>
                 <input type="number" class="form-control form-select-sm inp-qty" min="1" value="1" />
             </div>
-            <div class="col-1 col-md-1 text-end pt-3">
+            <div class="col-2 col-md-1 text-end pt-3">
                 <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="document.getElementById('${rowId}').remove()" title="Xóa dòng">
                     <i class="bi bi-trash fs-5"></i>
                 </button>
@@ -491,57 +485,23 @@
         container.appendChild(row);
     }
 
-    async function onMedicineSelected(rowId) {
-        const row = document.getElementById(rowId);
-        if (!row) return;
-        const medSelect = row.querySelector(".sel-med");
-        const batchSelect = row.querySelector(".sel-batch");
-        const medId = medSelect.value;
-
-        if (!medId) {
-            batchSelect.innerHTML = '<option value="">-- Chọn thuốc trước --</option>';
-            return;
-        }
-
-        batchSelect.innerHTML = '<option value="">Đang nạp lô...</option>';
-        try {
-            const resp = await fetch(`/Dentist/Prescriptions/${medId}/Batches`);
-            const data = await resp.json();
-            if (data.isSuccess && data.data && data.data.length > 0) {
-                let options = "";
-                data.data.forEach(b => {
-                    if (b.quantityAvailable > 0 && !b.isExpired) {
-                        options += `<option value="${b.medicineBatchId}">${b.batchNumber} (HSD: ${b.expiryDate} - Tồn: ${b.quantityAvailable})</option>`;
-                    }
-                });
-                batchSelect.innerHTML = options || '<option value="">(Không có lô khả dụng)</option>';
-            } else {
-                batchSelect.innerHTML = '<option value="">(Không có lô)</option>';
-            }
-        } catch (e) {
-            batchSelect.innerHTML = '<option value="">(Lỗi nạp lô)</option>';
-        }
-    }
-
     function prepareDispenseJson() {
         const rows = document.querySelectorAll(".dispense-row");
         const list = [];
         for (const r of rows) {
             const medId = parseInt(r.querySelector(".sel-med").value);
-            const batchId = parseInt(r.querySelector(".sel-batch").value);
             const qty = parseInt(r.querySelector(".inp-qty").value);
 
-            if (medId && batchId && qty > 0) {
+            if (medId && qty > 0) {
                 list.push({
                     medicineId: medId,
-                    medicineBatchId: batchId,
                     quantity: qty
                 });
             }
         }
 
         if (list.length === 0) {
-            alert("Vui lòng chọn thuốc, lô thuốc và số lượng cấp phát hợp lệ.");
+            alert("Vui lòng chọn thuốc và nhập số lượng cấp phát hợp lệ.");
             return false;
         }
 

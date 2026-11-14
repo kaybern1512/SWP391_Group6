@@ -2,7 +2,7 @@
 @{
     var currentDate = ViewData["CurrentDate"] as string ?? (Model.ScheduledStart?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"));
     var returnUrl = ViewData["ReturnUrl"] as string ?? "";
-    var isExamining = Model.Status == "InService";
+    var isExamining = Model.Status == "InService" || Model.Status == "InProgress";
 }
 
 <tr>
@@ -32,6 +32,14 @@
     <td>
         <div class="fw-semibold text-primary">@Model.ServiceName</div>
         <div class="text-muted small">@Model.DepartmentName</div>
+        @if (Model.Services != null && Model.Services.Count > 1)
+        {
+            <div class="mt-1">
+                <span class="badge bg-light text-dark border small" title="@string.Join(", ", Model.Services.Select(s => s.ServiceName))">
+                    <i class="bi bi-collection me-1"></i>@(Model.Services.Count) dịch vụ liên khoa
+                </span>
+            </div>
+        }
     </td>
     <td>
         <div class="fw-bold text-success fs-6">
@@ -91,6 +99,7 @@
                     <i class="bi bi-clock me-1"></i>Chờ đến phòng khám
                 </span>
                 break;
+            case "InProgress":
             case "InService":
                 <span class="badge bg-primary px-3 py-2">
                     <i class="bi bi-heart-pulse-fill me-1"></i>Đang điều trị
@@ -146,7 +155,7 @@
                     <i class="bi bi-hourglass me-1"></i>Chờ Check-in
                 </span>
             }
-            else if (Model.Status == "InService")
+            else if (Model.Status == "InService" || Model.Status == "InProgress")
             {
                 <a asp-controller="DentistMedicalRecord" asp-action="Index" 
                    asp-route-patientId="@Model.PatientUserId" 
@@ -164,7 +173,7 @@
             <a asp-controller="DentistTreatmentPlan" asp-action="Create" asp-route-patientId="@Model.PatientUserId" class="btn btn-sm btn-outline-info" title="Lập phác đồ & kế hoạch điều trị cho bệnh nhân">
                 <i class="bi bi-diagram-3 me-1"></i>Phác Đồ
             </a>
-            @if (Model.Status == "InService" || Model.Status == "Completed")
+            @if (Model.Status == "InService" || Model.Status == "InProgress" || Model.Status == "Completed")
             {
                 <a asp-controller="DentistPrescription" 
                    asp-action="Index" 

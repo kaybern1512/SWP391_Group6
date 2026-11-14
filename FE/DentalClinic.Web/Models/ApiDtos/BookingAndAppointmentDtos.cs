@@ -111,6 +111,8 @@ public class CreateReceptionistAppointmentRequest
     public long PatientUserId { get; set; }
     public long DepartmentId { get; set; }
     public long RequestedServiceId { get; set; }
+    public List<long>? AdditionalServiceIds { get; set; }
+    public List<BookingServiceItemRequest>? ServiceItems { get; set; }
     public string? ComboCode { get; set; }
     public long? ComboId { get; set; }
     public long? RequestedDentistUserId { get; set; }
@@ -123,10 +125,20 @@ public class CreateReceptionistAppointmentRequest
     public string? ReasonForVisit { get; set; }
 }
 
+public class BookingServiceItemRequest
+{
+    public long DepartmentServiceId { get; set; }
+    public long? RequestedDentistUserId { get; set; }
+    public DateTime? ScheduledStart { get; set; }
+    public string? Notes { get; set; }
+}
+
 public class CreateAppointmentRequest
 {
     public long DepartmentId { get; set; }
     public long RequestedServiceId { get; set; }
+    public List<long>? AdditionalServiceIds { get; set; }
+    public List<BookingServiceItemRequest>? ServiceItems { get; set; }
     public string? ComboCode { get; set; }
     public long? ComboId { get; set; }
     public long? RequestedDentistUserId { get; set; }
@@ -136,6 +148,36 @@ public class CreateAppointmentRequest
     public bool AutoConfirm { get; set; } = false;
     public DateTime ScheduledStart { get; set; }
     public string? ReasonForVisit { get; set; }
+}
+
+public class AppointmentServiceItemDto
+{
+    public long AppointmentServiceId { get; set; }
+    public long AppointmentId { get; set; }
+    public int DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
+    public int DepartmentServiceId { get; set; }
+    public string? ServiceName { get; set; }
+    public int? DurationMinutes { get; set; }
+    public decimal UnitPrice { get; set; }
+    public int? ComboId { get; set; }
+    public int? ComboItemId { get; set; }
+    public long? RequestedDentistUserId { get; set; }
+    public string? RequestedDentistName { get; set; }
+    public long? AssignedDentistUserId { get; set; }
+    public string? AssignedDentistName { get; set; }
+    public int? RoomId { get; set; }
+    public string? RoomName { get; set; }
+    public int? DentalChairId { get; set; }
+    public string? ChairCode { get; set; }
+    public DateOnly ServiceDate { get; set; }
+    public DateTime ScheduledStart { get; set; }
+    public DateTime ScheduledEnd { get; set; }
+    public int? QueueNumber { get; set; }
+    public string? QueueCode { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string? Notes { get; set; }
+    public string? PendingActionType { get; set; }
 }
 
 public class AppointmentDto
@@ -226,6 +268,9 @@ public class AppointmentDto
     public long? TreatmentPlanItemId { get; set; }
 
     public AppointmentChangeProposalDto? ActiveProposal { get; set; }
+    public List<AppointmentServiceItemDto> Services { get; set; } = new();
+    [JsonIgnore]
+    public List<AppointmentServiceItemDto> AppointmentServices => Services;
     public List<StatusHistoryDto> StatusHistories { get; set; } = new();
 }
 
@@ -364,6 +409,7 @@ public class CompleteAppointmentRequest
     public string? FollowUpReason { get; set; }
     public DateTime? RecommendedFollowUpDate { get; set; }
     public string? FollowUpReasonCategory { get; set; }
+    public long? AppointmentServiceId { get; set; }
 }
 
 public class StaffCancelAppointmentRequest

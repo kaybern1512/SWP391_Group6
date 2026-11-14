@@ -1880,6 +1880,9 @@ public class AppointmentService : IAppointmentService
             var now = DateTime.UtcNow;
             var oldStatus = appointment.Status;
 
+            var dentistProfile = await _dbContext.DentistProfiles.AsNoTracking().FirstOrDefaultAsync(d => d.UserId == request.AssignedDentistUserId, ct);
+            var dentistDeptId = dentistProfile?.DepartmentId;
+
             foreach (var item in items)
             {
                 if (!item.QueueNumber.HasValue || item.QueueNumber <= 0)
@@ -1888,12 +1891,30 @@ public class AppointmentService : IAppointmentService
                     item.QueueNumber = deptCounters[item.DepartmentId];
                 }
 
-                item.AssignedDentistUserId = request.AssignedDentistUserId;
-                item.RoomId = (int)request.RoomId;
-                item.DentalChairId = (int)request.DentalChairId.Value;
+                if (dentistDeptId.HasValue && item.DepartmentId == dentistDeptId.Value)
+                {
+                    item.AssignedDentistUserId = request.AssignedDentistUserId;
+                    item.RoomId = (int)request.RoomId;
+                    item.DentalChairId = (int)request.DentalChairId.Value;
+                }
+                else if (item.RequestedDentistUserId.HasValue)
+                {
+                    var reqDentistDept = await _dbContext.DentistProfiles.AsNoTracking()
+                        .Where(d => d.UserId == item.RequestedDentistUserId.Value)
+                        .Select(d => (int?)d.DepartmentId)
+                        .FirstOrDefaultAsync(ct);
+                    if (reqDentistDept.HasValue && reqDentistDept.Value == item.DepartmentId)
+                    {
+                        item.AssignedDentistUserId = item.RequestedDentistUserId;
+                    }
+                }
+
                 item.ServiceDate = DateOnly.FromDateTime(item.ScheduledStart);
-                item.Status = AppointmentStatus.Confirmed;
-                item.PendingActionType = null;
+                if (item.AssignedDentistUserId.HasValue && item.RoomId.HasValue && item.DentalChairId.HasValue)
+                {
+                    item.Status = AppointmentStatus.Confirmed;
+                    item.PendingActionType = null;
+                }
                 item.UpdatedAt = now;
             }
 
