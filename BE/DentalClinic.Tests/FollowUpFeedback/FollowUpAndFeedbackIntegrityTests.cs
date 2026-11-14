@@ -81,7 +81,7 @@ public class FollowUpAndFeedbackIntegrityTests
             RecommendedDate = DateOnly.FromDateTime(now.AddDays(14)),
             RecommendedServiceId = 1,
             ClinicalReason = "Tái khám kiểm tra liền sẹo sau nhổ răng",
-            Status = "Suggested",
+            Status = "Proposed",
             ResultingAppointmentId = null, // Must be NULL initially
             CreatedAt = now,
             UpdatedAt = now
@@ -95,7 +95,7 @@ public class FollowUpAndFeedbackIntegrityTests
 
         var saved = await db.FollowUpSchedules.FindAsync(1L);
         Assert.NotNull(saved);
-        Assert.Equal("Suggested", saved.Status);
+        Assert.Equal("Proposed", saved.Status);
         Assert.Null(saved.ResultingAppointmentId); // NOT an automatically booked appointment!
         Assert.Equal(3001, saved.PatientUserId);
         Assert.Equal(4001, saved.DentistUserId);

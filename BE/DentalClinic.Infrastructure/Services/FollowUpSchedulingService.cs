@@ -563,7 +563,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             {
                 var pendingFollowUp = await _dbContext.FollowUpSchedules
                     .FirstOrDefaultAsync(f => f.TreatmentSessionId == session.SessionId &&
-                                              (f.Status == "Suggested" || f.Status == "Pending"), ct);
+                                              (f.Status == "Proposed" || f.Status == "Pending"), ct);
 
                 if (pendingFollowUp != null)
                 {

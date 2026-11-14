@@ -602,7 +602,7 @@ public class MedicineService : IMedicineService
             }
 
             var allDispensed = prescription.PrescriptionItems.All(pi => pi.QuantityDispensed >= pi.Quantity);
-            prescription.Status = allDispensed ? "Dispensed" : "PartiallyDispensed";
+            prescription.Status = allDispensed ? "Dispensed" : "Active";
             prescription.UpdatedAt = now;
 
             await _context.SaveChangesAsync(ct);

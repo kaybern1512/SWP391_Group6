@@ -274,17 +274,28 @@ public class SqlServerRefactorIntegrationTests
         var res2 = await apptService.CreatePatientAppointmentAsync(fixture.patientId, afternoonReq);
         Assert.True(res2.Success);
 
-        // 3. Third booking on same day (15:30) -> MUST BE REJECTED
+        // 3. Third non-overlapping booking on same day (16:30) -> ALLOWED by genuine business rule
         var thirdReq = new CreateAppointmentRequest
         {
             DepartmentId = fixture.dept1Id,
             RequestedServiceId = fixture.srv1Id,
-            ScheduledStart = targetDay.AddHours(15).AddMinutes(30),
-            ReasonForVisit = "Khám thêm ca chiều"
+            ScheduledStart = targetDay.AddHours(16).AddMinutes(30),
+            ReasonForVisit = "Khám thêm ca chiều cuối ngày"
         };
         var res3 = await apptService.CreatePatientAppointmentAsync(fixture.patientId, thirdReq);
-        Assert.False(res3.Success);
-        Assert.Contains("tối đa 2", res3.Message);
+        Assert.True(res3.Success, res3.Message);
+
+        // 4. Overlapping booking on same day (14:15, during 14:00-14:45) -> MUST BE REJECTED
+        var overlapReq = new CreateAppointmentRequest
+        {
+            DepartmentId = fixture.dept1Id,
+            RequestedServiceId = fixture.srv1Id,
+            ScheduledStart = targetDay.AddHours(14).AddMinutes(15),
+            ReasonForVisit = "Khám trùng giờ"
+        };
+        var res4 = await apptService.CreatePatientAppointmentAsync(fixture.patientId, overlapReq);
+        Assert.False(res4.Success);
+        Assert.Contains("Bạn đã có lịch khám", res4.Message);
     }
 
     [Fact]

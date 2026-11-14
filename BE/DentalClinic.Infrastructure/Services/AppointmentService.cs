@@ -98,6 +98,15 @@ public class AppointmentService : IAppointmentService
             return ApiResponse<List<BookingServicePlanItem>>.Fail("Thời gian khám không được nằm trong quá khứ.");
         }
 
+        var clinic = await _dbContext.ClinicProfiles.AsNoTracking().FirstOrDefaultAsync(c => c.ClinicId == 1, ct);
+        var openingTime = clinic?.OpeningTime ?? new TimeOnly(8, 0);
+        var closingTime = clinic?.ClosingTime ?? new TimeOnly(20, 0);
+        var startTimeOnly = TimeOnly.FromDateTime(requestedStart);
+        if (startTimeOnly < openingTime || startTimeOnly > closingTime)
+        {
+            return ApiResponse<List<BookingServicePlanItem>>.Fail($"Thời gian đặt khám ({startTimeOnly:HH:mm}) phải nằm trong giờ hoạt động của phòng khám ({openingTime:HH:mm} - {closingTime:HH:mm}).");
+        }
+
         ServiceCombo? selectedCombo = null;
         if (comboId.HasValue && comboId.Value > 0)
         {
@@ -345,26 +354,12 @@ public class AppointmentService : IAppointmentService
             return ApiResponse<AppointmentDto>.Fail("Bạn đã gửi một yêu cầu đặt lịch khám cho dịch vụ và khung giờ này rồi.");
         }
 
-        var distinctApptCount = existingSameDayItems.Select(s => s.AppointmentId).Distinct().Count();
-        if (distinctApptCount >= 2)
-        {
-            return ApiResponse<AppointmentDto>.Fail(
-                $"Theo quy định phòng khám, mỗi bệnh nhân chỉ được đặt tối đa 2 lịch khám trong cùng một ngày. Bạn đã có {distinctApptCount} lịch hẹn vào ngày {overallStart:dd/MM/yyyy}.");
-        }
-
-        var isNewAppointmentMorning = overallStart.TimeOfDay < new TimeSpan(12, 0, 0);
         foreach (var existing in existingSameDayItems)
         {
             if (overallStart < existing.ScheduledEnd && overallEnd > existing.ScheduledStart)
             {
                 return ApiResponse<AppointmentDto>.Fail(
                     $"Bạn đã có lịch khám #APT-{existing.AppointmentId:D6} từ {existing.ScheduledStart:HH:mm} đến {existing.ScheduledEnd:HH:mm} cùng ngày.");
-            }
-
-            var isExistingMorning = existing.ScheduledStart.TimeOfDay < new TimeSpan(12, 0, 0);
-            if (distinctApptCount >= 1 && isNewAppointmentMorning == isExistingMorning)
-            {
-                return ApiResponse<AppointmentDto>.Fail("Phòng khám quy định chỉ được đặt tối đa 2 lịch/ngày nếu ở 2 buổi khác nhau (1 buổi sáng và 1 buổi chiều).");
             }
         }
 
@@ -2277,28 +2272,45 @@ public class AppointmentService : IAppointmentService
 
         var now = DateTime.UtcNow;
 
+        var session = appointment.TreatmentSessions.FirstOrDefault(s => s.AppointmentServiceId == targetService.AppointmentServiceId);
+        if (session == null)
+        {
+            session = new TreatmentSession
+            {
+                AppointmentId = appointment.AppointmentId,
+                AppointmentServiceId = targetService.AppointmentServiceId,
+                PatientUserId = appointment.PatientUserId,
+                DentistUserId = dentistUserId,
+                SessionDate = DateOnly.FromDateTime(now),
+                Notes = notes,
+                ClinicalObservations = "Hoàn tất dịch vụ",
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            _dbContext.TreatmentSessions.Add(session);
+            await _dbContext.SaveChangesAsync(ct);
+        }
+
+        var performed = await _dbContext.PerformedServices
+            .FirstOrDefaultAsync(ps => ps.AppointmentId == appointment.AppointmentId && ps.AppointmentServiceId == targetService.AppointmentServiceId, ct);
+        if (performed == null)
+        {
+            performed = new PerformedService
+            {
+                TreatmentSessionId = session.SessionId,
+                AppointmentId = appointment.AppointmentId,
+                AppointmentServiceId = targetService.AppointmentServiceId,
+                DepartmentServiceId = targetService.DepartmentServiceId,
+                Quantity = 1,
+                UnitPrice = targetService.UnitPrice,
+                Notes = notes,
+                CreatedAt = now
+            };
+            _dbContext.PerformedServices.Add(performed);
+        }
+
         if (!string.IsNullOrWhiteSpace(followUpReason) || recommendedFollowUpDate.HasValue)
         {
-            var session = appointment.TreatmentSessions.FirstOrDefault(s => s.AppointmentServiceId == targetService.AppointmentServiceId)
-                          ?? appointment.TreatmentSessions.FirstOrDefault();
-            if (session == null)
-            {
-                session = new TreatmentSession
-                {
-                    AppointmentId = appointment.AppointmentId,
-                    AppointmentServiceId = targetService.AppointmentServiceId,
-                    PatientUserId = appointment.PatientUserId,
-                    DentistUserId = dentistUserId,
-                    SessionDate = DateOnly.FromDateTime(now),
-                    Notes = notes,
-                    ClinicalObservations = "Hoàn tất dịch vụ",
-                    CreatedAt = now,
-                    UpdatedAt = now
-                };
-                _dbContext.TreatmentSessions.Add(session);
-                await _dbContext.SaveChangesAsync(ct);
-            }
-
             var fuSchedule = new FollowUpSchedule
             {
                 TreatmentSessionId = session.SessionId,
@@ -2307,7 +2319,7 @@ public class AppointmentService : IAppointmentService
                 RecommendedDate = DateOnly.FromDateTime(recommendedFollowUpDate ?? now.AddDays(7)),
                 RecommendedServiceId = targetService.DepartmentServiceId,
                 ClinicalReason = string.IsNullOrWhiteSpace(followUpReason) ? "Tái khám theo dõi định kỳ sau thủ thuật" : followUpReason.Trim(),
-                Status = "Suggested",
+                Status = "Proposed",
                 CreatedAt = now,
                 UpdatedAt = now
             };
