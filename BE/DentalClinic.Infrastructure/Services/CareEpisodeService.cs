@@ -12,6 +12,7 @@ using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using AppointmentServiceEntity = DentalClinic.Infrastructure.Persistence.Entities.AppointmentService;
 
 namespace DentalClinic.Infrastructure.Services;
 
@@ -35,152 +36,47 @@ public class CareEpisodeService : ICareEpisodeService
 
     public async Task<ApiResponse<CareEpisodeDto>> GetOrCreateActiveEpisodeForAppointmentAsync(long appointmentId, CancellationToken ct = default)
     {
-        var appointment = await _dbContext.Appointments
-            .Include(a => a.PatientUser)
-            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
-
-        if (appointment == null)
-            return ApiResponse<CareEpisodeDto>.Fail("Không tìm thấy ca khám chỉ định.");
-
-        if (appointment.CareEpisodeId.HasValue)
-        {
-            await EnsurePrimaryTaskForAppointmentAsync(appointment, appointment.CareEpisodeId.Value, ct);
-            return await GetEpisodeByIdAsync(appointment.CareEpisodeId.Value, ct);
-        }
-
-        // Look for an existing open episode for this patient today
-        var today = DateTime.UtcNow.Date;
-        var existingEpisode = await _dbContext.CareEpisodes
-            .Where(e => e.PatientUserId == appointment.PatientUserId &&
-                        (e.Status == "Open" || e.Status == "PendingAdditionalService" || e.Status == "ReadyForBilling") &&
-                        e.OpenedAtUtc >= today && e.OpenedAtUtc < today.AddDays(1))
-            .OrderByDescending(e => e.CareEpisodeId)
-            .FirstOrDefaultAsync(ct);
-
-        if (existingEpisode != null)
-        {
-            appointment.CareEpisodeId = existingEpisode.CareEpisodeId;
-            appointment.UpdatedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync(ct);
-            await EnsurePrimaryTaskForAppointmentAsync(appointment, existingEpisode.CareEpisodeId, ct);
-            return await GetEpisodeByIdAsync(existingEpisode.CareEpisodeId, ct);
-        }
-
-        // Create a new care episode with appointment as RootAppointment
-        var episodeCode = await GenerateEpisodeCodeAsync(ct);
-        var newEpisode = new CareEpisode
-        {
-            EpisodeCode = episodeCode,
-            PatientUserId = appointment.PatientUserId,
-            RootAppointmentId = appointment.AppointmentId,
-            Status = "Open",
-            OpenedAtUtc = DateTime.UtcNow,
-            CreatedAtUtc = DateTime.UtcNow,
-            Notes = $"Đợt khám khởi tạo từ ca khám #{appointment.AppointmentCode}"
-        };
-
-        _dbContext.CareEpisodes.Add(newEpisode);
-        await _dbContext.SaveChangesAsync(ct);
-
-        appointment.CareEpisodeId = newEpisode.CareEpisodeId;
-        appointment.UpdatedAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync(ct);
-
-        await EnsurePrimaryTaskForAppointmentAsync(appointment, newEpisode.CareEpisodeId, ct);
-
-        _logger.LogInformation("Khởi tạo đợt khám mới {EpisodeCode} cho bệnh nhân {PatientUserId} từ ca khám #{AppointmentId}",
-            newEpisode.EpisodeCode, appointment.PatientUserId, appointment.AppointmentId);
-
-        return await GetEpisodeByIdAsync(newEpisode.CareEpisodeId, ct);
+        return await GetEpisodeByIdAsync(appointmentId, ct);
     }
 
     public async Task<ApiResponse<CareEpisodeDto>> GetEpisodeByIdAsync(long careEpisodeId, CancellationToken ct = default)
     {
-        var episode = await _dbContext.CareEpisodes
-            .Include(e => e.PatientUser)
-                .ThenInclude(u => u.PatientProfile)
-            .Include(e => e.Appointments)
-                .ThenInclude(a => a.Department)
-            .Include(e => e.Appointments)
-                .ThenInclude(a => a.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
-            .Include(e => e.Appointments)
-                .ThenInclude(a => a.Room)
-            .Include(e => e.Appointments)
-                .ThenInclude(a => a.DentalChair)
-            .Include(e => e.Appointments)
-                .ThenInclude(a => a.RequestedService)
-            .Include(e => e.ServiceTasks)
-                .ThenInclude(t => t.DepartmentService)
-                    .ThenInclude(s => s.Department)
-            .Include(e => e.ServiceTasks)
-                .ThenInclude(t => t.PerformingDentistUser)
-                    .ThenInclude(u => u.StaffProfile)
-            .Include(e => e.ServiceTasks)
-                .ThenInclude(t => t.Appointment)
-            .Include(e => e.ServiceTasks)
-                .ThenInclude(t => t.StepProgresses)
-                    .ThenInclude(p => p.Step)
-            .Include(e => e.ServiceTasks)
-                .ThenInclude(t => t.StepProgresses)
-                    .ThenInclude(p => p.CompletedByDentistUser)
-                        .ThenInclude(u => u!.StaffProfile)
-            .Include(e => e.DepartmentReferrals)
-                .ThenInclude(r => r.FromDepartment)
-            .Include(e => e.DepartmentReferrals)
-                .ThenInclude(r => r.ToDepartment)
-            .Include(e => e.DepartmentReferrals)
-                .ThenInclude(r => r.RequestedService)
-            .Include(e => e.DepartmentReferrals)
-                .ThenInclude(r => r.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
-            .Include(e => e.DepartmentReferrals)
-                .ThenInclude(r => r.SourceAppointment)
-            .Include(e => e.DepartmentReferrals)
-                .ThenInclude(r => r.DestinationAppointment)
-            .Include(e => e.Invoices)
-                .ThenInclude(i => i.InvoiceItems)
-            .Include(e => e.Invoices)
-                .ThenInclude(i => i.Payments)
-            .FirstOrDefaultAsync(e => e.CareEpisodeId == careEpisodeId, ct);
-
-        if (episode == null)
+        var appointment = await LoadAppointmentEpisodeGraphAsync(careEpisodeId, ct);
+        if (appointment == null)
             return ApiResponse<CareEpisodeDto>.Fail("Không tìm thấy đợt khám chỉ định.");
 
-        var dto = MapCareEpisodeToDto(episode);
+        var referrals = await LoadReferralsForAppointmentAsync(appointment.AppointmentId, ct);
+        var dto = MapAppointmentToCareEpisodeDto(appointment, referrals);
         return ApiResponse<CareEpisodeDto>.Ok(dto);
     }
 
     public async Task<ApiResponse<CareEpisodeDto>> GetEpisodeByAppointmentIdAsync(long appointmentId, CancellationToken ct = default)
     {
-        var appointment = await _dbContext.Appointments
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
-
-        if (appointment == null)
-            return ApiResponse<CareEpisodeDto>.Fail("Không tìm thấy ca khám chỉ định.");
-
-        if (appointment.CareEpisodeId.HasValue)
-        {
-            await EnsurePrimaryTaskForAppointmentAsync(appointment, appointment.CareEpisodeId.Value, ct);
-            return await GetEpisodeByIdAsync(appointment.CareEpisodeId.Value, ct);
-        }
-
-        return await GetOrCreateActiveEpisodeForAppointmentAsync(appointmentId, ct);
+        return await GetEpisodeByIdAsync(appointmentId, ct);
     }
 
     public async Task<ApiResponse<CareEpisodeDto>> GetPatientActiveEpisodeAsync(long patientUserId, CancellationToken ct = default)
     {
-        var episode = await _dbContext.CareEpisodes
-            .Where(e => e.PatientUserId == patientUserId &&
-                        (e.Status == "Open" || e.Status == "PendingAdditionalService" || e.Status == "ReadyForBilling"))
-            .OrderByDescending(e => e.CareEpisodeId)
+        var activeStatuses = new[]
+        {
+            AppointmentStatus.PendingReceptionReview,
+            AppointmentStatus.Confirmed,
+            AppointmentStatus.CheckedIn,
+            AppointmentStatus.InService,
+            "WaitingForFollowUp"
+        };
+
+        var appointmentId = await _dbContext.Appointments
+            .AsNoTracking()
+            .Where(a => a.PatientUserId == patientUserId && activeStatuses.Contains(a.Status))
+            .OrderByDescending(a => a.AppointmentId)
+            .Select(a => (long?)a.AppointmentId)
             .FirstOrDefaultAsync(ct);
 
-        if (episode == null)
+        if (!appointmentId.HasValue)
             return ApiResponse<CareEpisodeDto>.Fail("Hiện tại bệnh nhân không có đợt khám nào đang diễn ra.");
 
-        return await GetEpisodeByIdAsync(episode.CareEpisodeId, ct);
+        return await GetEpisodeByIdAsync(appointmentId.Value, ct);
     }
 
     #endregion
@@ -196,41 +92,42 @@ public class CareEpisodeService : ICareEpisodeService
         if (appointment == null)
             return ApiResponse<List<EpisodeServiceTaskDto>>.Fail("Không tìm thấy ca khám.");
 
-        // Check departments where dentist is actively assigned
-        var activeDepartmentIds = await _dbContext.DentistDepartments
+        var dentist = await _dbContext.DentistProfiles
+            .Include(d => d.StaffProfile)
+            .Include(d => d.Department)
             .AsNoTracking()
-            .Where(dd => dd.DentistUserId == dentistUserId && dd.Status == "Active")
-            .Select(dd => dd.DepartmentId)
-            .ToListAsync(ct);
+            .FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
 
-        if (!activeDepartmentIds.Any())
+        if (dentist == null || dentist.Department == null || dentist.Department.Status != "Active")
             return ApiResponse<List<EpisodeServiceTaskDto>>.Ok(new List<EpisodeServiceTaskDto>(), "Bác sĩ chưa được gán chuyên khoa hoạt động.");
 
         var services = await _dbContext.DepartmentServices
             .Include(s => s.Department)
             .AsNoTracking()
-            .Where(s => activeDepartmentIds.Contains(s.DepartmentId) && s.Status == "Active")
-            .OrderBy(s => s.Department.Name)
-            .ThenBy(s => s.ServiceName)
+            .Where(s => s.DepartmentId == dentist.DepartmentId && s.Status == "Active")
+            .OrderBy(s => s.ServiceName)
             .ToListAsync(ct);
+
+        var apptCode = FormatAppointmentCode(appointment.AppointmentId);
+        var dentistName = dentist.StaffProfile?.FullName ?? string.Empty;
 
         var result = services.Select(s => new EpisodeServiceTaskDto
         {
             ServiceTaskId = 0,
             TaskCode = string.Empty,
-            CareEpisodeId = appointment.CareEpisodeId ?? 0,
-            AppointmentId = appointmentId,
-            AppointmentCode = appointment.AppointmentCode,
+            CareEpisodeId = appointment.AppointmentId,
+            AppointmentId = appointment.AppointmentId,
+            AppointmentCode = apptCode,
             DepartmentServiceId = s.DepartmentServiceId,
             ServiceName = s.ServiceName,
             DepartmentId = s.DepartmentId,
             DepartmentName = s.Department.Name,
             PerformingDentistUserId = dentistUserId,
-            PerformingDentistName = string.Empty,
+            PerformingDentistName = dentistName,
             Status = "Planned",
             Quantity = 1,
             UnitPriceSnapshot = s.Price,
-            EstimatedDurationMinutes = s.DurationMinutes ?? 30,
+            EstimatedDurationMinutes = s.DurationMinutes,
             PlannedAtUtc = DateTime.UtcNow
         }).ToList();
 
@@ -249,7 +146,7 @@ public class CareEpisodeService : ICareEpisodeService
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Vui lòng chọn dịch vụ cần thực hiện.");
 
         var appointment = await _dbContext.Appointments
-            .Include(a => a.PatientUser)
+            .Include(a => a.AppointmentServices)
             .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId, ct);
 
         if (appointment == null)
@@ -257,146 +154,125 @@ public class CareEpisodeService : ICareEpisodeService
 
         var service = await _dbContext.DepartmentServices
             .Include(s => s.Department)
-            .FirstOrDefaultAsync(s => s.DepartmentServiceId == request.DepartmentServiceId && s.Status == "Active", ct);
+            .FirstOrDefaultAsync(s => s.DepartmentServiceId == (int)request.DepartmentServiceId && s.Status == "Active", ct);
 
         if (service == null)
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Dịch vụ được chọn không tồn tại hoặc đã ngừng hoạt động.");
 
-        // Qualification check: Dentist must be active in the service's department
-        var isQualified = await _dbContext.DentistDepartments
-            .AnyAsync(dd => dd.DentistUserId == dentistUserId && dd.DepartmentId == service.DepartmentId && dd.Status == "Active", ct);
+        var dentist = await _dbContext.DentistProfiles
+            .Include(d => d.StaffProfile)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
 
-        if (!isQualified)
+        if (dentist == null || dentist.DepartmentId != service.DepartmentId)
         {
             return ApiResponse<EpisodeServiceTaskDto>.Fail(
                 $"Bác sĩ không thuộc chuyên khoa '{service.Department.Name}' cung cấp dịch vụ này. Vui lòng chuyển tiếp bệnh nhân sang bác sĩ chuyên khoa phù hợp (Internal Referral).");
         }
 
-        // Ensure episode exists
-        if (!appointment.CareEpisodeId.HasValue)
-        {
-            var epRes = await GetOrCreateActiveEpisodeForAppointmentAsync(appointment.AppointmentId, ct);
-            if (!epRes.Success || epRes.Data == null)
-                return ApiResponse<EpisodeServiceTaskDto>.Fail(epRes.Message ?? "Không thể tạo đợt khám cho ca điều trị.");
-            appointment.CareEpisodeId = epRes.Data.CareEpisodeId;
-        }
+        var referenceItem = appointment.AppointmentServices
+            .OrderByDescending(s => s.ScheduledEnd)
+            .FirstOrDefault();
 
-        var activeWorkflow = await _dbContext.ServiceWorkflows
-            .Include(w => w.Steps)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(w => w.DepartmentServiceId == service.DepartmentServiceId && w.IsActive && w.ApprovalStatus == "Approved", ct);
+        var scheduledStart = referenceItem?.ScheduledEnd ?? DateTime.UtcNow;
+        var durationMinutes = service.DurationMinutes > 0 ? service.DurationMinutes : 30;
+        var scheduledEnd = scheduledStart.AddMinutes(durationMinutes);
+        var serviceDate = DateOnly.FromDateTime(scheduledStart);
 
-        var taskCode = await GenerateTaskCodeAsync(ct);
-        var task = new EpisodeServiceTask
+        var nextQueueNumber = await AllocateDepartmentQueueNumberAsync(service.DepartmentId, serviceDate, ct);
+
+        var apptService = new AppointmentServiceEntity
         {
-            TaskCode = taskCode,
-            CareEpisodeId = appointment.CareEpisodeId.Value,
             AppointmentId = appointment.AppointmentId,
             DepartmentServiceId = service.DepartmentServiceId,
-            PerformingDentistUserId = dentistUserId,
-            Status = "Planned",
-            Quantity = request.Quantity > 0 ? request.Quantity : 1,
-            UnitPriceSnapshot = service.Price,
-            EstimatedDurationMinutes = service.DurationMinutes ?? 30,
-            AppliedWorkflowId = activeWorkflow?.WorkflowId,
-            AppliedWorkflowVersion = activeWorkflow?.Version,
-            PlannedAtUtc = DateTime.UtcNow,
+            DepartmentId = service.DepartmentId,
+            RequestedDentistUserId = dentistUserId,
+            AssignedDentistUserId = dentistUserId,
+            RoomId = referenceItem?.RoomId,
+            DentalChairId = referenceItem?.DentalChairId,
+            ServiceDate = serviceDate,
+            ScheduledStart = scheduledStart,
+            ScheduledEnd = scheduledEnd,
+            QueueNumber = nextQueueNumber,
+            UnitPrice = service.Price,
+            Status = "Confirmed",
             Notes = request.Notes?.Trim(),
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
 
-        if (activeWorkflow != null && activeWorkflow.Steps != null)
-        {
-            foreach (var step in activeWorkflow.Steps.OrderBy(s => s.StepOrder))
-            {
-                task.StepProgresses.Add(new EpisodeServiceTaskStepProgress
-                {
-                    StepId = step.StepId,
-                    Status = "Pending",
-                    CreatedAtUtc = DateTime.UtcNow
-                });
-            }
-        }
-
-        _dbContext.EpisodeServiceTasks.Add(task);
+        _dbContext.AppointmentServices.Add(apptService);
+        appointment.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Đã thêm chỉ định dịch vụ {TaskCode} ({ServiceName}) cho ca khám #{AppointmentCode} của bác sĩ {DentistUserId}",
-            task.TaskCode, service.ServiceName, appointment.AppointmentCode, dentistUserId);
+        apptService.DepartmentService = service;
 
-        var performingUser = await _dbContext.UserAccounts
-            .Include(u => u.StaffProfile)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.UserId == dentistUserId, ct);
+        _logger.LogInformation("Đã thêm chỉ định dịch vụ #{AppointmentServiceId} ({ServiceName}) cho ca khám #{AppointmentId} của bác sĩ {DentistUserId}",
+            apptService.AppointmentServiceId, service.ServiceName, appointment.AppointmentId, dentistUserId);
 
-        return ApiResponse<EpisodeServiceTaskDto>.Ok(MapToTaskDto(task, GetUserDisplayName(performingUser)), "Chỉ định dịch vụ bổ sung thành công.");
+        var dto = MapAppointmentServiceToTaskDto(apptService, dentist.StaffProfile?.FullName);
+        dto.Quantity = request.Quantity > 0 ? request.Quantity : 1;
+
+        return ApiResponse<EpisodeServiceTaskDto>.Ok(dto, "Chỉ định dịch vụ bổ sung thành công.");
     }
 
     public async Task<ApiResponse<EpisodeServiceTaskDto>> StartServiceTaskAsync(long dentistUserId, long serviceTaskId, CancellationToken ct = default)
     {
-        var task = await _dbContext.EpisodeServiceTasks
-            .Include(t => t.DepartmentService)
-                .ThenInclude(s => s.Department)
-            .Include(t => t.Appointment)
-            .Include(t => t.PerformingDentistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Include(t => t.StepProgresses)
-                .ThenInclude(p => p.Step)
-            .Include(t => t.CareEpisode)
-            .FirstOrDefaultAsync(t => t.ServiceTaskId == serviceTaskId, ct);
+        var apptService = await _dbContext.AppointmentServices
+            .Include(s => s.Appointment)
+            .Include(s => s.DepartmentService)
+                .ThenInclude(ds => ds.Department)
+            .Include(s => s.AssignedDentist)
+                .ThenInclude(d => d!.StaffProfile)
+            .Include(s => s.TreatmentSessions)
+                .ThenInclude(ts => ts.PerformedServices)
+            .FirstOrDefaultAsync(s => s.AppointmentServiceId == serviceTaskId, ct);
 
-        if (task == null)
+        if (apptService == null)
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Không tìm thấy tác vụ điều trị chỉ định.");
 
-        var isAuthorized = task.PerformingDentistUserId == dentistUserId ||
-            await _dbContext.DentistDepartments.AnyAsync(dd => dd.DentistUserId == dentistUserId && dd.DepartmentId == task.DepartmentService.DepartmentId && dd.Status == "Active", ct);
+        var isAuthorized = apptService.AssignedDentistUserId == dentistUserId ||
+            await _dbContext.DentistProfiles.AnyAsync(d => d.UserId == dentistUserId && d.DepartmentId == apptService.DepartmentId, ct);
 
         if (!isAuthorized)
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Bạn không có quyền thực hiện tác vụ của chuyên khoa/bác sĩ khác.");
 
-        if (task.Status == "Completed")
+        if (apptService.Status == "Completed")
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Tác vụ này đã hoàn thành, không thể bắt đầu lại.");
 
-        if (task.Status == "Cancelled")
+        if (apptService.Status == "Cancelled")
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Tác vụ này đã bị hủy.");
 
-        // Lazy initialize steps if workflow exists but step progresses weren't seeded
-        if (task.AppliedWorkflowId.HasValue && !task.StepProgresses.Any())
-        {
-            var wfSteps = await _dbContext.ServiceWorkflowSteps
-                .Where(s => s.WorkflowId == task.AppliedWorkflowId.Value)
-                .OrderBy(s => s.StepOrder)
-                .ToListAsync(ct);
+        apptService.AssignedDentistUserId ??= dentistUserId;
+        apptService.Status = "InProgress";
+        apptService.UpdatedAt = DateTime.UtcNow;
 
-            foreach (var step in wfSteps)
-            {
-                var prog = new EpisodeServiceTaskStepProgress
-                {
-                    ServiceTaskId = task.ServiceTaskId,
-                    StepId = step.StepId,
-                    Status = "Pending",
-                    CreatedAtUtc = DateTime.UtcNow
-                };
-                _dbContext.EpisodeServiceTaskStepProgresses.Add(prog);
-                task.StepProgresses.Add(prog);
-            }
+        if (apptService.Appointment.Status == AppointmentStatus.Confirmed || apptService.Appointment.Status == AppointmentStatus.CheckedIn)
+        {
+            apptService.Appointment.Status = AppointmentStatus.InService;
+            apptService.Appointment.UpdatedAt = DateTime.UtcNow;
         }
 
-        task.Status = "InProgress";
-        task.StartedAtUtc ??= DateTime.UtcNow;
-        task.UpdatedAtUtc = DateTime.UtcNow;
-
-        var firstStep = task.StepProgresses.OrderBy(p => p.Step?.StepOrder ?? 0).FirstOrDefault();
-        if (firstStep != null && firstStep.Status == "Pending")
+        var session = apptService.TreatmentSessions.OrderByDescending(ts => ts.SessionId).FirstOrDefault();
+        if (session == null)
         {
-            firstStep.Status = "InProgress";
-            firstStep.StartedAtUtc = DateTime.UtcNow;
+            session = new TreatmentSession
+            {
+                AppointmentId = apptService.AppointmentId,
+                AppointmentServiceId = apptService.AppointmentServiceId,
+                PatientUserId = apptService.Appointment.PatientUserId,
+                DentistUserId = dentistUserId,
+                SessionDate = apptService.ServiceDate,
+                Notes = apptService.Notes,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _dbContext.TreatmentSessions.Add(session);
         }
 
         await _dbContext.SaveChangesAsync(ct);
-        _logger.LogInformation("Bác sĩ {DentistUserId} đã bắt đầu tác vụ {TaskCode} ({ServiceName})", dentistUserId, task.TaskCode, task.DepartmentService.ServiceName);
 
-        return ApiResponse<EpisodeServiceTaskDto>.Ok(MapToTaskDto(task), "Bắt đầu thực hiện dịch vụ thành công.");
+        return ApiResponse<EpisodeServiceTaskDto>.Ok(MapAppointmentServiceToTaskDto(apptService), "Bắt đầu thực hiện dịch vụ thành công.");
     }
 
     public async Task<ApiResponse<EpisodeTaskStepProgressDto>> CompleteTaskStepAsync(
@@ -409,153 +285,68 @@ public class CareEpisodeService : ICareEpisodeService
         if (request == null)
             return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Dữ liệu xác nhận bước không hợp lệ.");
 
-        var task = await _dbContext.EpisodeServiceTasks
-            .Include(t => t.DepartmentService)
-                .ThenInclude(s => s.Department)
-            .Include(t => t.Appointment)
-            .Include(t => t.StepProgresses)
-                .ThenInclude(p => p.Step)
-            .FirstOrDefaultAsync(t => t.ServiceTaskId == serviceTaskId, ct);
+        var apptService = await _dbContext.AppointmentServices
+            .Include(s => s.Appointment)
+            .Include(s => s.DepartmentService)
+            .FirstOrDefaultAsync(s => s.AppointmentServiceId == serviceTaskId, ct);
 
-        if (task == null)
+        if (apptService == null)
             return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Không tìm thấy tác vụ điều trị chỉ định.");
 
-        var isAuthorized = task.PerformingDentistUserId == dentistUserId ||
-            await _dbContext.DentistDepartments.AnyAsync(dd => dd.DentistUserId == dentistUserId && dd.DepartmentId == task.DepartmentService.DepartmentId && dd.Status == "Active", ct);
+        var isAuthorized = apptService.AssignedDentistUserId == dentistUserId ||
+            await _dbContext.DentistProfiles.AnyAsync(d => d.UserId == dentistUserId && d.DepartmentId == apptService.DepartmentId, ct);
 
         if (!isAuthorized)
             return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Bạn không có quyền cập nhật tiến độ tác vụ của bác sĩ khác.");
 
-        if (task.Status == "Completed")
+        if (apptService.Status == "Completed")
             return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Tác vụ này đã hoàn thành.");
 
-        if (task.Status == "Cancelled")
+        if (apptService.Status == "Cancelled")
             return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Tác vụ này đã bị hủy.");
 
-        if (task.Status == "Planned")
+        if (apptService.Status != "InProgress")
         {
-            task.Status = "InProgress";
-            task.StartedAtUtc = DateTime.UtcNow;
-            task.UpdatedAtUtc = DateTime.UtcNow;
+            apptService.Status = "InProgress";
+            apptService.UpdatedAt = DateTime.UtcNow;
         }
 
-        var progress = task.StepProgresses.FirstOrDefault(p => p.StepId == stepId);
-        var stepDef = progress?.Step ?? await _dbContext.ServiceWorkflowSteps.FirstOrDefaultAsync(s => s.StepId == stepId, ct);
-
-        if (stepDef == null)
-            return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Không tìm thấy định nghĩa bước quy trình.");
-
-        if (progress == null)
+        if (!string.IsNullOrWhiteSpace(request.Notes))
         {
-            progress = new EpisodeServiceTaskStepProgress
-            {
-                ServiceTaskId = serviceTaskId,
-                StepId = stepId,
-                Status = "Pending",
-                CreatedAtUtc = DateTime.UtcNow
-            };
-            _dbContext.EpisodeServiceTaskStepProgresses.Add(progress);
-            task.StepProgresses.Add(progress);
-        }
-
-        var inputVal = request.ResultValue?.Trim();
-        if (stepDef.IsRequired && stepDef.ExpectedDataType != "None" && string.IsNullOrWhiteSpace(inputVal))
-        {
-            return ApiResponse<EpisodeTaskStepProgressDto>.Fail($"Bước '{stepDef.StepName}' yêu cầu nhập dữ liệu kết quả ({stepDef.ExpectedDataType}).");
-        }
-
-        if (!string.IsNullOrWhiteSpace(inputVal))
-        {
-            switch (stepDef.ExpectedDataType?.ToUpperInvariant())
-            {
-                case "NUMBER":
-                    if (!decimal.TryParse(inputVal, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _) &&
-                        !decimal.TryParse(inputVal, out _))
-                    {
-                        return ApiResponse<EpisodeTaskStepProgressDto>.Fail($"Dữ liệu bước '{stepDef.StepName}' phải là định dạng số hợp lệ.");
-                    }
-                    break;
-                case "BOOLEAN":
-                    var lower = inputVal.ToLowerInvariant();
-                    if (lower != "true" && lower != "false" && lower != "1" && lower != "0" && lower != "đạt" && lower != "yes" && lower != "no")
-                    {
-                        return ApiResponse<EpisodeTaskStepProgressDto>.Fail($"Dữ liệu bước '{stepDef.StepName}' phải là xác nhận Có/Không (Boolean).");
-                    }
-                    break;
-            }
-        }
-
-        var reqText = (stepDef.CompletionRequirement ?? string.Empty).ToLowerInvariant();
-        var stepNameLower = stepDef.StepName.ToLowerInvariant();
-        if (reqText.Contains("x-quang") || reqText.Contains("xray") || reqText.Contains("chụp phim") ||
-            stepNameLower.Contains("x-quang") || stepNameLower.Contains("xray") || stepNameLower.Contains("chụp phim"))
-        {
-            var hasXrayResult = await _dbContext.DiagnosticResults
-                .Include(r => r.DiagnosticOrder)
-                .AnyAsync(r => (r.DiagnosticOrder.AppointmentId == task.AppointmentId || r.DiagnosticOrder.PatientUserId == task.Appointment.PatientUserId) &&
-                               (r.DiagnosticOrder.Status == "Completed" || r.IsReviewed || !string.IsNullOrWhiteSpace(r.FileUrl)), ct)
-                || !string.IsNullOrWhiteSpace(request.EvidenceUrl);
-
-            if (!hasXrayResult)
-            {
-                return ApiResponse<EpisodeTaskStepProgressDto>.Fail(
-                    $"Bước '{stepDef.StepName}' yêu cầu có kết quả chụp phim/X-quang hoàn tất trước khi xác nhận hoàn thành.");
-            }
-        }
-
-        progress.Status = "Completed";
-        progress.ResultValue = inputVal;
-        progress.Notes = request.Notes?.Trim();
-        progress.EvidenceUrl = request.EvidenceUrl?.Trim();
-        progress.CompletedByDentistUserId = dentistUserId;
-        progress.CompletedAtUtc = DateTime.UtcNow;
-        progress.UpdatedAtUtc = DateTime.UtcNow;
-
-        task.UpdatedAtUtc = DateTime.UtcNow;
-
-        var nextStep = task.StepProgresses
-            .Where(p => (p.Step?.StepOrder ?? 0) > stepDef.StepOrder && p.Status == "Pending")
-            .OrderBy(p => p.Step?.StepOrder ?? 0)
-            .FirstOrDefault();
-
-        if (nextStep != null)
-        {
-            nextStep.Status = "InProgress";
-            nextStep.StartedAtUtc ??= DateTime.UtcNow;
-            nextStep.UpdatedAtUtc = DateTime.UtcNow;
+            apptService.Notes = string.IsNullOrWhiteSpace(apptService.Notes)
+                ? request.Notes.Trim()
+                : $"{apptService.Notes} | {request.Notes.Trim()}";
+            apptService.UpdatedAt = DateTime.UtcNow;
         }
 
         await _dbContext.SaveChangesAsync(ct);
-        _logger.LogInformation("Bác sĩ {DentistUserId} đã hoàn thành bước #{StepOrder} ({StepName}) cho tác vụ {TaskCode}",
-            dentistUserId, stepDef.StepOrder, stepDef.StepName, task.TaskCode);
 
-        var performingUser = await _dbContext.UserAccounts
-            .Include(u => u.StaffProfile)
+        var dentistName = await _dbContext.StaffProfiles
             .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.UserId == dentistUserId, ct);
+            .Where(s => s.UserId == dentistUserId)
+            .Select(s => s.FullName)
+            .FirstOrDefaultAsync(ct);
 
         var dto = new EpisodeTaskStepProgressDto
         {
-            ProgressId = progress.ProgressId,
-            ServiceTaskId = progress.ServiceTaskId,
-            StepId = progress.StepId,
-            StepName = stepDef.StepName,
-            Description = stepDef.Description,
-            StepOrder = stepDef.StepOrder,
-            IsRequired = stepDef.IsRequired,
-            CompletionRequirement = stepDef.CompletionRequirement,
-            ExpectedDataType = stepDef.ExpectedDataType,
-            Status = progress.Status,
-            ResultValue = progress.ResultValue,
-            Notes = progress.Notes,
-            EvidenceUrl = progress.EvidenceUrl,
+            ProgressId = stepId,
+            ServiceTaskId = serviceTaskId,
+            StepId = stepId,
+            StepName = apptService.DepartmentService.ServiceName,
+            StepOrder = 1,
+            IsRequired = true,
+            ExpectedDataType = "None",
+            Status = "Completed",
+            ResultValue = request.ResultValue?.Trim(),
+            Notes = request.Notes?.Trim(),
+            EvidenceUrl = request.EvidenceUrl?.Trim(),
             CompletedByDentistUserId = dentistUserId,
-            CompletedByDentistName = GetUserDisplayName(performingUser),
-            StartedAtUtc = progress.StartedAtUtc,
-            CompletedAtUtc = progress.CompletedAtUtc
+            CompletedByDentistName = dentistName ?? string.Empty,
+            StartedAtUtc = apptService.CreatedAt,
+            CompletedAtUtc = DateTime.UtcNow
         };
 
-        return ApiResponse<EpisodeTaskStepProgressDto>.Ok(dto, $"Đã xác nhận hoàn thành bước '{stepDef.StepName}'.");
+        return ApiResponse<EpisodeTaskStepProgressDto>.Ok(dto, "Đã xác nhận hoàn thành bước điều trị.");
     }
 
     public async Task<ApiResponse<EpisodeServiceTaskDto>> CompleteServiceTaskAsync(
@@ -564,149 +355,122 @@ public class CareEpisodeService : ICareEpisodeService
         CompleteServiceTaskRequest request,
         CancellationToken ct = default)
     {
-        var task = await _dbContext.EpisodeServiceTasks
-            .Include(t => t.DepartmentService)
-                .ThenInclude(s => s.Department)
-            .Include(t => t.Appointment)
-            .Include(t => t.PerformingDentistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Include(t => t.StepProgresses)
-                .ThenInclude(p => p.Step)
-            .Include(t => t.CareEpisode)
-            .FirstOrDefaultAsync(t => t.ServiceTaskId == serviceTaskId, ct);
+        var apptService = await _dbContext.AppointmentServices
+            .Include(s => s.Appointment)
+            .Include(s => s.DepartmentService)
+                .ThenInclude(ds => ds.Department)
+            .Include(s => s.AssignedDentist)
+                .ThenInclude(d => d!.StaffProfile)
+            .Include(s => s.TreatmentSessions)
+                .ThenInclude(ts => ts.PerformedServices)
+            .FirstOrDefaultAsync(s => s.AppointmentServiceId == serviceTaskId, ct);
 
-        if (task == null)
+        if (apptService == null)
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Không tìm thấy tác vụ điều trị chỉ định.");
 
-        var isAuthorized = task.PerformingDentistUserId == dentistUserId ||
-            await _dbContext.DentistDepartments.AnyAsync(dd => dd.DentistUserId == dentistUserId && dd.DepartmentId == task.DepartmentService.DepartmentId && dd.Status == "Active", ct);
+        var isAuthorized = apptService.AssignedDentistUserId == dentistUserId ||
+            await _dbContext.DentistProfiles.AnyAsync(d => d.UserId == dentistUserId && d.DepartmentId == apptService.DepartmentId, ct);
 
         if (!isAuthorized)
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Bạn không có quyền hoàn thành tác vụ của bác sĩ khác.");
 
-        if (task.Status == "Completed")
-            return ApiResponse<EpisodeServiceTaskDto>.Ok(MapToTaskDto(task), "Tác vụ đã được hoàn thành trước đó.");
+        if (apptService.Status == "Completed")
+            return ApiResponse<EpisodeServiceTaskDto>.Ok(MapAppointmentServiceToTaskDto(apptService), "Tác vụ đã được hoàn thành trước đó.");
 
-        if (task.Status == "Cancelled")
+        if (apptService.Status == "Cancelled")
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Tác vụ này đã bị hủy.");
 
-        var requiredIncompleteSteps = task.StepProgresses
-            .Where(p => (p.Step?.IsRequired ?? true) && p.Status != "Completed")
-            .OrderBy(p => p.Step?.StepOrder ?? 0)
-            .ToList();
-
-        if (requiredIncompleteSteps.Any())
-        {
-            var firstIncomplete = requiredIncompleteSteps.First();
-            return ApiResponse<EpisodeServiceTaskDto>.Fail(
-                $"Chưa thể hoàn thành dịch vụ. Bước bắt buộc số {firstIncomplete.Step?.StepOrder}: '{firstIncomplete.Step?.StepName}' chưa được hoàn thành.");
-        }
-
-        task.Status = "Completed";
-        task.CompletedAtUtc = DateTime.UtcNow;
-        task.ClinicalRecordId = request?.ClinicalRecordId ?? task.ClinicalRecordId;
+        apptService.AssignedDentistUserId ??= dentistUserId;
+        apptService.Status = "Completed";
         if (!string.IsNullOrWhiteSpace(request?.Notes))
         {
-            task.Notes = request.Notes.Trim();
+            apptService.Notes = request.Notes.Trim();
         }
-        task.UpdatedAtUtc = DateTime.UtcNow;
+        apptService.UpdatedAt = DateTime.UtcNow;
 
+        await EnsurePerformedServiceRecordedAsync(apptService, dentistUserId, request?.ClinicalFindings, request?.Notes, ct);
         await _dbContext.SaveChangesAsync(ct);
-        _logger.LogInformation("Bác sĩ {DentistUserId} đã hoàn thành toàn bộ dịch vụ cho tác vụ {TaskCode} ({ServiceName})",
-            dentistUserId, task.TaskCode, task.DepartmentService.ServiceName);
 
-        return ApiResponse<EpisodeServiceTaskDto>.Ok(MapToTaskDto(task), $"Đã hoàn thành dịch vụ '{task.DepartmentService.ServiceName}'.");
+        return ApiResponse<EpisodeServiceTaskDto>.Ok(
+            MapAppointmentServiceToTaskDto(apptService),
+            $"Đã hoàn thành dịch vụ '{apptService.DepartmentService.ServiceName}'.");
     }
 
     public async Task<ApiResponse<bool>> ValidateAppointmentTasksCompletedAsync(long appointmentId, CancellationToken ct = default)
     {
-        var tasks = await _dbContext.EpisodeServiceTasks
-            .Include(t => t.DepartmentService)
-            .Include(t => t.StepProgresses)
-                .ThenInclude(p => p.Step)
-            .Where(t => t.AppointmentId == appointmentId && t.Status != "Cancelled")
+        var services = await _dbContext.AppointmentServices
+            .Include(s => s.DepartmentService)
+            .AsNoTracking()
+            .Where(s => s.AppointmentId == appointmentId && s.Status != "Cancelled" && s.Status != "NoShow")
             .ToListAsync(ct);
 
-        if (!tasks.Any())
+        if (!services.Any())
             return ApiResponse<bool>.Ok(true, "Ca khám không có tác vụ nào cần xử lý.");
 
-        var incompleteTasks = tasks.Where(t => t.Status != "Completed").ToList();
-        if (incompleteTasks.Any())
+        var incomplete = services.Where(s => s.Status != "Completed").ToList();
+        if (incomplete.Any())
         {
-            var names = string.Join(", ", incompleteTasks.Select(t => t.DepartmentService?.ServiceName ?? t.TaskCode));
+            var names = string.Join(", ", incomplete.Select(s => s.DepartmentService?.ServiceName ?? $"#{s.AppointmentServiceId}"));
             return ApiResponse<bool>.Fail($"Ca khám còn các dịch vụ chưa hoàn thành: {names}. Vui lòng hoàn thành các dịch vụ trước khi kết thúc ca khám.");
         }
 
         return ApiResponse<bool>.Ok(true, "Tất cả các dịch vụ thuộc ca khám đã hoàn thành.");
     }
 
-    public async Task<ApiResponse<EpisodeServiceTaskDto>> UpdateServiceTaskStatusAsync(long dentistUserId, long serviceTaskId, UpdateServiceTaskStatusRequest request, CancellationToken ct = default)
+    public async Task<ApiResponse<EpisodeServiceTaskDto>> UpdateServiceTaskStatusAsync(
+        long dentistUserId,
+        long serviceTaskId,
+        UpdateServiceTaskStatusRequest request,
+        CancellationToken ct = default)
     {
-        if (request == null)
+        if (request == null || string.IsNullOrWhiteSpace(request.Status))
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Dữ liệu cập nhật trạng thái không hợp lệ.");
 
-        var task = await _dbContext.EpisodeServiceTasks
-            .Include(t => t.DepartmentService)
-                .ThenInclude(s => s.Department)
-            .Include(t => t.Appointment)
-            .Include(t => t.PerformingDentistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Include(t => t.StepProgresses)
-                .ThenInclude(p => p.Step)
-            .Include(t => t.CareEpisode)
-            .FirstOrDefaultAsync(t => t.ServiceTaskId == serviceTaskId, ct);
+        var apptService = await _dbContext.AppointmentServices
+            .Include(s => s.Appointment)
+            .Include(s => s.DepartmentService)
+                .ThenInclude(ds => ds.Department)
+            .Include(s => s.AssignedDentist)
+                .ThenInclude(d => d!.StaffProfile)
+            .Include(s => s.TreatmentSessions)
+                .ThenInclude(ts => ts.PerformedServices)
+            .FirstOrDefaultAsync(s => s.AppointmentServiceId == serviceTaskId, ct);
 
-        if (task == null)
+        if (apptService == null)
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Không tìm thấy tác vụ điều trị chỉ định.");
 
-        var validStatuses = new[] { "Planned", "InProgress", "Completed", "Cancelled" };
-        if (!validStatuses.Contains(request.Status, StringComparer.OrdinalIgnoreCase))
-            return ApiResponse<EpisodeServiceTaskDto>.Fail($"Trạng thái '{request.Status}' không hợp lệ.");
-
-        var targetStatus = request.Status;
-
-        if (string.Equals(targetStatus, "InProgress", StringComparison.OrdinalIgnoreCase))
+        var targetStatus = request.Status.Trim();
+        if (string.Equals(targetStatus, "Planned", StringComparison.OrdinalIgnoreCase))
         {
-            task.Status = "InProgress";
-            task.StartedAtUtc = DateTime.UtcNow;
-            task.UpdatedAtUtc = DateTime.UtcNow;
+            apptService.Status = "Confirmed";
+        }
+        else if (string.Equals(targetStatus, "InProgress", StringComparison.OrdinalIgnoreCase))
+        {
+            return await StartServiceTaskAsync(dentistUserId, serviceTaskId, ct);
         }
         else if (string.Equals(targetStatus, "Completed", StringComparison.OrdinalIgnoreCase))
         {
-            var requiredIncompleteSteps = task.StepProgresses
-                .Where(p => (p.Step?.IsRequired ?? true) && p.Status != "Completed")
-                .OrderBy(p => p.Step?.StepOrder ?? 0)
-                .ToList();
-
-            if (requiredIncompleteSteps.Any())
+            return await CompleteServiceTaskAsync(dentistUserId, serviceTaskId, new CompleteServiceTaskRequest
             {
-                var firstIncomplete = requiredIncompleteSteps.First();
-                return ApiResponse<EpisodeServiceTaskDto>.Fail(
-                    $"Chưa thể hoàn thành dịch vụ. Bước bắt buộc số {firstIncomplete.Step?.StepOrder}: '{firstIncomplete.Step?.StepName}' chưa được hoàn thành.");
-            }
-
-            task.Status = "Completed";
-            task.CompletedAtUtc = DateTime.UtcNow;
-            task.UpdatedAtUtc = DateTime.UtcNow;
-            if (request.ClinicalRecordId.HasValue)
-                task.ClinicalRecordId = request.ClinicalRecordId;
-            if (!string.IsNullOrWhiteSpace(request.Notes))
-                task.Notes = request.Notes.Trim();
+                ClinicalRecordId = request.ClinicalRecordId,
+                Notes = request.Notes
+            }, ct);
         }
         else if (string.Equals(targetStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
         {
-            task.Status = "Cancelled";
-            task.CancelledAtUtc = DateTime.UtcNow;
-            task.CancellationReason = request.CancellationReason?.Trim() ?? "Hủy theo yêu cầu lâm sàng";
-            task.UpdatedAtUtc = DateTime.UtcNow;
+            apptService.Status = "Cancelled";
+            var cancelNote = request.CancellationReason?.Trim() ?? request.Notes?.Trim() ?? "Hủy theo yêu cầu lâm sàng";
+            apptService.Notes = cancelNote;
+        }
+        else
+        {
+            return ApiResponse<EpisodeServiceTaskDto>.Fail($"Trạng thái '{request.Status}' không hợp lệ.");
         }
 
+        apptService.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Tác vụ {TaskCode} đã cập nhật sang trạng thái {Status} bởi bác sĩ {DentistUserId}",
-            task.TaskCode, task.Status, dentistUserId);
-
-        return ApiResponse<EpisodeServiceTaskDto>.Ok(MapToTaskDto(task), "Cập nhật trạng thái dịch vụ thành công.");
+        return ApiResponse<EpisodeServiceTaskDto>.Ok(MapAppointmentServiceToTaskDto(apptService), "Cập nhật trạng thái dịch vụ thành công.");
     }
 
     #endregion
@@ -721,80 +485,93 @@ public class CareEpisodeService : ICareEpisodeService
         if (request.SourceAppointmentId <= 0)
             return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Vui lòng chỉ định ca khám nguồn.");
 
-        if (request.ToDepartmentId <= 0)
-            return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Vui lòng chọn chuyên khoa chuyển đến.");
+        if (request.ToDepartmentId <= 0 && request.RequestedServiceId <= 0)
+            return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Vui lòng chọn chuyên khoa hoặc dịch vụ chuyển đến.");
 
         if (string.IsNullOrWhiteSpace(request.Reason))
             return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Vui lòng nhập lý do chuyển tiếp và chẩn đoán lâm sàng.");
 
-        var sourceAppt = await _dbContext.Appointments
-            .Include(a => a.PatientUser)
-            .Include(a => a.Department)
-            .FirstOrDefaultAsync(a => a.AppointmentId == request.SourceAppointmentId, ct);
+        var sourceApptService = await _dbContext.AppointmentServices
+            .Include(s => s.Appointment)
+            .Include(s => s.DepartmentService)
+                .ThenInclude(ds => ds.Department)
+            .Include(s => s.TreatmentSessions)
+            .FirstOrDefaultAsync(s => s.AppointmentServiceId == request.SourceAppointmentId, ct);
+
+        Appointment? sourceAppt = sourceApptService?.Appointment;
+        if (sourceAppt == null)
+        {
+            sourceAppt = await _dbContext.Appointments
+                .Include(a => a.AppointmentServices)
+                    .ThenInclude(s => s.DepartmentService)
+                        .ThenInclude(ds => ds.Department)
+                .Include(a => a.AppointmentServices)
+                    .ThenInclude(s => s.TreatmentSessions)
+                .FirstOrDefaultAsync(a => a.AppointmentId == request.SourceAppointmentId, ct);
+
+            sourceApptService = sourceAppt?.AppointmentServices
+                .OrderByDescending(s => s.AssignedDentistUserId == dentistUserId)
+                .ThenBy(s => s.AppointmentServiceId)
+                .FirstOrDefault();
+        }
 
         if (sourceAppt == null)
             return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Không tìm thấy ca khám nguồn.");
 
         DepartmentService? requestedService = null;
+        int toDepartmentId = (int)request.ToDepartmentId;
         if (request.RequestedServiceId > 0)
         {
             requestedService = await _dbContext.DepartmentServices
-                .FirstOrDefaultAsync(s => s.DepartmentServiceId == request.RequestedServiceId && s.Status == "Active", ct);
+                .FirstOrDefaultAsync(s => s.DepartmentServiceId == (int)request.RequestedServiceId && s.Status == "Active", ct);
 
             if (requestedService == null)
                 return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Dịch vụ yêu cầu không tồn tại hoặc đã ngừng hoạt động.");
 
-            request.ToDepartmentId = requestedService.DepartmentId;
+            toDepartmentId = requestedService.DepartmentId;
         }
 
-        var targetDept = await _dbContext.Departments.FirstOrDefaultAsync(d => d.DepartmentId == request.ToDepartmentId && d.Status == "Active", ct);
+        var targetDept = await _dbContext.Departments.FirstOrDefaultAsync(d => d.DepartmentId == toDepartmentId && d.Status == "Active", ct);
         if (targetDept == null)
             return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Chuyên khoa chuyển đến không tồn tại hoặc đã ngừng hoạt động.");
 
-        // Ensure episode exists
-        if (!sourceAppt.CareEpisodeId.HasValue)
-        {
-            var epRes = await GetOrCreateActiveEpisodeForAppointmentAsync(sourceAppt.AppointmentId, ct);
-            if (!epRes.Success || epRes.Data == null)
-                return ApiResponse<CareEpisodeReferralSummaryDto>.Fail("Không thể khởi tạo đợt khám cho ca khám này.");
-            sourceAppt.CareEpisodeId = epRes.Data.CareEpisodeId;
-        }
+        int fromDepartmentId = sourceApptService?.DepartmentId
+            ?? await _dbContext.DentistProfiles
+                .Where(d => d.UserId == dentistUserId)
+                .Select(d => (int?)d.DepartmentId)
+                .FirstOrDefaultAsync(ct)
+            ?? targetDept.DepartmentId;
 
-        var episode = await _dbContext.CareEpisodes.FirstOrDefaultAsync(e => e.CareEpisodeId == sourceAppt.CareEpisodeId.Value, ct);
-        if (episode != null)
-        {
-            episode.Status = "PendingAdditionalService";
-            episode.UpdatedAtUtc = DateTime.UtcNow;
-        }
+        var fromDept = await _dbContext.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == fromDepartmentId, ct);
+        var session = sourceApptService?.TreatmentSessions.OrderByDescending(ts => ts.SessionId).FirstOrDefault();
+
+        var urgency = NormalizeUrgency(request.Urgency);
 
         var referral = new DepartmentReferral
         {
-            SourceAppointmentId = sourceAppt.AppointmentId,
-            CareEpisodeId = sourceAppt.CareEpisodeId,
-            FromDepartmentId = sourceAppt.DepartmentId ?? targetDept.DepartmentId,
-            ToDepartmentId = request.ToDepartmentId,
-            RequestedServiceId = request.RequestedServiceId > 0 ? request.RequestedServiceId : null,
+            TreatmentSessionId = session?.SessionId,
+            FromDepartmentId = fromDepartmentId,
+            ToDepartmentId = targetDept.DepartmentId,
+            RequestedServiceId = requestedService?.DepartmentServiceId,
             AssignedDentistUserId = request.PreferredDentistUserId,
             Reason = request.Reason.Trim(),
-            Urgency = string.Equals(request.Urgency?.Trim(), "Urgent", StringComparison.OrdinalIgnoreCase) ? "Urgent" : "Normal",
-            Status = "Pending",
             ClinicalInstructions = request.ClinicalInstructions?.Trim(),
+            Urgency = urgency,
+            Status = "Pending",
+            SourceAppointmentServiceId = sourceApptService?.AppointmentServiceId,
             CreatedAt = DateTime.UtcNow
         };
 
         _dbContext.DepartmentReferrals.Add(referral);
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Bác sĩ {DentistUserId} tạo chuyển tiếp khoa #{ReferralId} từ ca #{SourceCode} sang khoa #{ToDeptId} cho bệnh nhân {PatientUserId}",
-            dentistUserId, referral.ReferralId, sourceAppt.AppointmentCode, request.ToDepartmentId, sourceAppt.PatientUserId);
-
         var dto = new CareEpisodeReferralSummaryDto
         {
             ReferralId = referral.ReferralId,
-            SourceAppointmentId = referral.SourceAppointmentId,
-            SourceAppointmentCode = sourceAppt.AppointmentCode,
+            SourceAppointmentId = sourceAppt.AppointmentId,
+            SourceAppointmentCode = FormatAppointmentCode(sourceAppt.AppointmentId),
             FromDepartmentId = referral.FromDepartmentId,
-            FromDepartmentName = sourceAppt.Department?.Name ?? string.Empty,
+            FromDepartmentName = fromDept?.Name ?? string.Empty,
             ToDepartmentId = referral.ToDepartmentId,
             ToDepartmentName = targetDept.Name,
             RequestedServiceId = referral.RequestedServiceId,
@@ -816,37 +593,19 @@ public class CareEpisodeService : ICareEpisodeService
             .Include(r => r.FromDepartment)
             .Include(r => r.ToDepartment)
             .Include(r => r.RequestedService)
-            .Include(r => r.AssignedDentistUser)
-                .ThenInclude(d => d!.User)
-            .Include(r => r.SourceAppointment)
+            .Include(r => r.AssignedDentist)
+                .ThenInclude(d => d!.StaffProfile)
+            .Include(r => r.SourceAppointmentService)
+            .Include(r => r.DestinationAppointmentService)
+            .Include(r => r.TreatmentSession)
+            .AsNoTracking()
             .Where(r => r.Status == "Pending")
             .OrderByDescending(r => r.Urgency == "Emergency")
             .ThenByDescending(r => r.Urgency == "Urgent")
             .ThenBy(r => r.CreatedAt)
             .ToListAsync(ct);
 
-        var list = referrals.Select(r => new CareEpisodeReferralSummaryDto
-        {
-            ReferralId = r.ReferralId,
-            SourceAppointmentId = r.SourceAppointmentId,
-            SourceAppointmentCode = r.SourceAppointment?.AppointmentCode,
-            DestinationAppointmentId = r.DestinationAppointmentId,
-            FromDepartmentId = r.FromDepartmentId,
-            FromDepartmentName = r.FromDepartment.Name,
-            ToDepartmentId = r.ToDepartmentId,
-            ToDepartmentName = r.ToDepartment.Name,
-            RequestedServiceId = r.RequestedServiceId,
-            RequestedServiceName = r.RequestedService?.ServiceName,
-            AssignedDentistUserId = r.AssignedDentistUserId,
-            AssignedDentistName = r.AssignedDentistUser?.User?.FullName,
-            Reason = r.Reason,
-            Urgency = r.Urgency,
-            Status = r.Status,
-            ClinicalInstructions = r.ClinicalInstructions,
-            CreatedAt = r.CreatedAt,
-            ReviewedAt = r.ReviewedAt
-        }).ToList();
-
+        var list = referrals.Select(MapReferralToDto).ToList();
         return ApiResponse<List<CareEpisodeReferralSummaryDto>>.Ok(list);
     }
 
@@ -854,6 +613,7 @@ public class CareEpisodeService : ICareEpisodeService
     {
         var referral = await _dbContext.DepartmentReferrals
             .Include(r => r.ToDepartment)
+            .AsNoTracking()
             .FirstOrDefaultAsync(r => r.ReferralId == referralId, ct);
 
         if (referral == null)
@@ -862,37 +622,32 @@ public class CareEpisodeService : ICareEpisodeService
         var targetDeptId = referral.ToDepartmentId;
         var dateOnly = DateOnly.FromDateTime(targetDate);
 
-        // Get dentists active in this department
-        var activeDentists = await _dbContext.DentistDepartments
-            .Include(dd => dd.DentistUser)
-                .ThenInclude(d => d.User)
-            .Where(dd => dd.DepartmentId == targetDeptId && dd.Status == "Active")
-            .Select(dd => dd.DentistUser)
-            .Distinct()
+        var activeDentists = await _dbContext.DentistProfiles
+            .Include(d => d.StaffProfile)
+                .ThenInclude(s => s.User)
+            .AsNoTracking()
+            .Where(d => d.DepartmentId == targetDeptId && d.StaffProfile.User.Status == "Active")
             .ToListAsync(ct);
 
         var result = new List<AvailableDentistForReferralDto>();
 
         foreach (var dentist in activeDentists)
         {
-            // Check approved leave
-            var hasLeave = await _dbContext.DentistLeaveRequests
-                .AnyAsync(l => l.DentistUserId == dentist.UserId &&
+            var hasLeave = await _dbContext.StaffLeaveRequests
+                .AnyAsync(l => l.StaffUserId == dentist.UserId &&
                                l.Status == "Approved" &&
                                l.StartDate <= dateOnly &&
                                l.EndDate >= dateOnly, ct);
 
             bool isAvailable = !hasLeave;
-            string? unavailReason = null;
-            if (hasLeave)
-            {
-                unavailReason = "Bác sĩ có lịch nghỉ phép đã được phê duyệt trong ngày này.";
-            }
+            string? unavailReason = hasLeave
+                ? "Bác sĩ có lịch nghỉ phép đã được phê duyệt trong ngày này."
+                : null;
 
             result.Add(new AvailableDentistForReferralDto
             {
                 DentistUserId = dentist.UserId,
-                FullName = dentist.User?.FullName ?? "Bác sĩ",
+                FullName = dentist.StaffProfile?.FullName ?? "Bác sĩ",
                 DentistCode = dentist.LicenseNumber,
                 Qualifications = dentist.Qualification,
                 DepartmentId = targetDeptId,
@@ -921,8 +676,10 @@ public class CareEpisodeService : ICareEpisodeService
         using var appLock = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, new[] { lockKey }, 5000, ct);
 
         var referral = await _dbContext.DepartmentReferrals
-            .Include(r => r.CareEpisode)
-            .Include(r => r.SourceAppointment)
+            .Include(r => r.SourceAppointmentService)
+                .ThenInclude(s => s!.Appointment)
+            .Include(r => r.TreatmentSession)
+                .ThenInclude(ts => ts!.Appointment)
             .Include(r => r.ToDepartment)
             .FirstOrDefaultAsync(r => r.ReferralId == request.ReferralId, ct);
 
@@ -932,11 +689,11 @@ public class CareEpisodeService : ICareEpisodeService
         if (referral.Status != "Pending")
             return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail($"Yêu cầu này đã được xử lý trước đó (Trạng thái: {referral.Status}).");
 
-        // Validate dentist belongs to ToDepartment
-        var isDentistInDept = await _dbContext.DentistDepartments
-            .AnyAsync(dd => dd.DentistUserId == request.AssignedDentistUserId && dd.DepartmentId == referral.ToDepartmentId && dd.Status == "Active", ct);
+        var assignedDentist = await _dbContext.DentistProfiles
+            .Include(d => d.StaffProfile)
+            .FirstOrDefaultAsync(d => d.UserId == request.AssignedDentistUserId && d.DepartmentId == referral.ToDepartmentId, ct);
 
-        if (!isDentistInDept)
+        if (assignedDentist == null)
             return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail("Bác sĩ được chọn không thuộc chuyên khoa tiếp nhận.");
 
         var scheduledStart = request.ScheduledStart;
@@ -947,9 +704,8 @@ public class CareEpisodeService : ICareEpisodeService
 
         var dateOnly = DateOnly.FromDateTime(scheduledStart);
 
-        // Check dentist approved leave
-        var hasLeave = await _dbContext.DentistLeaveRequests
-            .AnyAsync(l => l.DentistUserId == request.AssignedDentistUserId &&
+        var hasLeave = await _dbContext.StaffLeaveRequests
+            .AnyAsync(l => l.StaffUserId == request.AssignedDentistUserId &&
                            l.Status == "Approved" &&
                            l.StartDate <= dateOnly &&
                            l.EndDate >= dateOnly, ct);
@@ -957,177 +713,113 @@ public class CareEpisodeService : ICareEpisodeService
         if (hasLeave)
             return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail("Bác sĩ tiếp nhận có lịch nghỉ phép đã phê duyệt trong khung giờ này.");
 
-        // Check dentist overlapping appointments
-        var hasDentistOverlap = await _dbContext.Appointments
-            .AnyAsync(a => a.AssignedDentistUserId == request.AssignedDentistUserId &&
-                           a.ScheduledStart.HasValue &&
-                           a.ScheduledEnd.HasValue &&
-                           a.ScheduledStart < scheduledEnd &&
-                           a.ScheduledEnd > scheduledStart &&
-                           a.Status != AppointmentStatus.Cancelled &&
-                           a.Status != AppointmentStatus.Rejected, ct);
+        var inactiveServiceStatuses = new[] { "Cancelled", "NoShow" };
+
+        var hasDentistOverlap = await _dbContext.AppointmentServices
+            .AnyAsync(s => s.AssignedDentistUserId == request.AssignedDentistUserId &&
+                           s.ScheduledStart < scheduledEnd &&
+                           s.ScheduledEnd > scheduledStart &&
+                           !inactiveServiceStatuses.Contains(s.Status), ct);
 
         if (hasDentistOverlap)
             return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail("Bác sĩ đã có lịch hẹn khác trùng khung giờ này.");
 
-        // Check chair overlapping if chair specified
-        if (request.DentalChairId.HasValue && request.DentalChairId.Value > 0)
+        int? chairId = request.DentalChairId.HasValue && request.DentalChairId.Value > 0
+            ? (int)request.DentalChairId.Value
+            : null;
+        int? roomId = request.RoomId.HasValue && request.RoomId.Value > 0
+            ? (int)request.RoomId.Value
+            : null;
+
+        if (chairId.HasValue)
         {
-            var chair = await _dbContext.DentalChairs.FirstOrDefaultAsync(c => c.DentalChairId == request.DentalChairId.Value && c.Status == "Active", ct);
+            var chair = await _dbContext.DentalChairs
+                .FirstOrDefaultAsync(c => c.DentalChairId == chairId.Value && c.Status == "Active", ct);
             if (chair == null)
                 return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail("Ghế điều trị không tồn tại hoặc đã ngừng hoạt động.");
 
-            var hasChairOverlap = await _dbContext.Appointments
-                .AnyAsync(a => a.DentalChairId == request.DentalChairId.Value &&
-                               a.ScheduledStart.HasValue &&
-                               a.ScheduledEnd.HasValue &&
-                               a.ScheduledStart < scheduledEnd &&
-                               a.ScheduledEnd > scheduledStart &&
-                               a.Status != AppointmentStatus.Cancelled &&
-                               a.Status != AppointmentStatus.Rejected, ct);
+            roomId ??= chair.RoomId;
+
+            var hasChairOverlap = await _dbContext.AppointmentServices
+                .AnyAsync(s => s.DentalChairId == chairId.Value &&
+                               s.ScheduledStart < scheduledEnd &&
+                               s.ScheduledEnd > scheduledStart &&
+                               !inactiveServiceStatuses.Contains(s.Status), ct);
 
             if (hasChairOverlap)
                 return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail("Ghế điều trị đã có ca hẹn khác sử dụng trong khung giờ này.");
         }
 
-        var episodeId = referral.CareEpisodeId ?? referral.SourceAppointment?.CareEpisodeId;
-        if (!episodeId.HasValue)
+        var parentAppointment = referral.SourceAppointmentService?.Appointment ?? referral.TreatmentSession?.Appointment;
+        if (parentAppointment == null)
+            return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail("Không xác định được hồ sơ cuộc hẹn gốc của yêu cầu chuyển khoa.");
+
+        DepartmentService? targetService = null;
+        if (referral.RequestedServiceId.HasValue)
         {
-            var epRes = await GetOrCreateActiveEpisodeForAppointmentAsync(referral.SourceAppointmentId ?? 0, ct);
-            episodeId = epRes.Data?.CareEpisodeId;
+            targetService = await _dbContext.DepartmentServices
+                .FirstOrDefaultAsync(s => s.DepartmentServiceId == referral.RequestedServiceId.Value && s.Status == "Active", ct);
         }
+        targetService ??= await _dbContext.DepartmentServices
+            .Where(s => s.DepartmentId == referral.ToDepartmentId && s.Status == "Active")
+            .OrderBy(s => s.DepartmentServiceId)
+            .FirstOrDefaultAsync(ct);
 
-        var apptCode = await GenerateUniqueAppointmentCodeAsync(ct);
+        if (targetService == null)
+            return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail("Chuyên khoa tiếp nhận chưa có dịch vụ hoạt động để tạo lịch hẹn.");
 
-        // Allocate Monotonic Queue Number for Department B on scheduled date (Policy: Allocated on Confirmed)
-        var targetDate = scheduledStart.Date;
-        var existingQueueNumbers = await _dbContext.Appointments
-            .Where(a => a.DepartmentId == referral.ToDepartmentId &&
-                        a.ScheduledStart.HasValue &&
-                        a.ScheduledStart.Value.Date == targetDate &&
-                        !string.IsNullOrEmpty(a.QueueNumber))
-            .Select(a => a.QueueNumber!)
-            .ToListAsync(ct);
+        var queueNumberInt = await AllocateDepartmentQueueNumberAsync(referral.ToDepartmentId, dateOnly, ct);
+        var formattedQueue = FormatQueueNumber(referral.ToDepartment?.Name, referral.ToDepartmentId, queueNumberInt);
 
-        int maxSeq = 0;
-        foreach (var qn in existingQueueNumbers)
+        var destApptService = new AppointmentServiceEntity
         {
-            var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
-            if (match.Success && int.TryParse(match.Value, out int num))
-            {
-                if (num > maxSeq) maxSeq = num;
-            }
-        }
-
-        var deptCode = GetDepartmentCode(referral.ToDepartment?.Name, referral.ToDepartmentId);
-        var queueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
-
-        // CREATE APPOINTMENT B: Status = Confirmed, QueueNumber allocated immediately upon Confirmed
-        var apptB = new Appointment
-        {
-            AppointmentCode = apptCode,
-            PatientUserId = referral.SourceAppointment?.PatientUserId ?? referral.CareEpisode?.PatientUserId ?? 0,
+            AppointmentId = parentAppointment.AppointmentId,
+            DepartmentServiceId = targetService.DepartmentServiceId,
             DepartmentId = referral.ToDepartmentId,
-            RequestedServiceId = referral.RequestedServiceId,
+            RequestedDentistUserId = request.AssignedDentistUserId,
             AssignedDentistUserId = request.AssignedDentistUserId,
-            RoomId = request.RoomId,
-            DentalChairId = request.DentalChairId,
+            RoomId = roomId,
+            DentalChairId = chairId,
+            ServiceDate = dateOnly,
             ScheduledStart = scheduledStart,
             ScheduledEnd = scheduledEnd,
-            Status = AppointmentStatus.Confirmed,
-            QueueNumber = queueNumber,
-            CareEpisodeId = episodeId,
-            BookingSource = BookingSource.Receptionist,
-            ReasonForVisit = $"Chuyển chuyên khoa từ ca khám #{referral.SourceAppointment?.AppointmentCode}: {referral.Reason}",
+            QueueNumber = queueNumberInt,
+            UnitPrice = targetService.Price,
+            Status = "Confirmed",
+            Notes = string.IsNullOrWhiteSpace(request.Notes)
+                ? $"Chuyển chuyên khoa từ #{referral.ReferralId}: {referral.Reason}"
+                : request.Notes.Trim(),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
 
-        _dbContext.Appointments.Add(apptB);
+        _dbContext.AppointmentServices.Add(destApptService);
         await _dbContext.SaveChangesAsync(ct);
 
-        // Record status history for Appointment B Confirmed
-        _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
-        {
-            AppointmentId = apptB.AppointmentId,
-            OldStatus = null,
-            NewStatus = AppointmentStatus.Confirmed,
-            ChangedByUserId = receptionistUserId,
-            Note = $"Tạo và xác nhận ca khám chuyển tiếp #{apptB.AppointmentCode}. Cấp số thứ tự: {queueNumber}.",
-            ChangedAt = DateTime.UtcNow
-        });
-
-        // Update referral
-        referral.DestinationAppointmentId = apptB.AppointmentId;
+        referral.DestinationAppointmentServiceId = destApptService.AppointmentServiceId;
         referral.AssignedDentistUserId = request.AssignedDentistUserId;
+        referral.ReviewedByUserId = receptionistUserId;
         referral.Status = "Accepted";
         referral.ReviewedAt = DateTime.UtcNow;
 
-        // Auto-create initial planned task for Appointment B if requestedService exists
-        if (referral.RequestedServiceId.HasValue && episodeId.HasValue)
-        {
-            var srv = await _dbContext.DepartmentServices.FirstOrDefaultAsync(s => s.DepartmentServiceId == referral.RequestedServiceId.Value, ct);
-            if (srv != null)
-            {
-                var activeWf = await _dbContext.ServiceWorkflows
-                    .Include(w => w.Steps)
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(w => w.DepartmentServiceId == srv.DepartmentServiceId && w.IsActive && w.ApprovalStatus == "Approved", ct);
-
-                var taskCode = await GenerateTaskCodeAsync(ct);
-                var bTask = new EpisodeServiceTask
-                {
-                    TaskCode = taskCode,
-                    CareEpisodeId = episodeId.Value,
-                    AppointmentId = apptB.AppointmentId,
-                    DepartmentServiceId = srv.DepartmentServiceId,
-                    PerformingDentistUserId = request.AssignedDentistUserId,
-                    Status = "Planned",
-                    Quantity = 1,
-                    UnitPriceSnapshot = srv.Price,
-                    EstimatedDurationMinutes = srv.DurationMinutes ?? 30,
-                    AppliedWorkflowId = activeWf?.WorkflowId,
-                    AppliedWorkflowVersion = activeWf?.Version,
-                    PlannedAtUtc = DateTime.UtcNow,
-                    Notes = $"Dịch vụ chỉ định theo ca chuyển tiếp #{referral.ReferralId}",
-                    CreatedAtUtc = DateTime.UtcNow
-                };
-
-                if (activeWf != null && activeWf.Steps != null)
-                {
-                    foreach (var step in activeWf.Steps.OrderBy(s => s.StepOrder))
-                    {
-                        bTask.StepProgresses.Add(new EpisodeServiceTaskStepProgress
-                        {
-                            StepId = step.StepId,
-                            Status = "Pending",
-                            CreatedAtUtc = DateTime.UtcNow
-                        });
-                    }
-                }
-
-                _dbContext.EpisodeServiceTasks.Add(bTask);
-            }
-        }
-
+        parentAppointment.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
 
-        // Post-commit notifications for Patient & Dentist (Idempotent notification contract)
-        if (_notificationService != null && apptB.PatientUserId > 0)
+        if (_notificationService != null && parentAppointment.PatientUserId > 0)
         {
             try
             {
                 await _notificationService.CreateNotificationAsync(
-                    apptB.PatientUserId,
-                    apptB.AppointmentId,
+                    parentAppointment.PatientUserId,
+                    parentAppointment.AppointmentId,
                     "AppointmentConfirmed",
-                    $"Xác nhận lịch hẹn chuyển chuyên khoa #{apptB.AppointmentCode}",
-                    $"Lịch khám chuyển chuyên khoa của bạn tại {referral.ToDepartment?.Name ?? "phòng khám"} đã được xác nhận. Số thứ tự: {queueNumber}. Vui lòng đến đúng giờ.",
+                    $"Xác nhận lịch hẹn chuyển chuyên khoa #{FormatAppointmentCode(parentAppointment.AppointmentId)}",
+                    $"Lịch khám chuyển chuyên khoa của bạn tại {referral.ToDepartment?.Name ?? "phòng khám"} đã được xác nhận. Số thứ tự: {formattedQueue}.",
                     ct);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Lỗi gửi thông báo lịch hẹn cho bệnh nhân {PatientUserId}", apptB.PatientUserId);
+                _logger.LogWarning(ex, "Lỗi gửi thông báo lịch hẹn cho bệnh nhân {PatientUserId}", parentAppointment.PatientUserId);
             }
         }
 
@@ -1137,10 +829,10 @@ public class CareEpisodeService : ICareEpisodeService
             {
                 await _notificationService.CreateNotificationAsync(
                     request.AssignedDentistUserId,
-                    apptB.AppointmentId,
+                    parentAppointment.AppointmentId,
                     "AppointmentAssigned",
-                    $"Phân công ca khám chuyển khoa #{apptB.AppointmentCode}",
-                    $"Bạn được phân công tiếp nhận ca khám chuyển khoa #{apptB.AppointmentCode} ({referral.ToDepartment?.Name}). Bệnh nhân có STT: {queueNumber}.",
+                    $"Phân công ca khám chuyển khoa #{FormatAppointmentCode(parentAppointment.AppointmentId)}",
+                    $"Bạn được phân công tiếp nhận dịch vụ chuyển khoa ({referral.ToDepartment?.Name}). STT: {formattedQueue}.",
                     ct);
             }
             catch (Exception ex)
@@ -1149,39 +841,27 @@ public class CareEpisodeService : ICareEpisodeService
             }
         }
 
-        _logger.LogInformation("Điều phối ca khám đích #{ApptCode} (ID: {ApptId}) cho ca chuyển khoa #{ReferralId} với STT {QueueNumber} bởi lễ tân {ReceptionistUserId}",
-            apptB.AppointmentCode, apptB.AppointmentId, referral.ReferralId, queueNumber, receptionistUserId);
-
-        var assignedDentist = await _dbContext.DentistProfiles
-            .Include(d => d.User)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(d => d.UserId == request.AssignedDentistUserId, ct);
-
-        var srvInfo = referral.RequestedServiceId.HasValue
-            ? await _dbContext.DepartmentServices.AsNoTracking().FirstOrDefaultAsync(s => s.DepartmentServiceId == referral.RequestedServiceId.Value, ct)
-            : null;
-
         var dto = new CareEpisodeAppointmentSummaryDto
         {
-            AppointmentId = apptB.AppointmentId,
-            AppointmentCode = apptB.AppointmentCode,
-            DepartmentId = apptB.DepartmentId,
-            DepartmentName = referral.ToDepartment.Name,
-            RequestedServiceId = apptB.RequestedServiceId,
-            RequestedServiceName = srvInfo?.ServiceName,
-            AssignedDentistUserId = apptB.AssignedDentistUserId,
-            AssignedDentistName = assignedDentist?.User?.FullName,
-            RoomId = apptB.RoomId,
-            DentalChairId = apptB.DentalChairId,
-            ScheduledStart = apptB.ScheduledStart,
-            ScheduledEnd = apptB.ScheduledEnd,
-            Status = apptB.Status,
-            QueueNumber = apptB.QueueNumber,
+            AppointmentId = destApptService.AppointmentServiceId,
+            AppointmentCode = FormatAppointmentCode(parentAppointment.AppointmentId),
+            DepartmentId = destApptService.DepartmentId,
+            DepartmentName = referral.ToDepartment?.Name,
+            RequestedServiceId = destApptService.DepartmentServiceId,
+            RequestedServiceName = targetService.ServiceName,
+            AssignedDentistUserId = destApptService.AssignedDentistUserId,
+            AssignedDentistName = assignedDentist.StaffProfile?.FullName,
+            RoomId = destApptService.RoomId,
+            DentalChairId = destApptService.DentalChairId,
+            ScheduledStart = destApptService.ScheduledStart,
+            ScheduledEnd = destApptService.ScheduledEnd,
+            Status = destApptService.Status,
+            QueueNumber = formattedQueue,
             IsRoot = false,
-            ReasonForVisit = apptB.ReasonForVisit
+            ReasonForVisit = destApptService.Notes
         };
 
-        return ApiResponse<CareEpisodeAppointmentSummaryDto>.Ok(dto, $"Điều phối ca khám chuyển khoa thành công. Ca khám đang ở trạng thái Confirmed với số thứ tự: {queueNumber}.");
+        return ApiResponse<CareEpisodeAppointmentSummaryDto>.Ok(dto, $"Điều phối ca khám chuyển khoa thành công. Số thứ tự: {formattedQueue}.");
     }
 
     public async Task<ApiResponse<CareEpisodeAppointmentSummaryDto>> StationBCheckInAsync(long receptionistUserId, StationBCheckInRequest request, CancellationToken ct = default)
@@ -1189,107 +869,90 @@ public class CareEpisodeService : ICareEpisodeService
         if (request == null || request.AppointmentId <= 0)
             return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail("Mã ca khám không hợp lệ.");
 
-        var appt = await _dbContext.Appointments
-            .Include(a => a.Department)
-            .Include(a => a.AssignedDentistUser)
-                .ThenInclude(d => d!.User)
-            .Include(a => a.CareEpisode)
-            .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId, ct);
+        var apptService = await _dbContext.AppointmentServices
+            .Include(s => s.Appointment)
+            .Include(s => s.DepartmentService)
+                .ThenInclude(ds => ds.Department)
+            .Include(s => s.AssignedDentist)
+                .ThenInclude(d => d!.StaffProfile)
+            .FirstOrDefaultAsync(s => s.AppointmentServiceId == request.AppointmentId, ct);
 
-        if (appt == null)
+        if (apptService == null)
+        {
+            apptService = await _dbContext.AppointmentServices
+                .Include(s => s.Appointment)
+                .Include(s => s.DepartmentService)
+                    .ThenInclude(ds => ds.Department)
+                .Include(s => s.AssignedDentist)
+                    .ThenInclude(d => d!.StaffProfile)
+                .Where(s => s.AppointmentId == request.AppointmentId)
+                .OrderByDescending(s => s.AppointmentServiceId)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (apptService == null)
             return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail("Không tìm thấy ca khám chỉ định.");
 
-        if (appt.Status == AppointmentStatus.CheckedIn || appt.Status == AppointmentStatus.InService)
-            return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail($"Ca khám đã được Check-in trước đó (Trạng thái: {appt.Status}, STT: {appt.QueueNumber}).");
-
-        if (appt.Status != AppointmentStatus.Confirmed && appt.Status != AppointmentStatus.PendingReceptionReview)
-            return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail($"Ca khám ở trạng thái '{appt.Status}', không thể Check-in.");
-
-        // CRITICAL INVARIANT: Sequential InService check across the entire CareEpisode
-        if (appt.CareEpisodeId.HasValue)
+        if (apptService.Status == "CheckedIn" || apptService.Status == "InProgress")
         {
-            var isAnotherInService = await _dbContext.Appointments
-                .AnyAsync(a => a.CareEpisodeId == appt.CareEpisodeId.Value &&
-                               a.AppointmentId != appt.AppointmentId &&
-                               a.Status == AppointmentStatus.InService, ct);
-
-            if (isAnotherInService)
-            {
-                return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail(
-                    "Bệnh nhân hiện đang trong quá trình thực hiện dịch vụ tại trạm khám trước (InService). Vui lòng đợi bác sĩ hoàn tất trước khi tiến hành Check-in và gọi vào Trạm B.");
-            }
+            var existingQ = FormatQueueNumber(apptService.DepartmentService?.Department?.Name, apptService.DepartmentId, apptService.QueueNumber ?? 1);
+            return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail($"Ca khám đã được Check-in trước đó (Trạng thái: {apptService.Status}, STT: {existingQ}).");
         }
 
-        // PRESERVE QueueNumber if already allocated upon Confirmed (Policy Alignment)
-        var queueNumber = appt.QueueNumber;
-        if (string.IsNullOrEmpty(queueNumber))
+        if (apptService.Status != "Confirmed" && apptService.Status != "PendingReceptionReview")
+            return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail($"Ca khám ở trạng thái '{apptService.Status}', không thể Check-in.");
+
+        var isAnotherInService = await _dbContext.AppointmentServices
+            .AnyAsync(s => s.AppointmentId == apptService.AppointmentId &&
+                           s.AppointmentServiceId != apptService.AppointmentServiceId &&
+                           s.Status == "InProgress", ct);
+
+        if (isAnotherInService)
         {
-            // Safe fallback for legacy records missing QueueNumber
-            var targetDate = (appt.ScheduledStart ?? DateTime.UtcNow).Date;
-            var existingQueueNumbers = await _dbContext.Appointments
-                .Where(a => a.DepartmentId == appt.DepartmentId &&
-                            a.ScheduledStart.HasValue &&
-                            a.ScheduledStart.Value.Date == targetDate &&
-                            !string.IsNullOrEmpty(a.QueueNumber))
-                .Select(a => a.QueueNumber!)
-                .ToListAsync(ct);
-
-            int maxSeq = 0;
-            foreach (var qn in existingQueueNumbers)
-            {
-                var match = System.Text.RegularExpressions.Regex.Match(qn, @"\d+$");
-                if (match.Success && int.TryParse(match.Value, out int num))
-                {
-                    if (num > maxSeq) maxSeq = num;
-                }
-            }
-
-            var deptCode = GetDepartmentCode(appt.Department?.Name, appt.DepartmentId);
-            queueNumber = $"Q-{deptCode}-{(maxSeq + 1):D3}";
-            appt.QueueNumber = queueNumber;
-            _logger.LogWarning("Ca khám #{ApptCode} thiếu QueueNumber lúc Confirmed. Đã cấp fallback: {QueueNumber}", appt.AppointmentCode, queueNumber);
+            return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail(
+                "Bệnh nhân hiện đang trong quá trình thực hiện dịch vụ tại trạm khám trước (InProgress). Vui lòng đợi bác sĩ hoàn tất trước khi tiến hành Check-in và gọi vào Trạm B.");
         }
 
-        var oldStatus = appt.Status;
-        appt.Status = AppointmentStatus.CheckedIn;
-        appt.CheckedInAt = DateTime.UtcNow;
-        appt.UpdatedAt = DateTime.UtcNow;
-
-        _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+        if (!apptService.QueueNumber.HasValue || apptService.QueueNumber.Value <= 0)
         {
-            AppointmentId = appt.AppointmentId,
-            OldStatus = oldStatus,
-            NewStatus = AppointmentStatus.CheckedIn,
-            ChangedByUserId = receptionistUserId,
-            Note = $"Bệnh nhân đã đến Trạm B và hoàn tất Check-in. Giữ nguyên số thứ tự: {queueNumber}.",
-            ChangedAt = DateTime.UtcNow
-        });
+            apptService.QueueNumber = await AllocateDepartmentQueueNumberAsync(apptService.DepartmentId, apptService.ServiceDate, ct);
+        }
+
+        apptService.Status = "CheckedIn";
+        apptService.UpdatedAt = DateTime.UtcNow;
+
+        if (apptService.Appointment.Status == AppointmentStatus.Confirmed || apptService.Appointment.Status == AppointmentStatus.PendingReceptionReview)
+        {
+            apptService.Appointment.Status = AppointmentStatus.CheckedIn;
+            apptService.Appointment.CheckedInAt ??= DateTime.UtcNow;
+            apptService.Appointment.UpdatedAt = DateTime.UtcNow;
+        }
 
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Lễ tân {UserId} hoàn tất Check-in Trạm B cho ca #{ApptCode}, giữ nguyên STT: {QueueNumber}",
-            receptionistUserId, appt.AppointmentCode, queueNumber);
+        var formattedQueue = FormatQueueNumber(apptService.DepartmentService?.Department?.Name, apptService.DepartmentId, apptService.QueueNumber.Value);
 
         var dto = new CareEpisodeAppointmentSummaryDto
         {
-            AppointmentId = appt.AppointmentId,
-            AppointmentCode = appt.AppointmentCode,
-            DepartmentId = appt.DepartmentId,
-            DepartmentName = appt.Department?.Name,
-            RequestedServiceId = appt.RequestedServiceId,
-            AssignedDentistUserId = appt.AssignedDentistUserId,
-            AssignedDentistName = appt.AssignedDentistUser?.User?.FullName,
-            RoomId = appt.RoomId,
-            DentalChairId = appt.DentalChairId,
-            ScheduledStart = appt.ScheduledStart,
-            ScheduledEnd = appt.ScheduledEnd,
-            Status = appt.Status,
-            QueueNumber = appt.QueueNumber,
+            AppointmentId = apptService.AppointmentServiceId,
+            AppointmentCode = FormatAppointmentCode(apptService.AppointmentId),
+            DepartmentId = apptService.DepartmentId,
+            DepartmentName = apptService.DepartmentService?.Department?.Name,
+            RequestedServiceId = apptService.DepartmentServiceId,
+            RequestedServiceName = apptService.DepartmentService?.ServiceName,
+            AssignedDentistUserId = apptService.AssignedDentistUserId,
+            AssignedDentistName = apptService.AssignedDentist?.StaffProfile?.FullName,
+            RoomId = apptService.RoomId,
+            DentalChairId = apptService.DentalChairId,
+            ScheduledStart = apptService.ScheduledStart,
+            ScheduledEnd = apptService.ScheduledEnd,
+            Status = apptService.Status,
+            QueueNumber = formattedQueue,
             IsRoot = false,
-            ReasonForVisit = appt.ReasonForVisit
+            ReasonForVisit = apptService.Notes
         };
 
-        return ApiResponse<CareEpisodeAppointmentSummaryDto>.Ok(dto, $"Check-in Trạm B thành công. Giữ nguyên số thứ tự: {queueNumber}.");
+        return ApiResponse<CareEpisodeAppointmentSummaryDto>.Ok(dto, $"Check-in Trạm B thành công. Giữ nguyên số thứ tự: {formattedQueue}.");
     }
 
     #endregion
@@ -1298,127 +961,102 @@ public class CareEpisodeService : ICareEpisodeService
 
     public async Task<ApiResponse<ConsolidatedEpisodeBillingSummaryDto>> GetConsolidatedInvoiceSummaryAsync(long careEpisodeId, CancellationToken ct = default)
     {
-        var episode = await _dbContext.CareEpisodes
-            .Include(e => e.PatientUser)
-                .ThenInclude(u => u.PatientProfile)
-            .Include(e => e.Appointments)
-                .ThenInclude(a => a.Department)
-            .Include(e => e.Appointments)
-                .ThenInclude(a => a.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
-            .Include(e => e.Appointments)
-                .ThenInclude(a => a.RequestedService)
-            .Include(e => e.ServiceTasks)
-                .ThenInclude(t => t.DepartmentService)
-            .Include(e => e.ServiceTasks)
-                .ThenInclude(t => t.PerformingDentistUser)
-                    .ThenInclude(u => u.StaffProfile)
-            .Include(e => e.ServiceTasks)
-                .ThenInclude(t => t.Appointment)
-            .Include(e => e.Invoices)
-                .ThenInclude(i => i.InvoiceItems)
-            .Include(e => e.Invoices)
-                .ThenInclude(i => i.Payments)
-            .FirstOrDefaultAsync(e => e.CareEpisodeId == careEpisodeId, ct);
-
-        if (episode == null)
+        var appointment = await LoadAppointmentEpisodeGraphAsync(careEpisodeId, ct);
+        if (appointment == null)
             return ApiResponse<ConsolidatedEpisodeBillingSummaryDto>.Fail("Không tìm thấy đợt khám chỉ định.");
 
-        var apptIds = episode.Appointments.Select(a => a.AppointmentId).ToList();
-
-        // 1. Collect all completed service tasks under this episode
-        var completedTasks = episode.ServiceTasks
-            .Where(t => t.Status == "Completed")
-            .ToList();
-
+        var apptCode = FormatAppointmentCode(appointment.AppointmentId);
         var lineItems = new List<ConsolidatedBillingLineItemDto>();
 
-        foreach (var task in completedTasks)
+        var performedServices = appointment.TreatmentSessions
+            .SelectMany(ts => ts.PerformedServices.Select(ps => new { Session = ts, Performed = ps }))
+            .ToList();
+
+        foreach (var entry in performedServices)
         {
             lineItems.Add(new ConsolidatedBillingLineItemDto
             {
-                ServiceTaskId = task.ServiceTaskId,
-                AppointmentId = task.AppointmentId,
-                AppointmentCode = task.Appointment?.AppointmentCode ?? string.Empty,
-                Description = task.DepartmentService.ServiceName,
-                PerformingDentistUserId = task.PerformingDentistUserId,
-                PerformingDentistName = GetUserDisplayName(task.PerformingDentistUser),
-                Quantity = task.Quantity,
-                UnitPrice = task.UnitPriceSnapshot,
-                SourceType = "ServiceTask",
-                SourceId = task.ServiceTaskId
+                ServiceTaskId = entry.Performed.AppointmentServiceId,
+                AppointmentId = appointment.AppointmentId,
+                AppointmentCode = apptCode,
+                Description = entry.Performed.DepartmentService?.ServiceName ?? $"Dịch vụ #{entry.Performed.DepartmentServiceId}",
+                PerformingDentistUserId = entry.Session.DentistUserId,
+                PerformingDentistName = entry.Session.Dentist?.StaffProfile?.FullName,
+                Quantity = entry.Performed.Quantity,
+                UnitPrice = entry.Performed.UnitPrice,
+                SourceType = "PerformedService",
+                SourceId = entry.Performed.PerformedServiceId,
+                IsIncludedInCombo = appointment.ComboId.HasValue
             });
         }
 
-        // 2. Collect completed diagnostic imaging orders under this episode
-        var diagnosticOrders = await _dbContext.DiagnosticOrders
-            .Include(d => d.Appointment)
-            .Where(d => apptIds.Contains(d.AppointmentId) && d.Status == "Completed")
+        var recordedApptServiceIds = performedServices.Select(p => p.Performed.AppointmentServiceId).ToHashSet();
+        foreach (var svc in appointment.AppointmentServices.Where(s => s.Status == "Completed" && !recordedApptServiceIds.Contains(s.AppointmentServiceId)))
+        {
+            lineItems.Add(new ConsolidatedBillingLineItemDto
+            {
+                ServiceTaskId = svc.AppointmentServiceId,
+                AppointmentId = appointment.AppointmentId,
+                AppointmentCode = apptCode,
+                Description = svc.DepartmentService?.ServiceName ?? $"Dịch vụ #{svc.DepartmentServiceId}",
+                PerformingDentistUserId = svc.AssignedDentistUserId,
+                PerformingDentistName = svc.AssignedDentist?.StaffProfile?.FullName,
+                Quantity = 1,
+                UnitPrice = svc.UnitPrice,
+                SourceType = "ServiceTask",
+                SourceId = svc.AppointmentServiceId,
+                IsIncludedInCombo = svc.ComboId.HasValue
+            });
+        }
+
+        var dispensedItems = await _dbContext.PrescriptionItems
+            .Include(pi => pi.Prescription)
+            .Include(pi => pi.Medicine)
+            .AsNoTracking()
+            .Where(pi => pi.Prescription.AppointmentId == appointment.AppointmentId && pi.QuantityDispensed > 0)
             .ToListAsync(ct);
 
-        foreach (var diag in diagnosticOrders)
+        foreach (var medItem in dispensedItems)
         {
             lineItems.Add(new ConsolidatedBillingLineItemDto
             {
-                AppointmentId = diag.AppointmentId,
-                AppointmentCode = diag.Appointment.AppointmentCode,
-                Description = $"Chẩn đoán hình ảnh: {diag.DiagnosticType}",
-                Quantity = 1,
-                UnitPrice = 150000m,
-                SourceType = "DiagnosticOrder",
-                SourceId = diag.DiagnosticOrderId
+                AppointmentId = appointment.AppointmentId,
+                AppointmentCode = apptCode,
+                Description = $"Thuốc: {medItem.Medicine.MedicineName}",
+                PerformingDentistUserId = medItem.DispensedByUserId ?? medItem.Prescription.DentistUserId,
+                Quantity = medItem.QuantityDispensed,
+                UnitPrice = medItem.UnitPriceAtDispense ?? medItem.Medicine.UnitPrice,
+                SourceType = "Prescription",
+                SourceId = medItem.PrescriptionItemId
             });
-        }
-
-        // 3. Fallback: If no completed service tasks yet, check if any appointment has requested service completed
-        if (!lineItems.Any())
-        {
-            foreach (var appt in episode.Appointments.Where(a => a.Status == AppointmentStatus.Completed || a.Status == AppointmentStatus.InService))
-            {
-                if (appt.RequestedService != null)
-                {
-                    lineItems.Add(new ConsolidatedBillingLineItemDto
-                    {
-                        AppointmentId = appt.AppointmentId,
-                        AppointmentCode = appt.AppointmentCode,
-                        Description = appt.RequestedService.ServiceName,
-                        PerformingDentistUserId = appt.AssignedDentistUserId,
-                        PerformingDentistName = appt.AssignedDentistUser?.User?.FullName,
-                        Quantity = 1,
-                        UnitPrice = appt.RequestedService.Price,
-                        SourceType = "AppointmentService",
-                        SourceId = appt.RequestedServiceId
-                    });
-                }
-            }
         }
 
         var subTotal = lineItems.Sum(i => i.TotalAmount);
-        var existingInvoice = episode.Invoices.OrderByDescending(i => i.InvoiceId).FirstOrDefault();
-        var taxItem = existingInvoice?.InvoiceItems.FirstOrDefault(ii => ii.Description.Contains("VAT"));
-        var taxAmount = taxItem?.Amount ?? 0m;
+        var existingInvoice = appointment.Invoice;
+        var discountAmount = existingInvoice?.DiscountAmount ?? 0m;
+        var totalAmount = existingInvoice?.FinalAmount ?? Math.Max(0m, subTotal - discountAmount);
         var paidAmount = existingInvoice != null && existingInvoice.Status == "Paid"
-            ? existingInvoice.TotalAmount
-            : (existingInvoice?.Payments.Where(p => p.Status == "Completed" || p.Status == "Success").Sum(p => p.Amount) ?? 0m);
+            ? existingInvoice.FinalAmount
+            : (existingInvoice?.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0m);
 
         var summary = new ConsolidatedEpisodeBillingSummaryDto
         {
-            CareEpisodeId = episode.CareEpisodeId,
-            EpisodeCode = episode.EpisodeCode,
-            PatientUserId = episode.PatientUserId,
-            PatientName = GetUserDisplayName(episode.PatientUser),
-            EpisodeStatus = episode.Status,
+            CareEpisodeId = appointment.AppointmentId,
+            EpisodeCode = FormatEpisodeCode(appointment.AppointmentId, appointment.CreatedAt),
+            PatientUserId = appointment.PatientUserId,
+            PatientName = appointment.Patient?.FullName ?? string.Empty,
+            EpisodeStatus = MapEpisodeStatus(appointment),
             HasExistingInvoice = existingInvoice != null,
             ExistingInvoiceId = existingInvoice?.InvoiceId,
             ExistingInvoiceCode = existingInvoice?.InvoiceCode,
             ExistingInvoiceStatus = existingInvoice?.Status,
             SubTotal = subTotal,
-            DiscountAmount = 0m,
+            DiscountAmount = discountAmount,
             TaxPercent = 0m,
-            TaxAmount = taxAmount,
-            TotalAmount = existingInvoice?.TotalAmount ?? subTotal,
+            TaxAmount = 0m,
+            TotalAmount = totalAmount,
             PaidAmount = paidAmount,
-            BalanceRemaining = Math.Max(0m, (existingInvoice?.TotalAmount ?? subTotal) - paidAmount),
+            BalanceRemaining = Math.Max(0m, totalAmount - paidAmount),
             LineItems = lineItems
         };
 
@@ -1436,90 +1074,109 @@ public class CareEpisodeService : ICareEpisodeService
         using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
         try
         {
-            var episode = await _dbContext.CareEpisodes
-                .Include(e => e.PatientUser)
-                    .ThenInclude(u => u.PatientProfile)
-                .Include(e => e.Appointments)
-                    .ThenInclude(a => a.Department)
-                .Include(e => e.Appointments)
-                    .ThenInclude(a => a.AssignedDentistUser)
-                        .ThenInclude(d => d!.User)
-                .Include(e => e.Appointments)
-                    .ThenInclude(a => a.RequestedService)
-                .Include(e => e.ServiceTasks)
-                    .ThenInclude(t => t.DepartmentService)
-                .Include(e => e.ServiceTasks)
-                    .ThenInclude(t => t.PerformingDentistUser)
-                        .ThenInclude(u => u.StaffProfile)
-                .Include(e => e.Invoices)
-                    .ThenInclude(i => i.InvoiceItems)
-                .FirstOrDefaultAsync(e => e.CareEpisodeId == request.CareEpisodeId, ct);
+            var appointment = await _dbContext.Appointments
+                .Include(a => a.Patient)
+                    .ThenInclude(p => p.User)
+                .Include(a => a.AppointmentServices)
+                    .ThenInclude(s => s.DepartmentService)
+                .Include(a => a.AppointmentServices)
+                    .ThenInclude(s => s.TreatmentSessions)
+                        .ThenInclude(ts => ts.PerformedServices)
+                .Include(a => a.TreatmentSessions)
+                    .ThenInclude(ts => ts.PerformedServices)
+                        .ThenInclude(ps => ps.DepartmentService)
+                .Include(a => a.Invoice)
+                    .ThenInclude(i => i!.InvoiceItems)
+                .Include(a => a.Invoice)
+                    .ThenInclude(i => i!.Payments)
+                .FirstOrDefaultAsync(a => a.AppointmentId == request.CareEpisodeId, ct);
 
-            if (episode == null)
+            if (appointment == null)
             {
                 await tx.RollbackAsync(ct);
                 return ApiResponse<InvoiceDto>.Fail("Không tìm thấy đợt khám chỉ định.");
             }
 
-            // CRITICAL INVARIANT: Protect existing non-Unpaid invoices from mutation or duplicate invoice creation
-            var existingInvoice = episode.Invoices.FirstOrDefault();
+            var existingInvoice = appointment.Invoice;
             if (existingInvoice != null && existingInvoice.Status != "Unpaid")
             {
                 await tx.RollbackAsync(ct);
-                if (existingInvoice.Status == "Paid")
-                {
-                    return ApiResponse<InvoiceDto>.Fail(
-                        $"Đợt khám này đã có hóa đơn #{existingInvoice.InvoiceCode} đã thanh toán (Paid). Để bảo toàn dòng tiền, hóa đơn đã thanh toán không được chỉnh sửa hoặc tạo đè.");
-                }
                 return ApiResponse<InvoiceDto>.Fail(
-                    $"Đợt khám này đã có hóa đơn #{existingInvoice.InvoiceCode} với trạng thái {existingInvoice.Status}. Để bảo toàn dữ liệu tài chính, không được chỉnh sửa hoặc tạo thêm hóa đơn.");
+                    $"Đợt khám này đã có hóa đơn #{existingInvoice.InvoiceCode} với trạng thái {existingInvoice.Status}. Không được chỉnh sửa hoặc tạo đè.");
             }
 
-            // Get consolidated billing summary items
-            var summaryRes = await GetConsolidatedInvoiceSummaryAsync(episode.CareEpisodeId, ct);
-            if (!summaryRes.Success || summaryRes.Data == null || !summaryRes.Data.LineItems.Any())
+            foreach (var completedSvc in appointment.AppointmentServices.Where(s => s.Status == "Completed"))
+            {
+                var dentistId = completedSvc.AssignedDentistUserId ?? completedSvc.RequestedDentistUserId
+                    ?? await _dbContext.DentistProfiles.Select(d => d.UserId).FirstOrDefaultAsync(ct);
+                await EnsurePerformedServiceRecordedAsync(completedSvc, dentistId, null, completedSvc.Notes, ct);
+            }
+            await _dbContext.SaveChangesAsync(ct);
+
+            var performedServices = await _dbContext.PerformedServices
+                .Include(ps => ps.DepartmentService)
+                .Include(ps => ps.TreatmentSession)
+                .Where(ps => ps.AppointmentId == appointment.AppointmentId)
+                .ToListAsync(ct);
+
+            var dispensedItems = await _dbContext.PrescriptionItems
+                .Include(pi => pi.Prescription)
+                .Include(pi => pi.Medicine)
+                .Where(pi => pi.Prescription.AppointmentId == appointment.AppointmentId && pi.QuantityDispensed > 0)
+                .ToListAsync(ct);
+
+            if (!performedServices.Any() && !dispensedItems.Any())
             {
                 await tx.RollbackAsync(ct);
-                return ApiResponse<InvoiceDto>.Fail("Đợt khám chưa có dịch vụ nào hoàn tất để xuất hóa đơn.");
+                return ApiResponse<InvoiceDto>.Fail("Đợt khám chưa có dịch vụ hoặc đơn thuốc đã cấp phát nào để xuất hóa đơn.");
             }
 
-            var lineItems = summaryRes.Data.LineItems;
-            var subTotal = lineItems.Sum(i => i.TotalAmount);
+            var newItems = new List<InvoiceItem>();
+            foreach (var ps in performedServices)
+            {
+                var lineTotal = ps.Quantity * ps.UnitPrice;
+                newItems.Add(new InvoiceItem
+                {
+                    AppointmentId = appointment.AppointmentId,
+                    PerformedServiceId = ps.PerformedServiceId,
+                    Description = ps.DepartmentService?.ServiceName ?? $"Dịch vụ #{ps.DepartmentServiceId}",
+                    Quantity = ps.Quantity,
+                    UnitPrice = ps.UnitPrice,
+                    TotalAmount = lineTotal
+                });
+            }
+
+            foreach (var pi in dispensedItems)
+            {
+                var unitPrice = pi.UnitPriceAtDispense ?? pi.Medicine.UnitPrice;
+                var lineTotal = pi.QuantityDispensed * unitPrice;
+                newItems.Add(new InvoiceItem
+                {
+                    AppointmentId = appointment.AppointmentId,
+                    PrescriptionItemId = pi.PrescriptionItemId,
+                    Description = $"Thuốc: {pi.Medicine.MedicineName}",
+                    Quantity = pi.QuantityDispensed,
+                    UnitPrice = unitPrice,
+                    TotalAmount = lineTotal
+                });
+            }
+
+            var subTotal = newItems.Sum(i => i.TotalAmount);
             var discount = Math.Max(0m, request.DiscountAmount);
             if (discount > subTotal) discount = subTotal;
+            var finalAmount = subTotal - discount;
 
-            var discountedSubTotal = subTotal - discount;
-            var taxPercent = Math.Max(0m, request.TaxPercent);
-            if (taxPercent > 100m) taxPercent = 100m;
-
-            var taxAmount = Math.Round(discountedSubTotal * (taxPercent / 100m), 2);
-            var totalAmount = Math.Round(discountedSubTotal + taxAmount, 2);
-
-            // Deduplicate line items by ServiceTaskId within this batch
-            var distinctLineItems = new List<ConsolidatedBillingLineItemDto>();
-            var seenTaskIds = new HashSet<long>();
-            foreach (var item in lineItems)
-            {
-                if (item.ServiceTaskId.HasValue)
-                {
-                    if (!seenTaskIds.Add(item.ServiceTaskId.Value))
-                    {
-                        continue;
-                    }
-                }
-                distinctLineItems.Add(item);
-            }
-
-            // Check if there is an existing Unpaid invoice to update, or create a new one
             Invoice invoice;
-
-            if (existingInvoice != null && existingInvoice.Status == "Unpaid")
+            if (existingInvoice != null)
             {
                 invoice = existingInvoice;
                 _dbContext.InvoiceItems.RemoveRange(invoice.InvoiceItems);
                 invoice.InvoiceItems.Clear();
-                invoice.TotalAmount = totalAmount;
+                invoice.TotalAmount = subTotal;
+                invoice.DiscountAmount = discount;
+                invoice.FinalAmount = finalAmount;
                 invoice.GeneratedByUserId = receptionistUserId;
+                invoice.UpdatedAt = DateTime.UtcNow;
             }
             else
             {
@@ -1527,124 +1184,32 @@ public class CareEpisodeService : ICareEpisodeService
                 invoice = new Invoice
                 {
                     InvoiceCode = invoiceCode,
-                    CareEpisodeId = episode.CareEpisodeId,
-                    AppointmentId = episode.RootAppointmentId,
+                    AppointmentId = appointment.AppointmentId,
                     GeneratedByUserId = receptionistUserId,
-                    TotalAmount = totalAmount,
-                    Status = totalAmount == 0 ? "Paid" : "Unpaid",
+                    TotalAmount = subTotal,
+                    DiscountAmount = discount,
+                    FinalAmount = finalAmount,
+                    Status = finalAmount == 0m ? "Paid" : "Unpaid",
                     CreatedAt = DateTime.UtcNow
                 };
                 _dbContext.Invoices.Add(invoice);
             }
 
-            // Anti-double-billing: Verify that none of these ServiceTasks are billed in any OTHER invoice
-            var taskIdsToCheck = distinctLineItems.Where(i => i.ServiceTaskId.HasValue).Select(i => i.ServiceTaskId!.Value).ToList();
-            if (taskIdsToCheck.Any())
+            foreach (var item in newItems)
             {
-                var alreadyBilledTask = await _dbContext.InvoiceItems
-                    .Where(ii => ii.ServiceTaskId.HasValue && taskIdsToCheck.Contains(ii.ServiceTaskId.Value) && (invoice.InvoiceId == 0 || ii.InvoiceId != invoice.InvoiceId))
-                    .Select(ii => new { ii.ServiceTaskId, ii.Invoice.InvoiceCode })
-                    .FirstOrDefaultAsync(ct);
-
-                if (alreadyBilledTask != null)
-                {
-                    await tx.RollbackAsync(ct);
-                    return ApiResponse<InvoiceDto>.Fail(
-                        $"Dịch vụ chỉ định ID {alreadyBilledTask.ServiceTaskId} đã được lập hóa đơn tại #{alreadyBilledTask.InvoiceCode}. Không thể lập hóa đơn trùng lặp.");
-                }
+                invoice.InvoiceItems.Add(item);
             }
-
-            // Add consolidated line items
-            foreach (var item in distinctLineItems)
-            {
-                invoice.InvoiceItems.Add(new InvoiceItem
-                {
-                    AppointmentId = item.AppointmentId,
-                    PerformingDentistUserId = item.PerformingDentistUserId,
-                    ServiceTaskId = item.ServiceTaskId,
-                    SourceType = item.SourceType,
-                    SourceId = item.SourceId,
-                    Description = item.Description.Trim(),
-                    Quantity = item.Quantity,
-                    UnitPrice = item.UnitPrice,
-                    Amount = item.TotalAmount
-                });
-            }
-
-            // VAT item if tax applied
-            if (taxPercent > 0 && taxAmount > 0)
-            {
-                invoice.InvoiceItems.Add(new InvoiceItem
-                {
-                    AppointmentId = episode.RootAppointmentId,
-                    Description = $"Thuế giá trị gia tăng (VAT {taxPercent:G29}%)",
-                    Quantity = 1,
-                    UnitPrice = taxAmount,
-                    Amount = taxAmount,
-                    SourceType = "Tax"
-                });
-            }
-
-            // Update Care Episode status
-            episode.Status = totalAmount == 0 ? "Closed" : "ReadyForBilling";
-            if (totalAmount == 0)
-            {
-                episode.ClosedAtUtc = DateTime.UtcNow;
-            }
-            episode.UpdatedAtUtc = DateTime.UtcNow;
 
             await _dbContext.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
 
-            _logger.LogInformation("Đã lập hóa đơn tổng hợp #{InvoiceCode} ({TotalAmount:N0} đ) cho đợt khám #{EpisodeCode}",
-                invoice.InvoiceCode, invoice.TotalAmount, episode.EpisodeCode);
-
-            // Map and return
-            var staffUser = await _dbContext.UserAccounts
-                .Include(u => u.StaffProfile)
+            var staffName = await _dbContext.StaffProfiles
                 .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.UserId == receptionistUserId, ct);
-            var rootAppt = episode.Appointments.FirstOrDefault(a => a.AppointmentId == episode.RootAppointmentId);
+                .Where(s => s.UserId == receptionistUserId)
+                .Select(s => s.FullName)
+                .FirstOrDefaultAsync(ct);
 
-            var invoiceDto = new InvoiceDto
-            {
-                InvoiceId = invoice.InvoiceId,
-                InvoiceCode = invoice.InvoiceCode,
-                CareEpisodeId = episode.CareEpisodeId,
-                CareEpisodeCode = episode.EpisodeCode,
-                AppointmentId = invoice.AppointmentId,
-                AppointmentCode = rootAppt?.AppointmentCode,
-                PatientUserId = episode.PatientUserId,
-                PatientName = GetUserDisplayName(episode.PatientUser),
-                PatientPhoneNumber = episode.PatientUser.PhoneNumber,
-                PatientEmail = episode.PatientUser.Email,
-                GeneratedByUserId = receptionistUserId,
-                GeneratedByName = GetUserDisplayName(staffUser),
-                SubTotal = subTotal,
-                DiscountAmount = discount,
-                TaxPercent = taxPercent,
-                TaxAmount = taxAmount,
-                TotalAmount = totalAmount,
-                PaidAmount = invoice.Status == "Paid" ? totalAmount : 0,
-                RemainingAmount = invoice.Status == "Paid" ? 0 : totalAmount,
-                Status = invoice.Status,
-                CreatedAt = invoice.CreatedAt,
-                Items = invoice.InvoiceItems.Select(ii => new InvoiceItemDto
-                {
-                    InvoiceItemId = ii.InvoiceItemId,
-                    InvoiceId = ii.InvoiceId,
-                    AppointmentId = ii.AppointmentId,
-                    PerformingDentistUserId = ii.PerformingDentistUserId,
-                    ServiceTaskId = ii.ServiceTaskId,
-                    SourceType = ii.SourceType,
-                    SourceId = ii.SourceId,
-                    Description = ii.Description,
-                    Quantity = ii.Quantity,
-                    UnitPrice = ii.UnitPrice,
-                    Amount = ii.Quantity * ii.UnitPrice
-                }).ToList()
-            };
-
+            var invoiceDto = MapInvoiceToDto(invoice, appointment, staffName);
             return ApiResponse<InvoiceDto>.Ok(invoiceDto, "Xuất hóa đơn tổng hợp cho đợt khám thành công.");
         }
         catch (Exception ex)
@@ -1659,145 +1224,120 @@ public class CareEpisodeService : ICareEpisodeService
 
     #region Helper Methods
 
-    private CareEpisodeDto MapCareEpisodeToDto(CareEpisode ep)
+    private async Task<Appointment?> LoadAppointmentEpisodeGraphAsync(long appointmentId, CancellationToken ct)
     {
-        var appointments = ep.Appointments.Select(a => new CareEpisodeAppointmentSummaryDto
-        {
-            AppointmentId = a.AppointmentId,
-            AppointmentCode = a.AppointmentCode,
-            DepartmentId = a.DepartmentId,
-            DepartmentName = a.Department?.Name,
-            RequestedServiceId = a.RequestedServiceId,
-            RequestedServiceName = a.RequestedService?.ServiceName,
-            AssignedDentistUserId = a.AssignedDentistUserId,
-            AssignedDentistName = a.AssignedDentistUser?.User?.FullName,
-            RoomId = a.RoomId,
-            RoomName = a.Room?.RoomCode,
-            DentalChairId = a.DentalChairId,
-            ChairName = a.DentalChair?.ChairCode,
-            ScheduledStart = a.ScheduledStart,
-            ScheduledEnd = a.ScheduledEnd,
-            Status = a.Status,
-            QueueNumber = a.QueueNumber,
-            IsRoot = a.AppointmentId == ep.RootAppointmentId,
-            ReasonForVisit = a.ReasonForVisit
-        }).OrderBy(a => a.AppointmentId).ToList();
+        return await _dbContext.Appointments
+            .Include(a => a.Patient)
+                .ThenInclude(p => p.User)
+            .Include(a => a.AppointmentServices)
+                .ThenInclude(s => s.DepartmentService)
+                    .ThenInclude(ds => ds.Department)
+            .Include(a => a.AppointmentServices)
+                .ThenInclude(s => s.AssignedDentist)
+                    .ThenInclude(d => d!.StaffProfile)
+            .Include(a => a.AppointmentServices)
+                .ThenInclude(s => s.Room)
+            .Include(a => a.AppointmentServices)
+                .ThenInclude(s => s.DentalChair)
+            .Include(a => a.AppointmentServices)
+                .ThenInclude(s => s.TreatmentSessions)
+                    .ThenInclude(ts => ts.PerformedServices)
+            .Include(a => a.TreatmentSessions)
+                .ThenInclude(ts => ts.Dentist)
+                    .ThenInclude(d => d.StaffProfile)
+            .Include(a => a.TreatmentSessions)
+                .ThenInclude(ts => ts.PerformedServices)
+                    .ThenInclude(ps => ps.DepartmentService)
+            .Include(a => a.Invoice)
+                .ThenInclude(i => i!.InvoiceItems)
+            .Include(a => a.Invoice)
+                .ThenInclude(i => i!.Payments)
+            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+    }
 
-        var serviceTasks = ep.ServiceTasks
-            .Select(t => MapToTaskDto(t))
-            .OrderBy(t => t.ServiceTaskId)
-            .ToList();
+    private async Task<List<DepartmentReferral>> LoadReferralsForAppointmentAsync(long appointmentId, CancellationToken ct)
+    {
+        return await _dbContext.DepartmentReferrals
+            .Include(r => r.FromDepartment)
+            .Include(r => r.ToDepartment)
+            .Include(r => r.RequestedService)
+            .Include(r => r.AssignedDentist)
+                .ThenInclude(d => d!.StaffProfile)
+            .Include(r => r.SourceAppointmentService)
+            .Include(r => r.DestinationAppointmentService)
+            .Include(r => r.TreatmentSession)
+            .AsNoTracking()
+            .Where(r =>
+                (r.SourceAppointmentService != null && r.SourceAppointmentService.AppointmentId == appointmentId) ||
+                (r.DestinationAppointmentService != null && r.DestinationAppointmentService.AppointmentId == appointmentId) ||
+                (r.TreatmentSession != null && r.TreatmentSession.AppointmentId == appointmentId))
+            .OrderBy(r => r.ReferralId)
+            .ToListAsync(ct);
+    }
 
-        var referrals = ep.DepartmentReferrals.Select(r => new CareEpisodeReferralSummaryDto
+    private async Task EnsurePerformedServiceRecordedAsync(
+        AppointmentServiceEntity apptService,
+        long dentistUserId,
+        string? clinicalFindings,
+        string? notes,
+        CancellationToken ct)
+    {
+        var session = apptService.TreatmentSessions.OrderByDescending(ts => ts.SessionId).FirstOrDefault();
+        if (session == null)
         {
-            ReferralId = r.ReferralId,
-            SourceAppointmentId = r.SourceAppointmentId,
-            SourceAppointmentCode = r.SourceAppointment?.AppointmentCode,
-            DestinationAppointmentId = r.DestinationAppointmentId,
-            DestinationAppointmentCode = r.DestinationAppointment?.AppointmentCode,
-            FromDepartmentId = r.FromDepartmentId,
-            FromDepartmentName = r.FromDepartment?.Name ?? string.Empty,
-            ToDepartmentId = r.ToDepartmentId,
-            ToDepartmentName = r.ToDepartment?.Name ?? string.Empty,
-            RequestedServiceId = r.RequestedServiceId,
-            RequestedServiceName = r.RequestedService?.ServiceName,
-            AssignedDentistUserId = r.AssignedDentistUserId,
-            AssignedDentistName = r.AssignedDentistUser?.User?.FullName,
-            Reason = r.Reason,
-            Urgency = r.Urgency,
-            Status = r.Status,
-            ClinicalInstructions = r.ClinicalInstructions,
-            CreatedAt = r.CreatedAt,
-            ReviewedAt = r.ReviewedAt
-        }).OrderBy(r => r.ReferralId).ToList();
-
-        var invoice = ep.Invoices.OrderByDescending(i => i.InvoiceId).FirstOrDefault();
-        InvoiceDto? invoiceDto = null;
-        if (invoice != null)
-        {
-            invoiceDto = new InvoiceDto
+            session = new TreatmentSession
             {
-                InvoiceId = invoice.InvoiceId,
-                InvoiceCode = invoice.InvoiceCode,
-                CareEpisodeId = ep.CareEpisodeId,
-                CareEpisodeCode = ep.EpisodeCode,
-                AppointmentId = invoice.AppointmentId,
-                PatientUserId = ep.PatientUserId,
-                PatientName = GetUserDisplayName(ep.PatientUser),
-                PatientPhoneNumber = ep.PatientUser.PhoneNumber,
-                PatientEmail = ep.PatientUser.Email,
-                GeneratedByUserId = invoice.GeneratedByUserId,
-                TotalAmount = invoice.TotalAmount,
-                Status = invoice.Status,
-                CreatedAt = invoice.CreatedAt,
-                Items = invoice.InvoiceItems.Select(ii => new InvoiceItemDto
-                {
-                    InvoiceItemId = ii.InvoiceItemId,
-                    InvoiceId = ii.InvoiceId,
-                    AppointmentId = ii.AppointmentId,
-                    PerformingDentistUserId = ii.PerformingDentistUserId,
-                    ServiceTaskId = ii.ServiceTaskId,
-                    SourceType = ii.SourceType,
-                    SourceId = ii.SourceId,
-                    Description = ii.Description,
-                    Quantity = ii.Quantity,
-                    UnitPrice = ii.UnitPrice,
-                    Amount = ii.Quantity * ii.UnitPrice
-                }).ToList()
+                AppointmentId = apptService.AppointmentId,
+                AppointmentServiceId = apptService.AppointmentServiceId,
+                PatientUserId = apptService.Appointment.PatientUserId,
+                DentistUserId = dentistUserId,
+                SessionDate = apptService.ServiceDate,
+                ClinicalObservations = clinicalFindings?.Trim(),
+                Notes = notes?.Trim() ?? apptService.Notes,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             };
+            _dbContext.TreatmentSessions.Add(session);
+            await _dbContext.SaveChangesAsync(ct);
+        }
+        else if (!string.IsNullOrWhiteSpace(clinicalFindings) || !string.IsNullOrWhiteSpace(notes))
+        {
+            if (!string.IsNullOrWhiteSpace(clinicalFindings))
+                session.ClinicalObservations = clinicalFindings.Trim();
+            if (!string.IsNullOrWhiteSpace(notes))
+                session.Notes = notes.Trim();
+            session.UpdatedAt = DateTime.UtcNow;
         }
 
-        var totalEstimatedCost = serviceTasks.Sum(t => t.TotalAmount);
-        var totalActualCost = serviceTasks.Where(t => t.Status == "Completed").Sum(t => t.TotalAmount);
-        var totalPaid = invoice != null && invoice.Status == "Paid" ? invoice.TotalAmount : 0;
+        var hasPerformed = await _dbContext.PerformedServices
+            .AnyAsync(ps => ps.AppointmentServiceId == apptService.AppointmentServiceId, ct);
 
-        return new CareEpisodeDto
+        if (!hasPerformed)
         {
-            CareEpisodeId = ep.CareEpisodeId,
-            EpisodeCode = ep.EpisodeCode,
-            PatientUserId = ep.PatientUserId,
-            PatientName = GetUserDisplayName(ep.PatientUser),
-            PatientPhone = ep.PatientUser.PhoneNumber,
-            RootAppointmentId = ep.RootAppointmentId,
-            RootAppointmentCode = ep.RootAppointment?.AppointmentCode ?? string.Empty,
-            Status = ep.Status,
-            OpenedAtUtc = ep.OpenedAtUtc,
-            ClosedAtUtc = ep.ClosedAtUtc,
-            Notes = ep.Notes,
-            CreatedAtUtc = ep.CreatedAtUtc,
-            Appointments = appointments,
-            ServiceTasks = serviceTasks,
-            Referrals = referrals,
-            ConsolidatedInvoice = invoiceDto,
-            TotalEstimatedCost = totalEstimatedCost,
-            TotalActualCost = totalActualCost,
-            TotalPaidAmount = totalPaid,
-            RemainingBalance = Math.Max(0, totalActualCost - totalPaid)
-        };
+            var performed = new PerformedService
+            {
+                TreatmentSessionId = session.SessionId,
+                AppointmentId = apptService.AppointmentId,
+                AppointmentServiceId = apptService.AppointmentServiceId,
+                DepartmentServiceId = apptService.DepartmentServiceId,
+                Quantity = 1,
+                UnitPrice = apptService.UnitPrice,
+                Notes = notes?.Trim() ?? apptService.Notes,
+                CreatedAt = DateTime.UtcNow
+            };
+            _dbContext.PerformedServices.Add(performed);
+        }
     }
 
-    private static string GetUserDisplayName(UserAccount? user)
+    private async Task<int> AllocateDepartmentQueueNumberAsync(int departmentId, DateOnly serviceDate, CancellationToken ct)
     {
-        if (user == null) return string.Empty;
-        return user.StaffProfile?.FullName ?? user.PatientProfile?.FullName ?? user.Email ?? "N/A";
-    }
+        var maxQueue = await _dbContext.AppointmentServices
+            .Where(s => s.DepartmentId == departmentId && s.ServiceDate == serviceDate && s.QueueNumber.HasValue)
+            .Select(s => s.QueueNumber!.Value)
+            .DefaultIfEmpty(0)
+            .MaxAsync(ct);
 
-    private async Task<string> GenerateEpisodeCodeAsync(CancellationToken ct)
-    {
-        var today = DateTime.UtcNow;
-        var prefix = $"EP-{today:yyyyMMdd}-";
-        var count = await _dbContext.CareEpisodes
-            .CountAsync(e => e.OpenedAtUtc.Date == today.Date, ct);
-        return $"{prefix}{(count + 1):D4}";
-    }
-
-    private async Task<string> GenerateTaskCodeAsync(CancellationToken ct)
-    {
-        var today = DateTime.UtcNow;
-        var prefix = $"TSK-{today:yyyyMMdd}-";
-        var count = await _dbContext.EpisodeServiceTasks
-            .CountAsync(t => t.CreatedAtUtc.Date == today.Date, ct);
-        return $"{prefix}{(count + 1):D4}";
+        return maxQueue + 1;
     }
 
     private async Task<string> GenerateInvoiceCodeAsync(CancellationToken ct)
@@ -1805,20 +1345,21 @@ public class CareEpisodeService : ICareEpisodeService
         var today = DateTime.UtcNow;
         var prefix = $"INV-{today:yyyyMMdd}-";
         var count = await _dbContext.Invoices
-            .CountAsync(i => i.CreatedAt.Date == today.Date, ct);
+            .CountAsync(i => i.CreatedAt >= today.Date && i.CreatedAt < today.Date.AddDays(1), ct);
         return $"{prefix}{(count + 1):D4}";
     }
 
-    private async Task<string> GenerateUniqueAppointmentCodeAsync(CancellationToken ct)
+    private static string FormatAppointmentCode(long appointmentId) => $"APT-{appointmentId:D6}";
+
+    private static string FormatEpisodeCode(long appointmentId, DateTime createdAt) => $"EP-{createdAt:yyyyMMdd}-{appointmentId:D4}";
+
+    private static string FormatQueueNumber(string? deptName, int deptId, int queueNumber)
     {
-        var today = DateTime.UtcNow;
-        var prefix = $"APT-{today:yyyyMMdd}-";
-        var count = await _dbContext.Appointments
-            .CountAsync(a => a.CreatedAt.Date == today.Date, ct);
-        return $"{prefix}{(count + 1):D4}";
+        var deptCode = GetDepartmentCode(deptName, deptId);
+        return $"Q-{deptCode}-{queueNumber:D3}";
     }
 
-    private static string GetDepartmentCode(string? deptName, long? deptId)
+    private static string GetDepartmentCode(string? deptName, int? deptId)
     {
         if (string.IsNullOrWhiteSpace(deptName))
             return $"D{deptId ?? 1}";
@@ -1838,113 +1379,210 @@ public class CareEpisodeService : ICareEpisodeService
         return deptName.Length >= 3 ? deptName.Substring(0, 3).ToUpperInvariant() : $"D{deptId ?? 1}";
     }
 
-    private async Task EnsurePrimaryTaskForAppointmentAsync(Appointment appointment, long episodeId, CancellationToken ct)
+    private static string NormalizeUrgency(string? urgency)
     {
-        if (!appointment.RequestedServiceId.HasValue) return;
-
-        var hasExistingTask = await _dbContext.EpisodeServiceTasks.AnyAsync(t => t.AppointmentId == appointment.AppointmentId, ct);
-        if (hasExistingTask) return;
-
-        var srv = await _dbContext.DepartmentServices
-            .Include(s => s.Department)
-            .FirstOrDefaultAsync(s => s.DepartmentServiceId == appointment.RequestedServiceId.Value && s.Status == "Active", ct);
-
-        if (srv == null) return;
-
-        var activeWf = await _dbContext.ServiceWorkflows
-            .Include(w => w.Steps)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(w => w.DepartmentServiceId == srv.DepartmentServiceId && w.IsActive && w.ApprovalStatus == "Approved", ct);
-
-        var taskCode = await GenerateTaskCodeAsync(ct);
-        var dentistId = appointment.AssignedDentistUserId ?? appointment.RequestedDentistUserId ?? 0;
-        var initTask = new EpisodeServiceTask
-        {
-            TaskCode = taskCode,
-            CareEpisodeId = episodeId,
-            AppointmentId = appointment.AppointmentId,
-            DepartmentServiceId = srv.DepartmentServiceId,
-            PerformingDentistUserId = dentistId,
-            Status = "Planned",
-            Quantity = 1,
-            UnitPriceSnapshot = srv.Price,
-            EstimatedDurationMinutes = srv.DurationMinutes ?? 30,
-            AppliedWorkflowId = activeWf?.WorkflowId,
-            AppliedWorkflowVersion = activeWf?.Version,
-            PlannedAtUtc = DateTime.UtcNow,
-            Notes = $"Dịch vụ ban đầu của ca khám #{appointment.AppointmentCode}",
-            CreatedAtUtc = DateTime.UtcNow
-        };
-
-        if (activeWf != null && activeWf.Steps != null)
-        {
-            foreach (var step in activeWf.Steps.OrderBy(s => s.StepOrder))
-            {
-                initTask.StepProgresses.Add(new EpisodeServiceTaskStepProgress
-                {
-                    StepId = step.StepId,
-                    Status = "Pending",
-                    CreatedAtUtc = DateTime.UtcNow
-                });
-            }
-        }
-
-        _dbContext.EpisodeServiceTasks.Add(initTask);
-        await _dbContext.SaveChangesAsync(ct);
+        if (string.Equals(urgency?.Trim(), "Emergency", StringComparison.OrdinalIgnoreCase))
+            return "Emergency";
+        if (string.Equals(urgency?.Trim(), "Urgent", StringComparison.OrdinalIgnoreCase))
+            return "Urgent";
+        return "Normal";
     }
 
-    private static EpisodeServiceTaskDto MapToTaskDto(EpisodeServiceTask t, string? performingDentistName = null)
+    private static string MapEpisodeStatus(Appointment appointment)
     {
-        var steps = t.StepProgresses?
-            .OrderBy(p => p.Step?.StepOrder ?? 0)
-            .Select(p => new EpisodeTaskStepProgressDto
-            {
-                ProgressId = p.ProgressId,
-                ServiceTaskId = p.ServiceTaskId,
-                StepId = p.StepId,
-                StepName = p.Step?.StepName ?? string.Empty,
-                Description = p.Step?.Description,
-                StepOrder = p.Step?.StepOrder ?? 0,
-                IsRequired = p.Step?.IsRequired ?? true,
-                CompletionRequirement = p.Step?.CompletionRequirement,
-                ExpectedDataType = p.Step?.ExpectedDataType ?? "None",
-                Status = p.Status,
-                ResultValue = p.ResultValue,
-                Notes = p.Notes,
-                EvidenceUrl = p.EvidenceUrl,
-                CompletedByDentistUserId = p.CompletedByDentistUserId,
-                CompletedByDentistName = p.CompletedByDentistUser?.StaffProfile?.FullName ?? p.CompletedByDentistUser?.Email,
-                StartedAtUtc = p.StartedAtUtc,
-                CompletedAtUtc = p.CompletedAtUtc
-            }).ToList() ?? new List<EpisodeTaskStepProgressDto>();
+        if (appointment.Status == AppointmentStatus.Cancelled || appointment.Status == AppointmentStatus.Rejected)
+            return "Cancelled";
+        if (appointment.Invoice != null && appointment.Invoice.Status == "Paid")
+            return "Closed";
+        if (appointment.Status == AppointmentStatus.Completed)
+            return "ReadyForBilling";
+        return "Open";
+    }
+
+    private static CareEpisodeDto MapAppointmentToCareEpisodeDto(Appointment appointment, List<DepartmentReferral> referrals)
+    {
+        var orderedServices = appointment.AppointmentServices
+            .OrderBy(s => s.ScheduledStart)
+            .ThenBy(s => s.AppointmentServiceId)
+            .ToList();
+
+        var firstServiceId = orderedServices.FirstOrDefault()?.AppointmentServiceId;
+
+        var appointmentsList = orderedServices.Select(s => new CareEpisodeAppointmentSummaryDto
+        {
+            AppointmentId = s.AppointmentServiceId,
+            AppointmentCode = FormatAppointmentCode(appointment.AppointmentId),
+            DepartmentId = s.DepartmentId,
+            DepartmentName = s.DepartmentService?.Department?.Name,
+            RequestedServiceId = s.DepartmentServiceId,
+            RequestedServiceName = s.DepartmentService?.ServiceName,
+            AssignedDentistUserId = s.AssignedDentistUserId,
+            AssignedDentistName = s.AssignedDentist?.StaffProfile?.FullName,
+            RoomId = s.RoomId,
+            RoomName = s.Room?.RoomCode,
+            DentalChairId = s.DentalChairId,
+            ChairName = s.DentalChair?.ChairCode,
+            ScheduledStart = s.ScheduledStart,
+            ScheduledEnd = s.ScheduledEnd,
+            Status = s.Status,
+            QueueNumber = s.QueueNumber.HasValue
+                ? FormatQueueNumber(s.DepartmentService?.Department?.Name, s.DepartmentId, s.QueueNumber.Value)
+                : null,
+            IsRoot = s.AppointmentServiceId == firstServiceId,
+            ReasonForVisit = s.Notes ?? appointment.ReasonForVisit
+        }).ToList();
+
+        var serviceTasks = orderedServices
+            .Select(s => MapAppointmentServiceToTaskDto(s))
+            .ToList();
+
+        var referralDtos = referrals.Select(MapReferralToDto).ToList();
+
+        var invoiceDto = appointment.Invoice != null
+            ? MapInvoiceToDto(appointment.Invoice, appointment, null)
+            : null;
+
+        var totalEstimatedCost = serviceTasks.Sum(t => t.TotalAmount);
+        var totalActualCost = serviceTasks.Where(t => t.Status == "Completed").Sum(t => t.TotalAmount);
+        var totalPaid = invoiceDto?.PaidAmount ?? 0m;
+
+        return new CareEpisodeDto
+        {
+            CareEpisodeId = appointment.AppointmentId,
+            EpisodeCode = FormatEpisodeCode(appointment.AppointmentId, appointment.CreatedAt),
+            PatientUserId = appointment.PatientUserId,
+            PatientName = appointment.Patient?.FullName ?? string.Empty,
+            PatientPhone = appointment.Patient?.User?.PhoneNumber,
+            RootAppointmentId = appointment.AppointmentId,
+            RootAppointmentCode = FormatAppointmentCode(appointment.AppointmentId),
+            Status = MapEpisodeStatus(appointment),
+            OpenedAtUtc = appointment.CreatedAt,
+            ClosedAtUtc = appointment.CompletedAt,
+            Notes = appointment.ReasonForVisit,
+            CreatedAtUtc = appointment.CreatedAt,
+            Appointments = appointmentsList,
+            ServiceTasks = serviceTasks,
+            Referrals = referralDtos,
+            ConsolidatedInvoice = invoiceDto,
+            TotalEstimatedCost = totalEstimatedCost,
+            TotalActualCost = totalActualCost,
+            TotalPaidAmount = totalPaid,
+            RemainingBalance = Math.Max(0m, totalActualCost - totalPaid)
+        };
+    }
+
+    private static EpisodeServiceTaskDto MapAppointmentServiceToTaskDto(AppointmentServiceEntity s, string? performingDentistName = null)
+    {
+        var taskStatus = s.Status switch
+        {
+            "Completed" => "Completed",
+            "InProgress" => "InProgress",
+            "Cancelled" or "NoShow" => "Cancelled",
+            _ => "Planned"
+        };
+
+        var session = s.TreatmentSessions?.OrderByDescending(ts => ts.SessionId).FirstOrDefault();
 
         return new EpisodeServiceTaskDto
         {
-            ServiceTaskId = t.ServiceTaskId,
-            TaskCode = t.TaskCode,
-            CareEpisodeId = t.CareEpisodeId,
-            AppointmentId = t.AppointmentId,
-            AppointmentCode = t.Appointment?.AppointmentCode ?? string.Empty,
-            DepartmentServiceId = t.DepartmentServiceId,
-            ServiceName = t.DepartmentService?.ServiceName ?? string.Empty,
-            DepartmentId = t.DepartmentService?.DepartmentId ?? 0,
-            DepartmentName = t.DepartmentService?.Department?.Name ?? string.Empty,
-            PerformingDentistUserId = t.PerformingDentistUserId,
-            PerformingDentistName = performingDentistName ?? GetUserDisplayName(t.PerformingDentistUser),
-            Status = t.Status,
-            Quantity = t.Quantity,
-            UnitPriceSnapshot = t.UnitPriceSnapshot,
-            EstimatedDurationMinutes = t.EstimatedDurationMinutes,
-            PlannedAtUtc = t.PlannedAtUtc,
-            StartedAtUtc = t.StartedAtUtc,
-            CompletedAtUtc = t.CompletedAtUtc,
-            CancelledAtUtc = t.CancelledAtUtc,
-            CancellationReason = t.CancellationReason,
-            ClinicalRecordId = t.ClinicalRecordId,
-            AppliedWorkflowId = t.AppliedWorkflowId,
-            AppliedWorkflowVersion = t.AppliedWorkflowVersion,
-            StepProgresses = steps,
-            Notes = t.Notes
+            ServiceTaskId = s.AppointmentServiceId,
+            TaskCode = $"TSK-{s.AppointmentServiceId:D6}",
+            CareEpisodeId = s.AppointmentId,
+            AppointmentId = s.AppointmentId,
+            AppointmentCode = FormatAppointmentCode(s.AppointmentId),
+            DepartmentServiceId = s.DepartmentServiceId,
+            ServiceName = s.DepartmentService?.ServiceName ?? string.Empty,
+            DepartmentId = s.DepartmentId,
+            DepartmentName = s.DepartmentService?.Department?.Name ?? string.Empty,
+            PerformingDentistUserId = s.AssignedDentistUserId ?? s.RequestedDentistUserId ?? 0,
+            PerformingDentistName = performingDentistName ?? s.AssignedDentist?.StaffProfile?.FullName ?? string.Empty,
+            Status = taskStatus,
+            Quantity = 1,
+            UnitPriceSnapshot = s.UnitPrice,
+            EstimatedDurationMinutes = s.DepartmentService?.DurationMinutes ?? (int)Math.Max(15, (s.ScheduledEnd - s.ScheduledStart).TotalMinutes),
+            PlannedAtUtc = s.CreatedAt,
+            StartedAtUtc = session?.CreatedAt,
+            CompletedAtUtc = taskStatus == "Completed" ? (s.UpdatedAt ?? session?.UpdatedAt ?? s.CreatedAt) : null,
+            CancelledAtUtc = taskStatus == "Cancelled" ? s.UpdatedAt : null,
+            CancellationReason = taskStatus == "Cancelled" ? s.Notes : null,
+            ClinicalRecordId = session?.SessionId,
+            Notes = s.Notes
+        };
+    }
+
+    private static CareEpisodeReferralSummaryDto MapReferralToDto(DepartmentReferral r)
+    {
+        var sourceApptId = r.SourceAppointmentService?.AppointmentId ?? r.TreatmentSession?.AppointmentId;
+        var destApptId = r.DestinationAppointmentService?.AppointmentId;
+
+        return new CareEpisodeReferralSummaryDto
+        {
+            ReferralId = r.ReferralId,
+            SourceAppointmentId = r.SourceAppointmentServiceId ?? sourceApptId,
+            SourceAppointmentCode = sourceApptId.HasValue ? FormatAppointmentCode(sourceApptId.Value) : null,
+            DestinationAppointmentId = r.DestinationAppointmentServiceId ?? destApptId,
+            DestinationAppointmentCode = destApptId.HasValue ? FormatAppointmentCode(destApptId.Value) : null,
+            FromDepartmentId = r.FromDepartmentId,
+            FromDepartmentName = r.FromDepartment?.Name ?? string.Empty,
+            ToDepartmentId = r.ToDepartmentId,
+            ToDepartmentName = r.ToDepartment?.Name ?? string.Empty,
+            RequestedServiceId = r.RequestedServiceId,
+            RequestedServiceName = r.RequestedService?.ServiceName,
+            AssignedDentistUserId = r.AssignedDentistUserId,
+            AssignedDentistName = r.AssignedDentist?.StaffProfile?.FullName,
+            TargetAppointmentQueueNumber = r.DestinationAppointmentService?.QueueNumber,
+            StationBCheckInStatus = r.DestinationAppointmentService?.Status,
+            Reason = r.Reason,
+            Urgency = r.Urgency,
+            Status = r.Status,
+            ClinicalInstructions = r.ClinicalInstructions,
+            CreatedAt = r.CreatedAt,
+            ReviewedAt = r.ReviewedAt
+        };
+    }
+
+    private static InvoiceDto MapInvoiceToDto(Invoice invoice, Appointment appointment, string? generatedByName)
+    {
+        var paidAmount = invoice.Status == "Paid"
+            ? invoice.FinalAmount
+            : invoice.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount);
+
+        return new InvoiceDto
+        {
+            InvoiceId = invoice.InvoiceId,
+            InvoiceCode = invoice.InvoiceCode,
+            CareEpisodeId = appointment.AppointmentId,
+            CareEpisodeCode = FormatEpisodeCode(appointment.AppointmentId, appointment.CreatedAt),
+            AppointmentId = invoice.AppointmentId,
+            AppointmentCode = FormatAppointmentCode(appointment.AppointmentId),
+            PatientUserId = appointment.PatientUserId,
+            PatientName = appointment.Patient?.FullName ?? string.Empty,
+            PatientPhoneNumber = appointment.Patient?.User?.PhoneNumber,
+            PatientEmail = appointment.Patient?.User?.Email,
+            GeneratedByUserId = invoice.GeneratedByUserId,
+            GeneratedByName = generatedByName,
+            SubTotal = invoice.TotalAmount,
+            DiscountAmount = invoice.DiscountAmount,
+            TaxPercent = 0m,
+            TaxAmount = 0m,
+            TotalAmount = invoice.FinalAmount,
+            PaidAmount = paidAmount,
+            RemainingAmount = Math.Max(0m, invoice.FinalAmount - paidAmount),
+            Status = invoice.Status,
+            CreatedAt = invoice.CreatedAt,
+            Items = invoice.InvoiceItems.Select(ii => new InvoiceItemDto
+            {
+                InvoiceItemId = ii.InvoiceItemId,
+                InvoiceId = ii.InvoiceId,
+                AppointmentId = ii.AppointmentId,
+                PerformedServiceId = ii.PerformedServiceId,
+                SourceType = ii.PerformedServiceId.HasValue ? "PerformedService" : "Prescription",
+                SourceId = ii.PerformedServiceId ?? ii.PrescriptionItemId,
+                Description = ii.Description,
+                Quantity = ii.Quantity,
+                UnitPrice = ii.UnitPrice,
+                Amount = ii.TotalAmount
+            }).ToList()
         };
     }
 

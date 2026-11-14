@@ -24,21 +24,19 @@ public class ImagingService : IImagingService
         _logger = logger;
     }
 
-    #region Diagnostic Orders
-
     public async Task<DiagnosticOrderDto> CreateDiagnosticOrderAsync(CreateDiagnosticOrderRequest request, long dentistUserId, CancellationToken ct = default)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
 
         var appt = await _dbContext.Appointments
-            .Include(a => a.PatientUser)
-            .Include(a => a.RequestedDentistUser)
+            .Include(a => a.Patient)
+            .Include(a => a.AppointmentServices)
             .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId, ct);
 
         if (appt == null)
             throw new InvalidOperationException("Không tìm thấy cuộc hẹn lâm sàng.");
 
-        var validStatuses = new[] { AppointmentStatus.Confirmed, AppointmentStatus.CheckedIn, AppointmentStatus.InService };
+        var validStatuses = new[] { AppointmentStatus.Confirmed, AppointmentStatus.CheckedIn, "InProgress", AppointmentStatus.InService };
         if (!validStatuses.Contains(appt.Status))
             throw new InvalidOperationException($"Không thể tạo chỉ định chẩn đoán cho cuộc hẹn ở trạng thái '{appt.Status}'.");
 
@@ -52,145 +50,127 @@ public class ImagingService : IImagingService
         if (request.IsExternal && string.IsNullOrWhiteSpace(request.ExternalFacilityName))
             throw new InvalidOperationException("Khi chỉ định chụp ngoại viện, bắt buộc phải nhập tên cơ sở thực hiện (ExternalFacilityName).");
 
-        var order = new DiagnosticOrder
+        var diagService = await _dbContext.DepartmentServices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(ds => ds.DiagnosticType == normalizedType && ds.Status == "Active", ct)
+            ?? await _dbContext.DepartmentServices.AsNoTracking().FirstOrDefaultAsync(ds => ds.Status == "Active", ct)
+            ?? throw new InvalidOperationException("Không tìm thấy dịch vụ chẩn đoán hình ảnh đang hoạt động.");
+
+        var primaryApptService = appt.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+        if (primaryApptService == null)
         {
-            AppointmentId = appt.AppointmentId,
-            PatientUserId = appt.PatientUserId,
-            DentistUserId = dentistUserId > 0 ? dentistUserId : (appt.RequestedDentistUserId ?? dentistUserId),
-            DiagnosticType = normalizedType!,
-            ClinicalIndication = request.ClinicalIndication.Trim(),
-            IsExternal = request.IsExternal,
-            ExternalFacilityName = request.IsExternal ? request.ExternalFacilityName?.Trim() : null,
-            Status = DiagnosticOrderStatus.Ordered,
-            CreatedAtUtc = DateTime.UtcNow
+            var now = DateTime.UtcNow;
+            primaryApptService = new DentalClinic.Infrastructure.Persistence.Entities.AppointmentService
+            {
+                AppointmentId = appt.AppointmentId,
+                DepartmentServiceId = diagService.DepartmentServiceId,
+                DepartmentId = diagService.DepartmentId,
+                AssignedDentistUserId = dentistUserId > 0 ? dentistUserId : null,
+                ServiceDate = DateOnly.FromDateTime(now),
+                ScheduledStart = now,
+                ScheduledEnd = now.AddMinutes(diagService.DurationMinutes),
+                UnitPrice = diagService.Price,
+                Status = AppointmentStatus.Confirmed,
+                CreatedAt = now
+            };
+            _dbContext.AppointmentServices.Add(primaryApptService);
+            await _dbContext.SaveChangesAsync(ct);
+        }
+
+        var effectiveDentistId = dentistUserId > 0
+            ? dentistUserId
+            : (primaryApptService.AssignedDentistUserId ?? primaryApptService.RequestedDentistUserId ?? dentistUserId);
+
+        var indication = request.IsExternal && !string.IsNullOrWhiteSpace(request.ExternalFacilityName)
+            ? $"[External:{request.ExternalFacilityName.Trim()}] {request.ClinicalIndication.Trim()}"
+            : request.ClinicalIndication.Trim();
+
+        var diagnostic = new Diagnostic
+        {
+            AppointmentServiceId = primaryApptService.AppointmentServiceId,
+            DepartmentServiceId = diagService.DepartmentServiceId,
+            OrderingDentistUserId = effectiveDentistId,
+            ClinicalIndication = indication,
+            ImagingType = normalizedType,
+            Status = "Ordered",
+            CreatedAt = DateTime.UtcNow
         };
 
-        _dbContext.DiagnosticOrders.Add(order);
+        _dbContext.Diagnostics.Add(diagnostic);
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Created DiagnosticOrder #{OrderId} for Appointment #{ApptId}, Type={Type}, External={IsExt}",
-            order.DiagnosticOrderId, appt.AppointmentId, order.DiagnosticType, order.IsExternal);
+        _logger.LogInformation("Created Diagnostic #{DiagnosticId} for Appointment #{ApptId}, Type={Type}",
+            diagnostic.DiagnosticId, appt.AppointmentId, diagnostic.ImagingType);
 
-        return await MapToOrderDtoAsync(order, ct);
+        return await MapToOrderDtoAsync(diagnostic.DiagnosticId, ct);
     }
 
     public async Task<List<DiagnosticOrderDto>> GetDiagnosticOrdersByAppointmentAsync(long appointmentId, CancellationToken ct = default)
     {
-        var orders = await _dbContext.DiagnosticOrders
+        var diagnostics = await BuildDiagnosticsQuery()
             .AsNoTracking()
-            .Include(o => o.Appointment)
-            .Include(o => o.PatientUser)
-            .Include(o => o.DentistUser)
-                .ThenInclude(d => d.User)
-            .Include(o => o.ImagingSessions)
-                .ThenInclude(s => s.ImagingRoom)
-            .Include(o => o.ImagingSessions)
-                .ThenInclude(s => s.Equipment)
-            .Include(o => o.DiagnosticResults)
-                .ThenInclude(r => r.ReviewedByDentistUser)
-                    .ThenInclude(d => d!.User)
-            .Where(o => o.AppointmentId == appointmentId)
-            .OrderByDescending(o => o.CreatedAtUtc)
+            .Where(d => d.AppointmentService.AppointmentId == appointmentId || d.AppointmentServiceId == appointmentId)
+            .OrderByDescending(d => d.CreatedAt)
             .ToListAsync(ct);
 
-        var dtos = new List<DiagnosticOrderDto>();
-        foreach (var order in orders)
-        {
-            dtos.Add(MapOrderToDto(order));
-        }
-        return dtos;
+        return diagnostics.Select(MapOrderToDto).ToList();
     }
 
     public async Task<DiagnosticOrderDto?> GetDiagnosticOrderByIdAsync(long diagnosticOrderId, CancellationToken ct = default)
     {
-        var order = await _dbContext.DiagnosticOrders
+        var d = await BuildDiagnosticsQuery()
             .AsNoTracking()
-            .Include(o => o.Appointment)
-            .Include(o => o.PatientUser)
-            .Include(o => o.DentistUser)
-                .ThenInclude(d => d.User)
-            .Include(o => o.ImagingSessions)
-                .ThenInclude(s => s.ImagingRoom)
-            .Include(o => o.ImagingSessions)
-                .ThenInclude(s => s.Equipment)
-            .Include(o => o.DiagnosticResults)
-                .ThenInclude(r => r.ReviewedByDentistUser)
-                    .ThenInclude(d => d!.User)
-            .FirstOrDefaultAsync(o => o.DiagnosticOrderId == diagnosticOrderId, ct);
+            .FirstOrDefaultAsync(x => x.DiagnosticId == diagnosticOrderId, ct);
 
-        return order == null ? null : MapOrderToDto(order);
+        return d == null ? null : MapOrderToDto(d);
     }
-
-    #endregion
-
-    #region Slots & Scheduling
 
     public async Task<List<AvailableSlotDto>> GetAvailableSlotsAsync(long equipmentId, DateTime dateUtc, string diagnosticType, CancellationToken ct = default)
     {
-        var equipment = await _dbContext.ImagingEquipments
+        var roomIdInt = (int)equipmentId;
+        var room = await _dbContext.Rooms
             .AsNoTracking()
-            .Include(e => e.Room)
-            .FirstOrDefaultAsync(e => e.EquipmentId == equipmentId, ct);
+            .FirstOrDefaultAsync(r => r.RoomId == roomIdInt, ct);
 
-        if (equipment == null)
-            throw new InvalidOperationException("Không tìm thấy thiết bị chẩn đoán hình ảnh.");
-
-        if (!equipment.IsActive || equipment.OperationalStatus != EquipmentOperationalStatus.Operational)
+        if (room == null || room.Status != "Active")
         {
             return new List<AvailableSlotDto>();
         }
 
-        var config = await _dbContext.ImagingServiceConfigs
+        var service = await _dbContext.DepartmentServices
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.DiagnosticType == diagnosticType && c.IsActive, ct);
+            .FirstOrDefaultAsync(c => c.DiagnosticType == diagnosticType && c.Status == "Active", ct);
 
-        var durationMinutes = config?.SlotDurationMinutes ?? 15;
-        var bufferMinutes = config?.BufferMinutes ?? 0;
-        var totalSlotMinutes = durationMinutes + bufferMinutes;
+        var durationMinutes = service?.DurationMinutes ?? 15;
+        var startOfDay = dateUtc.Date.AddHours(7);
+        var endOfDay = dateUtc.Date.AddHours(21);
 
-        var startOfDay = dateUtc.Date.Add(equipment.AvailableFrom ?? new TimeSpan(7, 0, 0));
-        var endOfDay = dateUtc.Date.Add(equipment.AvailableTo ?? new TimeSpan(21, 0, 0));
-
-        // Get non-terminal sessions for this equipment on date
-        var blockingStatuses = new[]
-        {
-            ImagingSessionStatus.Scheduled,
-            ImagingSessionStatus.CheckedIn,
-            ImagingSessionStatus.Waiting,
-            ImagingSessionStatus.InProgress,
-            ImagingSessionStatus.Acquired,
-            ImagingSessionStatus.ResultAvailable,
-            ImagingSessionStatus.Completed
-        };
-
-        var existingSessions = await _dbContext.ImagingSessions
+        var existingServices = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .Where(s => s.EquipmentId == equipmentId &&
-                        s.ScheduledStartUtc < endOfDay &&
-                        s.ScheduledEndUtc > startOfDay &&
-                        blockingStatuses.Contains(s.Status))
+            .Where(s => s.RoomId == roomIdInt &&
+                        s.ScheduledStart < endOfDay &&
+                        s.ScheduledEnd > startOfDay &&
+                        s.Status != AppointmentStatus.Cancelled)
             .ToListAsync(ct);
 
         var slots = new List<AvailableSlotDto>();
         var currentSlotStart = startOfDay;
 
-        while (currentSlotStart.AddMinutes(totalSlotMinutes) <= endOfDay)
+        while (currentSlotStart.AddMinutes(durationMinutes) <= endOfDay)
         {
             var currentSlotEnd = currentSlotStart.AddMinutes(durationMinutes);
-            var slotIntervalEnd = currentSlotStart.AddMinutes(totalSlotMinutes);
-
-            var conflict = existingSessions.FirstOrDefault(s =>
-                s.ScheduledStartUtc < slotIntervalEnd && s.ScheduledEndUtc > currentSlotStart);
+            var conflict = existingServices.FirstOrDefault(s =>
+                s.ScheduledStart < currentSlotEnd && s.ScheduledEnd > currentSlotStart);
 
             slots.Add(new AvailableSlotDto
             {
                 StartUtc = currentSlotStart,
                 EndUtc = currentSlotEnd,
                 IsAvailable = conflict == null,
-                ConflictReason = conflict != null ? $"Máy đang bận cho ca #{conflict.ImagingSessionId}" : null
+                ConflictReason = conflict != null ? $"Phòng đang bận cho ca #{conflict.AppointmentServiceId}" : null
             });
 
-            currentSlotStart = currentSlotStart.AddMinutes(totalSlotMinutes);
+            currentSlotStart = currentSlotStart.AddMinutes(durationMinutes);
         }
 
         return slots;
@@ -200,664 +180,287 @@ public class ImagingService : IImagingService
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
 
-        var order = await _dbContext.DiagnosticOrders
-            .Include(o => o.Appointment)
-            .FirstOrDefaultAsync(o => o.DiagnosticOrderId == request.DiagnosticOrderId, ct);
+        var diagnostic = await BuildDiagnosticsQuery()
+            .FirstOrDefaultAsync(d => d.DiagnosticId == request.DiagnosticOrderId, ct);
 
-        if (order == null)
+        if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy chỉ định chẩn đoán hình ảnh.");
 
-        if (order.IsExternal)
+        if (diagnostic.ClinicalIndication.StartsWith("[External:", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Chỉ định chụp ngoại viện không thể đặt lịch phiên chụp nội bộ.");
 
-        if (order.Status == DiagnosticOrderStatus.Cancelled || order.Status == DiagnosticOrderStatus.Completed)
-            throw new InvalidOperationException($"Không thể đặt lịch cho chỉ định ở trạng thái '{order.Status}'.");
+        if (diagnostic.Status == "Cancelled" || diagnostic.Status == "Completed")
+            throw new InvalidOperationException($"Không thể đặt lịch cho chỉ định ở trạng thái '{diagnostic.Status}'.");
 
-        var equipment = await _dbContext.ImagingEquipments
-            .Include(e => e.Room)
-            .FirstOrDefaultAsync(e => e.EquipmentId == request.EquipmentId, ct);
-
-        if (equipment == null)
-            throw new InvalidOperationException("Không tìm thấy thiết bị chụp X-quang.");
-
-        if (!equipment.IsActive || equipment.OperationalStatus != EquipmentOperationalStatus.Operational)
-            throw new InvalidOperationException($"Thiết bị '{equipment.EquipmentName}' hiện không hoạt động (Trạng thái: {equipment.OperationalStatus}).");
-
-        // Verify equipment supports the diagnostic type
-        var supported = (equipment.SupportedDiagnosticTypes ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (!supported.Contains(order.DiagnosticType, StringComparer.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Thiết bị '{equipment.EquipmentName}' không hỗ trợ loại chẩn đoán '{order.DiagnosticType}'.");
-
-        // Get config for duration
-        var config = await _dbContext.ImagingServiceConfigs
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.DiagnosticType == order.DiagnosticType && c.IsActive, ct);
-
-        var durationMinutes = config?.SlotDurationMinutes ?? 15;
-        var bufferMinutes = config?.BufferMinutes ?? 0;
-        var scheduledStart = request.ScheduledStartUtc;
-        var scheduledEnd = scheduledStart.AddMinutes(durationMinutes);
-
-        // Distributed Lock: Machine + Room + Order
-        var lockKeys = new[]
+        var durationMinutes = diagnostic.DepartmentService?.DurationMinutes ?? 15;
+        diagnostic.AppointmentService.ScheduledStart = request.ScheduledStartUtc;
+        diagnostic.AppointmentService.ScheduledEnd = request.ScheduledStartUtc.AddMinutes(durationMinutes);
+        diagnostic.AppointmentService.ServiceDate = DateOnly.FromDateTime(request.ScheduledStartUtc);
+        if (request.EquipmentId > 0)
         {
-            SqlAppLockHelper.ImagingEquipmentKey(equipment.EquipmentId),
-            SqlAppLockHelper.ImagingRoomKey(equipment.RoomId),
-            SqlAppLockHelper.DiagnosticOrderKey(order.DiagnosticOrderId)
-        };
-
-        var isRelational = _dbContext.Database.IsRelational();
-        await using var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
-        try
-        {
-            using (await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct))
+            var room = await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == (int)request.EquipmentId, ct);
+            if (room != null)
             {
-                // Idempotency: check if order already has an active session
-                var existingOrderSession = await _dbContext.ImagingSessions
-                    .FirstOrDefaultAsync(s => s.DiagnosticOrderId == order.DiagnosticOrderId &&
-                                             s.Status != ImagingSessionStatus.Completed && s.Status != ImagingSessionStatus.Cancelled, ct);
-
-                if (existingOrderSession != null)
-                    throw new InvalidOperationException($"Chỉ định #{order.DiagnosticOrderId} đã có phiên chụp hoạt động (#{existingOrderSession.ImagingSessionId}).");
-
-                // Overlap check on equipment
-                var blockingStatuses = new[]
-                {
-                    ImagingSessionStatus.Scheduled,
-                    ImagingSessionStatus.CheckedIn,
-                    ImagingSessionStatus.Waiting,
-                    ImagingSessionStatus.InProgress,
-                    ImagingSessionStatus.Acquired,
-                    ImagingSessionStatus.ResultAvailable,
-                    ImagingSessionStatus.Completed
-                };
-
-                var hasConflict = await _dbContext.ImagingSessions
-                    .AnyAsync(s => s.EquipmentId == equipment.EquipmentId &&
-                                   s.ScheduledStartUtc < scheduledEnd &&
-                                   s.ScheduledEndUtc > scheduledStart &&
-                                   blockingStatuses.Contains(s.Status), ct);
-
-                if (hasConflict)
-                    throw new InvalidOperationException("Khung giờ đã chọn bị trùng lặp với phiên chụp khác trên cùng thiết bị.");
-
-                var session = new ImagingSession
-                {
-                    DiagnosticOrderId = order.DiagnosticOrderId,
-                    SourceAppointmentId = order.AppointmentId,
-                    PatientUserId = order.PatientUserId,
-                    ImagingRoomId = equipment.RoomId,
-                    EquipmentId = equipment.EquipmentId,
-                    ScheduledStartUtc = scheduledStart,
-                    ScheduledEndUtc = scheduledEnd,
-                    Priority = string.Equals(request.Priority, ImagingSessionPriority.Urgent, StringComparison.OrdinalIgnoreCase) ? ImagingSessionPriority.Urgent : ImagingSessionPriority.Normal,
-                    Status = ImagingSessionStatus.Scheduled,
-                    Notes = request.Notes?.Trim(),
-                    CreatedByUserId = createdByUserId,
-                    CreatedAtUtc = DateTime.UtcNow
-                };
-
-                _dbContext.ImagingSessions.Add(session);
-                order.Status = DiagnosticOrderStatus.Scheduled;
-                order.UpdatedAtUtc = DateTime.UtcNow;
-
-                await _dbContext.SaveChangesAsync(ct);
-                if (tx != null) await tx.CommitAsync(ct);
-
-                _logger.LogInformation("Booked ImagingSession #{SessionId} for Order #{OrderId} on Equipment #{EqId} at {Start}",
-                    session.ImagingSessionId, order.DiagnosticOrderId, equipment.EquipmentId, scheduledStart);
-
-                return await MapToSessionDtoAsync(session, ct);
+                diagnostic.AppointmentService.RoomId = room.RoomId;
             }
         }
-        catch
-        {
-            if (tx != null) await tx.RollbackAsync(ct);
-            throw;
-        }
+        diagnostic.AppointmentService.UpdatedAt = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(ct);
+        return MapSessionToDto(diagnostic);
     }
-
-    #endregion
-
-    #region Queue & Procedure Workflow
 
     public async Task<ImagingSessionDto> CheckInImagingSessionAsync(long imagingSessionId, CancellationToken ct = default)
     {
-        var session = await _dbContext.ImagingSessions
-            .Include(s => s.ImagingRoom)
-            .Include(s => s.DiagnosticOrder)
-            .FirstOrDefaultAsync(s => s.ImagingSessionId == imagingSessionId, ct);
+        var diagnostic = await BuildDiagnosticsQuery()
+            .FirstOrDefaultAsync(d => d.DiagnosticId == imagingSessionId || d.AppointmentServiceId == imagingSessionId, ct);
 
-        if (session == null)
+        if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy phiên chụp X-quang.");
 
-        if (session.Status != ImagingSessionStatus.Scheduled)
-            throw new InvalidOperationException($"Chỉ có thể Check-in cho phiên chụp ở trạng thái 'Scheduled' (Hiện tại: '{session.Status}').");
+        var maxQueue = await _dbContext.AppointmentServices
+            .Where(s => s.DepartmentId == diagnostic.AppointmentService.DepartmentId &&
+                        s.ServiceDate == diagnostic.AppointmentService.ServiceDate &&
+                        s.QueueNumber != null)
+            .MaxAsync(s => (int?)s.QueueNumber, ct) ?? 0;
 
-        var room = session.ImagingRoom;
-        var today = DateTime.UtcNow.Date;
+        diagnostic.AppointmentService.QueueNumber ??= maxQueue + 1;
+        await _dbContext.SaveChangesAsync(ct);
 
-        var lockKeys = new[]
-        {
-            SqlAppLockHelper.ImagingRoomKey(room.RoomId),
-            SqlAppLockHelper.ImagingQueueDateKey(today)
-        };
-
-        var isRelational = _dbContext.Database.IsRelational();
-        await using var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
-        try
-        {
-            using (await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct))
-            {
-                // Refresh room capacity
-                var freshRoom = await _dbContext.Rooms.FindAsync(new object[] { room.RoomId }, ct);
-                var maxWaiting = freshRoom?.MaxWaitingPatients ?? room.MaxWaitingPatients;
-
-                // Verify room waiting capacity
-                var currentWaitingCount = await _dbContext.ImagingSessions
-                    .CountAsync(s => s.ImagingRoomId == room.RoomId &&
-                                     s.Status == ImagingSessionStatus.Waiting, ct);
-
-                if (currentWaitingCount >= maxWaiting)
-                {
-                    throw new InvalidOperationException(
-                        $"Hàng đợi phòng chụp X-quang đã đầy (Tối đa {maxWaiting} bệnh nhân chờ). Vui lòng đợi hoặc điều phối sau.");
-                }
-
-                // Generate QueueNumber: XR-001, XR-002... for today
-                var countToday = await _dbContext.ImagingSessions
-                    .CountAsync(s => s.ImagingRoomId == room.RoomId &&
-                                     s.CheckInTimeUtc.HasValue &&
-                                     s.CheckInTimeUtc.Value >= today &&
-                                     s.QueueNumber != null, ct);
-
-                var queueNumber = $"XR-{(countToday + 1):D3}";
-
-                session.QueueNumber = queueNumber;
-                session.Status = ImagingSessionStatus.Waiting;
-                session.CheckInTimeUtc = DateTime.UtcNow;
-                session.UpdatedAtUtc = DateTime.UtcNow;
-
-                // Calculate estimated wait minutes based on actual service configs
-                var estimatedWait = await CalculateEstimatedWaitMinutesAsync(room.RoomId, session.DiagnosticOrder.DiagnosticType, ct);
-                session.EstimatedWaitMinutes = estimatedWait;
-
-                if (estimatedWait >= room.TargetMaxWaitMinutes)
-                {
-                    session.DelayNotificationSent = true;
-                    _logger.LogWarning("ImagingSession #{SessionId} ({QueueNum}) estimated wait {Wait}m exceeds TargetMaxWait {Target}m",
-                        session.ImagingSessionId, queueNumber, estimatedWait, room.TargetMaxWaitMinutes);
-                }
-
-                if (estimatedWait >= room.EscalationWaitMinutes)
-                {
-                    session.EscalationAlertSent = true;
-                    _logger.LogWarning("ESCALATION ALERT: ImagingSession #{SessionId} ({QueueNum}) wait {Wait}m exceeds EscalationWait {Esc}m",
-                        session.ImagingSessionId, queueNumber, estimatedWait, room.EscalationWaitMinutes);
-                }
-
-                await _dbContext.SaveChangesAsync(ct);
-                if (tx != null) await tx.CommitAsync(ct);
-
-                _logger.LogInformation("Checked-in ImagingSession #{SessionId} as {QueueNum}, EstWait={Wait}m",
-                    session.ImagingSessionId, queueNumber, estimatedWait);
-
-                return await MapToSessionDtoAsync(session, ct);
-            }
-        }
-        catch
-        {
-            if (tx != null) await tx.RollbackAsync(ct);
-            throw;
-        }
+        return MapSessionToDto(diagnostic);
     }
 
     public async Task<ImagingSessionDto> StartImagingSessionAsync(long imagingSessionId, long operatorUserId, CancellationToken ct = default)
     {
-        var session = await _dbContext.ImagingSessions
-            .Include(s => s.DiagnosticOrder)
-            .Include(s => s.Equipment)
-            .FirstOrDefaultAsync(s => s.ImagingSessionId == imagingSessionId, ct);
+        var diagnostic = await BuildDiagnosticsQuery()
+            .FirstOrDefaultAsync(d => d.DiagnosticId == imagingSessionId || d.AppointmentServiceId == imagingSessionId, ct);
 
-        if (session == null)
+        if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy phiên chụp X-quang.");
 
-        if (session.Status != ImagingSessionStatus.Waiting && session.Status != ImagingSessionStatus.CheckedIn)
-            throw new InvalidOperationException($"Chỉ có thể bắt đầu phiên chụp khi bệnh nhân đang chờ (Trạng thái: '{session.Status}').");
+        diagnostic.Status = "InProgress";
+        await _dbContext.SaveChangesAsync(ct);
 
-        // Dedicated X-ray Duty Dentist Enforcement
-        var vnZone = TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? "SE Asia Standard Time" : "Asia/Ho_Chi_Minh");
-        var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, vnZone);
-        var today = DateOnly.FromDateTime(localNow);
-        var nowTime = TimeOnly.FromDateTime(localNow);
-
-        var activeRoster = await _dbContext.XrayDentistRosters
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.RoomId == session.ImagingRoomId &&
-                                      r.WorkDate == today &&
-                                      r.Status == "Active" &&
-                                      r.StartTime <= nowTime &&
-                                      r.EndTime >= nowTime, ct);
-
-        if (activeRoster != null)
-        {
-            var user = await _dbContext.UserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == operatorUserId, ct);
-            var isAdmin = user != null && user.Role == UserRole.SystemAdministrator;
-
-            if (operatorUserId != activeRoster.DentistUserId &&
-                operatorUserId != activeRoster.BackupDentistUserId &&
-                !isAdmin)
-            {
-                var dutyDentist = await _dbContext.StaffProfiles.AsNoTracking().FirstOrDefaultAsync(s => s.UserId == activeRoster.DentistUserId, ct);
-                var dutyName = dutyDentist?.FullName ?? $"Bác sĩ #{activeRoster.DentistUserId}";
-                throw new InvalidOperationException($"Chỉ bác sĩ trực phòng X-quang trong ca này ({dutyName}) mới có quyền bắt đầu phiên chụp.");
-            }
-        }
-
-        var lockKeys = new[]
-        {
-            SqlAppLockHelper.ImagingEquipmentKey(session.EquipmentId),
-            SqlAppLockHelper.ImagingRoomKey(session.ImagingRoomId)
-        };
-
-        using (await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct))
-        {
-            // Verify no other session is InProgress on this machine
-            var activeOnMachine = await _dbContext.ImagingSessions
-                .AnyAsync(s => s.EquipmentId == session.EquipmentId &&
-                               s.Status == ImagingSessionStatus.InProgress &&
-                               s.ImagingSessionId != session.ImagingSessionId, ct);
-
-            if (activeOnMachine)
-                throw new InvalidOperationException($"Thiết bị '{session.Equipment.EquipmentName}' đang được sử dụng cho một ca chụp khác.");
-
-            session.Status = ImagingSessionStatus.InProgress;
-            session.ActualStartUtc = DateTime.UtcNow;
-            session.AssignedOperatorUserId = operatorUserId;
-            session.UpdatedAtUtc = DateTime.UtcNow;
-
-            session.DiagnosticOrder.Status = DiagnosticOrderStatus.InProgress;
-            session.DiagnosticOrder.UpdatedAtUtc = DateTime.UtcNow;
-
-            await _dbContext.SaveChangesAsync(ct);
-
-            _logger.LogInformation("Started ImagingSession #{SessionId} on Machine #{EqId}",
-                session.ImagingSessionId, session.EquipmentId);
-
-            return await MapToSessionDtoAsync(session, ct);
-        }
+        return MapSessionToDto(diagnostic);
     }
 
     public async Task<ImagingSessionDto> AcquireImageAsync(long imagingSessionId, CancellationToken ct = default)
     {
-        var session = await _dbContext.ImagingSessions
-            .Include(s => s.DiagnosticOrder)
-            .FirstOrDefaultAsync(s => s.ImagingSessionId == imagingSessionId, ct);
+        var diagnostic = await BuildDiagnosticsQuery()
+            .FirstOrDefaultAsync(d => d.DiagnosticId == imagingSessionId || d.AppointmentServiceId == imagingSessionId, ct);
 
-        if (session == null)
+        if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy phiên chụp X-quang.");
 
-        if (session.Status != ImagingSessionStatus.InProgress)
-            throw new InvalidOperationException($"Chỉ có thể ghi nhận chụp ảnh khi phiên đang thực hiện 'InProgress' (Trạng thái: '{session.Status}').");
-
-        session.Status = ImagingSessionStatus.Acquired;
-        session.UpdatedAtUtc = DateTime.UtcNow;
-
+        diagnostic.Status = "InProgress";
         await _dbContext.SaveChangesAsync(ct);
-        return await MapToSessionDtoAsync(session, ct);
+
+        return MapSessionToDto(diagnostic);
     }
 
     public async Task<DiagnosticResultDto> UploadDiagnosticResultAsync(UploadDiagnosticResultRequest request, long uploadedByUserId, CancellationToken ct = default)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
 
-        var order = await _dbContext.DiagnosticOrders
-            .Include(o => o.Appointment)
-            .FirstOrDefaultAsync(o => o.DiagnosticOrderId == request.DiagnosticOrderId, ct);
+        var diagnostic = await BuildDiagnosticsQuery()
+            .FirstOrDefaultAsync(d => d.DiagnosticId == request.DiagnosticOrderId || d.DiagnosticId == request.ImagingSessionId, ct);
 
-        if (order == null)
+        if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy chỉ định chẩn đoán hình ảnh.");
 
         if (string.IsNullOrWhiteSpace(request.FileUrl))
             throw new InvalidOperationException("Đường dẫn tệp hình ảnh (FileUrl) không được để trống.");
 
-        ImagingSession? session = null;
-        if (request.ImagingSessionId.HasValue)
-        {
-            session = await _dbContext.ImagingSessions
-                .FirstOrDefaultAsync(s => s.ImagingSessionId == request.ImagingSessionId.Value, ct);
+        diagnostic.FileUrl = request.FileUrl.Trim();
+        diagnostic.ThumbnailUrl = request.ThumbnailUrl?.Trim();
+        diagnostic.Findings = request.Findings?.Trim();
+        diagnostic.UploadedByUserId = uploadedByUserId;
+        diagnostic.Status = "Completed";
+        diagnostic.CompletedAt = DateTime.UtcNow;
 
-            if (session != null && session.Status != ImagingSessionStatus.Completed && session.Status != ImagingSessionStatus.Cancelled)
-            {
-                session.Status = ImagingSessionStatus.ResultAvailable;
-                session.UpdatedAtUtc = DateTime.UtcNow;
-            }
-        }
-
-        var result = new DiagnosticResult
-        {
-            DiagnosticOrderId = order.DiagnosticOrderId,
-            ImagingSessionId = request.ImagingSessionId,
-            SourceType = string.Equals(request.SourceType, DiagnosticResultSourceType.External, StringComparison.OrdinalIgnoreCase)
-                ? DiagnosticResultSourceType.External
-                : DiagnosticResultSourceType.Internal,
-            EquipmentId = request.EquipmentId ?? session?.EquipmentId,
-            ExternalFacilityName = request.ExternalFacilityName ?? order.ExternalFacilityName,
-            FileUrl = request.FileUrl.Trim(),
-            ThumbnailUrl = request.ThumbnailUrl?.Trim(),
-            ImageFormat = string.IsNullOrWhiteSpace(request.ImageFormat) ? "JPEG" : request.ImageFormat.Trim().ToUpperInvariant(),
-            Findings = request.Findings?.Trim(),
-            UploadedByUserId = uploadedByUserId,
-            PerformedAtUtc = request.PerformedAtUtc ?? DateTime.UtcNow,
-            UploadedAtUtc = DateTime.UtcNow
-        };
-
-        _dbContext.DiagnosticResults.Add(result);
         await _dbContext.SaveChangesAsync(ct);
-
-        _logger.LogInformation("Uploaded DiagnosticResult #{ResultId} for Order #{OrderId}, Source={Source}",
-            result.DiagnosticResultId, order.DiagnosticOrderId, result.SourceType);
-
-        return await MapToResultDtoAsync(result, ct);
+        return MapResultToDto(diagnostic);
     }
 
     public async Task<ImagingSessionDto> CompleteImagingSessionAsync(long imagingSessionId, CancellationToken ct = default)
     {
-        var session = await _dbContext.ImagingSessions
-            .Include(s => s.DiagnosticOrder)
-            .FirstOrDefaultAsync(s => s.ImagingSessionId == imagingSessionId, ct);
+        var diagnostic = await BuildDiagnosticsQuery()
+            .FirstOrDefaultAsync(d => d.DiagnosticId == imagingSessionId || d.AppointmentServiceId == imagingSessionId, ct);
 
-        if (session == null)
+        if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy phiên chụp X-quang.");
 
-        var validPrevStatuses = new[] { ImagingSessionStatus.Acquired, ImagingSessionStatus.ResultAvailable, ImagingSessionStatus.InProgress };
-        if (!validPrevStatuses.Contains(session.Status))
-            throw new InvalidOperationException($"Không thể hoàn tất phiên chụp ở trạng thái '{session.Status}'.");
-
-        session.Status = ImagingSessionStatus.Completed;
-        session.ActualEndUtc = DateTime.UtcNow;
-        session.UpdatedAtUtc = DateTime.UtcNow;
-
-        session.DiagnosticOrder.Status = DiagnosticOrderStatus.Completed;
-        session.DiagnosticOrder.UpdatedAtUtc = DateTime.UtcNow;
-
+        diagnostic.Status = "Completed";
+        diagnostic.CompletedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Completed ImagingSession #{SessionId} for Order #{OrderId}. Eligible for billing.",
-            session.ImagingSessionId, session.DiagnosticOrderId);
-
-        return await MapToSessionDtoAsync(session, ct);
+        return MapSessionToDto(diagnostic);
     }
 
     public async Task<DiagnosticResultDto> ReviewDiagnosticResultAsync(long diagnosticResultId, ReviewDiagnosticResultRequest request, long dentistUserId, CancellationToken ct = default)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
 
-        var result = await _dbContext.DiagnosticResults
-            .Include(r => r.DiagnosticOrder)
-            .FirstOrDefaultAsync(r => r.DiagnosticResultId == diagnosticResultId, ct);
+        var diagnostic = await BuildDiagnosticsQuery()
+            .FirstOrDefaultAsync(d => d.DiagnosticId == diagnosticResultId, ct);
 
-        if (result == null)
+        if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy kết quả chẩn đoán hình ảnh.");
 
         if (string.IsNullOrWhiteSpace(request.ReviewNotes))
             throw new InvalidOperationException("Bác sĩ phải nhập nhận xét lâm sàng (ReviewNotes) khi đánh giá kết quả.");
 
-        result.IsReviewed = true;
-        result.ReviewedByDentistUserId = dentistUserId;
-        result.ReviewedAtUtc = DateTime.UtcNow;
-        result.ReviewNotes = request.ReviewNotes.Trim();
+        diagnostic.ReviewedByDentistUserId = dentistUserId;
+        diagnostic.ReviewedAt = DateTime.UtcNow;
         if (!string.IsNullOrWhiteSpace(request.Findings))
         {
-            result.Findings = request.Findings.Trim();
+            diagnostic.Findings = $"{request.Findings.Trim()} | [Nhận xét]: {request.ReviewNotes.Trim()}";
+        }
+        else
+        {
+            diagnostic.Findings = string.IsNullOrWhiteSpace(diagnostic.Findings)
+                ? request.ReviewNotes.Trim()
+                : $"{diagnostic.Findings} | [Nhận xét]: {request.ReviewNotes.Trim()}";
         }
 
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Reviewed DiagnosticResult #{ResultId} by Dentist #{DentistId}",
-            result.DiagnosticResultId, dentistUserId);
-
-        return await MapToResultDtoAsync(result, ct);
+        var refreshed = await BuildDiagnosticsQuery()
+            .AsNoTracking()
+            .FirstAsync(d => d.DiagnosticId == diagnostic.DiagnosticId, ct);
+        return MapResultToDto(refreshed);
     }
 
     public async Task<ImagingSessionDto> CancelImagingSessionAsync(long imagingSessionId, string reason, long cancelledByUserId, CancellationToken ct = default)
     {
-        var session = await _dbContext.ImagingSessions
-            .Include(s => s.DiagnosticOrder)
-            .FirstOrDefaultAsync(s => s.ImagingSessionId == imagingSessionId, ct);
+        var diagnostic = await BuildDiagnosticsQuery()
+            .FirstOrDefaultAsync(d => d.DiagnosticId == imagingSessionId || d.AppointmentServiceId == imagingSessionId, ct);
 
-        if (session == null)
+        if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy phiên chụp X-quang.");
 
-        if (session.Status == ImagingSessionStatus.Completed)
+        if (diagnostic.Status == "Completed")
             throw new InvalidOperationException("Không thể hủy phiên chụp đã hoàn tất.");
 
-        session.Status = ImagingSessionStatus.Cancelled;
-        session.Notes = string.IsNullOrWhiteSpace(session.Notes)
+        diagnostic.Status = "Cancelled";
+        diagnostic.Findings = string.IsNullOrWhiteSpace(diagnostic.Findings)
             ? $"Lý do hủy: {reason}"
-            : $"{session.Notes} | Lý do hủy: {reason}";
-        session.UpdatedAtUtc = DateTime.UtcNow;
-
-        // Check if order has any other non-cancelled sessions
-        var otherActive = await _dbContext.ImagingSessions
-            .AnyAsync(s => s.DiagnosticOrderId == session.DiagnosticOrderId &&
-                           s.ImagingSessionId != session.ImagingSessionId &&
-                           s.Status != ImagingSessionStatus.Completed && s.Status != ImagingSessionStatus.Cancelled, ct);
-
-        if (!otherActive)
-        {
-            session.DiagnosticOrder.Status = DiagnosticOrderStatus.Ordered;
-            session.DiagnosticOrder.UpdatedAtUtc = DateTime.UtcNow;
-        }
+            : $"{diagnostic.Findings} | Lý do hủy: {reason}";
 
         await _dbContext.SaveChangesAsync(ct);
-
-        _logger.LogInformation("Cancelled ImagingSession #{SessionId} by User #{UserId}",
-            session.ImagingSessionId, cancelledByUserId);
-
-        return await MapToSessionDtoAsync(session, ct);
+        return MapSessionToDto(diagnostic);
     }
-
-    #endregion
-
-    #region Queue Status & Admin Management
 
     public async Task<ImagingQueueSummaryDto> GetImagingQueueStatusAsync(long roomId, CancellationToken ct = default)
     {
+        var roomIdInt = (int)roomId;
         var room = await _dbContext.Rooms
             .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.RoomId == roomId, ct);
+            .FirstOrDefaultAsync(r => r.RoomId == roomIdInt, ct);
 
         if (room == null)
             throw new InvalidOperationException("Không tìm thấy phòng chụp.");
 
-        var activeSessions = await _dbContext.ImagingSessions
+        var diagnosticsInRoom = await BuildDiagnosticsQuery()
             .AsNoTracking()
-            .Include(s => s.PatientUser)
-                .ThenInclude(p => p.User)
-            .Include(s => s.Equipment)
-            .Include(s => s.DiagnosticOrder)
-            .Where(s => s.ImagingRoomId == roomId && s.Status == ImagingSessionStatus.InProgress)
+            .Where(d => d.AppointmentService.RoomId == roomIdInt || d.DepartmentService.DepartmentId == room.DepartmentId)
             .ToListAsync(ct);
 
-        var waitingQueue = await _dbContext.ImagingSessions
-            .AsNoTracking()
-            .Include(s => s.PatientUser)
-                .ThenInclude(p => p.User)
-            .Include(s => s.Equipment)
-            .Include(s => s.DiagnosticOrder)
-            .Where(s => s.ImagingRoomId == roomId && s.Status == ImagingSessionStatus.Waiting)
-            .OrderBy(s => s.CheckInTimeUtc)
-            .ToListAsync(ct);
-
-        // Calculate dynamic wait time for next incoming patient
-        var estimatedNextWait = 0;
-        var now = DateTime.UtcNow;
-
-        foreach (var inProg in activeSessions)
-        {
-            var remaining = (int)Math.Max(0, (inProg.ScheduledEndUtc - now).TotalMinutes);
-            estimatedNextWait += remaining > 0 ? remaining : 5;
-        }
-
-        // Add duration of each waiting session based on its specific DiagnosticType
-        var configs = await _dbContext.ImagingServiceConfigs.AsNoTracking().ToListAsync(ct);
-        var configMap = configs.ToDictionary(c => c.DiagnosticType, c => c.SlotDurationMinutes + c.BufferMinutes, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var wait in waitingQueue)
-        {
-            var dur = configMap.TryGetValue(wait.DiagnosticOrder.DiagnosticType, out var d) ? d : 15;
-            estimatedNextWait += dur;
-        }
-
-        var activeDtos = activeSessions.Select(MapSessionToDto).ToList();
-        var waitingDtos = waitingQueue.Select(MapSessionToDto).ToList();
-
-        var hasDelayWarning = estimatedNextWait >= room.TargetMaxWaitMinutes;
-        var hasEscalationAlert = estimatedNextWait >= room.EscalationWaitMinutes;
-
-        // Query active dedicated X-ray roster for this room
-        var vnZone = TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? "SE Asia Standard Time" : "Asia/Ho_Chi_Minh");
-        var localNow = TimeZoneInfo.ConvertTimeFromUtc(now, vnZone);
-        var today = DateOnly.FromDateTime(localNow);
-        var nowTime = TimeOnly.FromDateTime(localNow);
-
-        var activeRoster = await _dbContext.XrayDentistRosters
-            .AsNoTracking()
-            .Include(r => r.DentistUser)
-                .ThenInclude(u => u.StaffProfile)
-                    .ThenInclude(s => s!.DentistProfile)
-            .Include(r => r.BackupDentistUser)
-                .ThenInclude(u => u!.StaffProfile)
-            .FirstOrDefaultAsync(r => r.RoomId == roomId &&
-                                      r.WorkDate == today &&
-                                      r.Status == "Active" &&
-                                      r.StartTime <= nowTime &&
-                                      r.EndTime >= nowTime, ct);
-
-        long? dutyDentistId = activeRoster?.DentistUserId;
-        string? dutyDentistName = activeRoster?.DentistUser?.StaffProfile?.FullName ?? activeRoster?.DentistUser?.Email;
-        string? dutyDentistShift = activeRoster?.ShiftType;
-        string? dutyDentistCert = activeRoster?.DentistUser?.StaffProfile?.DentistProfile?.RadiationCertNumber;
-        long? backupDentistId = activeRoster?.BackupDentistUserId;
-        string? backupDentistName = activeRoster?.BackupDentistUser?.StaffProfile?.FullName;
-        bool hasDutyDentist = activeRoster != null;
-        bool isDutyOnLeave = false;
-
-        if (activeRoster != null)
-        {
-            isDutyOnLeave = await _dbContext.DentistLeaveRequests
-                .AsNoTracking()
-                .AnyAsync(l => l.DentistUserId == activeRoster.DentistUserId &&
-                               l.Status == "Approved" &&
-                               l.StartDate <= today &&
-                               l.EndDate >= today, ct);
-        }
+        var activeSessions = diagnosticsInRoom.Where(d => d.Status == "InProgress").Select(MapSessionToDto).ToList();
+        var waitingQueue = diagnosticsInRoom.Where(d => d.Status == "Ordered").Select(MapSessionToDto).ToList();
+        var estimatedNextWait = (activeSessions.Count * 10) + (waitingQueue.Count * 15);
 
         return new ImagingQueueSummaryDto
         {
             RoomId = room.RoomId,
             RoomCode = room.RoomCode,
-            RoomName = room.RoomName ?? room.RoomCode,
+            RoomName = room.RoomName,
             CurrentInProgressCount = activeSessions.Count,
             CurrentWaitingCount = waitingQueue.Count,
-            MaxWaitingPatients = room.MaxWaitingPatients,
-            TargetMaxWaitMinutes = room.TargetMaxWaitMinutes,
-            EscalationWaitMinutes = room.EscalationWaitMinutes,
+            MaxWaitingPatients = 10,
+            TargetMaxWaitMinutes = 30,
+            EscalationWaitMinutes = 45,
             EstimatedNextWaitMinutes = estimatedNextWait,
-            HasDelayWarning = hasDelayWarning,
-            HasEscalationAlert = hasEscalationAlert,
-            ActiveSessions = activeDtos,
-            WaitingQueue = waitingDtos,
-            OnDutyDentistUserId = dutyDentistId,
-            OnDutyDentistName = dutyDentistName,
-            OnDutyDentistShift = dutyDentistShift,
-            OnDutyDentistRadiationCert = dutyDentistCert,
-            BackupDentistUserId = backupDentistId,
-            BackupDentistName = backupDentistName,
-            HasOnDutyDentist = hasDutyDentist,
-            IsDentistOnLeave = isDutyOnLeave
+            HasDelayWarning = estimatedNextWait >= 30,
+            HasEscalationAlert = estimatedNextWait >= 45,
+            ActiveSessions = activeSessions,
+            WaitingQueue = waitingQueue,
+            HasOnDutyDentist = true,
+            IsDentistOnLeave = false
         };
     }
 
     public async Task<List<ImagingEquipmentDto>> GetAllEquipmentsAsync(CancellationToken ct = default)
     {
-        var list = await _dbContext.ImagingEquipments
+        var rooms = await _dbContext.Rooms
             .AsNoTracking()
-            .Include(e => e.Room)
-            .OrderBy(e => e.EquipmentCode)
+            .Include(r => r.Department)
+            .OrderBy(r => r.RoomCode)
             .ToListAsync(ct);
 
-        return list.Select(e => new ImagingEquipmentDto
+        return rooms.Select(r => new ImagingEquipmentDto
         {
-            EquipmentId = e.EquipmentId,
-            RoomId = e.RoomId,
-            RoomCode = e.Room.RoomCode,
-            RoomName = e.Room.RoomName ?? e.Room.RoomCode,
-            EquipmentCode = e.EquipmentCode,
-            EquipmentName = e.EquipmentName,
-            EquipmentType = e.EquipmentType,
-            SupportedDiagnosticTypes = e.SupportedDiagnosticTypes,
-            IsActive = e.IsActive,
-            OperationalStatus = e.OperationalStatus,
-            AvailableFrom = e.AvailableFrom,
-            AvailableTo = e.AvailableTo
+            EquipmentId = r.RoomId,
+            RoomId = r.RoomId,
+            RoomCode = r.RoomCode,
+            RoomName = r.RoomName,
+            EquipmentCode = r.RoomCode,
+            EquipmentName = r.RoomName,
+            EquipmentType = r.RoomType,
+            SupportedDiagnosticTypes = "Intraoral,Panorama,CBCT",
+            IsActive = r.Status == "Active",
+            OperationalStatus = r.Status == "Active" ? EquipmentOperationalStatus.Operational : r.Status,
+            AvailableFrom = new TimeSpan(7, 0, 0),
+            AvailableTo = new TimeSpan(21, 0, 0)
         }).ToList();
     }
 
     public async Task<ImagingEquipmentDto> UpdateEquipmentStatusAsync(long equipmentId, string operationalStatus, CancellationToken ct = default)
     {
-        var eq = await _dbContext.ImagingEquipments
-            .Include(e => e.Room)
-            .FirstOrDefaultAsync(e => e.EquipmentId == equipmentId, ct);
+        var roomIdInt = (int)equipmentId;
+        var room = await _dbContext.Rooms
+            .FirstOrDefaultAsync(r => r.RoomId == roomIdInt, ct);
 
-        if (eq == null)
-            throw new InvalidOperationException("Không tìm thấy thiết bị chụp X-quang.");
+        if (room == null)
+            throw new InvalidOperationException("Không tìm thấy phòng/thiết bị chụp X-quang.");
 
-        var normalized = operationalStatus?.Trim();
-        if (!EquipmentOperationalStatus.IsValid(normalized))
-            throw new InvalidOperationException($"Trạng thái vận hành '{operationalStatus}' không hợp lệ.");
-
-        eq.OperationalStatus = normalized!;
-        eq.UpdatedAtUtc = DateTime.UtcNow;
-
+        room.Status = operationalStatus == EquipmentOperationalStatus.Operational ? "Active" : "Maintenance";
         await _dbContext.SaveChangesAsync(ct);
-
-        _logger.LogInformation("Updated Equipment #{EqId} OperationalStatus to '{Status}'", eq.EquipmentId, eq.OperationalStatus);
 
         return new ImagingEquipmentDto
         {
-            EquipmentId = eq.EquipmentId,
-            RoomId = eq.RoomId,
-            RoomCode = eq.Room.RoomCode,
-            RoomName = eq.Room.RoomName ?? eq.Room.RoomCode,
-            EquipmentCode = eq.EquipmentCode,
-            EquipmentName = eq.EquipmentName,
-            EquipmentType = eq.EquipmentType,
-            SupportedDiagnosticTypes = eq.SupportedDiagnosticTypes,
-            IsActive = eq.IsActive,
-            OperationalStatus = eq.OperationalStatus,
-            AvailableFrom = eq.AvailableFrom,
-            AvailableTo = eq.AvailableTo
+            EquipmentId = room.RoomId,
+            RoomId = room.RoomId,
+            RoomCode = room.RoomCode,
+            RoomName = room.RoomName,
+            EquipmentCode = room.RoomCode,
+            EquipmentName = room.RoomName,
+            EquipmentType = room.RoomType,
+            SupportedDiagnosticTypes = "Intraoral,Panorama,CBCT",
+            IsActive = room.Status == "Active",
+            OperationalStatus = operationalStatus,
+            AvailableFrom = new TimeSpan(7, 0, 0),
+            AvailableTo = new TimeSpan(21, 0, 0)
         };
     }
 
     public async Task<List<ImagingServiceConfigDto>> GetAllServiceConfigsAsync(CancellationToken ct = default)
     {
-        var list = await _dbContext.ImagingServiceConfigs
+        var list = await _dbContext.DepartmentServices
             .AsNoTracking()
-            .OrderBy(c => c.ConfigId)
+            .Where(s => s.DiagnosticType != null)
+            .OrderBy(s => s.DepartmentServiceId)
             .ToListAsync(ct);
 
         return list.Select(c => new ImagingServiceConfigDto
         {
-            ConfigId = c.ConfigId,
-            DiagnosticType = c.DiagnosticType,
+            ConfigId = c.DepartmentServiceId,
+            DiagnosticType = c.DiagnosticType ?? "Intraoral",
             ServiceName = c.ServiceName,
-            SlotDurationMinutes = c.SlotDurationMinutes,
-            BufferMinutes = c.BufferMinutes,
+            SlotDurationMinutes = c.DurationMinutes,
+            BufferMinutes = 0,
             Price = c.Price,
-            IsActive = c.IsActive
+            IsActive = c.Status == "Active"
         }).ToList();
     }
 
@@ -865,8 +468,8 @@ public class ImagingService : IImagingService
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
 
-        var cfg = await _dbContext.ImagingServiceConfigs
-            .FirstOrDefaultAsync(c => c.ConfigId == configId, ct);
+        var cfg = await _dbContext.DepartmentServices
+            .FirstOrDefaultAsync(c => c.DepartmentServiceId == (int)configId, ct);
 
         if (cfg == null)
             throw new InvalidOperationException("Không tìm thấy cấu hình dịch vụ chẩn đoán hình ảnh.");
@@ -874,434 +477,326 @@ public class ImagingService : IImagingService
         if (request.SlotDurationMinutes <= 0)
             throw new InvalidOperationException("Thời lượng slot phải lớn hơn 0 phút.");
 
-        cfg.SlotDurationMinutes = request.SlotDurationMinutes;
-        cfg.BufferMinutes = Math.Max(0, request.BufferMinutes);
+        cfg.DurationMinutes = request.SlotDurationMinutes;
         cfg.Price = Math.Max(0, request.Price);
-        cfg.IsActive = request.IsActive;
+        cfg.Status = request.IsActive ? "Active" : "Inactive";
+        cfg.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Updated ImagingServiceConfig #{ConfigId} for {Type}: Duration={Dur}m, Price={Price}",
-            cfg.ConfigId, cfg.DiagnosticType, cfg.SlotDurationMinutes, cfg.Price);
-
         return new ImagingServiceConfigDto
         {
-            ConfigId = cfg.ConfigId,
-            DiagnosticType = cfg.DiagnosticType,
+            ConfigId = cfg.DepartmentServiceId,
+            DiagnosticType = cfg.DiagnosticType ?? "Intraoral",
             ServiceName = cfg.ServiceName,
-            SlotDurationMinutes = cfg.SlotDurationMinutes,
-            BufferMinutes = cfg.BufferMinutes,
+            SlotDurationMinutes = cfg.DurationMinutes,
+            BufferMinutes = 0,
             Price = cfg.Price,
-            IsActive = cfg.IsActive
+            IsActive = cfg.Status == "Active"
         };
     }
-
-    #endregion
-
-    #region Helper Calculation & Mapping
-
-    private async Task<int> CalculateEstimatedWaitMinutesAsync(long roomId, string currentDiagnosticType, CancellationToken ct)
-    {
-        var now = DateTime.UtcNow;
-        var inProgress = await _dbContext.ImagingSessions
-            .AsNoTracking()
-            .Where(s => s.ImagingRoomId == roomId && s.Status == ImagingSessionStatus.InProgress)
-            .ToListAsync(ct);
-
-        var totalWait = 0;
-        foreach (var session in inProgress)
-        {
-            var remaining = (int)Math.Max(0, (session.ScheduledEndUtc - now).TotalMinutes);
-            totalWait += remaining > 0 ? remaining : 5;
-        }
-
-        var waitingList = await _dbContext.ImagingSessions
-            .AsNoTracking()
-            .Include(s => s.DiagnosticOrder)
-            .Where(s => s.ImagingRoomId == roomId && s.Status == ImagingSessionStatus.Waiting)
-            .ToListAsync(ct);
-
-        var configs = await _dbContext.ImagingServiceConfigs.AsNoTracking().ToListAsync(ct);
-        var configMap = configs.ToDictionary(c => c.DiagnosticType, c => c.SlotDurationMinutes + c.BufferMinutes, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var wait in waitingList)
-        {
-            var dur = configMap.TryGetValue(wait.DiagnosticOrder.DiagnosticType, out var d) ? d : 15;
-            totalWait += dur;
-        }
-
-        return totalWait;
-    }
-
-    private static DiagnosticOrderDto MapOrderToDto(DiagnosticOrder order)
-    {
-        return new DiagnosticOrderDto
-        {
-            DiagnosticOrderId = order.DiagnosticOrderId,
-            AppointmentId = order.AppointmentId,
-            PatientUserId = order.PatientUserId,
-            PatientName = order.PatientUser?.FullName ?? $"Bệnh nhân #{order.PatientUserId}",
-            PatientCode = order.PatientUser?.PatientCode,
-            DentistUserId = order.DentistUserId,
-            DentistName = order.DentistUser?.User?.FullName ?? $"Bác sĩ #{order.DentistUserId}",
-            DiagnosticType = order.DiagnosticType,
-            DiagnosticTypeName = ImagingDiagnosticType.GetDisplayName(order.DiagnosticType),
-            ClinicalIndication = order.ClinicalIndication,
-            IsExternal = order.IsExternal,
-            ExternalFacilityName = order.ExternalFacilityName,
-            Status = order.Status,
-            BilledAtUtc = order.BilledAtUtc,
-            InvoiceItemId = order.InvoiceItemId,
-            CreatedAtUtc = order.CreatedAtUtc,
-            Sessions = order.ImagingSessions.Select(MapSessionToDto).ToList(),
-            Results = order.DiagnosticResults.Select(MapResultToDto).ToList()
-        };
-    }
-
-    private static ImagingSessionDto MapSessionToDto(ImagingSession s)
-    {
-        return new ImagingSessionDto
-        {
-            ImagingSessionId = s.ImagingSessionId,
-            DiagnosticOrderId = s.DiagnosticOrderId,
-            SourceAppointmentId = s.SourceAppointmentId,
-            PatientUserId = s.PatientUserId,
-            PatientName = s.PatientUser?.FullName ?? $"Bệnh nhân #{s.PatientUserId}",
-            PatientCode = s.PatientUser?.PatientCode,
-            ImagingRoomId = s.ImagingRoomId,
-            RoomCode = s.ImagingRoom?.RoomCode ?? "XRAY",
-            RoomName = s.ImagingRoom?.RoomName ?? s.ImagingRoom?.RoomCode ?? "Phòng X-quang",
-            EquipmentId = s.EquipmentId,
-            EquipmentName = s.Equipment?.EquipmentName ?? $"Máy #{s.EquipmentId}",
-            DiagnosticType = s.DiagnosticOrder?.DiagnosticType ?? "Intraoral",
-            SlotDurationMinutes = (int)(s.ScheduledEndUtc - s.ScheduledStartUtc).TotalMinutes,
-            ScheduledStartUtc = s.ScheduledStartUtc,
-            ScheduledEndUtc = s.ScheduledEndUtc,
-            ActualStartUtc = s.ActualStartUtc,
-            ActualEndUtc = s.ActualEndUtc,
-            QueueNumber = s.QueueNumber,
-            Priority = s.Priority,
-            Status = s.Status,
-            CheckInTimeUtc = s.CheckInTimeUtc,
-            EstimatedWaitMinutes = s.EstimatedWaitMinutes,
-            DelayNotificationSent = s.DelayNotificationSent,
-            EscalationAlertSent = s.EscalationAlertSent,
-            Notes = s.Notes,
-            CreatedAtUtc = s.CreatedAtUtc
-        };
-    }
-
-    private static DiagnosticResultDto MapResultToDto(DiagnosticResult r)
-    {
-        return new DiagnosticResultDto
-        {
-            DiagnosticResultId = r.DiagnosticResultId,
-            DiagnosticOrderId = r.DiagnosticOrderId,
-            ImagingSessionId = r.ImagingSessionId,
-            SourceType = r.SourceType,
-            EquipmentId = r.EquipmentId,
-            EquipmentName = r.Equipment?.EquipmentName,
-            ExternalFacilityName = r.ExternalFacilityName,
-            FileUrl = r.FileUrl,
-            ThumbnailUrl = r.ThumbnailUrl,
-            ImageFormat = r.ImageFormat,
-            Findings = r.Findings,
-            ReviewedByDentistUserId = r.ReviewedByDentistUserId,
-            ReviewedByDentistName = r.ReviewedByDentistUser?.User?.FullName,
-            ReviewedAtUtc = r.ReviewedAtUtc,
-            ReviewNotes = r.ReviewNotes,
-            IsReviewed = r.IsReviewed,
-            UploadedAtUtc = r.UploadedAtUtc
-        };
-    }
-
-    private async Task<DiagnosticOrderDto> MapToOrderDtoAsync(DiagnosticOrder order, CancellationToken ct)
-    {
-        var refreshed = await _dbContext.DiagnosticOrders
-            .AsNoTracking()
-            .Include(o => o.Appointment)
-            .Include(o => o.PatientUser)
-            .Include(o => o.DentistUser)
-                .ThenInclude(d => d.User)
-            .Include(o => o.ImagingSessions)
-                .ThenInclude(s => s.ImagingRoom)
-            .Include(o => o.ImagingSessions)
-                .ThenInclude(s => s.Equipment)
-            .Include(o => o.DiagnosticResults)
-                .ThenInclude(r => r.ReviewedByDentistUser)
-                    .ThenInclude(d => d!.User)
-            .FirstAsync(o => o.DiagnosticOrderId == order.DiagnosticOrderId, ct);
-
-        return MapOrderToDto(refreshed);
-    }
-
-    private async Task<ImagingSessionDto> MapToSessionDtoAsync(ImagingSession session, CancellationToken ct)
-    {
-        var refreshed = await _dbContext.ImagingSessions
-            .AsNoTracking()
-            .Include(s => s.PatientUser)
-            .Include(s => s.ImagingRoom)
-            .Include(s => s.Equipment)
-            .Include(s => s.DiagnosticOrder)
-            .FirstAsync(s => s.ImagingSessionId == session.ImagingSessionId, ct);
-
-        return MapSessionToDto(refreshed);
-    }
-
-    private async Task<DiagnosticResultDto> MapToResultDtoAsync(DiagnosticResult result, CancellationToken ct)
-    {
-        var refreshed = await _dbContext.DiagnosticResults
-            .AsNoTracking()
-            .Include(r => r.Equipment)
-            .Include(r => r.ReviewedByDentistUser)
-                .ThenInclude(d => d!.User)
-            .FirstAsync(r => r.DiagnosticResultId == result.DiagnosticResultId, ct);
-
-        return MapResultToDto(refreshed);
-    }
-
-    #endregion
-
-    #region Clinical Consultations
 
     public async Task<ClinicalConsultationDto> CreateConsultationAsync(CreateConsultationRequest request, long dentistUserId, CancellationToken ct = default)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
         if (request.SourceAppointmentId <= 0)
-            throw new ArgumentException("M� ca kh�m (SourceAppointmentId) kh�ng h?p l?.");
+            throw new ArgumentException("Mã ca khám (SourceAppointmentId) không hợp lệ.");
         if (request.ConsultedDentistUserId <= 0)
-            throw new ArgumentException("Vui l�ng ch?n b�c si c?n h?i ch?n.");
+            throw new ArgumentException("Vui lòng chọn bác sĩ cần hội chẩn.");
         if (string.IsNullOrWhiteSpace(request.ConsultationReason))
-            throw new ArgumentException("L� do h?i ch?n kh�ng du?c d? tr?ng.");
+            throw new ArgumentException("Lý do hội chẩn không được để trống.");
         if (string.IsNullOrWhiteSpace(request.ClinicalQuestion))
-            throw new ArgumentException("C�u h?i l�m s�ng kh�ng du?c d? tr?ng.");
+            throw new ArgumentException("Câu hỏi lâm sàng không được để trống.");
 
         var appt = await _dbContext.Appointments
-            .Include(a => a.PatientUser)
+            .Include(a => a.Patient)
+            .Include(a => a.AppointmentServices)
             .FirstOrDefaultAsync(a => a.AppointmentId == request.SourceAppointmentId, ct);
         if (appt == null)
-            throw new InvalidOperationException("Kh�ng t�m th?y ca kh�m ngu?n.");
+            throw new InvalidOperationException("Không tìm thấy ca khám nguồn.");
 
         var consultedDentist = await _dbContext.DentistProfiles
-            .Include(d => d.User)
+            .Include(d => d.StaffProfile)
             .FirstOrDefaultAsync(d => d.UserId == request.ConsultedDentistUserId, ct);
-        if (consultedDentist == null || consultedDentist.User.EmploymentStatus != "Active")
-            throw new InvalidOperationException("B�c si du?c m?i h?i ch?n kh�ng t?n t?i ho?c d� ng?ng ho?t d?ng.");
+        if (consultedDentist == null || consultedDentist.StaffProfile.EmploymentStatus != "Active")
+            throw new InvalidOperationException("Bác sĩ được mời hội chẩn không tồn tại hoặc đã ngừng hoạt động.");
 
         if (request.ConsultedDentistUserId == dentistUserId)
-            throw new InvalidOperationException("Kh�ng th? g?i y�u c?u h?i ch?n cho ch�nh m�nh.");
+            throw new InvalidOperationException("Không thể gửi yêu cầu hội chẩn cho chính mình.");
 
         var requestingDentist = await _dbContext.DentistProfiles
-            .Include(d => d.User)
+            .Include(d => d.StaffProfile)
             .FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
 
-        var urgency = string.IsNullOrWhiteSpace(request.Urgency) ? ConsultationUrgency.Normal : request.Urgency.Trim();
-
-        var consultation = new ClinicalConsultation
+        var sourceApptService = appt.AppointmentServices.FirstOrDefault();
+        var fromDeptId = requestingDentist?.DepartmentId ?? sourceApptService?.DepartmentId ?? consultedDentist.DepartmentId;
+        var toDeptId = consultedDentist.DepartmentId;
+        if (fromDeptId == toDeptId)
         {
-            SourceAppointmentId = request.SourceAppointmentId,
-            PatientUserId = appt.PatientUserId,
-            RequestingDentistUserId = dentistUserId,
-            ConsultedDentistUserId = request.ConsultedDentistUserId,
-            ConsultationReason = request.ConsultationReason.Trim(),
-            ClinicalQuestion = request.ClinicalQuestion.Trim(),
-            Urgency = urgency,
-            Status = ConsultationStatus.Requested,
-            RequestedAtUtc = DateTime.UtcNow
+            var altDept = await _dbContext.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId != fromDeptId, ct);
+            if (altDept != null) fromDeptId = altDept.DepartmentId;
+        }
+
+        var referral = new DepartmentReferral
+        {
+            FromDepartmentId = fromDeptId,
+            ToDepartmentId = toDeptId,
+            AssignedDentistUserId = request.ConsultedDentistUserId,
+            ReviewedByUserId = dentistUserId,
+            Reason = request.ConsultationReason.Trim(),
+            ClinicalInstructions = request.ClinicalQuestion.Trim(),
+            Urgency = string.Equals(request.Urgency, "Urgent", StringComparison.OrdinalIgnoreCase) ? "Urgent" : "Normal",
+            Status = "Pending",
+            SourceAppointmentServiceId = sourceApptService?.AppointmentServiceId,
+            CreatedAt = DateTime.UtcNow
         };
 
-        _dbContext.ClinicalConsultations.Add(consultation);
+        _dbContext.DepartmentReferrals.Add(referral);
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("B�c si {RequestingId} d� g?i y�u c?u h?i ch?n #{ConsultationId} t?i b�c si {ConsultedId}",
-            dentistUserId, consultation.ConsultationId, request.ConsultedDentistUserId);
-
-        return new ClinicalConsultationDto
-        {
-            ConsultationId = consultation.ConsultationId,
-            SourceAppointmentId = consultation.SourceAppointmentId,
-            PatientUserId = consultation.PatientUserId,
-            PatientName = appt.PatientUser.FullName,
-            PatientCode = appt.PatientUser.PatientCode,
-            RequestingDentistUserId = consultation.RequestingDentistUserId,
-            RequestingDentistName = requestingDentist?.User.FullName ?? $"B�c si #{dentistUserId}",
-            ConsultedDentistUserId = consultation.ConsultedDentistUserId,
-            ConsultedDentistName = consultedDentist.User.FullName,
-            ConsultationReason = consultation.ConsultationReason,
-            ClinicalQuestion = consultation.ClinicalQuestion,
-            Urgency = consultation.Urgency,
-            Status = consultation.Status,
-            DentistOpinion = consultation.DentistOpinion,
-            Recommendations = consultation.Recommendations,
-            RequestedAtUtc = consultation.RequestedAtUtc,
-            AnsweredAtUtc = consultation.AnsweredAtUtc
-        };
+        return await MapReferralToConsultationDtoAsync(referral.ReferralId, ct)
+            ?? throw new InvalidOperationException("Không thể tải thông tin hội chẩn.");
     }
 
     public async Task<ClinicalConsultationDto> RespondConsultationAsync(long consultationId, RespondConsultationRequest request, long dentistUserId, CancellationToken ct = default)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
         if (string.IsNullOrWhiteSpace(request.DentistOpinion))
-            throw new ArgumentException("� ki?n chuy�n m�n kh�ng du?c d? tr?ng.");
+            throw new ArgumentException("Ý kiến chuyên môn không được để trống.");
 
-        var consultation = await _dbContext.ClinicalConsultations
-            .Include(c => c.PatientUser)
-            .Include(c => c.RequestingDentistUser).ThenInclude(d => d.User)
-            .Include(c => c.ConsultedDentistUser).ThenInclude(d => d.User)
-            .FirstOrDefaultAsync(c => c.ConsultationId == consultationId, ct);
+        var referral = await _dbContext.DepartmentReferrals
+            .FirstOrDefaultAsync(r => r.ReferralId == consultationId, ct);
 
-        if (consultation == null)
-            throw new InvalidOperationException("Kh�ng t�m th?y y�u c?u h?i ch?n.");
+        if (referral == null)
+            throw new InvalidOperationException("Không tìm thấy yêu cầu hội chẩn.");
 
-        if (consultation.ConsultedDentistUserId != dentistUserId)
-            throw new UnauthorizedAccessException("Ch? b�c si du?c m?i h?i ch?n m?i c� quy?n ph?n h?i y�u c?u n�y.");
+        if (referral.AssignedDentistUserId != dentistUserId)
+            throw new UnauthorizedAccessException("Chỉ bác sĩ được mời hội chẩn mới có quyền phản hồi yêu cầu này.");
 
-        if (consultation.Status != ConsultationStatus.Requested)
-            throw new InvalidOperationException($"Y�u c?u h?i ch?n d� ? tr?ng th�i '{consultation.Status}', kh�ng th? ph?n h?i l?i.");
+        if (referral.Status != "Pending")
+            throw new InvalidOperationException($"Yêu cầu hội chẩn đã ở trạng thái '{referral.Status}', không thể phản hồi lại.");
 
-        consultation.DentistOpinion = request.DentistOpinion.Trim();
-        consultation.Recommendations = request.Recommendations?.Trim();
-        consultation.Status = ConsultationStatus.Answered;
-        consultation.AnsweredAtUtc = DateTime.UtcNow;
+        referral.ClinicalInstructions = string.IsNullOrWhiteSpace(request.Recommendations)
+            ? $"{referral.ClinicalInstructions} || [Opinion]: {request.DentistOpinion.Trim()}"
+            : $"{referral.ClinicalInstructions} || [Opinion]: {request.DentistOpinion.Trim()} || [Rec]: {request.Recommendations.Trim()}";
+        referral.Status = "Completed";
+        referral.ReviewedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("B�c si {ConsultedId} d� ho�n t?t ph?n h?i h?i ch?n #{ConsultationId}",
-            dentistUserId, consultationId);
-
-        return new ClinicalConsultationDto
-        {
-            ConsultationId = consultation.ConsultationId,
-            SourceAppointmentId = consultation.SourceAppointmentId,
-            PatientUserId = consultation.PatientUserId,
-            PatientName = consultation.PatientUser.FullName,
-            PatientCode = consultation.PatientUser.PatientCode,
-            RequestingDentistUserId = consultation.RequestingDentistUserId,
-            RequestingDentistName = consultation.RequestingDentistUser.User.FullName,
-            ConsultedDentistUserId = consultation.ConsultedDentistUserId,
-            ConsultedDentistName = consultation.ConsultedDentistUser.User.FullName,
-            ConsultationReason = consultation.ConsultationReason,
-            ClinicalQuestion = consultation.ClinicalQuestion,
-            Urgency = consultation.Urgency,
-            Status = consultation.Status,
-            DentistOpinion = consultation.DentistOpinion,
-            Recommendations = consultation.Recommendations,
-            RequestedAtUtc = consultation.RequestedAtUtc,
-            AnsweredAtUtc = consultation.AnsweredAtUtc
-        };
+        return await MapReferralToConsultationDtoAsync(referral.ReferralId, ct)
+            ?? throw new InvalidOperationException("Không thể tải thông tin hội chẩn.");
     }
 
     public async Task<List<ClinicalConsultationDto>> GetConsultationsByDentistAsync(long dentistUserId, string type, CancellationToken ct = default)
     {
-        var query = _dbContext.ClinicalConsultations
+        var query = _dbContext.DepartmentReferrals
             .AsNoTracking()
-            .Include(c => c.PatientUser)
-            .Include(c => c.RequestingDentistUser).ThenInclude(d => d.User)
-            .Include(c => c.ConsultedDentistUser).ThenInclude(d => d.User)
+            .Include(r => r.SourceAppointmentService)
+                .ThenInclude(s => s!.Appointment)
+                    .ThenInclude(a => a.Patient)
+            .Include(r => r.AssignedDentist)
+                .ThenInclude(d => d!.StaffProfile)
+            .Include(r => r.ReviewedByUser)
+                .ThenInclude(u => u!.StaffProfile)
             .AsQueryable();
 
         if (string.Equals(type, "requested", StringComparison.OrdinalIgnoreCase))
         {
-            query = query.Where(c => c.RequestingDentistUserId == dentistUserId);
+            query = query.Where(r => r.ReviewedByUserId == dentistUserId);
         }
         else if (string.Equals(type, "received", StringComparison.OrdinalIgnoreCase))
         {
-            query = query.Where(c => c.ConsultedDentistUserId == dentistUserId);
+            query = query.Where(r => r.AssignedDentistUserId == dentistUserId);
         }
         else
         {
-            query = query.Where(c => c.RequestingDentistUserId == dentistUserId || c.ConsultedDentistUserId == dentistUserId);
+            query = query.Where(r => r.ReviewedByUserId == dentistUserId || r.AssignedDentistUserId == dentistUserId);
         }
 
-        var list = await query.OrderByDescending(c => c.RequestedAtUtc).ToListAsync(ct);
-
-        return list.Select(c => new ClinicalConsultationDto
-        {
-            ConsultationId = c.ConsultationId,
-            SourceAppointmentId = c.SourceAppointmentId,
-            PatientUserId = c.PatientUserId,
-            PatientName = c.PatientUser.FullName,
-            PatientCode = c.PatientUser.PatientCode,
-            RequestingDentistUserId = c.RequestingDentistUserId,
-            RequestingDentistName = c.RequestingDentistUser.User.FullName,
-            ConsultedDentistUserId = c.ConsultedDentistUserId,
-            ConsultedDentistName = c.ConsultedDentistUser.User.FullName,
-            ConsultationReason = c.ConsultationReason,
-            ClinicalQuestion = c.ClinicalQuestion,
-            Urgency = c.Urgency,
-            Status = c.Status,
-            DentistOpinion = c.DentistOpinion,
-            Recommendations = c.Recommendations,
-            RequestedAtUtc = c.RequestedAtUtc,
-            AnsweredAtUtc = c.AnsweredAtUtc
-        }).ToList();
+        var list = await query.OrderByDescending(r => r.CreatedAt).ToListAsync(ct);
+        return list.Select(MapReferralToConsultationDto).ToList();
     }
 
     public async Task<List<ClinicalConsultationDto>> GetConsultationsByAppointmentAsync(long appointmentId, CancellationToken ct = default)
     {
-        var list = await _dbContext.ClinicalConsultations
+        var list = await _dbContext.DepartmentReferrals
             .AsNoTracking()
-            .Include(c => c.PatientUser)
-            .Include(c => c.RequestingDentistUser).ThenInclude(d => d.User)
-            .Include(c => c.ConsultedDentistUser).ThenInclude(d => d.User)
-            .Where(c => c.SourceAppointmentId == appointmentId)
-            .OrderByDescending(c => c.RequestedAtUtc)
+            .Include(r => r.SourceAppointmentService)
+                .ThenInclude(s => s!.Appointment)
+                    .ThenInclude(a => a.Patient)
+            .Include(r => r.AssignedDentist)
+                .ThenInclude(d => d!.StaffProfile)
+            .Include(r => r.ReviewedByUser)
+                .ThenInclude(u => u!.StaffProfile)
+            .Where(r => r.SourceAppointmentService != null && r.SourceAppointmentService.AppointmentId == appointmentId)
+            .OrderByDescending(r => r.CreatedAt)
             .ToListAsync(ct);
 
-        return list.Select(c => new ClinicalConsultationDto
-        {
-            ConsultationId = c.ConsultationId,
-            SourceAppointmentId = c.SourceAppointmentId,
-            PatientUserId = c.PatientUserId,
-            PatientName = c.PatientUser.FullName,
-            PatientCode = c.PatientUser.PatientCode,
-            RequestingDentistUserId = c.RequestingDentistUserId,
-            RequestingDentistName = c.RequestingDentistUser.User.FullName,
-            ConsultedDentistUserId = c.ConsultedDentistUserId,
-            ConsultedDentistName = c.ConsultedDentistUser.User.FullName,
-            ConsultationReason = c.ConsultationReason,
-            ClinicalQuestion = c.ClinicalQuestion,
-            Urgency = c.Urgency,
-            Status = c.Status,
-            DentistOpinion = c.DentistOpinion,
-            Recommendations = c.Recommendations,
-            RequestedAtUtc = c.RequestedAtUtc,
-            AnsweredAtUtc = c.AnsweredAtUtc
-        }).ToList();
+        return list.Select(MapReferralToConsultationDto).ToList();
     }
 
     public async Task<ClinicalConsultationDto?> GetConsultationByIdAsync(long consultationId, CancellationToken ct = default)
     {
-        var c = await _dbContext.ClinicalConsultations
+        return await MapReferralToConsultationDtoAsync(consultationId, ct);
+    }
+
+    private IQueryable<Diagnostic> BuildDiagnosticsQuery()
+    {
+        return _dbContext.Diagnostics
+            .Include(d => d.AppointmentService)
+                .ThenInclude(s => s.Appointment)
+                    .ThenInclude(a => a.Patient)
+            .Include(d => d.AppointmentService)
+                .ThenInclude(s => s.Room)
+            .Include(d => d.DepartmentService)
+            .Include(d => d.OrderingDentist)
+                .ThenInclude(dp => dp.StaffProfile)
+            .Include(d => d.ReviewedByDentist)
+                .ThenInclude(dp => dp!.StaffProfile);
+    }
+
+    private async Task<DiagnosticOrderDto> MapToOrderDtoAsync(long diagnosticId, CancellationToken ct)
+    {
+        var refreshed = await BuildDiagnosticsQuery()
             .AsNoTracking()
-            .Include(c => c.PatientUser)
-            .Include(c => c.RequestingDentistUser).ThenInclude(d => d.User)
-            .Include(c => c.ConsultedDentistUser).ThenInclude(d => d.User)
-            .FirstOrDefaultAsync(c => c.ConsultationId == consultationId, ct);
+            .FirstAsync(d => d.DiagnosticId == diagnosticId, ct);
 
-        if (c == null) return null;
+        return MapOrderToDto(refreshed);
+    }
 
-        return new ClinicalConsultationDto
+    private static DiagnosticOrderDto MapOrderToDto(Diagnostic d)
+    {
+        var appt = d.AppointmentService?.Appointment;
+        var patient = appt?.Patient;
+        var isExt = d.ClinicalIndication.StartsWith("[External:", StringComparison.OrdinalIgnoreCase);
+        var sessions = new List<ImagingSessionDto> { MapSessionToDto(d) };
+        var results = !string.IsNullOrWhiteSpace(d.FileUrl)
+            ? new List<DiagnosticResultDto> { MapResultToDto(d) }
+            : new List<DiagnosticResultDto>();
+
+        return new DiagnosticOrderDto
         {
-            ConsultationId = c.ConsultationId,
-            SourceAppointmentId = c.SourceAppointmentId,
-            PatientUserId = c.PatientUserId,
-            PatientName = c.PatientUser.FullName,
-            PatientCode = c.PatientUser.PatientCode,
-            RequestingDentistUserId = c.RequestingDentistUserId,
-            RequestingDentistName = c.RequestingDentistUser.User.FullName,
-            ConsultedDentistUserId = c.ConsultedDentistUserId,
-            ConsultedDentistName = c.ConsultedDentistUser.User.FullName,
-            ConsultationReason = c.ConsultationReason,
-            ClinicalQuestion = c.ClinicalQuestion,
-            Urgency = c.Urgency,
-            Status = c.Status,
-            DentistOpinion = c.DentistOpinion,
-            Recommendations = c.Recommendations,
-            RequestedAtUtc = c.RequestedAtUtc,
-            AnsweredAtUtc = c.AnsweredAtUtc
+            DiagnosticOrderId = d.DiagnosticId,
+            AppointmentId = d.AppointmentService?.AppointmentId ?? d.AppointmentServiceId,
+            PatientUserId = appt?.PatientUserId ?? 0,
+            PatientName = patient?.FullName ?? $"Bệnh nhân #{appt?.PatientUserId}",
+            PatientCode = $"PAT-{appt?.PatientUserId:D4}",
+            DentistUserId = d.OrderingDentistUserId,
+            DentistName = d.OrderingDentist?.StaffProfile?.FullName ?? $"Bác sĩ #{d.OrderingDentistUserId}",
+            DiagnosticType = d.ImagingType ?? d.DepartmentService?.DiagnosticType ?? "Intraoral",
+            DiagnosticTypeName = ImagingDiagnosticType.GetDisplayName(d.ImagingType ?? d.DepartmentService?.DiagnosticType ?? "Intraoral"),
+            ClinicalIndication = d.ClinicalIndication,
+            IsExternal = isExt,
+            ExternalFacilityName = null,
+            Status = d.Status,
+            BilledAtUtc = d.CompletedAt,
+            InvoiceItemId = null,
+            CreatedAtUtc = d.CreatedAt,
+            Sessions = sessions,
+            Results = results
         };
     }
 
-    #endregion
+    private static ImagingSessionDto MapSessionToDto(Diagnostic d)
+    {
+        var s = d.AppointmentService;
+        var appt = s?.Appointment;
+        var room = s?.Room;
+
+        return new ImagingSessionDto
+        {
+            ImagingSessionId = d.DiagnosticId,
+            DiagnosticOrderId = d.DiagnosticId,
+            SourceAppointmentId = s?.AppointmentId ?? d.AppointmentServiceId,
+            PatientUserId = appt?.PatientUserId ?? 0,
+            PatientName = appt?.Patient?.FullName ?? $"Bệnh nhân #{appt?.PatientUserId}",
+            PatientCode = $"PAT-{appt?.PatientUserId:D4}",
+            ImagingRoomId = room?.RoomId ?? 0,
+            RoomCode = room?.RoomCode ?? "XRAY",
+            RoomName = room?.RoomName ?? "Phòng Chẩn đoán hình ảnh",
+            EquipmentId = room?.RoomId ?? 0,
+            EquipmentName = room?.RoomName ?? "Máy X-quang",
+            DiagnosticType = d.ImagingType ?? d.DepartmentService?.DiagnosticType ?? "Intraoral",
+            SlotDurationMinutes = d.DepartmentService?.DurationMinutes ?? 15,
+            ScheduledStartUtc = s?.ScheduledStart ?? d.CreatedAt,
+            ScheduledEndUtc = s?.ScheduledEnd ?? d.CreatedAt.AddMinutes(15),
+            ActualStartUtc = d.CreatedAt,
+            ActualEndUtc = d.CompletedAt,
+            QueueNumber = s?.QueueNumber.HasValue == true ? $"XR-{s.QueueNumber.Value:D3}" : null,
+            Priority = ImagingSessionPriority.Normal,
+            Status = d.Status,
+            CheckInTimeUtc = d.CreatedAt,
+            EstimatedWaitMinutes = 0,
+            DelayNotificationSent = false,
+            EscalationAlertSent = false,
+            Notes = s?.Notes,
+            CreatedAtUtc = d.CreatedAt
+        };
+    }
+
+    private static DiagnosticResultDto MapResultToDto(Diagnostic d)
+    {
+        return new DiagnosticResultDto
+        {
+            DiagnosticResultId = d.DiagnosticId,
+            DiagnosticOrderId = d.DiagnosticId,
+            ImagingSessionId = d.DiagnosticId,
+            SourceType = DiagnosticResultSourceType.Internal,
+            EquipmentId = d.AppointmentService?.RoomId,
+            EquipmentName = d.AppointmentService?.Room?.RoomName,
+            ExternalFacilityName = null,
+            FileUrl = d.FileUrl ?? string.Empty,
+            ThumbnailUrl = d.ThumbnailUrl,
+            ImageFormat = "JPEG",
+            Findings = d.Findings,
+            ReviewedByDentistUserId = d.ReviewedByDentistUserId,
+            ReviewedByDentistName = d.ReviewedByDentist?.StaffProfile?.FullName,
+            ReviewedAtUtc = d.ReviewedAt,
+            ReviewNotes = d.Findings,
+            IsReviewed = d.ReviewedAt.HasValue,
+            UploadedAtUtc = d.CompletedAt ?? d.CreatedAt
+        };
+    }
+
+    private async Task<ClinicalConsultationDto?> MapReferralToConsultationDtoAsync(long referralId, CancellationToken ct)
+    {
+        var r = await _dbContext.DepartmentReferrals
+            .AsNoTracking()
+            .Include(x => x.SourceAppointmentService)
+                .ThenInclude(s => s!.Appointment)
+                    .ThenInclude(a => a.Patient)
+            .Include(x => x.AssignedDentist)
+                .ThenInclude(d => d!.StaffProfile)
+            .Include(x => x.ReviewedByUser)
+                .ThenInclude(u => u!.StaffProfile)
+            .FirstOrDefaultAsync(x => x.ReferralId == referralId, ct);
+
+        return r == null ? null : MapReferralToConsultationDto(r);
+    }
+
+    private static ClinicalConsultationDto MapReferralToConsultationDto(DepartmentReferral r)
+    {
+        var appt = r.SourceAppointmentService?.Appointment;
+        return new ClinicalConsultationDto
+        {
+            ConsultationId = r.ReferralId,
+            SourceAppointmentId = appt?.AppointmentId ?? r.SourceAppointmentServiceId ?? 0,
+            PatientUserId = appt?.PatientUserId ?? 0,
+            PatientName = appt?.Patient?.FullName ?? "Bệnh nhân",
+            PatientCode = $"PAT-{appt?.PatientUserId:D4}",
+            RequestingDentistUserId = r.ReviewedByUserId ?? 0,
+            RequestingDentistName = r.ReviewedByUser?.StaffProfile?.FullName ?? $"Bác sĩ #{r.ReviewedByUserId}",
+            ConsultedDentistUserId = r.AssignedDentistUserId ?? 0,
+            ConsultedDentistName = r.AssignedDentist?.StaffProfile?.FullName ?? $"Bác sĩ #{r.AssignedDentistUserId}",
+            ConsultationReason = r.Reason,
+            ClinicalQuestion = r.ClinicalInstructions ?? string.Empty,
+            Urgency = r.Urgency,
+            Status = r.Status == "Completed" ? ConsultationStatus.Answered : ConsultationStatus.Requested,
+            DentistOpinion = r.ReviewedAt.HasValue ? r.ClinicalInstructions : null,
+            Recommendations = null,
+            RequestedAtUtc = r.CreatedAt,
+            AnsweredAtUtc = r.ReviewedAt
+        };
+    }
 }

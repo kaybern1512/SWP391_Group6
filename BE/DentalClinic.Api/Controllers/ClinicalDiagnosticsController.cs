@@ -383,12 +383,11 @@ public class ClinicalDiagnosticsController : ControllerBase
     {
         try
         {
-            var result = await _dbContext.DiagnosticResults
+            var result = await _dbContext.Diagnostics
                 .AsNoTracking()
-                .Include(r => r.DiagnosticOrder)
-                .FirstOrDefaultAsync(r => r.DiagnosticResultId == resultId, ct);
+                .FirstOrDefaultAsync(r => r.DiagnosticId == resultId && r.FileUrl != null, ct);
 
-            if (result == null)
+            if (result == null || string.IsNullOrWhiteSpace(result.FileUrl))
                 return NotFound("Không tìm thấy kết quả chẩn đoán.");
 
             var stream = await _imagingStorageService.GetImageStreamAsync(result.FileUrl, ct);

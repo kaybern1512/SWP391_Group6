@@ -13,25 +13,21 @@ public partial class Medicine
 
     public string? ActiveIngredient { get; set; }
 
-    public string? Concentration { get; set; }
-
-    public string? DosageForm { get; set; }
-
     public string Unit { get; set; } = null!;
 
     public decimal UnitPrice { get; set; }
 
-    public int MinimumStockAlert { get; set; } = 20;
+    public int StockQuantity { get; set; }
+
+    public int MinimumStockAlert { get; set; } = 10;
 
     public string? UsageInstructions { get; set; }
 
-    public string Status { get; set; } = "Active";
+    public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 
-    public virtual ICollection<MedicineBatch> MedicineBatches { get; set; } = new List<MedicineBatch>();
-
-    public virtual ICollection<MedicineDispensationItem> DispensationItems { get; set; } = new List<MedicineDispensationItem>();
+    public virtual ICollection<PrescriptionItem> PrescriptionItems { get; set; } = new List<PrescriptionItem>();
 }

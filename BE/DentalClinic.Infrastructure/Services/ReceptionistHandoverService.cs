@@ -8,7 +8,6 @@ using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.ReceptionistWorkforce.DTOs;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
-using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace DentalClinic.Infrastructure.Services;
@@ -31,50 +30,42 @@ public class ReceptionistHandoverService : IReceptionistHandoverService
 
     public async Task<ApiResponse<HandoverSummaryItemsDto>> GetCurrentHandoverSummaryAsync(CancellationToken ct = default)
     {
-        // 1. Pending appointment requests
         var pendingAppts = await _dbContext.Appointments
             .AsNoTracking()
-            .Include(a => a.PatientUser)
-            .Include(a => a.RequestedService)
+            .Include(a => a.Patient)
+            .Include(a => a.AppointmentServices)
+                .ThenInclude(s => s.DepartmentService)
             .Where(a => a.Status == AppointmentStatus.PendingReceptionReview)
-            .OrderBy(a => a.ScheduledStart)
+            .OrderBy(a => a.CreatedAt)
             .Take(10)
             .ToListAsync(ct);
 
         int totalPendingAppts = await _dbContext.Appointments
             .CountAsync(a => a.Status == AppointmentStatus.PendingReceptionReview, ct);
 
-        // 2. Unpaid or partially paid invoices
         var unpaidInvoices = await _dbContext.Invoices
             .AsNoTracking()
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.PatientUser)
+                .ThenInclude(a => a.Patient)
             .Include(i => i.Payments)
-            .Where(i => i.Status != "Paid")
+            .Where(i => i.Status != "Paid" && i.Status != "Cancelled")
             .OrderByDescending(i => i.CreatedAt)
             .Take(10)
             .ToListAsync(ct);
 
         int totalUnpaidInvoices = await _dbContext.Invoices
-            .CountAsync(i => i.Status != "Paid", ct);
-
-        // 3. Active chat sessions
-        int activeChats = await _dbContext.SupportChatMessages
-            .Where(m => m.SentAt >= DateTime.UtcNow.AddHours(-12))
-            .Select(m => m.SenderUserId)
-            .Distinct()
-            .CountAsync(ct);
+            .CountAsync(i => i.Status != "Paid" && i.Status != "Cancelled", ct);
 
         var sampleInvoices = unpaidInvoices.Select(i =>
         {
-            decimal paid = i.Payments.Where(p => p.Status == "Paid" || p.Status == "Success").Sum(p => p.Amount);
-            decimal remaining = Math.Max(0, i.TotalAmount - paid);
+            decimal paid = i.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount);
+            decimal remaining = Math.Max(0, i.FinalAmount - paid);
             return new UnpaidInvoiceSummaryDto
             {
                 InvoiceId = i.InvoiceId,
                 InvoiceCode = i.InvoiceCode,
-                PatientName = i.Appointment?.PatientUser?.FullName ?? "Bệnh nhân",
-                TotalAmount = i.TotalAmount,
+                PatientName = i.Appointment?.Patient?.FullName ?? "Bệnh nhân",
+                TotalAmount = i.FinalAmount,
                 RemainingAmount = remaining
             };
         }).ToList();
@@ -82,16 +73,20 @@ public class ReceptionistHandoverService : IReceptionistHandoverService
         var summary = new HandoverSummaryItemsDto
         {
             PendingAppointmentRequests = totalPendingAppts,
-            SamplePendingAppointments = pendingAppts.Select(a => new PendingApptSummaryDto
+            SamplePendingAppointments = pendingAppts.Select(a =>
             {
-                AppointmentId = a.AppointmentId,
-                PatientName = a.PatientUser?.FullName ?? "Bệnh nhân",
-                ServiceName = a.RequestedService?.ServiceName ?? "Dịch vụ nha khoa",
-                ScheduledStart = a.ScheduledStart ?? DateTime.UtcNow
+                var firstSvc = a.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+                return new PendingApptSummaryDto
+                {
+                    AppointmentId = a.AppointmentId,
+                    PatientName = a.Patient?.FullName ?? "Bệnh nhân",
+                    ServiceName = firstSvc?.DepartmentService?.ServiceName ?? "Dịch vụ nha khoa",
+                    ScheduledStart = firstSvc?.ScheduledStart ?? a.CreatedAt
+                };
             }).ToList(),
             UnpaidInvoicesCount = totalUnpaidInvoices,
             SampleUnpaidInvoices = sampleInvoices,
-            ActiveChatSessionsCount = activeChats
+            ActiveChatSessionsCount = 0
         };
 
         return ApiResponse<HandoverSummaryItemsDto>.Ok(summary);
@@ -109,24 +104,6 @@ public class ReceptionistHandoverService : IReceptionistHandoverService
 
         var summaryRes = await GetCurrentHandoverSummaryAsync(ct);
         var summary = summaryRes.Data ?? new HandoverSummaryItemsDto();
-
-        var handover = new ReceptionistWorkHandover
-        {
-            FromReceptionistUserId = fromUserId,
-            ToReceptionistUserId = request.ToReceptionistUserId,
-            WorkDate = request.WorkDate,
-            ShiftId = request.ShiftId,
-            HandoverType = request.HandoverType,
-            PendingAppointmentCount = summary.PendingAppointmentRequests,
-            UnpaidInvoiceCount = summary.UnpaidInvoicesCount,
-            ActiveChatCount = summary.ActiveChatSessionsCount,
-            Notes = request.Notes.Trim(),
-            HandoverStatus = "Transferred",
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _dbContext.ReceptionistWorkHandovers.Add(handover);
-        await _dbContext.SaveChangesAsync(ct);
 
         var fromProfile = await _dbContext.StaffProfiles.FirstOrDefaultAsync(sp => sp.UserId == fromUserId, ct);
         string fromName = fromProfile?.FullName ?? $"Lễ tân #{fromUserId}";
@@ -146,9 +123,9 @@ public class ReceptionistHandoverService : IReceptionistHandoverService
             fromUserId,
             "CREATE_WORK_HANDOVER",
             "ReceptionistWorkHandover",
-            handover.HandoverId.ToString(),
+            request.WorkDate.ToString("yyyy-MM-dd"),
             null,
-            $"To: {request.ToReceptionistUserId}, Appts: {summary.PendingAppointmentRequests}, Invoices: {summary.UnpaidInvoicesCount}",
+            request.Notes.Trim(),
             ct);
 
         var toProfile = request.ToReceptionistUserId.HasValue
@@ -157,20 +134,20 @@ public class ReceptionistHandoverService : IReceptionistHandoverService
 
         var dto = new ReceptionistWorkHandoverDto
         {
-            HandoverId = handover.HandoverId,
-            FromReceptionistUserId = handover.FromReceptionistUserId,
+            HandoverId = DateTime.UtcNow.Ticks,
+            FromReceptionistUserId = fromUserId,
             FromReceptionistName = fromName,
-            ToReceptionistUserId = handover.ToReceptionistUserId,
+            ToReceptionistUserId = request.ToReceptionistUserId,
             ToReceptionistName = toProfile?.FullName,
-            WorkDate = handover.WorkDate,
-            ShiftId = handover.ShiftId,
-            HandoverType = handover.HandoverType,
-            PendingAppointmentCount = handover.PendingAppointmentCount,
-            UnpaidInvoiceCount = handover.UnpaidInvoiceCount,
-            ActiveChatCount = handover.ActiveChatCount,
-            Notes = handover.Notes,
-            HandoverStatus = handover.HandoverStatus,
-            CreatedAt = handover.CreatedAt
+            WorkDate = request.WorkDate,
+            ShiftId = request.ShiftId,
+            HandoverType = request.HandoverType,
+            PendingAppointmentCount = summary.PendingAppointmentRequests,
+            UnpaidInvoiceCount = summary.UnpaidInvoicesCount,
+            ActiveChatCount = 0,
+            Notes = request.Notes.Trim(),
+            HandoverStatus = "Transferred",
+            CreatedAt = DateTime.UtcNow
         };
 
         return ApiResponse<ReceptionistWorkHandoverDto>.Ok(dto, "Đã ghi nhận bàn giao công việc ca trực thành công.");
@@ -181,39 +158,6 @@ public class ReceptionistHandoverService : IReceptionistHandoverService
         long toUserId,
         CancellationToken ct = default)
     {
-        var handover = await _dbContext.ReceptionistWorkHandovers.FirstOrDefaultAsync(h => h.HandoverId == handoverId, ct);
-        if (handover == null)
-        {
-            return ApiResponse<bool>.Fail("Không tìm thấy biên bản bàn giao.");
-        }
-
-        if (handover.HandoverStatus == "Acknowledged" || handover.HandoverStatus == "Completed")
-        {
-            return ApiResponse<bool>.Fail("Biên bản bàn giao này đã được tiếp nhận trước đó.");
-        }
-
-        if (handover.FromReceptionistUserId == toUserId)
-        {
-            return ApiResponse<bool>.Fail("Bạn không thể tự tiếp nhận biên bản bàn giao của chính mình.");
-        }
-
-        handover.ToReceptionistUserId ??= toUserId;
-        handover.HandoverStatus = "Acknowledged";
-        handover.AcknowledgedAt = DateTime.UtcNow;
-
-        await _dbContext.SaveChangesAsync(ct);
-
-        var toProfile = await _dbContext.StaffProfiles.FirstOrDefaultAsync(sp => sp.UserId == toUserId, ct);
-        string toName = toProfile?.FullName ?? $"Lễ tân #{toUserId}";
-
-        await _notificationService.CreateNotificationAsync(
-            handover.FromReceptionistUserId,
-            null,
-            "WorkHandoverAcknowledged",
-            "Đồng nghiệp đã tiếp nhận bàn giao ca",
-            $"{toName} đã xác nhận tiếp nhận bàn giao ca trực ngày {handover.WorkDate:dd/MM/yyyy}.",
-            ct);
-
         await _auditLogService.LogAsync(
             toUserId,
             "ACKNOWLEDGE_WORK_HANDOVER",
@@ -231,46 +175,41 @@ public class ReceptionistHandoverService : IReceptionistHandoverService
         long? userId = null,
         CancellationToken ct = default)
     {
-        var query = _dbContext.ReceptionistWorkHandovers
+        var query = _dbContext.AuditLogs
             .AsNoTracking()
-            .Include(h => h.FromReceptionistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Include(h => h.ToReceptionistUser)
+            .Include(a => a.User)
                 .ThenInclude(u => u!.StaffProfile)
-            .AsQueryable();
-
-        if (date.HasValue)
-        {
-            query = query.Where(h => h.WorkDate == date.Value);
-        }
+            .Where(a => a.EntityName == "ReceptionistWorkHandover" && a.Action == "CREATE_WORK_HANDOVER");
 
         if (userId.HasValue && userId.Value > 0)
         {
-            query = query.Where(h => h.FromReceptionistUserId == userId.Value || h.ToReceptionistUserId == userId.Value);
+            query = query.Where(a => a.UserId == userId.Value);
         }
 
-        var list = await query
-            .OrderByDescending(h => h.CreatedAt)
+        var logs = await query
+            .OrderByDescending(a => a.CreatedAt)
+            .Take(50)
             .ToListAsync(ct);
 
-        var dtos = list.Select(h => new ReceptionistWorkHandoverDto
+        var dtos = logs.Select(l =>
         {
-            HandoverId = h.HandoverId,
-            FromReceptionistUserId = h.FromReceptionistUserId,
-            FromReceptionistName = h.FromReceptionistUser.StaffProfile != null ? h.FromReceptionistUser.StaffProfile.FullName : (h.FromReceptionistUser.Email ?? "Lễ tân"),
-            ToReceptionistUserId = h.ToReceptionistUserId,
-            ToReceptionistName = h.ToReceptionistUser != null ? (h.ToReceptionistUser.StaffProfile != null ? h.ToReceptionistUser.StaffProfile.FullName : h.ToReceptionistUser.Email) : null,
-            WorkDate = h.WorkDate,
-            ShiftId = h.ShiftId,
-            HandoverType = h.HandoverType,
-            PendingAppointmentCount = h.PendingAppointmentCount,
-            UnpaidInvoiceCount = h.UnpaidInvoiceCount,
-            ActiveChatCount = h.ActiveChatCount,
-            Notes = h.Notes,
-            HandoverStatus = h.HandoverStatus,
-            CreatedAt = h.CreatedAt,
-            AcknowledgedAt = h.AcknowledgedAt
-        }).ToList();
+            var workDate = DateOnly.TryParse(l.EntityId, out var parsed)
+                ? parsed
+                : DateOnly.FromDateTime(l.CreatedAt);
+            return new ReceptionistWorkHandoverDto
+            {
+                HandoverId = l.AuditLogId,
+                FromReceptionistUserId = l.UserId ?? 0,
+                FromReceptionistName = l.User?.StaffProfile?.FullName ?? l.User?.Email ?? "Lễ tân",
+                WorkDate = workDate,
+                HandoverType = "ShiftEnd",
+                Notes = l.NewValues ?? string.Empty,
+                HandoverStatus = "Transferred",
+                CreatedAt = l.CreatedAt
+            };
+        })
+        .Where(d => !date.HasValue || d.WorkDate == date.Value)
+        .ToList();
 
         return ApiResponse<List<ReceptionistWorkHandoverDto>>.Ok(dtos);
     }

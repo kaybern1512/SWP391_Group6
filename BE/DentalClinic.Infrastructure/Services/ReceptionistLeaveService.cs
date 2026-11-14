@@ -69,10 +69,10 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
                 return ApiResponse<ReceptionistLeaveRequestDto>.Fail("Giờ kết thúc nghỉ phép phải lớn hơn giờ bắt đầu.");
             }
 
-            // Verify that receptionist has at least one scheduled shift on these dates
-            bool hasScheduledShift = await _dbContext.ReceptionistWorkSchedules
+            bool hasScheduledShift = await _dbContext.StaffWorkSchedules
                 .AsNoTracking()
-                .AnyAsync(s => s.ReceptionistUserId == receptionistUserId &&
+                .AnyAsync(s => s.StaffUserId == receptionistUserId &&
+                               s.StaffRole == UserRole.Receptionist &&
                                s.WorkDate >= request.StartDate && s.WorkDate <= request.EndDate &&
                                s.Status == "Scheduled", ct);
 
@@ -82,13 +82,13 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
                 return ApiResponse<ReceptionistLeaveRequestDto>.Fail("Bạn không có ca làm việc nào được phân công trong khoảng thời gian xin nghỉ này.");
             }
 
-            // Prevent duplicate pending or approved requests overlapping
             bool duplicateExists;
             if (request.StartTime.HasValue && request.EndTime.HasValue)
             {
-                duplicateExists = await _dbContext.ReceptionistLeaveRequests
+                duplicateExists = await _dbContext.StaffLeaveRequests
                     .AsNoTracking()
-                    .AnyAsync(l => l.ReceptionistUserId == receptionistUserId &&
+                    .AnyAsync(l => l.StaffRole == UserRole.Receptionist &&
+                                   l.StaffUserId == receptionistUserId &&
                                    (l.Status == "Pending" || l.Status == "Approved") &&
                                    l.StartDate <= request.EndDate && l.EndDate >= request.StartDate &&
                                    ((!l.StartTime.HasValue || !l.EndTime.HasValue) ||
@@ -96,9 +96,10 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
             }
             else
             {
-                duplicateExists = await _dbContext.ReceptionistLeaveRequests
+                duplicateExists = await _dbContext.StaffLeaveRequests
                     .AsNoTracking()
-                    .AnyAsync(l => l.ReceptionistUserId == receptionistUserId &&
+                    .AnyAsync(l => l.StaffRole == UserRole.Receptionist &&
+                                   l.StaffUserId == receptionistUserId &&
                                    (l.Status == "Pending" || l.Status == "Approved") &&
                                    l.StartDate <= request.EndDate && l.EndDate >= request.StartDate, ct);
             }
@@ -109,100 +110,62 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
                 return ApiResponse<ReceptionistLeaveRequestDto>.Fail("Bạn đã có đơn xin nghỉ phép đang chờ duyệt hoặc đã được phê duyệt trong khoảng thời gian này.");
             }
 
-        var leave = new ReceptionistLeaveRequest
-        {
-            ReceptionistUserId = receptionistUserId,
-            LeaveType = request.LeaveType,
-            StartDate = request.StartDate,
-            EndDate = request.EndDate,
-            StartTime = request.StartTime,
-            EndTime = request.EndTime,
-            Reason = request.Reason.Trim(),
-            AdditionalNotes = request.AdditionalNotes?.Trim(),
-            Status = "Pending",
-            CreatedAt = DateTime.UtcNow
-        };
-
-        // Create periods for each day in range
-        var periods = new List<ReceptionistLeaveRequestPeriod>();
-        for (var date = request.StartDate; date <= request.EndDate; date = date.AddDays(1))
-        {
-            periods.Add(new ReceptionistLeaveRequestPeriod
+            var leave = new StaffLeaveRequest
             {
-                LeaveRequest = leave,
-                LeaveDate = date,
+                StaffUserId = receptionistUserId,
+                StaffRole = UserRole.Receptionist,
+                LeaveType = request.LeaveType,
+                StartDate = request.StartDate,
+                EndDate = request.EndDate,
                 StartTime = request.StartTime,
                 EndTime = request.EndTime,
-                Status = "Pending"
-            });
-        }
-        leave.Periods = periods;
+                Reason = string.IsNullOrWhiteSpace(request.AdditionalNotes)
+                    ? request.Reason.Trim()
+                    : $"{request.Reason.Trim()} | {request.AdditionalNotes.Trim()}",
+                Status = "Pending",
+                CreatedAt = DateTime.UtcNow
+            };
 
-        _dbContext.ReceptionistLeaveRequests.Add(leave);
-        await _dbContext.SaveChangesAsync(ct);
-        if (tx != null) await tx.CommitAsync(ct);
+            _dbContext.StaffLeaveRequests.Add(leave);
+            await _dbContext.SaveChangesAsync(ct);
+            if (tx != null) await tx.CommitAsync(ct);
 
-        // Notify Admins
-        var staffProfile = await _dbContext.StaffProfiles.FirstOrDefaultAsync(sp => sp.UserId == receptionistUserId, ct);
-        string staffName = staffProfile?.FullName ?? $"Lễ tân #{receptionistUserId}";
+            var staffProfile = await _dbContext.StaffProfiles.FirstOrDefaultAsync(sp => sp.UserId == receptionistUserId, ct);
+            string staffName = staffProfile?.FullName ?? $"Lễ tân #{receptionistUserId}";
 
-        var adminIds = await _dbContext.UserAccounts
-            .Where(u => u.Role == "SystemAdministrator" && u.Status == "Active")
-            .Select(u => u.UserId)
-            .ToListAsync(ct);
+            var adminIds = await _dbContext.UserAccounts
+                .Where(u => u.Role == UserRole.SystemAdministrator && u.Status == "Active")
+                .Select(u => u.UserId)
+                .ToListAsync(ct);
 
-        foreach (var adminId in adminIds)
-        {
-            await _notificationService.CreateNotificationAsync(
-                adminId,
-                null,
-                "LeaveRequest",
-                $"Đơn xin nghỉ phép mới từ {staffName}",
-                $"{staffName} đã gửi đơn xin nghỉ ({request.LeaveType}) từ {request.StartDate:dd/MM/yyyy} đến {request.EndDate:dd/MM/yyyy}. Lý do: {request.Reason}",
-                ct);
-        }
-
-        await _auditLogService.LogAsync(
-            receptionistUserId,
-            "CREATE_RECEPTIONIST_LEAVE_REQUEST",
-            "ReceptionistLeaveRequest",
-            leave.LeaveRequestId.ToString(),
-            null,
-            $"Type: {request.LeaveType}, Dates: {request.StartDate:yyyy-MM-dd} to {request.EndDate:yyyy-MM-dd}",
-            ct);
-
-        var dto = new ReceptionistLeaveRequestDto
-        {
-            LeaveRequestId = leave.LeaveRequestId,
-            ReceptionistUserId = leave.ReceptionistUserId,
-            ReceptionistName = staffName,
-            EmployeeCode = staffProfile?.EmployeeCode ?? $"EMP-{receptionistUserId}",
-            LeaveType = leave.LeaveType,
-            StartDate = leave.StartDate,
-            EndDate = leave.EndDate,
-            StartTime = leave.StartTime,
-            EndTime = leave.EndTime,
-            Reason = leave.Reason,
-            AdditionalNotes = leave.AdditionalNotes,
-            Status = leave.Status,
-            CreatedAt = leave.CreatedAt,
-            Periods = periods.Select(p => new ReceptionistLeavePeriodDto
+            foreach (var adminId in adminIds)
             {
-                PeriodId = p.PeriodId,
-                LeaveDate = p.LeaveDate,
-                StartTime = p.StartTime,
-                EndTime = p.EndTime,
-                Status = p.Status
-            }).ToList()
-        };
+                await _notificationService.CreateNotificationAsync(
+                    adminId,
+                    null,
+                    "LeaveRequest",
+                    $"Đơn xin nghỉ phép mới từ {staffName}",
+                    $"{staffName} đã gửi đơn xin nghỉ ({request.LeaveType}) từ {request.StartDate:dd/MM/yyyy} đến {request.EndDate:dd/MM/yyyy}. Lý do: {request.Reason}",
+                    ct);
+            }
 
-        return ApiResponse<ReceptionistLeaveRequestDto>.Ok(dto, "Gửi đơn xin nghỉ phép thành công. Đơn đang chờ Quản trị viên xét duyệt.");
-    }
-    catch
-    {
-        if (tx != null) await tx.RollbackAsync(ct);
-        throw;
-    }
+            await _auditLogService.LogAsync(
+                receptionistUserId,
+                "CREATE_RECEPTIONIST_LEAVE_REQUEST",
+                "StaffLeaveRequest",
+                leave.LeaveRequestId.ToString(),
+                null,
+                $"Type: {request.LeaveType}, Dates: {request.StartDate:yyyy-MM-dd} to {request.EndDate:yyyy-MM-dd}",
+                ct);
+
+            var dto = MapToDto(leave, staffName, null);
+            return ApiResponse<ReceptionistLeaveRequestDto>.Ok(dto, "Gửi đơn xin nghỉ phép thành công. Đơn đang chờ Quản trị viên xét duyệt.");
+        }
+        catch
+        {
+            if (tx != null) await tx.RollbackAsync(ct);
+            throw;
+        }
     }
 
     public async Task<ApiResponse<bool>> WithdrawLeaveRequestAsync(
@@ -210,16 +173,15 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
         long receptionistUserId,
         CancellationToken ct = default)
     {
-        var leave = await _dbContext.ReceptionistLeaveRequests
-            .Include(l => l.Periods)
-            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId, ct);
+        var leave = await _dbContext.StaffLeaveRequests
+            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId && l.StaffRole == UserRole.Receptionist, ct);
 
         if (leave == null)
         {
             return ApiResponse<bool>.Fail("Không tìm thấy đơn xin nghỉ phép.");
         }
 
-        if (leave.ReceptionistUserId != receptionistUserId)
+        if (leave.StaffUserId != receptionistUserId)
         {
             return ApiResponse<bool>.Fail("Bạn không có quyền rút đơn xin nghỉ của người khác.");
         }
@@ -231,17 +193,13 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
 
         leave.Status = "Withdrawn";
         leave.UpdatedAt = DateTime.UtcNow;
-        foreach (var p in leave.Periods)
-        {
-            p.Status = "Withdrawn";
-        }
 
         await _dbContext.SaveChangesAsync(ct);
 
         await _auditLogService.LogAsync(
             receptionistUserId,
             "WITHDRAW_LEAVE_REQUEST",
-            "ReceptionistLeaveRequest",
+            "StaffLeaveRequest",
             leaveRequestId.ToString(),
             "Pending",
             "Withdrawn by user",
@@ -254,18 +212,18 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
         ReceptionistLeaveFilterRequest request,
         CancellationToken ct = default)
     {
-        var query = _dbContext.ReceptionistLeaveRequests
+        var query = _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(l => l.ReceptionistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Include(l => l.ApprovedByUser)
+            .Include(l => l.StaffUser)
+                .ThenInclude(s => s.User)
+            .Include(l => l.ReviewedByUser)
                 .ThenInclude(u => u!.StaffProfile)
-            .Include(l => l.Periods)
+            .Where(l => l.StaffRole == UserRole.Receptionist)
             .AsQueryable();
 
         if (request.ReceptionistUserId.HasValue && request.ReceptionistUserId.Value > 0)
         {
-            query = query.Where(l => l.ReceptionistUserId == request.ReceptionistUserId.Value);
+            query = query.Where(l => l.StaffUserId == request.ReceptionistUserId.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(request.Status))
@@ -287,34 +245,10 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync(ct);
 
-        var dtos = leaves.Select(l => new ReceptionistLeaveRequestDto
-        {
-            LeaveRequestId = l.LeaveRequestId,
-            ReceptionistUserId = l.ReceptionistUserId,
-            ReceptionistName = l.ReceptionistUser.StaffProfile != null ? l.ReceptionistUser.StaffProfile.FullName : (l.ReceptionistUser.Email ?? "Lễ tân"),
-            EmployeeCode = l.ReceptionistUser.StaffProfile != null ? l.ReceptionistUser.StaffProfile.EmployeeCode : $"EMP-{l.ReceptionistUserId}",
-            LeaveType = l.LeaveType,
-            StartDate = l.StartDate,
-            EndDate = l.EndDate,
-            StartTime = l.StartTime,
-            EndTime = l.EndTime,
-            Reason = l.Reason,
-            AdditionalNotes = l.AdditionalNotes,
-            Status = l.Status,
-            RejectionReason = l.RejectionReason,
-            ApprovedBy = l.ApprovedBy,
-            ApprovedByName = l.ApprovedByUser?.StaffProfile?.FullName ?? l.ApprovedByUser?.Email,
-            ApprovedAt = l.ApprovedAt,
-            CreatedAt = l.CreatedAt,
-            Periods = l.Periods.Select(p => new ReceptionistLeavePeriodDto
-            {
-                PeriodId = p.PeriodId,
-                LeaveDate = p.LeaveDate,
-                StartTime = p.StartTime,
-                EndTime = p.EndTime,
-                Status = p.Status
-            }).ToList()
-        }).ToList();
+        var dtos = leaves.Select(l => MapToDto(
+            l,
+            l.StaffUser?.FullName ?? l.StaffUser?.User?.Email ?? "Lễ tân",
+            l.ReviewedByUser?.StaffProfile?.FullName ?? l.ReviewedByUser?.Email)).ToList();
 
         return ApiResponse<List<ReceptionistLeaveRequestDto>>.Ok(dtos);
     }
@@ -333,10 +267,9 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
         long leaveRequestId,
         CancellationToken ct = default)
     {
-        var leave = await _dbContext.ReceptionistLeaveRequests
+        var leave = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(l => l.Periods)
-            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId, ct);
+            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId && l.StaffRole == UserRole.Receptionist, ct);
 
         if (leave == null)
         {
@@ -349,12 +282,10 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
 
         for (var date = leave.StartDate; date <= leave.EndDate; date = date.AddDays(1))
         {
-            // Check RULE 1
-            var (rule1Allowed, currentCount, rule1Msg) = await _coverageService.ValidateDailyMaxLeavesAsync(date, leave.ReceptionistUserId, ct);
+            var (rule1Allowed, currentCount, rule1Msg) = await _coverageService.ValidateDailyMaxLeavesAsync(date, leave.StaffUserId, ct);
             int postCount = rule1Allowed ? (currentCount + 1) : currentCount;
 
-            // Check RULE 2
-            var shiftStatuses = await _coverageService.CheckShiftCoverageForDateAsync(date, leave.ReceptionistUserId, leave.StartTime, leave.EndTime, ct);
+            var shiftStatuses = await _coverageService.CheckShiftCoverageForDateAsync(date, leave.StaffUserId, leave.StartTime, leave.EndTime, ct);
             bool hasUnderstaffed = shiftStatuses.Any(s => s.IsUnderstaffed);
 
             if (!rule1Allowed)
@@ -396,10 +327,8 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
         long adminUserId,
         CancellationToken ct = default)
     {
-        // 1. Lock across all dates in the leave request
-        var leave = await _dbContext.ReceptionistLeaveRequests
-            .Include(l => l.Periods)
-            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId, ct);
+        var leave = await _dbContext.StaffLeaveRequests
+            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId && l.StaffRole == UserRole.Receptionist, ct);
 
         if (leave == null)
         {
@@ -427,10 +356,8 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
 
         try
         {
-            // Revalidate leave status within lock
-            var freshLeave = await _dbContext.ReceptionistLeaveRequests
-                .Include(l => l.Periods)
-                .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId, ct);
+            var freshLeave = await _dbContext.StaffLeaveRequests
+                .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId && l.StaffRole == UserRole.Receptionist, ct);
 
             if (freshLeave == null || freshLeave.Status != "Pending")
             {
@@ -438,27 +365,17 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
                 return ApiResponse<bool>.Fail("Đơn xin nghỉ phép đã được thay đổi hoặc xử lý bởi người khác.");
             }
 
-            bool isLockedPeriod = await _dbContext.IsPeriodLockedAsync(freshLeave.StartDate, freshLeave.EndDate, ct);
-            if (isLockedPeriod)
-            {
-                if (tx != null) await tx.RollbackAsync(ct);
-                return ApiResponse<bool>.Fail("Không thể duyệt nghỉ phép hồi tố trong kỳ công đã được chốt sổ. Vui lòng mở lại kỳ công trước khi phê duyệt.");
-            }
-
-            // Multi-day ALL-OR-NOTHING validation
             var violationReasons = new List<string>();
 
             for (var date = freshLeave.StartDate; date <= freshLeave.EndDate; date = date.AddDays(1))
             {
-                // RULE 1: Max 2 distinct receptionists on leave per day
-                var (rule1Valid, currentApproved, rule1Msg) = await _coverageService.ValidateDailyMaxLeavesAsync(date, freshLeave.ReceptionistUserId, ct);
+                var (rule1Valid, currentApproved, _) = await _coverageService.ValidateDailyMaxLeavesAsync(date, freshLeave.StaffUserId, ct);
                 if (!rule1Valid)
                 {
                     violationReasons.Add($"Ngày {date:dd/MM/yyyy}: Vi phạm giới hạn tối đa 2 lễ tân nghỉ/ngày (Hiện đã có {currentApproved} người được duyệt).");
                 }
 
-                // RULE 2: Min 2 available per shift
-                var shiftsCoverage = await _coverageService.CheckShiftCoverageForDateAsync(date, freshLeave.ReceptionistUserId, freshLeave.StartTime, freshLeave.EndTime, ct);
+                var shiftsCoverage = await _coverageService.CheckShiftCoverageForDateAsync(date, freshLeave.StaffUserId, freshLeave.StartTime, freshLeave.EndTime, ct);
                 var understaffed = shiftsCoverage.Where(s => s.IsUnderstaffed).ToList();
                 if (understaffed.Any())
                 {
@@ -474,23 +391,16 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
                 return ApiResponse<bool>.Fail(fullMsg);
             }
 
-            // Mark Approved
             freshLeave.Status = "Approved";
-            freshLeave.ApprovedBy = adminUserId;
-            freshLeave.ApprovedAt = DateTime.UtcNow;
+            freshLeave.ReviewedByUserId = adminUserId;
+            freshLeave.ReviewedAt = DateTime.UtcNow;
             freshLeave.UpdatedAt = DateTime.UtcNow;
-
-            foreach (var p in freshLeave.Periods)
-            {
-                p.Status = "Approved";
-            }
 
             await _dbContext.SaveChangesAsync(ct);
             if (tx != null) await tx.CommitAsync(ct);
 
-            // Send notification to Receptionist
             await _notificationService.CreateNotificationAsync(
-                freshLeave.ReceptionistUserId,
+                freshLeave.StaffUserId,
                 null,
                 "LeaveApproved",
                 "Đơn xin nghỉ phép đã được phê duyệt",
@@ -500,7 +410,7 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
             await _auditLogService.LogAsync(
                 adminUserId,
                 "APPROVE_RECEPTIONIST_LEAVE",
-                "ReceptionistLeaveRequest",
+                "StaffLeaveRequest",
                 leaveRequestId.ToString(),
                 "Pending",
                 "Approved",
@@ -529,9 +439,8 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
         var lockKeys = new List<string> { SqlAppLockHelper.ReceptionistLeaveKey(leaveRequestId) };
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
 
-        var leave = await _dbContext.ReceptionistLeaveRequests
-            .Include(l => l.Periods)
-            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId, ct);
+        var leave = await _dbContext.StaffLeaveRequests
+            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId && l.StaffRole == UserRole.Receptionist, ct);
 
         if (leave == null)
         {
@@ -545,20 +454,14 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
 
         leave.Status = "Rejected";
         leave.RejectionReason = rejectionReason.Trim();
-        leave.ApprovedBy = adminUserId;
-        leave.ApprovedAt = DateTime.UtcNow;
+        leave.ReviewedByUserId = adminUserId;
+        leave.ReviewedAt = DateTime.UtcNow;
         leave.UpdatedAt = DateTime.UtcNow;
-
-        foreach (var p in leave.Periods)
-        {
-            p.Status = "Rejected";
-        }
 
         await _dbContext.SaveChangesAsync(ct);
 
-        // Notify Receptionist
         await _notificationService.CreateNotificationAsync(
-            leave.ReceptionistUserId,
+            leave.StaffUserId,
             null,
             "LeaveRejected",
             "Đơn xin nghỉ phép đã bị từ chối",
@@ -568,7 +471,7 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
         await _auditLogService.LogAsync(
             adminUserId,
             "REJECT_RECEPTIONIST_LEAVE",
-            "ReceptionistLeaveRequest",
+            "StaffLeaveRequest",
             leaveRequestId.ToString(),
             "Pending",
             $"Rejected with reason: {rejectionReason}",
@@ -591,9 +494,8 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
         var lockKeys = new List<string> { SqlAppLockHelper.ReceptionistLeaveKey(leaveRequestId) };
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
 
-        var leave = await _dbContext.ReceptionistLeaveRequests
-            .Include(l => l.Periods)
-            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId, ct);
+        var leave = await _dbContext.StaffLeaveRequests
+            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId && l.StaffRole == UserRole.Receptionist, ct);
 
         if (leave == null)
         {
@@ -605,25 +507,14 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
             return ApiResponse<bool>.Fail("Chỉ có thể hủy đơn nghỉ phép đã được phê duyệt.");
         }
 
-        bool isCancelLocked = await _dbContext.IsPeriodLockedAsync(leave.StartDate, leave.EndDate, ct);
-        if (isCancelLocked)
-        {
-            return ApiResponse<bool>.Fail("Không thể hủy nghỉ phép trong kỳ công đã được chốt sổ. Vui lòng mở lại kỳ công trước.");
-        }
-
         leave.Status = "Cancelled";
         leave.RejectionReason = $"Hủy sau khi duyệt: {reason.Trim()}";
         leave.UpdatedAt = DateTime.UtcNow;
 
-        foreach (var p in leave.Periods)
-        {
-            p.Status = "Cancelled";
-        }
-
         await _dbContext.SaveChangesAsync(ct);
 
         await _notificationService.CreateNotificationAsync(
-            leave.ReceptionistUserId,
+            leave.StaffUserId,
             null,
             "LeaveCancelled",
             "Lịch nghỉ phép đã được hủy bởi Quản trị viên",
@@ -633,12 +524,51 @@ public class ReceptionistLeaveService : IReceptionistLeaveService
         await _auditLogService.LogAsync(
             adminUserId,
             "CANCEL_APPROVED_LEAVE",
-            "ReceptionistLeaveRequest",
+            "StaffLeaveRequest",
             leaveRequestId.ToString(),
             "Approved",
             $"Cancelled: {reason}",
             ct);
 
         return ApiResponse<bool>.Ok(true, "Đã hủy lịch nghỉ phép thành công.");
+    }
+
+    private static ReceptionistLeaveRequestDto MapToDto(StaffLeaveRequest l, string staffName, string? approvedByName)
+    {
+        var periods = new List<ReceptionistLeavePeriodDto>();
+        long seq = 1;
+        for (var d = l.StartDate; d <= l.EndDate; d = d.AddDays(1))
+        {
+            periods.Add(new ReceptionistLeavePeriodDto
+            {
+                PeriodId = l.LeaveRequestId * 100 + seq++,
+                LeaveDate = d,
+                StartTime = l.StartTime,
+                EndTime = l.EndTime,
+                Status = l.Status
+            });
+        }
+
+        return new ReceptionistLeaveRequestDto
+        {
+            LeaveRequestId = l.LeaveRequestId,
+            ReceptionistUserId = l.StaffUserId,
+            ReceptionistName = staffName,
+            EmployeeCode = $"EMP-{l.StaffUserId}",
+            LeaveType = l.LeaveType,
+            StartDate = l.StartDate,
+            EndDate = l.EndDate,
+            StartTime = l.StartTime,
+            EndTime = l.EndTime,
+            Reason = l.Reason,
+            AdditionalNotes = null,
+            Status = l.Status,
+            RejectionReason = l.RejectionReason,
+            ApprovedBy = l.ReviewedByUserId,
+            ApprovedByName = approvedByName,
+            ApprovedAt = l.ReviewedAt,
+            CreatedAt = l.CreatedAt,
+            Periods = periods
+        };
     }
 }

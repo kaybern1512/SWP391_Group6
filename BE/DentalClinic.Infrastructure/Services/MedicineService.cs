@@ -1,13 +1,14 @@
-﻿using DentalClinic.Domain.Common;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Features.Medicines.DTOs;
+using DentalClinic.Domain.Common;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace DentalClinic.Infrastructure.Services;
 
@@ -23,7 +24,6 @@ public class MedicineService : IMedicineService
     public async Task<List<MedicineDto>> GetMedicinesAsync(MedicineSearchFilter filter)
     {
         var query = _context.Medicines
-            .Include(m => m.MedicineBatches)
             .AsNoTracking()
             .AsQueryable();
 
@@ -38,11 +38,9 @@ public class MedicineService : IMedicineService
 
         if (!string.IsNullOrWhiteSpace(filter.Status))
         {
-            query = query.Where(m => m.Status == filter.Status);
+            bool activeFilter = string.Equals(filter.Status.Trim(), "Active", StringComparison.OrdinalIgnoreCase);
+            query = query.Where(m => m.IsActive == activeFilter);
         }
-
-        var today = ClinicTimeHelper.TodayDateOnly;
-        var nearExpiryThreshold = today.AddDays(60);
 
         var list = await query
             .OrderBy(m => m.MedicineName)
@@ -52,19 +50,17 @@ public class MedicineService : IMedicineService
                 MedicineCode = m.MedicineCode,
                 MedicineName = m.MedicineName,
                 ActiveIngredient = m.ActiveIngredient,
-                Concentration = m.Concentration,
-                DosageForm = m.DosageForm,
+                Concentration = null,
+                DosageForm = null,
                 Unit = m.Unit,
                 UnitPrice = m.UnitPrice,
                 MinimumStockAlert = m.MinimumStockAlert,
                 UsageInstructions = m.UsageInstructions,
-                Status = m.Status,
+                Status = m.IsActive ? "Active" : "Inactive",
                 CreatedAt = m.CreatedAt,
-                TotalAvailableStock = m.MedicineBatches
-                    .Where(b => b.Status == "Available" && b.ExpiryDate > today)
-                    .Sum(b => b.QuantityAvailable),
-                ActiveBatchesCount = m.MedicineBatches.Count(b => b.Status == "Available" && b.QuantityAvailable > 0),
-                HasNearExpiryBatch = m.MedicineBatches.Any(b => b.Status == "Available" && b.QuantityAvailable > 0 && b.ExpiryDate <= nearExpiryThreshold && b.ExpiryDate > today)
+                TotalAvailableStock = m.StockQuantity,
+                ActiveBatchesCount = m.StockQuantity > 0 ? 1 : 0,
+                HasNearExpiryBatch = false
             })
             .ToListAsync();
 
@@ -83,62 +79,29 @@ public class MedicineService : IMedicineService
 
     public async Task<MedicineDetailDto?> GetMedicineByIdAsync(long id)
     {
-        var today = ClinicTimeHelper.TodayDateOnly;
-        var nearExpiryThreshold = today.AddDays(60);
-
         var medicine = await _context.Medicines
-            .Include(m => m.MedicineBatches)
-                .ThenInclude(b => b.StockTransactions)
-                    .ThenInclude(t => t.PerformedByUser).ThenInclude(u => u.StaffProfile)
             .AsNoTracking()
             .FirstOrDefaultAsync(m => m.MedicineId == id);
 
         if (medicine == null) return null;
 
-        var totalAvailable = medicine.MedicineBatches
-            .Where(b => b.Status == "Available" && b.ExpiryDate > today)
-            .Sum(b => b.QuantityAvailable);
-
-        var batchesDto = medicine.MedicineBatches
-            .OrderBy(b => b.ExpiryDate)
-            .Select(b => new MedicineBatchDto
+        var batchesDto = new List<MedicineBatchDto>
+        {
+            new MedicineBatchDto
             {
-                MedicineBatchId = b.MedicineBatchId,
-                MedicineId = b.MedicineId,
-                MedicineName = medicine.MedicineName,
-                MedicineCode = medicine.MedicineCode,
-                BatchNumber = b.BatchNumber,
-                ExpiryDate = b.ExpiryDate,
-                QuantityReceived = b.QuantityReceived,
-                QuantityAvailable = b.QuantityAvailable,
-                CostPrice = b.CostPrice,
-                Status = b.Status,
-                ReceivedDate = b.ReceivedDate
-            })
-            .ToList();
-
-        var recentTransactions = medicine.MedicineBatches
-            .SelectMany(b => b.StockTransactions.Select(t => new MedicineStockTransactionDto
-            {
-                TransactionId = t.TransactionId,
-                MedicineBatchId = t.MedicineBatchId,
-                BatchNumber = b.BatchNumber,
+                MedicineBatchId = medicine.MedicineId,
                 MedicineId = medicine.MedicineId,
                 MedicineName = medicine.MedicineName,
                 MedicineCode = medicine.MedicineCode,
-                TransactionType = t.TransactionType,
-                Quantity = t.Quantity,
-                QuantityBefore = t.QuantityBefore,
-                QuantityAfter = t.QuantityAfter,
-                Reason = t.Reason,
-                PerformedByUserId = t.PerformedByUserId,
-                PerformedByUserName = t.PerformedByUser != null ? (t.PerformedByUser.StaffProfile != null ? t.PerformedByUser.StaffProfile.FullName : (t.PerformedByUser.Email ?? "Quản trị viên")) : "Hệ thống",
-                ReferenceCode = t.ReferenceCode,
-                CreatedAt = t.CreatedAt
-            }))
-            .OrderByDescending(t => t.CreatedAt)
-            .Take(20)
-            .ToList();
+                BatchNumber = $"STOCK-{medicine.MedicineCode}",
+                ExpiryDate = ClinicTimeHelper.TodayDateOnly.AddYears(1),
+                QuantityReceived = medicine.StockQuantity,
+                QuantityAvailable = medicine.StockQuantity,
+                CostPrice = medicine.UnitPrice,
+                Status = medicine.StockQuantity > 0 ? "Available" : "Depleted",
+                ReceivedDate = medicine.CreatedAt
+            }
+        };
 
         return new MedicineDetailDto
         {
@@ -146,19 +109,19 @@ public class MedicineService : IMedicineService
             MedicineCode = medicine.MedicineCode,
             MedicineName = medicine.MedicineName,
             ActiveIngredient = medicine.ActiveIngredient,
-            Concentration = medicine.Concentration,
-            DosageForm = medicine.DosageForm,
+            Concentration = null,
+            DosageForm = null,
             Unit = medicine.Unit,
             UnitPrice = medicine.UnitPrice,
             MinimumStockAlert = medicine.MinimumStockAlert,
             UsageInstructions = medicine.UsageInstructions,
-            Status = medicine.Status,
+            Status = medicine.IsActive ? "Active" : "Inactive",
             CreatedAt = medicine.CreatedAt,
-            TotalAvailableStock = totalAvailable,
-            ActiveBatchesCount = medicine.MedicineBatches.Count(b => b.Status == "Available" && b.QuantityAvailable > 0),
-            HasNearExpiryBatch = medicine.MedicineBatches.Any(b => b.Status == "Available" && b.QuantityAvailable > 0 && b.ExpiryDate <= nearExpiryThreshold && b.ExpiryDate > today),
+            TotalAvailableStock = medicine.StockQuantity,
+            ActiveBatchesCount = medicine.StockQuantity > 0 ? 1 : 0,
+            HasNearExpiryBatch = false,
             Batches = batchesDto,
-            RecentTransactions = recentTransactions
+            RecentTransactions = new List<MedicineStockTransactionDto>()
         };
     }
 
@@ -186,13 +149,12 @@ public class MedicineService : IMedicineService
             MedicineCode = codeNormalized,
             MedicineName = request.MedicineName.Trim(),
             ActiveIngredient = request.ActiveIngredient?.Trim(),
-            Concentration = request.Concentration?.Trim(),
-            DosageForm = request.DosageForm?.Trim(),
             Unit = request.Unit.Trim(),
             UnitPrice = request.UnitPrice,
-            MinimumStockAlert = request.MinimumStockAlert >= 0 ? request.MinimumStockAlert : 20,
+            StockQuantity = 0,
+            MinimumStockAlert = request.MinimumStockAlert >= 0 ? request.MinimumStockAlert : 10,
             UsageInstructions = request.UsageInstructions?.Trim(),
-            Status = "Active",
+            IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -205,15 +167,15 @@ public class MedicineService : IMedicineService
             MedicineCode = medicine.MedicineCode,
             MedicineName = medicine.MedicineName,
             ActiveIngredient = medicine.ActiveIngredient,
-            Concentration = medicine.Concentration,
-            DosageForm = medicine.DosageForm,
+            Concentration = request.Concentration?.Trim(),
+            DosageForm = request.DosageForm?.Trim(),
             Unit = medicine.Unit,
             UnitPrice = medicine.UnitPrice,
             MinimumStockAlert = medicine.MinimumStockAlert,
             UsageInstructions = medicine.UsageInstructions,
-            Status = medicine.Status,
+            Status = "Active",
             CreatedAt = medicine.CreatedAt,
-            TotalAvailableStock = 0,
+            TotalAvailableStock = medicine.StockQuantity,
             ActiveBatchesCount = 0
         };
     }
@@ -221,7 +183,6 @@ public class MedicineService : IMedicineService
     public async Task<MedicineDto> UpdateMedicineAsync(long id, UpdateMedicineRequest request, long userId)
     {
         var medicine = await _context.Medicines
-            .Include(m => m.MedicineBatches)
             .FirstOrDefaultAsync(m => m.MedicineId == id);
 
         if (medicine == null)
@@ -238,39 +199,34 @@ public class MedicineService : IMedicineService
 
         medicine.MedicineName = request.MedicineName.Trim();
         medicine.ActiveIngredient = request.ActiveIngredient?.Trim();
-        medicine.Concentration = request.Concentration?.Trim();
-        medicine.DosageForm = request.DosageForm?.Trim();
         medicine.Unit = request.Unit.Trim();
         medicine.UnitPrice = request.UnitPrice;
-        medicine.MinimumStockAlert = request.MinimumStockAlert >= 0 ? request.MinimumStockAlert : 20;
+        medicine.MinimumStockAlert = request.MinimumStockAlert >= 0 ? request.MinimumStockAlert : 10;
         medicine.UsageInstructions = request.UsageInstructions?.Trim();
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            medicine.Status = request.Status;
+            medicine.IsActive = string.Equals(request.Status.Trim(), "Active", StringComparison.OrdinalIgnoreCase);
         }
         medicine.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
-        var today = ClinicTimeHelper.TodayDateOnly;
         return new MedicineDto
         {
             MedicineId = medicine.MedicineId,
             MedicineCode = medicine.MedicineCode,
             MedicineName = medicine.MedicineName,
             ActiveIngredient = medicine.ActiveIngredient,
-            Concentration = medicine.Concentration,
-            DosageForm = medicine.DosageForm,
+            Concentration = request.Concentration?.Trim(),
+            DosageForm = request.DosageForm?.Trim(),
             Unit = medicine.Unit,
             UnitPrice = medicine.UnitPrice,
             MinimumStockAlert = medicine.MinimumStockAlert,
             UsageInstructions = medicine.UsageInstructions,
-            Status = medicine.Status,
+            Status = medicine.IsActive ? "Active" : "Inactive",
             CreatedAt = medicine.CreatedAt,
-            TotalAvailableStock = medicine.MedicineBatches
-                .Where(b => b.Status == "Available" && b.ExpiryDate > today)
-                .Sum(b => b.QuantityAvailable),
-            ActiveBatchesCount = medicine.MedicineBatches.Count(b => b.Status == "Available" && b.QuantityAvailable > 0)
+            TotalAvailableStock = medicine.StockQuantity,
+            ActiveBatchesCount = medicine.StockQuantity > 0 ? 1 : 0
         };
     }
 
@@ -279,7 +235,7 @@ public class MedicineService : IMedicineService
         var medicine = await _context.Medicines.FindAsync(id);
         if (medicine == null) return false;
 
-        medicine.Status = status;
+        medicine.IsActive = string.Equals(status?.Trim(), "Active", StringComparison.OrdinalIgnoreCase);
         medicine.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return true;
@@ -287,27 +243,26 @@ public class MedicineService : IMedicineService
 
     public async Task<List<MedicineBatchDto>> GetBatchesByMedicineIdAsync(long medicineId)
     {
-        var medicine = await _context.Medicines.FindAsync(medicineId);
+        var medicine = await _context.Medicines.AsNoTracking().FirstOrDefaultAsync(m => m.MedicineId == medicineId);
         if (medicine == null) return new List<MedicineBatchDto>();
 
-        return await _context.MedicineBatches
-            .Where(b => b.MedicineId == medicineId)
-            .OrderBy(b => b.ExpiryDate)
-            .Select(b => new MedicineBatchDto
+        return new List<MedicineBatchDto>
+        {
+            new MedicineBatchDto
             {
-                MedicineBatchId = b.MedicineBatchId,
-                MedicineId = b.MedicineId,
+                MedicineBatchId = medicine.MedicineId,
+                MedicineId = medicine.MedicineId,
                 MedicineName = medicine.MedicineName,
                 MedicineCode = medicine.MedicineCode,
-                BatchNumber = b.BatchNumber,
-                ExpiryDate = b.ExpiryDate,
-                QuantityReceived = b.QuantityReceived,
-                QuantityAvailable = b.QuantityAvailable,
-                CostPrice = b.CostPrice,
-                Status = b.Status,
-                ReceivedDate = b.ReceivedDate
-            })
-            .ToListAsync();
+                BatchNumber = $"STOCK-{medicine.MedicineCode}",
+                ExpiryDate = ClinicTimeHelper.TodayDateOnly.AddYears(1),
+                QuantityReceived = medicine.StockQuantity,
+                QuantityAvailable = medicine.StockQuantity,
+                CostPrice = medicine.UnitPrice,
+                Status = medicine.StockQuantity > 0 ? "Available" : "Depleted",
+                ReceivedDate = medicine.CreatedAt
+            }
+        };
     }
 
     public async Task<MedicineBatchDto> ImportBatchAsync(ImportMedicineBatchRequest request, long userId)
@@ -316,82 +271,34 @@ public class MedicineService : IMedicineService
         if (medicine == null)
             throw new KeyNotFoundException($"Không tìm thấy thuốc với ID {request.MedicineId}.");
 
-        if (string.IsNullOrWhiteSpace(request.BatchNumber))
-            throw new ArgumentException("Số lô không được để trống.", nameof(request.BatchNumber));
-
         if (request.Quantity <= 0)
             throw new ArgumentException("Số lượng nhập kho phải lớn hơn 0.", nameof(request.Quantity));
 
-        if (request.CostPrice < 0)
-            throw new ArgumentException("Giá vốn nhập không được âm.", nameof(request.CostPrice));
-
-        var today = ClinicTimeHelper.TodayDateOnly;
-        if (request.ExpiryDate <= today)
-            throw new ArgumentException("Hạn sử dụng của lô thuốc phải ở tương lai.", nameof(request.ExpiryDate));
-
-        var batchNumberNormalized = request.BatchNumber.Trim().ToUpper();
-        var existingBatch = await _context.MedicineBatches
-            .FirstOrDefaultAsync(b => b.MedicineId == request.MedicineId && b.BatchNumber.ToUpper() == batchNumberNormalized);
-
-        if (existingBatch != null)
-            throw new InvalidOperationException($"Số lô '{batchNumberNormalized}' đã tồn tại cho thuốc này.");
-
-        var batch = new MedicineBatch
-        {
-            MedicineId = request.MedicineId,
-            BatchNumber = batchNumberNormalized,
-            ExpiryDate = request.ExpiryDate,
-            QuantityReceived = request.Quantity,
-            QuantityAvailable = request.Quantity,
-            CostPrice = request.CostPrice,
-            Status = "Available",
-            ReceivedDate = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.MedicineBatches.Add(batch);
-        await _context.SaveChangesAsync();
-
-        var transaction = new MedicineStockTransaction
-        {
-            MedicineBatchId = batch.MedicineBatchId,
-            TransactionType = "Import",
-            Quantity = request.Quantity,
-            QuantityBefore = 0,
-            QuantityAfter = request.Quantity,
-            Reason = string.IsNullOrWhiteSpace(request.Reason) ? "Nhập kho theo lô mới" : request.Reason.Trim(),
-            PerformedByUserId = userId,
-            ReferenceCode = request.ReferenceCode?.Trim(),
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.MedicineStockTransactions.Add(transaction);
+        medicine.StockQuantity += request.Quantity;
+        medicine.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
         return new MedicineBatchDto
         {
-            MedicineBatchId = batch.MedicineBatchId,
-            MedicineId = batch.MedicineId,
+            MedicineBatchId = medicine.MedicineId,
+            MedicineId = medicine.MedicineId,
             MedicineName = medicine.MedicineName,
             MedicineCode = medicine.MedicineCode,
-            BatchNumber = batch.BatchNumber,
-            ExpiryDate = batch.ExpiryDate,
-            QuantityReceived = batch.QuantityReceived,
-            QuantityAvailable = batch.QuantityAvailable,
-            CostPrice = batch.CostPrice,
-            Status = batch.Status,
-            ReceivedDate = batch.ReceivedDate
+            BatchNumber = string.IsNullOrWhiteSpace(request.BatchNumber) ? $"STOCK-{medicine.MedicineCode}" : request.BatchNumber.Trim().ToUpper(),
+            ExpiryDate = request.ExpiryDate,
+            QuantityReceived = request.Quantity,
+            QuantityAvailable = medicine.StockQuantity,
+            CostPrice = request.CostPrice,
+            Status = "Available",
+            ReceivedDate = DateTime.UtcNow
         };
     }
 
     public async Task<MedicineStockTransactionDto> AdjustStockAsync(StockAdjustmentRequest request, long userId)
     {
-        var batch = await _context.MedicineBatches
-            .Include(b => b.Medicine)
-            .FirstOrDefaultAsync(b => b.MedicineBatchId == request.MedicineBatchId);
-
-        if (batch == null)
-            throw new KeyNotFoundException($"Không tìm thấy lô thuốc với ID {request.MedicineBatchId}.");
+        var medicine = await _context.Medicines.FirstOrDefaultAsync(m => m.MedicineId == request.MedicineBatchId);
+        if (medicine == null)
+            throw new KeyNotFoundException($"Không tìm thấy thuốc với ID {request.MedicineBatchId}.");
 
         if (request.Quantity <= 0)
             throw new ArgumentException("Số lượng điều chỉnh phải lớn hơn 0.", nameof(request.Quantity));
@@ -399,179 +306,124 @@ public class MedicineService : IMedicineService
         if (string.IsNullOrWhiteSpace(request.Reason))
             throw new ArgumentException("Lý do điều chỉnh kiểm kê là bắt buộc để truy vết.", nameof(request.Reason));
 
-        var qtyBefore = batch.QuantityAvailable;
+        var qtyBefore = medicine.StockQuantity;
         int qtyAfter;
         string txType;
 
         if (string.Equals(request.AdjustmentType, "Decrease", StringComparison.OrdinalIgnoreCase))
         {
             if (request.Quantity > qtyBefore)
-                throw new InvalidOperationException($"Số lượng điều chỉnh giảm ({request.Quantity}) vượt quá số lượng tồn khả dụng hiện tại ({qtyBefore}). Không cho phép tồn âm.");
+                throw new InvalidOperationException($"Số lượng điều chỉnh giảm ({request.Quantity}) vượt quá số lượng tồn khả dụng hiện tại ({qtyBefore}).");
 
             qtyAfter = qtyBefore - request.Quantity;
-            batch.QuantityAvailable = qtyAfter;
-            if (qtyAfter == 0)
-            {
-                batch.Status = "Depleted";
-            }
             txType = "AdjustmentDecrease";
         }
-        else // Increase
+        else
         {
             qtyAfter = qtyBefore + request.Quantity;
-            batch.QuantityAvailable = qtyAfter;
-            batch.QuantityReceived += request.Quantity;
-            if (batch.Status == "Depleted")
-            {
-                batch.Status = "Available";
-            }
             txType = "AdjustmentIncrease";
         }
 
-        batch.UpdatedAt = DateTime.UtcNow;
-
-        var transaction = new MedicineStockTransaction
-        {
-            MedicineBatchId = batch.MedicineBatchId,
-            TransactionType = txType,
-            Quantity = request.Quantity,
-            QuantityBefore = qtyBefore,
-            QuantityAfter = qtyAfter,
-            Reason = request.Reason.Trim(),
-            PerformedByUserId = userId,
-            ReferenceCode = $"ADJ-{DateTime.UtcNow:yyyyMMddHHmmss}",
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.MedicineStockTransactions.Add(transaction);
+        medicine.StockQuantity = qtyAfter;
+        medicine.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
         var user = await _context.UserAccounts.Include(u => u.StaffProfile).FirstOrDefaultAsync(u => u.UserId == userId);
 
         return new MedicineStockTransactionDto
         {
-            TransactionId = transaction.TransactionId,
-            MedicineBatchId = batch.MedicineBatchId,
-            BatchNumber = batch.BatchNumber,
-            MedicineId = batch.MedicineId,
-            MedicineName = batch.Medicine.MedicineName,
-            MedicineCode = batch.Medicine.MedicineCode,
-            TransactionType = transaction.TransactionType,
-            Quantity = transaction.Quantity,
-            QuantityBefore = transaction.QuantityBefore,
-            QuantityAfter = transaction.QuantityAfter,
-            Reason = transaction.Reason,
-            PerformedByUserId = transaction.PerformedByUserId,
+            TransactionId = medicine.MedicineId,
+            MedicineBatchId = medicine.MedicineId,
+            BatchNumber = $"STOCK-{medicine.MedicineCode}",
+            MedicineId = medicine.MedicineId,
+            MedicineName = medicine.MedicineName,
+            MedicineCode = medicine.MedicineCode,
+            TransactionType = txType,
+            Quantity = request.Quantity,
+            QuantityBefore = qtyBefore,
+            QuantityAfter = qtyAfter,
+            Reason = request.Reason.Trim(),
+            PerformedByUserId = userId,
             PerformedByUserName = user?.StaffProfile?.FullName ?? user?.Email ?? "Quản trị viên",
-            ReferenceCode = transaction.ReferenceCode,
-            CreatedAt = transaction.CreatedAt
+            ReferenceCode = $"ADJ-{DateTime.UtcNow:yyyyMMddHHmmss}",
+            CreatedAt = DateTime.UtcNow
         };
     }
 
     public async Task<List<MedicineStockTransactionDto>> GetStockTransactionsAsync(long? medicineBatchId, long? medicineId, int page, int pageSize)
     {
-        var query = _context.MedicineStockTransactions
-            .Include(t => t.MedicineBatch)
-                .ThenInclude(b => b.Medicine)
-            .Include(t => t.PerformedByUser).ThenInclude(u => u.StaffProfile)
+        var query = _context.PrescriptionItems
             .AsNoTracking()
-            .AsQueryable();
+            .Include(pi => pi.Medicine)
+            .Include(pi => pi.DispensedByDentist)
+                .ThenInclude(d => d!.StaffProfile)
+            .Include(pi => pi.Prescription)
+            .Where(pi => pi.QuantityDispensed > 0);
 
-        if (medicineBatchId.HasValue)
+        var targetMedicineId = medicineId ?? medicineBatchId;
+        if (targetMedicineId.HasValue)
         {
-            query = query.Where(t => t.MedicineBatchId == medicineBatchId.Value);
-        }
-
-        if (medicineId.HasValue)
-        {
-            query = query.Where(t => t.MedicineBatch.MedicineId == medicineId.Value);
+            query = query.Where(pi => pi.MedicineId == targetMedicineId.Value);
         }
 
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 50;
 
         return await query
-            .OrderByDescending(t => t.CreatedAt)
+            .OrderByDescending(pi => pi.DispensedAt ?? pi.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(t => new MedicineStockTransactionDto
+            .Select(pi => new MedicineStockTransactionDto
             {
-                TransactionId = t.TransactionId,
-                MedicineBatchId = t.MedicineBatchId,
-                BatchNumber = t.MedicineBatch.BatchNumber,
-                MedicineId = t.MedicineBatch.MedicineId,
-                MedicineName = t.MedicineBatch.Medicine.MedicineName,
-                MedicineCode = t.MedicineBatch.Medicine.MedicineCode,
-                TransactionType = t.TransactionType,
-                Quantity = t.Quantity,
-                QuantityBefore = t.QuantityBefore,
-                QuantityAfter = t.QuantityAfter,
-                Reason = t.Reason,
-                PerformedByUserId = t.PerformedByUserId,
-                PerformedByUserName = t.PerformedByUser != null ? (t.PerformedByUser.StaffProfile != null ? t.PerformedByUser.StaffProfile.FullName : (t.PerformedByUser.Email ?? "Quản trị viên")) : "Hệ thống",
-                ReferenceCode = t.ReferenceCode,
-                CreatedAt = t.CreatedAt
+                TransactionId = pi.PrescriptionItemId,
+                MedicineBatchId = pi.MedicineId,
+                BatchNumber = $"STOCK-{pi.Medicine.MedicineCode}",
+                MedicineId = pi.MedicineId,
+                MedicineName = pi.Medicine.MedicineName,
+                MedicineCode = pi.Medicine.MedicineCode,
+                TransactionType = "Dispense",
+                Quantity = pi.QuantityDispensed,
+                QuantityBefore = pi.Medicine.StockQuantity + pi.QuantityDispensed,
+                QuantityAfter = pi.Medicine.StockQuantity,
+                Reason = $"Xuất cấp thuốc đơn #{pi.PrescriptionId}",
+                PerformedByUserId = pi.DispensedByUserId ?? pi.Prescription.DentistUserId,
+                PerformedByUserName = pi.DispensedByDentist != null && pi.DispensedByDentist.StaffProfile != null
+                    ? pi.DispensedByDentist.StaffProfile.FullName
+                    : "Bác sĩ",
+                ReferenceCode = $"RX-{pi.PrescriptionId}",
+                CreatedAt = pi.DispensedAt ?? pi.CreatedAt
             })
             .ToListAsync();
     }
 
     public async Task<MedicineInventorySummaryDto> GetInventorySummaryAsync()
     {
-        var today = ClinicTimeHelper.TodayDateOnly;
-        var nearExpiryThreshold = today.AddDays(60);
-
         var medicines = await _context.Medicines
-            .Include(m => m.MedicineBatches)
             .AsNoTracking()
             .ToListAsync();
 
         var totalMedicines = medicines.Count;
-        var activeMedicines = medicines.Count(m => m.Status == "Active");
-
-        var allBatches = medicines.SelectMany(m => m.MedicineBatches).ToList();
-        var totalBatches = allBatches.Count;
-        var totalStockUnits = allBatches
-            .Where(b => b.Status == "Available" && b.ExpiryDate > today)
-            .Sum(b => b.QuantityAvailable);
-
-        var lowStockCount = medicines.Count(m =>
-        {
-            var avail = m.MedicineBatches
-                .Where(b => b.Status == "Available" && b.ExpiryDate > today)
-                .Sum(b => b.QuantityAvailable);
-            return avail <= m.MinimumStockAlert;
-        });
-
-        var nearExpiryCount = allBatches.Count(b =>
-            b.Status == "Available" &&
-            b.QuantityAvailable > 0 &&
-            b.ExpiryDate > today &&
-            b.ExpiryDate <= nearExpiryThreshold);
-
-        var expiredCount = allBatches.Count(b =>
-            b.QuantityAvailable > 0 &&
-            b.ExpiryDate <= today);
+        var activeMedicines = medicines.Count(m => m.IsActive);
+        var totalStockUnits = medicines.Sum(m => m.StockQuantity);
+        var lowStockCount = medicines.Count(m => m.StockQuantity <= m.MinimumStockAlert);
 
         return new MedicineInventorySummaryDto
         {
             TotalMedicines = totalMedicines,
             ActiveMedicines = activeMedicines,
-            TotalBatches = totalBatches,
+            TotalBatches = activeMedicines,
             TotalStockUnits = totalStockUnits,
             LowStockMedicinesCount = lowStockCount,
-            NearExpiryBatchesCount = nearExpiryCount,
-            ExpiredBatchesCount = expiredCount
+            NearExpiryBatchesCount = 0,
+            ExpiredBatchesCount = 0
         };
     }
 
     public async Task<List<MedicineDto>> GetAvailableMedicinesForDentistAsync(string? searchTerm)
     {
-        var today = ClinicTimeHelper.TodayDateOnly;
-
         var query = _context.Medicines
-            .Include(m => m.MedicineBatches)
             .AsNoTracking()
-            .Where(m => m.Status == "Active");
+            .Where(m => m.IsActive && m.StockQuantity > 0);
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -582,7 +434,7 @@ public class MedicineService : IMedicineService
                 (m.ActiveIngredient != null && m.ActiveIngredient.ToLower().Contains(term)));
         }
 
-        var list = await query
+        return await query
             .OrderBy(m => m.MedicineName)
             .Select(m => new MedicineDto
             {
@@ -590,27 +442,19 @@ public class MedicineService : IMedicineService
                 MedicineCode = m.MedicineCode,
                 MedicineName = m.MedicineName,
                 ActiveIngredient = m.ActiveIngredient,
-                Concentration = m.Concentration,
-                DosageForm = m.DosageForm,
+                Concentration = null,
+                DosageForm = null,
                 Unit = m.Unit,
                 UnitPrice = m.UnitPrice,
                 MinimumStockAlert = m.MinimumStockAlert,
                 UsageInstructions = m.UsageInstructions,
-                Status = m.Status,
+                Status = m.IsActive ? "Active" : "Inactive",
                 CreatedAt = m.CreatedAt,
-                TotalAvailableStock = m.MedicineBatches
-                    .Where(b => b.Status == "Available" && b.ExpiryDate > today)
-                    .Sum(b => b.QuantityAvailable),
-                ActiveBatchesCount = m.MedicineBatches.Count(b => b.Status == "Available" && b.QuantityAvailable > 0)
+                TotalAvailableStock = m.StockQuantity,
+                ActiveBatchesCount = 1
             })
             .ToListAsync();
-
-        return list.Where(m => m.TotalAvailableStock > 0).ToList();
     }
-
-    // ==========================================
-    // DISPENSATION METHODS (WF-16 & WF-17)
-    // ==========================================
 
     public async Task<MedicineDispensationDto> DispenseMedicineAsync(CreateMedicineDispensationRequest request, long dentistUserId, string? userRole = null, CancellationToken ct = default)
     {
@@ -625,21 +469,25 @@ public class MedicineService : IMedicineService
         var prescription = await _context.Prescriptions
             .Include(p => p.TreatmentSession)
                 .ThenInclude(s => s.Appointment)
-                    .ThenInclude(a => a.PatientUser)
-                        
+            .Include(p => p.Patient)
             .Include(p => p.PrescriptionItems)
+                .ThenInclude(pi => pi.Medicine)
             .FirstOrDefaultAsync(p => p.PrescriptionId == request.PrescriptionId, ct);
 
         if (prescription == null)
             throw new KeyNotFoundException($"Không tìm thấy đơn thuốc với ID {request.PrescriptionId}.");
 
-        var appointment = prescription.TreatmentSession?.Appointment;
+        var appointment = prescription.TreatmentSession?.Appointment
+            ?? await _context.Appointments.FirstOrDefaultAsync(a => a.AppointmentId == prescription.AppointmentId, ct);
         if (appointment == null)
             throw new InvalidOperationException("Đơn thuốc không liên kết với buổi khám / ca khám hợp lệ.");
 
-        if (userRole == "Dentist" && appointment.AssignedDentistUserId != dentistUserId && prescription.TreatmentSession?.DentistUserId != dentistUserId)
+        if (userRole == "Dentist" && prescription.DentistUserId != dentistUserId && prescription.TreatmentSession?.DentistUserId != dentistUserId)
         {
-            throw new UnauthorizedAccessException("Bác sĩ không phụ trách ca khám này, không có quyền xuất cấp thuốc.");
+            var isAssigned = await _context.AppointmentServices
+                .AnyAsync(aps => aps.AppointmentId == appointment.AppointmentId && aps.AssignedDentistUserId == dentistUserId, ct);
+            if (!isAssigned)
+                throw new UnauthorizedAccessException("Bác sĩ không phụ trách ca khám này, không có quyền xuất cấp thuốc.");
         }
 
         var nonBillableStatuses = new[] { "Cancelled", "Withdrawn", "Rejected", "NoShow" };
@@ -649,171 +497,119 @@ public class MedicineService : IMedicineService
         using var tx = await _context.Database.BeginTransactionAsync(ct);
         try
         {
-            // Acquire canonical application locks on all involved batches to prevent concurrent over-dispensation
-            var batchKeys = request.Items
-                .Where(i => i.MedicineBatchId > 0)
-                .Select(i => SqlAppLockHelper.MedicineBatchKey(i.MedicineBatchId))
-                .Distinct();
-            var lockKeys = batchKeys.Append(SqlAppLockHelper.PrescriptionKey(prescription.PrescriptionId));
-            using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_context, lockKeys, timeoutMs: 5000, ct: ct);
-
-            var dispensation = new MedicineDispensation
-            {
-                PrescriptionId = prescription.PrescriptionId,
-                AppointmentId = appointment.AppointmentId,
-                PatientUserId = appointment.PatientUserId,
-                DentistUserId = dentistUserId,
-                DispensedAt = DateTime.UtcNow,
-                Notes = request.Notes?.Trim(),
-                Status = "Dispensed",
-                CreatedAt = DateTime.UtcNow
-            };
-
-            _context.MedicineDispensations.Add(dispensation);
-            await _context.SaveChangesAsync(ct);
-
-            var today = ClinicTimeHelper.TodayDateOnly;
+            var now = DateTime.UtcNow;
             decimal totalAmount = 0;
             var dispensedItemDtos = new List<MedicineDispensationItemDto>();
-            var currentRequestPrescriptionAllocations = new Dictionary<long, int>();
 
             foreach (var item in request.Items)
             {
                 if (item.Quantity <= 0)
                     throw new ArgumentException("Số lượng thuốc cấp phát phải lớn hơn 0.");
 
+                PrescriptionItem? prescItem = null;
                 if (item.PrescriptionItemId.HasValue && item.PrescriptionItemId.Value > 0)
                 {
-                    var prescItem = prescription.PrescriptionItems.FirstOrDefault(pi => pi.PrescriptionItemId == item.PrescriptionItemId.Value);
+                    prescItem = prescription.PrescriptionItems.FirstOrDefault(pi => pi.PrescriptionItemId == item.PrescriptionItemId.Value);
                     if (prescItem == null)
-                    {
                         throw new KeyNotFoundException($"Mục thuốc #{item.PrescriptionItemId.Value} không thuộc đơn thuốc #{prescription.PrescriptionId}.");
-                    }
-
-                    // P1 – Kiểm tra hạn mức kê đơn tích lũy: AlreadyDispensed + RequestedQuantity <= PrescribedQuantity
-                    var prescribedQty = prescItem.PrescribedQuantity;
-                    if (prescribedQty > 0)
-                    {
-                        var alreadyDispensed = await _context.MedicineDispensationItems
-                            .Where(mdi => mdi.PrescriptionItemId == item.PrescriptionItemId.Value &&
-                                          (mdi.Dispensation.Status == "Dispensed" || mdi.Dispensation.Status == "PartiallyDispensed"))
-                            .SumAsync(mdi => (int?)mdi.QuantityDispensed, ct) ?? 0;
-
-                        currentRequestPrescriptionAllocations.TryGetValue(item.PrescriptionItemId.Value, out int currentBatchSum);
-
-                        if (alreadyDispensed + currentBatchSum + item.Quantity > prescribedQty)
-                        {
-                            throw new InvalidOperationException(
-                                $"Mục thuốc '{prescItem.MedicationName}' đã được cấp {alreadyDispensed}/{prescribedQty} đơn vị. "
-                                + $"Không thể cấp thêm {item.Quantity} đơn vị (vượt quá số lượng kê đơn {prescribedQty}).");
-                        }
-
-                        currentRequestPrescriptionAllocations[item.PrescriptionItemId.Value] = currentBatchSum + item.Quantity;
-                    }
-                }
-                MedicineBatch? batch = null;
-                if (item.MedicineBatchId > 0)
-                {
-                    batch = await _context.MedicineBatches
-                        .Include(b => b.Medicine)
-                        .FirstOrDefaultAsync(b => b.MedicineBatchId == item.MedicineBatchId, ct);
                 }
                 else if (item.MedicineId > 0)
                 {
-                    // Auto-select nearest expiry batch by FEFO (First-Expiring, First-Out)
-                    batch = await _context.MedicineBatches
-                        .Include(b => b.Medicine)
-                        .Where(b => b.MedicineId == item.MedicineId && b.Status == "Available" && b.ExpiryDate > today && b.QuantityAvailable >= item.Quantity)
-                        .OrderBy(b => b.ExpiryDate)
-                        .FirstOrDefaultAsync(ct);
+                    prescItem = prescription.PrescriptionItems.FirstOrDefault(pi => pi.MedicineId == item.MedicineId);
                 }
 
-                if (batch == null)
-                    throw new KeyNotFoundException(item.MedicineBatchId > 0
-                        ? $"Không tìm thấy lô thuốc với ID {item.MedicineBatchId}."
-                        : $"Không tìm thấy lô thuốc khả dụng còn hạn và đủ số lượng cho thuốc ID {item.MedicineId} theo quy tắc FEFO.");
+                var medId = prescItem?.MedicineId ?? (item.MedicineId > 0 ? item.MedicineId : item.MedicineBatchId);
+                var medicine = await _context.Medicines.FirstOrDefaultAsync(m => m.MedicineId == medId, ct);
+                if (medicine == null)
+                    throw new KeyNotFoundException($"Không tìm thấy thuốc với ID {medId}.");
 
-                if (batch.Status != "Available" || batch.ExpiryDate <= today)
-                    throw new InvalidOperationException($"Lô thuốc '{batch.BatchNumber}' của '{batch.Medicine.MedicineName}' không khả dụng hoặc đã hết hạn (HSD: {batch.ExpiryDate:dd/MM/yyyy}).");
+                if (!medicine.IsActive)
+                    throw new InvalidOperationException($"Thuốc '{medicine.MedicineName}' không khả dụng.");
 
-                if (batch.QuantityAvailable < item.Quantity)
-                    throw new InvalidOperationException($"Lô '{batch.BatchNumber}' của '{batch.Medicine.MedicineName}' chỉ còn {batch.QuantityAvailable} đơn vị khả dụng, không đủ để cấp {item.Quantity} đơn vị.");
+                if (medicine.StockQuantity < item.Quantity)
+                    throw new InvalidOperationException($"Thuốc '{medicine.MedicineName}' chỉ còn {medicine.StockQuantity} đơn vị khả dụng, không đủ để cấp {item.Quantity} đơn vị.");
 
-                var qtyBefore = batch.QuantityAvailable;
-                batch.QuantityAvailable -= item.Quantity;
-                if (batch.QuantityAvailable == 0)
+                if (prescItem != null)
                 {
-                    batch.Status = "Depleted";
+                    var prescribedQty = prescItem.Quantity;
+                    if (prescribedQty > 0 && prescItem.QuantityDispensed + item.Quantity > prescribedQty)
+                    {
+                        throw new InvalidOperationException(
+                            $"Mục thuốc '{medicine.MedicineName}' đã được cấp {prescItem.QuantityDispensed}/{prescribedQty} đơn vị. "
+                            + $"Không thể cấp thêm {item.Quantity} đơn vị.");
+                    }
+
+                    prescItem.QuantityDispensed += item.Quantity;
+                    prescItem.DispensedAt = now;
+                    prescItem.DispensedByUserId = dentistUserId;
+                    prescItem.UnitPriceAtDispense = medicine.UnitPrice;
                 }
-                batch.UpdatedAt = DateTime.UtcNow;
-
-                var stockTx = new MedicineStockTransaction
+                else
                 {
-                    MedicineBatchId = batch.MedicineBatchId,
-                    TransactionType = "Dispense",
-                    Quantity = item.Quantity,
-                    QuantityBefore = qtyBefore,
-                    QuantityAfter = batch.QuantityAvailable,
-                    Reason = $"Xuất cấp thuốc cho bệnh nhân theo đơn #{prescription.PrescriptionId} (Ca #{appointment.AppointmentCode})",
-                    PerformedByUserId = dentistUserId,
-                    ReferenceCode = $"APPT-{appointment.AppointmentCode}",
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.MedicineStockTransactions.Add(stockTx);
+                    prescItem = new PrescriptionItem
+                    {
+                        PrescriptionId = prescription.PrescriptionId,
+                        AppointmentId = appointment.AppointmentId,
+                        MedicineId = medicine.MedicineId,
+                        Dosage = "Theo chỉ định",
+                        Frequency = "Theo chỉ định",
+                        Quantity = item.Quantity,
+                        QuantityDispensed = item.Quantity,
+                        UnitPriceAtDispense = medicine.UnitPrice,
+                        DispensedAt = now,
+                        DispensedByUserId = dentistUserId,
+                        Instructions = request.Notes?.Trim(),
+                        CreatedAt = now
+                    };
+                    _context.PrescriptionItems.Add(prescItem);
+                }
 
-                var snapshotPrice = batch.Medicine.UnitPrice;
+                medicine.StockQuantity -= item.Quantity;
+                medicine.UpdatedAt = now;
+
+                var snapshotPrice = medicine.UnitPrice;
                 var lineTotal = item.Quantity * snapshotPrice;
                 totalAmount += lineTotal;
 
-                var dispItem = new MedicineDispensationItem
-                {
-                    DispensationId = dispensation.DispensationId,
-                    PrescriptionItemId = item.PrescriptionItemId,
-                    MedicineId = batch.MedicineId,
-                    MedicineBatchId = batch.MedicineBatchId,
-                    QuantityDispensed = item.Quantity,
-                    UnitPriceSnapshot = snapshotPrice,
-                    TotalPrice = lineTotal,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.MedicineDispensationItems.Add(dispItem);
-
                 dispensedItemDtos.Add(new MedicineDispensationItemDto
                 {
-                    DispensationItemId = dispItem.DispensationItemId,
-                    DispensationId = dispensation.DispensationId,
-                    PrescriptionItemId = item.PrescriptionItemId,
-                    MedicineId = batch.MedicineId,
-                    MedicineCode = batch.Medicine.MedicineCode,
-                    MedicineName = batch.Medicine.MedicineName,
-                    Unit = batch.Medicine.Unit,
-                    MedicineBatchId = batch.MedicineBatchId,
-                    BatchNumber = batch.BatchNumber,
+                    DispensationItemId = prescItem.PrescriptionItemId,
+                    DispensationId = prescription.PrescriptionId,
+                    PrescriptionItemId = prescItem.PrescriptionItemId,
+                    MedicineId = medicine.MedicineId,
+                    MedicineCode = medicine.MedicineCode,
+                    MedicineName = medicine.MedicineName,
+                    Unit = medicine.Unit,
+                    MedicineBatchId = medicine.MedicineId,
+                    BatchNumber = $"STOCK-{medicine.MedicineCode}",
                     QuantityDispensed = item.Quantity,
                     UnitPriceSnapshot = snapshotPrice,
                     TotalPrice = lineTotal
                 });
             }
 
+            var allDispensed = prescription.PrescriptionItems.All(pi => pi.QuantityDispensed >= pi.Quantity);
+            prescription.Status = allDispensed ? "Dispensed" : "PartiallyDispensed";
+            prescription.UpdatedAt = now;
+
             await _context.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
 
             var dentistUser = await _context.UserAccounts.Include(u => u.StaffProfile).FirstOrDefaultAsync(u => u.UserId == dentistUserId, ct);
-            var patientProfile = prescription.TreatmentSession?.Appointment?.PatientUser;
 
             return new MedicineDispensationDto
             {
-                DispensationId = dispensation.DispensationId,
+                DispensationId = prescription.PrescriptionId,
                 PrescriptionId = prescription.PrescriptionId,
                 AppointmentId = appointment.AppointmentId,
-                AppointmentCode = appointment.AppointmentCode,
+                AppointmentCode = $"APT-{appointment.AppointmentId:D6}",
                 PatientUserId = appointment.PatientUserId,
-                PatientName = patientProfile?.FullName ?? "Bệnh nhân",
+                PatientName = prescription.Patient?.FullName ?? "Bệnh nhân",
                 DentistUserId = dentistUserId,
                 DentistName = dentistUser?.StaffProfile?.FullName ?? "Bác sĩ",
-                DispensedAt = dispensation.DispensedAt,
-                Notes = dispensation.Notes,
-                Status = dispensation.Status,
+                DispensedAt = now,
+                Notes = request.Notes,
+                Status = prescription.Status,
                 TotalAmount = totalAmount,
                 Items = dispensedItemDtos
             };
@@ -837,62 +633,77 @@ public class MedicineService : IMedicineService
             {
                 throw new UnauthorizedAccessException("Bệnh nhân không có quyền truy cập thông tin cấp thuốc của người khác.");
             }
-            if (requestingUserRole == "Dentist" && appointment.AssignedDentistUserId != requestingUserId)
+            if (requestingUserRole == "Dentist")
             {
-                var isTreatingDentist = await _context.TreatmentSessions.AnyAsync(s => s.AppointmentId == appointmentId && s.DentistUserId == requestingUserId, ct);
+                var isTreatingDentist = await _context.AppointmentServices.AnyAsync(aps => aps.AppointmentId == appointmentId && aps.AssignedDentistUserId == requestingUserId, ct)
+                    || await _context.TreatmentSessions.AnyAsync(s => s.AppointmentId == appointmentId && s.DentistUserId == requestingUserId, ct);
                 if (!isTreatingDentist)
                 {
                     throw new UnauthorizedAccessException("Bác sĩ không phụ trách ca khám này, không có quyền truy cập danh sách cấp thuốc.");
                 }
             }
         }
-        var dispensations = await _context.MedicineDispensations
-            .Include(d => d.Appointment)
-            .Include(d => d.PatientUser)
-            .Include(d => d.DentistUser).ThenInclude(u => u.StaffProfile)
-            .Include(d => d.DispensationItems).ThenInclude(i => i.Medicine)
-            .Include(d => d.DispensationItems).ThenInclude(i => i.MedicineBatch)
-            .Where(d => d.AppointmentId == appointmentId)
-            .OrderByDescending(d => d.DispensedAt)
+
+        var prescriptions = await _context.Prescriptions
             .AsNoTracking()
+            .Include(p => p.Patient)
+            .Include(p => p.Dentist)
+                .ThenInclude(d => d.StaffProfile)
+            .Include(p => p.PrescriptionItems)
+                .ThenInclude(pi => pi.Medicine)
+            .Where(p => p.AppointmentId == appointmentId && p.PrescriptionItems.Any(pi => pi.QuantityDispensed > 0))
+            .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(ct);
 
-        return dispensations.Select(d => new MedicineDispensationDto
+        return prescriptions.Select(p =>
         {
-            DispensationId = d.DispensationId,
-            PrescriptionId = d.PrescriptionId,
-            AppointmentId = d.AppointmentId,
-            AppointmentCode = d.Appointment.AppointmentCode,
-            PatientUserId = d.PatientUserId,
-            PatientName = d.PatientUser?.PatientProfile?.FullName ?? "Bệnh nhân",
-            DentistUserId = d.DentistUserId,
-            DentistName = d.DentistUser?.StaffProfile?.FullName ?? "Bác sĩ",
-            DispensedAt = d.DispensedAt,
-            Notes = d.Notes,
-            Status = d.Status,
-            TotalAmount = d.DispensationItems.Sum(i => i.TotalPrice),
-            Items = d.DispensationItems.Select(i => new MedicineDispensationItemDto
+            var dispensedItems = p.PrescriptionItems.Where(pi => pi.QuantityDispensed > 0).ToList();
+            return new MedicineDispensationDto
             {
-                DispensationItemId = i.DispensationItemId,
-                DispensationId = i.DispensationId,
-                PrescriptionItemId = i.PrescriptionItemId,
-                MedicineId = i.MedicineId,
-                MedicineCode = i.Medicine.MedicineCode,
-                MedicineName = i.Medicine.MedicineName,
-                Unit = i.Medicine.Unit,
-                MedicineBatchId = i.MedicineBatchId,
-                BatchNumber = i.MedicineBatch.BatchNumber,
-                QuantityDispensed = i.QuantityDispensed,
-                UnitPriceSnapshot = i.UnitPriceSnapshot,
-                TotalPrice = i.TotalPrice
-            }).ToList()
+                DispensationId = p.PrescriptionId,
+                PrescriptionId = p.PrescriptionId,
+                AppointmentId = appointmentId,
+                AppointmentCode = $"APT-{appointment.AppointmentId:D6}",
+                PatientUserId = p.PatientUserId,
+                PatientName = p.Patient?.FullName ?? "Bệnh nhân",
+                DentistUserId = p.DentistUserId,
+                DentistName = p.Dentist?.StaffProfile?.FullName ?? "Bác sĩ",
+                DispensedAt = dispensedItems.Max(pi => pi.DispensedAt) ?? p.CreatedAt,
+                Notes = p.Notes,
+                Status = p.Status,
+                TotalAmount = dispensedItems.Sum(pi => pi.QuantityDispensed * (pi.UnitPriceAtDispense ?? pi.Medicine?.UnitPrice ?? 0m)),
+                Items = dispensedItems.Select(pi =>
+                {
+                    var unitPrice = pi.UnitPriceAtDispense ?? pi.Medicine?.UnitPrice ?? 0m;
+                    return new MedicineDispensationItemDto
+                    {
+                        DispensationItemId = pi.PrescriptionItemId,
+                        DispensationId = p.PrescriptionId,
+                        PrescriptionItemId = pi.PrescriptionItemId,
+                        MedicineId = pi.MedicineId,
+                        MedicineCode = pi.Medicine?.MedicineCode ?? string.Empty,
+                        MedicineName = pi.Medicine?.MedicineName ?? string.Empty,
+                        Unit = pi.Medicine?.Unit ?? string.Empty,
+                        MedicineBatchId = pi.MedicineId,
+                        BatchNumber = pi.Medicine != null ? $"STOCK-{pi.Medicine.MedicineCode}" : string.Empty,
+                        QuantityDispensed = pi.QuantityDispensed,
+                        UnitPriceSnapshot = unitPrice,
+                        TotalPrice = pi.QuantityDispensed * unitPrice
+                    };
+                }).ToList()
+            };
         }).ToList();
     }
 
     public async Task<PrescriptionDispensationStatusDto> GetPrescriptionDispensationStatusAsync(long prescriptionId, long requestingUserId = 0, string? requestingUserRole = null, CancellationToken ct = default)
     {
         var prescription = await _context.Prescriptions
+            .AsNoTracking()
+            .Include(p => p.Patient)
+            .Include(p => p.Dentist)
+                .ThenInclude(d => d.StaffProfile)
             .Include(p => p.PrescriptionItems)
+                .ThenInclude(pi => pi.Medicine)
             .Include(p => p.TreatmentSession)
                 .ThenInclude(s => s.Appointment)
             .FirstOrDefaultAsync(p => p.PrescriptionId == prescriptionId, ct);
@@ -907,91 +718,78 @@ public class MedicineService : IMedicineService
             {
                 throw new UnauthorizedAccessException("Bệnh nhân không có quyền tra cứu đơn cấp phát của người khác.");
             }
-            if (requestingUserRole == "Dentist" && appointment.AssignedDentistUserId != requestingUserId && prescription.TreatmentSession?.DentistUserId != requestingUserId)
+            if (requestingUserRole == "Dentist" && prescription.DentistUserId != requestingUserId && prescription.TreatmentSession?.DentistUserId != requestingUserId)
             {
-                throw new UnauthorizedAccessException("Bác sĩ không phụ trách đơn thuốc này, không có quyền tra cứu trạng thái cấp phát.");
+                var isAssigned = await _context.AppointmentServices
+                    .AnyAsync(aps => aps.AppointmentId == appointment.AppointmentId && aps.AssignedDentistUserId == requestingUserId, ct);
+                if (!isAssigned)
+                    throw new UnauthorizedAccessException("Bác sĩ không phụ trách đơn thuốc này, không có quyền tra cứu trạng thái cấp phát.");
             }
         }
-        var dispensations = await _context.MedicineDispensations
-            .Include(d => d.Appointment)
-            .Include(d => d.PatientUser)
-            .Include(d => d.DentistUser).ThenInclude(u => u.StaffProfile)
-            .Include(d => d.DispensationItems).ThenInclude(i => i.Medicine)
-            .Include(d => d.DispensationItems).ThenInclude(i => i.MedicineBatch)
-            .Where(d => d.PrescriptionId == prescriptionId)
-            .OrderByDescending(d => d.DispensedAt)
-            .AsNoTracking()
-            .ToListAsync(ct);
 
-        var totalUnits = dispensations.SelectMany(d => d.DispensationItems).Sum(i => i.QuantityDispensed);
+        var dispensedItems = prescription.PrescriptionItems.Where(pi => pi.QuantityDispensed > 0).ToList();
+        var totalUnits = dispensedItems.Sum(i => i.QuantityDispensed);
 
         string status;
-        if (!dispensations.Any() || totalUnits == 0)
+        if (!dispensedItems.Any() || totalUnits == 0)
         {
             status = "NotDispensed";
         }
+        else if (prescription.PrescriptionItems.All(pi => pi.QuantityDispensed >= pi.Quantity))
+        {
+            status = "FullyDispensed";
+        }
         else
         {
-            var prescribedItemIds = prescription.PrescriptionItems.Select(pi => pi.PrescriptionItemId).ToHashSet();
-            if (prescribedItemIds.Count > 0)
-            {
-                var dispensedItemIds = dispensations
-                    .SelectMany(d => d.DispensationItems)
-                    .Where(i => i.PrescriptionItemId.HasValue)
-                    .Select(i => i.PrescriptionItemId!.Value)
-                    .ToHashSet();
-
-                if (prescribedItemIds.All(id => dispensedItemIds.Contains(id)))
-                {
-                    status = "FullyDispensed";
-                }
-                else
-                {
-                    status = "PartiallyDispensed";
-                }
-            }
-            else
-            {
-                status = "FullyDispensed";
-            }
+            status = "PartiallyDispensed";
         }
+
+        var dispensations = new List<MedicineDispensationDto>();
+        if (dispensedItems.Any())
+        {
+            dispensations.Add(new MedicineDispensationDto
+            {
+                DispensationId = prescription.PrescriptionId,
+                PrescriptionId = prescription.PrescriptionId,
+                AppointmentId = prescription.AppointmentId,
+                AppointmentCode = $"APT-{prescription.AppointmentId:D6}",
+                PatientUserId = prescription.PatientUserId,
+                PatientName = prescription.Patient?.FullName ?? "Bệnh nhân",
+                DentistUserId = prescription.DentistUserId,
+                DentistName = prescription.Dentist?.StaffProfile?.FullName ?? "Bác sĩ",
+                DispensedAt = dispensedItems.Max(pi => pi.DispensedAt) ?? prescription.CreatedAt,
+                Notes = prescription.Notes,
+                Status = status,
+                TotalAmount = dispensedItems.Sum(i => i.QuantityDispensed * (i.UnitPriceAtDispense ?? i.Medicine?.UnitPrice ?? 0m)),
+                Items = dispensedItems.Select(i =>
+                {
+                    var unitPrice = i.UnitPriceAtDispense ?? i.Medicine?.UnitPrice ?? 0m;
+                    return new MedicineDispensationItemDto
+                    {
+                        DispensationItemId = i.PrescriptionItemId,
+                        DispensationId = prescription.PrescriptionId,
+                        PrescriptionItemId = i.PrescriptionItemId,
+                        MedicineId = i.MedicineId,
+                        MedicineCode = i.Medicine?.MedicineCode ?? string.Empty,
+                        MedicineName = i.Medicine?.MedicineName ?? string.Empty,
+                        Unit = i.Medicine?.Unit ?? string.Empty,
+                        MedicineBatchId = i.MedicineId,
+                        BatchNumber = i.Medicine != null ? $"STOCK-{i.Medicine.MedicineCode}" : string.Empty,
+                        QuantityDispensed = i.QuantityDispensed,
+                        UnitPriceSnapshot = unitPrice,
+                        TotalPrice = i.QuantityDispensed * unitPrice
+                    };
+                }).ToList()
+            });
+        }
+
         return new PrescriptionDispensationStatusDto
         {
             PrescriptionId = prescriptionId,
             HasDispensation = dispensations.Any(),
             TotalUnitsDispensed = totalUnits,
             Status = status,
-            Dispensations = dispensations.Select(d => new MedicineDispensationDto
-            {
-                DispensationId = d.DispensationId,
-                PrescriptionId = d.PrescriptionId,
-                AppointmentId = d.AppointmentId,
-                AppointmentCode = d.Appointment.AppointmentCode,
-                PatientUserId = d.PatientUserId,
-                PatientName = d.PatientUser?.PatientProfile?.FullName ?? "Bệnh nhân",
-                DentistUserId = d.DentistUserId,
-                DentistName = d.DentistUser?.StaffProfile?.FullName ?? "Bác sĩ",
-                DispensedAt = d.DispensedAt,
-                Notes = d.Notes,
-                Status = d.Status,
-                TotalAmount = d.DispensationItems.Sum(i => i.TotalPrice),
-                Items = d.DispensationItems.Select(i => new MedicineDispensationItemDto
-                {
-                    DispensationItemId = i.DispensationItemId,
-                    DispensationId = i.DispensationId,
-                    PrescriptionItemId = i.PrescriptionItemId,
-                    MedicineId = i.MedicineId,
-                    MedicineCode = i.Medicine.MedicineCode,
-                    MedicineName = i.Medicine.MedicineName,
-                    Unit = i.Medicine.Unit,
-                    MedicineBatchId = i.MedicineBatchId,
-                    BatchNumber = i.MedicineBatch.BatchNumber,
-                    QuantityDispensed = i.QuantityDispensed,
-                    UnitPriceSnapshot = i.UnitPriceSnapshot,
-                    TotalPrice = i.TotalPrice
-                }).ToList()
-            }).ToList()
+            Dispensations = dispensations
         };
     }
-
 }

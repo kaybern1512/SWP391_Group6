@@ -20,6 +20,30 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
     private readonly IReceptionistCoverageService _coverageService;
     private readonly IAuditLogService _auditLogService;
 
+    private static readonly List<ReceptionistShiftTemplateDto> DefaultShiftTemplates = new()
+    {
+        new ReceptionistShiftTemplateDto
+        {
+            ShiftTemplateId = 1,
+            TemplateName = "Ca Sáng (08:00 - 12:00)",
+            StartTime = new TimeOnly(8, 0),
+            EndTime = new TimeOnly(12, 0),
+            MinStaffRequired = 2,
+            IsActive = true,
+            DisplayOrder = 1
+        },
+        new ReceptionistShiftTemplateDto
+        {
+            ShiftTemplateId = 2,
+            TemplateName = "Ca Chiều (13:00 - 17:00)",
+            StartTime = new TimeOnly(13, 0),
+            EndTime = new TimeOnly(17, 0),
+            MinStaffRequired = 2,
+            IsActive = true,
+            DisplayOrder = 2
+        }
+    };
+
     public ReceptionistScheduleService(
         DentalClinicDbContext dbContext,
         IReceptionistCoverageService coverageService,
@@ -30,25 +54,9 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         _auditLogService = auditLogService;
     }
 
-    public async Task<ApiResponse<List<ReceptionistShiftTemplateDto>>> GetShiftTemplatesAsync(CancellationToken ct = default)
+    public Task<ApiResponse<List<ReceptionistShiftTemplateDto>>> GetShiftTemplatesAsync(CancellationToken ct = default)
     {
-        var templates = await _dbContext.ReceptionistShiftTemplates
-            .AsNoTracking()
-            .Where(t => t.IsActive)
-            .OrderBy(t => t.DisplayOrder)
-            .Select(t => new ReceptionistShiftTemplateDto
-            {
-                ShiftTemplateId = t.ShiftTemplateId,
-                TemplateName = t.TemplateName,
-                StartTime = t.StartTime,
-                EndTime = t.EndTime,
-                MinStaffRequired = t.MinStaffRequired,
-                IsActive = t.IsActive,
-                DisplayOrder = t.DisplayOrder
-            })
-            .ToListAsync(ct);
-
-        return ApiResponse<List<ReceptionistShiftTemplateDto>>.Ok(templates);
+        return Task.FromResult(ApiResponse<List<ReceptionistShiftTemplateDto>>.Ok(DefaultShiftTemplates));
     }
 
     public async Task<ApiResponse<MonthlyReceptionistScheduleDto>> GetMonthlyScheduleAsync(
@@ -66,74 +74,40 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         int daysInMonth = DateTime.DaysInMonth(year, month);
         var endDate = new DateOnly(year, month, daysInMonth);
 
-        // 1. Templates
-        var templates = await _dbContext.ReceptionistShiftTemplates
-            .AsNoTracking()
-            .Where(t => t.IsActive)
-            .OrderBy(t => t.DisplayOrder)
-            .Select(t => new ReceptionistShiftTemplateDto
-            {
-                ShiftTemplateId = t.ShiftTemplateId,
-                TemplateName = t.TemplateName,
-                StartTime = t.StartTime,
-                EndTime = t.EndTime,
-                MinStaffRequired = t.MinStaffRequired,
-                IsActive = t.IsActive,
-                DisplayOrder = t.DisplayOrder
-            })
-            .ToListAsync(ct);
+        var templates = DefaultShiftTemplates;
 
-        // 2. Staff members (Role = Receptionist)
         var staffList = await _dbContext.UserAccounts
             .AsNoTracking()
             .Include(u => u.StaffProfile)
-            .Where(u => u.Role == "Receptionist" && u.Status == "Active")
+            .Where(u => u.Role == UserRole.Receptionist && u.Status == "Active")
             .OrderBy(u => u.StaffProfile != null ? u.StaffProfile.FullName : u.Email)
             .Select(u => new ReceptionistStaffSummaryDto
             {
                 UserId = u.UserId,
                 FullName = u.StaffProfile != null ? u.StaffProfile.FullName : (u.Email ?? "Lễ tân"),
-                EmployeeCode = u.StaffProfile != null ? u.StaffProfile.EmployeeCode : $"EMP-{u.UserId}",
+                EmployeeCode = $"EMP-{u.UserId}",
                 Email = u.Email ?? ""
             })
             .ToListAsync(ct);
 
-        // 3. Shifts in month
-        var shiftsQuery = _dbContext.ReceptionistWorkSchedules
+        var shiftsQuery = _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Include(s => s.ReceptionistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Include(s => s.ShiftTemplate)
-            .Where(s => s.WorkDate >= startDate && s.WorkDate <= endDate);
+            .Include(s => s.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Where(s => s.StaffRole == UserRole.Receptionist && s.WorkDate >= startDate && s.WorkDate <= endDate);
 
         if (receptionistUserId.HasValue && receptionistUserId.Value > 0)
         {
-            shiftsQuery = shiftsQuery.Where(s => s.ReceptionistUserId == receptionistUserId.Value);
+            shiftsQuery = shiftsQuery.Where(s => s.StaffUserId == receptionistUserId.Value);
         }
 
         var monthShifts = await shiftsQuery.ToListAsync(ct);
 
-        // 4. Leaves in month
-        var leaves = await _dbContext.ReceptionistLeaveRequests
+        var leaves = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(l => l.ReceptionistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Include(l => l.Periods)
-            .Where(l => l.StartDate <= endDate && l.EndDate >= startDate && l.Status != "Withdrawn" && l.Status != "Cancelled")
-            .ToListAsync(ct);
-
-        // 5. Incidents in month
-        var incidents = await _dbContext.ReceptionistCoverageIncidents
-            .AsNoTracking()
-            .Include(i => i.AffectedReceptionistUser)
-                .ThenInclude(u => u!.StaffProfile)
-            .Include(i => i.ReportedByUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Include(i => i.ReplacementReceptionistUser)
-                .ThenInclude(u => u!.StaffProfile)
-            .Include(i => i.ResolvedByUser)
-                .ThenInclude(u => u!.StaffProfile)
-            .Where(i => i.WorkDate >= startDate && i.WorkDate <= endDate)
+            .Include(l => l.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Where(l => l.StaffRole == UserRole.Receptionist && l.StartDate <= endDate && l.EndDate >= startDate && l.Status != "Withdrawn" && l.Status != "Cancelled")
             .ToListAsync(ct);
 
         var days = new List<DailyReceptionistScheduleDto>();
@@ -148,8 +122,8 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                 .Select(l => new ReceptionistLeaveSummaryDto
                 {
                     LeaveRequestId = l.LeaveRequestId,
-                    ReceptionistUserId = l.ReceptionistUserId,
-                    ReceptionistName = l.ReceptionistUser.StaffProfile != null ? l.ReceptionistUser.StaffProfile.FullName : (l.ReceptionistUser.Email ?? "Lễ tân"),
+                    ReceptionistUserId = l.StaffUserId,
+                    ReceptionistName = l.StaffUser?.FullName ?? l.StaffUser?.User?.Email ?? "Lễ tân",
                     LeaveType = l.LeaveType,
                     StartDate = l.StartDate,
                     EndDate = l.EndDate,
@@ -164,8 +138,8 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                 .Select(l => new ReceptionistLeaveSummaryDto
                 {
                     LeaveRequestId = l.LeaveRequestId,
-                    ReceptionistUserId = l.ReceptionistUserId,
-                    ReceptionistName = l.ReceptionistUser.StaffProfile != null ? l.ReceptionistUser.StaffProfile.FullName : (l.ReceptionistUser.Email ?? "Lễ tân"),
+                    ReceptionistUserId = l.StaffUserId,
+                    ReceptionistName = l.StaffUser?.FullName ?? l.StaffUser?.User?.Email ?? "Lễ tân",
                     LeaveType = l.LeaveType,
                     StartDate = l.StartDate,
                     EndDate = l.EndDate,
@@ -175,40 +149,35 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                     Reason = l.Reason
                 }).ToList();
 
-            var dayIncidents = incidents.Where(i => i.WorkDate == curDate).Select(i => new ReceptionistCoverageIncidentDto
-            {
-                IncidentId = i.IncidentId,
-                WorkDate = i.WorkDate,
-                ShiftStartTime = i.ShiftStartTime,
-                ShiftEndTime = i.ShiftEndTime,
-                AffectedReceptionistUserId = i.AffectedReceptionistUserId,
-                AffectedReceptionistName = i.AffectedReceptionistUser?.StaffProfile?.FullName ?? i.AffectedReceptionistUser?.Email,
-                IncidentType = i.IncidentType,
-                PlannedStaffCount = i.PlannedStaffCount,
-                AvailableStaffCount = i.AvailableStaffCount,
-                RequiredMinimumCount = i.RequiredMinimumCount,
-                ShortageCount = i.ShortageCount,
-                Reason = i.Reason,
-                ReportedBy = i.ReportedBy,
-                ReportedByName = i.ReportedByUser.StaffProfile != null ? i.ReportedByUser.StaffProfile.FullName : (i.ReportedByUser.Email ?? "Người báo cáo"),
-                ReportedAt = i.ReportedAt,
-                Status = i.Status,
-                ResolutionNotes = i.ResolutionNotes,
-                ReplacementReceptionistUserId = i.ReplacementReceptionistUserId,
-                ReplacementReceptionistName = i.ReplacementReceptionistUser?.StaffProfile?.FullName,
-                ResolvedBy = i.ResolvedBy,
-                ResolvedByName = i.ResolvedByUser?.StaffProfile?.FullName,
-                ResolvedAt = i.ResolvedAt
-            }).ToList();
+            var dayIncidents = dayShifts
+                .Where(s => s.Status == "AbsenceReported")
+                .Select(s => new ReceptionistCoverageIncidentDto
+                {
+                    IncidentId = s.WorkScheduleId,
+                    WorkDate = s.WorkDate,
+                    ShiftStartTime = s.StartTime,
+                    ShiftEndTime = s.EndTime,
+                    AffectedReceptionistUserId = s.StaffUserId,
+                    AffectedReceptionistName = s.StaffUser?.FullName ?? "Lễ tân",
+                    IncidentType = "EmergencyAbsence",
+                    PlannedStaffCount = 2,
+                    AvailableStaffCount = 1,
+                    RequiredMinimumCount = 2,
+                    ShortageCount = 1,
+                    Reason = s.Notes ?? "Vắng mặt đột xuất",
+                    ReportedBy = s.StaffUserId,
+                    ReportedByName = s.StaffUser?.FullName ?? "Lễ tân",
+                    ReportedAt = s.UpdatedAt ?? s.CreatedAt,
+                    Status = (s.Notes != null && s.Notes.Contains("[Đã xử lý:")) ? "Resolved" : "Open"
+                }).ToList();
 
             int distinctApprovedLeaves = dayApprovedLeaves.Select(l => l.ReceptionistUserId).Distinct().Count();
 
-            // Check if any shift on this day has available count < 2
             bool hasShortage = false;
             foreach (var tmpl in templates)
             {
                 var covering = dayShifts.Where(s => s.Status == "Scheduled" && s.StartTime < tmpl.EndTime && s.EndTime > tmpl.StartTime).ToList();
-                var availStaff = covering.Where(s => !dayApprovedLeaves.Any(al => al.ReceptionistUserId == s.ReceptionistUserId)).Select(s => s.ReceptionistUserId).Distinct().Count();
+                var availStaff = covering.Where(s => !dayApprovedLeaves.Any(al => al.ReceptionistUserId == s.StaffUserId)).Select(s => s.StaffUserId).Distinct().Count();
                 if (covering.Any() && availStaff < (tmpl.MinStaffRequired > 0 ? tmpl.MinStaffRequired : 2))
                 {
                     hasShortage = true;
@@ -220,21 +189,26 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             {
                 Date = curDate,
                 DayOfWeek = (int)curDate.DayOfWeek == 0 ? 7 : (int)curDate.DayOfWeek,
-                Shifts = dayShifts.Select(s => new ReceptionistWorkScheduleDto
+                Shifts = dayShifts.Select(s =>
                 {
-                    ReceptionistScheduleId = s.ReceptionistScheduleId,
-                    ReceptionistUserId = s.ReceptionistUserId,
-                    ReceptionistName = s.ReceptionistUser.StaffProfile != null ? s.ReceptionistUser.StaffProfile.FullName : (s.ReceptionistUser.Email ?? "Lễ tân"),
-                    EmployeeCode = s.ReceptionistUser.StaffProfile != null ? s.ReceptionistUser.StaffProfile.EmployeeCode : $"EMP-{s.ReceptionistUserId}",
-                    ShiftTemplateId = s.ShiftTemplateId,
-                    ShiftTemplateName = s.ShiftTemplate?.TemplateName,
-                    WorkDate = s.WorkDate,
-                    StartTime = s.StartTime,
-                    EndTime = s.EndTime,
-                    Status = s.Status,
-                    IsPublished = s.IsPublished,
-                    Notes = s.Notes,
-                    CreatedAt = s.CreatedAt
+                    int? tmplId = s.StartTime.Hour < 12 ? 1 : 2;
+                    string tmplName = s.StartTime.Hour < 12 ? "Ca Sáng" : "Ca Chiều";
+                    return new ReceptionistWorkScheduleDto
+                    {
+                        ReceptionistScheduleId = s.WorkScheduleId,
+                        ReceptionistUserId = s.StaffUserId,
+                        ReceptionistName = s.StaffUser?.FullName ?? s.StaffUser?.User?.Email ?? "Lễ tân",
+                        EmployeeCode = $"EMP-{s.StaffUserId}",
+                        ShiftTemplateId = tmplId,
+                        ShiftTemplateName = tmplName,
+                        WorkDate = s.WorkDate,
+                        StartTime = s.StartTime,
+                        EndTime = s.EndTime,
+                        Status = s.Status,
+                        IsPublished = true,
+                        Notes = s.Notes,
+                        CreatedAt = s.CreatedAt
+                    };
                 }).ToList(),
                 ApprovedLeaves = dayApprovedLeaves,
                 PendingLeaves = dayPendingLeaves,
@@ -265,35 +239,35 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         var start = fromDate ?? ClinicTimeHelper.TodayDateOnly;
         var end = toDate ?? start.AddDays(30);
 
-        var schedules = await _dbContext.ReceptionistWorkSchedules
+        var schedules = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Include(s => s.ReceptionistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Include(s => s.ShiftTemplate)
-            .Where(s => s.ReceptionistUserId == receptionistUserId &&
-                        s.WorkDate >= start && s.WorkDate <= end &&
-                        s.IsPublished)
+            .Include(s => s.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Where(s => s.StaffRole == UserRole.Receptionist &&
+                        s.StaffUserId == receptionistUserId &&
+                        s.WorkDate >= start && s.WorkDate <= end)
             .OrderBy(s => s.WorkDate)
             .ThenBy(s => s.StartTime)
-            .Select(s => new ReceptionistWorkScheduleDto
-            {
-                ReceptionistScheduleId = s.ReceptionistScheduleId,
-                ReceptionistUserId = s.ReceptionistUserId,
-                ReceptionistName = s.ReceptionistUser.StaffProfile != null ? s.ReceptionistUser.StaffProfile.FullName : (s.ReceptionistUser.Email ?? "Lễ tân"),
-                EmployeeCode = s.ReceptionistUser.StaffProfile != null ? s.ReceptionistUser.StaffProfile.EmployeeCode : $"EMP-{s.ReceptionistUserId}",
-                ShiftTemplateId = s.ShiftTemplateId,
-                ShiftTemplateName = s.ShiftTemplate != null ? s.ShiftTemplate.TemplateName : null,
-                WorkDate = s.WorkDate,
-                StartTime = s.StartTime,
-                EndTime = s.EndTime,
-                Status = s.Status,
-                IsPublished = s.IsPublished,
-                Notes = s.Notes,
-                CreatedAt = s.CreatedAt
-            })
             .ToListAsync(ct);
 
-        return ApiResponse<List<ReceptionistWorkScheduleDto>>.Ok(schedules);
+        var dtos = schedules.Select(s => new ReceptionistWorkScheduleDto
+        {
+            ReceptionistScheduleId = s.WorkScheduleId,
+            ReceptionistUserId = s.StaffUserId,
+            ReceptionistName = s.StaffUser?.FullName ?? s.StaffUser?.User?.Email ?? "Lễ tân",
+            EmployeeCode = $"EMP-{s.StaffUserId}",
+            ShiftTemplateId = s.StartTime.Hour < 12 ? 1 : 2,
+            ShiftTemplateName = s.StartTime.Hour < 12 ? "Ca Sáng" : "Ca Chiều",
+            WorkDate = s.WorkDate,
+            StartTime = s.StartTime,
+            EndTime = s.EndTime,
+            Status = s.Status,
+            IsPublished = true,
+            Notes = s.Notes,
+            CreatedAt = s.CreatedAt
+        }).ToList();
+
+        return ApiResponse<List<ReceptionistWorkScheduleDto>>.Ok(dtos);
     }
 
     public async Task<ApiResponse<ReceptionistWorkScheduleDto>> CreateScheduleAsync(
@@ -314,27 +288,21 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
 
-        bool isPeriodLocked = await _dbContext.IsPeriodLockedAsync(request.WorkDate, ct);
-        if (isPeriodLocked)
-        {
-            return ApiResponse<ReceptionistWorkScheduleDto>.Fail($"Kỳ công tháng {request.WorkDate.Month:D2}/{request.WorkDate.Year} đã được chốt sổ. Không thể phân ca trực.");
-        }
-
-        // Check if employee has approved leave during this time
-        bool hasLeave = await _dbContext.ReceptionistLeaveRequestPeriods
-            .AnyAsync(p => p.LeaveRequest.ReceptionistUserId == request.ReceptionistUserId &&
-                           p.LeaveDate == request.WorkDate &&
-                           p.Status == "Approved" &&
-                           (!p.StartTime.HasValue || (p.StartTime.Value < request.EndTime && p.EndTime > request.StartTime)), ct);
+        bool hasLeave = await _dbContext.StaffLeaveRequests
+            .AnyAsync(l => l.StaffRole == UserRole.Receptionist &&
+                           l.StaffUserId == request.ReceptionistUserId &&
+                           l.Status == "Approved" &&
+                           l.StartDate <= request.WorkDate && l.EndDate >= request.WorkDate &&
+                           (!l.StartTime.HasValue || !l.EndTime.HasValue || (l.StartTime.Value < request.EndTime && l.EndTime.Value > request.StartTime)), ct);
 
         if (hasLeave)
         {
             return ApiResponse<ReceptionistWorkScheduleDto>.Fail("Không thể phân ca vì lễ tân đã được duyệt nghỉ phép trong khoảng thời gian này.");
         }
 
-        // Check overlapping active shift for this receptionist
-        bool overlapping = await _dbContext.ReceptionistWorkSchedules
-            .AnyAsync(s => s.ReceptionistUserId == request.ReceptionistUserId &&
+        bool overlapping = await _dbContext.StaffWorkSchedules
+            .AnyAsync(s => s.StaffRole == UserRole.Receptionist &&
+                           s.StaffUserId == request.ReceptionistUserId &&
                            s.WorkDate == request.WorkDate &&
                            s.Status == "Scheduled" &&
                            s.StartTime < request.EndTime && s.EndTime > request.StartTime, ct);
@@ -344,28 +312,26 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             return ApiResponse<ReceptionistWorkScheduleDto>.Fail("Lễ tân đã có ca trực khác trùng hoặc giao thoa thời gian trong ngày.");
         }
 
-        var schedule = new ReceptionistWorkSchedule
+        var schedule = new StaffWorkSchedule
         {
-            ReceptionistUserId = request.ReceptionistUserId,
-            ShiftTemplateId = request.ShiftTemplateId,
+            StaffUserId = request.ReceptionistUserId,
+            StaffRole = UserRole.Receptionist,
             WorkDate = request.WorkDate,
             StartTime = request.StartTime,
             EndTime = request.EndTime,
             Status = "Scheduled",
-            IsPublished = true,
             Notes = request.Notes,
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = currentUserId
+            CreatedAt = DateTime.UtcNow
         };
 
-        _dbContext.ReceptionistWorkSchedules.Add(schedule);
+        _dbContext.StaffWorkSchedules.Add(schedule);
         await _dbContext.SaveChangesAsync(ct);
 
         await _auditLogService.LogAsync(
             currentUserId,
             "CREATE_RECEPTIONIST_SCHEDULE",
-            "ReceptionistWorkSchedule",
-            schedule.ReceptionistScheduleId.ToString(),
+            "StaffWorkSchedule",
+            schedule.WorkScheduleId.ToString(),
             null,
             $"UserId: {request.ReceptionistUserId}, Date: {request.WorkDate}, Time: {request.StartTime}-{request.EndTime}",
             ct);
@@ -376,16 +342,16 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
         var dto = new ReceptionistWorkScheduleDto
         {
-            ReceptionistScheduleId = schedule.ReceptionistScheduleId,
-            ReceptionistUserId = schedule.ReceptionistUserId,
+            ReceptionistScheduleId = schedule.WorkScheduleId,
+            ReceptionistUserId = schedule.StaffUserId,
             ReceptionistName = user?.StaffProfile?.FullName ?? user?.Email ?? "Lễ tân",
-            EmployeeCode = user?.StaffProfile?.EmployeeCode ?? $"EMP-{schedule.ReceptionistUserId}",
-            ShiftTemplateId = schedule.ShiftTemplateId,
+            EmployeeCode = $"EMP-{schedule.StaffUserId}",
+            ShiftTemplateId = request.ShiftTemplateId,
             WorkDate = schedule.WorkDate,
             StartTime = schedule.StartTime,
             EndTime = schedule.EndTime,
             Status = schedule.Status,
-            IsPublished = schedule.IsPublished,
+            IsPublished = true,
             Notes = schedule.Notes,
             CreatedAt = schedule.CreatedAt
         };
@@ -404,10 +370,10 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             return ApiResponse<ReceptionistWorkScheduleDto>.Fail("Giờ kết thúc ca trực phải lớn hơn giờ bắt đầu.");
         }
 
-        var schedule = await _dbContext.ReceptionistWorkSchedules
-            .Include(s => s.ReceptionistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .FirstOrDefaultAsync(s => s.ReceptionistScheduleId == scheduleId, ct);
+        var schedule = await _dbContext.StaffWorkSchedules
+            .Include(s => s.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .FirstOrDefaultAsync(s => s.WorkScheduleId == scheduleId && s.StaffRole == UserRole.Receptionist, ct);
 
         if (schedule == null)
         {
@@ -417,30 +383,23 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         var lockKeys = new List<string>
         {
             SqlAppLockHelper.ReceptionistCoverageDateKey(schedule.WorkDate),
-            SqlAppLockHelper.ReceptionistUserDateKey(schedule.ReceptionistUserId, schedule.WorkDate)
+            SqlAppLockHelper.ReceptionistUserDateKey(schedule.StaffUserId, schedule.WorkDate)
         };
 
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
 
-        bool isPeriodLocked = await _dbContext.IsPeriodLockedAsync(schedule.WorkDate, ct);
-        if (isPeriodLocked)
-        {
-            return ApiResponse<ReceptionistWorkScheduleDto>.Fail($"Kỳ công tháng {schedule.WorkDate.Month:D2}/{schedule.WorkDate.Year} đã được chốt sổ. Không thể điều chỉnh ca trực.");
-        }
-
-        // Check if employee has approved leave during new time
-        bool hasLeave = await _dbContext.ReceptionistLeaveRequestPeriods
-            .AnyAsync(p => p.LeaveRequest.ReceptionistUserId == schedule.ReceptionistUserId &&
-                           p.LeaveDate == schedule.WorkDate &&
-                           p.Status == "Approved" &&
-                           (!p.StartTime.HasValue || (p.StartTime.Value < request.EndTime && p.EndTime > request.StartTime)), ct);
+        bool hasLeave = await _dbContext.StaffLeaveRequests
+            .AnyAsync(l => l.StaffRole == UserRole.Receptionist &&
+                           l.StaffUserId == schedule.StaffUserId &&
+                           l.Status == "Approved" &&
+                           l.StartDate <= schedule.WorkDate && l.EndDate >= schedule.WorkDate &&
+                           (!l.StartTime.HasValue || !l.EndTime.HasValue || (l.StartTime.Value < request.EndTime && l.EndTime.Value > request.StartTime)), ct);
 
         if (hasLeave)
         {
             return ApiResponse<ReceptionistWorkScheduleDto>.Fail("Không thể cập nhật ca vì lễ tân đã được duyệt nghỉ phép trong khoảng thời gian này.");
         }
 
-        schedule.ShiftTemplateId = request.ShiftTemplateId;
         schedule.StartTime = request.StartTime;
         schedule.EndTime = request.EndTime;
         schedule.Status = request.Status;
@@ -452,24 +411,24 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         await _auditLogService.LogAsync(
             currentUserId,
             "UPDATE_RECEPTIONIST_SCHEDULE",
-            "ReceptionistWorkSchedule",
-            schedule.ReceptionistScheduleId.ToString(),
+            "StaffWorkSchedule",
+            schedule.WorkScheduleId.ToString(),
             null,
             $"Updated time: {request.StartTime}-{request.EndTime}, Status: {request.Status}",
             ct);
 
         var dto = new ReceptionistWorkScheduleDto
         {
-            ReceptionistScheduleId = schedule.ReceptionistScheduleId,
-            ReceptionistUserId = schedule.ReceptionistUserId,
-            ReceptionistName = schedule.ReceptionistUser.StaffProfile != null ? schedule.ReceptionistUser.StaffProfile.FullName : (schedule.ReceptionistUser.Email ?? "Lễ tân"),
-            EmployeeCode = schedule.ReceptionistUser.StaffProfile != null ? schedule.ReceptionistUser.StaffProfile.EmployeeCode : $"EMP-{schedule.ReceptionistUserId}",
-            ShiftTemplateId = schedule.ShiftTemplateId,
+            ReceptionistScheduleId = schedule.WorkScheduleId,
+            ReceptionistUserId = schedule.StaffUserId,
+            ReceptionistName = schedule.StaffUser?.FullName ?? schedule.StaffUser?.User?.Email ?? "Lễ tân",
+            EmployeeCode = $"EMP-{schedule.StaffUserId}",
+            ShiftTemplateId = request.ShiftTemplateId,
             WorkDate = schedule.WorkDate,
             StartTime = schedule.StartTime,
             EndTime = schedule.EndTime,
             Status = schedule.Status,
-            IsPublished = schedule.IsPublished,
+            IsPublished = true,
             Notes = schedule.Notes,
             CreatedAt = schedule.CreatedAt
         };
@@ -482,8 +441,8 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         long currentUserId,
         CancellationToken ct = default)
     {
-        var schedule = await _dbContext.ReceptionistWorkSchedules
-            .FirstOrDefaultAsync(s => s.ReceptionistScheduleId == scheduleId, ct);
+        var schedule = await _dbContext.StaffWorkSchedules
+            .FirstOrDefaultAsync(s => s.WorkScheduleId == scheduleId && s.StaffRole == UserRole.Receptionist, ct);
 
         if (schedule == null)
         {
@@ -497,12 +456,6 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
 
-        bool isPeriodLocked = await _dbContext.IsPeriodLockedAsync(schedule.WorkDate, ct);
-        if (isPeriodLocked)
-        {
-            return ApiResponse<bool>.Fail($"Kỳ công tháng {schedule.WorkDate.Month:D2}/{schedule.WorkDate.Year} đã được chốt sổ. Không thể xóa ca trực.");
-        }
-
         schedule.Status = "Cancelled";
         schedule.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
@@ -510,7 +463,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         await _auditLogService.LogAsync(
             currentUserId,
             "CANCEL_RECEPTIONIST_SCHEDULE",
-            "ReceptionistWorkSchedule",
+            "StaffWorkSchedule",
             scheduleId.ToString(),
             "Scheduled",
             "Cancelled",
@@ -538,14 +491,8 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             return ApiResponse<ReceptionistBulkSchedulePreviewDto>.Fail("Vui lòng chọn các thứ trong tuần để áp dụng.");
         }
 
-        var template = await _dbContext.ReceptionistShiftTemplates
-            .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.ShiftTemplateId == request.ShiftTemplateId && t.IsActive, ct);
-
-        if (template == null)
-        {
-            return ApiResponse<ReceptionistBulkSchedulePreviewDto>.Fail("Không tìm thấy ca mẫu (Shift Template) hợp lệ.");
-        }
+        var template = DefaultShiftTemplates.FirstOrDefault(t => t.ShiftTemplateId == request.ShiftTemplateId)
+                       ?? DefaultShiftTemplates.First();
 
         int daysInMonth = DateTime.DaysInMonth(request.Year, request.Month);
         int proposedCount = 0;
@@ -554,19 +501,17 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         var warnings = new List<string>();
         var errors = new List<string>();
 
-        // Approved leaves in month
         var startDate = new DateOnly(request.Year, request.Month, 1);
         var endDate = new DateOnly(request.Year, request.Month, daysInMonth);
 
-        var approvedLeaves = await _dbContext.ReceptionistLeaveRequestPeriods
+        var approvedLeaves = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(p => p.LeaveRequest)
-            .Where(p => p.LeaveDate >= startDate && p.LeaveDate <= endDate && p.Status == "Approved")
+            .Where(l => l.StaffRole == UserRole.Receptionist && l.Status == "Approved" && l.StartDate <= endDate && l.EndDate >= startDate)
             .ToListAsync(ct);
 
-        var existingShifts = await _dbContext.ReceptionistWorkSchedules
+        var existingShifts = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Where(s => s.WorkDate >= startDate && s.WorkDate <= endDate && s.Status == "Scheduled")
+            .Where(s => s.StaffRole == UserRole.Receptionist && s.WorkDate >= startDate && s.WorkDate <= endDate && s.Status == "Scheduled")
             .ToListAsync(ct);
 
         for (int day = 1; day <= daysInMonth; day++)
@@ -578,8 +523,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
             foreach (var userId in request.ReceptionistUserIds)
             {
-                // Check if user has approved leave on this date
-                bool hasLeave = approvedLeaves.Any(l => l.LeaveRequest.ReceptionistUserId == userId && l.LeaveDate == date);
+                bool hasLeave = approvedLeaves.Any(l => l.StaffUserId == userId && l.StartDate <= date && l.EndDate >= date);
                 if (hasLeave)
                 {
                     conflictWithLeave++;
@@ -587,7 +531,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                     continue;
                 }
 
-                bool alreadyScheduled = existingShifts.Any(s => s.ReceptionistUserId == userId && s.WorkDate == date);
+                bool alreadyScheduled = existingShifts.Any(s => s.StaffUserId == userId && s.WorkDate == date);
                 if (alreadyScheduled)
                 {
                     if (request.OverwriteExisting)
@@ -627,11 +571,8 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             return ApiResponse<bool>.Fail(previewRes.Message ?? "Dữ liệu phân ca hàng loạt không hợp lệ.");
         }
 
-        var template = await _dbContext.ReceptionistShiftTemplates
-            .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.ShiftTemplateId == request.ShiftTemplateId && t.IsActive, ct);
-
-        if (template == null) return ApiResponse<bool>.Fail("Không tìm thấy ca mẫu.");
+        var template = DefaultShiftTemplates.FirstOrDefault(t => t.ShiftTemplateId == request.ShiftTemplateId)
+                       ?? DefaultShiftTemplates.First();
 
         int daysInMonth = DateTime.DaysInMonth(request.Year, request.Month);
         var startDate = new DateOnly(request.Year, request.Month, 1);
@@ -649,13 +590,12 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         }
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
 
-        var approvedLeaves = await _dbContext.ReceptionistLeaveRequestPeriods
+        var approvedLeaves = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(p => p.LeaveRequest)
-            .Where(p => p.LeaveDate >= startDate && p.LeaveDate <= endDate && p.Status == "Approved")
+            .Where(l => l.StaffRole == UserRole.Receptionist && l.Status == "Approved" && l.StartDate <= endDate && l.EndDate >= startDate)
             .ToListAsync(ct);
 
-        var newShifts = new List<ReceptionistWorkSchedule>();
+        var newShifts = new List<StaffWorkSchedule>();
 
         for (int day = 1; day <= daysInMonth; day++)
         {
@@ -666,15 +606,15 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
             foreach (var userId in request.ReceptionistUserIds)
             {
-                if (approvedLeaves.Any(l => l.LeaveRequest.ReceptionistUserId == userId && l.LeaveDate == date))
+                if (approvedLeaves.Any(l => l.StaffUserId == userId && l.StartDate <= date && l.EndDate >= date))
                 {
                     continue;
                 }
 
                 if (request.OverwriteExisting)
                 {
-                    var existing = await _dbContext.ReceptionistWorkSchedules
-                        .Where(s => s.ReceptionistUserId == userId && s.WorkDate == date && s.Status == "Scheduled")
+                    var existing = await _dbContext.StaffWorkSchedules
+                        .Where(s => s.StaffRole == UserRole.Receptionist && s.StaffUserId == userId && s.WorkDate == date && s.Status == "Scheduled")
                         .ToListAsync(ct);
                     foreach (var ex in existing)
                     {
@@ -684,36 +624,34 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                 }
                 else
                 {
-                    bool exists = await _dbContext.ReceptionistWorkSchedules
-                        .AnyAsync(s => s.ReceptionistUserId == userId && s.WorkDate == date && s.Status == "Scheduled", ct);
+                    bool exists = await _dbContext.StaffWorkSchedules
+                        .AnyAsync(s => s.StaffRole == UserRole.Receptionist && s.StaffUserId == userId && s.WorkDate == date && s.Status == "Scheduled", ct);
                     if (exists) continue;
                 }
 
-                newShifts.Add(new ReceptionistWorkSchedule
+                newShifts.Add(new StaffWorkSchedule
                 {
-                    ReceptionistUserId = userId,
-                    ShiftTemplateId = template.ShiftTemplateId,
+                    StaffUserId = userId,
+                    StaffRole = UserRole.Receptionist,
                     WorkDate = date,
                     StartTime = template.StartTime,
                     EndTime = template.EndTime,
                     Status = "Scheduled",
-                    IsPublished = true,
                     Notes = $"Phân ca tự động ({template.TemplateName})",
-                    CreatedAt = DateTime.UtcNow,
-                    CreatedBy = currentUserId
+                    CreatedAt = DateTime.UtcNow
                 });
             }
         }
 
         if (newShifts.Any())
         {
-            _dbContext.ReceptionistWorkSchedules.AddRange(newShifts);
+            _dbContext.StaffWorkSchedules.AddRange(newShifts);
             await _dbContext.SaveChangesAsync(ct);
 
             await _auditLogService.LogAsync(
                 currentUserId,
                 "APPLY_BULK_RECEPTIONIST_SCHEDULE",
-                "ReceptionistWorkSchedule",
+                "StaffWorkSchedule",
                 $"{request.Year}-{request.Month}",
                 null,
                 $"Created {newShifts.Count} shifts for template {template.TemplateName}",
@@ -739,9 +677,9 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         var sourceStart = new DateOnly(request.SourceYear, request.SourceMonth, 1);
         var sourceEnd = new DateOnly(request.SourceYear, request.SourceMonth, sourceDays);
 
-        var sourceShifts = await _dbContext.ReceptionistWorkSchedules
+        var sourceShifts = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Where(s => s.WorkDate >= sourceStart && s.WorkDate <= sourceEnd && s.Status == "Scheduled")
+            .Where(s => s.StaffRole == UserRole.Receptionist && s.WorkDate >= sourceStart && s.WorkDate <= sourceEnd && s.Status == "Scheduled")
             .ToListAsync(ct);
 
         if (!sourceShifts.Any())
@@ -752,17 +690,15 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         var targetStart = new DateOnly(request.TargetYear, request.TargetMonth, 1);
         var targetEnd = new DateOnly(request.TargetYear, request.TargetMonth, targetDays);
 
-        // Check target approved leaves
-        var targetLeaves = await _dbContext.ReceptionistLeaveRequestPeriods
+        var targetLeaves = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(p => p.LeaveRequest)
-            .Where(p => p.LeaveDate >= targetStart && p.LeaveDate <= targetEnd && p.Status == "Approved")
+            .Where(l => l.StaffRole == UserRole.Receptionist && l.Status == "Approved" && l.StartDate <= targetEnd && l.EndDate >= targetStart)
             .ToListAsync(ct);
 
         if (request.OverwriteExisting)
         {
-            var existingTarget = await _dbContext.ReceptionistWorkSchedules
-                .Where(s => s.WorkDate >= targetStart && s.WorkDate <= targetEnd && s.Status == "Scheduled")
+            var existingTarget = await _dbContext.StaffWorkSchedules
+                .Where(s => s.StaffRole == UserRole.Receptionist && s.WorkDate >= targetStart && s.WorkDate <= targetEnd && s.Status == "Scheduled")
                 .ToListAsync(ct);
             foreach (var ex in existingTarget)
             {
@@ -771,7 +707,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             }
         }
 
-        var newShifts = new List<ReceptionistWorkSchedule>();
+        var newShifts = new List<StaffWorkSchedule>();
 
         for (int day = 1; day <= Math.Min(sourceDays, targetDays); day++)
         {
@@ -782,44 +718,41 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
             foreach (var s in dayShifts)
             {
-                // Skip if user has approved leave on target date
-                if (targetLeaves.Any(l => l.LeaveRequest.ReceptionistUserId == s.ReceptionistUserId && l.LeaveDate == tgtDate))
+                if (targetLeaves.Any(l => l.StaffUserId == s.StaffUserId && l.StartDate <= tgtDate && l.EndDate >= tgtDate))
                 {
                     continue;
                 }
 
                 if (!request.OverwriteExisting)
                 {
-                    bool exists = await _dbContext.ReceptionistWorkSchedules
-                        .AnyAsync(ws => ws.ReceptionistUserId == s.ReceptionistUserId && ws.WorkDate == tgtDate && ws.Status == "Scheduled", ct);
+                    bool exists = await _dbContext.StaffWorkSchedules
+                        .AnyAsync(ws => ws.StaffRole == UserRole.Receptionist && ws.StaffUserId == s.StaffUserId && ws.WorkDate == tgtDate && ws.Status == "Scheduled", ct);
                     if (exists) continue;
                 }
 
-                newShifts.Add(new ReceptionistWorkSchedule
+                newShifts.Add(new StaffWorkSchedule
                 {
-                    ReceptionistUserId = s.ReceptionistUserId,
-                    ShiftTemplateId = s.ShiftTemplateId,
+                    StaffUserId = s.StaffUserId,
+                    StaffRole = UserRole.Receptionist,
                     WorkDate = tgtDate,
                     StartTime = s.StartTime,
                     EndTime = s.EndTime,
                     Status = "Scheduled",
-                    IsPublished = true,
                     Notes = $"Sao chép từ ngày {srcDate:dd/MM/yyyy}",
-                    CreatedAt = DateTime.UtcNow,
-                    CreatedBy = currentUserId
+                    CreatedAt = DateTime.UtcNow
                 });
             }
         }
 
         if (newShifts.Any())
         {
-            _dbContext.ReceptionistWorkSchedules.AddRange(newShifts);
+            _dbContext.StaffWorkSchedules.AddRange(newShifts);
             await _dbContext.SaveChangesAsync(ct);
 
             await _auditLogService.LogAsync(
                 currentUserId,
                 "COPY_MONTH_RECEPTIONIST_SCHEDULE",
-                "ReceptionistWorkSchedule",
+                "StaffWorkSchedule",
                 $"{request.TargetYear}-{request.TargetMonth}",
                 null,
                 $"Copied {newShifts.Count} shifts from {request.SourceMonth}/{request.SourceYear} to {request.TargetMonth}/{request.TargetYear}",
@@ -841,15 +774,8 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
 
-        bool isPeriodLocked = await _dbContext.IsPeriodLockedAsync(request.Date, ct);
-        if (isPeriodLocked)
-        {
-            return ApiResponse<bool>.Fail($"Kỳ công tháng {request.Date.Month:D2}/{request.Date.Year} đã được chốt sổ. Không thể ghi đè lịch trực.");
-        }
-
-        // Cancel existing shifts on this date
-        var existing = await _dbContext.ReceptionistWorkSchedules
-            .Where(s => s.WorkDate == request.Date && s.Status == "Scheduled")
+        var existing = await _dbContext.StaffWorkSchedules
+            .Where(s => s.StaffRole == UserRole.Receptionist && s.WorkDate == request.Date && s.Status == "Scheduled")
             .ToListAsync(ct);
 
         foreach (var ex in existing)
@@ -858,32 +784,29 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             ex.UpdatedAt = DateTime.UtcNow;
         }
 
-        // Add requested shifts
-        var newShifts = new List<ReceptionistWorkSchedule>();
+        var newShifts = new List<StaffWorkSchedule>();
         foreach (var req in request.Shifts)
         {
-            newShifts.Add(new ReceptionistWorkSchedule
+            newShifts.Add(new StaffWorkSchedule
             {
-                ReceptionistUserId = req.ReceptionistUserId,
-                ShiftTemplateId = req.ShiftTemplateId,
+                StaffUserId = req.ReceptionistUserId,
+                StaffRole = UserRole.Receptionist,
                 WorkDate = request.Date,
                 StartTime = req.StartTime,
                 EndTime = req.EndTime,
                 Status = "Scheduled",
-                IsPublished = true,
                 Notes = req.Notes ?? "Điều chỉnh lịch trong ngày",
-                CreatedAt = DateTime.UtcNow,
-                CreatedBy = currentUserId
+                CreatedAt = DateTime.UtcNow
             });
         }
 
-        _dbContext.ReceptionistWorkSchedules.AddRange(newShifts);
+        _dbContext.StaffWorkSchedules.AddRange(newShifts);
         await _dbContext.SaveChangesAsync(ct);
 
         await _auditLogService.LogAsync(
             currentUserId,
             "DAILY_OVERRIDE_RECEPTIONIST_SCHEDULE",
-            "ReceptionistWorkSchedule",
+            "StaffWorkSchedule",
             request.Date.ToString("yyyy-MM-dd"),
             null,
             $"Applied {newShifts.Count} overridden shifts on {request.Date:yyyy-MM-dd}",

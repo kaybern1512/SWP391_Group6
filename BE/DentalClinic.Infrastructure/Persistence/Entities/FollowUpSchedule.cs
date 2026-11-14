@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -7,37 +7,35 @@ public partial class FollowUpSchedule
 {
     public long FollowUpId { get; set; }
 
-    public long? TreatmentSessionId { get; set; }
+    public long TreatmentSessionId { get; set; }
 
-    public long? PatientUserId { get; set; }
+    public long DentistUserId { get; set; }
 
-    public long? DentistUserId { get; set; }
+    public long PatientUserId { get; set; }
 
-    public long? TreatmentPlanId { get; set; }
+    public DateOnly RecommendedDate { get; set; }
 
-    public long? TreatmentPlanStageId { get; set; }
+    public int? RecommendedServiceId { get; set; }
 
-    public string? FollowUpReasonCategory { get; set; }
+    public string ClinicalReason { get; set; } = null!;
 
-    public DateTime RecommendedDate { get; set; }
+    public string Status { get; set; } = "Proposed";
 
-    public string? Reason { get; set; }
+    public long? ResultingAppointmentId { get; set; }
 
-    public string Status { get; set; } = null!;
+    public DateTime CreatedAt { get; set; }
 
-    public long? AppointmentId { get; set; }
+    public DateTime? UpdatedAt { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public virtual TreatmentSession TreatmentSession { get; set; } = null!;
 
-    public virtual Appointment? Appointment { get; set; }
+    public virtual DentistProfile Dentist { get; set; } = null!;
 
-    public virtual TreatmentSession? TreatmentSession { get; set; }
+    public virtual PatientProfile Patient { get; set; } = null!;
 
-    public virtual PatientProfile? PatientUser { get; set; }
+    public virtual DepartmentService? RecommendedService { get; set; }
 
-    public virtual DentistProfile? DentistUser { get; set; }
+    public virtual Appointment? ResultingAppointment { get; set; }
 
-    public virtual TreatmentPlan? TreatmentPlan { get; set; }
-
-    public virtual TreatmentPlanItem? TreatmentPlanStage { get; set; }
+    public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 }

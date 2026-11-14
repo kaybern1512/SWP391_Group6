@@ -1,13 +1,14 @@
 using System;
-using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
 
-public partial class DentistLeaveRequest
+public partial class StaffLeaveRequest
 {
     public long LeaveRequestId { get; set; }
 
-    public long DentistUserId { get; set; }
+    public long StaffUserId { get; set; }
+
+    public string StaffRole { get; set; } = null!;
 
     public string LeaveType { get; set; } = null!;
 
@@ -21,9 +22,7 @@ public partial class DentistLeaveRequest
 
     public string Reason { get; set; } = null!;
 
-    public string? Notes { get; set; }
-
-    public string Status { get; set; } = null!;
+    public string Status { get; set; } = "Pending";
 
     public long? ReviewedByUserId { get; set; }
 
@@ -35,9 +34,7 @@ public partial class DentistLeaveRequest
 
     public DateTime? UpdatedAt { get; set; }
 
-    public virtual DentistProfile DentistUser { get; set; } = null!;
+    public virtual StaffProfile StaffUser { get; set; } = null!;
 
     public virtual UserAccount? ReviewedByUser { get; set; }
-
-    public virtual ICollection<AppointmentDisruption> AppointmentDisruptions { get; set; } = new List<AppointmentDisruption>();
 }

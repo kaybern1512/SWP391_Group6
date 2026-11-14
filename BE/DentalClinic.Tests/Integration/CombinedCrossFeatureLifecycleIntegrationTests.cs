@@ -81,10 +81,10 @@ public class CombinedCrossFeatureLifecycleIntegrationTests
         }
 
         // 3. Clean leave requests & availability
-        var leaves = await db.DentistLeaveRequests
-            .Where(l => l.StartDate == testDate)
+        var leaves = await db.StaffLeaveRequests
+            .Where(l => l.StaffRole == "Dentist" && l.StartDate == testDate)
             .ToListAsync();
-        db.DentistLeaveRequests.RemoveRange(leaves);
+        db.StaffLeaveRequests.RemoveRange(leaves);
 
         var avails = await db.DentistAvailabilities
             .Where(a => a.StartDateTime >= dtStart && a.StartDateTime <= dtEnd)
@@ -264,7 +264,7 @@ public class CombinedCrossFeatureLifecycleIntegrationTests
             using (var db = CreateDbContext())
             {
                 // Invariant: Leave is Approved
-                var leaveInDb = await db.DentistLeaveRequests.FindAsync(leaveRequestId);
+                var leaveInDb = await db.StaffLeaveRequests.FindAsync(leaveRequestId);
                 Assert.NotNull(leaveInDb);
                 Assert.Equal("Approved", leaveInDb.Status);
 

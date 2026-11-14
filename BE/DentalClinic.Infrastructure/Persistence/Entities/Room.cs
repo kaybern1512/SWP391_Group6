@@ -5,35 +5,23 @@ namespace DentalClinic.Infrastructure.Persistence.Entities;
 
 public partial class Room
 {
-    public long RoomId { get; set; }
+    public int RoomId { get; set; }
+
+    public int DepartmentId { get; set; }
 
     public string RoomCode { get; set; } = null!;
 
-    public string? RoomName { get; set; }
+    public string RoomName { get; set; } = null!;
 
-    public long? DepartmentId { get; set; }
+    public string RoomType { get; set; } = null!;
 
-    public string Status { get; set; } = null!;
+    public string Status { get; set; } = "Active";
 
-    public bool IsExclusive { get; set; } = false;
+    public DateTime CreatedAt { get; set; }
 
-    public string RoomType { get; set; } = "Treatment";
-
-    public int MaxConcurrentPatients { get; set; } = 1;
-
-    public int MaxWaitingPatients { get; set; } = 3;
-
-    public int TargetMaxWaitMinutes { get; set; } = 20;
-
-    public int EscalationWaitMinutes { get; set; } = 30;
-
-    public virtual Department? Department { get; set; }
-
-    public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
+    public virtual Department Department { get; set; } = null!;
 
     public virtual ICollection<DentalChair> DentalChairs { get; set; } = new List<DentalChair>();
 
-    public virtual ICollection<ImagingEquipment> ImagingEquipments { get; set; } = new List<ImagingEquipment>();
-
-    public virtual ICollection<ImagingSession> ImagingSessions { get; set; } = new List<ImagingSession>();
+    public virtual ICollection<AppointmentService> AppointmentServices { get; set; } = new List<AppointmentService>();
 }

@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
 
@@ -9,21 +8,23 @@ public partial class Payment
 
     public long InvoiceId { get; set; }
 
-    public long PaidByPatientUserId { get; set; }
-
-    public string Method { get; set; } = null!;
-
     public decimal Amount { get; set; }
+
+    public string PaymentType { get; set; } = "Final";
+
+    public string Method { get; set; } = "Cash";
 
     public string? TransactionReference { get; set; }
 
-    public string Status { get; set; } = null!;
+    public string Status { get; set; } = "Successful";
 
-    public DateTime? PaidAt { get; set; }
+    public long ReceivedByUserId { get; set; }
 
-    public DateTime CreatedAt { get; set; }
+    public DateTime PaymentDate { get; set; }
+
+    public string? Notes { get; set; }
 
     public virtual Invoice Invoice { get; set; } = null!;
 
-    public virtual PatientProfile PaidByPatientUser { get; set; } = null!;
+    public virtual UserAccount ReceivedByUser { get; set; } = null!;
 }

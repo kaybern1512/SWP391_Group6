@@ -896,20 +896,21 @@ public class AttendanceAndOperationsTests
             CreatedBy = 1
         });
 
-        var leave = new ReceptionistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
             LeaveRequestId = 501,
-            ReceptionistUserId = 20,
+            StaffUserId = 20,
+            StaffRole = "Receptionist",
             LeaveType = "Annual",
             StartDate = date,
             EndDate = date,
             Reason = "Nghỉ việc gia đình",
             Status = "Approved",
-            ApprovedBy = 1,
-            ApprovedAt = DateTime.UtcNow
+            ReviewedByUserId = 1,
+            ReviewedAt = DateTime.UtcNow
         };
-        db.ReceptionistLeaveRequests.Add(leave);
-        db.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod
+        db.StaffLeaveRequests.Add(leave);
+        db.StaffLeaveRequestPeriods.Add(new StaffLeaveRequestPeriod
         {
             PeriodId = 1001,
             LeaveRequestId = 501,
@@ -1140,10 +1141,11 @@ public class AttendanceAndOperationsTests
 
         var today = ClinicTimeHelper.TodayDateOnly;
 
-        db.DentistLeaveRequests.Add(new DentistLeaveRequest
+        db.StaffLeaveRequests.Add(new StaffLeaveRequest
         {
             LeaveRequestId = 771,
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Personal",
             StartDate = today.AddDays(1),
             EndDate = today.AddDays(2),
@@ -1248,10 +1250,11 @@ public class AttendanceAndOperationsTests
         });
 
         // Add pending leave for dentist on 2026-10-12
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
             LeaveRequestId = 881,
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Annual",
             StartDate = new DateOnly(2026, 10, 12),
             EndDate = new DateOnly(2026, 10, 12),
@@ -1259,7 +1262,7 @@ public class AttendanceAndOperationsTests
             Reason = "Nghỉ việc cá nhân",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         var mockReminder = new Mock<IAppointmentReminderService>();
@@ -1342,10 +1345,11 @@ public class AttendanceAndOperationsTests
         });
 
         // Add pending leave for dentist on 2026-10-12
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
             LeaveRequestId = 882,
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Annual",
             StartDate = new DateOnly(2026, 10, 12),
             EndDate = new DateOnly(2026, 10, 12),
@@ -1353,7 +1357,7 @@ public class AttendanceAndOperationsTests
             Reason = "Nghỉ phép thường niên",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         var mockReminder = new Mock<IAppointmentReminderService>();

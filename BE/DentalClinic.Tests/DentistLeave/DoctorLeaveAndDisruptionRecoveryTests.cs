@@ -178,7 +178,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         Assert.Equal("Pending", response.Data.Status);
         Assert.Equal(10, response.Data.DentistUserId);
 
-        var savedInDb = await db.DentistLeaveRequests.FirstOrDefaultAsync(l => l.DentistUserId == 10);
+        var savedInDb = await db.StaffLeaveRequests.FirstOrDefaultAsync(l => l.StaffRole == "Dentist" && l.StaffUserId == 10);
         Assert.NotNull(savedInDb);
         Assert.Equal("Pending", savedInDb.Status);
     }
@@ -213,9 +213,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         var service = CreateLeaveService(db);
 
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Personal",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -225,7 +226,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         var response = await service.WithdrawLeaveRequestAsync(leave.LeaveRequestId, 10);
@@ -233,7 +234,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         Assert.True(response.Success);
         Assert.Equal("Withdrawn", response.Data?.Status);
 
-        var updated = await db.DentistLeaveRequests.FindAsync(leave.LeaveRequestId);
+        var updated = await db.StaffLeaveRequests.FindAsync(leave.LeaveRequestId);
         Assert.Equal("Withdrawn", updated?.Status);
     }
 
@@ -245,9 +246,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         var service = CreateLeaveService(db);
 
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "AnnualLeave",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -255,7 +257,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Approved",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         var response = await service.WithdrawLeaveRequestAsync(leave.LeaveRequestId, 10);
@@ -276,9 +278,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         var service = CreateLeaveService(db);
 
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Emergency",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -288,7 +291,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         var response = await service.GetLeaveImpactAnalysisAsync(leave.LeaveRequestId);
@@ -315,9 +318,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         var service = CreateLeaveService(db);
 
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "AnnualLeave",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -327,7 +331,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         var approveReq = new ApproveDentistLeaveRequest { AdminNotes = "Phê duyệt nghỉ phép thường niên" };
@@ -356,9 +360,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         var service = CreateLeaveService(db);
 
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Personal",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -366,7 +371,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         var rejectReq = new RejectDentistLeaveRequest { RejectionReason = "Không đủ nhân sự trực ca" };
@@ -395,9 +400,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
 
         // Setup Approved Leave and Disruption
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "AnnualLeave",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -405,7 +411,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
@@ -440,9 +446,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
 
         // Setup Approved Leave and Disruption
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "AnnualLeave",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -450,7 +457,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
@@ -491,9 +498,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
 
         // Setup
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "SickLeave",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -501,7 +509,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
@@ -536,9 +544,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         var disruptionService = CreateDisruptionService(db);
 
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Emergency",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -546,7 +555,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
@@ -581,9 +590,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         await db.SaveChangesAsync();
 
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "AnnualLeave",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -591,7 +601,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
@@ -633,9 +643,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         await db.SaveChangesAsync();
 
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Emergency",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -643,7 +654,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
@@ -678,9 +689,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         var disruptionService = CreateDisruptionService(db);
 
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "AnnualLeave",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -688,7 +700,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
@@ -726,9 +738,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         var disruptionService = CreateDisruptionService(db);
 
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "AnnualLeave",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -736,7 +749,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         // 1. Dentist 11 attempts to view Dentist 10's private leave request
@@ -813,9 +826,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         await db.SaveChangesAsync();
 
         // Doctor submits partial shift leave ONLY in afternoon (13:00 to 17:00)
-        var partialLeave = new DentistLeaveRequest
+        var partialLeave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Personal",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -825,7 +839,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(partialLeave);
+        db.StaffLeaveRequests.Add(partialLeave);
         await db.SaveChangesAsync();
 
         var impact = await leaveService.GetLeaveImpactAnalysisAsync(partialLeave.LeaveRequestId);
@@ -925,9 +939,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         await db.SaveChangesAsync();
 
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Emergency",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -935,7 +950,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         await leaveService.ApproveLeaveRequestAsync(leave.LeaveRequestId, 1, new ApproveDentistLeaveRequest());
@@ -970,9 +985,10 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         var disruptionService = CreateDisruptionService(db);
 
         var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Emergency",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -980,7 +996,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         // Verify state transition idempotency: second approval attempt is safely rejected
@@ -1013,10 +1029,11 @@ public class DoctorLeaveAndDisruptionRecoveryTests
         var apptStart = tomorrow.ToDateTime(new TimeOnly(10, 0));
         var apptEnd = tomorrow.ToDateTime(new TimeOnly(10, 30));
 
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
             LeaveRequestId = 50,
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Emergency",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -1024,7 +1041,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Approved",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
 
         var disruption = new AppointmentDisruption
         {
@@ -1093,10 +1110,11 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             CreatedAt = DateTime.UtcNow
         });
 
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
             LeaveRequestId = 50,
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             LeaveType = "Emergency",
             StartDate = tomorrow,
             EndDate = tomorrow,
@@ -1104,7 +1122,7 @@ public class DoctorLeaveAndDisruptionRecoveryTests
             Status = "Approved",
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
 
         var disruption = new AppointmentDisruption
         {

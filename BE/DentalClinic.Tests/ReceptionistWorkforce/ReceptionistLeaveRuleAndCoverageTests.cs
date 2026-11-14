@@ -139,10 +139,10 @@ public class ReceptionistLeaveRuleAndCoverageTests
         Assert.Contains("tối đa 2 lễ tân", app3.Message ?? "");
 
         // Verify database state: only 2 approved leaves exist
-        var approvedCount = await db.ReceptionistLeaveRequests.CountAsync(l => l.Status == "Approved");
+        var approvedCount = await db.StaffLeaveRequests.CountAsync(l => l.StaffRole == "Receptionist" && l.Status == "Approved");
         Assert.Equal(2, approvedCount);
 
-        var thirdReq = await db.ReceptionistLeaveRequests.FindAsync(req3.Data!.LeaveRequestId);
+        var thirdReq = await db.StaffLeaveRequests.FindAsync(req3.Data!.LeaveRequestId);
         Assert.Equal("Pending", thirdReq!.Status);
     }
 
@@ -370,7 +370,7 @@ public class ReceptionistLeaveRuleAndCoverageTests
         var withdrawRes = await leaveService.WithdrawLeaveRequestAsync(req.Data!.LeaveRequestId, 201);
         Assert.True(withdrawRes.Success);
 
-        var leave = await db.ReceptionistLeaveRequests.FindAsync(req.Data!.LeaveRequestId);
+        var leave = await db.StaffLeaveRequests.FindAsync(req.Data!.LeaveRequestId);
         Assert.Equal("Withdrawn", leave!.Status);
 
         // Attempting to withdraw again must fail
@@ -414,7 +414,7 @@ public class ReceptionistLeaveRuleAndCoverageTests
         var rejectRes = await leaveService.RejectLeaveRequestAsync(req.Data!.LeaveRequestId, "Không đủ nhân sự trực ngày đó", 1);
         Assert.True(rejectRes.Success);
 
-        var leave = await db.ReceptionistLeaveRequests.FindAsync(req.Data!.LeaveRequestId);
+        var leave = await db.StaffLeaveRequests.FindAsync(req.Data!.LeaveRequestId);
         Assert.Equal("Rejected", leave!.Status);
         Assert.Equal("Không đủ nhân sự trực ngày đó", leave.RejectionReason);
     }

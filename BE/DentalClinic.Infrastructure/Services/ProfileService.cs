@@ -38,8 +38,7 @@ public class ProfileService : IProfileService
             .Include(u => u.PatientProfile)
             .Include(u => u.StaffProfile)
                 .ThenInclude(s => s!.DentistProfile)
-                    .ThenInclude(d => d!.DentistDepartments)
-                        .ThenInclude(dd => dd.Department)
+                    .ThenInclude(d => d!.Department)
             .FirstOrDefaultAsync(u => u.UserId == userId, ct);
 
         if (user == null)
@@ -55,7 +54,7 @@ public class ProfileService : IProfileService
             Role = user.Role,
             Status = user.Status,
             AvatarUrl = user.AvatarUrl,
-            EmailVerifiedAt = user.EmailVerifiedAt,
+            EmailVerifiedAt = user.CreatedAt,
             CreatedAt = user.CreatedAt
         };
 
@@ -63,7 +62,7 @@ public class ProfileService : IProfileService
         {
             var p = user.PatientProfile;
             response.FullName = p.FullName;
-            response.Code = p.PatientCode;
+            response.Code = $"PT-{user.UserId:D6}";
             response.DateOfBirth = p.DateOfBirth.HasValue ? p.DateOfBirth.Value.ToDateTime(TimeOnly.MinValue) : null;
             response.Gender = p.Gender;
             response.Address = p.Address;
@@ -75,7 +74,7 @@ public class ProfileService : IProfileService
         {
             var s = user.StaffProfile;
             response.FullName = s.FullName;
-            response.Code = s.EmployeeCode;
+            response.Code = $"STF-{user.UserId:D6}";
 
             if (s.DentistProfile != null)
             {
@@ -84,9 +83,7 @@ public class ProfileService : IProfileService
                 response.Qualification = d.Qualification;
                 response.YearsOfExperience = d.YearsOfExperience;
                 response.Biography = d.Biography;
-
-                var dept = d.DentistDepartments.FirstOrDefault()?.Department;
-                response.DepartmentName = dept?.Name;
+                response.DepartmentName = d.Department?.Name;
             }
         }
         else

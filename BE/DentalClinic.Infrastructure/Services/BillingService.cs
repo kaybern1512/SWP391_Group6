@@ -80,11 +80,14 @@ public class BillingService : IBillingService
             }
 
             var appointment = await _dbContext.Appointments
-                .Include(a => a.PatientUser)
+                .Include(a => a.Patient)
                 .Include(a => a.Invoice)
-                .Include(a => a.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
-                .Include(a => a.Department)
+                .Include(a => a.AppointmentServices)
+                    .ThenInclude(s => s.AssignedDentist)
+                        .ThenInclude(d => d!.StaffProfile)
+                .Include(a => a.AppointmentServices)
+                    .ThenInclude(s => s.DepartmentService)
+                        .ThenInclude(ds => ds.Department)
                 .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId, ct);
 
             if (appointment == null)
@@ -110,17 +113,6 @@ public class BillingService : IBillingService
             if (appointment.Invoice != null)
                 return ApiResponse<InvoiceDto>.Fail($"Ca khám này đã được lập hóa đơn mã {appointment.Invoice.InvoiceCode}.");
 
-            if (appointment.CareEpisodeId.HasValue)
-            {
-                var existingEpisodeInvoice = await _dbContext.Invoices
-                    .FirstOrDefaultAsync(i => i.CareEpisodeId == appointment.CareEpisodeId.Value, ct);
-                if (existingEpisodeInvoice != null)
-                {
-                    return ApiResponse<InvoiceDto>.Fail($"Đợt khám này (Mã #{appointment.CareEpisodeId.Value}) đã có hóa đơn tổng hợp mã {existingEpisodeInvoice.InvoiceCode}. Vui lòng thanh toán hóa đơn tổng hợp.");
-                }
-            }
-
-            // Anti-double-billing guards
             var reqPerfIds = request.Items.Where(i => i.PerformedServiceId.HasValue).Select(i => i.PerformedServiceId!.Value).ToList();
             if (reqPerfIds.Count != reqPerfIds.Distinct().Count())
             {
@@ -139,9 +131,8 @@ public class BillingService : IBillingService
                 }
             }
 
-            // Validate staff user ID or pick available staff profile
             var validStaffUserId = staffUserId;
-            var staffExists = await _dbContext.StaffProfiles.AnyAsync(s => s.UserId == staffUserId, ct);
+            var staffExists = await _dbContext.UserAccounts.AnyAsync(u => u.UserId == staffUserId, ct);
             if (!staffExists)
             {
                 var defaultStaff = await _dbContext.StaffProfiles.OrderBy(s => s.UserId).FirstOrDefaultAsync(ct);
@@ -165,7 +156,8 @@ public class BillingService : IBillingService
             var discountedSubTotal = subTotal - discount;
             var taxPercent = Math.Max(0, request.TaxPercent);
             var taxAmount = Math.Round(discountedSubTotal * (taxPercent / 100m), 2);
-            var totalAmount = Math.Round(discountedSubTotal + taxAmount, 2);
+            var totalBeforeDiscount = Math.Round(subTotal + taxAmount, 2);
+            var finalAmount = Math.Round(discountedSubTotal + taxAmount, 2);
 
             var invoiceCode = await GenerateInvoiceCodeAsync(ct);
 
@@ -173,33 +165,38 @@ public class BillingService : IBillingService
             {
                 InvoiceCode = invoiceCode,
                 AppointmentId = appointment.AppointmentId,
-                CareEpisodeId = appointment.CareEpisodeId,
                 GeneratedByUserId = validStaffUserId,
-                TotalAmount = totalAmount,
-                Status = totalAmount == 0 ? "Paid" : "Unpaid",
+                TotalAmount = totalBeforeDiscount,
+                DiscountAmount = discount,
+                FinalAmount = finalAmount,
+                Status = finalAmount == 0 ? "Paid" : "Unpaid",
                 CreatedAt = DateTime.UtcNow
             };
 
             foreach (var item in request.Items)
             {
+                var itemTotal = item.Quantity * item.UnitPrice;
                 invoice.InvoiceItems.Add(new InvoiceItem
                 {
+                    AppointmentId = appointment.AppointmentId,
                     PerformedServiceId = item.PerformedServiceId,
                     Description = item.Description.Trim(),
                     Quantity = item.Quantity,
-                    UnitPrice = item.UnitPrice
+                    UnitPrice = item.UnitPrice,
+                    TotalAmount = itemTotal
                 });
             }
 
-            // If VAT was specified, record it as a transparent item if requested
             if (taxPercent > 0 && taxAmount > 0)
             {
                 invoice.InvoiceItems.Add(new InvoiceItem
                 {
+                    AppointmentId = appointment.AppointmentId,
                     PerformedServiceId = null,
                     Description = $"Thuế giá trị gia tăng (VAT {taxPercent:G29}%)",
                     Quantity = 1,
-                    UnitPrice = taxAmount
+                    UnitPrice = taxAmount,
+                    TotalAmount = taxAmount
                 });
             }
 
@@ -209,10 +206,10 @@ public class BillingService : IBillingService
 
             try
             {
-                var notifTitle = totalAmount == 0 ? "Hóa đơn viện phí (Miễn phí 100%)" : "Hóa đơn viện phí mới";
-                var notifMessage = totalAmount == 0
+                var notifTitle = finalAmount == 0 ? "Hóa đơn viện phí (Miễn phí 100%)" : "Hóa đơn viện phí mới";
+                var notifMessage = finalAmount == 0
                     ? $"Hóa đơn #{invoice.InvoiceCode} với tổng tiền 0 đ (đã áp dụng chiết khấu 100% số tiền {discount:N0} đ) đã được ghi nhận hoàn tất."
-                    : $"Hóa đơn #{invoice.InvoiceCode} với tổng tiền {totalAmount:N0} đ đã được tạo cho ca khám của bạn.";
+                    : $"Hóa đơn #{invoice.InvoiceCode} với tổng tiền {finalAmount:N0} đ đã được tạo cho ca khám của bạn.";
 
                 await _notificationService.CreateNotificationAsync(
                     appointment.PatientUserId,
@@ -270,7 +267,7 @@ public class BillingService : IBillingService
             var invoice = await _dbContext.Invoices
                 .Include(i => i.Payments)
                 .Include(i => i.Appointment)
-                    .ThenInclude(a => a.PatientUser)
+                    .ThenInclude(a => a.Patient)
                 .FirstOrDefaultAsync(i => i.InvoiceId == request.InvoiceId, ct);
 
             if (invoice == null)
@@ -282,7 +279,6 @@ public class BillingService : IBillingService
             if (invoice.Status == "Cancelled")
                 return ApiResponse<InvoiceDto>.Fail("Hóa đơn này đã bị hủy, không thể thu tiền.");
 
-            // Check duplicate transaction reference on this invoice
             if (!string.IsNullOrWhiteSpace(request.TransactionReference))
             {
                 var trimmedRef = request.TransactionReference.Trim();
@@ -301,7 +297,7 @@ public class BillingService : IBillingService
                 .Where(p => p.Status == "Successful")
                 .Sum(p => p.Amount);
 
-            var remaining = Math.Max(0, invoice.TotalAmount - alreadyPaid);
+            var remaining = Math.Max(0, invoice.FinalAmount - alreadyPaid);
 
             if (request.Amount > remaining)
             {
@@ -315,22 +311,24 @@ public class BillingService : IBillingService
                 ? $"TXN-{DateTime.UtcNow:yyyyMMddHHmmss}-{invoice.InvoiceId}"
                 : request.TransactionReference.Trim();
 
+            var validStaffUserId = staffUserId > 0 ? staffUserId : invoice.GeneratedByUserId;
+
             var payment = new Payment
             {
                 InvoiceId = invoice.InvoiceId,
-                PaidByPatientUserId = invoice.Appointment.PatientUserId,
+                ReceivedByUserId = validStaffUserId,
                 Method = normalizedMethod,
+                PaymentType = (alreadyPaid + request.Amount >= invoice.FinalAmount) ? "Final" : "Deposit",
                 Amount = request.Amount,
                 TransactionReference = txnRef,
                 Status = "Successful",
-                PaidAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow
+                PaymentDate = DateTime.UtcNow
             };
 
             _dbContext.Payments.Add(payment);
 
             var totalPaidAfterThis = alreadyPaid + request.Amount;
-            if (totalPaidAfterThis >= invoice.TotalAmount)
+            if (totalPaidAfterThis >= invoice.FinalAmount)
             {
                 invoice.Status = "Paid";
             }
@@ -338,10 +336,7 @@ public class BillingService : IBillingService
             {
                 invoice.Status = "PartiallyPaid";
             }
-
-            // CRITICAL BUSINESS INTEGRITY (P0-01):
-            // Only authorized clinical workflow (DentistCompleteAppointmentAsync) may mark an appointment Completed.
-            // Payment processing updates Invoice.Status, but must NOT silently override the clinical state of the appointment.
+            invoice.UpdatedAt = DateTime.UtcNow;
 
             await _dbContext.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
@@ -349,7 +344,7 @@ public class BillingService : IBillingService
             try
             {
                 var methodLabel = GetMethodDisplayName(normalizedMethod);
-                var patientUserId = invoice.Appointment?.PatientUserId ?? invoice.Payments.FirstOrDefault()?.PaidByPatientUserId ?? 0;
+                var patientUserId = invoice.Appointment?.PatientUserId ?? 0;
                 if (patientUserId > 0)
                 {
                     await _notificationService.CreateNotificationAsync(
@@ -383,13 +378,18 @@ public class BillingService : IBillingService
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
+                .ThenInclude(u => u.StaffProfile)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.PatientUser)
+                .ThenInclude(a => a.Patient)
+                    .ThenInclude(p => p.User)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
+                .ThenInclude(a => a.AppointmentServices)
+                    .ThenInclude(s => s.AssignedDentist)
+                        .ThenInclude(d => d!.StaffProfile)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.Department)
+                .ThenInclude(a => a.AppointmentServices)
+                    .ThenInclude(s => s.DepartmentService)
+                        .ThenInclude(ds => ds.Department)
             .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId, ct);
 
         if (invoice == null)
@@ -408,13 +408,18 @@ public class BillingService : IBillingService
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
+                .ThenInclude(u => u.StaffProfile)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.PatientUser)
+                .ThenInclude(a => a.Patient)
+                    .ThenInclude(p => p.User)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
+                .ThenInclude(a => a.AppointmentServices)
+                    .ThenInclude(s => s.AssignedDentist)
+                        .ThenInclude(d => d!.StaffProfile)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.Department)
+                .ThenInclude(a => a.AppointmentServices)
+                    .ThenInclude(s => s.DepartmentService)
+                        .ThenInclude(ds => ds.Department)
             .FirstOrDefaultAsync(i => i.AppointmentId == appointmentId, ct);
 
         if (invoice == null)
@@ -438,13 +443,18 @@ public class BillingService : IBillingService
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
+                .ThenInclude(u => u.StaffProfile)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.PatientUser)
+                .ThenInclude(a => a.Patient)
+                    .ThenInclude(p => p.User)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
+                .ThenInclude(a => a.AppointmentServices)
+                    .ThenInclude(s => s.AssignedDentist)
+                        .ThenInclude(d => d!.StaffProfile)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.Department)
+                .ThenInclude(a => a.AppointmentServices)
+                    .ThenInclude(s => s.DepartmentService)
+                        .ThenInclude(ds => ds.Department)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(status))
@@ -470,9 +480,8 @@ public class BillingService : IBillingService
             var term = searchTerm.Trim().ToLower();
             query = query.Where(i =>
                 i.InvoiceCode.ToLower().Contains(term) ||
-                i.Appointment.AppointmentCode.ToLower().Contains(term) ||
-                i.Appointment.PatientUser.FullName.ToLower().Contains(term) ||
-                (i.Appointment.PatientUser.PatientCode != null && i.Appointment.PatientUser.PatientCode.ToLower().Contains(term)));
+                i.AppointmentId.ToString().Contains(term) ||
+                i.Appointment.Patient.FullName.ToLower().Contains(term));
         }
 
         var list = await query
@@ -493,13 +502,18 @@ public class BillingService : IBillingService
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
+                .ThenInclude(u => u.StaffProfile)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.PatientUser)
+                .ThenInclude(a => a.Patient)
+                    .ThenInclude(p => p.User)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
+                .ThenInclude(a => a.AppointmentServices)
+                    .ThenInclude(s => s.AssignedDentist)
+                        .ThenInclude(d => d!.StaffProfile)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.Department)
+                .ThenInclude(a => a.AppointmentServices)
+                    .ThenInclude(s => s.DepartmentService)
+                        .ThenInclude(ds => ds.Department)
             .Where(i => i.Appointment.PatientUserId == patientUserId)
             .OrderByDescending(i => i.CreatedAt)
             .ThenBy(i => i.InvoiceId)
@@ -516,12 +530,14 @@ public class BillingService : IBillingService
     {
         var appt = await _dbContext.Appointments
             .AsNoTracking()
-            .Include(a => a.PatientUser)
-            .Include(a => a.AssignedDentistUser)
-                .ThenInclude(d => d!.User)
-            .Include(a => a.Department)
-            .Include(a => a.RequestedService)
+            .Include(a => a.Patient)
             .Include(a => a.Invoice)
+            .Include(a => a.AppointmentServices)
+                .ThenInclude(s => s.AssignedDentist)
+                    .ThenInclude(d => d!.StaffProfile)
+            .Include(a => a.AppointmentServices)
+                .ThenInclude(s => s.DepartmentService)
+                    .ThenInclude(ds => ds.Department)
             .Include(a => a.TreatmentSessions)
                 .ThenInclude(ts => ts.PerformedServices)
                     .ThenInclude(ps => ps.DepartmentService)
@@ -530,18 +546,20 @@ public class BillingService : IBillingService
         if (appt == null)
             return ApiResponse<AppointmentBillingPreparationDto>.Fail("Không tìm thấy ca khám.");
 
+        var primarySvc = appt.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+
         var dto = new AppointmentBillingPreparationDto
         {
             AppointmentId = appt.AppointmentId,
-            AppointmentCode = appt.AppointmentCode,
+            AppointmentCode = $"APT-{appt.AppointmentId:D6}",
             PatientUserId = appt.PatientUserId,
-            PatientCode = appt.PatientUser?.PatientCode ?? string.Empty,
-            PatientName = appt.PatientUser?.FullName ?? "Bệnh nhân",
-            PatientPhoneNumber = appt.PatientUser?.EmergencyContact,
-            PatientAddress = appt.PatientUser?.Address,
-            DentistName = appt.AssignedDentistUser?.User?.FullName,
-            DepartmentName = appt.Department?.Name,
-            ScheduledStart = appt.ScheduledStart,
+            PatientCode = $"BN-{appt.PatientUserId}",
+            PatientName = appt.Patient?.FullName ?? "Bệnh nhân",
+            PatientPhoneNumber = appt.Patient?.EmergencyContact,
+            PatientAddress = appt.Patient?.Address,
+            DentistName = primarySvc?.AssignedDentist?.StaffProfile?.FullName,
+            DepartmentName = primarySvc?.DepartmentService?.Department?.Name,
+            ScheduledStart = primarySvc?.ScheduledStart ?? appt.CreatedAt,
             ReasonForVisit = appt.ReasonForVisit,
             Status = appt.Status,
             HasInvoice = appt.Invoice != null,
@@ -549,7 +567,6 @@ public class BillingService : IBillingService
             ExistingInvoiceCode = appt.Invoice?.InvoiceCode
         };
 
-        // Collect performed services from clinical sessions
         var performedItems = new List<BillingPreloadedItemDto>();
         if (appt.TreatmentSessions != null && appt.TreatmentSessions.Any())
         {
@@ -572,80 +589,42 @@ public class BillingService : IBillingService
             }
         }
 
-        // If no performed services recorded, fallback to requested service
-        if (!performedItems.Any() && appt.RequestedService != null)
+        if (!performedItems.Any() && appt.AppointmentServices.Any())
+        {
+            foreach (var svc in appt.AppointmentServices)
+            {
+                performedItems.Add(new BillingPreloadedItemDto
+                {
+                    PerformedServiceId = null,
+                    DepartmentServiceId = svc.DepartmentServiceId,
+                    Description = svc.DepartmentService?.ServiceName ?? "Dịch vụ nha khoa",
+                    Quantity = 1,
+                    UnitPrice = svc.UnitPrice > 0 ? svc.UnitPrice : (svc.DepartmentService?.Price ?? 0)
+                });
+            }
+        }
+
+        // Load dispensed medicines from PrescriptionItems (3-table pharmacy)
+        var dispensedItems = await _dbContext.PrescriptionItems
+            .AsNoTracking()
+            .Include(pi => pi.Medicine)
+            .Where(pi => pi.AppointmentId == appt.AppointmentId && pi.QuantityDispensed > 0)
+            .ToListAsync(ct);
+
+        foreach (var item in dispensedItems)
         {
             performedItems.Add(new BillingPreloadedItemDto
             {
                 PerformedServiceId = null,
-                DepartmentServiceId = appt.RequestedServiceId,
-                Description = appt.RequestedService.ServiceName,
-                Quantity = 1,
-                UnitPrice = appt.RequestedService.Price
+                DepartmentServiceId = null,
+                Description = $"[Thuốc] {item.Medicine?.MedicineName ?? "Thuốc điều trị"}",
+                Quantity = item.QuantityDispensed,
+                UnitPrice = item.UnitPriceAtDispense ?? (item.Medicine?.UnitPrice ?? 0)
             });
-        }
-
-        // Load dispensed medicines from pharmacy (WF-16 & WF-17)
-        var allowedDispenseStatuses = new[] { "Dispensed", "PartiallyDispensed" };
-        var dispensations = await _dbContext.MedicineDispensations
-            .AsNoTracking()
-            .Include(d => d.DispensationItems)
-                .ThenInclude(i => i.Medicine)
-            .Include(d => d.DispensationItems)
-                .ThenInclude(i => i.MedicineBatch)
-            .Where(d => d.AppointmentId == appt.AppointmentId && allowedDispenseStatuses.Contains(d.Status))
-            .ToListAsync(ct);
-
-        foreach (var disp in dispensations)
-        {
-            foreach (var item in disp.DispensationItems)
-            {
-                if (item.QuantityDispensed <= 0) continue;
-
-                performedItems.Add(new BillingPreloadedItemDto
-                {
-                    PerformedServiceId = null,
-                    DepartmentServiceId = null,
-                    Description = $"[Thuốc] {item.Medicine?.MedicineName ?? "Thuốc điều trị"} (Lô {item.MedicineBatch?.BatchNumber ?? "N/A"})",
-                    Quantity = item.QuantityDispensed,
-                    UnitPrice = item.UnitPriceSnapshot
-                });
-            }
-        }
-
-        // Load completed internal diagnostic imaging sessions for this appointment
-        var completedImagingOrders = await _dbContext.DiagnosticOrders
-            .AsNoTracking()
-            .Include(o => o.ImagingSessions)
-            .Where(o => o.AppointmentId == appt.AppointmentId && !o.IsExternal && o.Status == "Completed")
-            .ToListAsync(ct);
-
-        foreach (var order in completedImagingOrders)
-        {
-            var completedSession = order.ImagingSessions.FirstOrDefault(s => s.Status == "Completed");
-            if (completedSession != null)
-            {
-                var config = await _dbContext.ImagingServiceConfigs
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(c => c.DiagnosticType == order.DiagnosticType, ct);
-
-                var price = config?.Price ?? 0;
-                var serviceName = config?.ServiceName ?? $"Chụp X-quang {order.DiagnosticType}";
-
-                performedItems.Add(new BillingPreloadedItemDto
-                {
-                    PerformedServiceId = null,
-                    DepartmentServiceId = null,
-                    Description = $"[CĐHA] {serviceName}",
-                    Quantity = 1,
-                    UnitPrice = price
-                });
-            }
         }
 
         dto.SuggestedItems = performedItems;
 
-        // Load available clinic services for receptionist to select additional items if needed
         var availableServices = await _dbContext.DepartmentServices
             .AsNoTracking()
             .Include(s => s.Department)
@@ -678,30 +657,37 @@ public class BillingService : IBillingService
 
         var appts = await _dbContext.Appointments
             .AsNoTracking()
-            .Include(a => a.PatientUser)
-            .Include(a => a.AssignedDentistUser)
-                .ThenInclude(d => d!.User)
-            .Include(a => a.Department)
+            .Include(a => a.Patient)
+            .Include(a => a.AppointmentServices)
+                .ThenInclude(s => s.AssignedDentist)
+                    .ThenInclude(d => d!.StaffProfile)
+            .Include(a => a.AppointmentServices)
+                .ThenInclude(s => s.DepartmentService)
+                    .ThenInclude(ds => ds.Department)
             .Include(a => a.Invoice)
             .Where(a => billableStatuses.Contains(a.Status))
-            .OrderByDescending(a => a.ScheduledStart ?? a.CreatedAt)
+            .OrderByDescending(a => a.CreatedAt)
             .Take(100)
             .ToListAsync(ct);
 
-        var list = appts.Select(a => new CompletedAppointmentForBillingDto
+        var list = appts.Select(a =>
         {
-            AppointmentId = a.AppointmentId,
-            AppointmentCode = a.AppointmentCode,
-            PatientName = a.PatientUser?.FullName ?? "Bệnh nhân",
-            PatientPhone = a.PatientUser?.EmergencyContact,
-            DentistName = a.AssignedDentistUser?.User?.FullName ?? "Chưa phân bổ",
-            DepartmentName = a.Department?.Name ?? "--",
-            ScheduledStart = a.ScheduledStart,
-            Status = a.Status,
-            HasInvoice = a.Invoice != null,
-            InvoiceCode = a.Invoice?.InvoiceCode,
-            TotalAmount = a.Invoice?.TotalAmount,
-            InvoiceStatus = a.Invoice?.Status
+            var firstSvc = a.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+            return new CompletedAppointmentForBillingDto
+            {
+                AppointmentId = a.AppointmentId,
+                AppointmentCode = $"APT-{a.AppointmentId:D6}",
+                PatientName = a.Patient?.FullName ?? "Bệnh nhân",
+                PatientPhone = a.Patient?.EmergencyContact,
+                DentistName = firstSvc?.AssignedDentist?.StaffProfile?.FullName ?? "Chưa phân bổ",
+                DepartmentName = firstSvc?.DepartmentService?.Department?.Name ?? "--",
+                ScheduledStart = firstSvc?.ScheduledStart ?? a.CreatedAt,
+                Status = a.Status,
+                HasInvoice = a.Invoice != null,
+                InvoiceCode = a.Invoice?.InvoiceCode,
+                TotalAmount = a.Invoice?.FinalAmount,
+                InvoiceStatus = a.Invoice?.Status
+            };
         }).ToList();
 
         return ApiResponse<List<CompletedAppointmentForBillingDto>>.Ok(list);
@@ -767,45 +753,47 @@ public class BillingService : IBillingService
             .Where(i => !i.Description.StartsWith(taxItemPrefix, StringComparison.OrdinalIgnoreCase))
             .Sum(i => i.Quantity * i.UnitPrice);
         var paidAmount = invoice.Payments.Where(p => p.Status == "Successful").Sum(p => p.Amount);
-        var remainingAmount = Math.Max(0, invoice.TotalAmount - paidAmount);
+        var remainingAmount = Math.Max(0, invoice.FinalAmount - paidAmount);
 
-        var discountAmount = Math.Clamp(subTotal + taxAmount - invoice.TotalAmount, 0m, subTotal);
-        var discountedSubTotal = subTotal - discountAmount;
+        var discountAmount = invoice.DiscountAmount;
+        var discountedSubTotal = Math.Max(0, subTotal - discountAmount);
         var taxPercent = discountedSubTotal > 0
             ? Math.Round(taxAmount / discountedSubTotal * 100m, 2)
             : 0m;
+
+        var firstSvc = invoice.Appointment?.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
 
         return new InvoiceDto
         {
             InvoiceId = invoice.InvoiceId,
             InvoiceCode = invoice.InvoiceCode,
             AppointmentId = invoice.AppointmentId,
-            AppointmentCode = invoice.Appointment?.AppointmentCode,
+            AppointmentCode = invoice.Appointment != null ? $"APT-{invoice.Appointment.AppointmentId:D6}" : null,
             PatientUserId = invoice.Appointment?.PatientUserId ?? 0,
-            PatientCode = invoice.Appointment?.PatientUser?.PatientCode,
-            PatientName = invoice.Appointment?.PatientUser?.FullName ?? "Bệnh nhân",
-            PatientPhoneNumber = invoice.Appointment?.PatientUser?.EmergencyContact,
-            PatientEmail = invoice.Appointment?.PatientUser?.User?.Email,
-            PatientAddress = invoice.Appointment?.PatientUser?.Address,
-            DentistName = invoice.Appointment?.AssignedDentistUser?.User?.FullName ?? "Chưa phân bổ",
-            DepartmentName = invoice.Appointment?.Department?.Name ?? "Nha khoa",
+            PatientCode = invoice.Appointment != null ? $"BN-{invoice.Appointment.PatientUserId}" : null,
+            PatientName = invoice.Appointment?.Patient?.FullName ?? "Bệnh nhân",
+            PatientPhoneNumber = invoice.Appointment?.Patient?.EmergencyContact,
+            PatientEmail = invoice.Appointment?.Patient?.User?.Email,
+            PatientAddress = invoice.Appointment?.Patient?.Address,
+            DentistName = firstSvc?.AssignedDentist?.StaffProfile?.FullName ?? "Chưa phân bổ",
+            DepartmentName = firstSvc?.DepartmentService?.Department?.Name ?? "Nha khoa",
             GeneratedByUserId = invoice.GeneratedByUserId,
-            GeneratedByName = invoice.GeneratedByUser?.FullName ?? "Nhân viên thu ngân",
+            GeneratedByName = invoice.GeneratedByUser?.StaffProfile?.FullName ?? "Nhân viên thu ngân",
             SubTotal = subTotal,
             DiscountAmount = discountAmount,
             TaxPercent = taxPercent,
             TaxAmount = taxAmount,
-            TotalAmount = invoice.TotalAmount,
+            TotalAmount = invoice.FinalAmount,
             PaidAmount = paidAmount,
             RemainingAmount = remainingAmount,
             Status = invoice.Status,
             CreatedAt = invoice.CreatedAt,
-            AppointmentDate = invoice.Appointment?.ScheduledStart,
+            AppointmentDate = firstSvc?.ScheduledStart ?? invoice.Appointment?.CreatedAt,
             ReasonForVisit = invoice.Appointment?.ReasonForVisit,
 
-            ClinicName = clinic?.Name ?? "NHA KHOA ĐA CHUYÊN KHOA DENTALCARE",
+            ClinicName = clinic?.ClinicName ?? "NHA KHOA ĐA CHUYÊN KHOA DENTALCARE",
             ClinicAddress = clinic?.Address ?? "123 Đường Nguyễn Tri Phương, Phường 5, Quận 10, TP. Hồ Chí Minh",
-            ClinicPhone = clinic?.PhoneNumber ?? "028 3822 9999",
+            ClinicPhone = clinic?.Hotline ?? "028 3822 9999",
             ClinicEmail = clinic?.Email ?? "contact@dentalcare.vn",
 
             Items = invoice.InvoiceItems
@@ -821,19 +809,19 @@ public class BillingService : IBillingService
                     Amount = item.Quantity * item.UnitPrice
                 }).ToList(),
 
-            Payments = invoice.Payments.OrderByDescending(p => p.CreatedAt).Select(p => new PaymentDto
+            Payments = invoice.Payments.OrderByDescending(p => p.PaymentDate).Select(p => new PaymentDto
             {
                 PaymentId = p.PaymentId,
                 InvoiceId = p.InvoiceId,
-                PaidByPatientUserId = p.PaidByPatientUserId,
-                PaidByPatientName = invoice.Appointment?.PatientUser?.FullName ?? "Bệnh nhân",
+                PaidByPatientUserId = invoice.Appointment?.PatientUserId ?? 0,
+                PaidByPatientName = invoice.Appointment?.Patient?.FullName ?? "Bệnh nhân",
                 Method = p.Method,
                 MethodDisplayName = GetMethodDisplayName(p.Method),
                 Amount = p.Amount,
                 TransactionReference = p.TransactionReference,
                 Status = p.Status,
-                PaidAt = p.PaidAt,
-                CreatedAt = p.CreatedAt
+                PaidAt = p.PaymentDate,
+                CreatedAt = p.PaymentDate
             }).ToList()
         };
     }

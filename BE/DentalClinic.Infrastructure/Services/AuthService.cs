@@ -93,123 +93,83 @@ public class AuthService : IAuthService
         var otpCode = _otpService.GenerateNumericOtp(6);
         var codeHash = _otpService.HashOtp(otpCode);
 
-        // 4. Concurrency-safe PatientCode generation with retry
-        string patientCode = string.Empty;
-        var maxRetries = 5;
+        // 4. Create UserAccount and PatientProfile (PK = UserId)
         var now = DateTime.UtcNow;
-        var yearMonth = now.ToString("yyyyMM");
 
-        for (int attempt = 0; attempt < maxRetries; attempt++)
+        using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
+        try
         {
-            using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
-            try
+            var userAccount = new UserAccount
             {
-                var prefix = $"PAT-{yearMonth}-";
-                var lastCode = await _dbContext.PatientProfiles
-                    .Where(p => p.PatientCode.StartsWith(prefix))
-                    .OrderByDescending(p => p.PatientCode)
-                    .Select(p => p.PatientCode)
-                    .FirstOrDefaultAsync(ct);
+                Email = email,
+                PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim(),
+                PasswordHash = _passwordHasher.HashPassword(request.Password),
+                Role = UserRole.Patient,
+                Status = AccountStatus.Unverified,
+                CreatedAt = now,
+                FailedLoginCount = 0
+            };
 
-                int nextSeq = 1;
-                if (!string.IsNullOrEmpty(lastCode) && lastCode.Length >= prefix.Length + 4)
+            _dbContext.UserAccounts.Add(userAccount);
+            await _dbContext.SaveChangesAsync(ct);
+
+            var patientProfile = new PatientProfile
+            {
+                UserId = userAccount.UserId,
+                FullName = request.FullName.Trim(),
+                DateOfBirth = request.DateOfBirth.HasValue ? DateOnly.FromDateTime(request.DateOfBirth.Value) : null,
+                Gender = request.Gender,
+                CreatedAt = now
+            };
+
+            _dbContext.PatientProfiles.Add(patientProfile);
+            await _dbContext.SaveChangesAsync(ct);
+
+            await tx.CommitAsync(ct);
+
+            var cacheEntry = new OtpCacheEntry
+            {
+                CodeHash = codeHash,
+                AttemptCount = 0,
+                CreatedAt = now
+            };
+            _cache.Set($"email-verify:{userAccount.UserId}", cacheEntry, TimeSpan.FromMinutes(5));
+
+            string? phoneOtpCode = null;
+            if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
+            {
+                phoneOtpCode = _otpService.GenerateNumericOtp(6);
+                var phoneCacheEntry = new OtpCacheEntry
                 {
-                    var seqStr = lastCode.Substring(prefix.Length);
-                    if (int.TryParse(seqStr, out var currentSeq))
-                    {
-                        nextSeq = currentSeq + 1 + attempt;
-                    }
-                }
-                else
-                {
-                    nextSeq += attempt;
-                }
-
-                patientCode = $"{prefix}{nextSeq:D4}";
-
-                // Create UserAccount
-                var userAccount = new UserAccount
-                {
-                    Email = email,
-                    PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim(),
-                    PasswordHash = _passwordHasher.HashPassword(request.Password),
-                    Role = UserRole.Patient,
-                    Status = AccountStatus.Unverified,
-                    CreatedAt = now,
-                    FailedLoginCount = 0
-                };
-
-                _dbContext.UserAccounts.Add(userAccount);
-                await _dbContext.SaveChangesAsync(ct);
-
-                // Create PatientProfile (PK = UserId)
-                var patientProfile = new PatientProfile
-                {
-                    UserId = userAccount.UserId,
-                    PatientCode = patientCode,
-                    FullName = request.FullName.Trim(),
-                    DateOfBirth = request.DateOfBirth.HasValue ? DateOnly.FromDateTime(request.DateOfBirth.Value) : null,
-                    Gender = request.Gender,
-                    CreatedAt = now
-                };
-
-                _dbContext.PatientProfiles.Add(patientProfile);
-                await _dbContext.SaveChangesAsync(ct);
-
-                await tx.CommitAsync(ct);
-
-                // Save OTP to IMemoryCache (5 minutes expiration)
-                var cacheEntry = new OtpCacheEntry
-                {
-                    CodeHash = codeHash,
+                    CodeHash = _otpService.HashOtp(phoneOtpCode),
                     AttemptCount = 0,
                     CreatedAt = now
                 };
-                _cache.Set($"email-verify:{userAccount.UserId}", cacheEntry, TimeSpan.FromMinutes(5));
-
-                string? phoneOtpCode = null;
-                if (!string.IsNullOrWhiteSpace(request.PhoneNumber))
-                {
-                    phoneOtpCode = _otpService.GenerateNumericOtp(6);
-                    var phoneCacheEntry = new OtpCacheEntry
-                    {
-                        CodeHash = _otpService.HashOtp(phoneOtpCode),
-                        AttemptCount = 0,
-                        CreatedAt = now
-                    };
-                    _cache.Set($"phone-verify:{userAccount.UserId}", phoneCacheEntry, TimeSpan.FromMinutes(5));
-                }
-
-                try
-                {
-                    await _emailService.SendEmailVerificationOtpAsync(email, request.FullName.Trim(), otpCode, ct);
-                    if (!string.IsNullOrWhiteSpace(phoneOtpCode))
-                    {
-                        _logger.LogInformation("\n======================================================\n[DEV SMS OTP NOTIFICATION]\nPURPOSE: PHONE VERIFICATION\nTO PHONE: {PhoneNumber} ({FullName})\nSMS OTP CODE: {PhoneOtpCode}\nEXPIRES IN: 5 minutes\n======================================================\n", request.PhoneNumber, request.FullName.Trim(), phoneOtpCode);
-                    }
-                    await _auditLogService.LogAsync(userAccount.UserId, "REGISTER", "UserAccount", userAccount.UserId.ToString(), ct: ct);
-                }
-                catch (Exception emailEx)
-                {
-                    _logger.LogError(emailEx, "Failed to dispatch verification email to {Email}", email);
-                }
-
-                return ApiResponse.Ok(null, "Đăng ký tài khoản thành công! Vui lòng kiểm tra email để lấy mã xác thực kích hoạt tài khoản.");
+                _cache.Set($"phone-verify:{userAccount.UserId}", phoneCacheEntry, TimeSpan.FromMinutes(5));
             }
-            catch (DbUpdateException ex) when (attempt < maxRetries - 1)
+
+            try
             {
-                await tx.RollbackAsync(ct);
-                _logger.LogWarning(ex, "Conflict generating PatientCode {PatientCode}, retrying attempt {Attempt}...", patientCode, attempt + 1);
+                await _emailService.SendEmailVerificationOtpAsync(email, request.FullName.Trim(), otpCode, ct);
+                if (!string.IsNullOrWhiteSpace(phoneOtpCode))
+                {
+                    _logger.LogInformation("\n======================================================\n[DEV SMS OTP NOTIFICATION]\nPURPOSE: PHONE VERIFICATION\nTO PHONE: {PhoneNumber} ({FullName})\nSMS OTP CODE: {PhoneOtpCode}\nEXPIRES IN: 5 minutes\n======================================================\n", request.PhoneNumber, request.FullName.Trim(), phoneOtpCode);
+                }
+                await _auditLogService.LogAsync(userAccount.UserId, "REGISTER", "UserAccount", userAccount.UserId.ToString(), ct: ct);
             }
-            catch (Exception ex)
+            catch (Exception emailEx)
             {
-                await tx.RollbackAsync(ct);
-                _logger.LogError(ex, "Error registering user {Email}.", email);
-                throw;
+                _logger.LogError(emailEx, "Failed to dispatch verification email to {Email}", email);
             }
+
+            return ApiResponse.Ok(null, "Đăng ký tài khoản thành công! Vui lòng kiểm tra email để lấy mã xác thực kích hoạt tài khoản.");
         }
-
-        return ApiResponse.Fail("Không thể tạo mã hồ sơ bệnh nhân lúc này. Vui lòng thử lại sau.");
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync(ct);
+            _logger.LogError(ex, "Error registering user {Email}.", email);
+            throw;
+        }
     }
 
     public async Task<ApiResponse> VerifyEmailAsync(VerifyEmailRequest request, string? ipAddress, CancellationToken ct = default)
@@ -251,7 +211,6 @@ public class AuthService : IAuthService
         _cache.Remove($"email-verify:{user.UserId}");
 
         user.Status = AccountStatus.Active;
-        user.EmailVerifiedAt = DateTime.UtcNow;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);
@@ -451,7 +410,9 @@ public class AuthService : IAuthService
         user.LastLoginAt = DateTime.UtcNow;
 
         var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? user.Email ?? string.Empty;
-        var userCode = user.PatientProfile?.PatientCode ?? user.StaffProfile?.EmployeeCode;
+        var userCode = user.PatientProfile != null
+            ? $"PT-{user.UserId:D6}"
+            : (user.StaffProfile != null ? $"STF-{user.UserId:D6}" : $"USR-{user.UserId:D6}");
 
         // Generate tokens
         var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Email ?? string.Empty, user.Role, fullName, user.AvatarUrl);
@@ -505,7 +466,7 @@ public class AuthService : IAuthService
             if (user.Status == AccountStatus.Unverified)
             {
                 user.Status = AccountStatus.Active;
-                user.EmailVerifiedAt = DateTime.UtcNow;
+                user.UpdatedAt = DateTime.UtcNow;
             }
 
             if (string.IsNullOrEmpty(user.AvatarUrl) && !string.IsNullOrEmpty(googleUser.Picture))
@@ -515,33 +476,13 @@ public class AuthService : IAuthService
         }
         else
         {
-            // Auto create new Patient account without ExternalLogins
             var now = DateTime.UtcNow;
-            var yearMonth = now.ToString("yyyyMM");
-            var prefix = $"PAT-{yearMonth}-";
-            var lastCode = await _dbContext.PatientProfiles
-                .Where(p => p.PatientCode.StartsWith(prefix))
-                .OrderByDescending(p => p.PatientCode)
-                .Select(p => p.PatientCode)
-                .FirstOrDefaultAsync(ct);
-
-            int nextSeq = 1;
-            if (!string.IsNullOrEmpty(lastCode) && lastCode.Length >= prefix.Length + 4)
-            {
-                var seqStr = lastCode.Substring(prefix.Length);
-                if (int.TryParse(seqStr, out var currentSeq))
-                {
-                    nextSeq = currentSeq + 1;
-                }
-            }
-            var patientCode = $"{prefix}{nextSeq:D4}";
 
             user = new UserAccount
             {
                 Email = googleEmail,
                 Role = UserRole.Patient,
                 Status = AccountStatus.Active,
-                EmailVerifiedAt = now,
                 AvatarUrl = googleUser.Picture,
                 CreatedAt = now,
                 FailedLoginCount = 0
@@ -553,7 +494,6 @@ public class AuthService : IAuthService
             var patientProfile = new PatientProfile
             {
                 UserId = user.UserId,
-                PatientCode = patientCode,
                 FullName = string.IsNullOrWhiteSpace(googleUser.Name) ? googleEmail : googleUser.Name,
                 CreatedAt = now
             };
@@ -579,7 +519,9 @@ public class AuthService : IAuthService
         user.LastLoginAt = DateTime.UtcNow;
 
         var fullName = user.PatientProfile?.FullName ?? user.StaffProfile?.FullName ?? googleUser.Name;
-        var userCode = user.PatientProfile?.PatientCode ?? user.StaffProfile?.EmployeeCode;
+        var userCode = user.PatientProfile != null
+            ? $"PT-{user.UserId:D6}"
+            : (user.StaffProfile != null ? $"STF-{user.UserId:D6}" : $"USR-{user.UserId:D6}");
 
         var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Email ?? googleEmail, user.Role, fullName, user.AvatarUrl);
         var rawRefreshToken = _jwtTokenService.GenerateRefreshToken();

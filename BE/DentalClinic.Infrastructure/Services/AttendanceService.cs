@@ -17,6 +17,10 @@ namespace DentalClinic.Infrastructure.Services;
 
 public class AttendanceService : IAttendanceService
 {
+    private const int DefaultLateGraceMinutes = 15;
+    private const int DefaultEarlyGraceMinutes = 15;
+    private const int AutoMissingPunchAfterHours = 4;
+
     private readonly DentalClinicDbContext _dbContext;
     private readonly IStaffShiftResolver _shiftResolver;
     private readonly ILogger<AttendanceService> _logger;
@@ -38,18 +42,22 @@ public class AttendanceService : IAttendanceService
 
         var existingRecords = await _dbContext.StaffAttendanceRecords
             .AsNoTracking()
-            .Where(r => r.UserId == userId && r.WorkDate == today)
+            .Include(r => r.WorkSchedule)
+            .Where(r => r.StaffUserId == userId && r.WorkDate == today)
             .ToListAsync(ct);
 
         var result = new List<TodayShiftAttendanceDto>();
 
         foreach (var shift in shifts)
         {
-            var record = existingRecords.FirstOrDefault(r => r.ShiftIdentifier == shift.ShiftIdentifier);
+            var record = existingRecords.FirstOrDefault(r =>
+                r.WorkScheduleId == shift.SourceScheduleId ||
+                BuildShiftIdentifier(r, role) == shift.ShiftIdentifier);
+
             var item = new TodayShiftAttendanceDto
             {
                 Shift = shift,
-                AttendanceRecord = record != null ? MapToDto(record) : null
+                AttendanceRecord = record != null ? MapToDto(record, role, shift) : null
             };
 
             if (shift.IsApprovedLeave && !shift.LeaveStartTime.HasValue)
@@ -73,19 +81,20 @@ public class AttendanceService : IAttendanceService
                 item.NextAllowedAction = "ClockIn";
                 item.Message = "Chưa chấm công vào cho ca trực.";
             }
-            else if (record.ClockInTimeUtc != null && record.ClockOutTimeUtc == null)
+            else if (record.ClockInTime != null && record.ClockOutTime == null)
             {
                 item.CanClockIn = false;
                 item.CanClockOut = true;
                 item.NextAllowedAction = "ClockOut";
-                item.Message = $"Đã chấm công vào lúc {ClinicTimeHelper.ToClinicTime(record.ClockInTimeUtc.Value):HH:mm}.";
+                item.Message = $"Đã chấm công vào lúc {ClinicTimeHelper.ToClinicTime(record.ClockInTime.Value):HH:mm}.";
             }
             else
             {
+                var workedMin = CalculateWorkedMinutes(record);
                 item.CanClockIn = false;
                 item.CanClockOut = false;
                 item.NextAllowedAction = "Completed";
-                item.Message = $"Đã hoàn thành ca trực ({record.ActualWorkedMinutes / 60}h{record.ActualWorkedMinutes % 60}m).";
+                item.Message = $"Đã hoàn thành ca trực ({workedMin / 60}h{workedMin % 60}m).";
             }
 
             result.Add(item);
@@ -112,15 +121,6 @@ public class AttendanceService : IAttendanceService
             var clinicNow = ClinicTimeHelper.ToClinicTime(nowUtc);
             var today = DateOnly.FromDateTime(clinicNow);
 
-            // 1. Check if monthly period is finalized/locked
-            var isPeriodLocked = await _dbContext.IsPeriodLockedAsync(today, ct);
-
-            if (isPeriodLocked)
-            {
-                return ApiResponse<StaffAttendanceRecordDto>.Fail($"Kỳ công tháng {today.Month:D2}/{today.Year} đã được chốt sổ. Không thể chấm công mới.");
-            }
-
-            // 2. Validate shift exists for today
             var shifts = await _shiftResolver.GetShiftsForStaffAsync(userId, role, today, ct);
             var shift = shifts.FirstOrDefault(s => s.ShiftIdentifier == request.ShiftIdentifier);
             if (shift == null)
@@ -148,83 +148,59 @@ public class AttendanceService : IAttendanceService
                 return ApiResponse<StaffAttendanceRecordDto>.Fail($"Ca làm việc này đã được ghi nhận vắng mặt khẩn cấp ({shift.Note}).");
             }
 
-            // 3. Check for existing attendance record
             var existingRecord = await _dbContext.StaffAttendanceRecords
-                .FirstOrDefaultAsync(r => r.UserId == userId && r.ShiftIdentifier == request.ShiftIdentifier, ct);
+                .Include(r => r.WorkSchedule)
+                .FirstOrDefaultAsync(r => r.StaffUserId == userId && r.WorkDate == today && r.WorkScheduleId == shift.SourceScheduleId, ct);
 
-            if (existingRecord != null && existingRecord.ClockInTimeUtc.HasValue)
+            if (existingRecord != null && existingRecord.ClockInTime.HasValue)
             {
                 return ApiResponse<StaffAttendanceRecordDto>.Fail("Bạn đã chấm công vào cho ca làm việc này rồi.");
             }
 
-            // 4. Policy thresholds
-            var policy = await _dbContext.AttendancePolicies.AsNoTracking().FirstOrDefaultAsync(ct)
-                         ?? new AttendancePolicy { LateGracePeriodMinutes = 15, EarlyLeaveGracePeriodMinutes = 15 };
-
-            // Calculate Scheduled Start UTC
             var scheduledStartClinic = today.ToDateTime(shift.StartTime);
             var scheduledStartUtc = ClinicTimeHelper.ToUtc(scheduledStartClinic);
-            var graceThresholdUtc = scheduledStartUtc.AddMinutes(policy.LateGracePeriodMinutes);
+            var graceThresholdUtc = scheduledStartUtc.AddMinutes(DefaultLateGraceMinutes);
 
             int lateMinutes = 0;
-            var status = AttendanceStatus.OnTime;
+            var status = "OnTime";
 
             if (nowUtc > graceThresholdUtc)
             {
                 lateMinutes = (int)Math.Max(0, (nowUtc - scheduledStartUtc).TotalMinutes);
-                status = AttendanceStatus.Late;
+                status = "Late";
             }
 
             StaffAttendanceRecord record;
             if (existingRecord != null)
             {
                 record = existingRecord;
-                record.ClockInTimeUtc = nowUtc;
+                record.ClockInTime = nowUtc;
                 record.LateMinutes = lateMinutes;
                 record.Status = status;
-                record.UpdatedAtUtc = nowUtc;
+                record.UpdatedAt = nowUtc;
             }
             else
             {
                 record = new StaffAttendanceRecord
                 {
-                    UserId = userId,
-                    Role = role,
+                    StaffUserId = userId,
+                    WorkScheduleId = shift.SourceScheduleId > 0 ? shift.SourceScheduleId : null,
                     WorkDate = today,
-                    ShiftIdentifier = shift.ShiftIdentifier,
-                    ScheduledStartTime = shift.StartTime,
-                    ScheduledEndTime = shift.EndTime,
-                    ClockInTimeUtc = nowUtc,
+                    ClockInTime = nowUtc,
                     LateMinutes = lateMinutes,
-                    EarlyDepartureMinutes = 0,
-                    ActualWorkedMinutes = 0,
+                    EarlyMinutes = 0,
                     Status = status,
-                    IsApprovedLeave = false,
-                    IsFinalized = false,
-                    CreatedAtUtc = nowUtc
+                    Notes = request.Note,
+                    CreatedAt = nowUtc
                 };
                 _dbContext.StaffAttendanceRecords.Add(record);
             }
 
             await _dbContext.SaveChangesAsync(ct);
-
-            // Audit Event
-            _dbContext.StaffAttendanceEvents.Add(new StaffAttendanceEvent
-            {
-                AttendanceId = record.AttendanceId,
-                UserId = userId,
-                EventType = AttendanceEventType.ClockIn,
-                EventTimeUtc = nowUtc,
-                Source = "WebPortal",
-                IpAddress = request.IpAddress,
-                Note = request.Note ?? (lateMinutes > 0 ? $"Chấm công vào trễ {lateMinutes} phút" : "Chấm công vào đúng giờ")
-            });
-
-            await _dbContext.SaveChangesAsync(ct);
             if (tx != null) await tx.CommitAsync(ct);
 
             _logger.LogInformation("Staff {UserId} ({Role}) clocked in for shift {ShiftIdentifier} at {Time}", userId, role, shift.ShiftIdentifier, nowUtc);
-            return ApiResponse<StaffAttendanceRecordDto>.Ok(MapToDto(record), lateMinutes > 0 ? $"Chấm công vào thành công (Ghi nhận trễ {lateMinutes} phút)." : "Chấm công vào thành công đúng giờ.");
+            return ApiResponse<StaffAttendanceRecordDto>.Ok(MapToDto(record, role, shift), lateMinutes > 0 ? $"Chấm công vào thành công (Ghi nhận trễ {lateMinutes} phút)." : "Chấm công vào thành công đúng giờ.");
         }
         catch (Exception ex)
         {
@@ -246,56 +222,48 @@ public class AttendanceService : IAttendanceService
             var nowUtc = DateTime.UtcNow;
 
             var recordQuery = _dbContext.StaffAttendanceRecords
-                .Where(r => r.UserId == userId);
+                .Include(r => r.WorkSchedule)
+                .Where(r => r.StaffUserId == userId);
 
             if (request.AttendanceId.HasValue && request.AttendanceId.Value > 0)
             {
-                recordQuery = recordQuery.Where(r => r.AttendanceId == request.AttendanceId.Value);
+                recordQuery = recordQuery.Where(r => r.AttendanceRecordId == request.AttendanceId.Value);
             }
             else if (!string.IsNullOrWhiteSpace(request.ShiftIdentifier))
             {
-                recordQuery = recordQuery.Where(r => r.ShiftIdentifier == request.ShiftIdentifier);
+                var scheduleId = ParseScheduleIdFromShiftIdentifier(request.ShiftIdentifier);
+                if (scheduleId.HasValue)
+                {
+                    recordQuery = recordQuery.Where(r => r.WorkScheduleId == scheduleId.Value);
+                }
             }
             else
             {
                 var today = ClinicTimeHelper.TodayDateOnly;
-                recordQuery = recordQuery.Where(r => r.WorkDate == today && r.ClockInTimeUtc != null && r.ClockOutTimeUtc == null);
+                recordQuery = recordQuery.Where(r => r.WorkDate == today && r.ClockInTime != null && r.ClockOutTime == null);
             }
 
             var record = await recordQuery.FirstOrDefaultAsync(ct);
-            if (record == null || !record.ClockInTimeUtc.HasValue)
+            if (record == null || !record.ClockInTime.HasValue)
             {
                 return ApiResponse<StaffAttendanceRecordDto>.Fail("Bạn chưa thực hiện chấm công vào cho ca này.");
             }
 
-            if (record.ClockOutTimeUtc.HasValue)
+            if (record.ClockOutTime.HasValue)
             {
                 return ApiResponse<StaffAttendanceRecordDto>.Fail("Bạn đã chấm công ra cho ca làm việc này rồi.");
             }
 
-            // Check if monthly period is locked
-            var isPeriodLocked = await _dbContext.IsPeriodLockedAsync(record.WorkDate, ct);
-
-            if (isPeriodLocked)
+            if (nowUtc <= record.ClockInTime.Value)
             {
-                return ApiResponse<StaffAttendanceRecordDto>.Fail($"Kỳ công tháng {record.WorkDate.Month:D2}/{record.WorkDate.Year} đã được chốt sổ. Không thể chấm công ra.");
+                nowUtc = record.ClockInTime.Value.AddSeconds(1);
             }
 
-            // Policy thresholds
-            var policy = await _dbContext.AttendancePolicies.AsNoTracking().FirstOrDefaultAsync(ct)
-                         ?? new AttendancePolicy { LateGracePeriodMinutes = 15, EarlyLeaveGracePeriodMinutes = 15 };
-
-            // Time calculations
-            if (nowUtc < record.ClockInTimeUtc.Value)
-            {
-                nowUtc = record.ClockInTimeUtc.Value;
-            }
-
-            var workedMinutes = (int)(nowUtc - record.ClockInTimeUtc.Value).TotalMinutes;
-
-            var scheduledEndClinic = record.WorkDate.ToDateTime(record.ScheduledEndTime);
+            var workedMinutes = (int)(nowUtc - record.ClockInTime.Value).TotalMinutes;
+            var scheduledEndTime = record.WorkSchedule?.EndTime ?? new TimeOnly(17, 0);
+            var scheduledEndClinic = record.WorkDate.ToDateTime(scheduledEndTime);
             var scheduledEndUtc = ClinicTimeHelper.ToUtc(scheduledEndClinic);
-            var earlyDepartureThresholdUtc = scheduledEndUtc.AddMinutes(-policy.EarlyLeaveGracePeriodMinutes);
+            var earlyDepartureThresholdUtc = scheduledEndUtc.AddMinutes(-DefaultEarlyGraceMinutes);
 
             int earlyLeaveMinutes = 0;
             if (nowUtc < earlyDepartureThresholdUtc)
@@ -303,46 +271,26 @@ public class AttendanceService : IAttendanceService
                 earlyLeaveMinutes = (int)Math.Max(0, (scheduledEndUtc - nowUtc).TotalMinutes);
             }
 
-            // Determine final attendance status
-            var finalStatus = AttendanceStatus.OnTime;
-            if (record.LateMinutes > 0 && earlyLeaveMinutes > 0)
+            var finalStatus = "OnTime";
+            if (record.LateMinutes > 0)
             {
-                finalStatus = AttendanceStatus.LateAndEarlyDeparture;
-            }
-            else if (record.LateMinutes > 0)
-            {
-                finalStatus = AttendanceStatus.Late;
+                finalStatus = "Late";
             }
             else if (earlyLeaveMinutes > 0)
             {
-                finalStatus = AttendanceStatus.EarlyDeparture;
+                finalStatus = "EarlyDeparture";
             }
 
-            record.ClockOutTimeUtc = nowUtc;
-            record.ActualWorkedMinutes = workedMinutes;
-            record.EarlyDepartureMinutes = earlyLeaveMinutes;
+            record.ClockOutTime = nowUtc;
+            record.EarlyMinutes = earlyLeaveMinutes;
             record.Status = finalStatus;
-            record.UpdatedAtUtc = nowUtc;
-
-            await _dbContext.SaveChangesAsync(ct);
-
-            // Audit Event
-            _dbContext.StaffAttendanceEvents.Add(new StaffAttendanceEvent
-            {
-                AttendanceId = record.AttendanceId,
-                UserId = userId,
-                EventType = AttendanceEventType.ClockOut,
-                EventTimeUtc = nowUtc,
-                Source = "WebPortal",
-                IpAddress = request.IpAddress,
-                Note = request.Note ?? $"Chấm công ra. Tổng thời gian làm việc: {workedMinutes / 60}h{workedMinutes % 60}m"
-            });
+            record.UpdatedAt = nowUtc;
 
             await _dbContext.SaveChangesAsync(ct);
             if (tx != null) await tx.CommitAsync(ct);
 
-            _logger.LogInformation("Staff {UserId} clocked out for record {RecordId} at {Time}", userId, record.AttendanceId, nowUtc);
-            return ApiResponse<StaffAttendanceRecordDto>.Ok(MapToDto(record), $"Chấm công ra thành công! Tổng thời gian làm: {workedMinutes / 60} giờ {workedMinutes % 60} phút.");
+            _logger.LogInformation("Staff {UserId} clocked out for record {RecordId} at {Time}", userId, record.AttendanceRecordId, nowUtc);
+            return ApiResponse<StaffAttendanceRecordDto>.Ok(MapToDto(record, role, null), $"Chấm công ra thành công! Tổng thời gian làm: {workedMinutes / 60} giờ {workedMinutes % 60} phút.");
         }
         catch (Exception ex)
         {
@@ -357,14 +305,18 @@ public class AttendanceService : IAttendanceService
         var from = fromDate ?? ClinicTimeHelper.TodayDateOnly.AddDays(-30);
         var to = toDate ?? ClinicTimeHelper.TodayDateOnly;
 
+        var user = await _dbContext.UserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == userId, ct);
+        var role = user?.Role ?? UserRole.Dentist;
+
         var records = await _dbContext.StaffAttendanceRecords
             .AsNoTracking()
-            .Where(r => r.UserId == userId && r.WorkDate >= from && r.WorkDate <= to)
+            .Include(r => r.WorkSchedule)
+            .Where(r => r.StaffUserId == userId && r.WorkDate >= from && r.WorkDate <= to)
             .OrderByDescending(r => r.WorkDate)
-            .ThenByDescending(r => r.ScheduledStartTime)
+            .ThenByDescending(r => r.AttendanceRecordId)
             .ToListAsync(ct);
 
-        return ApiResponse<List<StaffAttendanceRecordDto>>.Ok(records.Select(MapToDto).ToList());
+        return ApiResponse<List<StaffAttendanceRecordDto>>.Ok(records.Select(r => MapToDto(r, role, null)).ToList());
     }
 
     public async Task<ApiResponse<AttendanceCorrectionRequestDto>> SubmitCorrectionRequestAsync(long userId, SubmitAttendanceCorrectionRequest request, CancellationToken ct = default)
@@ -380,269 +332,115 @@ public class AttendanceService : IAttendanceService
         }
 
         var record = await _dbContext.StaffAttendanceRecords
-            .FirstOrDefaultAsync(r => r.AttendanceId == request.AttendanceId && r.UserId == userId, ct);
+            .Include(r => r.WorkSchedule)
+            .Include(r => r.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .FirstOrDefaultAsync(r => r.AttendanceRecordId == request.AttendanceId && r.StaffUserId == userId, ct);
 
         if (record == null)
         {
             return ApiResponse<AttendanceCorrectionRequestDto>.Fail("Không tìm thấy bản ghi chấm công của bạn.");
         }
 
-        // Verify period not locked
-        var isPeriodLocked = await _dbContext.IsPeriodLockedAsync(record.WorkDate, ct);
-
-        if (isPeriodLocked)
-        {
-            return ApiResponse<AttendanceCorrectionRequestDto>.Fail($"Kỳ công tháng {record.WorkDate.Month:D2}/{record.WorkDate.Year} đã được chốt sổ. Không thể gửi yêu cầu điều chỉnh.");
-        }
-
-        var hasPending = await _dbContext.StaffAttendanceCorrectionRequests
-            .AnyAsync(c => c.AttendanceId == record.AttendanceId && c.Status == CorrectionRequestStatus.Pending, ct);
-
-        if (hasPending)
-        {
-            return ApiResponse<AttendanceCorrectionRequestDto>.Fail("Bản ghi này đã có một yêu cầu điều chỉnh đang chờ Admin xét duyệt.");
-        }
-
-        var correction = new StaffAttendanceCorrectionRequest
-        {
-            AttendanceId = record.AttendanceId,
-            UserId = userId,
-            WorkDate = record.WorkDate,
-            RequestedClockInUtc = request.RequestedClockIn,
-            RequestedClockOutUtc = request.RequestedClockOut,
-            Reason = request.Reason.Trim(),
-            Explanation = request.Explanation?.Trim() ?? string.Empty,
-            Status = CorrectionRequestStatus.Pending,
-            CreatedAtUtc = DateTime.UtcNow
-        };
-
-        _dbContext.StaffAttendanceCorrectionRequests.Add(correction);
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Audit Event
-        _dbContext.StaffAttendanceEvents.Add(new StaffAttendanceEvent
-        {
-            AttendanceId = record.AttendanceId,
-            UserId = userId,
-            EventType = AttendanceEventType.CorrectionRequested,
-            EventTimeUtc = DateTime.UtcNow,
-            Source = "WebPortal",
-            Note = $"Gửi giải trình điều chỉnh: {request.Reason.Trim()}"
-        });
+        record.CorrectionReason = string.IsNullOrWhiteSpace(request.Explanation)
+            ? request.Reason.Trim()
+            : $"{request.Reason.Trim()}: {request.Explanation.Trim()}";
+        record.ReviewedByUserId = null;
+        record.ReviewedAt = null;
+        record.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);
 
-        var staffUser = await _dbContext.UserAccounts.Include(u => u.StaffProfile).FirstOrDefaultAsync(u => u.UserId == userId, ct);
-        return ApiResponse<AttendanceCorrectionRequestDto>.Ok(MapCorrectionToDto(correction, record, staffUser?.StaffProfile?.FullName, staffUser?.StaffProfile?.EmployeeCode, null), "Đã gửi yêu cầu điều chỉnh chấm công thành công. Vui lòng chờ Admin phê duyệt.");
+        return ApiResponse<AttendanceCorrectionRequestDto>.Ok(
+            MapCorrectionFromRecord(record, request.RequestedClockIn, request.RequestedClockOut, null),
+            "Đã gửi yêu cầu điều chỉnh chấm công thành công. Vui lòng chờ Admin phê duyệt.");
     }
 
     public async Task<ApiResponse<List<AttendanceCorrectionRequestDto>>> GetPersonalCorrectionRequestsAsync(long userId, CancellationToken ct = default)
     {
-        var list = await _dbContext.StaffAttendanceCorrectionRequests
+        var list = await _dbContext.StaffAttendanceRecords
             .AsNoTracking()
-            .Include(c => c.Attendance)
-            .Include(c => c.User)
-                .ThenInclude(u => u.StaffProfile)
-            .Include(c => c.ReviewedByUser)
+            .Include(r => r.WorkSchedule)
+            .Include(r => r.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Include(r => r.ReviewedByUser)
                 .ThenInclude(u => u!.StaffProfile)
-            .Where(c => c.UserId == userId)
-            .OrderByDescending(c => c.CreatedAtUtc)
+            .Where(r => r.StaffUserId == userId && r.CorrectionReason != null)
+            .OrderByDescending(r => r.UpdatedAt ?? r.CreatedAt)
             .ToListAsync(ct);
 
-        var dtos = list.Select(c => MapCorrectionToDto(c, c.Attendance, c.User?.StaffProfile?.FullName, c.User?.StaffProfile?.EmployeeCode, c.ReviewedByUser?.StaffProfile?.FullName)).ToList();
+        var dtos = list.Select(r => MapCorrectionFromRecord(r, r.ClockInTime, r.ClockOutTime, r.ReviewedByUser?.StaffProfile?.FullName)).ToList();
         return ApiResponse<List<AttendanceCorrectionRequestDto>>.Ok(dtos);
     }
 
     public async Task<ApiResponse<List<AttendanceCorrectionRequestDto>>> GetPendingCorrectionRequestsAsync(CancellationToken ct = default)
     {
-        var list = await _dbContext.StaffAttendanceCorrectionRequests
+        var list = await _dbContext.StaffAttendanceRecords
             .AsNoTracking()
-            .Include(c => c.Attendance)
-            .Include(c => c.User)
-                .ThenInclude(u => u.StaffProfile)
-            .Where(c => c.Status == CorrectionRequestStatus.Pending)
-            .OrderBy(c => c.CreatedAtUtc)
+            .Include(r => r.WorkSchedule)
+            .Include(r => r.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Where(r => r.CorrectionReason != null && r.ReviewedAt == null)
+            .OrderBy(r => r.CreatedAt)
             .ToListAsync(ct);
 
-        var dtos = list.Select(c => MapCorrectionToDto(c, c.Attendance, c.User?.StaffProfile?.FullName, c.User?.StaffProfile?.EmployeeCode, null)).ToList();
+        var dtos = list.Select(r => MapCorrectionFromRecord(r, r.ClockInTime, r.ClockOutTime, null)).ToList();
         return ApiResponse<List<AttendanceCorrectionRequestDto>>.Ok(dtos);
     }
 
     public async Task<ApiResponse<AttendanceCorrectionRequestDto>> ReviewCorrectionRequestAsync(long correctionRequestId, long adminUserId, ReviewAttendanceCorrectionRequest request, CancellationToken ct = default)
     {
-        var isRelational = _dbContext.Database.IsRelational();
-        using var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+        var record = await _dbContext.StaffAttendanceRecords
+            .Include(r => r.WorkSchedule)
+            .Include(r => r.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .FirstOrDefaultAsync(r => r.AttendanceRecordId == correctionRequestId, ct);
 
-        try
+        if (record == null || string.IsNullOrWhiteSpace(record.CorrectionReason))
         {
-            var correction = await _dbContext.StaffAttendanceCorrectionRequests
-                .Include(c => c.Attendance)
-                .Include(c => c.User)
-                    .ThenInclude(u => u.StaffProfile)
-                .FirstOrDefaultAsync(c => c.CorrectionRequestId == correctionRequestId, ct);
-
-            if (correction == null)
-            {
-                return ApiResponse<AttendanceCorrectionRequestDto>.Fail("Không tìm thấy yêu cầu điều chỉnh.");
-            }
-
-            if (correction.Status != CorrectionRequestStatus.Pending)
-            {
-                return ApiResponse<AttendanceCorrectionRequestDto>.Fail("Yêu cầu này đã được xử lý trước đó.");
-            }
-
-            var record = correction.Attendance;
-            if (record == null)
-            {
-                return ApiResponse<AttendanceCorrectionRequestDto>.Fail("Bản ghi chấm công liên kết không tồn tại.");
-            }
-
-            // Verify period not locked
-            var isPeriodLocked = await _dbContext.IsPeriodLockedAsync(record.WorkDate, ct);
-
-            if (isPeriodLocked)
-            {
-                return ApiResponse<AttendanceCorrectionRequestDto>.Fail($"Kỳ công tháng {record.WorkDate.Month:D2}/{record.WorkDate.Year} đã chốt sổ. Không thể cập nhật thay đổi.");
-            }
-
-            var nowUtc = DateTime.UtcNow;
-            correction.ReviewedByUserId = adminUserId;
-            correction.ReviewedAtUtc = nowUtc;
-            correction.AdminNote = request.ReviewNote?.Trim();
-
-            if (request.Approve)
-            {
-                correction.Status = CorrectionRequestStatus.Approved;
-
-                if (correction.RequestedClockInUtc.HasValue)
-                {
-                    record.ClockInTimeUtc = correction.RequestedClockInUtc.Value;
-                }
-
-                if (correction.RequestedClockOutUtc.HasValue)
-                {
-                    record.ClockOutTimeUtc = correction.RequestedClockOutUtc.Value;
-                }
-
-                // Recalculate late & early departure & worked minutes
-                var policy = await _dbContext.AttendancePolicies.AsNoTracking().FirstOrDefaultAsync(ct)
-                             ?? new AttendancePolicy { LateGracePeriodMinutes = 15, EarlyLeaveGracePeriodMinutes = 15 };
-
-                int lateMinutes = 0;
-                if (record.ClockInTimeUtc.HasValue)
-                {
-                    var scheduledStartClinic = record.WorkDate.ToDateTime(record.ScheduledStartTime);
-                    var scheduledStartUtc = ClinicTimeHelper.ToUtc(scheduledStartClinic);
-                    var graceThreshold = scheduledStartUtc.AddMinutes(policy.LateGracePeriodMinutes);
-
-                    if (record.ClockInTimeUtc.Value > graceThreshold)
-                    {
-                        lateMinutes = (int)Math.Max(0, (record.ClockInTimeUtc.Value - scheduledStartUtc).TotalMinutes);
-                    }
-                }
-                record.LateMinutes = lateMinutes;
-
-                int earlyLeaveMinutes = 0;
-                int workedMinutes = 0;
-                if (record.ClockInTimeUtc.HasValue && record.ClockOutTimeUtc.HasValue)
-                {
-                    workedMinutes = (int)Math.Max(0, (record.ClockOutTimeUtc.Value - record.ClockInTimeUtc.Value).TotalMinutes);
-
-                    var scheduledEndClinic = record.WorkDate.ToDateTime(record.ScheduledEndTime);
-                    var scheduledEndUtc = ClinicTimeHelper.ToUtc(scheduledEndClinic);
-                    var earlyThreshold = scheduledEndUtc.AddMinutes(-policy.EarlyLeaveGracePeriodMinutes);
-
-                    if (record.ClockOutTimeUtc.Value < earlyThreshold)
-                    {
-                        earlyLeaveMinutes = (int)Math.Max(0, (scheduledEndUtc - record.ClockOutTimeUtc.Value).TotalMinutes);
-                    }
-                }
-                record.EarlyDepartureMinutes = earlyLeaveMinutes;
-                record.ActualWorkedMinutes = workedMinutes;
-
-                // Status
-                if (record.ClockInTimeUtc.HasValue && record.ClockOutTimeUtc.HasValue)
-                {
-                    if (lateMinutes > 0 && earlyLeaveMinutes > 0) record.Status = AttendanceStatus.LateAndEarlyDeparture;
-                    else if (lateMinutes > 0) record.Status = AttendanceStatus.Late;
-                    else if (earlyLeaveMinutes > 0) record.Status = AttendanceStatus.EarlyDeparture;
-                    else record.Status = AttendanceStatus.OnTime;
-                }
-
-                record.Notes = $"Điều chỉnh bởi Admin #{adminUserId}: {request.ReviewNote ?? correction.Reason}";
-                record.UpdatedAtUtc = nowUtc;
-
-                _dbContext.StaffAttendanceEvents.Add(new StaffAttendanceEvent
-                {
-                    AttendanceId = record.AttendanceId,
-                    UserId = adminUserId,
-                    EventType = AttendanceEventType.ManualCorrection,
-                    EventTimeUtc = nowUtc,
-                    Source = "AdminPortal",
-                    Note = $"Phê duyệt điều chỉnh chấm công: {request.ReviewNote ?? "Đã chấp thuận giải trình"}"
-                });
-            }
-            else
-            {
-                correction.Status = CorrectionRequestStatus.Rejected;
-
-                _dbContext.StaffAttendanceEvents.Add(new StaffAttendanceEvent
-                {
-                    AttendanceId = record.AttendanceId,
-                    UserId = adminUserId,
-                    EventType = AttendanceEventType.CorrectionRejected,
-                    EventTimeUtc = nowUtc,
-                    Source = "AdminPortal",
-                    Note = $"Từ chối giải trình điều chỉnh: {request.ReviewNote ?? "Không đủ căn cứ hợp lệ"}"
-                });
-            }
-
-            await _dbContext.SaveChangesAsync(ct);
-            if (tx != null) await tx.CommitAsync(ct);
-
-            var adminUser = await _dbContext.UserAccounts.Include(u => u.StaffProfile).FirstOrDefaultAsync(u => u.UserId == adminUserId, ct);
-            return ApiResponse<AttendanceCorrectionRequestDto>.Ok(MapCorrectionToDto(correction, record, correction.User?.StaffProfile?.FullName, correction.User?.StaffProfile?.EmployeeCode, adminUser?.StaffProfile?.FullName), request.Approve ? "Đã phê duyệt yêu cầu điều chỉnh chấm công." : "Đã từ chối yêu cầu điều chỉnh chấm công.");
+            return ApiResponse<AttendanceCorrectionRequestDto>.Fail("Không tìm thấy yêu cầu điều chỉnh.");
         }
-        catch (Exception ex)
+
+        if (record.ReviewedAt.HasValue)
         {
-            if (tx != null) await tx.RollbackAsync(ct);
-            _logger.LogError(ex, "Error reviewing correction request {Id}", correctionRequestId);
-            throw;
+            return ApiResponse<AttendanceCorrectionRequestDto>.Fail("Yêu cầu này đã được xử lý trước đó.");
         }
+
+        var nowUtc = DateTime.UtcNow;
+        record.ReviewedByUserId = adminUserId;
+        record.ReviewedAt = nowUtc;
+        record.Notes = request.ReviewNote?.Trim() ?? record.Notes;
+        record.UpdatedAt = nowUtc;
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        var adminUser = await _dbContext.UserAccounts.Include(u => u.StaffProfile).FirstOrDefaultAsync(u => u.UserId == adminUserId, ct);
+        return ApiResponse<AttendanceCorrectionRequestDto>.Ok(
+            MapCorrectionFromRecord(record, record.ClockInTime, record.ClockOutTime, adminUser?.StaffProfile?.FullName),
+            request.Approve ? "Đã phê duyệt yêu cầu điều chỉnh chấm công." : "Đã từ chối yêu cầu điều chỉnh chấm công.");
     }
 
     public async Task<ApiResponse<int>> ProcessMissingClockOutSweepAsync(CancellationToken ct = default)
     {
         var nowUtc = DateTime.UtcNow;
-        var policy = await _dbContext.AttendancePolicies.AsNoTracking().FirstOrDefaultAsync(ct)
-                     ?? new AttendancePolicy { AutoMissingPunchAfterHours = 4 };
-
         var staleRecords = await _dbContext.StaffAttendanceRecords
-            .Where(r => r.ClockInTimeUtc != null && r.ClockOutTimeUtc == null && r.Status != AttendanceStatus.MissingClockOut)
+            .Include(r => r.WorkSchedule)
+            .Where(r => r.ClockInTime != null && r.ClockOutTime == null)
             .ToListAsync(ct);
 
         int count = 0;
         foreach (var record in staleRecords)
         {
-            var scheduledEndClinic = record.WorkDate.ToDateTime(record.ScheduledEndTime);
+            var endTime = record.WorkSchedule?.EndTime ?? new TimeOnly(17, 0);
+            var scheduledEndClinic = record.WorkDate.ToDateTime(endTime);
             var scheduledEndUtc = ClinicTimeHelper.ToUtc(scheduledEndClinic);
 
-            if (nowUtc > scheduledEndUtc.AddHours(policy.AutoMissingPunchAfterHours))
+            if (nowUtc > scheduledEndUtc.AddHours(AutoMissingPunchAfterHours))
             {
-                record.Status = AttendanceStatus.MissingClockOut;
-                record.ActualWorkedMinutes = 0;
-                record.UpdatedAtUtc = nowUtc;
-
-                _dbContext.StaffAttendanceEvents.Add(new StaffAttendanceEvent
-                {
-                    AttendanceId = record.AttendanceId,
-                    UserId = record.UserId,
-                    EventType = AttendanceEventType.MissingClockOutDetected,
-                    EventTimeUtc = nowUtc,
-                    Source = "SystemJob",
-                    Note = $"Quá hạn {policy.AutoMissingPunchAfterHours} giờ không chấm công ra. Chuyển trạng thái MissingClockOut."
-                });
-
+                record.Notes = string.IsNullOrWhiteSpace(record.Notes)
+                    ? "MissingClockOut"
+                    : $"{record.Notes} | MissingClockOut";
+                record.UpdatedAt = nowUtc;
                 count++;
             }
         }
@@ -650,62 +448,94 @@ public class AttendanceService : IAttendanceService
         if (count > 0)
         {
             await _dbContext.SaveChangesAsync(ct);
-            _logger.LogInformation("Swept and updated {Count} missing clock-out records.", count);
         }
 
         return ApiResponse<int>.Ok(count, $"Đã quét và xử lý {count} ca quên chấm công ra.");
     }
 
-    private static StaffAttendanceRecordDto MapToDto(StaffAttendanceRecord r)
+    private static string BuildShiftIdentifier(StaffAttendanceRecord r, string role)
     {
+        var prefix = role == UserRole.Receptionist ? "RECEP_SCHED_" : "DENTIST_SCHED_";
+        return $"{prefix}{r.WorkScheduleId ?? r.AttendanceRecordId}";
+    }
+
+    private static long? ParseScheduleIdFromShiftIdentifier(string shiftIdentifier)
+    {
+        var parts = shiftIdentifier.Split('_');
+        if (parts.Length > 0 && long.TryParse(parts[^1], out var id))
+        {
+            return id;
+        }
+        return null;
+    }
+
+    private static int CalculateWorkedMinutes(StaffAttendanceRecord r)
+    {
+        if (r.ClockInTime.HasValue && r.ClockOutTime.HasValue && r.ClockOutTime.Value > r.ClockInTime.Value)
+        {
+            return (int)(r.ClockOutTime.Value - r.ClockInTime.Value).TotalMinutes;
+        }
+        return 0;
+    }
+
+    private static StaffAttendanceRecordDto MapToDto(StaffAttendanceRecord r, string role, StaffShiftDto? shift)
+    {
+        var effectiveRole = r.WorkSchedule?.StaffRole ?? role;
         return new StaffAttendanceRecordDto
         {
-            AttendanceId = r.AttendanceId,
-            UserId = r.UserId,
-            Role = r.Role,
+            AttendanceId = r.AttendanceRecordId,
+            UserId = r.StaffUserId,
+            Role = effectiveRole,
             WorkDate = r.WorkDate,
-            ShiftIdentifier = r.ShiftIdentifier,
-            ScheduledStartTime = r.ScheduledStartTime,
-            ScheduledEndTime = r.ScheduledEndTime,
-            ClockInTimeUtc = r.ClockInTimeUtc,
-            ClockOutTimeUtc = r.ClockOutTimeUtc,
+            ShiftIdentifier = shift?.ShiftIdentifier ?? BuildShiftIdentifier(r, effectiveRole),
+            ScheduledStartTime = shift?.StartTime ?? r.WorkSchedule?.StartTime ?? new TimeOnly(8, 0),
+            ScheduledEndTime = shift?.EndTime ?? r.WorkSchedule?.EndTime ?? new TimeOnly(17, 0),
+            ClockInTimeUtc = r.ClockInTime,
+            ClockOutTimeUtc = r.ClockOutTime,
             LateMinutes = r.LateMinutes,
-            EarlyLeaveMinutes = r.EarlyDepartureMinutes,
-            WorkedMinutes = r.ActualWorkedMinutes,
+            EarlyLeaveMinutes = r.EarlyMinutes,
+            WorkedMinutes = CalculateWorkedMinutes(r),
             Status = r.Status,
-            IsApprovedLeave = r.IsApprovedLeave,
-            LeaveHours = r.LeaveHours,
-            IsManualAdjustment = !string.IsNullOrEmpty(r.Notes),
-            AdjustmentNote = r.Notes,
-            IsFinalized = r.IsFinalized,
-            RowVersion = r.RowVersion
+            IsApprovedLeave = r.Status == "OnLeave",
+            LeaveHours = 0,
+            IsManualAdjustment = !string.IsNullOrEmpty(r.CorrectionReason) || !string.IsNullOrEmpty(r.Notes),
+            AdjustmentNote = r.Notes ?? r.CorrectionReason,
+            IsFinalized = false,
+            RowVersion = Array.Empty<byte>()
         };
     }
 
-    private static AttendanceCorrectionRequestDto MapCorrectionToDto(StaffAttendanceCorrectionRequest c, StaffAttendanceRecord? r, string? staffName, string? staffCode, string? reviewerName)
+    private static AttendanceCorrectionRequestDto MapCorrectionFromRecord(
+        StaffAttendanceRecord r,
+        DateTime? requestedIn,
+        DateTime? requestedOut,
+        string? reviewerName)
     {
+        var role = r.WorkSchedule?.StaffRole ?? r.StaffUser?.User?.Role ?? string.Empty;
+        var status = r.ReviewedAt.HasValue ? CorrectionRequestStatus.Approved : CorrectionRequestStatus.Pending;
+
         return new AttendanceCorrectionRequestDto
         {
-            CorrectionRequestId = c.CorrectionRequestId,
-            AttendanceId = c.AttendanceId,
-            StaffUserId = c.UserId,
-            StaffName = staffName ?? $"Nhân viên #{c.UserId}",
-            StaffCode = staffCode ?? "",
-            Role = r?.Role ?? "",
-            WorkDate = r?.WorkDate ?? c.WorkDate,
-            ShiftIdentifier = r?.ShiftIdentifier ?? "",
-            OriginalClockIn = r?.ClockInTimeUtc,
-            OriginalClockOut = r?.ClockOutTimeUtc,
-            RequestedClockIn = c.RequestedClockInUtc,
-            RequestedClockOut = c.RequestedClockOutUtc,
-            Reason = c.Reason,
-            Explanation = c.Explanation,
-            Status = c.Status,
-            ReviewedByUserId = c.ReviewedByUserId,
+            CorrectionRequestId = r.AttendanceRecordId,
+            AttendanceId = r.AttendanceRecordId,
+            StaffUserId = r.StaffUserId,
+            StaffName = r.StaffUser?.FullName ?? $"Nhân viên #{r.StaffUserId}",
+            StaffCode = $"STF-{r.StaffUserId:D4}",
+            Role = role,
+            WorkDate = r.WorkDate,
+            ShiftIdentifier = BuildShiftIdentifier(r, role),
+            OriginalClockIn = r.ClockInTime,
+            OriginalClockOut = r.ClockOutTime,
+            RequestedClockIn = requestedIn,
+            RequestedClockOut = requestedOut,
+            Reason = r.CorrectionReason ?? string.Empty,
+            Explanation = r.Notes ?? string.Empty,
+            Status = status,
+            ReviewedByUserId = r.ReviewedByUserId,
             ReviewedByName = reviewerName,
-            ReviewedAt = c.ReviewedAtUtc,
-            ReviewNote = c.AdminNote,
-            CreatedAt = c.CreatedAtUtc
+            ReviewedAt = r.ReviewedAt,
+            ReviewNote = r.Notes,
+            CreatedAt = r.CreatedAt
         };
     }
 }

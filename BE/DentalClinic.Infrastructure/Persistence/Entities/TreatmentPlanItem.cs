@@ -1,45 +1,33 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
 
 public partial class TreatmentPlanItem
 {
-    public long TreatmentPlanItemId { get; set; }
+    public long PlanItemId { get; set; }
 
     public long TreatmentPlanId { get; set; }
 
-    public long? DepartmentServiceId { get; set; }
-
-    public long? AssignedDentistUserId { get; set; }
+    public int DepartmentServiceId { get; set; }
 
     public string? ToothNumber { get; set; }
 
     public int SequenceNo { get; set; }
 
-    public DateOnly? ExpectedDate { get; set; }
+    public decimal EstimatedCost { get; set; }
 
-    public decimal? EstimatedCost { get; set; }
+    public string Status { get; set; } = "Planned";
 
-    public string Status { get; set; } = null!;
+    public string? Notes { get; set; }
 
-    public string? StageName { get; set; }
+    public DateTime CreatedAt { get; set; }
 
-    public string? ResultSummary { get; set; }
-
-    public DateTime? CompletedAt { get; set; }
-
-    public string? SkippedReason { get; set; }
-
-    public string? Note { get; set; }
-
-    public virtual DentistProfile? AssignedDentistUser { get; set; }
-
-    public virtual DepartmentService? DepartmentService { get; set; }
+    public DateTime? UpdatedAt { get; set; }
 
     public virtual TreatmentPlan TreatmentPlan { get; set; } = null!;
 
-    public virtual ICollection<TreatmentSession> TreatmentSessions { get; set; } = new List<TreatmentSession>();
+    public virtual DepartmentService DepartmentService { get; set; } = null!;
 
-    public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
+    public virtual ICollection<AppointmentService> AppointmentServices { get; set; } = new List<AppointmentService>();
 }

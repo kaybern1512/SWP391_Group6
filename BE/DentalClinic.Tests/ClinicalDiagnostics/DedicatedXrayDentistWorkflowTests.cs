@@ -161,10 +161,11 @@ public class DedicatedXrayDentistWorkflowTests
         var today = DateOnly.FromDateTime(DateTime.Today);
 
         // Add approved leave for qualified dentist
-        db.DentistLeaveRequests.Add(new DentistLeaveRequest
+        db.StaffLeaveRequests.Add(new StaffLeaveRequest
         {
             LeaveRequestId = 101,
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             StartDate = today,
             EndDate = today,
             Reason = "Nghi phep ca nhan",
@@ -486,10 +487,11 @@ public class DedicatedXrayDentistWorkflowTests
             CreatedAtUtc = DateTime.UtcNow
         });
 
-        db.DentistLeaveRequests.Add(new DentistLeaveRequest
+        db.StaffLeaveRequests.Add(new StaffLeaveRequest
         {
             LeaveRequestId = 77,
-            DentistUserId = 10,
+            StaffUserId = 10,
+            StaffRole = "Dentist",
             StartDate = today,
             EndDate = today,
             Reason = "Nghi dot xuat",

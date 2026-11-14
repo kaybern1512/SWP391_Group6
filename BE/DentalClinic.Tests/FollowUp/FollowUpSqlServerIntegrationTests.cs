@@ -31,7 +31,8 @@ public class FollowUpSqlServerIntegrationTests
         "DentalCare_DentistTask_QA",
         "DentalCare_ServiceIntegration_QA",
         "DentalCare_Unified_QA",
-        "DentalCare_IntegrityFix_QA"
+        "DentalCare_IntegrityFix_QA",
+        "DentalCare_Simplification_QA"
     };
 
     private static async Task<long> GetValidTreatmentSessionIdAsync(DentalClinicDbContext db)
