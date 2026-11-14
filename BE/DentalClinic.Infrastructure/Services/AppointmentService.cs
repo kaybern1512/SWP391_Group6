@@ -1743,10 +1743,21 @@ public class AppointmentService : IAppointmentService
             return ApiResponse<AppointmentDto>.Fail("Không tìm thấy lịch hẹn.");
         }
 
-        if (appointment.Status == AppointmentStatus.Confirmed)
+        var nonModifiableStatuses = new[]
         {
-            var existingDto = await MapToDtoAsync(appointmentId, ct);
-            return ApiResponse<AppointmentDto>.Ok(existingDto!, "Lịch hẹn đã được xác nhận trước đó.");
+            AppointmentStatus.CheckedIn,
+            AppointmentStatus.Waiting,
+            AppointmentStatus.Called,
+            AppointmentStatus.InService,
+            AppointmentStatus.InProgress,
+            AppointmentStatus.Completed,
+            AppointmentStatus.Cancelled,
+            AppointmentStatus.NoShow,
+            AppointmentStatus.Withdrawn
+        };
+        if (nonModifiableStatuses.Contains(appointment.Status))
+        {
+            return ApiResponse<AppointmentDto>.Fail($"Không thể phân bổ hoặc xác nhận lịch hẹn ở trạng thái '{appointment.Status}'.");
         }
 
         var items = appointment.AppointmentServices.OrderBy(s => s.ScheduledStart).ToList();
@@ -1757,6 +1768,17 @@ public class AppointmentService : IAppointmentService
 
         var primaryItem = items.First();
         var primaryDeptId = primaryItem.DepartmentId;
+
+        bool isSameDentist = primaryItem.AssignedDentistUserId == request.AssignedDentistUserId;
+        bool isSameRoom = primaryItem.RoomId == (int)request.RoomId;
+        bool isSameChair = primaryItem.DentalChairId == (int)request.DentalChairId.Value;
+        bool isSameTime = !request.ScheduledStart.HasValue || ClinicTimeHelper.ToClinicTime(request.ScheduledStart.Value) == primaryItem.ScheduledStart;
+
+        if (appointment.Status == AppointmentStatus.Confirmed && isSameDentist && isSameRoom && isSameChair && isSameTime)
+        {
+            var existingDto = await MapToDtoAsync(appointmentId, ct);
+            return ApiResponse<AppointmentDto>.Ok(existingDto!, "Lịch hẹn đã được xác nhận trước đó.");
+        }
 
         var isDentistInDept = await _dbContext.DentistProfiles
             .AsNoTracking()
@@ -1917,18 +1939,22 @@ public class AppointmentService : IAppointmentService
             appointment.ConfirmedAt = now;
             appointment.UpdatedAt = now;
 
+            var actionDescription = oldStatus == AppointmentStatus.Confirmed
+                ? $"Cập nhật phân bổ bác sĩ/phòng/ghế (STT: {primaryItem.QueueNumber})."
+                : $"Xác nhận lịch hẹn và phân bổ bác sĩ/phòng/ghế (STT: {primaryItem.QueueNumber}).";
+
             AddStatusAuditLog(
                 appointmentId,
                 oldStatus,
                 AppointmentStatus.Confirmed,
                 managerUserId,
-                $"Xác nhận lịch hẹn và phân bổ bác sĩ/phòng/ghế (STT: {primaryItem.QueueNumber}).",
+                actionDescription,
                 now);
 
             await _dbContext.SaveChangesAsync(ct);
 
             var dto = await MapToDtoAsync(appointmentId, ct);
-            return ApiResponse<AppointmentDto>.Ok(dto!, "Xác nhận lịch hẹn thành công.");
+            return ApiResponse<AppointmentDto>.Ok(dto!, oldStatus == AppointmentStatus.Confirmed ? "Cập nhật phân bổ lịch hẹn thành công." : "Xác nhận lịch hẹn thành công.");
         }
     }
 

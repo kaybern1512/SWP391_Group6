@@ -1000,4 +1000,144 @@ public class SqlServerRefactorIntegrationTests
         Assert.Equal(5, fbDb.DentistRating);
         Assert.Equal(fixture.patientId, fbDb.PatientUserId);
     }
+
+    [Fact]
+    public async Task GroupI_ConfirmedAppointment_ReceptionistReassignment_And_ConcurrencyValidation()
+    {
+        if (!await IsSqlServerAvailableAsync()) return;
+
+        using var db = CreateDbContext();
+        await CleanDatabaseAsync(db);
+        var fixture = await SeedBaseFixtureAsync(db);
+
+        var notifMock = new Mock<INotificationService>();
+        var apptService = new AppointmentService(db, notifMock.Object, NullLogger<AppointmentService>.Instance);
+        var targetStart = DateTime.Today.AddDays(1).AddHours(14);
+
+        // 1. Book an appointment
+        var bookReq = new CreateAppointmentRequest
+        {
+            DepartmentId = fixture.dept1Id,
+            RequestedServiceId = fixture.srv1Id,
+            RequestedDentistUserId = fixture.dentist1Id,
+            ScheduledStart = targetStart,
+            ServiceItems = new List<BookingServiceItemRequest>
+            {
+                new BookingServiceItemRequest
+                {
+                    DepartmentServiceId = fixture.srv1Id,
+                    RequestedDentistUserId = fixture.dentist1Id,
+                    ScheduledStart = targetStart
+                }
+            }
+        };
+
+        var bookRes = await apptService.CreatePatientAppointmentAsync(fixture.patientId, bookReq);
+        Assert.True(bookRes.Success);
+        var apptId = bookRes.Data!.AppointmentId;
+
+        // 2. Initial confirmation with Dentist 1, Room 1, Chair 1
+        var confirmReq1 = new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = fixture.dentist1Id,
+            RoomId = fixture.room1Id,
+            DentalChairId = fixture.chair1Id,
+            ScheduledStart = targetStart,
+            ScheduledEnd = targetStart.AddMinutes(30)
+        };
+
+        var confirmRes1 = await apptService.ManagerConfirmAsync(apptId, fixture.receptionistId, confirmReq1);
+        Assert.True(confirmRes1.Success);
+
+        var apptDb = await db.Appointments.Include(a => a.AppointmentServices).FirstAsync(a => a.AppointmentId == apptId);
+        Assert.Equal("Confirmed", apptDb.Status);
+        Assert.Equal(fixture.dentist1Id, apptDb.AppointmentServices.First().AssignedDentistUserId);
+        Assert.Equal(fixture.room1Id, apptDb.AppointmentServices.First().RoomId);
+        Assert.Equal(fixture.chair1Id, apptDb.AppointmentServices.First().DentalChairId);
+
+        // 3. Idempotent confirm with identical allocation returns early OK
+        var idempotentRes = await apptService.ManagerConfirmAsync(apptId, fixture.receptionistId, confirmReq1);
+        Assert.True(idempotentRes.Success);
+        Assert.Contains("trước đó", idempotentRes.Message);
+
+        // 4. Create another chair in Room 1 and assign it
+        var chair1B = new DentalChair
+        {
+            RoomId = fixture.room1Id,
+            ChairCode = $"C1B_{Guid.NewGuid():N}"[..10],
+            ChairName = "Ghế 1B",
+            Status = "Active",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.DentalChairs.Add(chair1B);
+        await db.SaveChangesAsync();
+
+        // 5. Reassign confirmed appointment to chair 1B before check-in
+        var reassignReq = new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = fixture.dentist1Id,
+            RoomId = fixture.room1Id,
+            DentalChairId = chair1B.DentalChairId,
+            ScheduledStart = targetStart,
+            ScheduledEnd = targetStart.AddMinutes(30)
+        };
+
+        var reassignRes = await apptService.ManagerConfirmAsync(apptId, fixture.receptionistId, reassignReq);
+        Assert.True(reassignRes.Success, reassignRes.Message);
+
+        apptDb = await db.Appointments.Include(a => a.AppointmentServices).FirstAsync(a => a.AppointmentId == apptId);
+        Assert.Equal(chair1B.DentalChairId, apptDb.AppointmentServices.First().DentalChairId);
+
+        // 6. Concurrency / Conflict Validation:
+        // Patient 2 books for same slot
+        var userPatient2 = new UserAccount
+        {
+            Email = $"pat2_{Guid.NewGuid():N}@dentalcare.com",
+            Role = UserRole.Patient,
+            Status = AccountStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.UserAccounts.Add(userPatient2);
+        await db.SaveChangesAsync();
+
+        db.PatientProfiles.Add(new PatientProfile
+        {
+            UserId = userPatient2.UserId,
+            FullName = "Bệnh nhân Hai Concurrency",
+            CreatedAt = DateTime.UtcNow
+        });
+        db.DentalMedicalRecords.Add(new DentalMedicalRecord
+        {
+            PatientUserId = userPatient2.UserId,
+            MedicalHistory = "Bình thường",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var bookReq2 = new CreateAppointmentRequest
+        {
+            DepartmentId = fixture.dept1Id,
+            RequestedServiceId = fixture.srv1Id,
+            RequestedDentistUserId = fixture.dentist1Id,
+            ScheduledStart = targetStart,
+            ServiceItems = new List<BookingServiceItemRequest>
+            {
+                new BookingServiceItemRequest
+                {
+                    DepartmentServiceId = fixture.srv1Id,
+                    RequestedDentistUserId = fixture.dentist1Id,
+                    ScheduledStart = targetStart
+                }
+            }
+        };
+
+        var bookRes2 = await apptService.CreatePatientAppointmentAsync(userPatient2.UserId, bookReq2);
+        Assert.True(bookRes2.Success);
+        var apptId2 = bookRes2.Data!.AppointmentId;
+
+        // Try to confirm apptId2 on the SAME dentist and chair at the SAME time -> Must fail with conflict!
+        var conflictRes = await apptService.ManagerConfirmAsync(apptId2, fixture.receptionistId, reassignReq);
+        Assert.False(conflictRes.Success);
+        Assert.True(conflictRes.Message != null && (conflictRes.Message.Contains("Bác sĩ đã có lịch hẹn khác") || conflictRes.Message.Contains("Ghế nha khoa")));
+    }
 }
