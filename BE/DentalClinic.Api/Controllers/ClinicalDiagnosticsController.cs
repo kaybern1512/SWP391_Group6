@@ -349,6 +349,25 @@ public class ClinicalDiagnosticsController : ControllerBase
             if (file == null || file.Length == 0)
                 return BadRequest(ApiResponse<DiagnosticResultDto>.Fail("Vui lòng đính kèm tệp hình ảnh chẩn đoán hợp lệ."));
 
+            if (file.Length > 15 * 1024 * 1024)
+                return BadRequest(ApiResponse<DiagnosticResultDto>.Fail("Dung lượng tệp hình ảnh vượt quá giới hạn tối đa 15 MB."));
+
+            var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
+            var allowedExts = new[] { ".jpg", ".jpeg", ".png", ".dcm", ".dicom" };
+            if (!allowedExts.Contains(ext))
+                return BadRequest(ApiResponse<DiagnosticResultDto>.Fail($"Định dạng tệp '{ext}' không được hỗ trợ. Chỉ chấp nhận JPG, JPEG, PNG hoặc DICOM (.dcm, .dicom)."));
+
+            var targetOrderId = form.DiagnosticOrderId > 0 ? form.DiagnosticOrderId : form.ImagingSessionId;
+            if (targetOrderId <= 0)
+                return BadRequest(ApiResponse<DiagnosticResultDto>.Fail("Mã chỉ định chẩn đoán hình ảnh không hợp lệ."));
+
+            var targetDiagnostic = await _dbContext.Diagnostics.AsNoTracking().FirstOrDefaultAsync(d => d.DiagnosticId == targetOrderId, ct);
+            if (targetDiagnostic == null)
+                return NotFound(ApiResponse<DiagnosticResultDto>.Fail("Không tìm thấy chỉ định chẩn đoán hình ảnh."));
+
+            if (targetDiagnostic.Status == "Cancelled")
+                return BadRequest(ApiResponse<DiagnosticResultDto>.Fail("Chỉ định chẩn đoán hình ảnh đã bị hủy. Không thể tải lên kết quả."));
+
             var userId = GetCurrentUserId();
             using var stream = file.OpenReadStream();
             var uploadResult = await _imagingStorageService.UploadDentalImageAsync(stream, file.FileName, file.ContentType, "clinical-imaging", ct);
@@ -385,10 +404,23 @@ public class ClinicalDiagnosticsController : ControllerBase
         {
             var result = await _dbContext.Diagnostics
                 .AsNoTracking()
+                .Include(r => r.AppointmentService)
+                    .ThenInclude(s => s.Appointment)
                 .FirstOrDefaultAsync(r => r.DiagnosticId == resultId && r.FileUrl != null, ct);
 
             if (result == null || string.IsNullOrWhiteSpace(result.FileUrl))
                 return NotFound("Không tìm thấy kết quả chẩn đoán.");
+
+            var currentUserId = GetCurrentUserId();
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (role == UserRole.Patient)
+            {
+                var appt = result.AppointmentService?.Appointment;
+                if (appt == null || appt.PatientUserId != currentUserId)
+                {
+                    return Forbid();
+                }
+            }
 
             var stream = await _imagingStorageService.GetImageStreamAsync(result.FileUrl, ct);
             if (stream == null)

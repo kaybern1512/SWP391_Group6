@@ -121,6 +121,17 @@ public class ClinicalStaffAvailabilityService : IClinicalStaffAvailabilityServic
             return (false, "Bác sĩ đã có lịch hẹn khác trong khung giờ này.");
         }
 
+        var isDentistInService = await _dbContext.AppointmentServices
+            .AsNoTracking()
+            .AnyAsync(s => s.AssignedDentistUserId == dentistUserId &&
+                           s.Status == AppointmentStatus.InService &&
+                           (!excludeAppointmentId.HasValue || s.AppointmentId != excludeAppointmentId.Value), ct);
+
+        if (isDentistInService && start <= DateTime.UtcNow)
+        {
+            return (false, "Bác sĩ hiện đang trong ca khám bệnh khác chưa kết thúc.");
+        }
+
         return (true, null);
     }
 
@@ -138,6 +149,7 @@ public class ClinicalStaffAvailabilityService : IClinicalStaffAvailabilityServic
 
         var chair = await _dbContext.DentalChairs
             .AsNoTracking()
+            .Include(c => c.Room)
             .FirstOrDefaultAsync(c => c.DentalChairId == chairId, ct);
 
         if (chair == null)
@@ -158,6 +170,22 @@ public class ClinicalStaffAvailabilityService : IClinicalStaffAvailabilityServic
         if (!string.Equals(chair.Status, "Active", StringComparison.OrdinalIgnoreCase))
         {
             return (false, $"Ghế nha khoa '{chair.ChairCode}' hiện không khả dụng (Trạng thái: {chair.Status}).");
+        }
+
+        if (chair.Room != null && !string.Equals(chair.Room.Status, "Active", StringComparison.OrdinalIgnoreCase))
+        {
+            return (false, $"Phòng khám '{chair.Room.RoomName}' hiện không khả dụng (Trạng thái: {chair.Room.Status}). Do đó không thể sử dụng ghế nha khoa này.");
+        }
+
+        var isCurrentlyInService = await _dbContext.AppointmentServices
+            .AsNoTracking()
+            .AnyAsync(s => s.DentalChairId == chairId &&
+                           s.Status == AppointmentStatus.InService &&
+                           (!excludeAppointmentId.HasValue || s.AppointmentId != excludeAppointmentId.Value), ct);
+
+        if (isCurrentlyInService && start <= DateTime.UtcNow)
+        {
+            return (false, $"Ghế nha khoa '{chair.ChairCode}' hiện đang được sử dụng cho ca điều trị khác chưa kết thúc.");
         }
 
         var activeStatuses = new[]

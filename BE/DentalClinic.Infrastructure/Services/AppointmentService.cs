@@ -1043,6 +1043,42 @@ public class AppointmentService : IAppointmentService
 
         var primaryItem = existingItems.First();
         var delta = newStart - primaryItem.ScheduledStart;
+
+        var deptIds = existingItems.Select(x => x.DepartmentId).Distinct().ToList();
+        var hasPediatric = await _dbContext.Departments
+            .AsNoTracking()
+            .AnyAsync(d => deptIds.Contains(d.DepartmentId) && (d.Name.Contains("Trẻ Em") || d.Name.Contains("Pediatric")), ct);
+
+        if (hasPediatric)
+        {
+            var patientProfile = await _dbContext.PatientProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == patientUserId, ct);
+            if (patientProfile == null || !patientProfile.DateOfBirth.HasValue)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Vui lòng cập nhật ngày sinh trong hồ sơ để đăng ký chuyên khoa Răng Trẻ Em.");
+            }
+
+            var newApptDate = DateOnly.FromDateTime(newStart);
+            var dob = patientProfile.DateOfBirth.Value;
+            int age = newApptDate.Year - dob.Year;
+            if (newApptDate < dob.AddYears(age)) age--;
+            if (age > 15)
+            {
+                return ApiResponse<AppointmentDto>.Fail($"Chuyên khoa Răng Trẻ Em chỉ dành cho bệnh nhân từ 0 đến 15 tuổi. Bệnh nhân sẽ {age} tuổi tại thời điểm lịch hẹn mới ({newApptDate:dd/MM/yyyy}), vui lòng chọn chuyên khoa phù hợp.");
+            }
+        }
+
+        if (request.NewRequestedDentistUserId.HasValue)
+        {
+            var newPrimaryStart = primaryItem.ScheduledStart.Add(delta);
+            var newPrimaryEnd = primaryItem.ScheduledEnd.Add(delta);
+            var (isDentistAvail, dentistReason) = await _clinicalAvailabilityService.CheckDentistAvailabilityAsync(
+                request.NewRequestedDentistUserId.Value, newPrimaryStart, newPrimaryEnd, primaryItem.DepartmentId, appointmentId, ct);
+            if (!isDentistAvail)
+            {
+                return ApiResponse<AppointmentDto>.Fail(dentistReason ?? "Bác sĩ được yêu cầu không khả dụng trong khung giờ dời lịch.");
+            }
+        }
+
         var now = DateTime.UtcNow;
         var oldCode = $"APT-{appointment.AppointmentId:D6}";
 
@@ -2110,6 +2146,46 @@ public class AppointmentService : IAppointmentService
             return ApiResponse.Fail("Lịch hẹn chưa có dịch vụ.");
         }
 
+        if (request.ProposedDentistUserId.HasValue && request.ProposedStart.HasValue && request.ProposedEnd.HasValue)
+        {
+            var (isDentistAvail, dentistReason) = await _clinicalAvailabilityService.CheckDentistAvailabilityAsync(
+                request.ProposedDentistUserId.Value,
+                request.ProposedStart.Value,
+                request.ProposedEnd.Value,
+                primaryItem.DepartmentId,
+                appointmentId,
+                ct);
+
+            if (!isDentistAvail)
+            {
+                return ApiResponse.Fail(dentistReason ?? "Bác sĩ được đề xuất không khả dụng trong khung giờ này.");
+            }
+        }
+
+        if (request.ProposedStart.HasValue)
+        {
+            var deptIds = appointment.AppointmentServices.Select(x => x.DepartmentId).Distinct().ToList();
+            var hasPediatric = await _dbContext.Departments
+                .AsNoTracking()
+                .AnyAsync(d => deptIds.Contains(d.DepartmentId) && (d.Name.Contains("Trẻ Em") || d.Name.Contains("Pediatric")), ct);
+
+            if (hasPediatric)
+            {
+                var patientProfile = await _dbContext.PatientProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == appointment.PatientUserId, ct);
+                if (patientProfile?.DateOfBirth.HasValue == true)
+                {
+                    var propDate = DateOnly.FromDateTime(request.ProposedStart.Value);
+                    var dob = patientProfile.DateOfBirth.Value;
+                    int age = propDate.Year - dob.Year;
+                    if (propDate < dob.AddYears(age)) age--;
+                    if (age > 15)
+                    {
+                        return ApiResponse.Fail($"Chuyên khoa Răng Trẻ Em chỉ dành cho bệnh nhân từ 0 đến 15 tuổi. Bệnh nhân sẽ {age} tuổi tại thời điểm lịch hẹn đề xuất ({propDate:dd/MM/yyyy}), vui lòng chọn chuyên khoa phù hợp.");
+                    }
+                }
+            }
+        }
+
         var now = DateTime.UtcNow;
         primaryItem.PendingActionType = "Reschedule";
         primaryItem.PendingDentistUserId = request.ProposedDentistUserId;
@@ -2323,56 +2399,82 @@ public class AppointmentService : IAppointmentService
             return ApiResponse<StartAppointmentResultDto>.Fail("Dịch vụ chưa được phân bổ phòng khám / ghế nha khoa.");
         }
 
-        var (isChairAvail, chairReason) = await _clinicalAvailabilityService.CheckChairAvailabilityAsync(
-            targetService.DentalChairId.Value, targetService.ScheduledStart, targetService.ScheduledEnd, appointmentId, ct);
-        if (!isChairAvail)
+        var lockKeys = new List<string>
         {
-            return ApiResponse<StartAppointmentResultDto>.Fail(chairReason ?? "Ghế nha khoa không khả dụng.");
-        }
+            SqlAppLockHelper.ApptKey(appointmentId),
+            SqlAppLockHelper.ChairKey(targetService.DentalChairId.Value, targetService.ScheduledStart.Date),
+            SqlAppLockHelper.DentistKey(dentistUserId, targetService.ScheduledStart.Date)
+        };
 
-        var (isDentistAvail, dentistReason) = await _clinicalAvailabilityService.CheckDentistAvailabilityAsync(
-            dentistUserId, targetService.ScheduledStart, targetService.ScheduledEnd, dentist.DepartmentId, appointmentId, ct);
-        if (!isDentistAvail)
-        {
-            return ApiResponse<StartAppointmentResultDto>.Fail(dentistReason ?? "Bác sĩ không khả dụng.");
-        }
+        using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
 
-        if (targetService.Status == AppointmentStatus.InService)
+        var isRelational = _dbContext.Database.IsRelational();
+        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
+
+        try
         {
-            return ApiResponse<StartAppointmentResultDto>.Ok(new StartAppointmentResultDto
+            var (isChairAvail, chairReason) = await _clinicalAvailabilityService.CheckChairAvailabilityAsync(
+                targetService.DentalChairId.Value, targetService.ScheduledStart, targetService.ScheduledEnd, appointmentId, ct);
+            if (!isChairAvail)
             {
-                AppointmentId = appointment.AppointmentId,
-                PatientUserId = appointment.PatientUserId,
-                Status = AppointmentStatus.InService,
-                DentalChairId = targetService.DentalChairId
-            }, "Dịch vụ đã đang trong quá trình điều trị.");
-        }
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<StartAppointmentResultDto>.Fail(chairReason ?? "Ghế nha khoa không khả dụng.");
+            }
 
-        var nonStartableStatuses = new[] { AppointmentStatus.Cancelled, AppointmentStatus.NoShow, AppointmentStatus.Completed };
-        if (nonStartableStatuses.Contains(targetService.Status) || nonStartableStatuses.Contains(appointment.Status))
+            var (isDentistAvail, dentistReason) = await _clinicalAvailabilityService.CheckDentistAvailabilityAsync(
+                dentistUserId, targetService.ScheduledStart, targetService.ScheduledEnd, dentist.DepartmentId, appointmentId, ct);
+            if (!isDentistAvail)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<StartAppointmentResultDto>.Fail(dentistReason ?? "Bác sĩ không khả dụng.");
+            }
+
+            if (targetService.Status == AppointmentStatus.InService)
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<StartAppointmentResultDto>.Ok(new StartAppointmentResultDto
+                {
+                    AppointmentId = appointment.AppointmentId,
+                    PatientUserId = appointment.PatientUserId,
+                    Status = AppointmentStatus.InService,
+                    DentalChairId = targetService.DentalChairId
+                }, "Dịch vụ đã đang trong quá trình điều trị.");
+            }
+
+            var nonStartableStatuses = new[] { AppointmentStatus.Cancelled, AppointmentStatus.NoShow, AppointmentStatus.Completed };
+            if (nonStartableStatuses.Contains(targetService.Status) || nonStartableStatuses.Contains(appointment.Status))
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<StartAppointmentResultDto>.Fail($"Không thể bắt đầu dịch vụ ở trạng thái '{targetService.Status}'.");
+            }
+
+            var validStartStates = new[] { AppointmentStatus.Confirmed, AppointmentStatus.CheckedIn, AppointmentStatus.Waiting, AppointmentStatus.Called };
+            if (!validStartStates.Contains(targetService.Status))
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return ApiResponse<StartAppointmentResultDto>.Fail($"Dịch vụ phải ở trạng thái xác nhận hoặc đã check-in / chờ gọi (Trạng thái hiện tại: {targetService.Status}).");
+            }
+
+            var now = DateTime.UtcNow;
+            var oldApptStatus = appointment.Status;
+
+            targetService.Status = AppointmentStatus.InService;
+            targetService.AssignedDentistUserId = dentistUserId;
+            targetService.UpdatedAt = now;
+
+            appointment.Status = AppointmentStatus.InProgress;
+            appointment.UpdatedAt = now;
+
+            AddStatusAuditLog(appointment.AppointmentId, oldApptStatus, AppointmentStatus.InProgress, dentistUserId, $"Bác sĩ tiếp nhận dịch vụ #{targetService.AppointmentServiceId} vào ghế điều trị.", now);
+
+            await _dbContext.SaveChangesAsync(ct);
+            if (tx != null) await tx.CommitAsync(ct);
+        }
+        catch (Exception)
         {
-            return ApiResponse<StartAppointmentResultDto>.Fail($"Không thể bắt đầu dịch vụ ở trạng thái '{targetService.Status}'.");
+            if (tx != null) await tx.RollbackAsync(ct);
+            throw;
         }
-
-        var validStartStates = new[] { AppointmentStatus.Confirmed, AppointmentStatus.CheckedIn, AppointmentStatus.Waiting, AppointmentStatus.Called };
-        if (!validStartStates.Contains(targetService.Status))
-        {
-            return ApiResponse<StartAppointmentResultDto>.Fail($"Dịch vụ phải ở trạng thái xác nhận hoặc đã check-in / chờ gọi (Trạng thái hiện tại: {targetService.Status}).");
-        }
-
-        var now = DateTime.UtcNow;
-        var oldApptStatus = appointment.Status;
-
-        targetService.Status = AppointmentStatus.InService;
-        targetService.AssignedDentistUserId = dentistUserId;
-        targetService.UpdatedAt = now;
-
-        appointment.Status = AppointmentStatus.InProgress;
-        appointment.UpdatedAt = now;
-
-        AddStatusAuditLog(appointment.AppointmentId, oldApptStatus, AppointmentStatus.InProgress, dentistUserId, $"Bác sĩ tiếp nhận dịch vụ #{targetService.AppointmentServiceId} vào ghế điều trị.", now);
-
-        await _dbContext.SaveChangesAsync(ct);
 
         var resultDto = new StartAppointmentResultDto
         {

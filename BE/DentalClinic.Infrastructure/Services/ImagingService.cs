@@ -293,7 +293,7 @@ public class ImagingService : IImagingService
             try
             {
                 var appt = diagnostic.AppointmentService?.Appointment;
-                var patientName = appt?.Patient?.User?.PhoneNumber ?? $"Bệnh nhân #{appt?.PatientUserId}";
+                var patientName = !string.IsNullOrWhiteSpace(appt?.Patient?.FullName) ? appt.Patient.FullName : (appt?.Patient?.User?.PhoneNumber ?? $"Bệnh nhân #{appt?.PatientUserId}");
                 var apptId = appt?.AppointmentId ?? diagnostic.AppointmentServiceId;
 
                 await _notificationService.CreateNotificationAsync(

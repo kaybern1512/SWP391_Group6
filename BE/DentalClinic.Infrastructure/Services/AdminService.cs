@@ -801,6 +801,122 @@ public class AdminService : IAdminService
         var oldStatus = room.Status;
         room.Status = normalizedStatus;
 
+        if (string.Equals(normalizedStatus, "Maintenance", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalizedStatus, "Inactive", StringComparison.OrdinalIgnoreCase))
+        {
+            var now = DateTime.UtcNow;
+            var futureAppointments = await _dbContext.AppointmentServices
+                .Where(s => (s.RoomId == (int)roomId || (s.DentalChair != null && s.DentalChair.RoomId == (int)roomId)) &&
+                            (s.Status == AppointmentStatus.Confirmed || s.Status == AppointmentStatus.PendingReceptionReview || s.Status == AppointmentStatus.PendingDepartmentReview) &&
+                            s.ScheduledStart >= now)
+                .ToListAsync(ct);
+
+            foreach (var svc in futureAppointments)
+            {
+                svc.PendingActionType = "ReassignRoom";
+                svc.Notes = $"{svc.Notes} | [Cảnh báo: Phòng {room.RoomCode} chuyển {normalizedStatus}]".Trim(' ', '|');
+                svc.UpdatedAt = now;
+            }
+
+            var inServiceAppt = await _dbContext.AppointmentServices
+                .Where(s => (s.RoomId == (int)roomId || (s.DentalChair != null && s.DentalChair.RoomId == (int)roomId)) &&
+                            s.Status == AppointmentStatus.InService)
+                .FirstOrDefaultAsync(ct);
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    if (inServiceAppt?.AssignedDentistUserId.HasValue == true)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            inServiceAppt.AssignedDentistUserId.Value,
+                            inServiceAppt.AppointmentId,
+                            "RoomMaintenanceAlert",
+                            "Cảnh báo bảo trì phòng khám",
+                            $"Cảnh báo khẩn cấp: Phòng khám {room.RoomName} ({room.RoomCode}) đang được đưa vào diện bảo trì. Vui lòng hoàn tất hoặc chuyển ca điều trị an toàn cho bệnh nhân.",
+                            ct);
+                    }
+
+                    var receptionists = await _dbContext.UserAccounts
+                        .AsNoTracking()
+                        .Where(u => u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active)
+                        .Select(u => u.UserId)
+                        .ToListAsync(ct);
+
+                    var reasonDesc = string.Equals(normalizedStatus, "Maintenance", StringComparison.OrdinalIgnoreCase)
+                        ? "đang trong quá trình bảo trì"
+                        : "đã ngừng hoạt động";
+
+                    var msg = $"Phòng khám {room.RoomName} ({room.RoomCode}) {reasonDesc}. Vui lòng kiểm tra và điều phối lại các lịch hẹn bị ảnh hưởng ({futureAppointments.Count} ca hẹn).";
+
+                    foreach (var recId in receptionists)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            recId,
+                            null,
+                            "RoomMaintenanceAlert",
+                            "Cảnh báo bảo trì phòng khám",
+                            msg,
+                            ct);
+                    }
+
+                    var affectedDentistIds = futureAppointments
+                        .Where(s => s.AssignedDentistUserId.HasValue)
+                        .Select(s => s.AssignedDentistUserId!.Value)
+                        .Distinct()
+                        .ToList();
+
+                    foreach (var dentistId in affectedDentistIds)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            dentistId,
+                            null,
+                            "RoomMaintenanceAlert",
+                            "Cảnh báo bảo trì phòng khám",
+                            $"Phòng khám {room.RoomName} ({room.RoomCode}) đã chuyển sang chế độ bảo trì. Một số lịch khám sắp tới của bạn cần được điều phối lại phòng.",
+                            ct);
+                    }
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to send notifications for room {RoomId} status update", roomId);
+                }
+            }
+        }
+        else if (string.Equals(normalizedStatus, "Active", StringComparison.OrdinalIgnoreCase) &&
+                 (string.Equals(oldStatus, "Maintenance", StringComparison.OrdinalIgnoreCase) || string.Equals(oldStatus, "Inactive", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var receptionists = await _dbContext.UserAccounts
+                        .AsNoTracking()
+                        .Where(u => u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active)
+                        .Select(u => u.UserId)
+                        .ToListAsync(ct);
+
+                    var msg = $"Thông báo phục hồi: Phòng khám {room.RoomName} ({room.RoomCode}) đã hoàn tất bảo trì và sẵn sàng hoạt động trở lại.";
+
+                    foreach (var recId in receptionists)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            recId,
+                            null,
+                            "RoomRestoredAlert",
+                            "Phòng khám đã hoạt động trở lại",
+                            msg,
+                            ct);
+                    }
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to notify receptionists about room {RoomId} restored to active", roomId);
+                }
+            }
+        }
+
         await _dbContext.SaveChangesAsync(ct);
 
         await _auditLogService.LogAsync(
@@ -1022,10 +1138,25 @@ public class AdminService : IAdminService
                 svc.UpdatedAt = now;
             }
 
+            var inServiceAppt = await _dbContext.AppointmentServices
+                .Where(s => s.DentalChairId == chair.DentalChairId && s.Status == AppointmentStatus.InService)
+                .FirstOrDefaultAsync(ct);
+
             if (_notificationService != null)
             {
                 try
                 {
+                    if (inServiceAppt?.AssignedDentistUserId.HasValue == true)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            inServiceAppt.AssignedDentistUserId.Value,
+                            inServiceAppt.AppointmentId,
+                            "ChairMaintenanceAlert",
+                            "Cảnh báo bảo trì ghế nha khoa",
+                            $"Cảnh báo khẩn cấp: Ghế nha khoa {chair.ChairCode} đang được quản trị viên đưa vào diện bảo trì. Vui lòng kết thúc hoặc chuyển vị trí điều trị an toàn cho bệnh nhân.",
+                            ct);
+                    }
+
                     var receptionists = await _dbContext.UserAccounts
                         .AsNoTracking()
                         .Where(u => u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active)
@@ -1049,10 +1180,60 @@ public class AdminService : IAdminService
                             msg,
                             ct);
                     }
+
+                    var affectedDentistIds = futureAppointments
+                        .Where(s => s.AssignedDentistUserId.HasValue)
+                        .Select(s => s.AssignedDentistUserId!.Value)
+                        .Distinct()
+                        .ToList();
+
+                    foreach (var dentistId in affectedDentistIds)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            dentistId,
+                            null,
+                            "ChairMaintenanceAlert",
+                            "Cảnh báo bảo trì ghế nha khoa",
+                            $"Ghế nha khoa {chair.ChairCode} tại {roomName} đã được chuyển sang chế độ bảo trì. Một số lịch khám sắp tới của bạn cần được điều phối lại ghế.",
+                            ct);
+                    }
                 }
                 catch (Exception notifEx)
                 {
-                    _logger.LogWarning(notifEx, "Failed to notify receptionists about chair {ChairId} status update", chairId);
+                    _logger.LogWarning(notifEx, "Failed to notify staff about chair {ChairId} status update", chairId);
+                }
+            }
+        }
+        else if (string.Equals(normalizedStatus, "Active", StringComparison.OrdinalIgnoreCase) &&
+                 (string.Equals(oldStatus, "Maintenance", StringComparison.OrdinalIgnoreCase) || string.Equals(oldStatus, "Inactive", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var receptionists = await _dbContext.UserAccounts
+                        .AsNoTracking()
+                        .Where(u => u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active)
+                        .Select(u => u.UserId)
+                        .ToListAsync(ct);
+
+                    var roomName = chair.Room?.RoomName ?? $"Phòng #{chair.RoomId}";
+                    var msg = $"Thông báo phục hồi: Ghế nha khoa {chair.ChairCode} tại {roomName} đã hoàn tất bảo trì và sẵn sàng hoạt động trở lại.";
+
+                    foreach (var recId in receptionists)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            recId,
+                            null,
+                            "ChairRestoredAlert",
+                            "Ghế nha khoa đã hoạt động trở lại",
+                            msg,
+                            ct);
+                    }
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to notify receptionists about chair {ChairId} restored to active", chairId);
                 }
             }
         }
