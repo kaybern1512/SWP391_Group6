@@ -54,12 +54,12 @@ BEGIN TRY
     BEGIN TRANSACTION;
 
 -- -------------------------------------------------------------------------------------
--- 1. BACKUP CURRENT TARGET VALUES
+-- 1. BACKUP CURRENT TARGET VALUES (STORED IN TEMPDB TO PRESERVE EXACT 38 UAT TABLES)
 -- -------------------------------------------------------------------------------------
-IF OBJECT_ID(N'dbo._UAT_Encoding_Repair_Backup', N'U') IS NOT NULL
-    DROP TABLE dbo._UAT_Encoding_Repair_Backup;
+IF OBJECT_ID(N'tempdb.._UAT_Encoding_Repair_Backup', N'U') IS NOT NULL
+    DROP TABLE tempdb.._UAT_Encoding_Repair_Backup;
 
-CREATE TABLE dbo._UAT_Encoding_Repair_Backup (
+CREATE TABLE tempdb.._UAT_Encoding_Repair_Backup (
     BackupId INT IDENTITY(1,1) PRIMARY KEY,
     TableName NVARCHAR(100) NOT NULL,
     RecordId BIGINT NOT NULL,
@@ -69,41 +69,41 @@ CREATE TABLE dbo._UAT_Encoding_Repair_Backup (
 );
 
 -- Backup Departments
-INSERT INTO dbo._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
+INSERT INTO tempdb.._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
 SELECT N'Departments', DepartmentId, N'Name', Name FROM dbo.Departments WHERE DepartmentId IN (1, 2);
 
 -- Backup DepartmentServices
-INSERT INTO dbo._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
+INSERT INTO tempdb.._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
 SELECT N'DepartmentServices', DepartmentServiceId, N'ServiceName', ServiceName FROM dbo.DepartmentServices WHERE DepartmentServiceId IN (1, 2, 3, 4, 5)
 UNION ALL
 SELECT N'DepartmentServices', DepartmentServiceId, N'Description', Description FROM dbo.DepartmentServices WHERE DepartmentServiceId IN (1, 2, 3, 4, 5);
 
 -- Backup ServiceCombos
-INSERT INTO dbo._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
+INSERT INTO tempdb.._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
 SELECT N'ServiceCombos', ComboId, N'ComboName', ComboName FROM dbo.ServiceCombos WHERE ComboId = 1
 UNION ALL
 SELECT N'ServiceCombos', ComboId, N'Description', Description FROM dbo.ServiceCombos WHERE ComboId = 1;
 
 -- Backup ClinicProfile
-INSERT INTO dbo._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
+INSERT INTO tempdb.._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
 SELECT N'ClinicProfile', ClinicId, N'ClinicName', ClinicName FROM dbo.ClinicProfile WHERE ClinicId = 1
 UNION ALL
 SELECT N'ClinicProfile', ClinicId, N'Address', Address FROM dbo.ClinicProfile WHERE ClinicId = 1;
 
 -- Backup Rooms & DentalChairs
-INSERT INTO dbo._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
+INSERT INTO tempdb.._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
 SELECT N'Rooms', RoomId, N'RoomName', RoomName FROM dbo.Rooms WHERE RoomId IN (1, 2)
 UNION ALL
 SELECT N'DentalChairs', DentalChairId, N'ChairName', ChairName FROM dbo.DentalChairs WHERE DentalChairId IN (1, 2, 3, 4);
 
 -- Backup Medicines
-INSERT INTO dbo._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
+INSERT INTO tempdb.._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
 SELECT N'Medicines', MedicineId, N'Unit', Unit FROM dbo.Medicines WHERE MedicineId IN (1, 2, 3, 4)
 UNION ALL
 SELECT N'Medicines', MedicineId, N'UsageInstructions', UsageInstructions FROM dbo.Medicines WHERE MedicineId IN (1, 2, 3, 4);
 
 -- Backup Profiles
-INSERT INTO dbo._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
+INSERT INTO tempdb.._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
 SELECT N'PatientProfiles', UserId, N'FullName', FullName FROM dbo.PatientProfiles WHERE UserId = 1
 UNION ALL
 SELECT N'PatientProfiles', UserId, N'Address', Address FROM dbo.PatientProfiles WHERE UserId = 1
@@ -115,7 +115,7 @@ UNION ALL
 SELECT N'DentistProfiles', UserId, N'Biography', Biography FROM dbo.DentistProfiles WHERE UserId IN (3, 4);
 
 -- Backup Blog
-INSERT INTO dbo._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
+INSERT INTO tempdb.._UAT_Encoding_Repair_Backup (TableName, RecordId, ColumnName, OriginalValue)
 SELECT N'BlogCategories', CategoryId, N'Name', Name FROM dbo.BlogCategories WHERE CategoryId IN (1, 2)
 UNION ALL
 SELECT N'BlogCategories', CategoryId, N'Description', Description FROM dbo.BlogCategories WHERE CategoryId IN (1, 2)
@@ -124,7 +124,7 @@ SELECT N'BlogPosts', BlogPostId, N'Title', Title FROM dbo.BlogPosts WHERE BlogPo
 UNION ALL
 SELECT N'BlogPosts', BlogPostId, N'Summary', Summary FROM dbo.BlogPosts WHERE BlogPostId IN (1, 2);
 
-PRINT N'>>> Step 1: Backup created in dbo._UAT_Encoding_Repair_Backup (' + CAST(@@ROWCOUNT AS NVARCHAR(10)) + N' rows captured).';
+PRINT N'>>> Step 1: Backup created in tempdb.._UAT_Encoding_Repair_Backup (' + CAST(@@ROWCOUNT AS NVARCHAR(10)) + N' rows captured).';
 
 -- -------------------------------------------------------------------------------------
 -- 2. APPLY CANONICAL REPAIRS (TARGETING SPECIFIC IDENTIFIERS)
@@ -268,11 +268,50 @@ PRINT N'>>> Step 2: Targeted updates applied.';
 -- -------------------------------------------------------------------------------------
 -- 3. VERIFICATION & PREVIEW
 -- -------------------------------------------------------------------------------------
-PRINT N'>>> Step 3: Verification Preview:';
+PRINT N'>>> Step 3: Detailed Before / After Verification Preview:';
 
-SELECT 'Departments' AS Entity, DepartmentId AS Id, Name AS RepairedName FROM dbo.Departments WHERE DepartmentId IN (1, 2);
-SELECT 'DepartmentServices' AS Entity, DepartmentServiceId AS Id, ServiceName AS RepairedServiceName, Description AS RepairedDescription FROM dbo.DepartmentServices WHERE DepartmentServiceId IN (1, 2, 3, 4, 5);
-SELECT 'StaffProfiles' AS Entity, UserId AS Id, FullName AS RepairedFullName FROM dbo.StaffProfiles WHERE UserId IN (2, 3, 4, 5);
+SELECT 
+    b.TableName,
+    b.RecordId,
+    b.ColumnName,
+    b.OriginalValue AS CorruptedBeforeValue,
+    CASE 
+        WHEN b.TableName = 'Departments' AND b.ColumnName = 'Name' THEN d.Name
+        WHEN b.TableName = 'DepartmentServices' AND b.ColumnName = 'ServiceName' THEN ds.ServiceName
+        WHEN b.TableName = 'DepartmentServices' AND b.ColumnName = 'Description' THEN ds.Description
+        WHEN b.TableName = 'ServiceCombos' AND b.ColumnName = 'ComboName' THEN sc.ComboName
+        WHEN b.TableName = 'ServiceCombos' AND b.ColumnName = 'Description' THEN sc.Description
+        WHEN b.TableName = 'ClinicProfile' AND b.ColumnName = 'ClinicName' THEN cp.ClinicName
+        WHEN b.TableName = 'ClinicProfile' AND b.ColumnName = 'Address' THEN cp.Address
+        WHEN b.TableName = 'Rooms' AND b.ColumnName = 'RoomName' THEN r.RoomName
+        WHEN b.TableName = 'DentalChairs' AND b.ColumnName = 'ChairName' THEN dc.ChairName
+        WHEN b.TableName = 'Medicines' AND b.ColumnName = 'Unit' THEN m.Unit
+        WHEN b.TableName = 'Medicines' AND b.ColumnName = 'UsageInstructions' THEN m.UsageInstructions
+        WHEN b.TableName = 'PatientProfiles' AND b.ColumnName = 'FullName' THEN pp.FullName
+        WHEN b.TableName = 'PatientProfiles' AND b.ColumnName = 'Address' THEN pp.Address
+        WHEN b.TableName = 'StaffProfiles' AND b.ColumnName = 'FullName' THEN sp.FullName
+        WHEN b.TableName = 'DentistProfiles' AND b.ColumnName = 'Qualification' THEN dp.Qualification
+        WHEN b.TableName = 'DentistProfiles' AND b.ColumnName = 'Biography' THEN dp.Biography
+        WHEN b.TableName = 'BlogCategories' AND b.ColumnName = 'Name' THEN bc.Name
+        WHEN b.TableName = 'BlogCategories' AND b.ColumnName = 'Description' THEN bc.Description
+        WHEN b.TableName = 'BlogPosts' AND b.ColumnName = 'Title' THEN bp.Title
+        WHEN b.TableName = 'BlogPosts' AND b.ColumnName = 'Summary' THEN bp.Summary
+        ELSE N'(Unknown)'
+    END AS DesiredRepairedValue
+FROM tempdb.._UAT_Encoding_Repair_Backup b
+LEFT JOIN dbo.Departments d ON b.TableName = 'Departments' AND b.RecordId = d.DepartmentId
+LEFT JOIN dbo.DepartmentServices ds ON b.TableName = 'DepartmentServices' AND b.RecordId = ds.DepartmentServiceId
+LEFT JOIN dbo.ServiceCombos sc ON b.TableName = 'ServiceCombos' AND b.RecordId = sc.ComboId
+LEFT JOIN dbo.ClinicProfile cp ON b.TableName = 'ClinicProfile' AND b.RecordId = cp.ClinicId
+LEFT JOIN dbo.Rooms r ON b.TableName = 'Rooms' AND b.RecordId = r.RoomId
+LEFT JOIN dbo.DentalChairs dc ON b.TableName = 'DentalChairs' AND b.RecordId = dc.DentalChairId
+LEFT JOIN dbo.Medicines m ON b.TableName = 'Medicines' AND b.RecordId = m.MedicineId
+LEFT JOIN dbo.PatientProfiles pp ON b.TableName = 'PatientProfiles' AND b.RecordId = pp.UserId
+LEFT JOIN dbo.StaffProfiles sp ON b.TableName = 'StaffProfiles' AND b.RecordId = sp.UserId
+LEFT JOIN dbo.DentistProfiles dp ON b.TableName = 'DentistProfiles' AND b.RecordId = dp.UserId
+LEFT JOIN dbo.BlogCategories bc ON b.TableName = 'BlogCategories' AND b.RecordId = bc.CategoryId
+LEFT JOIN dbo.BlogPosts bp ON b.TableName = 'BlogPosts' AND b.RecordId = bp.BlogPostId
+ORDER BY b.TableName, b.RecordId, b.ColumnName;
 
 -- -------------------------------------------------------------------------------------
 -- 4. COMMIT OR ROLLBACK
