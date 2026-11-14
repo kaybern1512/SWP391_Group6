@@ -775,20 +775,8 @@ public class BillingService : IBillingService
             }
         }
 
-        if (!performedItems.Any() && appt.AppointmentServices.Any())
-        {
-            foreach (var svc in appt.AppointmentServices)
-            {
-                performedItems.Add(new BillingPreloadedItemDto
-                {
-                    PerformedServiceId = null,
-                    DepartmentServiceId = svc.DepartmentServiceId,
-                    Description = svc.DepartmentService?.ServiceName ?? "Dịch vụ nha khoa",
-                    Quantity = 1,
-                    UnitPrice = svc.UnitPrice > 0 ? svc.UnitPrice : (svc.DepartmentService?.Price ?? 0)
-                });
-            }
-        }
+        // Only actual performed services from treatment sessions may be preloaded.
+        // Unperformed services without a PerformedService entity cannot be billed per CK_InvoiceItems_SourceLink.
 
         // Load dispensed medicines from PrescriptionItems (3-table pharmacy)
         var dispensedItems = await _dbContext.PrescriptionItems

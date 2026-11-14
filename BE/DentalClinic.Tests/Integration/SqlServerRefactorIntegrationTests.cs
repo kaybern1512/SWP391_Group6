@@ -1596,4 +1596,269 @@ public class SqlServerRefactorIntegrationTests
         Assert.Equal(5, distinctQueues.Count);
         Assert.Equal(new List<int> { 1, 2, 3, 4, 5 }, distinctQueues);
     }
+
+    [Fact]
+    public async Task GroupL_ConcurrentInvoiceCreation_EnforcesAppLockAndSingleInvoice()
+    {
+        if (!await IsSqlServerAvailableAsync()) return;
+
+        using var db = CreateDbContext();
+        await CleanDatabaseAsync(db);
+        var fixture = await SeedBaseFixtureAsync(db);
+
+        var notifMock = new Mock<INotificationService>();
+
+        // 1. Create a completed appointment with a performed service
+        var appt = new Appointment
+        {
+            PatientUserId = fixture.patientId,
+            Status = "Completed",
+            BookingSource = "Patient",
+            CompletedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var srv = new AppointmentServiceEntity
+        {
+            AppointmentId = appt.AppointmentId,
+            DepartmentId = fixture.dept1Id,
+            DepartmentServiceId = fixture.srv1Id,
+            AssignedDentistUserId = fixture.dentist1Id,
+            RoomId = fixture.room1Id,
+            DentalChairId = fixture.chair1Id,
+            ServiceDate = DateOnly.FromDateTime(DateTime.Today),
+            ScheduledStart = DateTime.Today.AddHours(9),
+            ScheduledEnd = DateTime.Today.AddHours(9).AddMinutes(30),
+            Status = "Completed",
+            UnitPrice = 250000m,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.AppointmentServices.Add(srv);
+        await db.SaveChangesAsync();
+
+        var session = new TreatmentSession
+        {
+            AppointmentId = appt.AppointmentId,
+            AppointmentServiceId = srv.AppointmentServiceId,
+            PatientUserId = fixture.patientId,
+            DentistUserId = fixture.dentist1Id,
+            SessionDate = DateOnly.FromDateTime(DateTime.Today),
+            ClinicalObservations = "Khám nghiệm hoàn tất",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.TreatmentSessions.Add(session);
+        await db.SaveChangesAsync();
+
+        var perf = new PerformedService
+        {
+            TreatmentSessionId = session.SessionId,
+            AppointmentId = appt.AppointmentId,
+            AppointmentServiceId = srv.AppointmentServiceId,
+            DepartmentServiceId = fixture.srv1Id,
+            Quantity = 1,
+            UnitPrice = 250000m,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.PerformedServices.Add(perf);
+        await db.SaveChangesAsync();
+
+        var invReq = new CreateInvoiceRequest
+        {
+            AppointmentId = appt.AppointmentId,
+            DiscountAmount = 0m,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new()
+                {
+                    PerformedServiceId = perf.PerformedServiceId,
+                    Description = "Dịch vụ khám tổng quát",
+                    Quantity = 1,
+                    UnitPrice = 250000m
+                }
+            }
+        };
+
+        // 2. Launch 2 concurrent tasks trying to create an invoice for the SAME appointment
+        var task1 = Task.Run(async () =>
+        {
+            using var dbThread = CreateDbContext();
+            var billingThread = new BillingService(dbThread, notifMock.Object, NullLogger<BillingService>.Instance);
+            return await billingThread.CreateInvoiceAsync(fixture.receptionistId, invReq);
+        });
+
+        var task2 = Task.Run(async () =>
+        {
+            using var dbThread = CreateDbContext();
+            var billingThread = new BillingService(dbThread, notifMock.Object, NullLogger<BillingService>.Instance);
+            return await billingThread.CreateInvoiceAsync(fixture.receptionistId, invReq);
+        });
+
+        var results = await Task.WhenAll(task1, task2);
+
+        // Exactly one must succeed and one must fail
+        Assert.Single(results.Where(r => r.Success));
+        Assert.Single(results.Where(r => !r.Success));
+
+        var failedResult = results.First(r => !r.Success);
+        Assert.Contains("đã được lập hóa đơn", failedResult.Message);
+
+        // In database: exactly 1 invoice exists for this appointment
+        using var dbVerify = CreateDbContext();
+        var invoices = await dbVerify.Invoices.Where(i => i.AppointmentId == appt.AppointmentId).ToListAsync();
+        Assert.Single(invoices);
+        Assert.Equal(250000m, invoices[0].FinalAmount);
+    }
+
+    [Fact]
+    public async Task GroupM_ConcurrentRefund_PreventsOverRefund()
+    {
+        if (!await IsSqlServerAvailableAsync()) return;
+
+        using var db = CreateDbContext();
+        await CleanDatabaseAsync(db);
+        var fixture = await SeedBaseFixtureAsync(db);
+
+        var notifMock = new Mock<INotificationService>();
+        var billingService = new BillingService(db, notifMock.Object, NullLogger<BillingService>.Instance);
+
+        // 1. Create a completed appointment with performed service and paid invoice of 1,000,000
+        var appt = new Appointment
+        {
+            PatientUserId = fixture.patientId,
+            Status = "Completed",
+            BookingSource = "Patient",
+            CompletedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var srv = new AppointmentServiceEntity
+        {
+            AppointmentId = appt.AppointmentId,
+            DepartmentId = fixture.dept1Id,
+            DepartmentServiceId = fixture.srv1Id,
+            AssignedDentistUserId = fixture.dentist1Id,
+            RoomId = fixture.room1Id,
+            DentalChairId = fixture.chair1Id,
+            ServiceDate = DateOnly.FromDateTime(DateTime.Today),
+            ScheduledStart = DateTime.Today.AddHours(9),
+            ScheduledEnd = DateTime.Today.AddHours(9).AddMinutes(30),
+            Status = "Completed",
+            UnitPrice = 1000000m,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.AppointmentServices.Add(srv);
+        await db.SaveChangesAsync();
+
+        var session = new TreatmentSession
+        {
+            AppointmentId = appt.AppointmentId,
+            AppointmentServiceId = srv.AppointmentServiceId,
+            PatientUserId = fixture.patientId,
+            DentistUserId = fixture.dentist1Id,
+            SessionDate = DateOnly.FromDateTime(DateTime.Today),
+            ClinicalObservations = "Hoàn tất điều trị",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.TreatmentSessions.Add(session);
+        await db.SaveChangesAsync();
+
+        var perf = new PerformedService
+        {
+            TreatmentSessionId = session.SessionId,
+            AppointmentId = appt.AppointmentId,
+            AppointmentServiceId = srv.AppointmentServiceId,
+            DepartmentServiceId = fixture.srv1Id,
+            Quantity = 1,
+            UnitPrice = 1000000m,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.PerformedServices.Add(perf);
+        await db.SaveChangesAsync();
+
+        var invRes = await billingService.CreateInvoiceAsync(fixture.receptionistId, new CreateInvoiceRequest
+        {
+            AppointmentId = appt.AppointmentId,
+            DiscountAmount = 0m,
+            Items = new List<CreateInvoiceItemRequest>
+            {
+                new()
+                {
+                    PerformedServiceId = perf.PerformedServiceId,
+                    Description = "Trám răng thẩm mỹ",
+                    Quantity = 1,
+                    UnitPrice = 1000000m
+                }
+            }
+        });
+        Assert.True(invRes.Success);
+        var invId = invRes.Data!.InvoiceId;
+
+        // Pay full 1,000,000
+        var payRes = await billingService.ProcessPaymentAsync(fixture.receptionistId, new ProcessPaymentRequest
+        {
+            InvoiceId = invId,
+            Amount = 1000000m,
+            Method = "Cash",
+            TransactionReference = "PAY-FULL-1000"
+        });
+        Assert.True(payRes.Success);
+        Assert.Equal("Paid", payRes.Data!.Status);
+
+        // 2. Concurrently attempt 2 refunds of 600,000 each (Total 1,200,000 > 1,000,000 paid)
+        var refundReq1 = new ProcessRefundRequest
+        {
+            InvoiceId = invId,
+            Amount = 600000m,
+            Method = "Cash",
+            Reason = "Hoàn tiền lần 1"
+        };
+        var refundReq2 = new ProcessRefundRequest
+        {
+            InvoiceId = invId,
+            Amount = 600000m,
+            Method = "Cash",
+            Reason = "Hoàn tiền lần 2"
+        };
+
+        var task1 = Task.Run(async () =>
+        {
+            using var dbThread = CreateDbContext();
+            var billingThread = new BillingService(dbThread, notifMock.Object, NullLogger<BillingService>.Instance);
+            return await billingThread.ProcessRefundAsync(fixture.receptionistId, refundReq1);
+        });
+
+        var task2 = Task.Run(async () =>
+        {
+            using var dbThread = CreateDbContext();
+            var billingThread = new BillingService(dbThread, notifMock.Object, NullLogger<BillingService>.Instance);
+            return await billingThread.ProcessRefundAsync(fixture.receptionistId, refundReq2);
+        });
+
+        var results = await Task.WhenAll(task1, task2);
+
+        // Exactly one must succeed and one must fail
+        Assert.Single(results.Where(r => r.Success));
+        Assert.Single(results.Where(r => !r.Success));
+
+        var failedRefund = results.First(r => !r.Success);
+        Assert.Contains("vượt quá số tiền thực tế có thể hoàn", failedRefund.Message);
+
+        // In database: exactly 1 refund payment exists of 600,000
+        using var dbVerify = CreateDbContext();
+        var refunds = await dbVerify.Payments.Where(p => p.InvoiceId == invId && p.PaymentType == "Refund").ToListAsync();
+        Assert.Single(refunds);
+        Assert.Equal(600000m, refunds[0].Amount);
+
+        // Verify invoice calculation in DB: remaining refundable is 400,000, invoice status is PartiallyPaid
+        var invoiceDb = await dbVerify.Invoices.FirstAsync(i => i.InvoiceId == invId);
+        Assert.Equal("PartiallyPaid", invoiceDb.Status);
+    }
 }

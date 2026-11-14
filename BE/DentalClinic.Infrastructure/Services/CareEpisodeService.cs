@@ -390,6 +390,27 @@ public class CareEpisodeService : ICareEpisodeService
         apptService.UpdatedAt = DateTime.UtcNow;
 
         await EnsurePerformedServiceRecordedAsync(apptService, dentistUserId, request?.ClinicalFindings, request?.Notes, ct);
+
+        // Aggregate parent appointment status
+        var allActiveTasks = await _dbContext.AppointmentServices
+            .Where(s => s.AppointmentId == apptService.AppointmentId && s.Status != "Cancelled" && s.Status != "NoShow")
+            .ToListAsync(ct);
+
+        if (allActiveTasks.All(s => s.AppointmentServiceId == apptService.AppointmentServiceId || s.Status == "Completed"))
+        {
+            if (apptService.Appointment != null)
+            {
+                apptService.Appointment.Status = "Completed";
+                apptService.Appointment.CompletedAt = DateTime.UtcNow;
+                apptService.Appointment.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+        else if (apptService.Appointment != null && (apptService.Appointment.Status == "CheckedIn" || apptService.Appointment.Status == "Confirmed"))
+        {
+            apptService.Appointment.Status = "InProgress";
+            apptService.Appointment.UpdatedAt = DateTime.UtcNow;
+        }
+
         await _dbContext.SaveChangesAsync(ct);
 
         return ApiResponse<EpisodeServiceTaskDto>.Ok(

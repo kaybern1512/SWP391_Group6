@@ -476,4 +476,59 @@ public class ReceptionistShiftSwapTests
         Assert.False(proposeRes.Success);
         Assert.Contains("trùng thời gian", proposeRes.Message ?? "");
     }
+
+    [Fact]
+    public async Task ShiftSwap_ScheduleHasAttendance_Fails()
+    {
+        using var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedReceptionistsAsync(db);
+
+        var auditService = new AuditLogService(db, NullLogger<AuditLogService>.Instance);
+        var coverage = new ReceptionistCoverageService(db, _mockNotify.Object, auditService);
+        var service = new ReceptionistShiftSwapService(db, coverage, _mockNotify.Object, auditService);
+
+        var date1 = ClinicTimeHelper.TodayDateOnly.AddDays(14);
+
+        var sched1 = new StaffWorkSchedule
+        {
+            WorkScheduleId = 9001,
+            StaffUserId = 301,
+            StaffRole = "Receptionist",
+            WorkDate = date1,
+            StartTime = new TimeOnly(7, 0),
+            EndTime = new TimeOnly(13, 0),
+            Status = "Scheduled",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.StaffWorkSchedules.Add(sched1);
+
+        // Add attendance record for this schedule
+        db.StaffAttendanceRecords.Add(new StaffAttendanceRecord
+        {
+            AttendanceRecordId = 9001,
+            StaffUserId = 301,
+            WorkScheduleId = 9001,
+            WorkDate = date1,
+            ClockInTime = date1.ToDateTime(new TimeOnly(7, 5)),
+            Status = "OnTime",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var proposeRes = await service.CreateSwapRequestAsync(301, new CreateReceptionistShiftSwapRequest
+        {
+            SourceScheduleId = 9001,
+            TargetReceptionistUserId = 302,
+            Reason = "Đổi ca đã có chấm công"
+        });
+        var swapId = proposeRes.Data!.SwapRequestId;
+
+        // Peer accepts
+        await service.RespondToSwapRequestAsync(swapId, 302, new RespondShiftSwapRequest { Accept = true });
+
+        // Admin approval must fail because attendance record exists
+        var adminRes = await service.AdminDecideSwapRequestAsync(swapId, 1, new AdminDecideShiftSwapRequest { Approve = true });
+        Assert.False(adminRes.Success);
+        Assert.Contains("chấm công", adminRes.Message ?? "");
+    }
 }

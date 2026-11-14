@@ -1926,12 +1926,40 @@ public class AppointmentService : IAppointmentService
                     }
                 }
 
-                item.ServiceDate = DateOnly.FromDateTime(item.ScheduledStart);
-                if (item.AssignedDentistUserId.HasValue && item.RoomId.HasValue && item.DentalChairId.HasValue)
+                if (!item.AssignedDentistUserId.HasValue)
                 {
-                    item.Status = AppointmentStatus.Confirmed;
-                    item.PendingActionType = null;
+                    var deptDentist = await _dbContext.DentistProfiles
+                        .Include(d => d.StaffProfile)
+                        .Where(d => d.DepartmentId == item.DepartmentId && d.StaffProfile.EmploymentStatus == "Active")
+                        .Select(d => (long?)d.UserId)
+                        .FirstOrDefaultAsync(ct);
+                    if (deptDentist.HasValue)
+                    {
+                        item.AssignedDentistUserId = deptDentist.Value;
+                    }
                 }
+
+                if (!item.RoomId.HasValue || !item.DentalChairId.HasValue)
+                {
+                    var deptChair = await _dbContext.DentalChairs
+                        .Include(c => c.Room)
+                        .Where(c => c.Status == "Active" && c.Room.DepartmentId == item.DepartmentId && c.Room.Status == "Active")
+                        .FirstOrDefaultAsync(ct);
+                    if (deptChair != null)
+                    {
+                        item.RoomId = deptChair.RoomId;
+                        item.DentalChairId = deptChair.DentalChairId;
+                    }
+                    else
+                    {
+                        item.RoomId = (int)request.RoomId;
+                        item.DentalChairId = (int)request.DentalChairId.Value;
+                    }
+                }
+
+                item.ServiceDate = DateOnly.FromDateTime(item.ScheduledStart);
+                item.Status = AppointmentStatus.Confirmed;
+                item.PendingActionType = null;
                 item.UpdatedAt = now;
             }
 
@@ -2286,6 +2314,83 @@ public class AppointmentService : IAppointmentService
                 ?? appointment.AppointmentServices.FirstOrDefault(s => s.Status == AppointmentStatus.InService);
         }
 
+        var activeServices = appointment.AppointmentServices
+            .Where(s => s.Status != AppointmentStatus.Cancelled && s.Status != AppointmentStatus.NoShow)
+            .ToList();
+
+        // If targetService is null (or already completed), and all active services are already completed:
+        if ((targetService == null || targetService.Status == AppointmentStatus.Completed) &&
+            activeServices.Any() && activeServices.All(s => s.Status == AppointmentStatus.Completed))
+        {
+            var nowUtc = DateTime.UtcNow;
+            var oldApptStatus = appointment.Status;
+            appointment.Status = AppointmentStatus.Completed;
+            appointment.CompletedAt = nowUtc;
+            appointment.UpdatedAt = nowUtc;
+
+            if (!string.IsNullOrWhiteSpace(followUpReason) || recommendedFollowUpDate.HasValue)
+            {
+                var latestSession = appointment.TreatmentSessions.OrderByDescending(ts => ts.CreatedAt).FirstOrDefault();
+                var firstService = activeServices.FirstOrDefault();
+                if (latestSession != null)
+                {
+                    var existingFu = await _dbContext.FollowUpSchedules
+                        .FirstOrDefaultAsync(f => f.TreatmentSessionId == latestSession.SessionId, ct);
+                    if (existingFu == null)
+                    {
+                        var fuSchedule = new FollowUpSchedule
+                        {
+                            TreatmentSessionId = latestSession.SessionId,
+                            PatientUserId = appointment.PatientUserId,
+                            DentistUserId = dentistUserId,
+                            RecommendedDate = DateOnly.FromDateTime(recommendedFollowUpDate ?? nowUtc.AddDays(7)),
+                            RecommendedServiceId = firstService?.DepartmentServiceId ?? 1,
+                            ClinicalReason = string.IsNullOrWhiteSpace(followUpReason) ? "Tái khám theo dõi định kỳ sau thủ thuật" : followUpReason.Trim(),
+                            Status = "Proposed",
+                            CreatedAt = nowUtc,
+                            UpdatedAt = nowUtc
+                        };
+                        _dbContext.FollowUpSchedules.Add(fuSchedule);
+                    }
+                    else
+                    {
+                        existingFu.RecommendedDate = DateOnly.FromDateTime(recommendedFollowUpDate ?? nowUtc.AddDays(7));
+                        if (!string.IsNullOrWhiteSpace(followUpReason))
+                        {
+                            existingFu.ClinicalReason = followUpReason.Trim();
+                        }
+                        existingFu.UpdatedAt = nowUtc;
+                    }
+                }
+            }
+
+            AddStatusAuditLog(
+                appointment.AppointmentId,
+                oldApptStatus,
+                AppointmentStatus.Completed,
+                dentistUserId,
+                string.IsNullOrWhiteSpace(notes) ? "Bác sĩ hoàn tất ca khám." : notes.Trim(),
+                nowUtc);
+
+            var linkedFollowUp = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.ResultingAppointmentId == appointment.AppointmentId, ct);
+            if (linkedFollowUp != null)
+            {
+                linkedFollowUp.Status = "Completed";
+                linkedFollowUp.UpdatedAt = nowUtc;
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
+
+            var completedQueueDto = await MapToDtoAsync(appointment.AppointmentId, ct);
+            if (_queueHubContext != null && completedQueueDto != null)
+            {
+                _ = _queueHubContext.Clients.All.ReceiveTreatmentCompleted(completedQueueDto);
+            }
+
+            return ApiResponse.Ok("Đã hoàn thành ca khám thành công.");
+        }
+
         if (targetService == null)
         {
             return ApiResponse.Fail("Không tìm thấy dịch vụ đang điều trị (InService) để hoàn tất.");
@@ -2369,7 +2474,7 @@ public class AppointmentService : IAppointmentService
         targetService.Status = AppointmentStatus.Completed;
         targetService.UpdatedAt = now;
 
-        var activeServices = appointment.AppointmentServices
+        activeServices = appointment.AppointmentServices
             .Where(s => s.Status != AppointmentStatus.Cancelled && s.Status != AppointmentStatus.NoShow)
             .ToList();
 
@@ -2511,7 +2616,17 @@ public class AppointmentService : IAppointmentService
             return ApiResponse.Fail("Không tìm thấy thông tin lịch hẹn.");
         }
 
-        var primaryItem = appt.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+        var dentist = await _dbContext.DentistProfiles.AsNoTracking().FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
+        var primaryItem = appt.AppointmentServices
+            .Where(s => s.Status != AppointmentStatus.Completed && s.Status != AppointmentStatus.Cancelled)
+            .OrderBy(s => s.ScheduledStart)
+            .FirstOrDefault(s => s.AssignedDentistUserId == dentistUserId || (dentist != null && s.DepartmentId == dentist.DepartmentId))
+            ?? appt.AppointmentServices
+                .Where(s => s.Status != AppointmentStatus.Completed && s.Status != AppointmentStatus.Cancelled)
+                .OrderBy(s => s.ScheduledStart)
+                .FirstOrDefault()
+            ?? appt.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+
         if (primaryItem == null)
         {
             return ApiResponse.Fail("Ca khám chưa có dịch vụ liên kết.");
@@ -2572,7 +2687,17 @@ public class AppointmentService : IAppointmentService
             return ApiResponse.Fail("Không tìm thấy thông tin lịch hẹn.");
         }
 
-        var primaryItem = appt.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+        var dentist = await _dbContext.DentistProfiles.AsNoTracking().FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
+        var primaryItem = appt.AppointmentServices
+            .Where(s => s.Status != AppointmentStatus.Completed && s.Status != AppointmentStatus.Cancelled)
+            .OrderBy(s => s.ScheduledStart)
+            .FirstOrDefault(s => s.AssignedDentistUserId == dentistUserId || (dentist != null && s.DepartmentId == dentist.DepartmentId))
+            ?? appt.AppointmentServices
+                .Where(s => s.Status != AppointmentStatus.Completed && s.Status != AppointmentStatus.Cancelled)
+                .OrderBy(s => s.ScheduledStart)
+                .FirstOrDefault()
+            ?? appt.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+
         if (primaryItem == null)
         {
             return ApiResponse.Fail("Ca khám chưa có dịch vụ liên kết.");

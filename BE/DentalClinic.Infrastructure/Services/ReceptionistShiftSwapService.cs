@@ -561,19 +561,72 @@ public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
                 {
                     return ApiResponse<bool>.Fail("Lễ tân yêu cầu đã có ca trực khác trùng thời gian với ca đối ứng trong ngày đó.");
                 }
+            }
 
-                sourceSchedule.StaffUserId = cycle.TargetUserId;
-                sourceSchedule.UpdatedAt = DateTime.UtcNow;
-                targetSchedule.StaffUserId = cycle.RequestingUserId;
-                targetSchedule.UpdatedAt = DateTime.UtcNow;
+            // Attendance safeguard: Cannot swap a schedule that already has attendance records
+            var hasAttendance = await _dbContext.StaffAttendanceRecords
+                .AnyAsync(a => a.WorkScheduleId == sourceSchedule.WorkScheduleId ||
+                               (targetSchedule != null && a.WorkScheduleId == targetSchedule.WorkScheduleId), ct);
+            if (hasAttendance)
+            {
+                return ApiResponse<bool>.Fail("Không thể đổi ca làm việc đã có dữ liệu chấm công / điểm danh.");
+            }
+
+            if (_dbContext.Database.IsSqlServer())
+            {
+                await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE dbo.StaffWorkSchedules SET StaffUserId = {cycle.TargetUserId}, UpdatedAt = {DateTime.UtcNow} WHERE WorkScheduleId = {sourceSchedule.WorkScheduleId}", ct);
+
+                if (targetSchedule != null)
+                {
+                    await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+                        $"UPDATE dbo.StaffWorkSchedules SET StaffUserId = {cycle.RequestingUserId}, UpdatedAt = {DateTime.UtcNow} WHERE WorkScheduleId = {targetSchedule.WorkScheduleId}", ct);
+                }
             }
             else
             {
-                sourceSchedule.StaffUserId = cycle.TargetUserId;
-                sourceSchedule.UpdatedAt = DateTime.UtcNow;
-            }
+                // For InMemory test provider: replace entities to honor EF Core alternate key immutability
+                _dbContext.StaffWorkSchedules.Remove(sourceSchedule);
+                if (targetSchedule != null)
+                {
+                    _dbContext.StaffWorkSchedules.Remove(targetSchedule);
+                }
+                await _dbContext.SaveChangesAsync(ct);
 
-            await _dbContext.SaveChangesAsync(ct);
+                var updatedSource = new StaffWorkSchedule
+                {
+                    WorkScheduleId = sourceSchedule.WorkScheduleId,
+                    StaffUserId = cycle.TargetUserId,
+                    StaffRole = sourceSchedule.StaffRole,
+                    WorkDate = sourceSchedule.WorkDate,
+                    StartTime = sourceSchedule.StartTime,
+                    EndTime = sourceSchedule.EndTime,
+                    Status = sourceSchedule.Status,
+                    Notes = sourceSchedule.Notes,
+                    CreatedAt = sourceSchedule.CreatedAt,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _dbContext.StaffWorkSchedules.Add(updatedSource);
+
+                if (targetSchedule != null)
+                {
+                    var updatedTarget = new StaffWorkSchedule
+                    {
+                        WorkScheduleId = targetSchedule.WorkScheduleId,
+                        StaffUserId = cycle.RequestingUserId,
+                        StaffRole = targetSchedule.StaffRole,
+                        WorkDate = targetSchedule.WorkDate,
+                        StartTime = targetSchedule.StartTime,
+                        EndTime = targetSchedule.EndTime,
+                        Status = targetSchedule.Status,
+                        Notes = targetSchedule.Notes,
+                        CreatedAt = targetSchedule.CreatedAt,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    _dbContext.StaffWorkSchedules.Add(updatedTarget);
+                }
+                await _dbContext.SaveChangesAsync(ct);
+            }
         }
 
         var reasonPart = !string.IsNullOrWhiteSpace(request.Reason) ? $";Reason:{request.Reason.Trim()}" : string.Empty;
