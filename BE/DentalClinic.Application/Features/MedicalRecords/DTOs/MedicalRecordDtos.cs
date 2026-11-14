@@ -80,6 +80,7 @@ public class CreateClinicalEntryRequest
 {
     public long PatientUserId { get; set; }
     public long? AppointmentId { get; set; }
+    public long? AppointmentServiceId { get; set; }
     public string? Symptoms { get; set; }
     public string? ClinicalFindings { get; set; }
     public string Diagnosis { get; set; } = string.Empty;

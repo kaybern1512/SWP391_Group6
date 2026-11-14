@@ -53,8 +53,10 @@ public class ImagingService : IImagingService
         var diagService = await _dbContext.DepartmentServices
             .AsNoTracking()
             .FirstOrDefaultAsync(ds => ds.DiagnosticType == normalizedType && ds.Status == "Active", ct)
-            ?? await _dbContext.DepartmentServices.AsNoTracking().FirstOrDefaultAsync(ds => ds.Status == "Active", ct)
-            ?? throw new InvalidOperationException("Không tìm thấy dịch vụ chẩn đoán hình ảnh đang hoạt động.");
+            ?? await _dbContext.DepartmentServices.AsNoTracking().FirstOrDefaultAsync(ds => ds.DiagnosticType != null && ds.Status == "Active", ct);
+
+        if (diagService == null)
+            throw new InvalidOperationException($"Không tìm thấy dịch vụ chẩn đoán hình ảnh đang hoạt động cho loại '{normalizedType}'.");
 
         var primaryApptService = appt.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
         if (primaryApptService == null)
@@ -300,6 +302,10 @@ public class ImagingService : IImagingService
     public async Task<DiagnosticResultDto> ReviewDiagnosticResultAsync(long diagnosticResultId, ReviewDiagnosticResultRequest request, long dentistUserId, CancellationToken ct = default)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
+
+        var dentist = await _dbContext.DentistProfiles.AsNoTracking().FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
+        if (dentist == null)
+            throw new UnauthorizedAccessException("Chỉ bác sĩ điều trị mới có quyền duyệt kết quả chẩn đoán hình ảnh.");
 
         var diagnostic = await BuildDiagnosticsQuery()
             .FirstOrDefaultAsync(d => d.DiagnosticId == diagnosticResultId, ct);

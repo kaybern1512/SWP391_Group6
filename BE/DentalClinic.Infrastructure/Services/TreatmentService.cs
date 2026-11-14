@@ -319,6 +319,14 @@ public class TreatmentService : ITreatmentService
     public async Task<ApiResponse<TreatmentSessionDto>> CreateTreatmentSessionAsync(
         long dentistUserId, CreateTreatmentSessionRequest request, CancellationToken ct = default)
     {
+        var dentist = await _dbContext.DentistProfiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
+        if (dentist == null)
+        {
+            return ApiResponse<TreatmentSessionDto>.Fail("Không tìm thấy thông tin bác sĩ điều trị.");
+        }
+
         var item = await _dbContext.TreatmentPlanItems
             .Include(i => i.TreatmentPlan)
                 .ThenInclude(p => p.TreatmentPlanItems)
@@ -356,8 +364,27 @@ public class TreatmentService : ITreatmentService
             return ApiResponse<TreatmentSessionDto>.Fail("Không tìm thấy ca khám tương ứng.");
         }
 
-        var primaryItem = appt.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
-        if (primaryItem == null)
+        if (item.TreatmentPlan.PatientUserId != appt.PatientUserId)
+        {
+            return ApiResponse<TreatmentSessionDto>.Fail("Kế hoạch điều trị không thuộc về bệnh nhân của ca khám này.");
+        }
+
+        AppointmentServiceEntity? targetService = null;
+        if (request.AppointmentServiceId.HasValue)
+        {
+            targetService = appt.AppointmentServices.FirstOrDefault(s => s.AppointmentServiceId == request.AppointmentServiceId.Value);
+            if (targetService == null)
+            {
+                return ApiResponse<TreatmentSessionDto>.Fail("Dịch vụ chỉ định không thuộc ca khám này.");
+            }
+        }
+        else
+        {
+            targetService = appt.AppointmentServices.FirstOrDefault(s => s.AssignedDentistUserId == dentistUserId)
+                ?? appt.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+        }
+
+        if (targetService == null)
         {
             return ApiResponse<TreatmentSessionDto>.Fail("Ca khám chưa có dịch vụ liên kết.");
         }
@@ -370,7 +397,7 @@ public class TreatmentService : ITreatmentService
         var session = new TreatmentSession
         {
             AppointmentId = appointmentId,
-            AppointmentServiceId = primaryItem.AppointmentServiceId,
+            AppointmentServiceId = targetService.AppointmentServiceId,
             PatientUserId = appt.PatientUserId,
             TreatmentPlanId = item.TreatmentPlanId,
             DentistUserId = dentistUserId,
@@ -390,14 +417,23 @@ public class TreatmentService : ITreatmentService
             {
                 if (svc.DepartmentServiceId > 0)
                 {
+                    if (svc.Quantity <= 0)
+                    {
+                        return ApiResponse<TreatmentSessionDto>.Fail("Số lượng dịch vụ thực hiện phải lớn hơn 0.");
+                    }
+                    if (svc.UnitPrice < 0)
+                    {
+                        return ApiResponse<TreatmentSessionDto>.Fail("Đơn giá dịch vụ không được âm.");
+                    }
+
                     var perf = new PerformedService
                     {
                         TreatmentSessionId = session.SessionId,
                         AppointmentId = appointmentId,
-                        AppointmentServiceId = primaryItem.AppointmentServiceId,
+                        AppointmentServiceId = targetService.AppointmentServiceId,
                         DepartmentServiceId = (int)svc.DepartmentServiceId,
                         Quantity = svc.Quantity > 0 ? svc.Quantity : 1,
-                        UnitPrice = svc.UnitPrice,
+                        UnitPrice = svc.UnitPrice >= 0 ? svc.UnitPrice : 0,
                         CreatedAt = now
                     };
                     _dbContext.PerformedServices.Add(perf);
@@ -819,6 +855,16 @@ public class TreatmentService : ITreatmentService
             return ApiResponse<PerformedServiceDto>.Fail("Vui lòng chọn dịch vụ điều trị thực tế đã thực hiện.");
         }
 
+        if (request.Quantity <= 0)
+        {
+            return ApiResponse<PerformedServiceDto>.Fail("Số lượng dịch vụ phải lớn hơn 0.");
+        }
+
+        if (request.UnitPrice.HasValue && request.UnitPrice.Value < 0)
+        {
+            return ApiResponse<PerformedServiceDto>.Fail("Đơn giá dịch vụ không được âm.");
+        }
+
         var appointment = await _dbContext.Appointments
             .Include(a => a.AppointmentServices)
             .Include(a => a.TreatmentSessions)
@@ -829,8 +875,22 @@ public class TreatmentService : ITreatmentService
             return ApiResponse<PerformedServiceDto>.Fail("Không tìm thấy thông tin ca khám.");
         }
 
-        var primaryItem = appointment.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
-        if (primaryItem == null)
+        AppointmentServiceEntity? targetService = null;
+        if (request.AppointmentServiceId.HasValue)
+        {
+            targetService = appointment.AppointmentServices.FirstOrDefault(s => s.AppointmentServiceId == request.AppointmentServiceId.Value);
+            if (targetService == null)
+            {
+                return ApiResponse<PerformedServiceDto>.Fail("Dịch vụ chỉ định không thuộc ca khám này.");
+            }
+        }
+        else
+        {
+            targetService = appointment.AppointmentServices.FirstOrDefault(s => s.AssignedDentistUserId == dentistUserId)
+                ?? appointment.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+        }
+
+        if (targetService == null)
         {
             return ApiResponse<PerformedServiceDto>.Fail("Ca khám chưa có dịch vụ liên kết.");
         }
@@ -842,16 +902,16 @@ public class TreatmentService : ITreatmentService
         }
 
         decimal unitPrice = request.UnitPrice.HasValue && request.UnitPrice.Value >= 0 ? request.UnitPrice.Value : service.Price;
-        int quantity = request.Quantity > 0 ? request.Quantity : 1;
+        int quantity = request.Quantity;
         var now = DateTime.UtcNow;
 
-        var session = appointment.TreatmentSessions.FirstOrDefault();
+        var session = appointment.TreatmentSessions.FirstOrDefault(s => s.AppointmentServiceId == targetService.AppointmentServiceId);
         if (session == null)
         {
             session = new TreatmentSession
             {
                 AppointmentId = appointment.AppointmentId,
-                AppointmentServiceId = primaryItem.AppointmentServiceId,
+                AppointmentServiceId = targetService.AppointmentServiceId,
                 PatientUserId = appointment.PatientUserId,
                 TreatmentPlanId = request.TreatmentPlanId,
                 DentistUserId = dentistUserId,
@@ -869,7 +929,7 @@ public class TreatmentService : ITreatmentService
         {
             TreatmentSessionId = session.SessionId,
             AppointmentId = appointment.AppointmentId,
-            AppointmentServiceId = primaryItem.AppointmentServiceId,
+            AppointmentServiceId = targetService.AppointmentServiceId,
             DepartmentServiceId = service.DepartmentServiceId,
             Quantity = quantity,
             UnitPrice = unitPrice,

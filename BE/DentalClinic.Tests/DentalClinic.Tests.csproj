@@ -33,6 +33,20 @@
     <Compile Remove="**/*.cs" />
     <Compile Include="Booking/VietnamTimezoneStandardizationTests.cs" />
     <Compile Include="Booking/BookingCoreIntegrityTests.cs" />
+    <Compile Include="Clinical/ClinicalExecutionIntegrityTests.cs" />
+    <Compile Include="Diagnostics/DiagnosticsAndReferralIntegrityTests.cs" />
+    <Compile Include="Medicine/PrescriptionAndDispensingIntegrityTests.cs" />
+    <Compile Include="Billing/InvoiceAndPaymentIntegrityTests.cs" />
+    <Compile Include="FollowUpFeedback/FollowUpAndFeedbackIntegrityTests.cs" />
+    <Compile Include="Auth/*.cs" />
+    <Compile Include="Blog/BlogServiceTests.cs" />
+    <Compile Include="Notifications/NotificationServiceTests.cs" />
+    <Compile Include="Support/SupportServiceTests.cs" />
+    <Compile Include="Profile/ProfileServiceTests.cs" />
+    <Compile Include="Admin/FourRoleRbacAuthorizationRegressionTests.cs" />
+    <Compile Include="Admin/AdminControllerAuthorizationRegressionTests.cs" />
+    <Compile Include="Admin/AdminRedesignUnitTests.cs" />
+    <Compile Include="Integration/SqlServerRefactorIntegrationTests.cs" />
   </ItemGroup>
 
 </Project>

@@ -54,7 +54,6 @@ public class ProfileServiceTests
         db.PatientProfiles.Add(new PatientProfile
         {
             UserId = user.UserId,
-            PatientCode = "PAT-202609-0010",
             FullName = "Le Thi C",
             Gender = "Female",
             DateOfBirth = new DateOnly(1995, 5, 20),
@@ -69,7 +68,7 @@ public class ProfileServiceTests
         Assert.NotNull(result.Data);
         Assert.Equal("patient@dentalcare.com", result.Data.Email);
         Assert.Equal("Le Thi C", result.Data.FullName);
-        Assert.Equal("PAT-202609-0010", result.Data.Code);
+        Assert.Equal($"PT-{user.UserId:D6}", result.Data.Code);
         Assert.Equal(UserRole.Patient, result.Data.Role);
         Assert.Equal("Female", result.Data.Gender);
     }
@@ -91,7 +90,6 @@ public class ProfileServiceTests
         var staff = new StaffProfile
         {
             UserId = user.UserId,
-            EmployeeCode = "EMP-001",
             FullName = "Dr. Hoang Minh",
             EmploymentStatus = "Active"
         };
@@ -109,6 +107,7 @@ public class ProfileServiceTests
         var dentist = new DentistProfile
         {
             UserId = staff.UserId,
+            DepartmentId = dept.DepartmentId,
             LicenseNumber = "LIC-99999",
             Qualification = "Tiến sĩ Răng Hàm Mặt",
             YearsOfExperience = 12,
@@ -117,21 +116,13 @@ public class ProfileServiceTests
         db.DentistProfiles.Add(dentist);
         await db.SaveChangesAsync();
 
-        db.DentistDepartments.Add(new DentistDepartment
-        {
-            DentistUserId = dentist.UserId,
-            DepartmentId = dept.DepartmentId,
-            Status = "Active"
-        });
-        await db.SaveChangesAsync();
-
         var service = CreateProfileService(db);
         var result = await service.GetProfileAsync(user.UserId);
 
         Assert.True(result.Success);
         Assert.NotNull(result.Data);
         Assert.Equal("Dr. Hoang Minh", result.Data.FullName);
-        Assert.Equal("EMP-001", result.Data.Code);
+        Assert.Equal($"STF-{user.UserId:D6}", result.Data.Code);
         Assert.Equal("LIC-99999", result.Data.LicenseNumber);
         Assert.Equal(12, result.Data.YearsOfExperience);
         Assert.Equal("Khoa Răng Trẻ Em", result.Data.DepartmentName);
@@ -154,7 +145,6 @@ public class ProfileServiceTests
         var profile = new PatientProfile
         {
             UserId = user.UserId,
-            PatientCode = "PAT-202609-0020",
             FullName = "Old Name"
         };
         db.PatientProfiles.Add(profile);
@@ -188,7 +178,7 @@ public class ProfileServiceTests
         db.UserAccounts.AddRange(user1, user2);
         await db.SaveChangesAsync();
 
-        db.PatientProfiles.Add(new PatientProfile { UserId = user1.UserId, PatientCode = "PAT-01", FullName = "User 1" });
+        db.PatientProfiles.Add(new PatientProfile { UserId = user1.UserId, FullName = "User 1" });
         await db.SaveChangesAsync();
 
         var service = CreateProfileService(db);

@@ -14,6 +14,7 @@ public class CreateInvoiceRequest
 public class CreateInvoiceItemRequest
 {
     public long? PerformedServiceId { get; set; }
+    public long? PrescriptionItemId { get; set; }
     public string Description { get; set; } = string.Empty;
     public int Quantity { get; set; } = 1;
     public decimal UnitPrice { get; set; }

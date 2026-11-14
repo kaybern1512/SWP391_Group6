@@ -114,6 +114,7 @@ public class CreateTreatmentSessionRequest
 {
     public long? TreatmentPlanItemId { get; set; }
     public long AppointmentId { get; set; }
+    public long? AppointmentServiceId { get; set; }
     public DateTime SessionDate { get; set; } = DateTime.UtcNow;
     public string? TreatmentResult { get; set; }
     public string? ClinicalNote { get; set; }
@@ -131,6 +132,7 @@ public class CreatePerformedServiceInput
 public class AddPerformedServiceToAppointmentRequest
 {
     public long DepartmentServiceId { get; set; }
+    public long? AppointmentServiceId { get; set; }
     public int Quantity { get; set; } = 1;
     public decimal? UnitPrice { get; set; }
     public string? Note { get; set; }

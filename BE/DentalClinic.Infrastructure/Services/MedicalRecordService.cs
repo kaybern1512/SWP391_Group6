@@ -216,12 +216,38 @@ public class MedicalRecordService : IMedicalRecordService
         }
 
         long? apptSvcId = null;
+        DentalClinic.Infrastructure.Persistence.Entities.Appointment? appointment = null;
         if (request.AppointmentId.HasValue)
         {
-            var svc = await _dbContext.AppointmentServices
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.AppointmentId == request.AppointmentId.Value, ct);
-            apptSvcId = svc?.AppointmentServiceId;
+            appointment = await _dbContext.Appointments
+                .Include(a => a.AppointmentServices)
+                .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId.Value, ct);
+
+            if (appointment == null)
+            {
+                return ApiResponse<ClinicalEntryDto>.Fail("Không tìm thấy ca khám chỉ định.");
+            }
+
+            if (appointment.PatientUserId != request.PatientUserId)
+            {
+                return ApiResponse<ClinicalEntryDto>.Fail("Mã bệnh nhân không khớp với ca khám chỉ định.");
+            }
+
+            if (request.AppointmentServiceId.HasValue)
+            {
+                var svc = appointment.AppointmentServices.FirstOrDefault(s => s.AppointmentServiceId == request.AppointmentServiceId.Value);
+                if (svc == null)
+                {
+                    return ApiResponse<ClinicalEntryDto>.Fail("Dịch vụ chỉ định không thuộc ca khám này.");
+                }
+                apptSvcId = svc.AppointmentServiceId;
+            }
+            else
+            {
+                var svc = appointment.AppointmentServices.FirstOrDefault(s => s.AssignedDentistUserId == dentistUserId)
+                    ?? appointment.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+                apptSvcId = svc?.AppointmentServiceId;
+            }
         }
 
         var entry = new ClinicalEntry
@@ -298,22 +324,29 @@ public class MedicalRecordService : IMedicalRecordService
             await _dbContext.SaveChangesAsync(ct);
         }
 
-        if (request.AppointmentId.HasValue)
+        if (request.AppointmentId.HasValue && request.CompleteAppointment && appointment != null)
         {
-            var appointment = await _dbContext.Appointments
-                .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId.Value, ct);
+            var activeServices = appointment.AppointmentServices
+                .Where(s => s.Status != AppointmentStatus.Cancelled && s.Status != AppointmentStatus.NoShow)
+                .ToList();
 
-            if (appointment != null)
+            var currentSvc = activeServices.FirstOrDefault(s => s.AppointmentServiceId == apptSvcId);
+            if (currentSvc != null)
             {
-                if (request.CompleteAppointment)
-                {
-                    if (appointment.Status != AppointmentStatus.Completed && appointment.Status != AppointmentStatus.Cancelled)
-                    {
-                        appointment.Status = AppointmentStatus.Completed;
-                        appointment.CompletedAt = DateTime.UtcNow;
-                        appointment.UpdatedAt = DateTime.UtcNow;
-                    }
-                }
+                currentSvc.Status = AppointmentStatus.Completed;
+                currentSvc.UpdatedAt = DateTime.UtcNow;
+            }
+
+            if (activeServices.All(s => s.Status == AppointmentStatus.Completed))
+            {
+                appointment.Status = AppointmentStatus.Completed;
+                appointment.CompletedAt = DateTime.UtcNow;
+                appointment.UpdatedAt = DateTime.UtcNow;
+            }
+            else if (activeServices.Any(s => s.Status == AppointmentStatus.InService))
+            {
+                appointment.Status = AppointmentStatus.InProgress;
+                appointment.UpdatedAt = DateTime.UtcNow;
             }
         }
 
@@ -479,11 +512,7 @@ public class MedicalRecordService : IMedicalRecordService
 
         if (apptSvcId <= 0)
         {
-            var anySvc = await _dbContext.AppointmentServices.AsNoTracking().FirstOrDefaultAsync(ct);
-            if (anySvc == null)
-                return ApiResponse<ImagingRecordDto>.Fail("Không tìm thấy dịch vụ cuộc hẹn liên kết để lưu chẩn đoán hình ảnh.");
-            apptSvcId = anySvc.AppointmentServiceId;
-            deptSvcId = anySvc.DepartmentServiceId;
+            return ApiResponse<ImagingRecordDto>.Fail("Không tìm thấy dịch vụ cuộc hẹn liên kết để lưu chẩn đoán hình ảnh.");
         }
 
         var diag = new Diagnostic

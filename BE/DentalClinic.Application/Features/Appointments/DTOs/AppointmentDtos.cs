@@ -276,6 +276,7 @@ public class ReceptionistNoShowRequest
 
 public class CompleteAppointmentRequest
 {
+    public long? AppointmentServiceId { get; set; }
     public string? Notes { get; set; }
     public string? FollowUpReason { get; set; }
     public DateTime? RecommendedFollowUpDate { get; set; }

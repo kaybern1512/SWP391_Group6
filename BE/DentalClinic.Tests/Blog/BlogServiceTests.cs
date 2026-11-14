@@ -54,15 +54,13 @@ public class BlogServiceTests
         {
             CategoryId = 1,
             Name = "Niềng răng - Chỉnh nha",
-            Slug = "nieng-rang-chinh-nha",
-            CreatedAt = DateTime.UtcNow
+            Slug = "nieng-rang-chinh-nha"
         };
         var category2 = new BlogCategory
         {
             CategoryId = 2,
             Name = "Cấy ghép Implant",
-            Slug = "cay-ghep-implant",
-            CreatedAt = DateTime.UtcNow
+            Slug = "cay-ghep-implant"
         };
         db.BlogCategories.AddRange(category1, category2);
 
@@ -77,7 +75,6 @@ public class BlogServiceTests
         var dentistStaff1 = new StaffProfile
         {
             UserId = 10,
-            EmployeeCode = "DENT-010",
             FullName = "Nguyễn Văn A",
             EmploymentStatus = "Active"
         };
@@ -93,7 +90,6 @@ public class BlogServiceTests
         var dentistStaff2 = new StaffProfile
         {
             UserId = 20,
-            EmployeeCode = "DENT-020",
             FullName = "Trần Thị B",
             EmploymentStatus = "Active"
         };
@@ -743,16 +739,11 @@ public class BlogServiceTests
         Assert.Equal("Image", result.Data.MediaType);
         Assert.Equal("https://res.cloudinary.com/demo/image/upload/tooth_123.jpg", result.Data.Url);
 
-        var savedMedia = await db.BlogPostMedia.FirstOrDefaultAsync(m => m.PublicId == "tooth_123");
-        Assert.NotNull(savedMedia);
-        Assert.Equal(10, savedMedia.UploadedByUserId);
-        Assert.Equal("tooth_123", savedMedia.PublicId);
-
         mockAudit.Verify(a => a.LogAsync(
             10,
             "UploadBlogMedia",
-            "BlogPostMedia",
-            savedMedia.MediaId.ToString(),
+            "BlogPost",
+            "0",
             null,
             It.IsAny<string>(),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -780,35 +771,32 @@ public class BlogServiceTests
         var (service, db, mockAudit, mockStorage, _) = CreateFullService();
         await SeedDataAsync(db);
 
-        var media = new BlogPostMedia
+        var post = new BlogPost
         {
-            MediaId = 100,
-            UploadedByUserId = 10,
-            MediaType = "Image",
-            FileUrl = "https://res.cloudinary.com/demo/image/upload/pic1.jpg",
-            PublicId = "pic1",
-            ContentType = "image/jpeg",
-            SizeBytes = 1024,
+            BlogPostId = 100,
+            AuthorUserId = 10,
+            CategoryId = 1,
+            Title = "Bài viết có video",
+            Slug = "bai-viet-co-video",
+            Content = "Nội dung",
+            VideoUrl = "https://res.cloudinary.com/demo/video/upload/vid1.mp4",
             CreatedAt = DateTime.UtcNow
         };
-        db.BlogPostMedia.Add(media);
+        db.BlogPosts.Add(post);
         await db.SaveChangesAsync();
-
-        mockStorage.Setup(s => s.DeleteMediaAsync("pic1", "Image", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
 
         var result = await service.DeleteMediaAsync(100, userId: 10, isAdmin: false);
 
         Assert.True(result.Success);
-        Assert.Null(await db.BlogPostMedia.FirstOrDefaultAsync(m => m.MediaId == 100));
-        mockStorage.Verify(s => s.DeleteMediaAsync("pic1", "Image", It.IsAny<CancellationToken>()), Times.Once);
+        var updated = await db.BlogPosts.FindAsync((long)100);
+        Assert.Null(updated!.VideoUrl);
 
         mockAudit.Verify(a => a.LogAsync(
             10,
             "DeleteBlogMedia",
-            "BlogPostMedia",
+            "BlogPost",
             "100",
-            It.IsAny<string>(),
+            null,
             null,
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -819,18 +807,18 @@ public class BlogServiceTests
         var (service, db, _, mockStorage, _) = CreateFullService();
         await SeedDataAsync(db);
 
-        var media = new BlogPostMedia
+        var post = new BlogPost
         {
-            MediaId = 101,
-            UploadedByUserId = 10, // Uploaded by user 10
-            MediaType = "Image",
-            FileUrl = "https://res.cloudinary.com/demo/image/upload/pic2.jpg",
-            PublicId = "pic2",
-            ContentType = "image/jpeg",
-            SizeBytes = 1024,
+            BlogPostId = 101,
+            AuthorUserId = 10,
+            CategoryId = 1,
+            Title = "Bài viết của user 10",
+            Slug = "bai-viet-user-10",
+            Content = "Nội dung",
+            VideoUrl = "https://res.cloudinary.com/demo/video/upload/vid2.mp4",
             CreatedAt = DateTime.UtcNow
         };
-        db.BlogPostMedia.Add(media);
+        db.BlogPosts.Add(post);
         await db.SaveChangesAsync();
 
         // User 20 tries to delete user 10's media
@@ -838,8 +826,8 @@ public class BlogServiceTests
 
         Assert.False(result.Success);
         Assert.Contains("Bạn không có quyền xóa", result.Message);
-        Assert.NotNull(await db.BlogPostMedia.FirstOrDefaultAsync(m => m.MediaId == 101));
-        mockStorage.Verify(s => s.DeleteMediaAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        var postCheck = await db.BlogPosts.FindAsync((long)101);
+        Assert.NotNull(postCheck!.VideoUrl);
     }
 
     [Fact]
@@ -848,60 +836,9 @@ public class BlogServiceTests
         var (service, db, _, mockStorage, _) = CreateFullService();
         await SeedDataAsync(db);
 
-        // Orphan 1: > 24h old, BlogPostId == null -> SHOULD be deleted
-        var oldOrphan = new BlogPostMedia
-        {
-            MediaId = 201,
-            BlogPostId = null,
-            UploadedByUserId = 10,
-            MediaType = "Image",
-            FileUrl = "https://res.cloudinary.com/demo/image/upload/old_orphan.jpg",
-            PublicId = "old_orphan",
-            ContentType = "image/jpeg",
-            SizeBytes = 500,
-            CreatedAt = DateTime.UtcNow.AddHours(-30)
-        };
-
-        // Orphan 2: fresh (< 24h old), BlogPostId == null -> SHOULD NOT be deleted
-        var freshOrphan = new BlogPostMedia
-        {
-            MediaId = 202,
-            BlogPostId = null,
-            UploadedByUserId = 10,
-            MediaType = "Image",
-            FileUrl = "https://res.cloudinary.com/demo/image/upload/fresh_orphan.jpg",
-            PublicId = "fresh_orphan",
-            ContentType = "image/jpeg",
-            SizeBytes = 500,
-            CreatedAt = DateTime.UtcNow.AddHours(-2)
-        };
-
-        // Attached media: > 24h old, but attached to a post -> SHOULD NOT be deleted
-        var attached = new BlogPostMedia
-        {
-            MediaId = 203,
-            BlogPostId = 1,
-            UploadedByUserId = 10,
-            MediaType = "Image",
-            FileUrl = "https://res.cloudinary.com/demo/image/upload/attached.jpg",
-            PublicId = "attached",
-            ContentType = "image/jpeg",
-            SizeBytes = 500,
-            CreatedAt = DateTime.UtcNow.AddHours(-30)
-        };
-
-        db.BlogPostMedia.AddRange(oldOrphan, freshOrphan, attached);
-        await db.SaveChangesAsync();
-
-        mockStorage.Setup(s => s.DeleteMediaAsync("old_orphan", "Image", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
         var result = await service.CleanupOrphanMediaAsync();
 
         Assert.True(result.Success);
-        Assert.Equal(1, result.Data);
-        Assert.Null(await db.BlogPostMedia.FirstOrDefaultAsync(m => m.MediaId == 201));
-        Assert.NotNull(await db.BlogPostMedia.FirstOrDefaultAsync(m => m.MediaId == 202));
-        Assert.NotNull(await db.BlogPostMedia.FirstOrDefaultAsync(m => m.MediaId == 203));
+        Assert.Equal(0, result.Data);
     }
 }

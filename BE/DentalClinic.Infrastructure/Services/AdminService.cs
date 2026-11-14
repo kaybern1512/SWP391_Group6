@@ -389,6 +389,7 @@ public class AdminService : IAdminService
             Description = request.Description?.Trim(),
             DurationMinutes = request.DurationMinutes.Value,
             Price = request.Price,
+            DiagnosticType = serviceType,
             Status = string.Equals(request.Status, "Inactive", StringComparison.OrdinalIgnoreCase) ? "Inactive" : "Active",
             CreatedAt = DateTime.UtcNow
         };

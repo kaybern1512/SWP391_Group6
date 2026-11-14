@@ -113,10 +113,32 @@ public class BillingService : IBillingService
             if (appointment.Invoice != null)
                 return ApiResponse<InvoiceDto>.Fail($"Ca khám này đã được lập hóa đơn mã {appointment.Invoice.InvoiceCode}.");
 
-            var reqPerfIds = request.Items.Where(i => i.PerformedServiceId.HasValue).Select(i => i.PerformedServiceId!.Value).ToList();
+            var reqPerfIds = request.Items.Where(i => i.PerformedServiceId.HasValue && i.PerformedServiceId.Value > 0).Select(i => i.PerformedServiceId!.Value).ToList();
             if (reqPerfIds.Count != reqPerfIds.Distinct().Count())
             {
                 return ApiResponse<InvoiceDto>.Fail("Yêu cầu lập hóa đơn chứa dịch vụ đã thực hiện bị lặp lại. Mỗi dịch vụ chỉ được tính phí một lần.");
+            }
+
+            var reqPrescIds = request.Items.Where(i => i.PrescriptionItemId.HasValue && i.PrescriptionItemId.Value > 0).Select(i => i.PrescriptionItemId!.Value).ToList();
+            if (reqPrescIds.Count != reqPrescIds.Distinct().Count())
+            {
+                return ApiResponse<InvoiceDto>.Fail("Yêu cầu lập hóa đơn chứa mục thuốc bị lặp lại. Mỗi mục thuốc chỉ được tính phí một lần.");
+            }
+
+            foreach (var item in request.Items)
+            {
+                bool hasPerf = item.PerformedServiceId.HasValue && item.PerformedServiceId.Value > 0;
+                bool hasPresc = item.PrescriptionItemId.HasValue && item.PrescriptionItemId.Value > 0;
+
+                if (hasPerf && hasPresc)
+                {
+                    return ApiResponse<InvoiceDto>.Fail($"Khoản phí '{item.Description}' không thể vừa là dịch vụ vừa là thuốc (vi phạm quy tắc XOR CK_InvoiceItems_SourceLink).");
+                }
+
+                if (!hasPerf && !hasPresc)
+                {
+                    return ApiResponse<InvoiceDto>.Fail($"Khoản phí '{item.Description}' phải liên kết với dịch vụ điều trị đã thực hiện hoặc thuốc đã cấp phát.");
+                }
             }
 
             if (reqPerfIds.Any())
@@ -128,6 +150,43 @@ public class BillingService : IBillingService
                 if (alreadyBilled.Any())
                 {
                     return ApiResponse<InvoiceDto>.Fail($"Dịch vụ đã thực hiện (Mã #{alreadyBilled.First()}) đã được tính phí trên hóa đơn khác.");
+                }
+
+                var invalidApptServices = await _dbContext.PerformedServices
+                    .Where(ps => reqPerfIds.Contains(ps.PerformedServiceId) && ps.AppointmentId != appointment.AppointmentId)
+                    .Select(ps => ps.PerformedServiceId)
+                    .ToListAsync(ct);
+                if (invalidApptServices.Any())
+                {
+                    return ApiResponse<InvoiceDto>.Fail($"Dịch vụ điều trị #{invalidApptServices.First()} không thuộc ca khám này.");
+                }
+            }
+
+            if (reqPrescIds.Any())
+            {
+                var alreadyBilledMed = await _dbContext.InvoiceItems
+                    .Where(ii => ii.PrescriptionItemId.HasValue && reqPrescIds.Contains(ii.PrescriptionItemId.Value))
+                    .Select(ii => ii.PrescriptionItemId!.Value)
+                    .ToListAsync(ct);
+                if (alreadyBilledMed.Any())
+                {
+                    return ApiResponse<InvoiceDto>.Fail($"Mục thuốc (Mã #{alreadyBilledMed.First()}) đã được tính phí trên hóa đơn khác.");
+                }
+
+                var dispensedMeds = await _dbContext.PrescriptionItems
+                    .Where(pi => reqPrescIds.Contains(pi.PrescriptionItemId))
+                    .ToListAsync(ct);
+
+                foreach (var prescItem in dispensedMeds)
+                {
+                    if (prescItem.AppointmentId != appointment.AppointmentId)
+                    {
+                        return ApiResponse<InvoiceDto>.Fail($"Mục thuốc #{prescItem.PrescriptionItemId} không thuộc ca khám này.");
+                    }
+                    if (prescItem.QuantityDispensed <= 0)
+                    {
+                        return ApiResponse<InvoiceDto>.Fail($"Mục thuốc #{prescItem.PrescriptionItemId} chưa được cấp phát từ kho dược nên không thể lập hóa đơn tính tiền.");
+                    }
                 }
             }
 
@@ -153,12 +212,7 @@ public class BillingService : IBillingService
                 discount = subTotal;
             }
 
-            var discountedSubTotal = subTotal - discount;
-            var taxPercent = Math.Max(0, request.TaxPercent);
-            var taxAmount = Math.Round(discountedSubTotal * (taxPercent / 100m), 2);
-            var totalBeforeDiscount = Math.Round(subTotal + taxAmount, 2);
-            var finalAmount = Math.Round(discountedSubTotal + taxAmount, 2);
-
+            var finalAmount = subTotal - discount;
             var invoiceCode = await GenerateInvoiceCodeAsync(ct);
 
             var invoice = new Invoice
@@ -166,7 +220,7 @@ public class BillingService : IBillingService
                 InvoiceCode = invoiceCode,
                 AppointmentId = appointment.AppointmentId,
                 GeneratedByUserId = validStaffUserId,
-                TotalAmount = totalBeforeDiscount,
+                TotalAmount = subTotal,
                 DiscountAmount = discount,
                 FinalAmount = finalAmount,
                 Status = finalAmount == 0 ? "Paid" : "Unpaid",
@@ -179,24 +233,12 @@ public class BillingService : IBillingService
                 invoice.InvoiceItems.Add(new InvoiceItem
                 {
                     AppointmentId = appointment.AppointmentId,
-                    PerformedServiceId = item.PerformedServiceId,
+                    PerformedServiceId = item.PerformedServiceId > 0 ? item.PerformedServiceId : null,
+                    PrescriptionItemId = item.PrescriptionItemId > 0 ? item.PrescriptionItemId : null,
                     Description = item.Description.Trim(),
                     Quantity = item.Quantity,
                     UnitPrice = item.UnitPrice,
                     TotalAmount = itemTotal
-                });
-            }
-
-            if (taxPercent > 0 && taxAmount > 0)
-            {
-                invoice.InvoiceItems.Add(new InvoiceItem
-                {
-                    AppointmentId = appointment.AppointmentId,
-                    PerformedServiceId = null,
-                    Description = $"Thuế giá trị gia tăng (VAT {taxPercent:G29}%)",
-                    Quantity = 1,
-                    UnitPrice = taxAmount,
-                    TotalAmount = taxAmount
                 });
             }
 
@@ -616,6 +658,7 @@ public class BillingService : IBillingService
             performedItems.Add(new BillingPreloadedItemDto
             {
                 PerformedServiceId = null,
+                PrescriptionItemId = item.PrescriptionItemId,
                 DepartmentServiceId = null,
                 Description = $"[Thuốc] {item.Medicine?.MedicineName ?? "Thuốc điều trị"}",
                 Quantity = item.QuantityDispensed,
@@ -803,6 +846,7 @@ public class BillingService : IBillingService
                     InvoiceItemId = item.InvoiceItemId,
                     InvoiceId = item.InvoiceId,
                     PerformedServiceId = item.PerformedServiceId,
+                    PrescriptionItemId = item.PrescriptionItemId,
                     Description = item.Description,
                     Quantity = item.Quantity,
                     UnitPrice = item.UnitPrice,

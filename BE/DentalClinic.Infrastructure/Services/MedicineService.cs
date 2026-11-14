@@ -564,8 +564,21 @@ public class MedicineService : IMedicineService
                     _context.PrescriptionItems.Add(prescItem);
                 }
 
-                medicine.StockQuantity -= item.Quantity;
-                medicine.UpdatedAt = now;
+                if (_context.Database.IsSqlServer())
+                {
+                    var rowsAffected = await _context.Database.ExecuteSqlInterpolatedAsync(
+                        $"UPDATE Medicines SET StockQuantity = StockQuantity - {item.Quantity}, UpdatedAt = {now} WHERE MedicineId = {medicine.MedicineId} AND StockQuantity >= {item.Quantity}", ct);
+                    if (rowsAffected == 0)
+                    {
+                        throw new InvalidOperationException($"Thuốc '{medicine.MedicineName}' không đủ số lượng tồn kho khả dụng để cấp {item.Quantity} đơn vị.");
+                    }
+                    await _context.Entry(medicine).ReloadAsync(ct);
+                }
+                else
+                {
+                    medicine.StockQuantity -= item.Quantity;
+                    medicine.UpdatedAt = now;
+                }
 
                 var snapshotPrice = medicine.UnitPrice;
                 var lineTotal = item.Quantity * snapshotPrice;

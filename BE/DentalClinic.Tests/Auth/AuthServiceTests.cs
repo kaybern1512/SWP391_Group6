@@ -165,7 +165,6 @@ public class AuthServiceTests
 
         var updatedUser = await db.UserAccounts.FindAsync(user.UserId);
         Assert.Equal(AccountStatus.Active, updatedUser!.Status);
-        Assert.NotNull(updatedUser.EmailVerifiedAt);
     }
 
     [Fact]
@@ -215,7 +214,6 @@ public class AuthServiceTests
         db.PatientProfiles.Add(new PatientProfile
         {
             UserId = user.UserId,
-            PatientCode = "PAT-202609-0001",
             FullName = "Patient Test"
         });
         await db.SaveChangesAsync();
@@ -365,10 +363,10 @@ public class AuthServiceTests
     }
 
     [Theory]
-    [InlineData("admin@dentalcare.com", UserRole.SystemAdministrator, "EMP-ADM-001", "Admin Quản Trị")]
-    [InlineData("receptionist@dentalcare.com", UserRole.Receptionist, "EMP-REC-001", "Lễ Tân Mai")]
-    [InlineData("dentist@dentalcare.com", UserRole.Dentist, "EMP-DEN-001", "Bác Sĩ Hùng")]
-    public async Task LoginAsync_StaffRoles_ReturnsCorrectRoleAndEmployeeCode(string email, string role, string empCode, string fullName)
+    [InlineData("admin@dentalcare.com", UserRole.SystemAdministrator, "Admin Quản Trị")]
+    [InlineData("receptionist@dentalcare.com", UserRole.Receptionist, "Lễ Tân Mai")]
+    [InlineData("dentist@dentalcare.com", UserRole.Dentist, "Bác Sĩ Hùng")]
+    public async Task LoginAsync_StaffRoles_ReturnsCorrectRoleAndEmployeeCode(string email, string role, string fullName)
     {
         using var db = CreateDbContext("StaffLogin_" + role);
         var user = new UserAccount
@@ -376,8 +374,7 @@ public class AuthServiceTests
             Email = email,
             PasswordHash = _passwordHasher.HashPassword("Password123@"),
             Role = role,
-            Status = AccountStatus.Active,
-            EmailVerifiedAt = DateTime.UtcNow
+            Status = AccountStatus.Active
         };
         db.UserAccounts.Add(user);
         await db.SaveChangesAsync();
@@ -385,7 +382,6 @@ public class AuthServiceTests
         db.StaffProfiles.Add(new StaffProfile
         {
             UserId = user.UserId,
-            EmployeeCode = empCode,
             FullName = fullName,
             EmploymentStatus = "Active"
         });
@@ -402,7 +398,7 @@ public class AuthServiceTests
         Assert.NotNull(result.Data);
         Assert.NotNull(result.Data.User);
         Assert.Equal(role, result.Data.User.Role);
-        Assert.Equal(empCode, result.Data.User.UserCode);
+        Assert.Equal($"STF-{user.UserId:D6}", result.Data.User.UserCode);
         Assert.Equal(fullName, result.Data.User.FullName);
         Assert.NotEmpty(result.Data.AccessToken);
     }
@@ -416,8 +412,7 @@ public class AuthServiceTests
             Email = "phoneuser@example.com",
             PhoneNumber = "0988776655",
             Status = AccountStatus.Unverified,
-            Role = UserRole.Patient,
-            EmailVerifiedAt = DateTime.UtcNow
+            Role = UserRole.Patient
         };
         db.UserAccounts.Add(user);
         await db.SaveChangesAsync();

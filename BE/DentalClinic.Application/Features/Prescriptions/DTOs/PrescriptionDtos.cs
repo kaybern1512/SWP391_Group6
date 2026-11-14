@@ -44,6 +44,7 @@ public class CreatePrescriptionRequest
 public class CreatePrescriptionItemInput
 {
     public string MedicationName { get; set; } = string.Empty;
+    public int Quantity { get; set; } = 10;
     public string? Dosage { get; set; }
     public string? Frequency { get; set; }
     public string? Duration { get; set; }

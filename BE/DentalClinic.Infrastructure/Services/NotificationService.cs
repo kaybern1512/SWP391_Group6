@@ -34,15 +34,28 @@ public class NotificationService : INotificationService
     {
         try
         {
+            var notifType = !string.IsNullOrWhiteSpace(type) ? type : "System";
+            var dedupKey = appointmentId.HasValue
+                ? $"{userId}_{appointmentId.Value}_{notifType}_{DateTime.UtcNow:yyyyMMddHH}"
+                : null;
+
+            if (dedupKey != null)
+            {
+                var existing = await _dbContext.Notifications
+                    .AnyAsync(n => n.DeduplicationKey == dedupKey, ct);
+                if (existing) return;
+            }
+
             var notification = new Notification
             {
                 UserId = userId,
                 AppointmentId = appointmentId,
-                Type = !string.IsNullOrWhiteSpace(type) ? type : "System",
+                Type = notifType,
                 Channel = "InApp",
                 Subject = subject,
                 Content = content,
                 DeliveryStatus = "Sent",
+                DeduplicationKey = dedupKey,
                 SentAt = DateTime.UtcNow
             };
 

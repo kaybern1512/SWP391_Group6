@@ -55,33 +55,29 @@ public class FeedbackService : IFeedbackService
         }
 
         var targetService = appointment.AppointmentServices
-            .Where(s => s.Status == "Completed" && s.AssignedDentistUserId.HasValue &&
+            .Where(s => s.Status == AppointmentStatus.Completed && s.AssignedDentistUserId.HasValue &&
                         (!request.DentistUserId.HasValue || s.AssignedDentistUserId == request.DentistUserId.Value))
             .OrderByDescending(s => s.ScheduledEnd)
-            .FirstOrDefault()
-            ?? appointment.AppointmentServices.OrderBy(s => s.AppointmentServiceId).FirstOrDefault();
-
-        if (appointment.Status != AppointmentStatus.Completed && (targetService == null || targetService.Status != "Completed"))
-        {
-            return ApiResponse<VisitFeedbackDto>.Fail("Chỉ có thể gửi đánh giá sau khi dịch vụ ca khám đã hoàn thành.");
-        }
+            .FirstOrDefault();
 
         if (targetService == null || !targetService.AssignedDentistUserId.HasValue)
         {
-            return ApiResponse<VisitFeedbackDto>.Fail("Ca khám chưa được phân công bác sĩ phụ trách nên không thể gửi đánh giá.");
+            return ApiResponse<VisitFeedbackDto>.Fail("Chỉ có thể gửi đánh giá sau khi dịch vụ ca khám đã hoàn thành và có bác sĩ phụ trách.");
         }
 
-        if (request.DentistUserId.HasValue && request.DentistUserId.Value != targetService.AssignedDentistUserId.Value)
+        var assignedDentistId = targetService.AssignedDentistUserId.Value;
+
+        if (request.DentistUserId.HasValue && request.DentistUserId.Value != assignedDentistId)
         {
             return ApiResponse<VisitFeedbackDto>.Fail("Bác sĩ được đánh giá không khớp với bác sĩ phụ trách dịch vụ.");
         }
 
         var existingFeedback = await _dbContext.VisitFeedbacks
-            .AnyAsync(f => f.AppointmentServiceId == targetService.AppointmentServiceId, ct);
+            .AnyAsync(f => f.AppointmentId == appointment.AppointmentId && f.DentistUserId == assignedDentistId, ct);
 
         if (existingFeedback)
         {
-            return ApiResponse<VisitFeedbackDto>.Fail("Ca khám này đã được gửi đánh giá trước đó.");
+            return ApiResponse<VisitFeedbackDto>.Fail("Ca khám này đã được gửi đánh giá cho bác sĩ phụ trách trước đó.");
         }
 
         var feedback = new VisitFeedback
@@ -89,7 +85,7 @@ public class FeedbackService : IFeedbackService
             AppointmentId = appointment.AppointmentId,
             AppointmentServiceId = targetService.AppointmentServiceId,
             PatientUserId = appointment.PatientUserId,
-            DentistUserId = targetService.AssignedDentistUserId.Value,
+            DentistUserId = assignedDentistId,
             DentistRating = request.DentistRating,
             ClinicRating = request.ClinicRating,
             Comments = request.Comment?.Trim(),
@@ -262,7 +258,12 @@ public class FeedbackService : IFeedbackService
             : "Published";
 
         await _dbContext.SaveChangesAsync(ct);
-        return await GetFeedbackDtoByIdAsync(feedback.FeedbackId, ct);
+        var dtoRes = await GetFeedbackDtoByIdAsync(feedback.FeedbackId, ct);
+        if (dtoRes.Success && dtoRes.Data != null)
+        {
+            dtoRes.Data.AdminNotes = request.AdminNotes?.Trim();
+        }
+        return dtoRes;
     }
 
     public async Task<ApiResponse<VisitFeedbackDto>> RespondFeedbackAsync(long feedbackId, RespondFeedbackRequest request, long adminUserId, CancellationToken ct = default)
@@ -279,7 +280,13 @@ public class FeedbackService : IFeedbackService
         }
 
         await _dbContext.SaveChangesAsync(ct);
-        return await GetFeedbackDtoByIdAsync(feedback.FeedbackId, ct);
+        var dtoRes = await GetFeedbackDtoByIdAsync(feedback.FeedbackId, ct);
+        if (dtoRes.Success && dtoRes.Data != null)
+        {
+            dtoRes.Data.AdminResponse = request.AdminResponse.Trim();
+            dtoRes.Data.AdminRespondedByUserId = adminUserId;
+        }
+        return dtoRes;
     }
 
     private IQueryable<VisitFeedback> BuildQuery()

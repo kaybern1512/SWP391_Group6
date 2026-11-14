@@ -176,7 +176,7 @@ public class PrescriptionService : IPrescriptionService
             return ApiResponse<PrescriptionDto>.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
         }
 
-        if (appointment.Status != AppointmentStatus.InService && appointment.Status != AppointmentStatus.Completed)
+        if (appointment.Status != AppointmentStatus.InProgress && appointment.Status != AppointmentStatus.InService && appointment.Status != AppointmentStatus.Completed)
         {
             return ApiResponse<PrescriptionDto>.Fail($"Bác sĩ chỉ có thể kê đơn thuốc sau khi ca khám đã bắt đầu diễn ra hoặc đã hoàn tất khám (Trạng thái hiện tại: {appointment.Status}).");
         }
@@ -239,28 +239,25 @@ public class PrescriptionService : IPrescriptionService
                 }
             }
 
+            var addedMedicineIds = new HashSet<long>();
             foreach (var item in request.Items.Where(i => !string.IsNullOrWhiteSpace(i.MedicationName)))
             {
                 var medName = item.MedicationName.Trim();
                 var med = await _dbContext.Medicines
                     .FirstOrDefaultAsync(m => m.MedicineName.ToLower() == medName.ToLower(), ct);
 
-                if (med == null)
+                if (med == null || !med.IsActive)
                 {
-                    med = new Medicine
-                    {
-                        MedicineCode = $"MED-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..4].ToUpper()}",
-                        MedicineName = medName,
-                        Unit = "Viên",
-                        UnitPrice = 0,
-                        StockQuantity = 100,
-                        MinimumStockAlert = 10,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    _dbContext.Medicines.Add(med);
-                    await _dbContext.SaveChangesAsync(ct);
+                    return ApiResponse<PrescriptionDto>.Fail($"Thuốc '{medName}' không tồn tại hoặc đã ngừng cung cấp trong danh mục dược.");
                 }
+
+                if (addedMedicineIds.Contains(med.MedicineId))
+                {
+                    return ApiResponse<PrescriptionDto>.Fail($"Đơn thuốc không được chứa trùng lặp cùng một loại thuốc ('{med.MedicineName}').");
+                }
+                addedMedicineIds.Add(med.MedicineId);
+
+                var qty = item.Quantity > 0 ? item.Quantity : 10;
 
                 var pItem = new PrescriptionItem
                 {
@@ -272,7 +269,7 @@ public class PrescriptionService : IPrescriptionService
                     Instructions = string.IsNullOrWhiteSpace(item.Duration)
                         ? item.Instructions?.Trim()
                         : $"{item.Duration.Trim()} - {item.Instructions?.Trim()}".Trim(' ', '-'),
-                    Quantity = 10,
+                    Quantity = qty,
                     QuantityDispensed = 0,
                     CreatedAt = DateTime.UtcNow
                 };

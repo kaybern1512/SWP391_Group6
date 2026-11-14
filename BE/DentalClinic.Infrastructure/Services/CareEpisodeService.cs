@@ -62,6 +62,7 @@ public class CareEpisodeService : ICareEpisodeService
             AppointmentStatus.PendingReceptionReview,
             AppointmentStatus.Confirmed,
             AppointmentStatus.CheckedIn,
+            AppointmentStatus.InProgress,
             AppointmentStatus.InService,
             "WaitingForFollowUp"
         };
@@ -249,7 +250,7 @@ public class CareEpisodeService : ICareEpisodeService
 
         if (apptService.Appointment.Status == AppointmentStatus.Confirmed || apptService.Appointment.Status == AppointmentStatus.CheckedIn)
         {
-            apptService.Appointment.Status = AppointmentStatus.InService;
+            apptService.Appointment.Status = AppointmentStatus.InProgress;
             apptService.Appointment.UpdatedAt = DateTime.UtcNow;
         }
 
