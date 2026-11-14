@@ -19,6 +19,11 @@ public interface IBillingService
         ProcessPaymentRequest request,
         CancellationToken ct = default);
 
+    Task<ApiResponse<InvoiceDto>> ProcessRefundAsync(
+        long staffUserId,
+        ProcessRefundRequest request,
+        CancellationToken ct = default);
+
     Task<ApiResponse<InvoiceDto>> GetInvoiceByIdAsync(
         long invoiceId,
         CancellationToken ct = default);

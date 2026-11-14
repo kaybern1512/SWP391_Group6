@@ -28,6 +28,7 @@ public class PaymentDto
     public string PaidByPatientName { get; set; } = string.Empty;
     public string Method { get; set; } = string.Empty;
     public string MethodDisplayName { get; set; } = string.Empty;
+    public string PaymentType { get; set; } = "Final";
     public decimal Amount { get; set; }
     public string? TransactionReference { get; set; }
     public string Status { get; set; } = string.Empty;
@@ -159,4 +160,13 @@ public class CompletedAppointmentForBillingDto
     public string? InvoiceCode { get; set; }
     public decimal? TotalAmount { get; set; }
     public string? InvoiceStatus { get; set; }
+}
+
+public class ProcessRefundRequest
+{
+    public long InvoiceId { get; set; }
+    public decimal Amount { get; set; }
+    public string Method { get; set; } = "Cash";
+    public string? Reason { get; set; }
+    public string? TransactionReference { get; set; }
 }

@@ -240,7 +240,7 @@ public class SqlServerRefactorIntegrationTests
     }
 
     [Fact]
-    public async Task GroupB_ShiftBookingQuota_RejectsThirdBookingOnSameDay()
+    public async Task GroupB_ShiftBooking_AllowsMultipleNonOverlappingAndRejectsOverlappingBookings()
     {
         if (!await IsSqlServerAvailableAsync()) return;
 
@@ -1139,5 +1139,206 @@ public class SqlServerRefactorIntegrationTests
         var conflictRes = await apptService.ManagerConfirmAsync(apptId2, fixture.receptionistId, reassignReq);
         Assert.False(conflictRes.Success);
         Assert.True(conflictRes.Message != null && (conflictRes.Message.Contains("Bác sĩ đã có lịch hẹn khác") || conflictRes.Message.Contains("Ghế nha khoa")));
+    }
+
+    [Fact]
+    public async Task GroupJ_AppointmentChildStatusAggregation_And_BillingRefundLifecycle()
+    {
+        if (!await IsSqlServerAvailableAsync()) return;
+
+        using var db = CreateDbContext();
+        await CleanDatabaseAsync(db);
+        var fixture = await SeedBaseFixtureAsync(db);
+
+        var notifMock = new Mock<INotificationService>();
+        var apptService = new AppointmentService(db, notifMock.Object, NullLogger<AppointmentService>.Instance);
+        var billingService = new BillingService(db, notifMock.Object, NullLogger<BillingService>.Instance);
+
+        var targetStart = DateTime.Today.AddDays(1).AddHours(9);
+
+        // 1. Book appointment with 2 services
+        var bookReq = new CreateAppointmentRequest
+        {
+            DepartmentId = fixture.dept1Id,
+            RequestedServiceId = fixture.srv1Id,
+            RequestedDentistUserId = fixture.dentist1Id,
+            ScheduledStart = targetStart,
+            ReasonForVisit = "Kiểm tra tổng quát và niềng",
+            ServiceItems = new List<BookingServiceItemRequest>
+            {
+                new BookingServiceItemRequest
+                {
+                    DepartmentServiceId = fixture.srv1Id,
+                    RequestedDentistUserId = fixture.dentist1Id,
+                    ScheduledStart = targetStart
+                },
+                new BookingServiceItemRequest
+                {
+                    DepartmentServiceId = fixture.srv2Id,
+                    RequestedDentistUserId = fixture.dentist2Id,
+                    ScheduledStart = targetStart.AddHours(1)
+                }
+            }
+        };
+
+        var bookRes = await apptService.CreatePatientAppointmentAsync(fixture.patientId, bookReq);
+        Assert.True(bookRes.Success);
+        var apptId = bookRes.Data!.AppointmentId;
+
+        // Allocate resources for service 2
+        var srvLine2 = await db.AppointmentServices.FirstAsync(s => s.AppointmentId == apptId && s.DepartmentServiceId == fixture.srv2Id);
+        srvLine2.AssignedDentistUserId = fixture.dentist2Id;
+        srvLine2.RoomId = fixture.room2Id;
+        srvLine2.DentalChairId = fixture.chair2Id;
+        await db.SaveChangesAsync();
+
+        // 2. Receptionist Confirms
+        var confirmReq = new ManagerConfirmRequest
+        {
+            AssignedDentistUserId = fixture.dentist1Id,
+            RoomId = fixture.room1Id,
+            DentalChairId = fixture.chair1Id,
+            ScheduledStart = targetStart,
+            ScheduledEnd = targetStart.AddHours(2)
+        };
+        var confirmRes = await apptService.ManagerConfirmAsync(apptId, fixture.receptionistId, confirmReq);
+        Assert.True(confirmRes.Success);
+
+        // 3. Receptionist Check-in
+        var checkinRes = await apptService.ReceptionistCheckInAsync(apptId, fixture.receptionistId);
+        Assert.True(checkinRes.Success);
+
+        var srvLine1 = await db.AppointmentServices.FirstAsync(s => s.AppointmentId == apptId && s.DepartmentServiceId == fixture.srv1Id);
+
+        // 4. Dentist 1 Starts Service 1
+        var start1 = await apptService.DentistStartAppointmentAsync(apptId, fixture.dentist1Id, srvLine1.AppointmentServiceId);
+        Assert.True(start1.Success);
+
+        var apptAfterStart1 = await db.Appointments.Include(a => a.AppointmentServices).FirstAsync(a => a.AppointmentId == apptId);
+        Assert.Equal("InProgress", apptAfterStart1.Status);
+
+        // 5. Dentist 1 Completes Service 1 (with follow-up note)
+        var comp1 = await apptService.DentistCompleteAppointmentAsync(
+            apptId,
+            fixture.dentist1Id,
+            notes: "Khám tổng quát hoàn tất, cần tái khám trám răng",
+            followUpReason: "Tái khám kiểm tra men răng",
+            recommendedFollowUpDate: DateTime.Today.AddDays(7),
+            appointmentServiceId: srvLine1.AppointmentServiceId);
+        Assert.True(comp1.Success);
+
+        // Invariant: Service 1 Completed, Service 2 CheckedIn waiting in queue -> Appointment status is CheckedIn
+        var apptAfterComp1 = await db.Appointments.Include(a => a.AppointmentServices).FirstAsync(a => a.AppointmentId == apptId);
+        Assert.Equal("CheckedIn", apptAfterComp1.Status);
+
+        // Verify FollowUpSchedule created with Proposed status
+        var fuDb = await db.FollowUpSchedules.Where(f => f.PatientUserId == fixture.patientId).ToListAsync();
+        Assert.Single(fuDb);
+        Assert.Equal("Proposed", fuDb[0].Status);
+
+        // 6. Dentist 2 Starts and Completes Service 2
+        var start2 = await apptService.DentistStartAppointmentAsync(apptId, fixture.dentist2Id, srvLine2.AppointmentServiceId);
+        Assert.True(start2.Success);
+
+        var comp2 = await apptService.DentistCompleteAppointmentAsync(apptId, fixture.dentist2Id, appointmentServiceId: srvLine2.AppointmentServiceId);
+        Assert.True(comp2.Success);
+
+        // All active services Completed -> Appointment overall is Completed
+        var apptAfterAllComp = await db.Appointments.Include(a => a.AppointmentServices).FirstAsync(a => a.AppointmentId == apptId);
+        Assert.Equal("Completed", apptAfterAllComp.Status);
+
+        // 7. Billing Lifecycle: Invoice, Partial/Deposit, Final, Refund
+        var perfList = await db.PerformedServices.Where(p => p.AppointmentId == apptId).ToListAsync();
+        Assert.Equal(2, perfList.Count);
+
+        var invReq = new CreateInvoiceRequest
+        {
+            AppointmentId = apptId,
+            DiscountAmount = 0m,
+            Items = perfList.Select(p => new CreateInvoiceItemRequest
+            {
+                PerformedServiceId = p.PerformedServiceId,
+                Description = $"Dịch vụ #{p.DepartmentServiceId}",
+                Quantity = p.Quantity,
+                UnitPrice = p.UnitPrice
+            }).ToList()
+        };
+
+        var invRes = await billingService.CreateInvoiceAsync(fixture.receptionistId, invReq);
+        Assert.True(invRes.Success);
+        var invId = invRes.Data!.InvoiceId;
+        var totalAmount = invRes.Data.TotalAmount; // 200,000 + 1,500,000 = 1,700,000
+
+        // 7a. Deposit Payment (1,000,000)
+        var depositReq = new ProcessPaymentRequest
+        {
+            InvoiceId = invId,
+            Amount = 1000000m,
+            Method = "Cash",
+            TransactionReference = "DEP-001"
+        };
+        var depositRes = await billingService.ProcessPaymentAsync(fixture.receptionistId, depositReq);
+        Assert.True(depositRes.Success);
+        Assert.Equal("PartiallyPaid", depositRes.Data!.Status);
+
+        var payDeposit = await db.Payments.FirstAsync(p => p.TransactionReference == "DEP-001");
+        Assert.Equal("Deposit", payDeposit.PaymentType);
+        Assert.Equal("Successful", payDeposit.Status);
+
+        // 7b. Final Payment (700,000)
+        var finalPayReq = new ProcessPaymentRequest
+        {
+            InvoiceId = invId,
+            Amount = 700000m,
+            Method = "BankTransfer",
+            TransactionReference = "FIN-002"
+        };
+        var finalPayRes = await billingService.ProcessPaymentAsync(fixture.receptionistId, finalPayReq);
+        Assert.True(finalPayRes.Success);
+        Assert.Equal("Paid", finalPayRes.Data!.Status);
+
+        var payFinal = await db.Payments.FirstAsync(p => p.TransactionReference == "FIN-002");
+        Assert.Equal("Final", payFinal.PaymentType);
+        Assert.Equal("Successful", payFinal.Status);
+
+        // 7c. Partial Refund (500,000)
+        var refundReq1 = new ProcessRefundRequest
+        {
+            InvoiceId = invId,
+            Amount = 500000m,
+            Method = "BankTransfer",
+            Reason = "Hoàn phí một phần do điều chỉnh gói"
+        };
+        var refundRes1 = await billingService.ProcessRefundAsync(fixture.receptionistId, refundReq1);
+        Assert.True(refundRes1.Success);
+        Assert.Equal("PartiallyPaid", refundRes1.Data!.Status);
+
+        // 7d. Over-refund rejection (attempt 1,500,000 when net paid is only 1,200,000)
+        var overRefundReq = new ProcessRefundRequest
+        {
+            InvoiceId = invId,
+            Amount = 1500000m,
+            Method = "Cash",
+            Reason = "Hoàn vượt mức"
+        };
+        var overRefundRes = await billingService.ProcessRefundAsync(fixture.receptionistId, overRefundReq);
+        Assert.False(overRefundRes.Success);
+        Assert.Contains("vượt quá số tiền thực tế có thể hoàn", overRefundRes.Message);
+
+        // 7e. Remaining Refund (1,200,000) -> Invoice becomes Cancelled
+        var refundReq2 = new ProcessRefundRequest
+        {
+            InvoiceId = invId,
+            Amount = 1200000m,
+            Method = "Cash",
+            Reason = "Hoàn toàn bộ số tiền còn lại"
+        };
+        var refundRes2 = await billingService.ProcessRefundAsync(fixture.receptionistId, refundReq2);
+        Assert.True(refundRes2.Success);
+        Assert.Equal("Cancelled", refundRes2.Data!.Status);
+
+        var allRefunds = await db.Payments.Where(p => p.InvoiceId == invId && p.PaymentType == "Refund").ToListAsync();
+        Assert.Equal(2, allRefunds.Count);
+        Assert.Equal(1700000m, allRefunds.Sum(r => r.Amount));
     }
 }

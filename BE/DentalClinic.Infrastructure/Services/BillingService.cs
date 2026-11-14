@@ -412,6 +412,128 @@ public class BillingService : IBillingService
         }
     }
 
+    public async Task<ApiResponse<InvoiceDto>> ProcessRefundAsync(
+        long staffUserId,
+        ProcessRefundRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null)
+            return ApiResponse<InvoiceDto>.Fail("Dữ liệu hoàn tiền không hợp lệ.");
+
+        if (request.InvoiceId <= 0)
+            return ApiResponse<InvoiceDto>.Fail("Mã hóa đơn không hợp lệ.");
+
+        if (request.Amount <= 0)
+            return ApiResponse<InvoiceDto>.Fail("Số tiền hoàn trả phải lớn hơn 0.");
+
+        using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
+        try
+        {
+            if (_dbContext.Database.IsSqlServer())
+            {
+                var lockKey = $"Lock_Invoice_{request.InvoiceId}";
+                var applockSql = @"
+                    DECLARE @res int;
+                    EXEC @res = sp_getapplock @Resource = {0}, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000;
+                    IF @res < 0
+                    BEGIN
+                        DECLARE @msg nvarchar(250) = FORMATMESSAGE('Không thể lấy application lock cho hóa đơn %s. Mã trạng thái: %d', {0}, @res);
+                        THROW 51000, @msg, 1;
+                    END";
+                await _dbContext.Database.ExecuteSqlRawAsync(applockSql, new object[] { lockKey }, ct);
+            }
+
+            var invoice = await _dbContext.Invoices
+                .Include(i => i.Payments)
+                .Include(i => i.Appointment)
+                    .ThenInclude(a => a.Patient)
+                .FirstOrDefaultAsync(i => i.InvoiceId == request.InvoiceId, ct);
+
+            if (invoice == null)
+                return ApiResponse<InvoiceDto>.Fail("Không tìm thấy hóa đơn cần hoàn tiền.");
+
+            var successfulPayments = invoice.Payments
+                .Where(p => (p.Status == "Successful" || p.Status == "Completed") && p.PaymentType != "Refund")
+                .Sum(p => p.Amount);
+
+            var alreadyRefunded = invoice.Payments
+                .Where(p => (p.Status == "Successful" || p.Status == "Completed") && p.PaymentType == "Refund")
+                .Sum(p => p.Amount);
+
+            var netPaid = successfulPayments - alreadyRefunded;
+            if (netPaid <= 0)
+            {
+                return ApiResponse<InvoiceDto>.Fail("Hóa đơn chưa có khoản thanh toán thực tế nào để hoàn trả.");
+            }
+
+            if (request.Amount > netPaid)
+            {
+                return ApiResponse<InvoiceDto>.Fail($"Số tiền hoàn trả ({request.Amount:N0} đ) vượt quá số tiền thực tế có thể hoàn ({netPaid:N0} đ).");
+            }
+
+            var normalizedMethod = NormalizeMethod(request.Method);
+            var txnRef = string.IsNullOrWhiteSpace(request.TransactionReference)
+                ? $"REFUND-{DateTime.UtcNow:yyyyMMddHHmmss}-{invoice.InvoiceId}"
+                : request.TransactionReference.Trim();
+
+            var validStaffUserId = staffUserId > 0 ? staffUserId : invoice.GeneratedByUserId;
+
+            var refundPayment = new Payment
+            {
+                InvoiceId = invoice.InvoiceId,
+                ReceivedByUserId = validStaffUserId,
+                Method = normalizedMethod,
+                PaymentType = "Refund",
+                Amount = request.Amount,
+                TransactionReference = txnRef,
+                Status = "Successful",
+                PaymentDate = DateTime.UtcNow
+            };
+
+            _dbContext.Payments.Add(refundPayment);
+
+            var newNetPaid = netPaid - request.Amount;
+            if (newNetPaid <= 0)
+            {
+                invoice.Status = "Cancelled";
+            }
+            else if (newNetPaid < invoice.FinalAmount)
+            {
+                invoice.Status = "PartiallyPaid";
+            }
+            invoice.UpdatedAt = DateTime.UtcNow;
+
+            await _dbContext.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            try
+            {
+                var patientUserId = invoice.Appointment?.PatientUserId ?? 0;
+                if (patientUserId > 0)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        patientUserId,
+                        invoice.AppointmentId,
+                        "Payment",
+                        "Xác nhận hoàn tiền",
+                        $"Hệ thống đã thực hiện hoàn tiền {request.Amount:N0} đ cho hóa đơn #{invoice.InvoiceCode}. Lý do: {request.Reason ?? "Theo yêu cầu của khách hàng"}.",
+                        ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lỗi khi gửi thông báo hoàn tiền cho hóa đơn {InvoiceCode}", invoice.InvoiceCode);
+            }
+
+            return await GetInvoiceByIdAsync(invoice.InvoiceId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi trong quá trình xử lý hoàn tiền cho hóa đơn #{InvoiceId}", request.InvoiceId);
+            throw;
+        }
+    }
+
     public async Task<ApiResponse<InvoiceDto>> GetInvoiceByIdAsync(long invoiceId, CancellationToken ct = default)
     {
         var invoice = await _dbContext.Invoices
@@ -795,7 +917,13 @@ public class BillingService : IBillingService
         var subTotal = invoice.InvoiceItems
             .Where(i => !i.Description.StartsWith(taxItemPrefix, StringComparison.OrdinalIgnoreCase))
             .Sum(i => i.Quantity * i.UnitPrice);
-        var paidAmount = invoice.Payments.Where(p => p.Status == "Successful").Sum(p => p.Amount);
+        var successfulPayments = invoice.Payments
+            .Where(p => (p.Status == "Successful" || p.Status == "Completed") && p.PaymentType != "Refund")
+            .Sum(p => p.Amount);
+        var refundedPayments = invoice.Payments
+            .Where(p => (p.Status == "Successful" || p.Status == "Completed") && p.PaymentType == "Refund")
+            .Sum(p => p.Amount);
+        var paidAmount = Math.Max(0, successfulPayments - refundedPayments);
         var remainingAmount = Math.Max(0, invoice.FinalAmount - paidAmount);
 
         var discountAmount = invoice.DiscountAmount;
@@ -859,6 +987,7 @@ public class BillingService : IBillingService
                 InvoiceId = p.InvoiceId,
                 PaidByPatientUserId = invoice.Appointment?.PatientUserId ?? 0,
                 PaidByPatientName = invoice.Appointment?.Patient?.FullName ?? "Bệnh nhân",
+                PaymentType = p.PaymentType,
                 Method = p.Method,
                 MethodDisplayName = GetMethodDisplayName(p.Method),
                 Amount = p.Amount,

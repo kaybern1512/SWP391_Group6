@@ -67,7 +67,7 @@ public class ReportService : IReportService
         var invoices = await query.OrderByDescending(i => i.CreatedAt).ThenBy(i => i.InvoiceId).ToListAsync(ct);
 
         var totalRevenue = invoices.Sum(i => i.FinalAmount);
-        var totalPaid = invoices.SelectMany(i => i.Payments).Where(p => p.Status == "Completed").Sum(p => p.Amount);
+        var totalPaid = invoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount);
         var totalRemaining = Math.Max(0, totalRevenue - totalPaid);
 
         var dailyMap = new Dictionary<string, (decimal revenue, decimal paid, int count)>();
@@ -82,7 +82,7 @@ public class ReportService : IReportService
             if (dailyMap.ContainsKey(key))
             {
                 var cur = dailyMap[key];
-                var invPaid = inv.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount);
+                var invPaid = inv.Payments.Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount);
                 dailyMap[key] = (cur.revenue + inv.FinalAmount, cur.paid + invPaid, cur.count + 1);
             }
         }
@@ -111,7 +111,7 @@ public class ReportService : IReportService
             if (deptInvoices.Any() || departmentId == dept.DepartmentId)
             {
                 var rev = deptInvoices.Sum(i => i.FinalAmount);
-                var paid = deptInvoices.SelectMany(i => i.Payments).Where(p => p.Status == "Completed").Sum(p => p.Amount);
+                var paid = deptInvoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount);
                 var pct = totalRevenue > 0 ? Math.Round((double)(rev * 100 / totalRevenue), 1) : 0;
                 var dentistCount = await _dbContext.DentistProfiles.CountAsync(d => d.DepartmentId == dept.DepartmentId, ct);
                 var completedAppts = deptInvoices.Count(i => i.Appointment.Status == AppointmentStatus.Completed);
@@ -378,7 +378,7 @@ public class ReportService : IReportService
 
     private static InvoiceDto MapToInvoiceDto(Invoice invoice, ClinicProfile? clinic)
     {
-        var paidAmount = invoice.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount);
+        var paidAmount = invoice.Payments.Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount);
         var remainingAmount = Math.Max(0, invoice.FinalAmount - paidAmount);
         var primaryService = invoice.Appointment?.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
 

@@ -1038,7 +1038,7 @@ public class CareEpisodeService : ICareEpisodeService
         var totalAmount = existingInvoice?.FinalAmount ?? Math.Max(0m, subTotal - discountAmount);
         var paidAmount = existingInvoice != null && existingInvoice.Status == "Paid"
             ? existingInvoice.FinalAmount
-            : (existingInvoice?.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0m);
+            : (existingInvoice?.Payments.Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount) ?? 0m);
 
         var summary = new ConsolidatedEpisodeBillingSummaryDto
         {
@@ -1546,7 +1546,7 @@ public class CareEpisodeService : ICareEpisodeService
     {
         var paidAmount = invoice.Status == "Paid"
             ? invoice.FinalAmount
-            : invoice.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount);
+            : invoice.Payments.Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount);
 
         return new InvoiceDto
         {

@@ -70,6 +70,21 @@ public class BillingController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("refunds")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<InvoiceDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<InvoiceDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ProcessRefund([FromBody] ProcessRefundRequest request, CancellationToken ct)
+    {
+        var staffUserId = GetCurrentUserId();
+        var result = await _billingService.ProcessRefundAsync(staffUserId, request, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
     [HttpGet("invoices")]
     [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<List<InvoiceDto>>), StatusCodes.Status200OK)]

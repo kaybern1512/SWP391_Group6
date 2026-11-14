@@ -10,6 +10,7 @@ public interface IBillingApiService
 {
     Task<ApiResult<InvoiceDto>> CreateInvoiceAsync(CreateInvoiceRequest request);
     Task<ApiResult<InvoiceDto>> ProcessPaymentAsync(ProcessPaymentRequest request);
+    Task<ApiResult<InvoiceDto>> ProcessRefundAsync(ProcessRefundRequest request);
     Task<ApiResult<InvoiceDto>> GetInvoiceByIdAsync(long invoiceId);
     Task<ApiResult<InvoiceDto>> GetInvoiceByAppointmentIdAsync(long appointmentId);
     Task<ApiResult<List<InvoiceDto>>> GetInvoicesAsync(string? status = null, string? searchTerm = null, DateTime? fromDate = null, DateTime? toDate = null);

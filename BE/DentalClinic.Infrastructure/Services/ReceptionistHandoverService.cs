@@ -58,7 +58,7 @@ public class ReceptionistHandoverService : IReceptionistHandoverService
 
         var sampleInvoices = unpaidInvoices.Select(i =>
         {
-            decimal paid = i.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount);
+            decimal paid = i.Payments.Where(p => p.Status == "Successful" || p.Status == "Completed").Sum(p => p.Amount);
             decimal remaining = Math.Max(0, i.FinalAmount - paid);
             return new UnpaidInvoiceSummaryDto
             {

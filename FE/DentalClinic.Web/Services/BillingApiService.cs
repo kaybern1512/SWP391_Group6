@@ -33,6 +33,11 @@ public class BillingApiService : IBillingApiService
         return await SendPostAsync<ProcessPaymentRequest, InvoiceDto>("/api/billing/payments", request);
     }
 
+    public async Task<ApiResult<InvoiceDto>> ProcessRefundAsync(ProcessRefundRequest request)
+    {
+        return await SendPostAsync<ProcessRefundRequest, InvoiceDto>("/api/billing/refunds", request);
+    }
+
     public async Task<ApiResult<InvoiceDto>> GetInvoiceByIdAsync(long invoiceId)
     {
         return await SendGetAsync<InvoiceDto>($"/api/billing/invoices/{invoiceId}");

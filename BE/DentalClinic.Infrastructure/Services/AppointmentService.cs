@@ -2337,19 +2337,33 @@ public class AppointmentService : IAppointmentService
 
         if (!string.IsNullOrWhiteSpace(followUpReason) || recommendedFollowUpDate.HasValue)
         {
-            var fuSchedule = new FollowUpSchedule
+            var existingFu = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.TreatmentSessionId == session.SessionId, ct);
+            if (existingFu == null)
             {
-                TreatmentSessionId = session.SessionId,
-                PatientUserId = appointment.PatientUserId,
-                DentistUserId = dentistUserId,
-                RecommendedDate = DateOnly.FromDateTime(recommendedFollowUpDate ?? now.AddDays(7)),
-                RecommendedServiceId = targetService.DepartmentServiceId,
-                ClinicalReason = string.IsNullOrWhiteSpace(followUpReason) ? "Tái khám theo dõi định kỳ sau thủ thuật" : followUpReason.Trim(),
-                Status = "Proposed",
-                CreatedAt = now,
-                UpdatedAt = now
-            };
-            _dbContext.FollowUpSchedules.Add(fuSchedule);
+                var fuSchedule = new FollowUpSchedule
+                {
+                    TreatmentSessionId = session.SessionId,
+                    PatientUserId = appointment.PatientUserId,
+                    DentistUserId = dentistUserId,
+                    RecommendedDate = DateOnly.FromDateTime(recommendedFollowUpDate ?? now.AddDays(7)),
+                    RecommendedServiceId = targetService.DepartmentServiceId,
+                    ClinicalReason = string.IsNullOrWhiteSpace(followUpReason) ? "Tái khám theo dõi định kỳ sau thủ thuật" : followUpReason.Trim(),
+                    Status = "Proposed",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                _dbContext.FollowUpSchedules.Add(fuSchedule);
+            }
+            else
+            {
+                existingFu.RecommendedDate = DateOnly.FromDateTime(recommendedFollowUpDate ?? now.AddDays(7));
+                if (!string.IsNullOrWhiteSpace(followUpReason))
+                {
+                    existingFu.ClinicalReason = followUpReason.Trim();
+                }
+                existingFu.UpdatedAt = now;
+            }
         }
 
         targetService.Status = AppointmentStatus.Completed;
@@ -2360,7 +2374,14 @@ public class AppointmentService : IAppointmentService
             .ToList();
 
         var oldStatus = appointment.Status;
-        if (activeServices.All(s => s.Status == AppointmentStatus.Completed))
+        if (!activeServices.Any())
+        {
+            appointment.Status = appointment.AppointmentServices.Any(s => s.Status == AppointmentStatus.NoShow)
+                ? AppointmentStatus.NoShow
+                : AppointmentStatus.Cancelled;
+            appointment.UpdatedAt = now;
+        }
+        else if (activeServices.All(s => s.Status == AppointmentStatus.Completed))
         {
             appointment.Status = AppointmentStatus.Completed;
             appointment.CompletedAt = now;
