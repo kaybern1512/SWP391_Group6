@@ -29,4 +29,10 @@
     <ProjectReference Include="..\DentalClinic.Infrastructure\DentalClinic.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="**/*.cs" />
+    <Compile Include="Booking/VietnamTimezoneStandardizationTests.cs" />
+    <Compile Include="Booking/BookingCoreIntegrityTests.cs" />
+  </ItemGroup>
+
 </Project>
