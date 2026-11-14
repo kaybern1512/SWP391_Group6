@@ -1355,4 +1355,245 @@ public class SqlServerRefactorIntegrationTests
         Assert.Equal(2, allRefunds.Count);
         Assert.Equal(1700000m, allRefunds.Sum(r => r.Amount));
     }
+
+    [Fact]
+    public async Task GroupK_RealSqlServerConcurrencyStressTests_EnsuresLockingAndDataIntegrity()
+    {
+        if (!await IsSqlServerAvailableAsync()) return;
+
+        using var db = CreateDbContext();
+        await CleanDatabaseAsync(db);
+        var fixture = await SeedBaseFixtureAsync(db);
+
+        var notifMock = new Mock<INotificationService>();
+        var medicineService = new MedicineService(db);
+        var prescriptionService = new PrescriptionService(db, NullLogger<PrescriptionService>.Instance);
+
+        // K1. Concurrent Medicine Stock Deduction (Over-allocation race condition)
+        // Seed a medicine with exactly 10 units in stock
+        var medCode = $"MED-CONC-{Guid.NewGuid():N}"[..15];
+        var med = new MedicineEntity
+        {
+            MedicineCode = medCode,
+            MedicineName = "Thuốc Concurrency Test 500mg",
+            Unit = "Viên",
+            UnitPrice = 10000m,
+            StockQuantity = 10,
+            MinimumStockAlert = 5,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Medicines.Add(med);
+        await db.SaveChangesAsync();
+
+        // Create 2 appointments and prescriptions requesting 7 units each (total 14 > 10)
+        var appt1 = new Appointment
+        {
+            PatientUserId = fixture.patientId,
+            Status = "InProgress",
+            BookingSource = "Patient",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var appt2 = new Appointment
+        {
+            PatientUserId = fixture.patientId,
+            Status = "InProgress",
+            BookingSource = "Patient",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.Appointments.AddRange(appt1, appt2);
+        await db.SaveChangesAsync();
+
+        var srvLine1 = new AppointmentServiceEntity
+        {
+            AppointmentId = appt1.AppointmentId,
+            DepartmentId = fixture.dept1Id,
+            DepartmentServiceId = fixture.srv1Id,
+            AssignedDentistUserId = fixture.dentist1Id,
+            RoomId = fixture.room1Id,
+            DentalChairId = fixture.chair1Id,
+            QueueNumber = 101,
+            Status = "InService",
+            ServiceDate = DateOnly.FromDateTime(DateTime.Today),
+            ScheduledStart = DateTime.Today.AddHours(9),
+            ScheduledEnd = DateTime.Today.AddHours(9).AddMinutes(30),
+            CreatedAt = DateTime.UtcNow
+        };
+        var srvLine2 = new AppointmentServiceEntity
+        {
+            AppointmentId = appt2.AppointmentId,
+            DepartmentId = fixture.dept1Id,
+            DepartmentServiceId = fixture.srv1Id,
+            AssignedDentistUserId = fixture.dentist1Id,
+            RoomId = fixture.room1Id,
+            DentalChairId = fixture.chair1Id,
+            QueueNumber = 102,
+            Status = "InService",
+            ServiceDate = DateOnly.FromDateTime(DateTime.Today),
+            ScheduledStart = DateTime.Today.AddHours(10),
+            ScheduledEnd = DateTime.Today.AddHours(10).AddMinutes(30),
+            CreatedAt = DateTime.UtcNow
+        };
+        db.AppointmentServices.AddRange(srvLine1, srvLine2);
+        await db.SaveChangesAsync();
+
+        var prescReq1 = new CreatePrescriptionRequest
+        {
+            AppointmentId = appt1.AppointmentId,
+            Items = new List<CreatePrescriptionItemInput>
+            {
+                new()
+                {
+                    MedicationName = med.MedicineName,
+                    Quantity = 7,
+                    Dosage = "1 viên",
+                    Frequency = "2 lần/ngày",
+                    Instructions = "Uống sau ăn"
+                }
+            }
+        };
+        var prescReq2 = new CreatePrescriptionRequest
+        {
+            AppointmentId = appt2.AppointmentId,
+            Items = new List<CreatePrescriptionItemInput>
+            {
+                new()
+                {
+                    MedicationName = med.MedicineName,
+                    Quantity = 7,
+                    Dosage = "1 viên",
+                    Frequency = "2 lần/ngày",
+                    Instructions = "Uống sau ăn"
+                }
+            }
+        };
+
+        var presRes1 = await prescriptionService.CreatePrescriptionAsync(fixture.dentist1Id, prescReq1);
+        var presRes2 = await prescriptionService.CreatePrescriptionAsync(fixture.dentist1Id, prescReq2);
+        Assert.True(presRes1.Success, presRes1.Message);
+        Assert.True(presRes2.Success, presRes2.Message);
+
+        var pItem1 = presRes1.Data!.Items[0];
+        var pItem2 = presRes2.Data!.Items[0];
+
+        // Concurrently attempt to dispense 7 units on both prescriptions
+        var task1 = Task.Run(async () =>
+        {
+            using var dbThread = CreateDbContext();
+            var medServiceThread = new MedicineService(dbThread);
+            try
+            {
+                var res = await medServiceThread.DispenseMedicineAsync(new CreateMedicineDispensationRequest
+                {
+                    PrescriptionId = presRes1.Data!.PrescriptionId,
+                    Items = new List<DispenseItemInput>
+                    {
+                        new() { PrescriptionItemId = pItem1.PrescriptionItemId, MedicineId = med.MedicineId, Quantity = 7 }
+                    }
+                }, fixture.dentist1Id, userRole: "Dentist");
+                return res != null;
+            }
+            catch
+            {
+                return false;
+            }
+        });
+
+        var task2 = Task.Run(async () =>
+        {
+            using var dbThread = CreateDbContext();
+            var medServiceThread = new MedicineService(dbThread);
+            try
+            {
+                var res = await medServiceThread.DispenseMedicineAsync(new CreateMedicineDispensationRequest
+                {
+                    PrescriptionId = presRes2.Data!.PrescriptionId,
+                    Items = new List<DispenseItemInput>
+                    {
+                        new() { PrescriptionItemId = pItem2.PrescriptionItemId, MedicineId = med.MedicineId, Quantity = 7 }
+                    }
+                }, fixture.dentist1Id, userRole: "Dentist");
+                return res != null;
+            }
+            catch
+            {
+                return false;
+            }
+        });
+
+        var results = await Task.WhenAll(task1, task2);
+        // Exactly one thread must succeed and one must fail
+        Assert.Single(results.Where(r => r));
+        Assert.Single(results.Where(r => !r));
+
+        // Verify SQL Server stock is exactly 3 (10 - 7 = 3), never negative
+        using var dbVerify = CreateDbContext();
+        var medAfter = await dbVerify.Medicines.FirstAsync(m => m.MedicineId == med.MedicineId);
+        Assert.Equal(3, medAfter.StockQuantity);
+
+        // K2. Concurrent Queue Number Generation via Receptionist CheckIn
+        // Set up 5 confirmed appointments in department 1 on targetDate
+        var targetDate = DateOnly.FromDateTime(DateTime.Today.AddDays(3));
+        var apptIds = new List<long>();
+        for (int i = 0; i < 5; i++)
+        {
+            var a = new Appointment
+            {
+                PatientUserId = fixture.patientId,
+                Status = "Confirmed",
+                BookingSource = "Patient",
+                ConfirmedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            db.Appointments.Add(a);
+            await db.SaveChangesAsync();
+
+            var s = new AppointmentServiceEntity
+            {
+                AppointmentId = a.AppointmentId,
+                DepartmentId = fixture.dept1Id,
+                DepartmentServiceId = fixture.srv1Id,
+                AssignedDentistUserId = fixture.dentist1Id,
+                RoomId = fixture.room1Id,
+                DentalChairId = fixture.chair1Id,
+                ServiceDate = targetDate,
+                ScheduledStart = targetDate.ToDateTime(new TimeOnly(8 + i, 0)),
+                ScheduledEnd = targetDate.ToDateTime(new TimeOnly(8 + i, 30)),
+                Status = "Confirmed",
+                UnitPrice = 200000m,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.AppointmentServices.Add(s);
+            await db.SaveChangesAsync();
+            apptIds.Add(a.AppointmentId);
+        }
+
+        // Concurrently check in and issue queue numbers
+        var checkinTasks = apptIds.Select(aid => Task.Run(async () =>
+        {
+            using var dbThread = CreateDbContext();
+            var apptServiceThread = new AppointmentService(dbThread, notifMock.Object, NullLogger<AppointmentService>.Instance);
+            var res = await apptServiceThread.ReceptionistCheckInAsync(aid, fixture.receptionistId);
+            return res.Success;
+        })).ToList();
+
+        var checkinResults = await Task.WhenAll(checkinTasks);
+        Assert.All(checkinResults, Assert.True);
+
+        // Verify in database: All 5 queue numbers must be sequential 1..5 with zero duplicates
+        using var dbCheck = CreateDbContext();
+        var assignedQueues = await dbCheck.AppointmentServices
+            .Where(s => apptIds.Contains(s.AppointmentId))
+            .Select(s => s.QueueNumber)
+            .ToListAsync();
+
+        Assert.Equal(5, assignedQueues.Count);
+        Assert.DoesNotContain(null, assignedQueues);
+        var distinctQueues = assignedQueues.Select(q => q!.Value).Distinct().OrderBy(q => q).ToList();
+        Assert.Equal(5, distinctQueues.Count);
+        Assert.Equal(new List<int> { 1, 2, 3, 4, 5 }, distinctQueues);
+    }
 }

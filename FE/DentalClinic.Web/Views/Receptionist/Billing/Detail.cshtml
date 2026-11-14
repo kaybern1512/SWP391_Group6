@@ -499,8 +499,11 @@
             </form>
         </div>
     </div>
+}
 
-    <!-- Refund Modal -->
+<!-- Refund Modal -->
+@if (Model.PaidAmount > 0)
+{
     <div class="modal fade" id="refundModal" tabindex="-1" aria-labelledby="refundModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <form asp-action="Refund" method="post" class="modal-content border-0 shadow">
@@ -559,6 +562,7 @@
             </form>
         </div>
     </div>
+}
 
     @section Scripts {
         <script>
@@ -578,6 +582,8 @@
                     } else if (vietQrBox) {
                         vietQrBox.classList.add('d-none');
                     }
+                }
+
                 const paymentModal = document.getElementById('paymentModal');
                 if (paymentModal) {
                     paymentModal.addEventListener('shown.bs.modal', toggleVietQr);
@@ -614,4 +620,3 @@
             });
         </script>
     }
-}

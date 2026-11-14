@@ -495,8 +495,7 @@ public partial class DentalClinicDbContext : DbContext
 
             entity.HasOne(d => d.WorkSchedule)
                 .WithMany(p => p.StaffAttendanceRecords)
-                .HasPrincipalKey(p => new { p.WorkScheduleId, p.StaffUserId, p.WorkDate })
-                .HasForeignKey(d => new { d.WorkScheduleId, d.StaffUserId, d.WorkDate })
+                .HasForeignKey(d => d.WorkScheduleId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_StaffAttendanceRecords_Schedule_User_Date");
 

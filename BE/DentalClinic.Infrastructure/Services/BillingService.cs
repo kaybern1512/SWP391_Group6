@@ -837,6 +837,7 @@ public class BillingService : IBillingService
         var billableStatuses = new[]
         {
             AppointmentStatus.InService,
+            AppointmentStatus.InProgress,
             AppointmentStatus.Completed,
             AppointmentStatus.CheckedIn,
             AppointmentStatus.Waiting
