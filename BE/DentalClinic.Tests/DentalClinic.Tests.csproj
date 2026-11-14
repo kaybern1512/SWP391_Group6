@@ -47,6 +47,7 @@
     <Compile Include="Admin/AdminControllerAuthorizationRegressionTests.cs" />
     <Compile Include="Admin/AdminRedesignUnitTests.cs" />
     <Compile Include="Integration/SqlServerRefactorIntegrationTests.cs" />
+    <Compile Include="UnicodeEncoding/*.cs" />
   </ItemGroup>
 
 </Project>

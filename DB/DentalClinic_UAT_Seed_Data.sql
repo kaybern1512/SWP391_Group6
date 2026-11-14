@@ -1,15 +1,22 @@
--- =====================================================================================
+﻿-- =====================================================================================
 -- DENTALCARE UAT SEED SCRIPT
--- Target: DentalCare_SWP391_Refactor_UAT
+-- Target: DentalCare_SWP391_Refactor_UAT, DentalCare_SWP391_Encoding_TEST, DentalCare_SWP391_Refactor_QA
+-- UTF-8 with BOM Encoding Enforced for Full Vietnamese Unicode Support
 -- =====================================================================================
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
 SET NOCOUNT ON;
 
 DECLARE @CurrentDb sysname = DB_NAME();
-IF @CurrentDb <> N'DentalCare_SWP391_Refactor_UAT'
+IF @CurrentDb IN (N'master', N'model', N'msdb', N'tempdb', N'DentalCare_SWP391')
 BEGIN
-    RAISERROR(N'ABORTED: This script must only run on DentalCare_SWP391_Refactor_UAT! Current: [%s]', 16, 1, @CurrentDb);
+    RAISERROR(N'ABORTED: Cannot run seed script on protected or system database [%s]!', 16, 1, @CurrentDb);
+    RETURN;
+END;
+
+IF @CurrentDb NOT IN (N'DentalCare_SWP391_Refactor_UAT', N'DentalCare_SWP391_Encoding_TEST', N'DentalCare_SWP391_Refactor_QA', N'DentalCare_SWP391_Refactor_TEST_Integration')
+BEGIN
+    RAISERROR(N'ABORTED: This script must only run on approved UAT/QA/TEST databases! Current: [%s]', 16, 1, @CurrentDb);
     RETURN;
 END;
 
