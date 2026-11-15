@@ -6,7 +6,7 @@
  * @param {string} email
  * @param {string} password
  */
-async function loginAs(page, email, password = 'Password123@') {
+async function loginAs(page, email, password = process.env.DEMO_PASSWORD || 'DentalCare@2026!') {
   await page.context().clearCookies();
   await page.goto('/Account/Login');
   await page.waitForLoadState('domcontentloaded');

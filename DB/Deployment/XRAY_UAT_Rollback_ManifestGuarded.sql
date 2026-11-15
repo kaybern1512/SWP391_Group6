@@ -26,6 +26,7 @@ DECLARE @TARGET_SERVICE_ID INT = NULL;              -- e.g. Created DepartmentSe
 DECLARE @TARGET_DENTIST_USER_ID BIGINT = NULL;      -- e.g. Created Dentist UserId for dentist.hung@dentalcare.test
 DECLARE @TARGET_SCHEDULE_ID_1 BIGINT = NULL;        -- e.g. Duty schedule for Dentist 3 on target date
 DECLARE @TARGET_SCHEDULE_ID_2 BIGINT = NULL;        -- e.g. Duty schedule for Dentist Hung on target date
+DECLARE @TARGET_SCHEDULE_ID_3 BIGINT = NULL;        -- e.g. General consultation schedule for Dentist 3 on target date
 
 ----------------------------------------------------------------------------------------
 -- 1. STRICT PRE-EXECUTION SAFETY GUARDS
@@ -163,6 +164,12 @@ BEGIN TRY
     BEGIN
         DELETE FROM dbo.StaffWorkSchedules WHERE WorkScheduleId = @TARGET_SCHEDULE_ID_2;
         PRINT '>> Deleted WorkSchedule ID: ' + CAST(@TARGET_SCHEDULE_ID_2 AS VARCHAR);
+    END;
+
+    IF @TARGET_SCHEDULE_ID_3 IS NOT NULL
+    BEGIN
+        DELETE FROM dbo.StaffWorkSchedules WHERE WorkScheduleId = @TARGET_SCHEDULE_ID_3;
+        PRINT '>> Deleted WorkSchedule ID: ' + CAST(@TARGET_SCHEDULE_ID_3 AS VARCHAR);
     END;
 
     -- Step 2: Remove Target Dentist Account (DentistProfiles -> StaffProfiles -> UserAccounts)

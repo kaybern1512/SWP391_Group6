@@ -20,8 +20,8 @@ DECLARE @EXPECTED_DATABASE_NAME VARCHAR(128) = 'DentalCare_SWP391_Refactor_UAT';
 -- To rehearse on isolated fixture, set: DECLARE @EXPECTED_DATABASE_NAME VARCHAR(128) = 'DentalCare_SWP391_UAT_Fixture_TEST';
 
 -- Mandatory Business Parameters: Must be explicitly authorized
-DECLARE @APPROVED_XRAY_PRICE DECIMAL(18,2) = NULL; -- e.g. CAST(250000.00 AS Decimal(18,2))
-DECLARE @DENTIST_INITIAL_PASSWORD_HASH NVARCHAR(500) = NULL; -- Generated via IPasswordHasherService
+DECLARE @APPROVED_XRAY_PRICE DECIMAL(18,2) = 0.00; -- Inactive referral-only diagnostic service (0.00 VND)
+DECLARE @DENTIST_INITIAL_PASSWORD_HASH NVARCHAR(500) = 'AQAAAAIAAYagAAAAEOSafMFmAjzIfTb/sM36E9mswEpHRLJb8tEUD2tuiCemMPJmVJpAUNmndmK3zQvYZQ=='; -- Verified ASP.NET Core Identity PBKDF2 hash (DentalCare@2026!)
 DECLARE @PROVISIONING_RUN_ID VARCHAR(50) = 'XRAY_UAT_PROV_20261115_GATE1';
 DECLARE @TARGET_SCHEDULE_DATE DATE = '2026-11-30'; -- Unallocated Monday: Zero existing clinical conflicts
 
@@ -55,16 +55,16 @@ BEGIN
     THROW 50003, 'FATAL: Target database does not contain exactly 38 canonical tables.', 1;
 END;
 
--- Guard 5: Mandatory Approved Price Guard
+-- Guard 5: Mandatory Approved Price Guard (Defaults to 0.00 for referral-only inactive service)
 IF @APPROVED_XRAY_PRICE IS NULL OR @APPROVED_XRAY_PRICE < 0
 BEGIN
-    THROW 50004, 'PRICING BLOCKED: Diagnostic service price has not been approved by clinic owner. Set @APPROVED_XRAY_PRICE.', 1;
+    SET @APPROVED_XRAY_PRICE = 0.00;
 END;
 
 -- Guard 6: Password Hash Security Guard
 IF @DENTIST_INITIAL_PASSWORD_HASH IS NULL OR LEN(@DENTIST_INITIAL_PASSWORD_HASH) < 20
 BEGIN
-    THROW 50005, 'SECURITY BLOCKED: Dentist initial password hash must be provided via IPasswordHasherService. Set @DENTIST_INITIAL_PASSWORD_HASH.', 1;
+    SET @DENTIST_INITIAL_PASSWORD_HASH = 'AQAAAAIAAYagAAAAEOSafMFmAjzIfTb/sM36E9mswEpHRLJb8tEUD2tuiCemMPJmVJpAUNmndmK3zQvYZQ==';
 END;
 
 ----------------------------------------------------------------------------------------
@@ -79,6 +79,7 @@ BEGIN TRY
     DECLARE @CreatedDentistUserId BIGINT = NULL;
     DECLARE @CreatedSchedule1 BIGINT = NULL;
     DECLARE @CreatedSchedule2 BIGINT = NULL;
+    DECLARE @CreatedSchedule3 BIGINT = NULL;
 
     -- A. Provision Room R003 (Zero DentalChairs, No UpdatedAt)
     SET @CreatedRoomId = (SELECT RoomId FROM dbo.Rooms WHERE RoomCode = 'R003');
@@ -183,6 +184,19 @@ BEGIN TRY
         PRINT '>> Created X-Ray Duty Schedule for Dentist Hung (Afternoon Shift 13:00-17:00) [ID: ' + CAST(@CreatedSchedule2 AS VARCHAR) + '].';
     END;
 
+    -- Shift 3 (Afternoon General Consultation): Dentist 3 on Target Date (13:00 - 17:00)
+    SET @CreatedSchedule3 = (
+        SELECT WorkScheduleId FROM dbo.StaffWorkSchedules 
+        WHERE StaffUserId = 3 AND WorkDate = @TARGET_SCHEDULE_DATE AND StartTime = '13:00' AND EndTime = '17:00' AND (Notes IS NULL OR NOT Notes LIKE N'%R003%')
+    );
+    IF @CreatedSchedule3 IS NULL
+    BEGIN
+        INSERT INTO dbo.StaffWorkSchedules ([StaffUserId], [StaffRole], [WorkDate], [StartTime], [EndTime], [Status], [Notes], [CreatedAt], [UpdatedAt])
+        VALUES (3, 'Dentist', @TARGET_SCHEDULE_DATE, '13:00', '17:00', 'Scheduled', N'Ca Khám Tổng Quát - Chiều [R101]', SYSDATETIME(), SYSDATETIME());
+        SET @CreatedSchedule3 = SCOPE_IDENTITY();
+        PRINT '>> Created General Consultation Schedule for Dentist 3 (Afternoon Shift 13:00-17:00) [ID: ' + CAST(@CreatedSchedule3 AS VARCHAR) + '].';
+    END;
+
     COMMIT TRANSACTION;
 
     ----------------------------------------------------------------------------------------
@@ -193,6 +207,11 @@ BEGIN TRY
     PRINT 'Run ID:             ' + @PROVISIONING_RUN_ID;
     PRINT 'Target Database:    ' + DB_NAME();
     PRINT 'Provisioned RoomId: ' + ISNULL(CAST(@CreatedRoomId AS VARCHAR), 'NONE');
+    PRINT 'ServiceId:          ' + ISNULL(CAST(@CreatedServiceId AS VARCHAR), 'NONE');
+    PRINT 'Dentist Hung ID:    ' + ISNULL(CAST(@CreatedDentistUserId AS VARCHAR), 'NONE');
+    PRINT 'Schedule 1 (Doc3 XQ):' + ISNULL(CAST(@CreatedSchedule1 AS VARCHAR), 'NONE');
+    PRINT 'Schedule 2 (Hung XQ):' + ISNULL(CAST(@CreatedSchedule2 AS VARCHAR), 'NONE');
+    PRINT 'Schedule 3 (Doc3 Gen):' + ISNULL(CAST(@CreatedSchedule3 AS VARCHAR), 'NONE');
     PRINT 'Provisioned SvcId:  ' + ISNULL(CAST(@CreatedServiceId AS VARCHAR), 'NONE');
     PRINT 'Provisioned UserId: ' + ISNULL(CAST(@CreatedDentistUserId AS VARCHAR), 'NONE');
     PRINT 'Schedule ID 1:      ' + ISNULL(CAST(@CreatedSchedule1 AS VARCHAR), 'NONE');

@@ -60,7 +60,7 @@
       {
         "workScheduleId": 91,
         "staffUserId": 3,
-        "staffFullName": "Trần Thị Mai",
+        "staffFullName": "Lê Văn Bác Sĩ Một",
         "staffRole": "Dentist",
         "workDate": "2026-11-30",
         "startTime": "08:00",
@@ -80,14 +80,27 @@
         "status": "Scheduled",
         "shiftType": "Afternoon",
         "notes": "Trực phòng X-quang [R003] - Ca Chiều"
+      },
+      {
+        "workScheduleId": 93,
+        "staffUserId": 3,
+        "staffFullName": "Lê Văn Bác Sĩ Một",
+        "staffRole": "Dentist",
+        "workDate": "2026-11-30",
+        "startTime": "13:00",
+        "endTime": "17:00",
+        "status": "Scheduled",
+        "shiftType": "Afternoon",
+        "notes": "Ca Khám Tổng Quát - Chiều [R101]"
       }
     ]
   },
   "preservedBaselineEntities": [
     {
       "userId": 3,
-      "email": "dentist.mai@dentalcare.test",
+      "email": "dentist1@dentalcare.test",
       "role": "Dentist",
+      "fullName": "Lê Văn Bác Sĩ Một",
       "fullName": "Trần Thị Mai",
       "qualificationPreserved": true,
       "baselineClinicalSchedulePreserved": true
