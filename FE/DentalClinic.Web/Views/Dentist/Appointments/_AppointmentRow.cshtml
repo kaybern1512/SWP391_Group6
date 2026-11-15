@@ -173,6 +173,15 @@
             <a asp-controller="DentistTreatmentPlan" asp-action="Create" asp-route-patientId="@Model.PatientUserId" class="btn btn-sm btn-outline-info" title="Lập phác đồ & kế hoạch điều trị cho bệnh nhân">
                 <i class="bi bi-diagram-3 me-1"></i>Phác Đồ
             </a>
+            @if (Model.Status == "InService" || Model.Status == "InProgress")
+            {
+                <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-semibold shadow-sm text-nowrap btn-order-xray" 
+                        data-bs-toggle="modal" data-bs-target="#orderXrayModal-@Model.AppointmentId" 
+                        title="Chỉ định chụp X-quang cho bệnh nhân">
+                    <i class="bi bi-camera-fill text-warning me-1"></i>Chỉ Định X-Quang
+                </button>
+            }
+
             @if (Model.Status == "InService" || Model.Status == "InProgress" || Model.Status == "Completed")
             {
                 <a asp-controller="DentistPrescription" 
@@ -193,5 +202,49 @@
                 </button>
             }
         </div>
+
+        @if (Model.Status == "InService" || Model.Status == "InProgress")
+        {
+            <!-- Modal Chỉ Định X-Quang -->
+            <div class="modal fade text-start" id="orderXrayModal-@Model.AppointmentId" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <form asp-controller="DentistAppointment" asp-action="OrderXray" asp-route-id="@Model.AppointmentId" method="post" id="orderXrayForm-@Model.AppointmentId">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="returnUrl" value="@returnUrl" />
+                            <div class="modal-header bg-light">
+                                <h5 class="modal-title fw-bold">
+                                    <i class="bi bi-camera-fill text-warning me-2"></i>Chỉ Định Chụp X-Quang
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert alert-info py-2 px-3 small mb-3">
+                                    <strong>Bệnh nhân:</strong> @Model.PatientName (@Model.PatientCode) &bull; <strong>Ca khám:</strong> #@Model.AppointmentId
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Loại Phim Chụp X-Quang <span class="text-danger">*</span></label>
+                                    <select name="diagnosticType" id="selectDiagType-@Model.AppointmentId" class="form-select" required>
+                                        <option value="Panorama" selected>Panorama (Toàn cảnh hàm răng)</option>
+                                        <option value="Intraoral">Intraoral (Cận chóp răng)</option>
+                                        <option value="CBCT">CBCT (Cone Beam CT 3D)</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Chỉ Định Lâm Sàng / Lý Do Chụp <span class="text-danger">*</span></label>
+                                    <textarea name="clinicalIndication" id="textareaIndication-@Model.AppointmentId" class="form-control" rows="3" required placeholder="Nhập yêu cầu lâm sàng...">Chụp Panorama kiểm tra tình trạng răng và cấu trúc xương hàm</textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer bg-light">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                                <button type="submit" class="btn btn-primary fw-semibold" id="btnSubmitOrderXray-@Model.AppointmentId">
+                                    <i class="bi bi-send-check me-1"></i>Xác Nhận Chỉ Định
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        }
     </td>
 </tr>

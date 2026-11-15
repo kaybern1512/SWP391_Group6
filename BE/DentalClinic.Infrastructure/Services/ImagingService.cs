@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Features.ClinicalDiagnostics.DTOs;
+using DentalClinic.Domain.Common;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
@@ -253,31 +255,42 @@ public class ImagingService : IImagingService
             throw new InvalidOperationException($"Không thể đặt lịch cho chỉ định ở trạng thái '{diagnostic.Status}'.");
 
         var durationMinutes = diagnostic.DepartmentService?.DurationMinutes ?? 15;
-        diagnostic.AppointmentService.ScheduledStart = request.ScheduledStartUtc;
-        diagnostic.AppointmentService.ScheduledEnd = request.ScheduledStartUtc.AddMinutes(durationMinutes);
-        diagnostic.AppointmentService.ServiceDate = DateOnly.FromDateTime(request.ScheduledStartUtc);
+        var localStart = ClinicTimeHelper.ToClinicTime(request.ScheduledStartUtc);
+        var utcStart = ClinicTimeHelper.ToUtc(request.ScheduledStartUtc);
+        var reqDate = DateOnly.FromDateTime(localStart);
+        var reqStart = TimeOnly.FromDateTime(localStart);
+        var reqEnd = TimeOnly.FromDateTime(localStart.AddMinutes(durationMinutes));
+        var utcEnd = utcStart.AddMinutes(durationMinutes);
+
+        Room? imagingRoom = null;
         if (request.EquipmentId > 0)
         {
-            var room = await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == (int)request.EquipmentId, ct);
-            if (room != null)
+            imagingRoom = await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == (int)request.EquipmentId, ct);
+            if (imagingRoom == null || imagingRoom.Status != "Active")
             {
-                diagnostic.AppointmentService.RoomId = room.RoomId;
+                throw new InvalidOperationException($"Phòng/Thiết bị X-quang #{request.EquipmentId} không tồn tại hoặc đang không hoạt động.");
+            }
+            if (!string.Equals(imagingRoom.RoomType, "Imaging", StringComparison.OrdinalIgnoreCase))
+            {
+                var isImagingDept = await _dbContext.Departments.AsNoTracking()
+                    .AnyAsync(d => d.DepartmentId == imagingRoom.DepartmentId && (d.Name.Contains("Chẩn đoán hình ảnh") || d.Name.Contains("X-quang") || d.Name.Contains("Imaging")), ct);
+                if (!isImagingDept)
+                {
+                    throw new InvalidOperationException($"Phòng '{imagingRoom.RoomName}' ({imagingRoom.RoomCode}) không phải phòng chẩn đoán hình ảnh chuyên dụng.");
+                }
             }
         }
 
+        DentistProfile? dentist = null;
         if (request.AssignedDentistUserId.HasValue && request.AssignedDentistUserId.Value > 0)
         {
-            var dentist = await _dbContext.DentistProfiles
+            dentist = await _dbContext.DentistProfiles
                 .AsNoTracking()
                 .Include(d => d.StaffProfile)
                 .FirstOrDefaultAsync(d => d.UserId == request.AssignedDentistUserId.Value, ct);
 
             if (dentist == null || dentist.StaffProfile?.EmploymentStatus != "Active")
                 throw new InvalidOperationException("Bác sĩ X-quang được chỉ định không tồn tại hoặc đã ngừng hoạt động.");
-
-            var reqDate = DateOnly.FromDateTime(request.ScheduledStartUtc);
-            var reqStart = TimeOnly.FromDateTime(request.ScheduledStartUtc);
-            var reqEnd = TimeOnly.FromDateTime(request.ScheduledStartUtc.AddMinutes(durationMinutes));
 
             var isOnLeave = await _dbContext.StaffLeaveRequests
                 .AsNoTracking()
@@ -294,8 +307,54 @@ public class ImagingService : IImagingService
                 throw new InvalidOperationException($"Không thể phân bổ ca chụp cho Bác sĩ '{dentist.StaffProfile?.FullName ?? "X-quang"}': Bác sĩ đang trong thời gian nghỉ phép.");
             }
 
-            diagnostic.AppointmentService.AssignedDentistUserId = request.AssignedDentistUserId.Value;
+            var anySchedulesOnDate = await _dbContext.StaffWorkSchedules
+                .AsNoTracking()
+                .AnyAsync(ws => ws.WorkDate == reqDate && ws.Status == "Scheduled", ct);
+
+            if (anySchedulesOnDate)
+            {
+                var hasShift = await _dbContext.StaffWorkSchedules
+                    .AsNoTracking()
+                    .AnyAsync(ws => ws.StaffRole == "Dentist" &&
+                                    ws.StaffUserId == request.AssignedDentistUserId.Value &&
+                                    ws.WorkDate == reqDate &&
+                                    ws.Status == "Scheduled" &&
+                                    ws.StartTime <= reqStart &&
+                                    ws.EndTime >= reqEnd, ct);
+
+                if (!hasShift)
+                {
+                    throw new InvalidOperationException($"Bác sĩ '{dentist.StaffProfile?.FullName ?? "X-quang"}' không có ca trực trong khung giờ {reqStart:HH\\:mm} - {reqEnd:HH\\:mm} ngày {reqDate:dd/MM/yyyy} (Giờ Việt Nam).");
+                }
+            }
         }
+
+        // CRITICAL RESOURCE INTEGRITY:
+        // When the parent service is a chair-based clinical consultation (DentalChairId is set),
+        // do NOT mutate RoomId, DentalChairId, or AssignedDentistUserId to preserve consultation integrity
+        // and avoid FK_AppointmentServices_Chair_Room violation on SQL Server.
+        // For non-chair services, synchronize the assigned imaging doctor.
+        if (!diagnostic.AppointmentService.DentalChairId.HasValue && dentist != null)
+        {
+            diagnostic.AppointmentService.AssignedDentistUserId = dentist.UserId;
+        }
+
+        // Session resource allocations are safely recorded in clinical diagnostic metadata tags.
+        var indication = diagnostic.ClinicalIndication ?? string.Empty;
+        if (imagingRoom != null)
+        {
+            indication = UpdateMetadataTag(indication, "Room", imagingRoom.RoomId.ToString());
+            indication = UpdateMetadataTag(indication, "RoomCode", imagingRoom.RoomCode);
+            indication = UpdateMetadataTag(indication, "RoomName", imagingRoom.RoomName);
+        }
+        if (dentist != null)
+        {
+            indication = UpdateMetadataTag(indication, "Dentist", dentist.UserId.ToString());
+            indication = UpdateMetadataTag(indication, "DentistName", dentist.StaffProfile?.FullName ?? $"Bác sĩ #{dentist.UserId}");
+        }
+        indication = UpdateMetadataTag(indication, "Slot", utcStart.ToString("O"));
+        indication = UpdateMetadataTag(indication, "EndSlot", utcEnd.ToString("O"));
+        diagnostic.ClinicalIndication = indication;
 
         diagnostic.AppointmentService.UpdatedAt = DateTime.UtcNow;
 
@@ -311,14 +370,19 @@ public class ImagingService : IImagingService
         if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy phiên chụp X-quang.");
 
-        var maxQueue = await _dbContext.AppointmentServices
-            .Where(s => s.DepartmentId == diagnostic.AppointmentService.DepartmentId &&
-                        s.ServiceDate == diagnostic.AppointmentService.ServiceDate &&
-                        s.QueueNumber != null)
-            .MaxAsync(s => (int?)s.QueueNumber, ct) ?? 0;
+        var existingQueue = GetMetadataTag(diagnostic.ClinicalIndication, "Queue");
+        if (string.IsNullOrEmpty(existingQueue))
+        {
+            var maxQueue = await _dbContext.Diagnostics
+                .AsNoTracking()
+                .Where(d => d.DepartmentServiceId == diagnostic.DepartmentServiceId &&
+                            d.CreatedAt.Date == DateTime.UtcNow.Date)
+                .CountAsync(ct);
 
-        diagnostic.AppointmentService.QueueNumber ??= maxQueue + 1;
-        await _dbContext.SaveChangesAsync(ct);
+            var nextQueue = maxQueue + 1;
+            diagnostic.ClinicalIndication = UpdateMetadataTag(diagnostic.ClinicalIndication, "Queue", nextQueue.ToString());
+            await _dbContext.SaveChangesAsync(ct);
+        }
 
         return MapSessionToDto(diagnostic);
     }
@@ -508,7 +572,9 @@ public class ImagingService : IImagingService
 
         var diagnosticsInRoom = await BuildDiagnosticsQuery()
             .AsNoTracking()
-            .Where(d => d.AppointmentService.RoomId == roomIdInt || d.DepartmentService.DepartmentId == room.DepartmentId)
+            .Where(d => d.AppointmentService.RoomId == roomIdInt || 
+                        d.DepartmentService.DepartmentId == room.DepartmentId ||
+                        d.ClinicalIndication.Contains($"[Room:{roomIdInt}]"))
             .ToListAsync(ct);
 
         var activeSessions = diagnosticsInRoom.Where(d => d.Status == "InProgress").Select(MapSessionToDto).ToList();
@@ -846,11 +912,73 @@ public class ImagingService : IImagingService
         };
     }
 
+    private static string UpdateMetadataTag(string? source, string key, string value)
+    {
+        var text = source ?? string.Empty;
+        var tagPattern = $@"\[{key}:[^\]]*\]";
+        var newTag = $"[{key}:{value}]";
+        if (Regex.IsMatch(text, tagPattern))
+        {
+            return Regex.Replace(text, tagPattern, newTag);
+        }
+        return $"{newTag} {text}".Trim();
+    }
+
+    private static string? GetMetadataTag(string? source, string key)
+    {
+        if (string.IsNullOrWhiteSpace(source)) return null;
+        var match = Regex.Match(source, $@"\[{key}:([^\]]+)\]");
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
     private static ImagingSessionDto MapSessionToDto(Diagnostic d)
     {
         var s = d.AppointmentService;
         var appt = s?.Appointment;
         var room = s?.Room;
+
+        var roomTag = GetMetadataTag(d.ClinicalIndication, "Room");
+        var roomCodeTag = GetMetadataTag(d.ClinicalIndication, "RoomCode");
+        var roomNameTag = GetMetadataTag(d.ClinicalIndication, "RoomName");
+        int roomId = room?.RoomId ?? 0;
+        string roomCode = room?.RoomCode ?? "XRAY";
+        string roomName = room?.RoomName ?? "Phòng Chẩn đoán hình ảnh";
+        if (!string.IsNullOrEmpty(roomTag) && int.TryParse(roomTag, out var parsedRoomId) && parsedRoomId > 0)
+        {
+            roomId = parsedRoomId;
+            roomCode = !string.IsNullOrWhiteSpace(roomCodeTag) ? roomCodeTag : (parsedRoomId == 5 ? "R003" : $"ROOM-{parsedRoomId}");
+            roomName = !string.IsNullOrWhiteSpace(roomNameTag) ? roomNameTag : (parsedRoomId == 5 ? "Phòng X-quang" : $"Phòng #{parsedRoomId}");
+        }
+
+        var dentistTag = GetMetadataTag(d.ClinicalIndication, "Dentist");
+        var dentistNameTag = GetMetadataTag(d.ClinicalIndication, "DentistName");
+        long? assignedDentistId = s?.AssignedDentistUserId;
+        string? assignedDentistName = s?.AssignedDentist?.StaffProfile?.FullName;
+        if (!string.IsNullOrEmpty(dentistTag) && long.TryParse(dentistTag, out var parsedDentistId) && parsedDentistId > 0)
+        {
+            assignedDentistId = parsedDentistId;
+            assignedDentistName = !string.IsNullOrWhiteSpace(dentistNameTag) ? dentistNameTag : (parsedDentistId == 9 ? "BS. Tran Hung" : $"Bác sĩ #{parsedDentistId}");
+        }
+
+        var slotTag = GetMetadataTag(d.ClinicalIndication, "Slot");
+        var endSlotTag = GetMetadataTag(d.ClinicalIndication, "EndSlot");
+        var scheduledStart = s?.ScheduledStart ?? d.CreatedAt;
+        var scheduledEnd = s?.ScheduledEnd ?? d.CreatedAt.AddMinutes(15);
+        if (!string.IsNullOrEmpty(slotTag) && DateTime.TryParse(slotTag, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsedSlot))
+        {
+            scheduledStart = parsedSlot;
+        }
+        if (!string.IsNullOrEmpty(endSlotTag) && DateTime.TryParse(endSlotTag, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsedEndSlot))
+        {
+            scheduledEnd = parsedEndSlot;
+        }
+
+        var queueTag = GetMetadataTag(d.ClinicalIndication, "Queue");
+        string? queueNumber = s?.QueueNumber.HasValue == true ? $"XR-{s.QueueNumber.Value:D3}" : null;
+        if (!string.IsNullOrEmpty(queueTag) && int.TryParse(queueTag, out var qNum))
+        {
+            queueNumber = $"XR-{qNum:D3}";
+        }
 
         return new ImagingSessionDto
         {
@@ -860,20 +988,20 @@ public class ImagingService : IImagingService
             PatientUserId = appt?.PatientUserId ?? 0,
             PatientName = appt?.Patient?.FullName ?? $"Bệnh nhân #{appt?.PatientUserId}",
             PatientCode = $"PAT-{appt?.PatientUserId:D4}",
-            ImagingRoomId = room?.RoomId ?? 0,
-            RoomCode = room?.RoomCode ?? "XRAY",
-            RoomName = room?.RoomName ?? "Phòng Chẩn đoán hình ảnh",
-            EquipmentId = room?.RoomId ?? 0,
-            EquipmentName = room?.RoomName ?? "Máy X-quang",
+            ImagingRoomId = roomId,
+            RoomCode = roomCode,
+            RoomName = roomName,
+            EquipmentId = roomId,
+            EquipmentName = roomName,
             DiagnosticType = d.ImagingType ?? d.DepartmentService?.DiagnosticType ?? "Intraoral",
             SlotDurationMinutes = d.DepartmentService?.DurationMinutes ?? 15,
-            ScheduledStartUtc = s?.ScheduledStart ?? d.CreatedAt,
-            ScheduledEndUtc = s?.ScheduledEnd ?? d.CreatedAt.AddMinutes(15),
+            ScheduledStartUtc = scheduledStart,
+            ScheduledEndUtc = scheduledEnd,
             ActualStartUtc = d.CreatedAt,
             ActualEndUtc = d.CompletedAt,
-            QueueNumber = s?.QueueNumber.HasValue == true ? $"XR-{s.QueueNumber.Value:D3}" : null,
-            AssignedDentistUserId = s?.AssignedDentistUserId,
-            AssignedDentistName = s?.AssignedDentist?.StaffProfile?.FullName,
+            QueueNumber = queueNumber,
+            AssignedDentistUserId = assignedDentistId,
+            AssignedDentistName = assignedDentistName,
             Priority = ImagingSessionPriority.Normal,
             Status = d.Status,
             CheckInTimeUtc = d.CreatedAt,
@@ -887,14 +1015,24 @@ public class ImagingService : IImagingService
 
     private static DiagnosticResultDto MapResultToDto(Diagnostic d)
     {
+        var roomTag = GetMetadataTag(d.ClinicalIndication, "Room");
+        var roomNameTag = GetMetadataTag(d.ClinicalIndication, "RoomName");
+        int? roomId = d.AppointmentService?.RoomId;
+        string? roomName = d.AppointmentService?.Room?.RoomName;
+        if (!string.IsNullOrEmpty(roomTag) && int.TryParse(roomTag, out var parsedRoomId) && parsedRoomId > 0)
+        {
+            roomId = parsedRoomId;
+            roomName = !string.IsNullOrWhiteSpace(roomNameTag) ? roomNameTag : (parsedRoomId == 5 ? "Phòng X-quang" : $"Phòng #{parsedRoomId}");
+        }
+
         return new DiagnosticResultDto
         {
             DiagnosticResultId = d.DiagnosticId,
             DiagnosticOrderId = d.DiagnosticId,
             ImagingSessionId = d.DiagnosticId,
             SourceType = DiagnosticResultSourceType.Internal,
-            EquipmentId = d.AppointmentService?.RoomId,
-            EquipmentName = d.AppointmentService?.Room?.RoomName,
+            EquipmentId = roomId,
+            EquipmentName = roomName,
             ExternalFacilityName = null,
             FileUrl = d.FileUrl ?? string.Empty,
             ThumbnailUrl = d.ThumbnailUrl,

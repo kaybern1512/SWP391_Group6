@@ -68,6 +68,76 @@ public class ImagingApiService : IImagingApiService
         return await SendPostAsync<DiagnosticResultDto>("/api/clinical-diagnostics/results/upload", request);
     }
 
+    public async Task<ApiResult<DiagnosticResultDto>> UploadResultFileAsync(
+        Microsoft.AspNetCore.Http.IFormFile file,
+        long diagnosticOrderId,
+        long sessionId,
+        long? equipmentId,
+        string? findings)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return ApiResult<DiagnosticResultDto>.Failure("Vui lòng đính kèm tệp hình ảnh chẩn đoán hợp lệ.", statusCode: 400);
+        }
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            using var stream = file.OpenReadStream();
+            using var streamContent = new StreamContent(stream);
+            if (!string.IsNullOrWhiteSpace(file.ContentType))
+            {
+                streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+            }
+            content.Add(streamContent, "File", file.FileName);
+            content.Add(new StringContent(diagnosticOrderId.ToString()), "DiagnosticOrderId");
+            content.Add(new StringContent(sessionId.ToString()), "ImagingSessionId");
+            if (equipmentId.HasValue && equipmentId.Value > 0)
+            {
+                content.Add(new StringContent(equipmentId.Value.ToString()), "EquipmentId");
+            }
+            if (!string.IsNullOrWhiteSpace(findings))
+            {
+                content.Add(new StringContent(findings.Trim(), System.Text.Encoding.UTF8), "Findings");
+            }
+
+            var response = await _httpClient.PostAsync("/api/clinical-diagnostics/results/upload-file", content);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var apiResponse = JsonSerializer.Deserialize<ApiResponse<DiagnosticResultDto>>(body, _jsonOptions);
+                if (apiResponse != null && apiResponse.Success && apiResponse.Data != null)
+                {
+                    return ApiResult<DiagnosticResultDto>.Success(apiResponse.Data, apiResponse.Message ?? "Tải lên tệp chẩn đoán hình ảnh thành công.", (int)response.StatusCode);
+                }
+
+                var direct = JsonSerializer.Deserialize<DiagnosticResultDto>(body, _jsonOptions);
+                if (direct != null)
+                {
+                    return ApiResult<DiagnosticResultDto>.Success(direct, "Tải lên tệp chẩn đoán hình ảnh thành công.", (int)response.StatusCode);
+                }
+
+                return ApiResult<DiagnosticResultDto>.Success(new DiagnosticResultDto(), "Tải lên tệp chẩn đoán hình ảnh thành công.", (int)response.StatusCode);
+            }
+
+            try
+            {
+                var errObj = JsonSerializer.Deserialize<ApiResponse<DiagnosticResultDto>>(body, _jsonOptions);
+                return ApiResult<DiagnosticResultDto>.Failure(errObj?.Message ?? $"Lỗi tải lên ({response.StatusCode})", statusCode: (int)response.StatusCode);
+            }
+            catch
+            {
+                return ApiResult<DiagnosticResultDto>.Failure(string.IsNullOrWhiteSpace(body) ? $"Lỗi tải lên ({response.StatusCode})" : body, statusCode: (int)response.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading imaging result file to API");
+            return ApiResult<DiagnosticResultDto>.Failure(ex.Message, statusCode: 500);
+        }
+    }
+
     public async Task<ApiResult<ImagingSessionDto>> CompleteSessionAsync(long sessionId)
     {
         return await SendPostAsync<ImagingSessionDto>($"/api/clinical-diagnostics/sessions/{sessionId}/complete", new { });

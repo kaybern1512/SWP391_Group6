@@ -12,10 +12,15 @@ namespace DentalClinic.Web.Controllers.Dentist;
 public class DentistAppointmentController : Controller
 {
     private readonly IAppointmentApiService _appointmentApiService;
+    private readonly IImagingApiService _imagingApiService;
 
-    public DentistAppointmentController(IAppointmentApiService appointmentApiService)
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public DentistAppointmentController(
+        IAppointmentApiService appointmentApiService,
+        IImagingApiService? imagingApiService = null)
     {
         _appointmentApiService = appointmentApiService;
+        _imagingApiService = imagingApiService!;
     }
 
     [HttpGet("")]
@@ -334,5 +339,41 @@ public class DentistAppointmentController : Controller
             TempData["ErrorMessage"] = result.Message ?? "Không thể chọn ghế điều trị này.";
         }
         return RedirectTarget();
+    }
+
+    [HttpPost("{id:long}/OrderXray")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> OrderXray(
+        long id,
+        [FromForm] string? diagnosticType = null,
+        [FromForm] string? clinicalIndication = null,
+        [FromForm] bool isExternal = false,
+        [FromForm] string? externalFacilityName = null,
+        [FromForm] string? returnUrl = null)
+    {
+        var req = new DentalClinic.Web.Models.ApiDtos.CreateDiagnosticOrderRequest
+        {
+            AppointmentId = id,
+            DiagnosticType = string.IsNullOrWhiteSpace(diagnosticType) ? "Panorama" : diagnosticType.Trim(),
+            ClinicalIndication = string.IsNullOrWhiteSpace(clinicalIndication) ? "Chụp khảo sát răng & xương hàm trước điều trị" : clinicalIndication.Trim(),
+            IsExternal = isExternal,
+            ExternalFacilityName = externalFacilityName?.Trim()
+        };
+
+        var result = await _imagingApiService.CreateOrderAsync(req);
+        if (result != null && result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = $"Đã tạo chỉ định chụp X-quang ({req.DiagnosticType}) thành công cho ca khám #{id}.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result?.Message ?? "Không thể tạo chỉ định chụp X-quang.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+        {
+            return Redirect(returnUrl);
+        }
+        return RedirectToAction(nameof(Today));
     }
 }

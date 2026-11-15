@@ -10,6 +10,7 @@ using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.Appointments.DTOs;
 using DentalClinic.Application.Features.ClinicalDiagnostics.DTOs;
+using DentalClinic.Domain.Common;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
@@ -743,6 +744,26 @@ public class RealSqlServerOperationalSafetyIntegrationTests
         db.AppointmentServices.Add(primarySvc);
         await db.SaveChangesAsync();
 
+        var today = DateOnly.FromDateTime(ClinicTimeHelper.ToClinicTime(now));
+        var existingShift = await db.StaffWorkSchedules.FirstOrDefaultAsync(
+            ws => ws.StaffUserId == 3 && ws.WorkDate == today && ws.Status == "Scheduled" && ws.StartTime <= new TimeOnly(7, 0) && ws.EndTime >= new TimeOnly(21, 0));
+        StaffWorkSchedule? tempShift = null;
+        if (existingShift == null)
+        {
+            tempShift = new StaffWorkSchedule
+            {
+                StaffUserId = 3,
+                StaffRole = "Dentist",
+                WorkDate = today,
+                StartTime = new TimeOnly(7, 0),
+                EndTime = new TimeOnly(21, 0),
+                Status = "Scheduled",
+                Notes = "Trực phòng X-quang [R003]"
+            };
+            db.StaffWorkSchedules.Add(tempShift);
+            await db.SaveChangesAsync();
+        }
+
         DiagnosticOrderDto createdOrder = null!;
         try
         {
@@ -821,6 +842,130 @@ public class RealSqlServerOperationalSafetyIntegrationTests
                         db.AppointmentServices.Remove(diagSvc);
                     }
                 }
+            }
+            if (tempShift != null)
+            {
+                db.StaffWorkSchedules.Remove(tempShift);
+            }
+            db.AppointmentServices.Remove(primarySvc);
+            db.Appointments.Remove(appt);
+            await db.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
+    public async Task RealSql_BookImagingInR003_PreservesConsultationRoom101AndChair1_NoFkViolation()
+    {
+        if (!await IsSqlServerAvailableAsync()) return;
+        using var db = CreateDbContext();
+
+        var date = new DateOnly(2026, 11, 30);
+        var now = DateTime.UtcNow;
+
+        // Ensure Room 101 (RoomId 1) and Chair 1 exist, and Room R003 (RoomId 5) exists
+        var room101 = await db.Rooms.FirstOrDefaultAsync(r => r.RoomId == 1);
+        var roomR003 = await db.Rooms.FirstOrDefaultAsync(r => r.RoomId == 5);
+        if (room101 == null || roomR003 == null) return;
+
+        // 1. Create clinical consultation appointment in Room 101 / Chair 1 / Dentist 3
+        var appt = new Appointment
+        {
+            PatientUserId = 1,
+            Status = AppointmentStatus.InService,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var primarySvc = new AppointmentServiceEntity
+        {
+            AppointmentId = appt.AppointmentId,
+            DepartmentId = room101.DepartmentId,
+            DepartmentServiceId = 1,
+            RoomId = 1,
+            DentalChairId = 1,
+            AssignedDentistUserId = 3,
+            ServiceDate = date,
+            ScheduledStart = new DateTime(2026, 11, 30, 8, 30, 0),
+            ScheduledEnd = new DateTime(2026, 11, 30, 9, 0, 0),
+            Status = AppointmentStatus.InService,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        db.AppointmentServices.Add(primarySvc);
+        await db.SaveChangesAsync();
+
+        var diag = new Diagnostic
+        {
+            AppointmentServiceId = primarySvc.AppointmentServiceId,
+            DepartmentServiceId = 1,
+            OrderingDentistUserId = 3,
+            ClinicalIndication = "Chỉ định chụp X-quang kiểm tra",
+            ImagingType = "Panorama",
+            Status = "Ordered",
+            CreatedAt = now
+        };
+        db.Diagnostics.Add(diag);
+        await db.SaveChangesAsync();
+
+        // Ensure Dentist 9 (Dr. Hung) has shift on 2026-11-30 13:00 - 17:00
+        var existingShift = await db.StaffWorkSchedules.FirstOrDefaultAsync(
+            ws => ws.StaffUserId == 9 && ws.WorkDate == date && ws.StartTime <= new TimeOnly(14, 0) && ws.EndTime >= new TimeOnly(14, 15));
+        StaffWorkSchedule? tempShift = null;
+        if (existingShift == null)
+        {
+            tempShift = new StaffWorkSchedule
+            {
+                StaffUserId = 9,
+                StaffRole = "Dentist",
+                WorkDate = date,
+                StartTime = new TimeOnly(13, 0),
+                EndTime = new TimeOnly(17, 0),
+                Status = "Scheduled",
+                Notes = "Trực phòng X-quang [R003]"
+            };
+            db.StaffWorkSchedules.Add(tempShift);
+            await db.SaveChangesAsync();
+        }
+
+        try
+        {
+            var imagingService = new ImagingService(db, NullLogger<ImagingService>.Instance, null!);
+
+            // Act: Book imaging in Room R003 (EquipmentId = 5) with Dr. Hung (Dentist 9)
+            // 07:00Z = 14:00 Vietnam time (within Dr. Hung's 13:00-17:00 shift)
+            var bookReq = new BookImagingSessionRequest
+            {
+                DiagnosticOrderId = diag.DiagnosticId,
+                EquipmentId = 5,
+                AssignedDentistUserId = 9,
+                ScheduledStartUtc = new DateTime(2026, 11, 30, 7, 0, 0, DateTimeKind.Utc)
+            };
+
+            var sessionDto = await imagingService.BookImagingSessionAsync(bookReq, 1);
+
+            // Assert: Returned session reflects imaging room 5 and dentist 9
+            Assert.NotNull(sessionDto);
+            Assert.Equal(5, sessionDto.ImagingRoomId);
+            Assert.Equal(5, sessionDto.EquipmentId);
+            Assert.Equal(9, sessionDto.AssignedDentistUserId);
+
+            // Assert: Consultation AppointmentService in SQL Server MUST preserve Room 1, Chair 1, Dentist 3
+            // and NOT trigger FK_AppointmentServices_Chair_Room violation!
+            var reloadedSvc = await db.AppointmentServices.AsNoTracking().FirstOrDefaultAsync(s => s.AppointmentServiceId == primarySvc.AppointmentServiceId);
+            Assert.NotNull(reloadedSvc);
+            Assert.Equal(1, reloadedSvc.RoomId);
+            Assert.Equal(1, reloadedSvc.DentalChairId);
+            Assert.Equal(3, reloadedSvc.AssignedDentistUserId);
+        }
+        finally
+        {
+            if (tempShift != null) db.StaffWorkSchedules.Remove(tempShift);
+            db.Diagnostics.Remove(diag);
+            if (tempShift != null)
+            {
+                db.StaffWorkSchedules.Remove(tempShift);
             }
             db.AppointmentServices.Remove(primarySvc);
             db.Appointments.Remove(appt);

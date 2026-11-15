@@ -17,6 +17,7 @@ public interface IImagingApiService
     Task<ApiResult<ImagingSessionDto>> StartSessionAsync(long sessionId);
     Task<ApiResult<ImagingSessionDto>> AcquireImageAsync(long sessionId);
     Task<ApiResult<DiagnosticResultDto>> UploadResultAsync(UploadDiagnosticResultRequest request);
+    Task<ApiResult<DiagnosticResultDto>> UploadResultFileAsync(Microsoft.AspNetCore.Http.IFormFile file, long diagnosticOrderId, long sessionId, long? equipmentId, string? findings);
     Task<ApiResult<ImagingSessionDto>> CompleteSessionAsync(long sessionId);
     Task<ApiResult<DiagnosticResultDto>> ReviewResultAsync(long resultId, ReviewDiagnosticResultRequest request);
     Task<ApiResult<ImagingSessionDto>> CancelSessionAsync(long sessionId, string reason);

@@ -234,9 +234,10 @@ public class ClinicalDiagnosticsController : ControllerBase
                 var isOrdering = targetDiagnostic.OrderingDentistUserId == userId;
                 var isAssigned = await _dbContext.AppointmentServices.AsNoTracking()
                     .AnyAsync(s => s.AppointmentServiceId == targetDiagnostic.AppointmentServiceId && s.AssignedDentistUserId == userId, ct);
+                var isAssignedImaging = targetDiagnostic.ClinicalIndication.Contains($"[Dentist:{userId}]");
                 var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(userId, targetDiagnostic.CreatedAt.AddHours(-1), targetDiagnostic.CreatedAt.AddHours(12), ct);
 
-                if (!isOrdering && !isAssigned && !isXrayDuty)
+                if (!isOrdering && !isAssigned && !isAssignedImaging && !isXrayDuty)
                 {
                     return Forbid();
                 }
@@ -421,9 +422,10 @@ public class ClinicalDiagnosticsController : ControllerBase
                 var isOrdering = targetDiagnostic.OrderingDentistUserId == userId;
                 var isAssigned = await _dbContext.AppointmentServices.AsNoTracking()
                     .AnyAsync(s => s.AppointmentServiceId == targetDiagnostic.AppointmentServiceId && s.AssignedDentistUserId == userId, ct);
+                var isAssignedImaging = targetDiagnostic.ClinicalIndication.Contains($"[Dentist:{userId}]");
                 var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(userId, targetDiagnostic.CreatedAt.AddHours(-1), targetDiagnostic.CreatedAt.AddHours(12), ct);
 
-                if (!isOrdering && !isAssigned && !isXrayDuty)
+                if (!isOrdering && !isAssigned && !isAssignedImaging && !isXrayDuty)
                 {
                     return Forbid();
                 }
@@ -492,13 +494,14 @@ public class ClinicalDiagnosticsController : ControllerBase
                 var isOrderingDentist = result.OrderingDentistUserId == currentUserId;
                 var isReviewingDentist = result.ReviewedByDentistUserId == currentUserId;
                 var isUploadingDentist = result.UploadedByUserId == currentUserId;
+                var isAssignedImaging = result.ClinicalIndication.Contains($"[Dentist:{currentUserId}]");
                 var isAssignedToAppt = result.AppointmentService?.AssignedDentistUserId == currentUserId ||
                                        (appt != null && await _dbContext.AppointmentServices.AsNoTracking().AnyAsync(s => s.AppointmentId == appt.AppointmentId && s.AssignedDentistUserId == currentUserId, ct));
 
                 // Clinical care circle enforcement: treating dentists, ordering doctor, assigned imaging doctor,
                 // reviewing doctor, or uploading doctor. An on-duty X-ray doctor cannot view arbitrary unrelated
                 // patient images merely by knowing the result ID unless directly assigned or part of the care circle.
-                if (!isOrderingDentist && !isReviewingDentist && !isUploadingDentist && !isAssignedToAppt)
+                if (!isOrderingDentist && !isReviewingDentist && !isUploadingDentist && !isAssignedToAppt && !isAssignedImaging)
                 {
                     return Forbid();
                 }

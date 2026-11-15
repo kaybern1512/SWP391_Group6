@@ -355,7 +355,7 @@ public class XrayStaffingAndLeaveCoverageBusinessRuleTests
             {
                 DiagnosticOrderId = 701,
                 EquipmentId = 101,
-                ScheduledStartUtc = new DateTime(2026, 12, 1, 9, 0, 0, DateTimeKind.Utc),
+                ScheduledStartUtc = new DateTime(2026, 12, 1, 2, 0, 0, DateTimeKind.Utc), // 09:00 VN Time (within 08:00 - 12:00 leave)
                 AssignedDentistUserId = 10
             }, 5));
 
@@ -441,5 +441,105 @@ public class XrayStaffingAndLeaveCoverageBusinessRuleTests
 
         // Assert: Must be false because Doctor A is on approved leave
         Assert.False(isOnDuty, "Dentist on approved leave must not be reported as on active X-ray duty");
+    }
+
+    [Fact]
+    public async Task TimezoneBoundary_VietnamAfternoonShift_1400Local_Accepted_And_2100Local_Rejected()
+    {
+        // Doctor B works afternoon: 13:00 - 17:00 Vietnam local time (ICT / UTC+7).
+        var db = CreateDbContext(nameof(TimezoneBoundary_VietnamAfternoonShift_1400Local_Accepted_And_2100Local_Rejected));
+        await SeedClinicDataAsync(db);
+
+        var date = new DateOnly(2026, 11, 30);
+        db.StaffWorkSchedules.Add(
+            new StaffWorkSchedule
+            {
+                WorkScheduleId = 50,
+                StaffUserId = 11, // Doctor B
+                StaffRole = "Dentist",
+                WorkDate = date,
+                StartTime = new TimeOnly(13, 0),
+                EndTime = new TimeOnly(17, 0),
+                Status = "Scheduled",
+                Notes = "Trực phòng X-quang ca chiều [R003]"
+            }
+        );
+
+        var appt = new Appointment
+        {
+            AppointmentId = 901,
+            PatientUserId = 20,
+            Status = AppointmentStatus.InService,
+            CreatedAt = DateTime.UtcNow
+        };
+        var apptSvc = new AppointmentServiceEntity
+        {
+            AppointmentServiceId = 901,
+            AppointmentId = 901,
+            DepartmentId = 1,
+            DepartmentServiceId = 201,
+            RoomId = 101,
+            DentalChairId = 1,
+            AssignedDentistUserId = 10, // Doctor A (consulting)
+            ServiceDate = date,
+            ScheduledStart = new DateTime(2026, 11, 30, 8, 30, 0),
+            ScheduledEnd = new DateTime(2026, 11, 30, 9, 0, 0),
+            Status = AppointmentStatus.InService,
+            CreatedAt = DateTime.UtcNow
+        };
+        var diag = new Diagnostic
+        {
+            DiagnosticId = 901,
+            AppointmentServiceId = 901,
+            DepartmentServiceId = 201,
+            OrderingDentistUserId = 10,
+            ClinicalIndication = "Chụp X-quang kiểm tra",
+            ImagingType = "Panorama",
+            Status = "Ordered",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        db.Appointments.Add(appt);
+        db.AppointmentServices.Add(apptSvc);
+        db.Diagnostics.Add(diag);
+        await db.SaveChangesAsync();
+
+        var imagingService = new ImagingService(db, NullLogger<ImagingService>.Instance, null!);
+
+        // Case 1: Client sends 14:00 Vietnam local time as 07:00Z UTC (2026-11-30T07:00:00Z)
+        // 07:00Z = 14:00 Vietnam time, which is INSIDE Doctor B's shift (13:00 - 17:00).
+        var validBookingReq = new BookImagingSessionRequest
+        {
+            DiagnosticOrderId = 901,
+            EquipmentId = 101, // Room R003
+            AssignedDentistUserId = 11, // Doctor B
+            ScheduledStartUtc = new DateTime(2026, 11, 30, 7, 0, 0, DateTimeKind.Utc)
+        };
+
+        var validResult = await imagingService.BookImagingSessionAsync(validBookingReq, 5);
+        Assert.NotNull(validResult);
+        Assert.Equal(11, validResult.AssignedDentistUserId);
+        Assert.Equal(101, validResult.ImagingRoomId);
+        Assert.Equal(new DateTime(2026, 11, 30, 7, 0, 0, DateTimeKind.Utc), validResult.ScheduledStartUtc);
+
+        // Verify parent consultation room and dentist are preserved!
+        var reloadedApptSvc = await db.AppointmentServices.FindAsync(901L);
+        Assert.NotNull(reloadedApptSvc);
+        Assert.Equal(101, reloadedApptSvc.RoomId);
+        Assert.Equal(10, reloadedApptSvc.AssignedDentistUserId); // Remains Doctor A!
+
+        // Case 2: Client mistakenly sends 14:00Z UTC (2026-11-30T14:00:00Z).
+        // 14:00Z = 21:00 Vietnam local time, which is OUTSIDE Doctor B's shift (13:00 - 17:00).
+        var invalidBookingReq = new BookImagingSessionRequest
+        {
+            DiagnosticOrderId = 901,
+            EquipmentId = 101,
+            AssignedDentistUserId = 11,
+            ScheduledStartUtc = new DateTime(2026, 11, 30, 14, 0, 0, DateTimeKind.Utc)
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => imagingService.BookImagingSessionAsync(invalidBookingReq, 5));
+        Assert.Contains("không có ca trực", ex.Message);
     }
 }
