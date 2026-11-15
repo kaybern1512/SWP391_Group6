@@ -161,6 +161,30 @@ public class ImagingService : IImagingService
                         s.Status != AppointmentStatus.Cancelled)
             .ToListAsync(ct);
 
+        var slotDate = DateOnly.FromDateTime(startOfDay);
+        var xraySchedules = await _dbContext.StaffWorkSchedules
+            .AsNoTracking()
+            .Where(ws => ws.StaffRole == "Dentist" &&
+                        ws.WorkDate == slotDate &&
+                        ws.Status == "Scheduled" &&
+                        ws.Notes != null &&
+                        (ws.Notes.Contains("X-quang") || ws.Notes.Contains("X-ray") || ws.Notes.Contains("R003")))
+            .ToListAsync(ct);
+
+        List<StaffLeaveRequest> leaves = new();
+        if (xraySchedules.Any())
+        {
+            var dentistIds = xraySchedules.Select(s => s.StaffUserId).Distinct().ToList();
+            leaves = await _dbContext.StaffLeaveRequests
+                .AsNoTracking()
+                .Where(l => l.StaffRole == "Dentist" &&
+                            dentistIds.Contains(l.StaffUserId) &&
+                            l.Status == "Approved" &&
+                            l.StartDate <= slotDate &&
+                            l.EndDate >= slotDate)
+                .ToListAsync(ct);
+        }
+
         var slots = new List<AvailableSlotDto>();
         var currentSlotStart = startOfDay;
 
@@ -170,12 +194,40 @@ public class ImagingService : IImagingService
             var conflict = existingServices.FirstOrDefault(s =>
                 s.ScheduledStart < currentSlotEnd && s.ScheduledEnd > currentSlotStart);
 
+            bool hasStaffCoverage = true;
+            string? staffingReason = null;
+            if (xraySchedules.Any())
+            {
+                var slotStartTime = TimeOnly.FromDateTime(currentSlotStart);
+                var slotEndTime = TimeOnly.FromDateTime(currentSlotEnd);
+
+                var availableDentists = xraySchedules
+                    .Where(ws => ws.StartTime < slotEndTime && ws.EndTime > slotStartTime)
+                    .Select(ws => ws.StaffUserId)
+                    .Distinct()
+                    .Where(dId => !leaves.Any(l => l.StaffUserId == dId &&
+                        (!l.StartTime.HasValue || !l.EndTime.HasValue ||
+                         (l.StartTime.Value < slotEndTime && l.EndTime.Value > slotStartTime))))
+                    .ToList();
+
+                if (!availableDentists.Any())
+                {
+                    hasStaffCoverage = false;
+                    staffingReason = "Phòng chụp X-quang không có bác sĩ trực khả dụng trong khung giờ này.";
+                }
+            }
+
+            var isSlotAvailable = conflict == null && hasStaffCoverage;
+            var reason = conflict != null 
+                ? $"Phòng đang bận cho ca #{conflict.AppointmentServiceId}" 
+                : staffingReason;
+
             slots.Add(new AvailableSlotDto
             {
                 StartUtc = currentSlotStart,
                 EndUtc = currentSlotEnd,
-                IsAvailable = conflict == null,
-                ConflictReason = conflict != null ? $"Phòng đang bận cho ca #{conflict.AppointmentServiceId}" : null
+                IsAvailable = isSlotAvailable,
+                ConflictReason = isSlotAvailable ? null : reason
             });
 
             currentSlotStart = currentSlotStart.AddMinutes(durationMinutes);
@@ -222,6 +274,25 @@ public class ImagingService : IImagingService
 
             if (dentist == null || dentist.StaffProfile?.EmploymentStatus != "Active")
                 throw new InvalidOperationException("Bác sĩ X-quang được chỉ định không tồn tại hoặc đã ngừng hoạt động.");
+
+            var reqDate = DateOnly.FromDateTime(request.ScheduledStartUtc);
+            var reqStart = TimeOnly.FromDateTime(request.ScheduledStartUtc);
+            var reqEnd = TimeOnly.FromDateTime(request.ScheduledStartUtc.AddMinutes(durationMinutes));
+
+            var isOnLeave = await _dbContext.StaffLeaveRequests
+                .AsNoTracking()
+                .AnyAsync(l => l.StaffRole == "Dentist" &&
+                               l.StaffUserId == request.AssignedDentistUserId.Value &&
+                               l.Status == "Approved" &&
+                               l.StartDate <= reqDate &&
+                               l.EndDate >= reqDate &&
+                               (!l.StartTime.HasValue || !l.EndTime.HasValue ||
+                                (l.StartTime.Value < reqEnd && l.EndTime.Value > reqStart)), ct);
+
+            if (isOnLeave)
+            {
+                throw new InvalidOperationException($"Không thể phân bổ ca chụp cho Bác sĩ '{dentist.StaffProfile?.FullName ?? "X-quang"}': Bác sĩ đang trong thời gian nghỉ phép.");
+            }
 
             diagnostic.AppointmentService.AssignedDentistUserId = request.AssignedDentistUserId.Value;
         }

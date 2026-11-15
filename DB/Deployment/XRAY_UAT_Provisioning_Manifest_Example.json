@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DentalCare SWP391 - X-Ray UAT Provisioning Manifest",
+  "manifestVersion": "1.0.0",
+  "executionMetadata": {
+    "runId": "XRAY_UAT_PROV_20261115_REHEARSAL",
+    "executedAtUtc": "2026-11-15T03:30:00Z",
+    "targetDatabase": "DentalCare_SWP391_Refactor_UAT",
+    "sqlServerInstance": "DESKTOP-1TUBGEU\\SQLEXPRESS",
+    "gitCommit": "d3ffea1266b0ca8817a5e003183577d6439b1a78",
+    "executedBy": "SystemAdministrator (Authorized UAT Lead)",
+    "canonicalTableCount": 38,
+    "executionStatus": "DryRunRehearsalCompleted"
+  },
+  "provisioningParameters": {
+    "approvedXrayPrice": 250000.00,
+    "serviceStatus": "Inactive",
+    "serviceBookingModel": "ReferralOnly_InternalDiagnosticOrders",
+    "targetScheduleDate": "2026-11-30",
+    "staffingPolicy": "StaffingPool=2DesignatedDentists, MinimumOperationalCoverage=1DoctorPerShift",
+    "targetShifts": "Morning 08:00-12:00 (Doctor A), Afternoon 13:00-17:00 (Doctor B)",
+    "passwordHashingMethod": "IPasswordHasherService (PBKDF2-HMAC-SHA256)",
+    "securityNote": "No plaintext passwords or operational hashes are persisted in public version control."
+  },
+  "createdEntities": {
+    "room": {
+      "roomId": 101,
+      "roomCode": "R003",
+      "roomName": "Phòng Chụp X-quang",
+      "roomType": "Imaging",
+      "departmentId": 1,
+      "status": "Active",
+      "associatedDentalChairs": 0
+    },
+    "departmentService": {
+      "departmentServiceId": 205,
+      "departmentId": 1,
+      "serviceCode": "SVC-XRAY-01",
+      "serviceName": "Chụp X-quang Panorama toàn cảnh",
+      "description": "Chụp phim toàn cảnh khảo sát cấu trúc xương hàm và răng ngầm.",
+      "price": 250000.00,
+      "durationMinutes": 15,
+      "diagnosticType": "Panorama",
+      "status": "Inactive"
+    },
+    "dentistAccount": {
+      "userId": 12,
+      "email": "dentist.hung@dentalcare.test",
+      "phoneNumber": "0912345678",
+      "role": "Dentist",
+      "status": "Active",
+      "fullName": "Đặng Văn Hùng [UAT Demo]",
+      "departmentId": 1,
+      "licenseNumber": "BS-XQ-003",
+      "qualification": "Bác sĩ Răng Hàm Mặt [Demo Credential - Pending Owner Verification]",
+      "yearsOfExperience": 5,
+      "biography": "Bác sĩ chuyên trách Chẩn đoán hình ảnh và X-quang."
+    },
+    "workSchedules": [
+      {
+        "workScheduleId": 91,
+        "staffUserId": 3,
+        "staffFullName": "Trần Thị Mai",
+        "staffRole": "Dentist",
+        "workDate": "2026-11-30",
+        "startTime": "08:00",
+        "endTime": "12:00",
+        "status": "Scheduled",
+        "shiftType": "Morning",
+        "notes": "Trực phòng X-quang [R003] - Ca Sáng"
+      },
+      {
+        "workScheduleId": 92,
+        "staffUserId": 12,
+        "staffFullName": "Đặng Văn Hùng [UAT Demo]",
+        "staffRole": "Dentist",
+        "workDate": "2026-11-30",
+        "startTime": "13:00",
+        "endTime": "17:00",
+        "status": "Scheduled",
+        "shiftType": "Afternoon",
+        "notes": "Trực phòng X-quang [R003] - Ca Chiều"
+      }
+    ]
+  },
+  "preservedBaselineEntities": [
+    {
+      "userId": 3,
+      "email": "dentist.mai@dentalcare.test",
+      "role": "Dentist",
+      "fullName": "Trần Thị Mai",
+      "qualificationPreserved": true,
+      "baselineClinicalSchedulePreserved": true
+    },
+    {
+      "userId": 6,
+      "email": "patient.dong@dentalcare.test",
+      "role": "Patient",
+      "fullName": "Võ Văn Đông",
+      "accountPreserved": true,
+      "medicalRecordsPreserved": true
+    }
+  ],
+  "rollbackManifestConfiguration": {
+    "targetScript": "DB/Deployment/XRAY_UAT_Rollback_ManifestGuarded.sql",
+    "exactManifestParameters": {
+      "@TARGET_ROOM_ID": 101,
+      "@TARGET_SERVICE_ID": 205,
+      "@TARGET_DENTIST_USER_ID": 12,
+      "@TARGET_SCHEDULE_ID_1": 91,
+      "@TARGET_SCHEDULE_ID_2": 92,
+      "@EXECUTE_ROLLBACK": 1
+    },
+    "dependencyProtectionPolicy": "StrictRefusal",
+    "enforcedPreChecks": [
+      "No Appointments referencing RoomId 101 or DentistUserId 12",
+      "No AppointmentServices referencing DepartmentServiceId 205",
+      "No Diagnostics referencing DepartmentServiceId 205 or DentistUserId 12",
+      "No Prescriptions or LeaveRequests referencing DentistUserId 12",
+      "No DentalChairs in RoomId 101"
+    ]
+  }
+}

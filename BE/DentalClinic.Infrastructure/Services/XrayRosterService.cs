@@ -103,7 +103,7 @@ public class XrayRosterService : IXrayRosterService
         var timeOfDay = TimeOnly.FromDateTime(localDateTime);
         var roomIdInt = (int)roomId;
 
-        var ws = await _dbContext.StaffWorkSchedules
+        var wsList = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
             .Include(x => x.StaffUser)
                 .ThenInclude(sp => sp.User)
@@ -118,16 +118,27 @@ public class XrayRosterService : IXrayRosterService
                         x.EndTime >= timeOfDay &&
                         x.StaffUser.DentistProfile != null &&
                         x.StaffUser.DentistProfile.Department.Rooms.Any(rm => rm.RoomId == roomIdInt))
-            .FirstOrDefaultAsync(ct);
-
-        if (ws == null) return null;
-
-        var leaves = await _dbContext.StaffLeaveRequests
-            .AsNoTracking()
-            .Where(l => l.StaffRole == "Dentist" && l.StaffUserId == ws.StaffUserId && l.Status == "Approved")
             .ToListAsync(ct);
 
-        return MapToDto(ws, leaves, roomIdInt);
+        if (!wsList.Any()) return null;
+
+        var dentistIds = wsList.Select(x => x.StaffUserId).Distinct().ToList();
+        var leaves = await _dbContext.StaffLeaveRequests
+            .AsNoTracking()
+            .Where(l => l.StaffRole == "Dentist" &&
+                        dentistIds.Contains(l.StaffUserId) &&
+                        l.Status == "Approved" &&
+                        l.StartDate <= workDate &&
+                        l.EndDate >= workDate &&
+                        (!l.StartTime.HasValue || !l.EndTime.HasValue ||
+                         (l.StartTime.Value <= timeOfDay && l.EndTime.Value >= timeOfDay)))
+            .ToListAsync(ct);
+
+        // Prioritize the on-duty dentist who is actively available (not on approved leave)
+        var activeWs = wsList.FirstOrDefault(ws => !leaves.Any(l => l.StaffUserId == ws.StaffUserId))
+                       ?? wsList.First();
+
+        return MapToDto(activeWs, leaves, roomIdInt);
     }
 
     public async Task<List<QualifiedDentistDto>> GetQualifiedDentistsAsync(CancellationToken ct = default)
@@ -302,7 +313,7 @@ public class XrayRosterService : IXrayRosterService
         var startTime = TimeOnly.FromDateTime(localStart);
         var endTime = TimeOnly.FromDateTime(localEnd);
 
-        return await _dbContext.StaffWorkSchedules
+        var hasDutySchedule = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
             .AnyAsync(r => r.StaffRole == "Dentist" &&
                            r.StaffUserId == dentistUserId &&
@@ -310,6 +321,20 @@ public class XrayRosterService : IXrayRosterService
                            r.Status == "Scheduled" &&
                            r.StartTime < endTime &&
                            r.EndTime > startTime, ct);
+
+        if (!hasDutySchedule) return false;
+
+        var isOnApprovedLeave = await _dbContext.StaffLeaveRequests
+            .AsNoTracking()
+            .AnyAsync(l => l.StaffRole == "Dentist" &&
+                           l.StaffUserId == dentistUserId &&
+                           l.Status == "Approved" &&
+                           l.StartDate <= startDate &&
+                           l.EndDate >= startDate &&
+                           (!l.StartTime.HasValue || !l.EndTime.HasValue ||
+                            (l.StartTime.Value < endTime && l.EndTime.Value > startTime)), ct);
+
+        return !isOnApprovedLeave;
     }
 
     public async Task<List<XrayDentistRosterDto>> GetDentistXrayScheduleAsync(long dentistUserId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default)
