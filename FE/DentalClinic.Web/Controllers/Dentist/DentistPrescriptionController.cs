@@ -76,7 +76,7 @@ public class DentistPrescriptionController : Controller
                         PatientCode = apptDetail.Data.PatientCode,
                         PatientPhone = apptDetail.Data.PatientPhone,
                         DepartmentName = apptDetail.Data.DepartmentName,
-                        ServiceName = apptDetail.Data.ServiceName,
+                        ServiceName = apptDetail.Data.ServiceName ?? string.Empty,
                         ScheduledStart = apptDetail.Data.ScheduledStart,
                         Status = apptDetail.Data.Status,
                         HasPrescription = false

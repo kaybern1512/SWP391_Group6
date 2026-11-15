@@ -931,7 +931,7 @@ var vm = new PatientRescheduleViewModel
 
             RequestedServiceId = appt.RequestedServiceId,
 
-            ServiceName = appt.ServiceName,
+            ServiceName = appt.ServiceName ?? string.Empty,
 
             CurrentScheduledStart = appt.ScheduledStart,
 
@@ -999,7 +999,7 @@ if (!ModelState.IsValid)
 
                 model.DepartmentName = appt.DepartmentName;
 
-                model.ServiceName = appt.ServiceName;
+                model.ServiceName = appt.ServiceName ?? string.Empty;
 
                 model.CurrentScheduledStart = appt.ScheduledStart;
 
@@ -1049,7 +1049,7 @@ var result = await _appointmentApiService.PatientRescheduleAsync(id, req);
 
                 model.DepartmentName = appt.DepartmentName;
 
-                model.ServiceName = appt.ServiceName;
+                model.ServiceName = appt.ServiceName ?? string.Empty;
 
                 model.CurrentScheduledStart = appt.ScheduledStart;
 
