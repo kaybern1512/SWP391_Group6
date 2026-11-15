@@ -7,12 +7,27 @@
  * @param {string} password
  */
 async function loginAs(page, email, password = process.env.DEMO_PASSWORD || 'DentalCare@2026!') {
+  const emailMap = {
+    'patient1@dentalcare.com': 'patient@dentalcare.test',
+    'patient@dentalcare.com': 'patient@dentalcare.test',
+    'patient1@dentalcare.test': 'patient@dentalcare.test',
+    'receptionist@dentalcare.com': 'receptionist@dentalcare.test',
+    'receptionist1@dentalcare.com': 'receptionist@dentalcare.test',
+    'receptionist1@dentalcare.test': 'receptionist@dentalcare.test',
+    'dentist@dentalcare.com': 'dentist1@dentalcare.test',
+    'dentist1@dentalcare.com': 'dentist1@dentalcare.test',
+    'dentist@dentalcare.test': 'dentist1@dentalcare.test',
+    'dentist2@dentalcare.com': 'dentist2@dentalcare.test',
+    'admin@dentalcare.com': 'admin@dentalcare.test'
+  };
+  const resolvedEmail = emailMap[email.toLowerCase()] || email;
+
   await page.context().clearCookies();
   await page.goto('/Account/Login');
   await page.waitForLoadState('domcontentloaded');
 
   // Fill credentials
-  await page.locator('input[name="Email"]').fill(email);
+  await page.locator('input[name="Email"]').fill(resolvedEmail);
   await page.locator('input[name="Password"]').fill(password);
 
   // Click login button and wait for redirect away from login page

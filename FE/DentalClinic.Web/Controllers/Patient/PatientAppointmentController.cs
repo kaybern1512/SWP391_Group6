@@ -427,21 +427,7 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
         };
 
         // Categorization & pre-selection based on query parameters or defaults
-        if (!string.IsNullOrEmpty(combo))
-        {
-            var matchedCombo = availableCombos.FirstOrDefault(c =>
-                c.Code.Equals(combo, StringComparison.OrdinalIgnoreCase) ||
-                (combo.Equals("COMBO_HYGIENE", StringComparison.OrdinalIgnoreCase) && c.Code.Equals("COMBO_CARE", StringComparison.OrdinalIgnoreCase)) ||
-                (combo.Equals("COMBO_CARE", StringComparison.OrdinalIgnoreCase) && c.Code.Equals("COMBO_HYGIENE", StringComparison.OrdinalIgnoreCase)));
-            if (matchedCombo != null)
-            {
-                vm.BookingCategory = "Combo";
-                vm.SelectedComboCode = combo.Equals("COMBO_HYGIENE", StringComparison.OrdinalIgnoreCase) ? combo : matchedCombo.Code;
-                vm.DepartmentId = matchedCombo.DepartmentId;
-                vm.RequestedServiceId = matchedCombo.ServiceId;
-            }
-        }
-        else if (!string.IsNullOrEmpty(category))
+        if (!string.IsNullOrEmpty(category))
         {
             vm.BookingCategory = category;
             if (category == "GeneralCheckup")
@@ -457,7 +443,27 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
                 vm.RequestedServiceId = first.ServiceId;
             }
         }
-        else if (serviceId.HasValue && serviceId.Value > 0)
+
+        if (!string.IsNullOrEmpty(combo))
+        {
+            vm.BookingCategory = "Combo";
+            var matchedCombo = availableCombos.FirstOrDefault(c =>
+                c.Code.Equals(combo, StringComparison.OrdinalIgnoreCase) ||
+                (combo.Equals("COMBO_HYGIENE", StringComparison.OrdinalIgnoreCase) && c.Code.Equals("COMBO_CARE", StringComparison.OrdinalIgnoreCase)) ||
+                (combo.Equals("COMBO_CARE", StringComparison.OrdinalIgnoreCase) && (c.Code.Equals("COMBO_HYGIENE", StringComparison.OrdinalIgnoreCase) || c.Code.Equals("COMBO-CARE-01", StringComparison.OrdinalIgnoreCase))) ||
+                (combo.Equals("COMBO-CARE-01", StringComparison.OrdinalIgnoreCase) && c.Code.Equals("COMBO_CARE", StringComparison.OrdinalIgnoreCase)));
+            if (matchedCombo != null)
+            {
+                vm.SelectedComboCode = combo.Equals("COMBO_HYGIENE", StringComparison.OrdinalIgnoreCase) ? combo : matchedCombo.Code;
+                vm.DepartmentId = matchedCombo.DepartmentId;
+                vm.RequestedServiceId = matchedCombo.ServiceId;
+            }
+            else
+            {
+                vm.SelectedComboCode = combo;
+            }
+        }
+        else if (string.IsNullOrEmpty(category) && serviceId.HasValue && serviceId.Value > 0)
         {
             var matchedSrv = filteredServices.FirstOrDefault(s => s.DepartmentServiceId == serviceId.Value);
             if (matchedSrv != null)
