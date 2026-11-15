@@ -495,13 +495,10 @@ public class ClinicalDiagnosticsController : ControllerBase
                 var isAssignedToAppt = result.AppointmentService?.AssignedDentistUserId == currentUserId ||
                                        (appt != null && await _dbContext.AppointmentServices.AsNoTracking().AnyAsync(s => s.AppointmentId == appt.AppointmentId && s.AssignedDentistUserId == currentUserId, ct));
 
-                var isXrayDentist = await _xrayRosterService.IsDentistOnXrayDutyAsync(
-                    currentUserId,
-                    result.CreatedAt.AddHours(-1),
-                    result.CreatedAt.AddHours(12),
-                    ct);
-
-                if (!isOrderingDentist && !isReviewingDentist && !isUploadingDentist && !isAssignedToAppt && !isXrayDentist)
+                // Clinical care circle enforcement: treating dentists, ordering doctor, assigned imaging doctor,
+                // reviewing doctor, or uploading doctor. An on-duty X-ray doctor cannot view arbitrary unrelated
+                // patient images merely by knowing the result ID unless directly assigned or part of the care circle.
+                if (!isOrderingDentist && !isReviewingDentist && !isUploadingDentist && !isAssignedToAppt)
                 {
                     return Forbid();
                 }
