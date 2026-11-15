@@ -132,6 +132,26 @@ public class ClinicalStaffAvailabilityService : IClinicalStaffAvailabilityServic
             return (false, "Bác sĩ hiện đang trong ca khám bệnh khác chưa kết thúc.");
         }
 
+        var startLocalTime = TimeOnly.FromDateTime(start);
+        var endLocalTime = TimeOnly.FromDateTime(end);
+
+        var isXrayDuty = await _dbContext.StaffWorkSchedules
+            .AsNoTracking()
+            .AnyAsync(ws => ws.StaffRole == UserRole.Dentist &&
+                           ws.StaffUserId == dentistUserId &&
+                           ws.WorkDate >= reqStartDate &&
+                           ws.WorkDate <= reqEndDate &&
+                           ws.Status == "Scheduled" &&
+                           ws.StartTime < endLocalTime &&
+                           ws.EndTime > startLocalTime &&
+                           ws.Notes != null &&
+                           (ws.Notes.Contains("X-quang") || ws.Notes.Contains("X-ray") || ws.Notes.Contains("R003")), ct);
+
+        if (isXrayDuty)
+        {
+            return (false, "Bác sĩ đang được phân công trực phòng chụp X-quang trong khung giờ này, không thể tiếp nhận ca điều trị lâm sàng.");
+        }
+
         return (true, null);
     }
 

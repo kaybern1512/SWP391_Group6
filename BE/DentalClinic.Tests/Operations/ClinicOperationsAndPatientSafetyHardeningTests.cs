@@ -509,9 +509,9 @@ public class ClinicOperationsAndPatientSafetyHardeningTests
 
         Assert.True(res.Success);
 
-        // Verify future appointment flagged with PendingActionType = "ReassignChair"
+        // Verify future appointment flagged with canonical PendingActionType = "Reschedule"
         var svcDb = await db.AppointmentServices.FindAsync((long)2001);
-        Assert.Equal("ReassignChair", svcDb!.PendingActionType);
+        Assert.Equal("Reschedule", svcDb!.PendingActionType);
 
         // Verify receptionist received maintenance alert notification
         notifMock.Verify(n => n.CreateNotificationAsync(

@@ -79,6 +79,17 @@ public class ClinicalDiagnosticsController : ControllerBase
     {
         try
         {
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            var currentUserId = GetCurrentUserId();
+            if (role == UserRole.Patient)
+            {
+                var appt = await _dbContext.Appointments.AsNoTracking().FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+                if (appt == null || appt.PatientUserId != currentUserId)
+                {
+                    return Forbid();
+                }
+            }
+
             var result = await _imagingService.GetDiagnosticOrdersByAppointmentAsync(appointmentId, ct);
             return Ok(ApiResponse<List<DiagnosticOrderDto>>.Ok(result));
         }
@@ -97,6 +108,13 @@ public class ClinicalDiagnosticsController : ControllerBase
             var result = await _imagingService.GetDiagnosticOrderByIdAsync(orderId, ct);
             if (result == null)
                 return NotFound(ApiResponse<DiagnosticOrderDto>.Fail("Không tìm thấy chỉ định chẩn đoán."));
+
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            var currentUserId = GetCurrentUserId();
+            if (role == UserRole.Patient && result.PatientUserId != currentUserId)
+            {
+                return Forbid();
+            }
 
             return Ok(ApiResponse<DiagnosticOrderDto>.Ok(result));
         }
@@ -198,7 +216,32 @@ public class ClinicalDiagnosticsController : ControllerBase
     {
         try
         {
+            var targetOrderId = request.DiagnosticOrderId > 0 ? request.DiagnosticOrderId : request.ImagingSessionId;
+            var targetDiagnostic = await _dbContext.Diagnostics.AsNoTracking().FirstOrDefaultAsync(d => d.DiagnosticId == targetOrderId, ct);
+            if (targetDiagnostic == null)
+                return NotFound(ApiResponse<DiagnosticResultDto>.Fail("Không tìm thấy chỉ định chẩn đoán hình ảnh."));
+
+            if (targetDiagnostic.Status == "Cancelled")
+                return BadRequest(ApiResponse<DiagnosticResultDto>.Fail("Chỉ định chẩn đoán hình ảnh đã bị hủy. Không thể tải lên kết quả."));
+
+            if (targetDiagnostic.Status == "Completed")
+                return BadRequest(ApiResponse<DiagnosticResultDto>.Fail("Chỉ định chẩn đoán hình ảnh đã hoàn tất kết quả. Không thể ghi đè kết quả đã khóa mà không có quy trình hiệu chỉnh (amendment)."));
+
             var userId = GetCurrentUserId();
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (role == UserRole.Dentist)
+            {
+                var isOrdering = targetDiagnostic.OrderingDentistUserId == userId;
+                var isAssigned = await _dbContext.AppointmentServices.AsNoTracking()
+                    .AnyAsync(s => s.AppointmentServiceId == targetDiagnostic.AppointmentServiceId && s.AssignedDentistUserId == userId, ct);
+                var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(userId, targetDiagnostic.CreatedAt.AddHours(-1), targetDiagnostic.CreatedAt.AddHours(12), ct);
+
+                if (!isOrdering && !isAssigned && !isXrayDuty)
+                {
+                    return Forbid();
+                }
+            }
+
             var result = await _imagingService.UploadDiagnosticResultAsync(request, userId, ct);
             return Ok(ApiResponse<DiagnosticResultDto>.Ok(result, "Tải lên kết quả chẩn đoán hình ảnh thành công."));
         }
@@ -368,7 +411,24 @@ public class ClinicalDiagnosticsController : ControllerBase
             if (targetDiagnostic.Status == "Cancelled")
                 return BadRequest(ApiResponse<DiagnosticResultDto>.Fail("Chỉ định chẩn đoán hình ảnh đã bị hủy. Không thể tải lên kết quả."));
 
+            if (targetDiagnostic.Status == "Completed")
+                return BadRequest(ApiResponse<DiagnosticResultDto>.Fail("Chỉ định chẩn đoán hình ảnh đã hoàn tất kết quả. Không thể ghi đè kết quả đã khóa mà không có quy trình hiệu chỉnh (amendment)."));
+
             var userId = GetCurrentUserId();
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (role == UserRole.Dentist)
+            {
+                var isOrdering = targetDiagnostic.OrderingDentistUserId == userId;
+                var isAssigned = await _dbContext.AppointmentServices.AsNoTracking()
+                    .AnyAsync(s => s.AppointmentServiceId == targetDiagnostic.AppointmentServiceId && s.AssignedDentistUserId == userId, ct);
+                var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(userId, targetDiagnostic.CreatedAt.AddHours(-1), targetDiagnostic.CreatedAt.AddHours(12), ct);
+
+                if (!isOrdering && !isAssigned && !isXrayDuty)
+                {
+                    return Forbid();
+                }
+            }
+
             using var stream = file.OpenReadStream();
             var uploadResult = await _imagingStorageService.UploadDentalImageAsync(stream, file.FileName, file.ContentType, "clinical-imaging", ct);
 
@@ -417,6 +477,31 @@ public class ClinicalDiagnosticsController : ControllerBase
             {
                 var appt = result.AppointmentService?.Appointment;
                 if (appt == null || appt.PatientUserId != currentUserId)
+                {
+                    return Forbid();
+                }
+            }
+            else if (role == UserRole.Receptionist)
+            {
+                // Receptionists have administrative access, not direct clinical raw image streaming
+                return Forbid();
+            }
+            else if (role == UserRole.Dentist)
+            {
+                var appt = result.AppointmentService?.Appointment;
+                var isOrderingDentist = result.OrderingDentistUserId == currentUserId;
+                var isReviewingDentist = result.ReviewedByDentistUserId == currentUserId;
+                var isUploadingDentist = result.UploadedByUserId == currentUserId;
+                var isAssignedToAppt = result.AppointmentService?.AssignedDentistUserId == currentUserId ||
+                                       (appt != null && await _dbContext.AppointmentServices.AsNoTracking().AnyAsync(s => s.AppointmentId == appt.AppointmentId && s.AssignedDentistUserId == currentUserId, ct));
+
+                var isXrayDentist = await _xrayRosterService.IsDentistOnXrayDutyAsync(
+                    currentUserId,
+                    result.CreatedAt.AddHours(-1),
+                    result.CreatedAt.AddHours(12),
+                    ct);
+
+                if (!isOrderingDentist && !isReviewingDentist && !isUploadingDentist && !isAssignedToAppt && !isXrayDentist)
                 {
                     return Forbid();
                 }

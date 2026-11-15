@@ -2172,16 +2172,18 @@ public class AppointmentService : IAppointmentService
             if (hasPediatric)
             {
                 var patientProfile = await _dbContext.PatientProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == appointment.PatientUserId, ct);
-                if (patientProfile?.DateOfBirth.HasValue == true)
+                if (patientProfile == null || !patientProfile.DateOfBirth.HasValue)
                 {
-                    var propDate = DateOnly.FromDateTime(request.ProposedStart.Value);
-                    var dob = patientProfile.DateOfBirth.Value;
-                    int age = propDate.Year - dob.Year;
-                    if (propDate < dob.AddYears(age)) age--;
-                    if (age > 15)
-                    {
-                        return ApiResponse.Fail($"Chuyên khoa Răng Trẻ Em chỉ dành cho bệnh nhân từ 0 đến 15 tuổi. Bệnh nhân sẽ {age} tuổi tại thời điểm lịch hẹn đề xuất ({propDate:dd/MM/yyyy}), vui lòng chọn chuyên khoa phù hợp.");
-                    }
+                    return ApiResponse.Fail("Vui lòng cập nhật ngày sinh trong hồ sơ để đăng ký chuyên khoa Răng Trẻ Em.");
+                }
+
+                var propDate = DateOnly.FromDateTime(request.ProposedStart.Value);
+                var dob = patientProfile.DateOfBirth.Value;
+                int age = propDate.Year - dob.Year;
+                if (propDate < dob.AddYears(age)) age--;
+                if (age > 15)
+                {
+                    return ApiResponse.Fail($"Chuyên khoa Răng Trẻ Em chỉ dành cho bệnh nhân từ 0 đến 15 tuổi. Bệnh nhân sẽ {age} tuổi tại thời điểm lịch hẹn đề xuất ({propDate:dd/MM/yyyy}), vui lòng chọn chuyên khoa phù hợp.");
                 }
             }
         }

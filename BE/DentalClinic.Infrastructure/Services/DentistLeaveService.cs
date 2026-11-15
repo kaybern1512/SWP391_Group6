@@ -443,6 +443,10 @@ public class DentistLeaveService : IDentistLeaveService
             {
                 SqlAppLockHelper.DentistMasterKey(leave.StaffUserId)
             };
+            for (var d = leave.StartDate; d <= leave.EndDate; d = d.AddDays(1))
+            {
+                lockKeys.Add(SqlAppLockHelper.DentistCoverageDateKey(d));
+            }
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
 
             var (canApproveXray, xrayReason) = await _clinicalAvailabilityService.ValidateXrayShiftLeaveCoverageAsync(
@@ -508,7 +512,7 @@ public class DentistLeaveService : IDentistLeaveService
                     svc.Status == AppointmentStatus.Waiting ||
                     svc.Status == AppointmentStatus.Called)
                 {
-                    svc.PendingActionType = "DoctorChange";
+                    svc.PendingActionType = "ChangeDentist";
                     svc.Notes = $"{svc.Notes} | [Cảnh báo khẩn: Bác sĩ nghỉ phép #{leave.LeaveRequestId}]".Trim(' ', '|');
                 }
                 else if (svc.Status == AppointmentStatus.Confirmed)

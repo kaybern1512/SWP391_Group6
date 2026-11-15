@@ -813,8 +813,8 @@ public class AdminService : IAdminService
 
             foreach (var svc in futureAppointments)
             {
-                svc.PendingActionType = "ReassignRoom";
-                svc.Notes = $"{svc.Notes} | [Cảnh báo: Phòng {room.RoomCode} chuyển {normalizedStatus}]".Trim(' ', '|');
+                svc.PendingActionType = "Reschedule";
+                svc.Notes = $"{svc.Notes} | [Cảnh báo: Phòng {room.RoomCode} chuyển {normalizedStatus} - Cần đổi phòng]".Trim(' ', '|');
                 svc.UpdatedAt = now;
             }
 
@@ -1133,8 +1133,8 @@ public class AdminService : IAdminService
 
             foreach (var svc in futureAppointments)
             {
-                svc.PendingActionType = "ReassignChair";
-                svc.Notes = $"{svc.Notes} | [Cảnh báo: Ghế {chair.ChairCode} chuyển {normalizedStatus}]".Trim(' ', '|');
+                svc.PendingActionType = "Reschedule";
+                svc.Notes = $"{svc.Notes} | [Cảnh báo: Ghế {chair.ChairCode} chuyển {normalizedStatus} - Cần đổi ghế]".Trim(' ', '|');
                 svc.UpdatedAt = now;
             }
 

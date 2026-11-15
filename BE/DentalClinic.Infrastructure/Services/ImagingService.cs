@@ -212,6 +212,20 @@ public class ImagingService : IImagingService
                 diagnostic.AppointmentService.RoomId = room.RoomId;
             }
         }
+
+        if (request.AssignedDentistUserId.HasValue && request.AssignedDentistUserId.Value > 0)
+        {
+            var dentist = await _dbContext.DentistProfiles
+                .AsNoTracking()
+                .Include(d => d.StaffProfile)
+                .FirstOrDefaultAsync(d => d.UserId == request.AssignedDentistUserId.Value, ct);
+
+            if (dentist == null || dentist.StaffProfile?.EmploymentStatus != "Active")
+                throw new InvalidOperationException("Bác sĩ X-quang được chỉ định không tồn tại hoặc đã ngừng hoạt động.");
+
+            diagnostic.AppointmentService.AssignedDentistUserId = request.AssignedDentistUserId.Value;
+        }
+
         diagnostic.AppointmentService.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);
@@ -275,6 +289,12 @@ public class ImagingService : IImagingService
 
         if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy chỉ định chẩn đoán hình ảnh.");
+
+        if (diagnostic.Status == "Cancelled")
+            throw new InvalidOperationException("Chỉ định chẩn đoán hình ảnh đã bị hủy. Không thể tải lên kết quả.");
+
+        if (diagnostic.Status == "Completed")
+            throw new InvalidOperationException("Chỉ định chẩn đoán hình ảnh đã hoàn tất kết quả. Không thể ghi đè kết quả đã khóa mà không có quy trình hiệu chỉnh (amendment).");
 
         if (string.IsNullOrWhiteSpace(request.FileUrl))
             throw new InvalidOperationException("Đường dẫn tệp hình ảnh (FileUrl) không được để trống.");
@@ -341,6 +361,25 @@ public class ImagingService : IImagingService
 
         if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy kết quả chẩn đoán hình ảnh.");
+
+        var appt = diagnostic.AppointmentService?.Appointment;
+        var isOrderingDentist = diagnostic.OrderingDentistUserId == dentistUserId;
+        var isAssignedDentist = diagnostic.AppointmentService?.AssignedDentistUserId == dentistUserId ||
+                                appt?.AppointmentServices.Any(s => s.AssignedDentistUserId == dentistUserId) == true;
+
+        if (!isOrderingDentist && !isAssignedDentist && dentistUserId > 0)
+        {
+            var hasConsultation = await _dbContext.DepartmentReferrals
+                .AsNoTracking()
+                .AnyAsync(r => (r.AssignedDentistUserId == dentistUserId || r.ReviewedByUserId == dentistUserId) &&
+                               (r.SourceAppointmentServiceId == diagnostic.AppointmentServiceId ||
+                                r.DestinationAppointmentServiceId == diagnostic.AppointmentServiceId), ct);
+
+            if (!hasConsultation)
+            {
+                throw new UnauthorizedAccessException("Chỉ bác sĩ chỉ định hoặc bác sĩ điều trị phụ trách ca khám mới có quyền đánh giá duyệt kết quả chẩn đoán.");
+            }
+        }
 
         if (string.IsNullOrWhiteSpace(request.ReviewNotes))
             throw new InvalidOperationException("Bác sĩ phải nhập nhận xét lâm sàng (ReviewNotes) khi đánh giá kết quả.");
@@ -684,6 +723,9 @@ public class ImagingService : IImagingService
                     .ThenInclude(a => a.Patient)
             .Include(d => d.AppointmentService)
                 .ThenInclude(s => s.Room)
+            .Include(d => d.AppointmentService)
+                .ThenInclude(s => s.AssignedDentist)
+                    .ThenInclude(dp => dp!.StaffProfile)
             .Include(d => d.DepartmentService)
             .Include(d => d.OrderingDentist)
                 .ThenInclude(dp => dp.StaffProfile)
@@ -759,6 +801,8 @@ public class ImagingService : IImagingService
             ActualStartUtc = d.CreatedAt,
             ActualEndUtc = d.CompletedAt,
             QueueNumber = s?.QueueNumber.HasValue == true ? $"XR-{s.QueueNumber.Value:D3}" : null,
+            AssignedDentistUserId = s?.AssignedDentistUserId,
+            AssignedDentistName = s?.AssignedDentist?.StaffProfile?.FullName,
             Priority = ImagingSessionPriority.Normal,
             Status = d.Status,
             CheckInTimeUtc = d.CreatedAt,

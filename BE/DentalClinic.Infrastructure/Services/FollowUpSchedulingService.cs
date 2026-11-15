@@ -731,7 +731,7 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
         var prefix = request.IsRebook ? "[Đặt lại lịch] " : "[Đổi lịch] ";
         var fullReason = prefix + request.Reason.Trim();
 
-        primaryItem.PendingActionType = request.IsRebook ? "Rebook" : "Reschedule";
+        primaryItem.PendingActionType = "Reschedule";
         primaryItem.PendingDentistUserId = doctorId;
         primaryItem.PendingScheduledStart = request.ProposedStart;
         primaryItem.PendingScheduledEnd = request.ProposedEnd;
@@ -849,7 +849,8 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             return ApiResponse<FollowUpProposalDto>.Fail("Không tìm thấy yêu cầu thay đổi lịch.");
         }
 
-        var isRebook = string.Equals(item.PendingActionType, "Rebook", StringComparison.OrdinalIgnoreCase);
+        var isRebook = string.Equals(item.PendingActionType, "Rebook", StringComparison.OrdinalIgnoreCase) ||
+                       (item.Notes != null && item.Notes.Contains("[Đặt lại lịch]"));
         var proposedStart = item.PendingScheduledStart ?? item.ScheduledStart;
         var proposedEnd = item.PendingScheduledEnd ?? item.ScheduledEnd;
         var reasonText = item.Notes ?? string.Empty;
@@ -1124,7 +1125,8 @@ public class FollowUpSchedulingService : IFollowUpSchedulingService
             ProposedEnd = s.PendingScheduledEnd,
             Reason = s.Notes ?? string.Empty,
             Status = string.IsNullOrWhiteSpace(s.PendingActionType) ? ProposalStatus.Accepted : ProposalStatus.Pending,
-            IsRebook = string.Equals(s.PendingActionType, "Rebook", StringComparison.OrdinalIgnoreCase),
+            IsRebook = string.Equals(s.PendingActionType, "Rebook", StringComparison.OrdinalIgnoreCase) ||
+                       (s.Notes != null && s.Notes.Contains("[Đặt lại lịch]")),
             CreatedAt = s.UpdatedAt ?? s.CreatedAt
         };
     }

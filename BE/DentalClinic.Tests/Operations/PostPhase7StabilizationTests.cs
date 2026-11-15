@@ -222,9 +222,10 @@ public class PostPhase7StabilizationTests
         notifMock.Verify(n => n.CreateNotificationAsync(2, null, "ChairMaintenanceAlert", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         notifMock.Verify(n => n.CreateNotificationAsync(3, null, "ChairMaintenanceAlert", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
 
-        // AppointmentService should be flagged
+        // AppointmentService should be flagged with canonical Reschedule
         var updatedSvc = await db.AppointmentServices.FindAsync(3001L);
-        Assert.Equal("ReassignChair", updatedSvc!.PendingActionType);
+        Assert.Equal("Reschedule", updatedSvc!.PendingActionType);
+        Assert.Contains("Ghế C101-1", updatedSvc.Notes);
     }
 
     [Fact]
@@ -281,7 +282,8 @@ public class PostPhase7StabilizationTests
         notifMock.Verify(n => n.CreateNotificationAsync(3, null, "RoomMaintenanceAlert", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
 
         var updatedSvc = await db.AppointmentServices.FindAsync(4001L);
-        Assert.Equal("ReassignRoom", updatedSvc!.PendingActionType);
+        Assert.Equal("Reschedule", updatedSvc!.PendingActionType);
+        Assert.Contains("Phòng R101", updatedSvc.Notes);
     }
 
     [Fact]
