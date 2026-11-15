@@ -1,0 +1,33 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant MVC as AccountController (FE)
+    participant API as AuthController (BE)
+    participant Svc as AuthService
+    participant Jwt as JwtTokenService
+    participant DB as DentalClinicDbContext (SQL)
+
+    User->>MVC: POST /Account/Login (Email, Password)
+    MVC->>API: POST /api/auth/login
+    API->>Svc: LoginAsync(request)
+    Svc->>DB: SELECT UserAccounts WHERE Email = @email
+    alt Account Locked or Inactive
+      DB-->>Svc: Status != 'Active'
+      Svc-->>API: Throw UnauthorizedException
+      API-->>MVC: 401 Unauthorized
+      MVC-->>User: Render Login error message
+    else Active Account
+      Svc->>Svc: PasswordHasherService.VerifyPassword(Password, PasswordHash)
+      alt Invalid Password
+        Svc->>DB: UPDATE UserAccounts SET FailedLoginCount += 1 (Lock if >= 5)
+        Svc-->>API: 401 Invalid credentials
+      else Valid Password
+        Svc->>Jwt: GenerateAccessToken(user) & GenerateRefreshToken()
+        Svc->>DB: UPDATE UserAccounts SET FailedLoginCount=0, RefreshTokenHash=@hash
+        Svc->>DB: INSERT AuditLogs (Action='UserLogin')
+        Svc-->>API: AuthResponse (AccessToken, Role, UserId)
+        API-->>MVC: 200 OK
+        MVC->>MVC: Issue Encrypted Auth Cookie + Role Claim
+        MVC-->>User: Redirect to Role Dashboard (/Patient, /Receptionist, /Dentist, /Admin)
+      end
+    end

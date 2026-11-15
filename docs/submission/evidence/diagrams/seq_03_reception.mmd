@@ -1,0 +1,30 @@
+sequenceDiagram
+    autonumber
+    actor Rec as Receptionist
+    participant MVC as ReceptionistAppointmentController
+    participant API as AppointmentsController
+    participant Svc as AppointmentService
+    participant DB as SQL Server
+
+    Rec->>MVC: GET /Receptionist/Appointments/Review/{id}
+    MVC->>API: GET /api/receptionist/appointments/{id}/available-dentists
+    API->>Svc: Query active Dentists, Rooms (Status='Active'), DentalChairs (Status='Active')
+    DB-->>MVC: Eligible Dentists, Rooms & Chairs
+
+    Rec->>MVC: POST /Receptionist/Appointments/Confirm/{id} (DentistId, RoomId, ChairId)
+    MVC->>API: POST /api/receptionist/appointments/{id}/confirm
+    API->>Svc: ReceptionistConfirmAsync(id, recUserId, request)
+    Svc->>DB: Verify Dentist not on approved leave & Chair belongs to Room (UQ_DentalChairs_RoomId_ChairId)
+    Svc->>DB: UPDATE Appointments SET Status='Confirmed'
+    Svc->>DB: UPDATE AppointmentServices SET Status='Confirmed', AssignedDentistUserId, RoomId, DentalChairId
+    Svc->>DB: INSERT Notifications (Patient & Dentist) + AuditLogs
+    DB-->>MVC: Confirmed
+
+    Note over Rec,DB: Patient Arrives at Clinic Counter on ServiceDate
+    Rec->>MVC: POST /Receptionist/Appointments/CheckIn/{id}
+    MVC->>API: POST /api/receptionist/appointments/{id}/check-in
+    API->>Svc: ReceptionistCheckInAsync(id, recUserId)
+    Svc->>DB: Compute MAX(QueueNumber)+1 for ServiceDate (UQ_AppointmentServices_ServiceDate_QueueNumber)
+    Svc->>DB: UPDATE Appointments SET Status='CheckedIn', CheckedInAt=SYSDATETIME()
+    Svc->>DB: UPDATE AppointmentServices SET Status='CheckedIn', QueueNumber=@nextStt
+    DB-->>MVC: QueueNumber issued (e.g. STT #1)

@@ -1,0 +1,56 @@
+erDiagram
+    ClinicProfile {
+      int ClinicId PK "CHECK = 1"
+      nvarchar ClinicName
+      varchar Hotline
+      time OpeningTime
+      time ClosingTime
+      int SlotDurationMinutes
+      int MaxConcurrentAppointmentsPerSlot
+    }
+    BlogCategories {
+      int CategoryId PK
+      nvarchar CategoryName UK
+      varchar Slug UK
+      bit IsActive
+    }
+    BlogPosts {
+      bigint PostId PK
+      int CategoryId FK
+      bigint AuthorUserId FK
+      bigint ReviewedByUserId FK
+      nvarchar Title
+      varchar Slug UK
+      varchar PostType "Blog|ClinicNews|Announcement"
+      varchar Status "Draft|PendingReview|Published|Rejected|Archived"
+    }
+    VisitFeedback {
+      bigint FeedbackId PK
+      bigint AppointmentId UK,FK
+      bigint PatientUserId FK
+      bigint DentistUserId FK
+      tinyint ClinicRating "1..5"
+      tinyint DentistRating "1..5"
+      nvarchar_max Comment
+      varchar Status "Draft|Published|Hidden"
+    }
+    Notifications {
+      bigint NotificationId PK
+      bigint UserId FK
+      bigint AppointmentId FK
+      varchar NotificationType
+      varchar Channel "InApp|Email|SMS"
+      varchar DeliveryStatus
+      datetime2 ScheduledFor
+    }
+    AuditLogs {
+      bigint AuditLogId PK
+      bigint ActorUserId FK
+      varchar Action
+      varchar EntityName
+      varchar EntityId
+      nvarchar_max OldValuesJson
+      nvarchar_max NewValuesJson
+      datetime2 CreatedAt
+    }
+    BlogCategories ||--o{ BlogPosts : "categorizes"

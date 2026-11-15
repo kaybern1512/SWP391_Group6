@@ -1,0 +1,33 @@
+classDiagram
+    class DentistPrescriptionController {
+      -IPrescriptionApiService _prescApi
+      -IMedicineApiService _medApi
+      +Index() Task~IActionResult~
+      +Create(CreatePrescriptionViewModel) Task~IActionResult~
+      +Dispense(DispenseMedicineViewModel) Task~IActionResult~
+      +Print(long id) Task~IActionResult~
+    }
+    class PrescriptionController {
+      -IPrescriptionService _prescriptionService
+      +CreatePrescription(CreatePrescriptionRequest) Task~ActionResult~
+      +GetPrescriptionDetail(long id) Task~ActionResult~
+    }
+    class MedicineController {
+      -IMedicineService _medicineService
+      +DispenseMedicine(DispenseMedicineRequest) Task~ActionResult~
+      +AdjustStock(AdjustStockRequest) Task~ActionResult~
+    }
+    class PrescriptionService {
+      -DentalClinicDbContext _db
+      +CreatePrescriptionAsync(long, CreatePrescriptionRequest) Task~PrescriptionDto~
+      +GetPrescriptionDetailAsync(long) Task~PrescriptionDto~
+    }
+    class MedicineService {
+      -DentalClinicDbContext _db
+      +DispenseMedicineAsync(long, DispenseMedicineRequest) Task
+      +AdjustStockAsync(long, AdjustStockRequest) Task
+    }
+    DentistPrescriptionController --> PrescriptionController
+    DentistPrescriptionController --> MedicineController
+    PrescriptionController --> PrescriptionService
+    MedicineController --> MedicineService

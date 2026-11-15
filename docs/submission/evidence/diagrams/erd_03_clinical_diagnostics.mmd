@@ -1,0 +1,96 @@
+erDiagram
+    DentalMedicalRecords {
+      bigint MedicalRecordId PK
+      bigint PatientUserId UK,FK
+      varchar RecordNumber UK
+      nvarchar BloodType
+      nvarchar Allergies
+      nvarchar ChronicConditions
+    }
+    ClinicalEntries {
+      bigint EntryId PK
+      bigint MedicalRecordId FK
+      bigint AppointmentId FK
+      bigint AppointmentServiceId FK
+      bigint DentistUserId FK
+      nvarchar_max ChiefComplaint
+      nvarchar_max ExaminationNotes
+      nvarchar_max Diagnosis
+      nvarchar_max TreatmentSummary
+    }
+    OdontogramEntries {
+      bigint OdontogramEntryId PK
+      bigint MedicalRecordId FK
+      bigint RecordedByDentistUserId FK
+      int ToothNumber "FDI 11..48"
+      varchar SurfaceCode
+      varchar ConditionCode
+      nvarchar ConditionNotes
+    }
+    TreatmentPlans {
+      bigint TreatmentPlanId PK
+      varchar PlanCode UK
+      bigint PatientUserId FK
+      bigint CreatedByDentistUserId FK
+      decimal EstimatedTotal
+      varchar Status
+    }
+    TreatmentPlanItems {
+      bigint TreatmentPlanItemId PK
+      bigint TreatmentPlanId FK
+      int DepartmentServiceId FK
+      int SequenceNo
+      decimal EstimatedCost
+      varchar Status
+    }
+    TreatmentSessions {
+      bigint TreatmentSessionId PK
+      bigint TreatmentPlanId FK
+      bigint TreatmentPlanItemId FK
+      bigint AppointmentId FK
+      bigint DentistUserId FK
+      date SessionDate
+      nvarchar_max SessionNotes
+    }
+    PerformedServices {
+      bigint PerformedServiceId PK
+      bigint TreatmentSessionId FK
+      bigint AppointmentId FK
+      bigint AppointmentServiceId FK
+      int DepartmentServiceId FK
+      int Quantity
+      decimal UnitPrice
+    }
+    Diagnostics {
+      bigint DiagnosticId PK
+      bigint AppointmentServiceId FK
+      int DepartmentServiceId FK
+      bigint OrderingDentistUserId FK
+      nvarchar_max ClinicalIndication
+      varchar Status
+      varchar ImagingType
+      nvarchar FileUrl
+      nvarchar_max Findings
+    }
+    DepartmentReferrals {
+      bigint ReferralId PK
+      bigint AppointmentServiceId FK
+      int FromDepartmentId FK
+      int ToDepartmentId FK
+      varchar Urgency
+      varchar Status
+    }
+    FollowUpSchedules {
+      bigint FollowUpId PK
+      bigint SourceAppointmentId FK
+      bigint PatientUserId FK
+      bigint DentistUserId FK
+      date RecommendedDate
+      varchar Status
+    }
+    DentalMedicalRecords ||--o{ ClinicalEntries : "records"
+    DentalMedicalRecords ||--o{ OdontogramEntries : "charts"
+    TreatmentPlans ||--o{ TreatmentPlanItems : "phases"
+    TreatmentPlans ||--o{ TreatmentSessions : "sessions"
+    TreatmentPlanItems ||--o{ TreatmentSessions : "executes_phase"
+    TreatmentSessions ||--o{ PerformedServices : "performs"

@@ -1,0 +1,53 @@
+flowchart LR
+    classDef actor fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#000,font-weight:bold
+    classDef uc fill:#E3F2FD,stroke:#1565C0,stroke-width:1.5px,color:#000
+    classDef sys fill:#FAFAFA,stroke:#424242,stroke-width:2px
+
+    PAT(["Actor: Patient"]):::actor
+    REC(["Actor: Receptionist"]):::actor
+    DEN(["Actor: Dentist<br/>(Clinical & X-Ray Duty)"]):::actor
+    ADM(["Actor: SystemAdministrator"]):::actor
+
+    subgraph System ["DentalCare Clinic Management System (SWP391)"]
+      direction TB
+      UC_COM["UC-COM-01..04: Authenticate, Register,<br/>Manage Profile & Reset Password"]:::uc
+      UC_PAT1["UC-PAT-01..03: Browse Catalog,<br/>Book Service & Combo Appointments"]:::uc
+      UC_PAT2["UC-PAT-04..06: View, Reschedule,<br/>Cancel & Resolve Disrupted Visits"]:::uc
+      UC_PAT3["UC-PAT-07..11: View EMR, Odontogram,<br/>Prescriptions, Invoices & Submit Feedback"]:::uc
+
+      UC_REC1["UC-REC-01..05: Review Requests, Confirm<br/>Room/Chair, Register Walk-In & Check-In Queue"]:::uc
+      UC_REC2["UC-REC-06..07: Resolve Disruptions &<br/>Schedule Dedicated X-Ray in Room R003"]:::uc
+      UC_REC3["UC-REC-08..10: Generate Invoices,<br/>Collect Payments/Refunds & Print Receipts"]:::uc
+      UC_REC4["UC-REC-11..13: Request Leave, Manage<br/>Shift Swap, Handover & Draft Blogs"]:::uc
+
+      UC_DEN1["UC-DEN-01..06: View Queue, Start Consultation,<br/>Update EMR/Odontogram & Treatment Plans/Sessions"]:::uc
+      UC_DEN2["UC-DEN-07..08: Create Prescriptions &<br/>Dispense Medicine from Inventory"]:::uc
+      UC_DEN3["UC-DEN-09..12: Order X-Ray, Execute Room R003<br/>Session, Upload & Review Radiographs"]:::uc
+      UC_DEN4["UC-DEN-13..15: Recommend Follow-Ups,<br/>Complete Visit & Submit Leave Request"]:::uc
+
+      UC_ADM1["UC-ADM-01..04: Manage Accounts, Roles,<br/>Departments, Services/Prices & Rooms/Chairs"]:::uc
+      UC_ADM2["UC-ADM-05..07: Manage Staff Schedules,<br/>Approve Leaves & Manage Medicine Inventory"]:::uc
+      UC_ADM3["UC-ADM-08..11: Publish Blogs/News, View<br/>Audit Logs & Reconcile Attendance"]:::uc
+    end
+
+    PAT --> UC_COM
+    PAT --> UC_PAT1
+    PAT --> UC_PAT2
+    PAT --> UC_PAT3
+
+    REC --> UC_COM
+    REC --> UC_REC1
+    REC --> UC_REC2
+    REC --> UC_REC3
+    REC --> UC_REC4
+
+    DEN --> UC_COM
+    DEN --> UC_DEN1
+    DEN --> UC_DEN2
+    DEN --> UC_DEN3
+    DEN --> UC_DEN4
+
+    ADM --> UC_COM
+    ADM --> UC_ADM1
+    ADM --> UC_ADM2
+    ADM --> UC_ADM3

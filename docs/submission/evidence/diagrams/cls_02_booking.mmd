@@ -1,0 +1,37 @@
+classDiagram
+    class PatientAppointmentController {
+      -IAppointmentApiService _apptApi
+      -IBookingApiService _bookingApi
+      +Services(string category, string combo) Task~IActionResult~
+      +GetServices(int departmentId) Task~IActionResult~
+      +GetDentists(int departmentId) Task~IActionResult~
+      +GetSlots(int serviceId, long? dentistId, DateOnly date) Task~IActionResult~
+      +Book(PatientBookAppointmentViewModel) Task~IActionResult~
+      +Reschedule(long id, PatientRescheduleViewModel) Task~IActionResult~
+      +Cancel(long id, string reason) Task~IActionResult~
+    }
+    class AppointmentsController {
+      -IAppointmentService _appointmentService
+      +GetCombos() Task~ActionResult~
+      +CreateAppointment(CreatePatientAppointmentRequest) Task~ActionResult~
+      +PatientReschedule(long id, RescheduleRequest) Task~ActionResult~
+      +PatientCancel(long id, CancelRequest) Task~ActionResult~
+    }
+    class BookingService {
+      -DentalClinicDbContext _db
+      -IClinicalStaffAvailabilityService _availability
+      +GetActiveDepartmentsAsync() Task~List~
+      +GetServicesByDepartmentAsync(int) Task~List~
+      +GetAvailableSlotsAsync(SlotQueryRequest) Task~List~
+    }
+    class AppointmentService {
+      -DentalClinicDbContext _db
+      -IClinicalStaffAvailabilityService _availability
+      -IAppointmentReminderService _reminder
+      +CreatePatientAppointmentAsync(long, CreatePatientAppointmentRequest) Task~AppointmentDto~
+      +PatientRescheduleAsync(long, long, RescheduleRequest) Task~AppointmentDto~
+      +PatientCancelAsync(long, long, string) Task
+    }
+    PatientAppointmentController --> AppointmentsController : HTTPS REST
+    AppointmentsController --> AppointmentService
+    AppointmentsController --> BookingService

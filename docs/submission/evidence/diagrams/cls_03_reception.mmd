@@ -1,0 +1,25 @@
+classDiagram
+    class ReceptionistAppointmentController {
+      -IAppointmentApiService _api
+      +Requests(AppointmentFilterViewModel) Task~IActionResult~
+      +Review(long id) Task~IActionResult~
+      +Confirm(long id, ConfirmAppointmentViewModel) Task~IActionResult~
+      +WalkInCheckIn(WalkInCheckInViewModel) Task~IActionResult~
+      +CheckIn(long id) Task~IActionResult~
+      +NoShow(long id) Task~IActionResult~
+    }
+    class AppointmentsController {
+      +GetReceptionistRequests() Task~ActionResult~
+      +RegisterWalkInPatient(RegisterWalkInRequest) Task~ActionResult~
+      +ManagerConfirm(long id, ConfirmAppointmentRequest) Task~ActionResult~
+      +ReceptionistCheckIn(long id) Task~ActionResult~
+    }
+    class AppointmentService {
+      -DentalClinicDbContext _db
+      +GetReceptionistRequestsAsync(Filter) Task~List~
+      +ReceptionistConfirmAsync(long, long, ConfirmRequest) Task
+      +RegisterWalkInAndCheckInAsync(long, WalkInRequest) Task~AppointmentDto~
+      +ReceptionistCheckInAsync(long, long) Task~int~
+    }
+    ReceptionistAppointmentController --> AppointmentsController
+    AppointmentsController --> AppointmentService

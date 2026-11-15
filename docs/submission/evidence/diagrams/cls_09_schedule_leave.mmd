@@ -1,0 +1,29 @@
+classDiagram
+    class AdminDentistScheduleController {
+      +BulkApply(BulkScheduleViewModel) Task~IActionResult~
+      +LeaveImpact(long id) Task~IActionResult~
+      +ApproveLeave(long id, ApproveLeaveViewModel) Task~IActionResult~
+      +RejectLeave(long id, string note) Task~IActionResult~
+    }
+    class DentistLeaveService {
+      -DentalClinicDbContext _db
+      -IClinicalStaffAvailabilityService _availability
+      +SubmitLeaveRequestAsync(long, SubmitLeaveRequest) Task~LeaveRequestDto~
+      +GetLeaveImpactAnalysisAsync(long) Task~LeaveImpactDto~
+      +ApproveLeaveRequestAsync(long, long, ApproveLeaveRequest) Task
+      +RejectLeaveRequestAsync(long, long, string) Task
+    }
+    class ClinicalStaffAvailabilityService {
+      -DentalClinicDbContext _db
+      +ValidateXrayShiftLeaveCoverageAsync(long, DateOnly, DateOnly, TimeOnly?, TimeOnly?) Task~bool~
+      +CheckDentistAvailabilityAsync(long, DateOnly, TimeOnly, TimeOnly) Task~bool~
+    }
+    class AppointmentDisruptionService {
+      -DentalClinicDbContext _db
+      +FlagAffectedAppointmentsForLeaveAsync(StaffLeaveRequest) Task
+      +PatientChooseNewDentistAsync(long, long, long) Task
+      +PatientRescheduleDisruptionAsync(long, long, RescheduleRequest) Task
+    }
+    AdminDentistScheduleController --> DentistLeaveService
+    DentistLeaveService --> ClinicalStaffAvailabilityService
+    DentistLeaveService --> AppointmentDisruptionService

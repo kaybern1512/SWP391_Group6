@@ -1,0 +1,31 @@
+sequenceDiagram
+    autonumber
+    actor Patient
+    participant MVC as PatientAppointmentController
+    participant API as AppointmentsController
+    participant Svc as AppointmentService
+    participant Avail as ClinicalStaffAvailabilityService
+    participant DB as SQL Server (38 Tables)
+
+    Patient->>MVC: GET /Patient/Appointment/Services?category=Combo
+    MVC->>API: GET /api/patient/appointments/combos
+    API->>Svc: GetAvailableCombosAsync()
+    Svc->>DB: SELECT ServiceCombos & ServiceComboItems WHERE IsActive=1
+    DB-->>MVC: Combo Catalog (COMBO_CARE = 500,000 VND Demo Price)
+
+    Patient->>MVC: Select Service/Combo, Date & Optional Dentist
+    MVC->>API: GET /api/booking/slots
+    API->>Avail: GetAvailableSlotsAsync(serviceId, date, dentistId)
+    Avail->>DB: Query ClinicProfile, StaffWorkSchedules, StaffLeaveRequests, AppointmentServices
+    DB-->>MVC: Valid shift slots (08:00-12:00, 13:00-17:00)
+
+    Patient->>MVC: POST /Patient/Appointment/Book
+    MVC->>API: POST /api/patient/appointments
+    API->>Svc: CreatePatientAppointmentAsync(patientUserId, request)
+    Svc->>DB: Check PatientProfiles.DateOfBirth (Pediatric <= 15 yrs rule)
+    Svc->>DB: Check same-day shift quota (Max 2 appts/day in distinct shifts)
+    Svc->>DB: INSERT Appointments (Status='PendingReceptionReview')
+    Svc->>DB: INSERT AppointmentServices (Status='PendingReceptionReview')
+    Svc->>DB: INSERT Notifications & AuditLogs
+    DB-->>MVC: AppointmentCreated (AppointmentCode)
+    MVC-->>Patient: Redirect to /Patient/Appointment/Success

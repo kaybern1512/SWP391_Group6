@@ -1,0 +1,23 @@
+classDiagram
+    class AppointmentReminderBackgroundService {
+      -IServiceProvider _serviceProvider
+      #ExecuteAsync(CancellationToken) Task
+    }
+    class AppointmentReminderService {
+      -DentalClinicDbContext _db
+      +ScheduleRemindersForAppointmentAsync(long) Task
+      +ProcessDueRemindersAsync(DateTime) Task~int~
+    }
+    class PostCareService {
+      -DentalClinicDbContext _db
+      +CreateFollowUpAsync(long, CreateFollowUpRequest) Task~FollowUpDto~
+      +UpdateFollowUpStatusAsync(long, string) Task
+    }
+    class NotificationService {
+      -DentalClinicDbContext _db
+      +GetUnreadCountAsync(long) Task~int~
+      +MarkAsReadAsync(long, long) Task
+      +MarkAllAsReadAsync(long) Task
+    }
+    AppointmentReminderBackgroundService --> AppointmentReminderService
+    AppointmentReminderService --> NotificationService

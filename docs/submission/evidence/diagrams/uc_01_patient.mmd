@@ -1,0 +1,48 @@
+flowchart LR
+    classDef actor fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#000,font-weight:bold
+    classDef uc fill:#E3F2FD,stroke:#1565C0,stroke-width:1.5px,color:#000
+    classDef sub fill:#F3E5F5,stroke:#6A1B9A,stroke-width:1px,color:#000
+
+    PAT(["Actor: Patient"]):::actor
+
+    subgraph PatBoundary ["Patient Portal Subsystem"]
+      UC_C1(["UC-COM-01: Register Patient Account"]):::uc
+      UC_C2(["UC-COM-02: Log In to System"]):::uc
+      UC_C3(["UC-COM-03: Manage User Profile"]):::uc
+      UC_P1(["UC-PAT-01: Search & View Dental Services"]):::uc
+      UC_P2(["UC-PAT-02: Book Appointment by Service"]):::uc
+      UC_P3(["UC-PAT-03: Book Service Combo Package"]):::uc
+      UC_P4(["UC-PAT-04: View My Appointments"]):::uc
+      UC_P5(["UC-PAT-05: Reschedule Appointment"]):::uc
+      UC_P6(["UC-PAT-06: Cancel or Withdraw Appointment"]):::uc
+      UC_P7(["UC-PAT-07: View Dental Medical Record"]):::uc
+      UC_P8(["UC-PAT-08: View Interactive 32-Tooth Odontogram"]):::uc
+      UC_P9(["UC-PAT-09: View Electronic Prescriptions"]):::uc
+      UC_P10(["UC-PAT-10: View Invoices & VietQR Payment"]):::uc
+      UC_P11(["UC-PAT-11: Submit Visit Feedback & Rating"]):::uc
+
+      INC_AGE(["Validate Pediatric Age <= 15"]):::sub
+      INC_QUOTA(["Verify Shift & Daily Quota"]):::sub
+      EXT_DISR(["Resolve Disrupted Appointment"]):::sub
+    end
+
+    PAT --> UC_C1
+    PAT --> UC_C2
+    PAT --> UC_C3
+    PAT --> UC_P1
+    PAT --> UC_P2
+    PAT --> UC_P3
+    PAT --> UC_P4
+    PAT --> UC_P5
+    PAT --> UC_P6
+    PAT --> UC_P7
+    PAT --> UC_P8
+    PAT --> UC_P9
+    PAT --> UC_P10
+    PAT --> UC_P11
+
+    UC_P2 -. "<<include>>" .-> INC_AGE
+    UC_P2 -. "<<include>>" .-> INC_QUOTA
+    UC_P3 -. "<<include>>" .-> INC_QUOTA
+    EXT_DISR -. "<<extend>>" .-> UC_P5
+    UC_P7 -. "<<include>>" .-> UC_P8

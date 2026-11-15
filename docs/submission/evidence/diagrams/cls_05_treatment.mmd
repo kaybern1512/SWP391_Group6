@@ -1,0 +1,24 @@
+classDiagram
+    class DentistTreatmentPlanController {
+      -ITreatmentApiService _api
+      +Index() Task~IActionResult~
+      +Create(CreateTreatmentPlanViewModel) Task~IActionResult~
+      +AddPhase(long id, AddPlanItemViewModel) Task~IActionResult~
+      +RecordSession(RecordSessionViewModel) Task~IActionResult~
+    }
+    class TreatmentController {
+      -ITreatmentService _treatmentService
+      +CreateTreatmentPlan(CreateTreatmentPlanRequest) Task~ActionResult~
+      +AddTreatmentPlanItem(long id, AddPlanItemRequest) Task~ActionResult~
+      +CreateTreatmentSession(CreateSessionRequest) Task~ActionResult~
+      +AddPerformedServiceToAppointment(long apptId, AddPerformedRequest) Task~ActionResult~
+    }
+    class TreatmentService {
+      -DentalClinicDbContext _db
+      +CreateTreatmentPlanAsync(long, CreateTreatmentPlanRequest) Task~TreatmentPlanDto~
+      +AddTreatmentPlanItemAsync(long, AddPlanItemRequest) Task~TreatmentPlanItemDto~
+      +CreateTreatmentSessionAsync(long, CreateSessionRequest) Task~TreatmentSessionDto~
+      +GetPerformedServicesByAppointmentAsync(long) Task~List~
+    }
+    DentistTreatmentPlanController --> TreatmentController
+    TreatmentController --> TreatmentService

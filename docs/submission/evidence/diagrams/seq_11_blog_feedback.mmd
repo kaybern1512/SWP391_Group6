@@ -1,0 +1,22 @@
+sequenceDiagram
+    autonumber
+    actor Rec as Receptionist
+    actor Adm as SystemAdministrator
+    actor Pat as Patient
+    participant BSvc as BlogService
+    participant FSvc as FeedbackService
+    participant DB as SQL Server
+
+    Rec->>BSvc: CreatePostAsync(recUserId, role='Receptionist', request)
+    BSvc->>DB: Enforce Receptionist cannot self-publish -> Status='PendingReview' (or 'Draft')
+    BSvc->>DB: INSERT BlogPosts (Title, Slug, ContentHtml, Status='PendingReview')
+
+    Adm->>BSvc: ReviewPostAsync(postId, adminUserId, Action='Publish')
+    BSvc->>DB: UPDATE BlogPosts SET Status='Published', ReviewedByUserId=@admin, PublishedAt=SYSDATETIME()
+    BSvc->>DB: INSERT AuditLogs (Action='PublishBlogPost')
+
+    Pat->>FSvc: CreateFeedbackAsync(patientUserId, AppointmentId, ClinicRating=5, DentistRating=5, Comment)
+    FSvc->>DB: Verify Appointments.Status == 'Completed' & PatientUserId == @patientUserId
+    FSvc->>DB: Check UQ_VisitFeedback_AppointmentId (1 feedback per appointment)
+    FSvc->>DB: INSERT VisitFeedback (ClinicRating, DentistRating, Comment, Status='Published')
+    DB-->>Pat: Feedback Recorded

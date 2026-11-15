@@ -1,0 +1,46 @@
+classDiagram
+    class AccountController {
+      -IAuthApiService _authApi
+      +Login(LoginViewModel) Task~IActionResult~
+      +Register(RegisterViewModel) Task~IActionResult~
+      +VerifyEmail(VerifyOtpViewModel) Task~IActionResult~
+      +ForgotPassword(ForgotPasswordViewModel) Task~IActionResult~
+      +ResetPassword(ResetPasswordViewModel) Task~IActionResult~
+      +ChangePassword(ChangePasswordViewModel) Task~IActionResult~
+      +Logout() Task~IActionResult~
+    }
+    class AuthController {
+      -IAuthService _authService
+      +Register(RegisterRequest) Task~ActionResult~
+      +VerifyEmail(VerifyEmailRequest) Task~ActionResult~
+      +Login(LoginRequest) Task~ActionResult~
+      +GoogleLogin(GoogleLoginRequest) Task~ActionResult~
+      +RefreshToken(RefreshTokenRequest) Task~ActionResult~
+      +ChangePassword(ChangePasswordRequest) Task~ActionResult~
+    }
+    class IAuthService {
+      <<interface>>
+      +RegisterAsync(RegisterRequest) Task~AuthResponse~
+      +LoginAsync(LoginRequest) Task~AuthResponse~
+      +GoogleLoginAsync(GoogleLoginRequest) Task~AuthResponse~
+      +RefreshTokenAsync(RefreshTokenRequest) Task~AuthResponse~
+      +ChangePasswordAsync(long, ChangePasswordRequest) Task
+    }
+    class AuthService {
+      -DentalClinicDbContext _db
+      -IPasswordHasherService _hasher
+      -IJwtTokenService _jwt
+      -IOtpService _otp
+      -IAuditLogService _audit
+      +LoginAsync(LoginRequest) Task~AuthResponse~
+      +RegisterAsync(RegisterRequest) Task~AuthResponse~
+    }
+    class JwtTokenService {
+      +GenerateAccessToken(UserAccount) string
+      +GenerateRefreshToken() string
+      +HashToken(string) string
+    }
+    AccountController --> AuthController : HTTPS REST
+    AuthController --> IAuthService
+    AuthService ..|> IAuthService
+    AuthService --> JwtTokenService

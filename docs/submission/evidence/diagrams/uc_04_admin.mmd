@@ -1,0 +1,39 @@
+flowchart LR
+    classDef actor fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#000,font-weight:bold
+    classDef uc fill:#F3E5F5,stroke:#4A148C,stroke-width:1.5px,color:#000
+    classDef sub fill:#E8EAF6,stroke:#1A237E,stroke-width:1px,color:#000
+
+    ADM(["Actor: SystemAdministrator"]):::actor
+
+    subgraph AdmBoundary ["System Administration & Governance Subsystem"]
+      UC_A1(["UC-ADM-01: Manage User Accounts & Role Locks"]):::uc
+      UC_A2(["UC-ADM-02: Manage Clinical Departments"]):::uc
+      UC_A3(["UC-ADM-03: Manage Services, Combos & Demo Prices"]):::uc
+      UC_A4(["UC-ADM-04: Manage Rooms & Dental Chairs Maintenance"]):::uc
+      UC_A5(["UC-ADM-05: Manage Monthly Staff Work Schedules"]):::uc
+      UC_A6(["UC-ADM-06: Approve or Reject Staff Leave Requests"]):::uc
+      UC_A7(["UC-ADM-07: Manage Medicine Catalog & Stock Adjustments"]):::uc
+      UC_A8(["UC-ADM-08: Review, Approve & Publish Blog Articles"]):::uc
+      UC_A9(["UC-ADM-09: Manage Clinic News & Announcements"]):::uc
+      UC_A10(["UC-ADM-10: View Security & Operational Audit Logs"]):::uc
+      UC_A11(["UC-ADM-11: Review & Export Workforce Attendance Reports"]):::uc
+
+      INC_IMP(["Analyze Appointment Disruption Impact"]):::sub
+      INC_XRAY(["Enforce X-Ray Shift Staffing Coverage >= 1"]):::sub
+    end
+
+    ADM --> UC_A1
+    ADM --> UC_A2
+    ADM --> UC_A3
+    ADM --> UC_A4
+    ADM --> UC_A5
+    ADM --> UC_A6
+    ADM --> UC_A7
+    ADM --> UC_A8
+    ADM --> UC_A9
+    ADM --> UC_A10
+    ADM --> UC_A11
+
+    UC_A4 -. "<<include>>" .-> INC_IMP
+    UC_A6 -. "<<include>>" .-> INC_IMP
+    UC_A6 -. "<<include>>" .-> INC_XRAY

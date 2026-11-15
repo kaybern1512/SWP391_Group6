@@ -1,0 +1,48 @@
+flowchart LR
+    classDef actor fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#000,font-weight:bold
+    classDef uc fill:#E0F7FA,stroke:#006064,stroke-width:1.5px,color:#000
+    classDef sub fill:#FCE4EC,stroke:#880E4F,stroke-width:1px,color:#000
+
+    DEN(["Actor: Dentist<br/>(Treating & X-Ray Duty)"]):::actor
+
+    subgraph DenBoundary ["Clinical Workspace & Diagnostic Imaging Subsystem"]
+      UC_D1(["UC-DEN-01: View Assigned Schedule & Queue"]):::uc
+      UC_D2(["UC-DEN-02: Start Clinical Consultation"]):::uc
+      UC_D3(["UC-DEN-03: Record Dental Medical Record Entry"]):::uc
+      UC_D4(["UC-DEN-04: Update 32-Tooth FDI Odontogram"]):::uc
+      UC_D5(["UC-DEN-05: Create Multi-Phase Treatment Plan"]):::uc
+      UC_D6(["UC-DEN-06: Record Treatment Session & Procedures"]):::uc
+      UC_D7(["UC-DEN-07: Create Electronic Prescription"]):::uc
+      UC_D8(["UC-DEN-08: Dispense Medicine & Deduct Stock"]):::uc
+      UC_D9(["UC-DEN-09: Order Diagnostic X-Ray"]):::uc
+      UC_D10(["UC-DEN-10: Perform Assigned X-Ray Session (R003)"]):::uc
+      UC_D11(["UC-DEN-11: Upload Diagnostic Image & Findings"]):::uc
+      UC_D12(["UC-DEN-12: Review Diagnostic X-Ray Result"]):::uc
+      UC_D13(["UC-DEN-13: Record Follow-Up Recommendation"]):::uc
+      UC_D14(["UC-DEN-14: Complete Clinical Consultation"]):::uc
+      UC_D15(["UC-DEN-15: Submit Dentist Leave Request"]):::uc
+
+      INC_PREREQ(["Validate Clinical Entry & Tasks Completed"]):::sub
+      INC_STOCK(["Enforce Non-Negative Medicines.StockQuantity"]):::sub
+      INC_XCOV(["Verify >= 1 Qualified X-Ray Dentist On Duty"]):::sub
+    end
+
+    DEN --> UC_D1
+    DEN --> UC_D2
+    DEN --> UC_D3
+    DEN --> UC_D4
+    DEN --> UC_D5
+    DEN --> UC_D6
+    DEN --> UC_D7
+    DEN --> UC_D8
+    DEN --> UC_D9
+    DEN --> UC_D10
+    DEN --> UC_D11
+    DEN --> UC_D12
+    DEN --> UC_D13
+    DEN --> UC_D14
+    DEN --> UC_D15
+
+    UC_D14 -. "<<include>>" .-> INC_PREREQ
+    UC_D8 -. "<<include>>" .-> INC_STOCK
+    UC_D15 -. "<<include>>" .-> INC_XCOV

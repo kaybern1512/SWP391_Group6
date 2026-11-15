@@ -1,0 +1,29 @@
+classDiagram
+    class AdminRoomChairController {
+      -IAdminApiService _adminApi
+      +Index() Task~IActionResult~
+      +CreateRoom(CreateRoomViewModel) Task~IActionResult~
+      +UpdateRoomStatus(int id, string status) Task~IActionResult~
+      +CreateChair(CreateChairViewModel) Task~IActionResult~
+      +UpdateChairStatus(int id, string status) Task~IActionResult~
+    }
+    class AdminController {
+      -IAdminService _adminService
+      -IAdminImpactAnalysisService _impactService
+      +GetRooms() Task~ActionResult~
+      +UpdateRoomStatus(long id, UpdateStatusRequest) Task~ActionResult~
+      +GetChairs() Task~ActionResult~
+      +UpdateChairStatus(long id, UpdateStatusRequest) Task~ActionResult~
+    }
+    class AdminService {
+      -DentalClinicDbContext _db
+      +UpdateRoomStatusAsync(int, string, long) Task
+      +UpdateChairStatusAsync(int, string, long) Task
+    }
+    class AdminImpactAnalysisService {
+      +PreviewRoomDeactivationImpactAsync(int) Task~ImpactDto~
+      +PreviewChairDeactivationImpactAsync(int) Task~ImpactDto~
+    }
+    AdminRoomChairController --> AdminController
+    AdminController --> AdminService
+    AdminController --> AdminImpactAnalysisService

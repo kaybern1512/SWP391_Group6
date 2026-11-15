@@ -1,0 +1,22 @@
+sequenceDiagram
+    autonumber
+    actor Adm as SystemAdministrator
+    participant MVC as AdminRoomChairController
+    participant API as AdminController / AdminWorkforceController
+    participant Imp as AdminImpactAnalysisService
+    participant Svc as AdminService
+    participant DB as SQL Server
+
+    Adm->>MVC: Preview Maintenance Impact for DentalChairId / RoomId
+    MVC->>API: GET /api/admin/impact/chair-deactivate/{chairId}
+    API->>Imp: PreviewChairDeactivationImpactAsync(chairId)
+    Imp->>DB: SELECT future AppointmentServices WHERE DentalChairId=@chairId AND Status IN ('Confirmed','PendingReceptionReview')
+    DB-->>MVC: List of impacted future appointments
+
+    Adm->>MVC: POST /Admin/Rooms/UpdateChairStatus/{id} (Status='Maintenance')
+    MVC->>API: POST /api/admin/chairs/{id}/status
+    API->>Svc: UpdateChairStatusAsync(id, 'Maintenance', adminUserId)
+    Svc->>DB: UPDATE DentalChairs SET Status='Maintenance', UpdatedAt=SYSDATETIME()
+    Svc->>DB: UPDATE affected AppointmentServices SET PendingActionType='Reschedule'
+    Svc->>DB: INSERT Notifications & AuditLogs (Action='UpdateChairStatus')
+    DB-->>MVC: Chair marked Maintenance & blocked from new bookings
