@@ -900,7 +900,7 @@ public class ImagingService : IImagingService
             DentistName = d.OrderingDentist?.StaffProfile?.FullName ?? $"Bác sĩ #{d.OrderingDentistUserId}",
             DiagnosticType = d.ImagingType ?? d.DepartmentService?.DiagnosticType ?? "Intraoral",
             DiagnosticTypeName = ImagingDiagnosticType.GetDisplayName(d.ImagingType ?? d.DepartmentService?.DiagnosticType ?? "Intraoral"),
-            ClinicalIndication = d.ClinicalIndication,
+            ClinicalIndication = ExtractMedicalIndication(d.ClinicalIndication),
             IsExternal = isExt,
             ExternalFacilityName = null,
             Status = d.Status,
@@ -910,6 +910,13 @@ public class ImagingService : IImagingService
             Sessions = sessions,
             Results = results
         };
+    }
+
+    public static string ExtractMedicalIndication(string? indication)
+    {
+        if (string.IsNullOrWhiteSpace(indication)) return string.Empty;
+        var clean = Regex.Replace(indication, @"\[(Room|RoomCode|RoomName|Dentist|DentistName|Slot|EndSlot|Queue):[^\]]*\]\s*", string.Empty).Trim();
+        return clean;
     }
 
     private static string UpdateMetadataTag(string? source, string key, string value)

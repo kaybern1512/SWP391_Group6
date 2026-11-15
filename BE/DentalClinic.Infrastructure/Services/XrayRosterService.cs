@@ -306,12 +306,16 @@ public class XrayRosterService : IXrayRosterService
     public async Task<bool> IsDentistOnXrayDutyAsync(long dentistUserId, DateTime startUtc, DateTime endUtc, CancellationToken ct = default)
     {
         var vnZone = TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? "SE Asia Standard Time" : "Asia/Ho_Chi_Minh");
-        var localStart = TimeZoneInfo.ConvertTimeFromUtc(startUtc, vnZone);
-        var localEnd = TimeZoneInfo.ConvertTimeFromUtc(endUtc, vnZone);
+        var localStart = startUtc.Kind == DateTimeKind.Utc 
+            ? TimeZoneInfo.ConvertTimeFromUtc(startUtc, vnZone) 
+            : startUtc;
+        var localEnd = endUtc.Kind == DateTimeKind.Utc 
+            ? TimeZoneInfo.ConvertTimeFromUtc(endUtc, vnZone) 
+            : endUtc;
 
         var startDate = DateOnly.FromDateTime(localStart);
         var startTime = TimeOnly.FromDateTime(localStart);
-        var endTime = TimeOnly.FromDateTime(localEnd);
+        var endTime = localEnd.Date > localStart.Date ? new TimeOnly(23, 59, 59) : TimeOnly.FromDateTime(localEnd);
 
         var hasDutySchedule = await _dbContext.StaffWorkSchedules
             .AsNoTracking()

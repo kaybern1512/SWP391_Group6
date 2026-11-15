@@ -512,4 +512,25 @@ public class DedicatedXrayDentistWorkflowTests
         Assert.Equal(12, queueStatus.BackupDentistUserId);
         Assert.Equal("BS. Nguyen Thi Thao", queueStatus.BackupDentistName);
     }
+
+    [Fact]
+    public void ClinicalIndication_MetadataTags_NeverOverwriteMedicalIndication_AndAreStrippedFromDisplay()
+    {
+        // 1. Verify medical indication is never erased or overwritten by metadata tags
+        var medicalIndication = "Chụp X-quang răng số 6 kiểm tra nang quanh chóp";
+        var rawWithTags = $"[Room:5] [RoomCode:R003] [RoomName:Phòng X-quang] [Dentist:9] [DentistName:BS. Tran Hung] [Slot:2026-11-30T07:00:00.0000000Z] [EndSlot:2026-11-30T07:15:00.0000000Z] [Queue:1] {medicalIndication}";
+
+        var extracted = ImagingService.ExtractMedicalIndication(rawWithTags);
+        Assert.Equal(medicalIndication, extracted);
+
+        // 2. Verify external facility indications are preserved
+        var externalWithTags = $"[External:Bệnh viện Răng Hàm Mặt] [Room:5] [Queue:2] {medicalIndication}";
+        var extractedExternal = ImagingService.ExtractMedicalIndication(externalWithTags);
+        Assert.Equal($"[External:Bệnh viện Răng Hàm Mặt] {medicalIndication}", extractedExternal);
+
+        // 3. Verify malicious injection of [Dentist:99] is stripped and never trusted
+        var maliciousIndication = $"Bệnh nhân đau răng [Dentist:99]";
+        var extractedMalicious = ImagingService.ExtractMedicalIndication(maliciousIndication);
+        Assert.Equal("Bệnh nhân đau răng", extractedMalicious);
+    }
 }

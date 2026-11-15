@@ -217,7 +217,9 @@ public class ClinicalDiagnosticsController : ControllerBase
         try
         {
             var targetOrderId = request.DiagnosticOrderId > 0 ? request.DiagnosticOrderId : request.ImagingSessionId;
-            var targetDiagnostic = await _dbContext.Diagnostics.AsNoTracking().FirstOrDefaultAsync(d => d.DiagnosticId == targetOrderId, ct);
+            var targetDiagnostic = await _dbContext.Diagnostics.AsNoTracking()
+                .Include(d => d.AppointmentService)
+                .FirstOrDefaultAsync(d => d.DiagnosticId == targetOrderId, ct);
             if (targetDiagnostic == null)
                 return NotFound(ApiResponse<DiagnosticResultDto>.Fail("Không tìm thấy chỉ định chẩn đoán hình ảnh."));
 
@@ -234,10 +236,18 @@ public class ClinicalDiagnosticsController : ControllerBase
                 var isOrdering = targetDiagnostic.OrderingDentistUserId == userId;
                 var isAssigned = await _dbContext.AppointmentServices.AsNoTracking()
                     .AnyAsync(s => s.AppointmentServiceId == targetDiagnostic.AppointmentServiceId && s.AssignedDentistUserId == userId, ct);
-                var isAssignedImaging = targetDiagnostic.ClinicalIndication.Contains($"[Dentist:{userId}]");
-                var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(userId, targetDiagnostic.CreatedAt.AddHours(-1), targetDiagnostic.CreatedAt.AddHours(12), ct);
+                var rawTime = (targetDiagnostic.AppointmentService != null && targetDiagnostic.AppointmentService.ScheduledStart > DateTime.MinValue)
+                    ? targetDiagnostic.AppointmentService.ScheduledStart
+                    : (targetDiagnostic.CreatedAt > DateTime.MinValue ? targetDiagnostic.CreatedAt : DateTime.UtcNow);
+                var safeStart = rawTime > DateTime.MinValue.AddHours(1) ? rawTime.AddHours(-1) : DateTime.MinValue;
+                var safeEnd = rawTime < DateTime.MaxValue.AddHours(-12) ? rawTime.AddHours(12) : DateTime.MaxValue;
+                var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(userId, safeStart, safeEnd, ct);
+                var isQualifiedXrayDentist = await _dbContext.DentistProfiles.AsNoTracking()
+                    .AnyAsync(dp => dp.UserId == userId && dp.Qualification != null && (dp.Qualification.Contains("Chẩn đoán hình ảnh") || dp.Qualification.Contains("X-quang")), ct);
 
-                if (!isOrdering && !isAssigned && !isAssignedImaging && !isXrayDuty)
+                // DATA INTEGRITY: Never trust free-text metadata tags in ClinicalIndication as authorization evidence.
+                // Authorization must be verified strictly against canonical database relations and active work schedules.
+                if (!isOrdering && !isAssigned && !(isXrayDuty && isQualifiedXrayDentist))
                 {
                     return Forbid();
                 }
@@ -405,7 +415,9 @@ public class ClinicalDiagnosticsController : ControllerBase
             if (targetOrderId <= 0)
                 return BadRequest(ApiResponse<DiagnosticResultDto>.Fail("Mã chỉ định chẩn đoán hình ảnh không hợp lệ."));
 
-            var targetDiagnostic = await _dbContext.Diagnostics.AsNoTracking().FirstOrDefaultAsync(d => d.DiagnosticId == targetOrderId, ct);
+            var targetDiagnostic = await _dbContext.Diagnostics.AsNoTracking()
+                .Include(d => d.AppointmentService)
+                .FirstOrDefaultAsync(d => d.DiagnosticId == targetOrderId, ct);
             if (targetDiagnostic == null)
                 return NotFound(ApiResponse<DiagnosticResultDto>.Fail("Không tìm thấy chỉ định chẩn đoán hình ảnh."));
 
@@ -422,10 +434,18 @@ public class ClinicalDiagnosticsController : ControllerBase
                 var isOrdering = targetDiagnostic.OrderingDentistUserId == userId;
                 var isAssigned = await _dbContext.AppointmentServices.AsNoTracking()
                     .AnyAsync(s => s.AppointmentServiceId == targetDiagnostic.AppointmentServiceId && s.AssignedDentistUserId == userId, ct);
-                var isAssignedImaging = targetDiagnostic.ClinicalIndication.Contains($"[Dentist:{userId}]");
-                var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(userId, targetDiagnostic.CreatedAt.AddHours(-1), targetDiagnostic.CreatedAt.AddHours(12), ct);
+                var rawTime = (targetDiagnostic.AppointmentService != null && targetDiagnostic.AppointmentService.ScheduledStart > DateTime.MinValue)
+                    ? targetDiagnostic.AppointmentService.ScheduledStart
+                    : (targetDiagnostic.CreatedAt > DateTime.MinValue ? targetDiagnostic.CreatedAt : DateTime.UtcNow);
+                var safeStart = rawTime > DateTime.MinValue.AddHours(1) ? rawTime.AddHours(-1) : DateTime.MinValue;
+                var safeEnd = rawTime < DateTime.MaxValue.AddHours(-12) ? rawTime.AddHours(12) : DateTime.MaxValue;
+                var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(userId, safeStart, safeEnd, ct);
+                var isQualifiedXrayDentist = await _dbContext.DentistProfiles.AsNoTracking()
+                    .AnyAsync(dp => dp.UserId == userId && dp.Qualification != null && (dp.Qualification.Contains("Chẩn đoán hình ảnh") || dp.Qualification.Contains("X-quang")), ct);
 
-                if (!isOrdering && !isAssigned && !isAssignedImaging && !isXrayDuty)
+                // DATA INTEGRITY: Never trust free-text metadata tags in ClinicalIndication as authorization evidence.
+                // Authorization must be verified strictly against canonical database relations and active work schedules.
+                if (!isOrdering && !isAssigned && !(isXrayDuty && isQualifiedXrayDentist))
                 {
                     return Forbid();
                 }
@@ -494,14 +514,22 @@ public class ClinicalDiagnosticsController : ControllerBase
                 var isOrderingDentist = result.OrderingDentistUserId == currentUserId;
                 var isReviewingDentist = result.ReviewedByDentistUserId == currentUserId;
                 var isUploadingDentist = result.UploadedByUserId == currentUserId;
-                var isAssignedImaging = result.ClinicalIndication.Contains($"[Dentist:{currentUserId}]");
                 var isAssignedToAppt = result.AppointmentService?.AssignedDentistUserId == currentUserId ||
                                        (appt != null && await _dbContext.AppointmentServices.AsNoTracking().AnyAsync(s => s.AppointmentId == appt.AppointmentId && s.AssignedDentistUserId == currentUserId, ct));
 
-                // Clinical care circle enforcement: treating dentists, ordering doctor, assigned imaging doctor,
-                // reviewing doctor, or uploading doctor. An on-duty X-ray doctor cannot view arbitrary unrelated
-                // patient images merely by knowing the result ID unless directly assigned or part of the care circle.
-                if (!isOrderingDentist && !isReviewingDentist && !isUploadingDentist && !isAssignedToAppt && !isAssignedImaging)
+                var rawTime = (result.AppointmentService != null && result.AppointmentService.ScheduledStart > DateTime.MinValue)
+                    ? result.AppointmentService.ScheduledStart
+                    : (result.CreatedAt > DateTime.MinValue ? result.CreatedAt : DateTime.UtcNow);
+                var safeStart = rawTime > DateTime.MinValue.AddHours(1) ? rawTime.AddHours(-1) : DateTime.MinValue;
+                var safeEnd = rawTime < DateTime.MaxValue.AddHours(-12) ? rawTime.AddHours(12) : DateTime.MaxValue;
+                var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(currentUserId, safeStart, safeEnd, ct);
+                var isQualifiedXrayDentist = await _dbContext.DentistProfiles.AsNoTracking()
+                    .AnyAsync(dp => dp.UserId == currentUserId && dp.Qualification != null && (dp.Qualification.Contains("Chẩn đoán hình ảnh") || dp.Qualification.Contains("X-quang")), ct);
+
+                // DATA INTEGRITY: Never trust free-text metadata tags in ClinicalIndication as authorization evidence.
+                // Clinical care circle enforcement: ordering dentist, reviewing dentist, uploading dentist,
+                // assigned treating dentist, or qualified on-duty imaging doctor verified from roster and profile.
+                if (!isOrderingDentist && !isReviewingDentist && !isUploadingDentist && !isAssignedToAppt && !(isXrayDuty && isQualifiedXrayDentist))
                 {
                     return Forbid();
                 }
