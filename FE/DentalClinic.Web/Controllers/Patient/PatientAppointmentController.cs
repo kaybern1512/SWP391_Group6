@@ -426,14 +426,20 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
             PatientEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
         };
 
+        var defaultGeneralService = filteredServices.FirstOrDefault(s => s.DepartmentId == 1 && s.ServiceName.Contains("Khám", StringComparison.OrdinalIgnoreCase))
+            ?? filteredServices.FirstOrDefault(s => s.DepartmentId == 1)
+            ?? filteredServices.FirstOrDefault();
+        long defaultGeneralDeptId = defaultGeneralService?.DepartmentId ?? 1;
+        long defaultGeneralServiceId = defaultGeneralService?.DepartmentServiceId ?? 1;
+
         // Categorization & pre-selection based on query parameters or defaults
         if (!string.IsNullOrEmpty(category))
         {
             vm.BookingCategory = category;
             if (category == "GeneralCheckup")
             {
-                vm.DepartmentId = 1;
-                vm.RequestedServiceId = 1;
+                vm.DepartmentId = defaultGeneralDeptId;
+                vm.RequestedServiceId = defaultGeneralServiceId;
             }
             else if (category == "Combo" && availableCombos.Any())
             {
@@ -493,8 +499,8 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
         {
             // Default: Khám tổng quát / Chưa biết nhu cầu
             vm.BookingCategory = "GeneralCheckup";
-            vm.DepartmentId = 1;
-            vm.RequestedServiceId = 1;
+            vm.DepartmentId = defaultGeneralDeptId;
+            vm.RequestedServiceId = defaultGeneralServiceId;
         }
 
         return View("~/Views/Patient/Appointment/Book.cshtml", vm);
@@ -545,46 +551,35 @@ var filtered = services.Where(s => allowedDeptIds.Contains(s.DepartmentId)).ToLi
 
     }
 
-[HttpGet("GetSlots")]
-
+    [HttpGet("GetSlots")]
     public async Task<IActionResult> GetSlots(long departmentId, long serviceId, string date, long? dentistUserId)
-
     {
-
         if (!DateOnly.TryParse(date, out var parsedDate))
-
         {
-
             return BadRequest(new { message = "Định dạng ngày không hợp lệ." });
-
         }
 
-var clinicToday = GetClinicToday();
-
+        var clinicToday = GetClinicToday();
         if (parsedDate < clinicToday)
-
         {
-
             return Json(new List<AvailableSlotDto>());
-
         }
 
-var result = await _appointmentApiService.GetAvailableSlotsAsync(departmentId, serviceId, parsedDate, dentistUserId);
+        var result = await _appointmentApiService.GetAvailableSlotsAsync(departmentId, serviceId, parsedDate, dentistUserId);
+        if (result != null && !result.IsSuccess)
+        {
+            Response.Headers["X-Slot-Error"] = Uri.EscapeDataString(result.Message ?? "Không thể lấy khung giờ.");
+        }
 
         var slots = result?.Data ?? new List<AvailableSlotDto>();
 
-if (parsedDate == clinicToday)
-
+        if (parsedDate == clinicToday)
         {
-
             var clinicNow = GetClinicNow();
-
             slots = slots.Where(s => s.StartTime > clinicNow.AddMinutes(15)).ToList();
-
         }
 
-return Json(slots);
-
+        return Json(slots);
     }
 
 [HttpPost("Book")]

@@ -133,6 +133,22 @@ public class BookingService : IBookingService
 
         if (service == null)
         {
+            var serviceOtherDept = await _dbContext.DepartmentServices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.DepartmentServiceId == (int)query.ServiceId && s.Status == "Active", ct);
+            if (serviceOtherDept != null)
+            {
+                return ApiResponse<List<AvailableSlotDto>>.Fail($"Dịch vụ '{serviceOtherDept.ServiceName}' thuộc chuyên khoa khác (Mã khoa #{serviceOtherDept.DepartmentId}). Vui lòng chọn đúng chuyên khoa.");
+            }
+
+            var inactiveService = await _dbContext.DepartmentServices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.DepartmentServiceId == (int)query.ServiceId, ct);
+            if (inactiveService != null && inactiveService.Status != "Active")
+            {
+                return ApiResponse<List<AvailableSlotDto>>.Fail($"Dịch vụ '{inactiveService.ServiceName}' hiện đang tạm ngừng cung cấp.");
+            }
+
             return ApiResponse<List<AvailableSlotDto>>.Fail("Dịch vụ không tồn tại hoặc không thuộc chuyên khoa đã chọn.");
         }
 
@@ -140,7 +156,7 @@ public class BookingService : IBookingService
 
         var clinicProfile = await _dbContext.ClinicProfiles.AsNoTracking().FirstOrDefaultAsync(ct);
         var openTime = clinicProfile?.OpeningTime ?? new TimeOnly(8, 0);
-        var closeTime = clinicProfile?.ClosingTime ?? new TimeOnly(17, 0);
+        var closeTime = clinicProfile?.ClosingTime ?? new TimeOnly(20, 0);
 
         var slotStepMinutes = (durationMinutes > 0 && durationMinutes < 30) ? durationMinutes : 30;
         var availableSlots = new List<AvailableSlotDto>();
@@ -162,7 +178,12 @@ public class BookingService : IBookingService
 
             var isAssigned = await _dbContext.DentistProfiles
                 .AsNoTracking()
-                .AnyAsync(dp => dp.UserId == dentistId && dp.DepartmentId == (int)query.DepartmentId, ct);
+                .Include(dp => dp.StaffProfile)
+                    .ThenInclude(u => u.User)
+                .AnyAsync(dp => dp.UserId == dentistId &&
+                                dp.DepartmentId == (int)query.DepartmentId &&
+                                dp.StaffProfile.EmploymentStatus == "Active" &&
+                                dp.StaffProfile.User.Status == AccountStatus.Active, ct);
 
             if (!isAssigned)
             {
@@ -254,6 +275,10 @@ public class BookingService : IBookingService
             var departmentDentistIds = await _dbContext.DentistProfiles
                 .AsNoTracking()
                 .Where(dp => dp.DepartmentId == (int)query.DepartmentId)
+                .Include(dp => dp.StaffProfile)
+                    .ThenInclude(u => u.User)
+                .Where(dp => dp.StaffProfile.EmploymentStatus == "Active" &&
+                             dp.StaffProfile.User.Status == AccountStatus.Active)
                 .Select(dp => dp.UserId)
                 .ToListAsync(ct);
 

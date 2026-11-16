@@ -154,9 +154,27 @@ public class AppointmentServiceItemDto
 {
     public long AppointmentServiceId { get; set; }
     public long AppointmentId { get; set; }
-    public int DepartmentId { get; set; }
+    [JsonPropertyName("departmentId")]
+    public int? NullableDepartmentId { get; set; }
+
+    [JsonIgnore]
+    public int DepartmentId
+    {
+        get => NullableDepartmentId ?? 0;
+        set => NullableDepartmentId = value;
+    }
+
     public string? DepartmentName { get; set; }
-    public int DepartmentServiceId { get; set; }
+
+    [JsonPropertyName("departmentServiceId")]
+    public int? NullableDepartmentServiceId { get; set; }
+
+    [JsonIgnore]
+    public int DepartmentServiceId
+    {
+        get => NullableDepartmentServiceId ?? 0;
+        set => NullableDepartmentServiceId = value;
+    }
     public string? ServiceName { get; set; }
     public int? DurationMinutes { get; set; }
     public decimal UnitPrice { get; set; }
@@ -188,8 +206,17 @@ public class AppointmentDto
     public string PatientName { get; set; } = string.Empty;
     public string PatientCode { get; set; } = string.Empty;
     public string? PatientPhone { get; set; }
-    public long DepartmentId { get; set; }
-    public string DepartmentName { get; set; } = string.Empty;
+    [JsonPropertyName("departmentId")]
+    public long? NullableDepartmentId { get; set; }
+
+    [JsonIgnore]
+    public long DepartmentId
+    {
+        get => NullableDepartmentId ?? 0;
+        set => NullableDepartmentId = value;
+    }
+
+    public string? DepartmentName { get; set; }
 
     [JsonPropertyName("requestedServiceId")]
     public long? NullableRequestedServiceId { get; set; }
