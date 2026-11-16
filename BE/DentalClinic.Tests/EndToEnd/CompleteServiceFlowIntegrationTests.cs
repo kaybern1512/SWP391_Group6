@@ -118,6 +118,16 @@ public class CompleteServiceFlowIntegrationTests
         }
         if (staleInService.Count > 0) await db.SaveChangesAsync();
 
+        // Clean any existing patient appointments on test date to prevent same-slot/shift limit
+        var stalePatientAppts = await db.Appointments
+            .Where(a => a.PatientUserId == patientUserId && a.ScheduledStart >= testDate.Date && a.ScheduledStart < testDate.Date.AddDays(1))
+            .ToListAsync();
+        if (stalePatientAppts.Count > 0)
+        {
+            db.Appointments.RemoveRange(stalePatientAppts);
+            await db.SaveChangesAsync();
+        }
+
         _output.WriteLine("======================================================================");
         _output.WriteLine("KHỞI CHẠY LUỒNG KHÁM HOÀN CHỈNH: DỊCH VỤ CHÍNH + DỊCH VỤ THÊM");
         _output.WriteLine("======================================================================");

@@ -131,6 +131,29 @@ public class ReceptionistBillingController : Controller
         return RedirectToAction(nameof(Detail), new { id = request.InvoiceId });
     }
 
+    [HttpPost("Refund")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Refund(ProcessRefundRequest request)
+    {
+        if (request == null || request.InvoiceId <= 0 || request.Amount <= 0)
+        {
+            TempData["ErrorMessage"] = "Thông tin hoàn tiền không hợp lệ.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var result = await _billingApiService.ProcessRefundAsync(request);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Ghi nhận hoàn tiền viện phí thành công!";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Giao dịch hoàn tiền thất bại.";
+        }
+
+        return RedirectToAction(nameof(Detail), new { id = request.InvoiceId });
+    }
+
     [HttpGet("Print/{id:long}")]
     public async Task<IActionResult> Print(long id)
     {

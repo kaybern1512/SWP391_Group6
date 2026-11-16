@@ -80,10 +80,11 @@ public class ReceptionistConcurrencyAndLockingTests
             }
 
             // Already 1 approved leave for receptionist 601
-            dbSetup.ReceptionistLeaveRequests.Add(new ReceptionistLeaveRequest
+            dbSetup.StaffLeaveRequests.Add(new StaffLeaveRequest
             {
                 LeaveRequestId = 7001,
-                ReceptionistUserId = 601,
+                StaffUserId = 601,
+                StaffRole = "Receptionist",
                 LeaveType = "FullDay",
                 StartDate = targetDate,
                 EndDate = targetDate,
@@ -91,7 +92,7 @@ public class ReceptionistConcurrencyAndLockingTests
                 Status = "Approved",
                 CreatedAt = DateTime.UtcNow
             });
-            dbSetup.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod
+            dbSetup.StaffLeaveRequestPeriods.Add(new StaffLeaveRequestPeriod
             {
                 PeriodId = 8001,
                 LeaveRequestId = 7001,
@@ -100,11 +101,12 @@ public class ReceptionistConcurrencyAndLockingTests
             });
 
             // Two pending leave requests for receptionist 602 and 603
-            dbSetup.ReceptionistLeaveRequests.AddRange(
-                new ReceptionistLeaveRequest
+            dbSetup.StaffLeaveRequests.AddRange(
+                new StaffLeaveRequest
                 {
                     LeaveRequestId = 7002,
-                    ReceptionistUserId = 602,
+                    StaffUserId = 602,
+                    StaffRole = "Receptionist",
                     LeaveType = "FullDay",
                     StartDate = targetDate,
                     EndDate = targetDate,
@@ -112,10 +114,11 @@ public class ReceptionistConcurrencyAndLockingTests
                     Status = "Pending",
                     CreatedAt = DateTime.UtcNow
                 },
-                new ReceptionistLeaveRequest
+                new StaffLeaveRequest
                 {
                     LeaveRequestId = 7003,
-                    ReceptionistUserId = 603,
+                    StaffUserId = 603,
+                    StaffRole = "Receptionist",
                     LeaveType = "FullDay",
                     StartDate = targetDate,
                     EndDate = targetDate,
@@ -124,15 +127,15 @@ public class ReceptionistConcurrencyAndLockingTests
                     CreatedAt = DateTime.UtcNow
                 }
             );
-            dbSetup.ReceptionistLeaveRequestPeriods.AddRange(
-                new ReceptionistLeaveRequestPeriod
+            dbSetup.StaffLeaveRequestPeriods.AddRange(
+                new StaffLeaveRequestPeriod
                 {
                     PeriodId = 8002,
                     LeaveRequestId = 7002,
                     LeaveDate = targetDate,
                     Status = "Pending"
                 },
-                new ReceptionistLeaveRequestPeriod
+                new StaffLeaveRequestPeriod
                 {
                     PeriodId = 8003,
                     LeaveRequestId = 7003,
@@ -169,9 +172,9 @@ public class ReceptionistConcurrencyAndLockingTests
         // Exactly one should succeed (taking total approved to 2), and one must fail (Rule 1 violation)
         using (var dbVerify = CreateDbContext(dbName))
         {
-            var distinctApprovedUsers = await dbVerify.ReceptionistLeaveRequests
-                .Where(l => l.Status == "Approved")
-                .Select(l => l.ReceptionistUserId)
+            var distinctApprovedUsers = await dbVerify.StaffLeaveRequests
+                .Where(l => l.StaffRole == "Receptionist" && l.Status == "Approved")
+                .Select(l => l.StaffUserId)
                 .Distinct()
                 .CountAsync();
 

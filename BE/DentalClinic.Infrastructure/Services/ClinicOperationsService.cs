@@ -46,28 +46,32 @@ public class ClinicOperationsService : IClinicOperationsService
 
         var todayRecords = await _dbContext.StaffAttendanceRecords
             .AsNoTracking()
+            .Include(r => r.StaffUser)
+                .ThenInclude(s => s.User)
             .Where(r => r.WorkDate == opDate)
             .ToListAsync(ct);
 
         var presentDentistIds = todayRecords
-            .Where(r => r.Role == UserRole.Dentist && r.ClockInTimeUtc != null)
-            .Select(r => r.UserId)
+            .Where(r => r.StaffUser?.User?.Role == UserRole.Dentist && r.ClockInTime != null)
+            .Select(r => r.StaffUserId)
             .Distinct()
             .ToList();
 
         var presentReceptionistIds = todayRecords
-            .Where(r => r.Role == UserRole.Receptionist && r.ClockInTimeUtc != null)
-            .Select(r => r.UserId)
+            .Where(r => r.StaffUser?.User?.Role == UserRole.Receptionist && r.ClockInTime != null)
+            .Select(r => r.StaffUserId)
             .Distinct()
             .ToList();
 
-        var onLeaveCount = todayRecords.Count(r => r.IsApprovedLeave) +
-                           allShifts.Count(s => s.IsApprovedLeave && !todayRecords.Any(r => r.ShiftIdentifier == s.ShiftIdentifier));
+        var onLeaveCount = allShifts.Count(s => s.IsApprovedLeave);
         var missingPunchCount = todayRecords.Count(r => r.Status == AttendanceStatus.MissingClockOut);
 
-        var unresolvedCoverageIncidents = await _dbContext.ReceptionistCoverageIncidents
+        var unresolvedCoverageIncidents = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .CountAsync(i => i.WorkDate == opDate && i.Status == "Open", ct);
+            .CountAsync(s => s.StaffRole == UserRole.Receptionist &&
+                             s.WorkDate == opDate &&
+                             s.Status == "AbsenceReported" &&
+                             (s.Notes == null || !s.Notes.Contains("[Đã xử lý:")), ct);
 
         var workforceKpis = new WorkforceKpiDto
         {
@@ -99,11 +103,13 @@ public class ClinicOperationsService : IClinicOperationsService
         {
             foreach (var group in shiftGroups)
             {
-                var shiftIdList = group.Select(s => s.ShiftIdentifier).ToList();
+                var scheduleIds = group.Where(s => s.SourceScheduleId.HasValue).Select(s => s.SourceScheduleId!.Value).ToList();
                 var schedCount = group.Select(s => s.UserId).Distinct().Count();
                 var presentUsersInShift = todayRecords
-                    .Where(r => r.Role == UserRole.Receptionist && shiftIdList.Contains(r.ShiftIdentifier) && r.ClockInTimeUtc != null)
-                    .Select(r => r.UserId)
+                    .Where(r => r.StaffUser?.User?.Role == UserRole.Receptionist &&
+                                r.ClockInTime != null &&
+                                (r.WorkScheduleId.HasValue && scheduleIds.Contains(r.WorkScheduleId.Value) || group.Any(g => g.UserId == r.StaffUserId)))
+                    .Select(r => r.StaffUserId)
                     .Distinct()
                     .ToList();
 
@@ -125,32 +131,37 @@ public class ClinicOperationsService : IClinicOperationsService
         }
         else
         {
-            // Default placeholder if no receptionist schedules exist today
             receptionistCoverage.Add(new ReceptionistCoverageDto
             {
                 ShiftIndex = 1,
-                ShiftName = "Ca Sáng (07:00 - 13:00)",
-                StartTime = new TimeOnly(7, 0),
-                EndTime = new TimeOnly(13, 0),
+                ShiftName = "Ca Sáng (08:00 - 12:00)",
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(12, 0),
                 ScheduledCount = 0,
                 PresentCount = 0
             });
             receptionistCoverage.Add(new ReceptionistCoverageDto
             {
                 ShiftIndex = 2,
-                ShiftName = "Ca Chiều (13:00 - 19:00)",
+                ShiftName = "Ca Chiều (13:00 - 17:00)",
                 StartTime = new TimeOnly(13, 0),
-                EndTime = new TimeOnly(19, 0),
+                EndTime = new TimeOnly(17, 0),
                 ScheduledCount = 0,
                 PresentCount = 0
             });
         }
 
-        // 3. Today's Appointments
-        var todayAppointments = await _dbContext.Appointments
+        // 3. Today's Appointments & Services
+        var todayServices = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .Where(a => a.ScheduledStart != null && a.ScheduledStart.Value >= opDateDateTime && a.ScheduledStart.Value < opDateNextDateTime)
+            .Include(s => s.Appointment)
+            .Where(s => s.ServiceDate == opDate)
             .ToListAsync(ct);
+
+        var todayAppointments = todayServices
+            .Select(s => s.Appointment)
+            .DistinctBy(a => a.AppointmentId)
+            .ToList();
 
         var activeStatuses = new[]
         {
@@ -167,12 +178,14 @@ public class ClinicOperationsService : IClinicOperationsService
         var dentistStatuses = new List<DentistDutyStatusDto>();
         foreach (var shift in dentistShifts)
         {
-            var record = todayRecords.FirstOrDefault(r => r.UserId == shift.UserId && r.ShiftIdentifier == shift.ShiftIdentifier);
-            var isPresent = record?.ClockInTimeUtc != null;
+            var record = todayRecords.FirstOrDefault(r =>
+                r.StaffUserId == shift.UserId &&
+                (!shift.SourceScheduleId.HasValue || r.WorkScheduleId == shift.SourceScheduleId));
+            var isPresent = record?.ClockInTime != null;
 
-            var dentistApptCount = todayAppointments.Count(a =>
-                activeStatuses.Contains(a.Status) &&
-                (a.AssignedDentistUserId == shift.UserId || (a.AssignedDentistUserId == null && a.RequestedDentistUserId == shift.UserId)));
+            var dentistApptCount = todayServices.Count(s =>
+                activeStatuses.Contains(s.Status) &&
+                (s.AssignedDentistUserId == shift.UserId || (s.AssignedDentistUserId == null && s.RequestedDentistUserId == shift.UserId)));
 
             dentistStatuses.Add(new DentistDutyStatusDto
             {
@@ -183,7 +196,7 @@ public class ClinicOperationsService : IClinicOperationsService
                 ShiftStart = shift.StartTime,
                 ShiftEnd = shift.EndTime,
                 IsPresent = isPresent,
-                ClockInTimeUtc = record?.ClockInTimeUtc,
+                ClockInTimeUtc = record?.ClockInTime,
                 ScheduledAppointmentsCount = dentistApptCount
             });
         }
@@ -199,18 +212,17 @@ public class ClinicOperationsService : IClinicOperationsService
             CancelledCount = todayAppointments.Count(a => a.Status == AppointmentStatus.Cancelled)
         };
 
-        // 6. Doctor Leave & Disruptions
-        var pendingLeavesCount = await _dbContext.DentistLeaveRequests.AsNoTracking().CountAsync(lr => lr.Status == "Pending", ct);
-        var approvedLeavesTodayCount = await _dbContext.DentistLeaveRequests.AsNoTracking().CountAsync(lr => lr.Status == "Approved" && lr.StartDate <= opDate && lr.EndDate >= opDate, ct);
-        var activeDisruptionsCount = await _dbContext.AppointmentDisruptions.AsNoTracking().CountAsync(d => d.Status != "Resolved" && d.Status != "Cancelled", ct);
-        var pendingPatientCount = await _dbContext.AppointmentDisruptions.AsNoTracking().CountAsync(d => d.Status == "PendingPatientAction", ct);
-        var pendingReceptionistCount = await _dbContext.AppointmentDisruptions.AsNoTracking().CountAsync(d => d.Status == "PendingReceptionist", ct);
+        // 6. Doctor Leave & Disruptions (via AppointmentServices.PendingActionType)
+        var pendingLeavesCount = await _dbContext.StaffLeaveRequests.AsNoTracking().CountAsync(lr => lr.StaffRole == UserRole.Dentist && lr.Status == "Pending", ct);
+        var approvedLeavesTodayCount = await _dbContext.StaffLeaveRequests.AsNoTracking().CountAsync(lr => lr.StaffRole == UserRole.Dentist && lr.Status == "Approved" && lr.StartDate <= opDate && lr.EndDate >= opDate, ct);
+        var activeDisruptionsCount = await _dbContext.AppointmentServices.AsNoTracking().CountAsync(s => s.PendingActionType != null, ct);
+        var pendingPatientCount = await _dbContext.AppointmentServices.AsNoTracking().CountAsync(s => s.PendingActionType != null && s.Status == AppointmentStatus.AwaitingPatientResponse, ct);
+        var pendingReceptionistCount = Math.Max(0, activeDisruptionsCount - pendingPatientCount);
 
         var nowUtc = DateTime.UtcNow;
-        var urgentDisruptionsCount = await _dbContext.AppointmentDisruptions
+        var urgentDisruptionsCount = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .Include(d => d.Appointment)
-            .CountAsync(d => (d.Status != "Resolved" && d.Status != "Cancelled") && d.Appointment != null && d.Appointment.ScheduledStart <= nowUtc.AddHours(24), ct);
+            .CountAsync(s => s.PendingActionType != null && s.ScheduledStart <= nowUtc.AddHours(24), ct);
 
         var doctorLeaveOps = new DoctorLeaveDisruptionOperationsDto
         {
@@ -238,32 +250,33 @@ public class ClinicOperationsService : IClinicOperationsService
 
         var todayPayments = await _dbContext.Payments
             .AsNoTracking()
-            .Where(p => (p.PaidAt ?? p.CreatedAt) >= opDateDateTime && (p.PaidAt ?? p.CreatedAt) < opDateNextDateTime && (p.Status == "Completed" || p.Status == "Paid" || p.Status == "Success"))
+            .Where(p => p.PaymentDate >= opDateDateTime && p.PaymentDate < opDateNextDateTime && p.Status == "Successful")
             .ToListAsync(ct);
 
         var monthPayments = await _dbContext.Payments
             .AsNoTracking()
-            .Where(p => (p.PaidAt ?? p.CreatedAt) >= monthStartDateTime && (p.PaidAt ?? p.CreatedAt) < monthEndDateTime && (p.Status == "Completed" || p.Status == "Paid" || p.Status == "Success"))
+            .Where(p => p.PaymentDate >= monthStartDateTime && p.PaymentDate < monthEndDateTime && p.Status == "Successful")
             .ToListAsync(ct);
+
+        var todayIncoming = todayPayments.Where(p => p.PaymentType != "Refund").Sum(p => p.Amount);
+        var todayRefunded = todayPayments.Where(p => p.PaymentType == "Refund").Sum(p => p.Amount);
+        var monthIncoming = monthPayments.Where(p => p.PaymentType != "Refund").Sum(p => p.Amount);
+        var monthRefunded = monthPayments.Where(p => p.PaymentType == "Refund").Sum(p => p.Amount);
 
         var financialOps = new FinancialOperationsDto
         {
-            TotalInvoicedToday = todayInvoices.Sum(i => i.TotalAmount),
-            TotalCollectedToday = todayPayments.Sum(p => p.Amount),
-            TotalInvoicedMonth = monthInvoices.Sum(i => i.TotalAmount),
-            TotalCollectedMonth = monthPayments.Sum(p => p.Amount),
+            TotalInvoicedToday = todayInvoices.Sum(i => i.FinalAmount),
+            TotalCollectedToday = Math.Max(0m, todayIncoming - todayRefunded),
+            TotalInvoicedMonth = monthInvoices.Sum(i => i.FinalAmount),
+            TotalCollectedMonth = Math.Max(0m, monthIncoming - monthRefunded),
             UnpaidInvoicesCount = todayInvoices.Count(i => i.Status == "Unpaid" || i.Status == "Pending"),
             PartiallyPaidInvoicesCount = todayInvoices.Count(i => i.Status == "PartiallyPaid")
         };
 
-        // 8. Medicine Inventory (Batches & Low Stock)
-        var todayDate = opDate;
-        var in30DaysDate = todayDate.AddDays(30);
-
-        var activeBatches = await _dbContext.MedicineBatches
+        // 8. Medicine Inventory (3-table pharmacy: Medicines.StockQuantity <= MinimumStockAlert)
+        var activeMedicines = await _dbContext.Medicines
             .AsNoTracking()
-            .Include(b => b.Medicine)
-            .Where(b => b.QuantityAvailable > 0)
+            .Where(m => m.IsActive)
             .ToListAsync(ct);
 
         int expiredCount = 0;
@@ -271,47 +284,19 @@ public class ClinicOperationsService : IClinicOperationsService
         int lowStockCount = 0;
         var alertItems = new List<MedicineBatchAlertItemDto>();
 
-        foreach (var b in activeBatches)
+        foreach (var m in activeMedicines)
         {
-            if (b.ExpiryDate < todayDate)
-            {
-                expiredCount++;
-                alertItems.Add(new MedicineBatchAlertItemDto
-                {
-                    MedicineBatchId = b.MedicineBatchId,
-                    MedicineName = b.Medicine?.MedicineName ?? $"Thuốc #{b.MedicineId}",
-                    BatchNumber = b.BatchNumber,
-                    ExpiryDate = b.ExpiryDate,
-                    DaysRemaining = b.ExpiryDate.DayNumber - todayDate.DayNumber,
-                    RemainingQuantity = b.QuantityAvailable,
-                    AlertType = "Expired"
-                });
-            }
-            else if (b.ExpiryDate <= in30DaysDate)
-            {
-                nearExpiryCount++;
-                alertItems.Add(new MedicineBatchAlertItemDto
-                {
-                    MedicineBatchId = b.MedicineBatchId,
-                    MedicineName = b.Medicine?.MedicineName ?? $"Thuốc #{b.MedicineId}",
-                    BatchNumber = b.BatchNumber,
-                    ExpiryDate = b.ExpiryDate,
-                    DaysRemaining = b.ExpiryDate.DayNumber - todayDate.DayNumber,
-                    RemainingQuantity = b.QuantityAvailable,
-                    AlertType = "NearExpiry"
-                });
-            }
-            else if (b.QuantityAvailable <= 10)
+            if (m.StockQuantity <= m.MinimumStockAlert)
             {
                 lowStockCount++;
                 alertItems.Add(new MedicineBatchAlertItemDto
                 {
-                    MedicineBatchId = b.MedicineBatchId,
-                    MedicineName = b.Medicine?.MedicineName ?? $"Thuốc #{b.MedicineId}",
-                    BatchNumber = b.BatchNumber,
-                    ExpiryDate = b.ExpiryDate,
-                    DaysRemaining = b.ExpiryDate.DayNumber - todayDate.DayNumber,
-                    RemainingQuantity = b.QuantityAvailable,
+                    MedicineBatchId = m.MedicineId,
+                    MedicineName = m.MedicineName,
+                    BatchNumber = m.MedicineCode,
+                    ExpiryDate = opDate.AddMonths(12),
+                    DaysRemaining = 365,
+                    RemainingQuantity = m.StockQuantity,
                     AlertType = "LowStock"
                 });
             }
@@ -322,7 +307,7 @@ public class ClinicOperationsService : IClinicOperationsService
             ExpiredBatchesCount = expiredCount,
             NearExpiryBatchesCount = nearExpiryCount,
             LowStockMedicinesCount = lowStockCount,
-            AlertItems = alertItems.OrderBy(a => a.ExpiryDate).Take(15).ToList()
+            AlertItems = alertItems.OrderBy(a => a.RemainingQuantity).Take(15).ToList()
         };
 
         // 9. Actionable Alerts
@@ -380,29 +365,16 @@ public class ClinicOperationsService : IClinicOperationsService
             });
         }
 
-        if (expiredCount > 0)
+        if (lowStockCount > 0)
         {
             alerts.Add(new ClinicOperationalAlertDto
             {
-                AlertType = "ExpiredMedicine",
-                Severity = "Critical",
-                Title = "Thuốc trong kho đã hết hạn sử dụng",
-                Message = $"Phát hiện {expiredCount} lô thuốc đã quá hạn sử dụng trong kho. Cần cô lập và xử lý tiêu hủy ngay lập tức.",
+                AlertType = "LowStockMedicine",
+                Severity = "Warning",
+                Title = "Thuốc chạm ngưỡng tồn kho tối thiểu",
+                Message = $"Có {lowStockCount} loại thuốc trong kho đang ở mức tồn kho thấp cần nhập bổ sung.",
                 ActionUrl = "/Admin/Medicine",
                 ActionLabel = "Quản lý kho thuốc"
-            });
-        }
-
-        if (nearExpiryCount > 0)
-        {
-            alerts.Add(new ClinicOperationalAlertDto
-            {
-                AlertType = "NearExpiryMedicine",
-                Severity = "Warning",
-                Title = "Lô thuốc cận hạn sử dụng (< 30 ngày)",
-                Message = $"Có {nearExpiryCount} lô thuốc sắp hết hạn trong 30 ngày tới. Ưu tiên cấp phát trước.",
-                ActionUrl = "/Admin/Medicine",
-                ActionLabel = "Xem lô cận hạn"
             });
         }
 

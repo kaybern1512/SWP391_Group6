@@ -1,0 +1,56 @@
+# ==============================================================================
+# DENTALCARE CLINIC MANAGEMENT SYSTEM — BACKEND API ENVIRONMENT CONFIGURATION
+# SWP391 Group 6 | Architecture: ASP.NET Core 8 Web API
+#
+# USAGE INSTRUCTIONS:
+# 1. Windows PowerShell:
+#    Get-Content env_server | Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object {
+#        $name, $value = $_.Split('=', 2)
+#        [System.Environment]::SetEnvironmentVariable($name, $value, "Process")
+#    }
+# 2. Linux / macOS Bash:
+#    export $(grep -v '^#' env_server | xargs)
+# 3. Docker / Docker Compose:
+#    docker run --env-file env_server ...
+# ==============================================================================
+
+# Core ASP.NET Core Runtime Settings
+ASPNETCORE_ENVIRONMENT=Development
+ASPNETCORE_URLS=https://localhost:7350;http://localhost:5350
+
+# Database Connection String (Default isolated demo database on .\SQLEXPRESS)
+ConnectionStrings__DentalClinicDatabase=Server=.\SQLEXPRESS;Database=DentalCare_SWP391_UAT_Fixture_TEST;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true
+
+# JWT Authentication Settings
+JwtSettings__Secret=DentalClinicSuperSecretSecurityKey_GraduationProject_2026_SWP391_Group6#
+JwtSettings__Issuer=DentalClinicApi
+JwtSettings__Audience=DentalClinicWeb
+JwtSettings__ExpirationMinutes=60
+JwtSettings__RefreshTokenExpirationDays=7
+
+# Frontend Base URL for CORS & Callback Validation
+Frontend__BaseUrl=https://localhost:7129
+
+# Medical Imaging Diagnostic Storage (Provider: Local or Cloudinary)
+MedicalImagingStorage__Provider=Local
+MedicalImagingStorage__LocalPath=
+
+# Cloudinary Integration (Profile Avatars & Public Media)
+Cloudinary__CloudName=YOUR_CLOUDINARY_CLOUD_NAME
+Cloudinary__ApiKey=YOUR_CLOUDINARY_API_KEY
+Cloudinary__ApiSecret=YOUR_CLOUDINARY_API_SECRET
+
+# Google OAuth Authentication
+Authentication__Google__ClientId=YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com
+
+# SMTP Email Dispatch Settings (Gmail App Password)
+EmailSettings__SmtpServer=smtp.gmail.com
+EmailSettings__Port=587
+EmailSettings__SenderEmail=dentalhealthdclinic@gmail.com
+EmailSettings__SenderName=Nha Khoa Đa Chuyên Khoa DentalCare
+EmailSettings__Username=dentalhealthdclinic@gmail.com
+EmailSettings__Password=YOUR_GMAIL_APP_PASSWORD
+EmailSettings__EnableSsl=true
+
+# OTP Verification Secret Key (HMAC-SHA256)
+OtpSettings__Secret=DentalClinicHmacSha256SecretKeyForOtpVerification_2026!

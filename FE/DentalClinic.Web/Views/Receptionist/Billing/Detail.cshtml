@@ -26,6 +26,13 @@
                     <i class="bi bi-cash-stack me-1"></i> Thu Tiền Viện Phí
                 </button>
             }
+
+            @if (Model.PaidAmount > 0)
+            {
+                <button type="button" class="btn btn-outline-danger shadow-sm px-3" data-bs-toggle="modal" data-bs-target="#refundModal">
+                    <i class="bi bi-arrow-return-left me-1"></i> Hoàn Tiền Viện Phí
+                </button>
+            }
         </div>
     </div>
 
@@ -190,7 +197,13 @@
                                                 <div class="fw-semibold">@p.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
                                             </td>
                                             <td>
-                                                @if (p.Method == "Cash")
+                                                @if (p.PaymentType == "Refund")
+                                                {
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                                        <i class="bi bi-arrow-return-left me-1"></i>Hoàn tiền
+                                                    </span>
+                                                }
+                                                else if (p.Method == "Cash")
                                                 {
                                                     <span class="badge bg-success-subtle text-success border border-success-subtle">
                                                         <i class="bi bi-cash me-1"></i>Tiền mặt
@@ -216,12 +229,24 @@
                                             <td>
                                                 <span class="font-monospace small text-muted">@p.TransactionReference</span>
                                             </td>
-                                            <td class="fw-bold text-success">
-                                                +@p.Amount.ToString("N0") đ
-                                            </td>
-                                            <td class="text-end pe-3">
-                                                <span class="badge bg-success"><i class="bi bi-check-all me-1"></i>Thành công</span>
-                                            </td>
+                                            @if (p.PaymentType == "Refund")
+                                            {
+                                                <td class="fw-bold text-danger">
+                                                    -@p.Amount.ToString("N0") đ
+                                                </td>
+                                                <td class="text-end pe-3">
+                                                    <span class="badge bg-danger"><i class="bi bi-arrow-return-left me-1"></i>Đã hoàn trả</span>
+                                                </td>
+                                            }
+                                            else
+                                            {
+                                                <td class="fw-bold text-success">
+                                                    +@p.Amount.ToString("N0") đ
+                                                </td>
+                                                <td class="text-end pe-3">
+                                                    <span class="badge bg-success"><i class="bi bi-check-all me-1"></i>Thành công</span>
+                                                </td>
+                                            }
                                         </tr>
                                     }
                                 </tbody>
@@ -474,6 +499,70 @@
             </form>
         </div>
     </div>
+}
+
+<!-- Refund Modal -->
+@if (Model.PaidAmount > 0)
+{
+    <div class="modal fade" id="refundModal" tabindex="-1" aria-labelledby="refundModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form asp-action="Refund" method="post" class="modal-content border-0 shadow">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="InvoiceId" value="@Model.InvoiceId" />
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold" id="refundModalLabel">
+                        <i class="bi bi-arrow-return-left me-2"></i>Hoàn Tiền Viện Phí #@Model.InvoiceCode
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="p-3 bg-light rounded-3 mb-3 border">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Bệnh nhân:</span>
+                            <span class="fw-bold">@Model.PatientName</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Số tiền đã thu thực tế:</span>
+                            <span class="fw-bold text-success">@Model.PaidAmount.ToString("N0") đ</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-dark">Hình thức hoàn trả <span class="text-danger">*</span></label>
+                        <select name="Method" class="form-select">
+                            <option value="Cash">Tiền mặt</option>
+                            <option value="BankTransfer">Chuyển khoản</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-dark">Số tiền hoàn trả (đ) <span class="text-danger">*</span></label>
+                        <input type="number" name="Amount" class="form-control form-control-lg fw-bold text-danger" value="@Model.PaidAmount" max="@Model.PaidAmount" min="1000" step="1000" required />
+                        <div class="form-text small text-muted">
+                            <i class="bi bi-info-circle me-1"></i>Tối đa có thể hoàn: @Model.PaidAmount.ToString("N0") đ.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Lý do hoàn tiền:</label>
+                        <input type="text" name="Reason" class="form-control" placeholder="VD: Bệnh nhân hủy dịch vụ, điều chỉnh viện phí..." required />
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="form-label small text-muted">Mã giao dịch hoàn tiền (nếu có):</label>
+                        <input type="text" name="TransactionReference" class="form-control form-control-sm" placeholder="VD: REF-928312..." />
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-light border px-4" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-danger px-4 py-2 shadow-sm">
+                        <i class="bi bi-arrow-return-left me-1"></i> Xác Nhận Hoàn Tiền
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+}
 
     @section Scripts {
         <script>
@@ -493,6 +582,8 @@
                     } else if (vietQrBox) {
                         vietQrBox.classList.add('d-none');
                     }
+                }
+
                 const paymentModal = document.getElementById('paymentModal');
                 if (paymentModal) {
                     paymentModal.addEventListener('shown.bs.modal', toggleVietQr);
@@ -529,4 +620,3 @@
             });
         </script>
     }
-}

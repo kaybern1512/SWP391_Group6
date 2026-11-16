@@ -217,6 +217,7 @@ app.MapHub<LiveChatHub>("/hubs/livechat");
 app.MapHub<ClinicQueueHub>("/hubs/clinic-queue");
 app.MapHub<ClinicQueueHub>("/hubs/clinicqueue");
 app.MapGet("/", () => Results.Redirect("/swagger"));
+app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
 
 app.Run();
 

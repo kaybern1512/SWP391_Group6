@@ -5,7 +5,7 @@
     var totalCount = allAppts.Count;
     var unCheckInCount = allAppts.Count(a => a.Status == "Confirmed");
     var checkedInCount = allAppts.Count(a => a.Status == "CheckedIn" || a.Status == "Waiting");
-    var inServiceCount = allAppts.Count(a => a.Status == "InService");
+    var inServiceCount = allAppts.Count(a => a.Status == "InService" || a.Status == "InProgress");
     var completedCount = allAppts.Count(a => a.Status == "Completed");
     var noShowCount = allAppts.Count(a => a.Status == "NoShow");
 
@@ -280,7 +280,18 @@
                         {
                             <tr class="appointment-row" data-status="@appt.Status" id="appt-row-@appt.AppointmentId">
                                 <td class="ps-3 text-center">
-                                    @if (!string.IsNullOrEmpty(appt.QueueNumber))
+                                    @if (appt.Services != null && appt.Services.Count > 1 && appt.Services.Any(s => !string.IsNullOrEmpty(s.QueueCode) || s.QueueNumber.HasValue))
+                                    {
+                                        <div class="d-flex flex-column gap-1">
+                                            @foreach (var s in appt.Services.Where(x => !string.IsNullOrEmpty(x.QueueCode) || x.QueueNumber.HasValue))
+                                            {
+                                                <span class="badge bg-primary-subtle text-primary border font-monospace small" title="@s.DepartmentName - @s.ServiceName">
+                                                    @(s.QueueCode ?? $"Q-{s.DepartmentId:D2}-{s.QueueNumber:D3}")
+                                                </span>
+                                            }
+                                        </div>
+                                    }
+                                    else if (!string.IsNullOrEmpty(appt.QueueNumber))
                                     {
                                         <div class="badge bg-primary fs-6 px-3 py-2 font-monospace shadow-sm">
                                             @appt.QueueNumber
@@ -305,8 +316,21 @@
                                     <div class="text-muted small">Mã: @appt.PatientCode &bull; SĐT: <strong>@(appt.PatientPhone ?? "N/A")</strong></div>
                                 </td>
                                 <td>
-                                    <div class="fw-semibold">@appt.ServiceName</div>
-                                    <div class="text-muted small"><i class="bi bi-building me-1"></i>@appt.DepartmentName</div>
+                                    @if (appt.Services != null && appt.Services.Count > 1)
+                                    {
+                                        <div class="fw-semibold text-primary">@appt.ServiceName (@appt.Services.Count DV)</div>
+                                        <div class="small text-muted">
+                                            @foreach (var s in appt.Services)
+                                            {
+                                                <span class="badge bg-light text-dark border me-1">@s.ServiceName</span>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="fw-semibold">@appt.ServiceName</div>
+                                        <div class="text-muted small"><i class="bi bi-building me-1"></i>@appt.DepartmentName</div>
+                                    }
                                 </td>
                                 <td>
                                     <div class="fw-bold text-success fs-6">
@@ -331,7 +355,7 @@
                                         </div>
                                         <div class="waiting-alert-badge mt-1"></div>
                                     }
-                                    else if (appt.Status == "InService")
+                                    else if (appt.Status == "InService" || appt.Status == "InProgress")
                                     {
                                         <span class="badge bg-primary px-3 py-2">
                                             <i class="bi bi-heart-pulse-fill me-1"></i>Đang khám tại ghế

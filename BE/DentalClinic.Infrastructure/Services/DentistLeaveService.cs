@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.DentistLeave.DTOs;
+using DentalClinic.Domain.Common;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
@@ -24,6 +24,7 @@ public class DentistLeaveService : IDentistLeaveService
     private readonly INotificationService _notificationService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<DentistLeaveService> _logger;
+    private readonly IClinicalStaffAvailabilityService _clinicalAvailabilityService;
 
     public DentistLeaveService(
         DentalClinicDbContext dbContext,
@@ -31,7 +32,8 @@ public class DentistLeaveService : IDentistLeaveService
         IEmailService emailService,
         INotificationService notificationService,
         IConfiguration configuration,
-        ILogger<DentistLeaveService> logger)
+        ILogger<DentistLeaveService> logger,
+        IClinicalStaffAvailabilityService? clinicalAvailabilityService = null)
     {
         _dbContext = dbContext;
         _reminderService = reminderService;
@@ -39,6 +41,8 @@ public class DentistLeaveService : IDentistLeaveService
         _notificationService = notificationService;
         _configuration = configuration;
         _logger = logger;
+        _clinicalAvailabilityService = clinicalAvailabilityService
+            ?? new ClinicalStaffAvailabilityService(dbContext, Microsoft.Extensions.Logging.Abstractions.NullLogger<ClinicalStaffAvailabilityService>.Instance);
     }
 
     public async Task<ApiResponse<DentistLeaveRequestDto>> SubmitLeaveRequestAsync(
@@ -62,17 +66,17 @@ public class DentistLeaveService : IDentistLeaveService
             return ApiResponse<DentistLeaveRequestDto>.Fail("Giờ kết thúc phải lớn hơn giờ bắt đầu.");
 
         var dentist = await _dbContext.DentistProfiles
-            .Include(d => d.User)
-            .Include(d => d.DentistDepartments).ThenInclude(dd => dd.Department)
+            .Include(d => d.StaffProfile)
+            .Include(d => d.Department)
             .FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
 
         if (dentist == null)
             return ApiResponse<DentistLeaveRequestDto>.Fail("Không tìm thấy thông tin bác sĩ.");
 
-        // Check if there is already an overlapping Pending or Approved leave request
-        var hasOverlap = await _dbContext.DentistLeaveRequests
+        var hasOverlap = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .AnyAsync(r => r.DentistUserId == dentistUserId &&
+            .AnyAsync(r => r.StaffRole == UserRole.Dentist &&
+                           r.StaffUserId == dentistUserId &&
                            (r.Status == DentistLeaveStatus.Pending || r.Status == DentistLeaveStatus.Approved) &&
                            !(request.EndDate < r.StartDate || request.StartDate > r.EndDate), ct);
 
@@ -81,24 +85,25 @@ public class DentistLeaveService : IDentistLeaveService
             return ApiResponse<DentistLeaveRequestDto>.Fail("Bạn đã có một đơn nghỉ phép đang chờ duyệt hoặc đã duyệt trong khoảng thời gian này.");
         }
 
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = dentistUserId,
+            StaffUserId = dentistUserId,
+            StaffRole = UserRole.Dentist,
             LeaveType = request.LeaveType,
             StartDate = request.StartDate,
             EndDate = request.EndDate,
             StartTime = request.StartTime,
             EndTime = request.EndTime,
-            Reason = request.Reason.Trim(),
-            Notes = request.Notes?.Trim(),
+            Reason = string.IsNullOrWhiteSpace(request.Notes)
+                ? request.Reason.Trim()
+                : $"{request.Reason.Trim()} | {request.Notes.Trim()}",
             Status = DentistLeaveStatus.Pending,
             CreatedAt = DateTime.UtcNow
         };
 
-        _dbContext.DentistLeaveRequests.Add(leave);
+        _dbContext.StaffLeaveRequests.Add(leave);
         await _dbContext.SaveChangesAsync(ct);
 
-        // Notify Admins about new leave request
         try
         {
             var adminUsers = await _dbContext.UserAccounts
@@ -106,7 +111,7 @@ public class DentistLeaveService : IDentistLeaveService
                 .Select(u => u.UserId)
                 .ToListAsync(ct);
 
-            var dentistName = dentist.User?.FullName ?? $"BS #{dentistUserId}";
+            var dentistName = dentist.StaffProfile?.FullName ?? $"BS #{dentistUserId}";
             var message = $"Bác sĩ {dentistName} đã gửi đơn xin nghỉ ({DentistLeaveType.ToDisplayName(request.LeaveType)}) từ {request.StartDate:dd/MM/yyyy} đến {request.EndDate:dd/MM/yyyy}.";
 
             foreach (var adminId in adminUsers)
@@ -128,15 +133,13 @@ public class DentistLeaveService : IDentistLeaveService
         long dentistUserId,
         CancellationToken ct = default)
     {
-        var leave = await _dbContext.DentistLeaveRequests
-            .Include(l => l.DentistUser).ThenInclude(d => d.User)
-            .Include(l => l.DentistUser).ThenInclude(d => d.DentistDepartments).ThenInclude(dd => dd.Department)
-            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId, ct);
+        var leave = await _dbContext.StaffLeaveRequests
+            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId && l.StaffRole == UserRole.Dentist, ct);
 
         if (leave == null)
             return ApiResponse<DentistLeaveRequestDto>.Fail("Không tìm thấy đơn xin nghỉ phép.");
 
-        if (leave.DentistUserId != dentistUserId)
+        if (leave.StaffUserId != dentistUserId)
             return ApiResponse<DentistLeaveRequestDto>.Fail("Bạn không có quyền thao tác trên đơn xin nghỉ này.");
 
         if (leave.Status != DentistLeaveStatus.Pending)
@@ -152,7 +155,12 @@ public class DentistLeaveService : IDentistLeaveService
 
         await _dbContext.SaveChangesAsync(ct);
 
-        var dto = MapToDto(leave, leave.DentistUser);
+        var dentist = await _dbContext.DentistProfiles
+            .Include(d => d.StaffProfile)
+            .Include(d => d.Department)
+            .FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
+
+        var dto = MapToDto(leave, dentist);
         return ApiResponse<DentistLeaveRequestDto>.Ok(dto, "Đã rút đơn xin nghỉ phép thành công.");
     }
 
@@ -161,18 +169,17 @@ public class DentistLeaveService : IDentistLeaveService
         CancellationToken ct = default)
     {
         var dentist = await _dbContext.DentistProfiles
-            .Include(d => d.User)
-            .Include(d => d.DentistDepartments).ThenInclude(dd => dd.Department)
+            .Include(d => d.StaffProfile)
+            .Include(d => d.Department)
             .FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
 
         if (dentist == null)
             return ApiResponse<List<DentistLeaveRequestDto>>.Fail("Không tìm thấy thông tin bác sĩ.");
 
-        var requests = await _dbContext.DentistLeaveRequests
+        var requests = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
             .Include(l => l.ReviewedByUser)
-            .Include(l => l.AppointmentDisruptions)
-            .Where(l => l.DentistUserId == dentistUserId)
+            .Where(l => l.StaffRole == UserRole.Dentist && l.StaffUserId == dentistUserId)
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync(ct);
 
@@ -184,16 +191,14 @@ public class DentistLeaveService : IDentistLeaveService
         DentistLeaveFilterRequest filter,
         CancellationToken ct = default)
     {
-        var query = _dbContext.DentistLeaveRequests
+        var query = _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(l => l.DentistUser).ThenInclude(d => d.User)
-            .Include(l => l.DentistUser).ThenInclude(d => d.DentistDepartments).ThenInclude(dd => dd.Department)
             .Include(l => l.ReviewedByUser)
-            .Include(l => l.AppointmentDisruptions)
+            .Where(l => l.StaffRole == UserRole.Dentist)
             .AsQueryable();
 
         if (filter.DentistUserId.HasValue)
-            query = query.Where(l => l.DentistUserId == filter.DentistUserId.Value);
+            query = query.Where(l => l.StaffUserId == filter.DentistUserId.Value);
 
         if (!string.IsNullOrWhiteSpace(filter.Status))
             query = query.Where(l => l.Status == filter.Status);
@@ -205,7 +210,15 @@ public class DentistLeaveService : IDentistLeaveService
             query = query.Where(l => l.StartDate <= filter.ToDate.Value);
 
         var requests = await query.OrderByDescending(l => l.CreatedAt).ToListAsync(ct);
-        var dtos = requests.Select(l => MapToDto(l, l.DentistUser)).ToList();
+        var dentistIds = requests.Select(l => l.StaffUserId).Distinct().ToList();
+        var dentists = await _dbContext.DentistProfiles
+            .AsNoTracking()
+            .Include(d => d.StaffProfile)
+            .Include(d => d.Department)
+            .Where(d => dentistIds.Contains(d.UserId))
+            .ToDictionaryAsync(d => d.UserId, ct);
+
+        var dtos = requests.Select(l => MapToDto(l, dentists.GetValueOrDefault(l.StaffUserId))).ToList();
 
         return ApiResponse<List<DentistLeaveRequestDto>>.Ok(dtos);
     }
@@ -216,24 +229,27 @@ public class DentistLeaveService : IDentistLeaveService
         string? currentRole = null,
         CancellationToken ct = default)
     {
-        var leave = await _dbContext.DentistLeaveRequests
+        var leave = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(l => l.DentistUser).ThenInclude(d => d.User)
-            .Include(l => l.DentistUser).ThenInclude(d => d.DentistDepartments).ThenInclude(dd => dd.Department)
             .Include(l => l.ReviewedByUser)
-            .Include(l => l.AppointmentDisruptions)
-            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId, ct);
+            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId && l.StaffRole == UserRole.Dentist, ct);
 
         if (leave == null)
             return ApiResponse<DentistLeaveRequestDto>.Fail("Không tìm thấy đơn xin nghỉ phép.");
 
-        if (currentRole == UserRole.Dentist && currentUserId.HasValue && leave.DentistUserId != currentUserId.Value)
+        if (currentRole == UserRole.Dentist && currentUserId.HasValue && leave.StaffUserId != currentUserId.Value)
             return ApiResponse<DentistLeaveRequestDto>.Fail("Bạn không có quyền xem đơn xin nghỉ phép của bác sĩ khác.");
 
         if (currentRole == UserRole.Patient)
             return ApiResponse<DentistLeaveRequestDto>.Fail("Bạn không có quyền truy cập thông tin đơn nghỉ phép của bác sĩ.");
 
-        var dto = MapToDto(leave, leave.DentistUser);
+        var dentist = await _dbContext.DentistProfiles
+            .AsNoTracking()
+            .Include(d => d.StaffProfile)
+            .Include(d => d.Department)
+            .FirstOrDefaultAsync(d => d.UserId == leave.StaffUserId, ct);
+
+        var dto = MapToDto(leave, dentist);
         return ApiResponse<DentistLeaveRequestDto>.Ok(dto);
     }
 
@@ -241,14 +257,18 @@ public class DentistLeaveService : IDentistLeaveService
         long leaveRequestId,
         CancellationToken ct = default)
     {
-        var leave = await _dbContext.DentistLeaveRequests
+        var leave = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(l => l.DentistUser).ThenInclude(d => d.User)
-            .Include(l => l.DentistUser).ThenInclude(d => d.DentistDepartments).ThenInclude(dd => dd.Department)
-            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId, ct);
+            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId && l.StaffRole == UserRole.Dentist, ct);
 
         if (leave == null)
             return ApiResponse<DentistLeaveImpactAnalysisDto>.Fail("Không tìm thấy đơn xin nghỉ phép.");
+
+        var dentist = await _dbContext.DentistProfiles
+            .AsNoTracking()
+            .Include(d => d.StaffProfile)
+            .Include(d => d.Department)
+            .FirstOrDefaultAsync(d => d.UserId == leave.StaffUserId, ct);
 
         var startDateTime = leave.StartDate.ToDateTime(leave.StartTime ?? TimeOnly.MinValue);
         var endDateTime = leave.EndDate.ToDateTime(leave.EndTime ?? new TimeOnly(23, 59, 59));
@@ -265,90 +285,86 @@ public class DentistLeaveService : IDentistLeaveService
             AppointmentStatus.InService
         };
 
-        var affectedAppts = await _dbContext.Appointments
+        var affectedServices = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .Include(a => a.PatientUser).ThenInclude(p => p.User)
-            .Include(a => a.RequestedService)
-            .Include(a => a.Department)
-            .Include(a => a.Invoice)
-            .Include(a => a.AppointmentDisruptions)
-            .Where(a => (a.AssignedDentistUserId == leave.DentistUserId || (a.AssignedDentistUserId == null && a.RequestedDentistUserId == leave.DentistUserId)) &&
-                        activeStatuses.Contains(a.Status) &&
-                        a.ScheduledStart.HasValue &&
-                        a.ScheduledStart.Value < endDateTime &&
-                        (a.ScheduledEnd ?? a.ScheduledStart.Value.AddMinutes(30)) > startDateTime)
-            .OrderBy(a => a.ScheduledStart)
+            .Include(s => s.Appointment)
+                .ThenInclude(a => a.Patient).ThenInclude(p => p.User)
+            .Include(s => s.Appointment)
+                .ThenInclude(a => a.Invoice)
+            .Include(s => s.DepartmentService)
+                .ThenInclude(ds => ds.Department)
+            .Where(s => (s.AssignedDentistUserId == leave.StaffUserId || (s.AssignedDentistUserId == null && s.RequestedDentistUserId == leave.StaffUserId)) &&
+                        activeStatuses.Contains(s.Status) &&
+                        s.ScheduledStart < endDateTime &&
+                        s.ScheduledEnd > startDateTime)
+            .OrderBy(s => s.ScheduledStart)
             .ToListAsync(ct);
 
         var now = DateTime.UtcNow;
-        var affectedDtos = affectedAppts.Select(a =>
+        var affectedDtos = affectedServices.Select(s =>
         {
-            var sStart = a.ScheduledStart ?? DateTime.MinValue;
-            var sEnd = a.ScheduledEnd ?? sStart.AddMinutes(30);
-            var activeDisruption = a.AppointmentDisruptions.FirstOrDefault(d => d.DentistLeaveRequestId == leaveRequestId);
-            var isUrgent = a.Status == AppointmentStatus.CheckedIn ||
-                           a.Status == AppointmentStatus.Waiting ||
-                           a.Status == AppointmentStatus.Called ||
-                           a.Status == AppointmentStatus.InService ||
-                           (sStart <= now.AddHours(24) && sStart >= now.AddHours(-2));
+            var a = s.Appointment;
+            var isUrgent = s.Status == AppointmentStatus.CheckedIn ||
+                           s.Status == AppointmentStatus.Waiting ||
+                           s.Status == AppointmentStatus.Called ||
+                           s.Status == AppointmentStatus.InService ||
+                           (s.ScheduledStart <= now.AddHours(24) && s.ScheduledStart >= now.AddHours(-2));
 
             return new LeaveAffectedAppointmentDto
             {
                 AppointmentId = a.AppointmentId,
-                AppointmentCode = a.AppointmentCode,
+                AppointmentCode = $"APT-{a.AppointmentId:D6}",
                 PatientUserId = a.PatientUserId,
-                PatientName = a.PatientUser?.FullName ?? "Bệnh nhân",
-                PatientPhone = a.PatientUser?.User?.PhoneNumber,
-                PatientEmail = a.PatientUser?.User?.Email,
-                ServiceName = a.RequestedService?.ServiceName ?? "Dịch vụ khám nha khoa",
-                DepartmentId = a.DepartmentId ?? 0,
-                DepartmentName = a.Department?.Name ?? "Chuyên khoa",
-                ScheduledStart = sStart,
-                ScheduledEnd = sEnd,
-                Status = a.Status,
+                PatientName = a.Patient?.FullName ?? "Bệnh nhân",
+                PatientPhone = a.Patient?.User?.PhoneNumber,
+                PatientEmail = a.Patient?.User?.Email,
+                ServiceName = s.DepartmentService?.ServiceName ?? "Dịch vụ khám nha khoa",
+                DepartmentId = s.DepartmentId,
+                DepartmentName = s.DepartmentService?.Department?.Name ?? "Chuyên khoa",
+                ScheduledStart = s.ScheduledStart,
+                ScheduledEnd = s.ScheduledEnd,
+                Status = s.Status,
                 HasDeposit = a.Invoice != null && (a.Invoice.Status == "Paid" || a.Invoice.Status == "PartiallyPaid"),
-                DisruptionStatus = activeDisruption?.Status,
+                DisruptionStatus = s.PendingActionType != null ? AppointmentDisruptionStatus.PendingPatientChoice : null,
                 IsUrgent = isUrgent
             };
         }).ToList();
 
-        // Find available alternative dentists in same departments
-        var deptIds = affectedDtos.Select(a => a.DepartmentId).Where(d => d > 0).Distinct().ToList();
-        if (!deptIds.Any() && leave.DentistUser?.DentistDepartments != null)
+        var deptIds = affectedDtos.Select(a => (int)a.DepartmentId).Where(d => d > 0).Distinct().ToList();
+        if (!deptIds.Any() && dentist != null)
         {
-            deptIds = leave.DentistUser.DentistDepartments.Select(dd => dd.DepartmentId).ToList();
+            deptIds.Add(dentist.DepartmentId);
         }
 
         var alternativeDentists = new List<AlternativeDentistDto>();
         if (deptIds.Any())
         {
-            var otherDentists = await _dbContext.DentistDepartments
+            var otherDentists = await _dbContext.DentistProfiles
                 .AsNoTracking()
-                .Include(dd => dd.DentistUser).ThenInclude(d => d.User)
-                .Include(dd => dd.Department)
-                .Where(dd => deptIds.Contains(dd.DepartmentId) &&
-                             dd.DentistUserId != leave.DentistUserId &&
-                             dd.Status == "Active")
+                .Include(d => d.StaffProfile).ThenInclude(sp => sp.User)
+                .Include(d => d.Department)
+                .Where(d => deptIds.Contains(d.DepartmentId) &&
+                            d.UserId != leave.StaffUserId &&
+                            d.StaffProfile.User.Status == "Active")
                 .ToListAsync(ct);
 
             foreach (var od in otherDentists)
             {
-                // Check if they are not on leave
-                var isUnavailable = await _dbContext.DentistAvailabilities
+                var isOnLeave = await _dbContext.StaffLeaveRequests
                     .AsNoTracking()
-                    .AnyAsync(da => da.DentistUserId == od.DentistUserId &&
-                                    da.AvailabilityStatus != DentistAvailabilityStatus.Available &&
-                                    da.StartDateTime < endDateTime &&
-                                    (da.EndDateTime == null || da.EndDateTime.Value > startDateTime), ct);
+                    .AnyAsync(lr => lr.StaffRole == UserRole.Dentist &&
+                                    lr.StaffUserId == od.UserId &&
+                                    lr.Status == DentistLeaveStatus.Approved &&
+                                    lr.StartDate <= leave.EndDate && lr.EndDate >= leave.StartDate, ct);
 
-                if (!isUnavailable)
+                if (!isOnLeave)
                 {
                     alternativeDentists.Add(new AlternativeDentistDto
                     {
-                        DentistUserId = od.DentistUserId,
-                        FullName = od.DentistUser?.User?.FullName ?? $"BS #{od.DentistUserId}",
-                        EmployeeCode = od.DentistUser?.User?.EmployeeCode,
-                        Specialization = od.DentistUser?.Qualification ?? od.Department?.Name,
+                        DentistUserId = od.UserId,
+                        FullName = od.StaffProfile?.FullName ?? $"BS #{od.UserId}",
+                        EmployeeCode = $"BS-{od.UserId}",
+                        Specialization = od.Qualification ?? od.Department?.Name,
                         DepartmentId = od.DepartmentId,
                         DepartmentName = od.Department?.Name ?? "Khoa",
                         AvailableStart = startDateTime,
@@ -361,8 +377,8 @@ public class DentistLeaveService : IDentistLeaveService
         var result = new DentistLeaveImpactAnalysisDto
         {
             LeaveRequestId = leave.LeaveRequestId,
-            DentistUserId = leave.DentistUserId,
-            DentistName = leave.DentistUser?.User?.FullName ?? $"BS #{leave.DentistUserId}",
+            DentistUserId = leave.StaffUserId,
+            DentistName = dentist?.StaffProfile?.FullName ?? $"BS #{leave.StaffUserId}",
             StartDate = leave.StartDate,
             EndDate = leave.EndDate,
             StartTime = leave.StartTime,
@@ -396,13 +412,19 @@ public class DentistLeaveService : IDentistLeaveService
         if (adminUser == null)
             return ApiResponse<DentistLeaveRequestDto>.Fail("Chỉ Quản trị viên hệ thống (System Administrator) mới có quyền phê duyệt đơn nghỉ phép.");
 
-        var leave = await _dbContext.DentistLeaveRequests
-            .Include(l => l.DentistUser).ThenInclude(d => d.User)
-            .Include(l => l.DentistUser).ThenInclude(d => d.DentistDepartments).ThenInclude(dd => dd.Department)
-            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId, ct);
+        var leave = await _dbContext.StaffLeaveRequests
+            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId && l.StaffRole == UserRole.Dentist, ct);
 
         if (leave == null)
             return ApiResponse<DentistLeaveRequestDto>.Fail("Không tìm thấy đơn xin nghỉ phép.");
+
+        var dentist = await _dbContext.DentistProfiles
+            .Include(d => d.StaffProfile)
+            .Include(d => d.Department)
+            .FirstOrDefaultAsync(d => d.UserId == leave.StaffUserId, ct);
+
+        if (dentist == null)
+            return ApiResponse<DentistLeaveRequestDto>.Fail("Không tìm thấy thông tin bác sĩ hợp lệ cho đơn nghỉ phép này.");
 
         if (leave.Status != DentistLeaveStatus.Pending)
             return ApiResponse<DentistLeaveRequestDto>.Fail($"Đơn xin nghỉ phép đang ở trạng thái '{DentistLeaveStatus.ToDisplayName(leave.Status)}', không thể phê duyệt.");
@@ -413,32 +435,35 @@ public class DentistLeaveService : IDentistLeaveService
         var isRelational = _dbContext.Database.IsRelational();
         var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
         IDisposable? lockScope = null;
-
-        var confirmedDisruptionsToEmail = new List<(AppointmentDisruption Disruption, Appointment Appointment, string PatientEmail, string PatientName)>();
+        var affectedServices = new List<DentalClinic.Infrastructure.Persistence.Entities.AppointmentService>();
 
         try
         {
             var lockKeys = new List<string>
             {
-                SqlAppLockHelper.DentistMasterKey(leave.DentistUserId)
+                SqlAppLockHelper.DentistMasterKey(leave.StaffUserId)
             };
+            for (var d = leave.StartDate; d <= leave.EndDate; d = d.AddDays(1))
+            {
+                lockKeys.Add(SqlAppLockHelper.DentistCoverageDateKey(d));
+            }
             lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
 
-            bool isLockedPeriod = await _dbContext.IsPeriodLockedAsync(leave.StartDate, leave.EndDate, ct);
-            if (isLockedPeriod)
+            var (canApproveXray, xrayReason) = await _clinicalAvailabilityService.ValidateXrayShiftLeaveCoverageAsync(
+                leave.StaffUserId, leave.StartDate, leave.EndDate, leave.StartTime, leave.EndTime, ct);
+
+            if (!canApproveXray)
             {
                 if (tx != null) await tx.RollbackAsync(ct);
-                return ApiResponse<DentistLeaveRequestDto>.Fail("Không thể duyệt nghỉ phép bác sĩ trong kỳ công đã được chốt sổ. Vui lòng mở lại kỳ công trước khi phê duyệt.");
+                return ApiResponse<DentistLeaveRequestDto>.Fail(xrayReason ?? "Không thể phê duyệt đơn nghỉ phép: Vi phạm quy định bảo đảm ca trực X-quang.");
             }
 
-            // Check if dentist is currently in service
-            var hasInService = await _dbContext.Appointments
+            var hasInService = await _dbContext.AppointmentServices
                 .AsNoTracking()
-                .AnyAsync(a => (a.AssignedDentistUserId == leave.DentistUserId || (a.AssignedDentistUserId == null && a.RequestedDentistUserId == leave.DentistUserId)) &&
-                               a.Status == AppointmentStatus.InService &&
-                               a.ScheduledStart.HasValue &&
-                               a.ScheduledStart.Value < endDateTime &&
-                               (a.ScheduledEnd ?? a.ScheduledStart.Value.AddMinutes(30)) > startDateTime, ct);
+                .AnyAsync(s => (s.AssignedDentistUserId == leave.StaffUserId || (s.AssignedDentistUserId == null && s.RequestedDentistUserId == leave.StaffUserId)) &&
+                               s.Status == AppointmentStatus.InService &&
+                               s.ScheduledStart < endDateTime &&
+                               s.ScheduledEnd > startDateTime, ct);
 
             if (hasInService)
             {
@@ -448,33 +473,17 @@ public class DentistLeaveService : IDentistLeaveService
 
             var now = DateTime.UtcNow;
 
-            // 1. Update leave request status
             leave.Status = DentistLeaveStatus.Approved;
             leave.ReviewedByUserId = adminUserId;
             leave.ReviewedAt = now;
             if (!string.IsNullOrWhiteSpace(request?.AdminNotes))
             {
-                leave.Notes = string.IsNullOrWhiteSpace(leave.Notes)
+                leave.Reason = string.IsNullOrWhiteSpace(leave.Reason)
                     ? $"[Admin Notes]: {request.AdminNotes.Trim()}"
-                    : $"{leave.Notes} | [Admin]: {request.AdminNotes.Trim()}";
+                    : $"{leave.Reason} | [Admin]: {request.AdminNotes.Trim()}";
             }
             leave.UpdatedAt = now;
 
-            // 2. Insert into DentistAvailability to block bookings and show on calendar
-            var availability = new DentistAvailability
-            {
-                DentistUserId = leave.DentistUserId,
-                StartDateTime = startDateTime,
-                EndDateTime = endDateTime,
-                AvailabilityStatus = leave.LeaveType == DentistLeaveType.SickLeave
-                    ? DentistAvailabilityStatus.Unavailable
-                    : DentistAvailabilityStatus.OnLeave,
-                Reason = $"Nghỉ phép theo đơn duyệt #{leave.LeaveRequestId}: {leave.Reason}",
-                CreatedAt = now
-            };
-            _dbContext.DentistAvailabilities.Add(availability);
-
-            // 3. Find all affected active appointments
             var activeStatuses = new[]
             {
                 AppointmentStatus.Confirmed,
@@ -486,83 +495,33 @@ public class DentistLeaveService : IDentistLeaveService
                 AppointmentStatus.Called
             };
 
-            var affectedAppts = await _dbContext.Appointments
-                .Include(a => a.PatientUser).ThenInclude(p => p.User)
-                .Include(a => a.RequestedService)
-                .Include(a => a.Department)
-                .Where(a => (a.AssignedDentistUserId == leave.DentistUserId || (a.AssignedDentistUserId == null && a.RequestedDentistUserId == leave.DentistUserId)) &&
-                            activeStatuses.Contains(a.Status) &&
-                            a.ScheduledStart.HasValue &&
-                            a.ScheduledStart.Value < endDateTime &&
-                            (a.ScheduledEnd ?? a.ScheduledStart.Value.AddMinutes(30)) > startDateTime)
+            affectedServices = await _dbContext.AppointmentServices
+                .Include(s => s.Appointment)
+                    .ThenInclude(a => a.Patient).ThenInclude(p => p.User)
+                .Include(s => s.DepartmentService)
+                .Where(s => (s.AssignedDentistUserId == leave.StaffUserId || (s.AssignedDentistUserId == null && s.RequestedDentistUserId == leave.StaffUserId)) &&
+                            activeStatuses.Contains(s.Status) &&
+                            s.ScheduledStart < endDateTime &&
+                            s.ScheduledEnd > startDateTime)
                 .ToListAsync(ct);
 
-            foreach (var appt in affectedAppts)
+            foreach (var svc in affectedServices)
             {
-                var alreadyDisrupted = await _dbContext.AppointmentDisruptions
-                    .AnyAsync(d => d.AppointmentId == appt.AppointmentId && d.DentistLeaveRequestId == leave.LeaveRequestId, ct);
-                if (alreadyDisrupted)
-                    continue;
-
-                if (appt.Status == AppointmentStatus.CheckedIn ||
-                    appt.Status == AppointmentStatus.Waiting ||
-                    appt.Status == AppointmentStatus.Called)
+                var appt = svc.Appointment;
+                if (svc.Status == AppointmentStatus.CheckedIn ||
+                    svc.Status == AppointmentStatus.Waiting ||
+                    svc.Status == AppointmentStatus.Called)
                 {
-                    // Urgent: Patient already at clinic!
-                    var disruption = new AppointmentDisruption
-                    {
-                        AppointmentId = appt.AppointmentId,
-                        DentistLeaveRequestId = leave.LeaveRequestId,
-                        OriginalDentistUserId = leave.DentistUserId,
-                        OriginalScheduledStart = appt.ScheduledStart!.Value,
-                        OriginalScheduledEnd = appt.ScheduledEnd ?? appt.ScheduledStart.Value.AddMinutes(30),
-                        Status = AppointmentDisruptionStatus.NeedsStaffAction,
-                        StaffNotes = "Bệnh nhân đã đến phòng khám khi bác sĩ được duyệt nghỉ. Lễ tân cần điều phối trực tiếp.",
-                        EmailDeliveryStatus = DisruptionEmailStatus.Skipped,
-                        EmailRetryCount = 0,
-                        CreatedAt = now
-                    };
-                    _dbContext.AppointmentDisruptions.Add(disruption);
-
-                    // Add appointment history note
-                    _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
-                    {
-                        AppointmentId = appt.AppointmentId,
-                        OldStatus = appt.Status,
-                        NewStatus = appt.Status,
-                        ChangedByUserId = adminUserId,
-                        Note = $"[Cảnh báo khẩn] Bác sĩ được duyệt nghỉ phép #{leave.LeaveRequestId}. Cần lễ tân điều phối bác sĩ thay thế ngay.",
-                        ChangedAt = now
-                    });
+                    svc.PendingActionType = "ChangeDentist";
+                    svc.Notes = $"{svc.Notes} | [Cảnh báo khẩn: Bác sĩ nghỉ phép #{leave.LeaveRequestId}]".Trim(' ', '|');
                 }
-                else if (appt.Status == AppointmentStatus.Confirmed)
+                else if (svc.Status == AppointmentStatus.Confirmed)
                 {
-                    // Generate cryptographically secure ActionToken
-                    byte[] tokenBytes = new byte[32];
-                    RandomNumberGenerator.Fill(tokenBytes);
-                    var actionToken = Convert.ToHexString(tokenBytes).ToLowerInvariant();
+                    svc.PendingActionType = "Reschedule";
+                    svc.Status = AppointmentStatus.AwaitingPatientResponse;
+                    appt.Status = AppointmentStatus.AwaitingPatientResponse;
+                    appt.UpdatedAt = now;
 
-                    var maxExpiry = now.AddDays(7);
-                    var apptStart = appt.ScheduledStart!.Value;
-                    var tokenExpiry = apptStart > now.AddHours(24) && apptStart < maxExpiry ? apptStart : maxExpiry;
-
-                    var disruption = new AppointmentDisruption
-                    {
-                        AppointmentId = appt.AppointmentId,
-                        DentistLeaveRequestId = leave.LeaveRequestId,
-                        OriginalDentistUserId = leave.DentistUserId,
-                        OriginalScheduledStart = appt.ScheduledStart!.Value,
-                        OriginalScheduledEnd = appt.ScheduledEnd ?? appt.ScheduledStart.Value.AddMinutes(30),
-                        Status = AppointmentDisruptionStatus.PendingPatientChoice,
-                        EmailDeliveryStatus = DisruptionEmailStatus.Pending,
-                        EmailRetryCount = 0,
-                        ActionToken = actionToken,
-                        TokenExpiresAt = tokenExpiry,
-                        CreatedAt = now
-                    };
-                    _dbContext.AppointmentDisruptions.Add(disruption);
-
-                    // Cancel pending reminders for this appointment
                     if (_reminderService != null)
                     {
                         try
@@ -574,38 +533,10 @@ public class DentistLeaveService : IDentistLeaveService
                             _logger.LogWarning(remEx, "Failed to cancel reminder for disrupted appointment {AppointmentId}", appt.AppointmentId);
                         }
                     }
-
-                    // Add history record
-                    _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
-                    {
-                        AppointmentId = appt.AppointmentId,
-                        OldStatus = appt.Status,
-                        NewStatus = appt.Status,
-                        ChangedByUserId = adminUserId,
-                        Note = $"[Gián đoạn do bác sĩ nghỉ phép #{leave.LeaveRequestId}] Hệ thống đã kích hoạt quy trình phục hồi lịch hẹn và gửi thông báo cho bệnh nhân.",
-                        ChangedAt = now
-                    });
-
-                    var patientEmail = appt.PatientUser?.User?.Email;
-                    var patientName = appt.PatientUser?.FullName ?? "Quý khách";
-                    if (!string.IsNullOrWhiteSpace(patientEmail))
-                    {
-                        confirmedDisruptionsToEmail.Add((disruption, appt, patientEmail, patientName));
-                    }
                 }
                 else
                 {
-                    // Pending review appointments: unassign dentist and note for receptionist
-                    appt.AssignedDentistUserId = null;
-                    _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
-                    {
-                        AppointmentId = appt.AppointmentId,
-                        OldStatus = appt.Status,
-                        NewStatus = appt.Status,
-                        ChangedByUserId = adminUserId,
-                        Note = $"Bác sĩ được duyệt nghỉ phép #{leave.LeaveRequestId}. Lễ tân cần chọn bác sĩ khác khi xác nhận lịch khám.",
-                        ChangedAt = now
-                    });
+                    svc.AssignedDentistUserId = null;
                 }
             }
 
@@ -623,63 +554,59 @@ public class DentistLeaveService : IDentistLeaveService
             lockScope?.Dispose();
         }
 
-        // Send disruption emails to patients outside transaction
-        var feBaseUrl = _configuration["Frontend:BaseUrl"] ?? "https://localhost:7129";
-        foreach (var item in confirmedDisruptionsToEmail)
-        {
-            try
-            {
-                var actionUrl = $"{feBaseUrl.TrimEnd('/')}/Patient/Appointment/Disruption/{item.Disruption.DisruptionId}?token={item.Disruption.ActionToken}";
-                var serviceName = item.Appointment.RequestedService?.ServiceName ?? "Dịch vụ khám nha khoa";
-
-                await _emailService.SendDoctorLeaveDisruptionEmailAsync(
-                    item.PatientEmail,
-                    item.PatientName,
-                    item.Appointment.AppointmentCode,
-                    item.Appointment.ScheduledStart ?? DateTime.UtcNow,
-                    serviceName,
-                    actionUrl,
-                    ct);
-
-                item.Disruption.EmailSentAt = DateTime.UtcNow;
-                item.Disruption.EmailDeliveryStatus = DisruptionEmailStatus.Sent;
-            }
-            catch (Exception emEx)
-            {
-                _logger.LogWarning(emEx, "Failed to send disruption email for appointment {AppointmentCode}", item.Appointment.AppointmentCode);
-                item.Disruption.EmailDeliveryStatus = DisruptionEmailStatus.Failed;
-                item.Disruption.EmailRetryCount++;
-                item.Disruption.EmailFailureReason = emEx.Message;
-            }
-        }
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to save email delivery status updates for leave {LeaveId}", leaveRequestId);
-        }
-
-        // Notify Dentist
         try
         {
             await _notificationService.CreateNotificationAsync(
-                leave.DentistUserId,
+                leave.StaffUserId,
                 null,
                 "DoctorLeaveApproved",
                 "Đơn xin nghỉ phép đã được phê duyệt",
                 $"Đơn xin nghỉ phép của bạn từ {leave.StartDate:dd/MM/yyyy} đến {leave.EndDate:dd/MM/yyyy} đã được quản trị viên phê duyệt.",
                 ct);
+
+            var receptionists = await _dbContext.UserAccounts
+                .AsNoTracking()
+                .Where(u => u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active)
+                .Select(u => u.UserId)
+                .ToListAsync(ct);
+
+            var dentistName = dentist.StaffProfile?.FullName ?? $"Bác sĩ #{leave.StaffUserId}";
+
+            var notifiedApptIds = new HashSet<long>();
+            foreach (var svc in affectedServices)
+            {
+                var appt = svc.Appointment;
+                if (appt == null || notifiedApptIds.Contains(appt.AppointmentId)) continue;
+                notifiedApptIds.Add(appt.AppointmentId);
+
+                await _notificationService.CreateNotificationAsync(
+                    appt.PatientUserId,
+                    appt.AppointmentId,
+                    "AppointmentDisrupted",
+                    "Thông báo điều phối lại lịch khám",
+                    $"Lịch khám của bạn vào ngày {svc.ScheduledStart:dd/MM/yyyy HH\\:mm} cần được sắp xếp lại do bác sĩ phụ trách có lịch nghỉ phép đột xuất. Vui lòng liên hệ lễ tân để được hỗ trợ.",
+                    ct);
+
+                var patientIdentifier = appt.Patient?.User?.PhoneNumber ?? $"Bệnh nhân #{appt.PatientUserId}";
+                foreach (var recId in receptionists)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        recId,
+                        appt.AppointmentId,
+                        "AppointmentDisrupted",
+                        "Cảnh báo lịch khám bị gián đoạn",
+                        $"Ca khám #{appt.AppointmentId} của bệnh nhân {patientIdentifier} bị ảnh hưởng do Bác sĩ {dentistName} nghỉ phép từ {leave.StartDate:dd/MM/yyyy} đến {leave.EndDate:dd/MM/yyyy}. Vui lòng điều phối hoặc xếp lại lịch.",
+                        ct);
+                }
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to notify dentist for leave {LeaveId}", leaveRequestId);
+            _logger.LogWarning(ex, "Failed to send notifications for approved leave {LeaveId}", leaveRequestId);
         }
 
-        var dto = MapToDto(leave, leave.DentistUser);
-        return ApiResponse<DentistLeaveRequestDto>.Ok(dto, "Đã phê duyệt đơn xin nghỉ phép thành công. Hệ thống đã tự động kích hoạt quy trình điều phối và gửi thông báo tới bệnh nhân bị ảnh hưởng.");
+        var dto = MapToDto(leave, dentist);
+        return ApiResponse<DentistLeaveRequestDto>.Ok(dto, "Đã phê duyệt đơn xin nghỉ phép thành công. Hệ thống đã tự động kích hoạt quy trình điều phối lịch hẹn bị ảnh hưởng.");
     }
 
     public async Task<ApiResponse<DentistLeaveRequestDto>> RejectLeaveRequestAsync(
@@ -698,13 +625,19 @@ public class DentistLeaveService : IDentistLeaveService
         if (adminUser == null)
             return ApiResponse<DentistLeaveRequestDto>.Fail("Chỉ Quản trị viên hệ thống (System Administrator) mới có quyền từ chối đơn nghỉ phép.");
 
-        var leave = await _dbContext.DentistLeaveRequests
-            .Include(l => l.DentistUser).ThenInclude(d => d.User)
-            .Include(l => l.DentistUser).ThenInclude(d => d.DentistDepartments).ThenInclude(dd => dd.Department)
-            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId, ct);
+        var leave = await _dbContext.StaffLeaveRequests
+            .FirstOrDefaultAsync(l => l.LeaveRequestId == leaveRequestId && l.StaffRole == UserRole.Dentist, ct);
 
         if (leave == null)
             return ApiResponse<DentistLeaveRequestDto>.Fail("Không tìm thấy đơn xin nghỉ phép.");
+
+        var dentist = await _dbContext.DentistProfiles
+            .Include(d => d.StaffProfile)
+            .Include(d => d.Department)
+            .FirstOrDefaultAsync(d => d.UserId == leave.StaffUserId, ct);
+
+        if (dentist == null)
+            return ApiResponse<DentistLeaveRequestDto>.Fail("Không tìm thấy thông tin bác sĩ hợp lệ cho đơn nghỉ phép này.");
 
         if (leave.Status != DentistLeaveStatus.Pending)
             return ApiResponse<DentistLeaveRequestDto>.Fail($"Đơn xin nghỉ phép đang ở trạng thái '{DentistLeaveStatus.ToDisplayName(leave.Status)}', không thể từ chối.");
@@ -717,11 +650,10 @@ public class DentistLeaveService : IDentistLeaveService
 
         await _dbContext.SaveChangesAsync(ct);
 
-        // Notify Dentist
         try
         {
             await _notificationService.CreateNotificationAsync(
-                leave.DentistUserId,
+                leave.StaffUserId,
                 null,
                 "DoctorLeaveRejected",
                 "Đơn xin nghỉ phép bị từ chối",
@@ -733,34 +665,40 @@ public class DentistLeaveService : IDentistLeaveService
             _logger.LogWarning(ex, "Failed to notify dentist on leave rejection {LeaveId}", leaveRequestId);
         }
 
-        var dto = MapToDto(leave, leave.DentistUser);
+        var dto = MapToDto(leave, dentist);
         return ApiResponse<DentistLeaveRequestDto>.Ok(dto, "Đã từ chối đơn xin nghỉ phép.");
     }
 
-    private static DentistLeaveRequestDto MapToDto(DentistLeaveRequest l, DentistProfile? d)
+    private static DentistLeaveRequestDto MapToDto(StaffLeaveRequest l, DentistProfile? d)
     {
+        var deptNames = new List<string>();
+        if (!string.IsNullOrWhiteSpace(d?.Department?.Name))
+        {
+            deptNames.Add(d.Department.Name);
+        }
+
         return new DentistLeaveRequestDto
         {
             LeaveRequestId = l.LeaveRequestId,
-            DentistUserId = l.DentistUserId,
-            DentistName = d?.User?.FullName ?? $"BS #{l.DentistUserId}",
-            DentistEmployeeCode = d?.User?.EmployeeCode,
-            DepartmentNames = d?.DentistDepartments?.Select(dd => dd.Department?.Name ?? string.Empty).Where(n => !string.IsNullOrEmpty(n)).ToList() ?? new List<string>(),
+            DentistUserId = l.StaffUserId,
+            DentistName = d?.StaffProfile?.FullName ?? $"BS #{l.StaffUserId}",
+            DentistEmployeeCode = $"BS-{l.StaffUserId}",
+            DepartmentNames = deptNames,
             LeaveType = l.LeaveType,
             StartDate = l.StartDate,
             EndDate = l.EndDate,
             StartTime = l.StartTime,
             EndTime = l.EndTime,
             Reason = l.Reason,
-            Notes = l.Notes,
+            Notes = null,
             Status = l.Status,
             ReviewedByUserId = l.ReviewedByUserId,
             ReviewedByName = l.ReviewedByUser?.Email,
             ReviewedAt = l.ReviewedAt,
             RejectionReason = l.RejectionReason,
-            AffectedAppointmentsCount = l.AppointmentDisruptions?.Count ?? 0,
-            ConfirmedAppointmentsCount = l.AppointmentDisruptions?.Count(ad => ad.Status == AppointmentDisruptionStatus.PendingPatientChoice || ad.Status == AppointmentDisruptionStatus.DoctorChanged || ad.Status == AppointmentDisruptionStatus.Rescheduled) ?? 0,
-            UrgentAppointmentsCount = l.AppointmentDisruptions?.Count(ad => ad.Status == AppointmentDisruptionStatus.NeedsStaffAction) ?? 0,
+            AffectedAppointmentsCount = 0,
+            ConfirmedAppointmentsCount = 0,
+            UrgentAppointmentsCount = 0,
             CreatedAt = l.CreatedAt,
             UpdatedAt = l.UpdatedAt
         };

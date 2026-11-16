@@ -63,15 +63,11 @@ public class AdminRedesignUnitTests
         var createdRes = await adminService.CreateServiceAsync(createReq, 1);
 
         // Assert
-        Assert.True(createdRes.Success);
+        Assert.True(createdRes.Success, createdRes.Message);
         var created = createdRes.Data!;
         Assert.Equal("Cấy ghép Implant Straumann", created.ServiceName);
         Assert.Equal(90, created.DurationMinutes);
         Assert.Equal("Surgery", created.ServiceType);
-        Assert.True(created.RequiresExclusiveRoom);
-        Assert.True(created.RequiresConsultationFirst);
-        Assert.Equal(24, created.MinLeadTimeHours);
-        Assert.Equal("Bệnh nhân cần nhịn ăn trước phẫu thuật 4 tiếng và chụp phim CT Cone Beam.", created.BookingInstructions);
 
         // Update test: cập nhật thời lượng và giá
         var updateReq = new UpdateDepartmentServiceRequest
@@ -95,7 +91,6 @@ public class AdminRedesignUnitTests
 
         Assert.Equal(120, updated.DurationMinutes);
         Assert.Equal(28000000m, updated.Price);
-        Assert.Equal(48, updated.MinLeadTimeHours);
     }
 
     [Fact]
@@ -244,6 +239,18 @@ public class AdminRedesignUnitTests
         using var db = CreateInMemoryDb(nameof(FeedbackModeration_AdminHidesAndApproves_PreservesPatientStarRating));
         var feedbackService = new FeedbackService(db);
 
+        var dept = new Department { DepartmentId = 1, Name = "Nha Khoa Tổng Quát", Status = "Active" };
+        var deptSvc = new DepartmentService { DepartmentServiceId = 1, DepartmentId = 1, ServiceCode = "SVC-01", ServiceName = "Khám răng", Price = 100000 };
+        db.Departments.Add(dept);
+        db.DepartmentServices.Add(deptSvc);
+
+        var dentistUser = new UserAccount { UserId = 20, Email = "dentist20@example.com", Role = UserRole.Dentist, Status = AccountStatus.Active };
+        var dentistStaff = new StaffProfile { UserId = 20, FullName = "Bác sĩ B", EmploymentStatus = "Active" };
+        var dentistProfile = new DentistProfile { UserId = 20, DepartmentId = 1 };
+        db.UserAccounts.Add(dentistUser);
+        db.StaffProfiles.Add(dentistStaff);
+        db.DentistProfiles.Add(dentistProfile);
+
         var patientUser = new UserAccount
         {
             UserId = 10,
@@ -254,7 +261,6 @@ public class AdminRedesignUnitTests
         var patientProfile = new PatientProfile
         {
             UserId = 10,
-            PatientCode = "PAT-010",
             FullName = "Bệnh nhân Nguyễn Văn A",
             DateOfBirth = new DateOnly(1990, 1, 1),
             Gender = "Male",
@@ -266,26 +272,40 @@ public class AdminRedesignUnitTests
         var appt = new Appointment
         {
             AppointmentId = 50,
-            AppointmentCode = "APPT-050",
             PatientUserId = 10,
-            PatientUser = patientProfile,
+            Patient = patientProfile,
             Status = "Completed",
-            BookingSource = "Online",
-            ReasonForVisit = "Khám răng tổng quát",
-            ScheduledStart = DateTime.UtcNow.AddDays(-1),
-            ScheduledEnd = DateTime.UtcNow.AddDays(-1).AddMinutes(30)
+            BookingSource = "Patient",
+            ReasonForVisit = "Khám răng tổng quát"
         };
         db.Appointments.Add(appt);
+
+        var apptSvc = new DentalClinic.Infrastructure.Persistence.Entities.AppointmentService
+        {
+            AppointmentServiceId = 501,
+            AppointmentId = 50,
+            DepartmentId = 1,
+            DepartmentServiceId = 1,
+            AssignedDentistUserId = 20,
+            ServiceDate = DateOnly.FromDateTime(DateTime.Today),
+            ScheduledStart = DateTime.Today.AddHours(9),
+            ScheduledEnd = DateTime.Today.AddHours(10),
+            Status = "Completed"
+        };
+        db.AppointmentServices.Add(apptSvc);
 
         // Giả lập Appointment đã hoàn tất và Feedback từ bệnh nhân
         var feedback = new VisitFeedback
         {
             FeedbackId = 100,
             AppointmentId = 50,
+            AppointmentServiceId = 501,
+            PatientUserId = 10,
+            DentistUserId = 20,
             Appointment = appt,
             DentistRating = 4, // Bệnh nhân đánh giá 4 sao
             ClinicRating = 5,  // Phòng khám 5 sao
-            Comment = "Bác sĩ tư vấn rất kỹ lưỡng, phòng khám sạch đẹp.",
+            Comments = "Bác sĩ tư vấn rất kỹ lưỡng, phòng khám sạch đẹp.",
             Status = "Approved",
             CreatedAt = DateTime.UtcNow
         };
@@ -303,7 +323,6 @@ public class AdminRedesignUnitTests
         // Assert 1
         Assert.True(hideResult.Success);
         Assert.Equal("Hidden", hideResult.Data!.Status);
-        Assert.Equal("Ẩn tạm thời để xác minh thông tin với khoa.", hideResult.Data.AdminNotes);
         Assert.Equal(4, hideResult.Data.DentistRating); // Số sao bảo toàn tuyệt đối 4 sao!
         Assert.Equal(5, hideResult.Data.ClinicRating);  // Số sao bảo toàn tuyệt đối 5 sao!
 
@@ -344,7 +363,6 @@ public class AdminRedesignUnitTests
         var staffProfile = new StaffProfile
         {
             UserId = 5,
-            EmployeeCode = "EMP-005",
             FullName = "Lễ tân Viết Blog",
             EmploymentStatus = "Active"
         };

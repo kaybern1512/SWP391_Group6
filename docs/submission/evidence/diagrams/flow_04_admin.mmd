@@ -1,0 +1,27 @@
+flowchart TD
+    classDef scr fill:#F3E5F5,stroke:#4A148C,stroke-width:1.5px,color:#000
+    classDef mod fill:#FFF3E0,stroke:#EF6C00,stroke-width:1.5px,stroke-dasharray: 4 2,color:#000
+
+    ADASH["SCR-ADM-01: Executive Operations & Revenue Dashboard<br/>(/Admin/Dashboard)"]:::scr
+    AUSER["SCR-ADM-02: User Accounts & 4-Role Management<br/>(/Admin/Users)"]:::scr
+    ADEPT["SCR-ADM-03: Clinical Departments Management<br/>(/Admin/Departments)"]:::scr
+    ASRV["SCR-ADM-04: Services & Demo Pricing Catalog<br/>(/Admin/Services)"]:::scr
+    AROOM["SCR-ADM-05: Rooms & Dental Chairs Maintenance<br/>(/Admin/Rooms)"]:::scr
+    ADSCH["SCR-ADM-06: Monthly Dentist Schedule & Leave Approval<br/>(/Admin/DentistSchedule)"]:::scr
+    ARSCH["SCR-ADM-07: Monthly Receptionist Schedule & Swaps<br/>(/Admin/ReceptionistSchedule)"]:::scr
+    IMP(["Modal: Leave & Maintenance Disruption Impact Preview<br/>(GET /Admin/DentistSchedule/LeaveImpact/{id})"]):::mod
+    AMED["SCR-ADM-08: Medicine Inventory & Stock Adjustments<br/>(/Admin/Medicine)"]:::scr
+    ABLOG["SCR-ADM-09: Blog Review & Publication Console<br/>(/Admin/Blog)"]:::scr
+    AWF["SCR-ADM-10: Workforce Attendance Reconciliation & CSV<br/>(/Admin/Workforce/Report)"]:::scr
+    AAUD["SCR-ADM-11: Security & Operational Audit Logs<br/>(/Admin/AuditLogs)"]:::scr
+
+    ADASH --> AUSER
+    ADASH --> ADEPT
+    ADASH --> ASRV
+    ADASH --> AROOM --> IMP
+    ADASH --> ADSCH --> IMP
+    ADASH --> ARSCH
+    ADASH --> AMED
+    ADASH --> ABLOG
+    ADASH --> AWF
+    ADASH --> AAUD

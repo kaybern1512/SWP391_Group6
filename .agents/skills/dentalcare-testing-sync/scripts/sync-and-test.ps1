@@ -13,15 +13,22 @@ $ErrorActionPreference = "Stop"
 if (Get-Variable -Name "PSNativeCommandUseErrorActionPreference" -ErrorAction SilentlyContinue) {
     $PSNativeCommandUseErrorActionPreference = $false
 }
-$swpRoot = "D:\SWP"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$parentRepo = (Resolve-Path "$scriptDir\..\..\..\..").Path
+if (Test-Path (Join-Path $parentRepo "BE\DentalClinic.Backend.sln")) {
+    $swpRoot = $parentRepo
+} elseif (Test-Path "D:\SWP391\DentalCare-DB-Simplification\BE\DentalClinic.Backend.sln") {
+    $swpRoot = "D:\SWP391\DentalCare-DB-Simplification"
+} else {
+    $swpRoot = "D:\SWP"
+}
 
 # Ensure local SQL Server instance is targeted for SQL Server QA integration tests
 if (-not $env:TEST_SQL_SERVER) {
-    $env:TEST_SQL_SERVER = ".\MSSQLSERVER01"
+    $env:TEST_SQL_SERVER = ".\SQLEXPRESS"
 }
 if (-not $env:DENTAL_CLINIC_SQL_INSTANCE) {
-    $env:DENTAL_CLINIC_SQL_INSTANCE = ".\MSSQLSERVER01"
+    $env:DENTAL_CLINIC_SQL_INSTANCE = ".\SQLEXPRESS"
 }
 
 Write-Host "=================================================================" -ForegroundColor Cyan

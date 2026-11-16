@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
@@ -11,7 +10,9 @@ public partial class BlogCategory
 
     public string Slug { get; set; } = null!;
 
-    public DateTime CreatedAt { get; set; }
+    public string? Description { get; set; }
+
+    public int DisplayOrder { get; set; }
 
     public virtual ICollection<BlogPost> BlogPosts { get; set; } = new List<BlogPost>();
 }

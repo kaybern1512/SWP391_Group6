@@ -67,13 +67,13 @@ public class CombinedCrossFeatureLifecycleIntegrationTests
             var histories = await db.AppointmentStatusHistories.Where(h => apptIds.Contains(h.AppointmentId)).ToListAsync();
             db.AppointmentStatusHistories.RemoveRange(histories);
 
-            var payments = await db.Payments.Where(p => p.Invoice.AppointmentId == 0 || apptIds.Contains(p.Invoice.AppointmentId)).ToListAsync();
+            var payments = await db.Payments.Where(p => p.Invoice.AppointmentId == 0 || (p.Invoice.AppointmentId.HasValue && apptIds.Contains(p.Invoice.AppointmentId.Value))).ToListAsync();
             db.Payments.RemoveRange(payments);
 
-            var invItems = await db.InvoiceItems.Where(i => apptIds.Contains(i.Invoice.AppointmentId)).ToListAsync();
+            var invItems = await db.InvoiceItems.Where(i => i.Invoice.AppointmentId.HasValue && apptIds.Contains(i.Invoice.AppointmentId.Value)).ToListAsync();
             db.InvoiceItems.RemoveRange(invItems);
 
-            var invoices = await db.Invoices.Where(i => apptIds.Contains(i.AppointmentId)).ToListAsync();
+            var invoices = await db.Invoices.Where(i => i.AppointmentId.HasValue && apptIds.Contains(i.AppointmentId.Value)).ToListAsync();
             db.Invoices.RemoveRange(invoices);
 
             var appts = await db.Appointments.Where(a => apptIds.Contains(a.AppointmentId)).ToListAsync();
@@ -81,10 +81,10 @@ public class CombinedCrossFeatureLifecycleIntegrationTests
         }
 
         // 3. Clean leave requests & availability
-        var leaves = await db.DentistLeaveRequests
-            .Where(l => l.StartDate == testDate)
+        var leaves = await db.StaffLeaveRequests
+            .Where(l => l.StaffRole == "Dentist" && l.StartDate == testDate)
             .ToListAsync();
-        db.DentistLeaveRequests.RemoveRange(leaves);
+        db.StaffLeaveRequests.RemoveRange(leaves);
 
         var avails = await db.DentistAvailabilities
             .Where(a => a.StartDateTime >= dtStart && a.StartDateTime <= dtEnd)
@@ -264,7 +264,7 @@ public class CombinedCrossFeatureLifecycleIntegrationTests
             using (var db = CreateDbContext())
             {
                 // Invariant: Leave is Approved
-                var leaveInDb = await db.DentistLeaveRequests.FindAsync(leaveRequestId);
+                var leaveInDb = await db.StaffLeaveRequests.FindAsync(leaveRequestId);
                 Assert.NotNull(leaveInDb);
                 Assert.Equal("Approved", leaveInDb.Status);
 

@@ -1,21 +1,30 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
 
 public partial class OdontogramEntry
 {
-    public long OdontogramEntryId { get; set; }
+    public long OdontogramId { get; set; }
 
-    public long ClinicalEntryId { get; set; }
+    public long MedicalRecordId { get; set; }
+
+    public long DentistUserId { get; set; }
 
     public string ToothNumber { get; set; } = null!;
 
-    public string? Surface { get; set; }
-
     public string Condition { get; set; } = null!;
 
-    public string? Note { get; set; }
+    public string? Surface { get; set; }
 
-    public virtual ClinicalEntry ClinicalEntry { get; set; } = null!;
+    public string? DiagnosisNotes { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
+
+    public virtual DentalMedicalRecord MedicalRecord { get; set; } = null!;
+
+    public virtual DentistProfile Dentist { get; set; } = null!;
 }

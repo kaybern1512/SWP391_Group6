@@ -1,0 +1,26 @@
+classDiagram
+    class ReceptionistBillingController {
+      -IBillingApiService _billingApi
+      +Create(long appointmentId) Task~IActionResult~
+      +Create(CreateInvoiceViewModel) Task~IActionResult~
+      +Detail(long id) Task~IActionResult~
+      +Pay(ProcessPaymentViewModel) Task~IActionResult~
+      +Refund(ProcessRefundViewModel) Task~IActionResult~
+      +Print(long id) Task~IActionResult~
+    }
+    class BillingController {
+      -IBillingService _billingService
+      +GetPreparation(long appointmentId) Task~ActionResult~
+      +CreateInvoice(CreateInvoiceRequest) Task~ActionResult~
+      +ProcessPayment(ProcessPaymentRequest) Task~ActionResult~
+      +ProcessRefund(ProcessRefundRequest) Task~ActionResult~
+    }
+    class BillingService {
+      -DentalClinicDbContext _db
+      +GetBillingPreparationAsync(long) Task~BillingPreparationDto~
+      +CreateInvoiceAsync(long, CreateInvoiceRequest) Task~InvoiceDto~
+      +ProcessPaymentAsync(long, ProcessPaymentRequest) Task~PaymentDto~
+      +ProcessRefundAsync(long, ProcessRefundRequest) Task~PaymentDto~
+    }
+    ReceptionistBillingController --> BillingController
+    BillingController --> BillingService

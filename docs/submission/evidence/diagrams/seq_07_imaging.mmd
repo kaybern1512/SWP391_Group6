@@ -1,0 +1,32 @@
+sequenceDiagram
+    autonumber
+    actor TDen as Treating Dentist
+    actor Rec as Receptionist
+    actor XDen as X-Ray Dentist (Dr. Hung)
+    participant API as ClinicalDiagnosticsController
+    participant Svc as ImagingService
+    participant DB as SQL Server
+
+    TDen->>API: POST /api/clinical-diagnostics/orders (AppointmentServiceId, ClinicalIndication)
+    API->>Svc: CreateDiagnosticOrderAsync(treatingDentistId, request)
+    Svc->>DB: INSERT Diagnostics (Status='Ordered', ImagingType='Panoramic', ClinicalIndication)
+    DB-->>TDen: Diagnostic Order Created
+
+    Rec->>API: POST /api/clinical-diagnostics/sessions/book (OrderId, Room R003, XrayDentistId, LocalTime->UTC)
+    API->>Svc: BookImagingSessionAsync(recUserId, bookRequest)
+    Svc->>DB: Verify XrayDentist has CanPerformXray=1 & active shift in StaffWorkSchedules
+    Svc->>DB: Preserve original consultation Room/Chair on treating AppointmentService!
+    Svc->>DB: INSERT/UPDATE imaging AppointmentServices (RoomId=R003, DentalChairId=NULL, AssignedDentistUserId=XrayDentist)
+    Rec->>API: POST /api/clinical-diagnostics/sessions/{id}/check-in
+    Svc->>DB: UPDATE imaging AppointmentServices SET Status='CheckedIn', QueueNumber=@stt
+
+    XDen->>API: POST /api/clinical-diagnostics/sessions/{id}/start
+    Svc->>DB: UPDATE Diagnostics SET Status='InProgress'
+    XDen->>API: POST /api/clinical-diagnostics/results/upload (PNG/DICOM file + Findings)
+    API->>Svc: UploadDiagnosticResultAsync & CompleteImagingSessionAsync
+    Svc->>DB: UPDATE Diagnostics SET FileUrl=@url, Findings=@text, UploadedByUserId=@xden, Status='Completed', CompletedAt=SYSDATETIME()
+    Svc->>DB: INSERT Notifications (Recipient = OrderingDentistUserId)
+
+    TDen->>API: GET /api/clinical-diagnostics/results/{id}/image & POST /review
+    API->>Svc: Verify caller is OrderingDentist / AssignedDentist -> Stream image bytes
+    Svc->>DB: UPDATE Diagnostics SET ReviewedByDentistUserId=@tden, ReviewedAt=SYSDATETIME()

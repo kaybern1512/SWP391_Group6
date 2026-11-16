@@ -1,0 +1,22 @@
+flowchart TD
+    classDef scr fill:#E0F7FA,stroke:#006064,stroke-width:1.5px,color:#000
+    classDef mod fill:#FFF3E0,stroke:#EF6C00,stroke-width:1.5px,stroke-dasharray: 4 2,color:#000
+
+    DDASH["SCR-DEN-01: Dentist Clinical Queue & Dashboard<br/>(/Dentist/Dashboard)"]:::scr
+    APPTD["SCR-DEN-02: Consultation Workspace<br/>(/Dentist/Appointments/{id})"]:::scr
+    DEMR["SCR-DEN-03: Clinical EMR & 32-Tooth Odontogram<br/>(/Dentist/MedicalRecords)<br/>[Tabs: Tooth Chart | Clinical Notes | X-Ray Gallery]"]:::scr
+    XORD(["Modal: Order Diagnostic X-Ray<br/>(POST /Dentist/MedicalRecords/AddImagingRecord)"]):::mod
+    TPLAN["SCR-DEN-04: Multi-Phase Treatment Plans & Sessions<br/>(/Dentist/TreatmentPlans, /Sessions)"]:::scr
+    DPRES["SCR-DEN-05: Prescription & Direct Batch Dispensing<br/>(/Dentist/Prescriptions)"]:::scr
+    DREF["SCR-DEN-06: Inter-Department Referrals & Follow-Ups<br/>(/Dentist/Referrals)"]:::scr
+    XRAYQ["SCR-DEN-07: Dedicated X-Ray Queue & Image Upload<br/>(/Dentist/XrayQueue - Room R003)"]:::scr
+    DSCHED["SCR-DEN-08: Dentist Schedule, Leave & Feedback<br/>(/Dentist/Schedule, /Availability, /Feedback)"]:::scr
+
+    DDASH --> APPTD
+    APPTD --> DEMR
+    DEMR --> XORD --> XRAYQ
+    XRAYQ -. "Radiograph Stream & Findings" .-> DEMR
+    APPTD --> TPLAN
+    APPTD --> DPRES
+    APPTD --> DREF
+    DDASH --> DSCHED

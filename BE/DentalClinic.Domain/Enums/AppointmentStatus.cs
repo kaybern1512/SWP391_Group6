@@ -10,6 +10,7 @@ public static class AppointmentStatus
     public const string Waiting = "Waiting";
     public const string Called = "Called";
     public const string InService = "InService";
+    public const string InProgress = "InProgress";
     public const string Completed = "Completed";
     public const string Rejected = "Rejected";
     public const string Withdrawn = "Withdrawn";
@@ -27,6 +28,7 @@ public static class AppointmentStatus
         Waiting,
         Called,
         InService,
+        InProgress,
         Completed,
         Rejected,
         Withdrawn,
@@ -41,5 +43,5 @@ public static class AppointmentStatus
     /// Checks whether an appointment status occupies a dentist or room/chair slot.
     /// </summary>
     public static bool IsSlotOccupying(string status) =>
-        status is Confirmed or CheckedIn or Waiting or Called or InService;
+        status is Confirmed or CheckedIn or Waiting or Called or InService or InProgress;
 }

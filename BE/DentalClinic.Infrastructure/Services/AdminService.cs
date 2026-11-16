@@ -22,18 +22,21 @@ public class AdminService : IAdminService
     private readonly IAuditLogService _auditLogService;
     private readonly ILogger<AdminService> _logger;
     private readonly IPasswordHasherService _passwordHasher;
+    private readonly INotificationService? _notificationService;
 
     [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
     public AdminService(
         DentalClinicDbContext dbContext,
         IAuditLogService auditLogService,
         ILogger<AdminService> logger,
-        IPasswordHasherService? passwordHasher = null)
+        IPasswordHasherService? passwordHasher = null,
+        INotificationService? notificationService = null)
     {
         _dbContext = dbContext;
         _auditLogService = auditLogService;
         _logger = logger;
         _passwordHasher = passwordHasher ?? new PasswordHasherService();
+        _notificationService = notificationService;
     }
 
     // ==========================================
@@ -44,9 +47,8 @@ public class AdminService : IAdminService
     {
         var departments = await _dbContext.Departments
             .AsNoTracking()
-            .Include(d => d.ManagerUser)
             .Include(d => d.DepartmentServices)
-            .Include(d => d.DentistDepartments)
+            .Include(d => d.DentistProfiles)
             .OrderBy(d => d.DepartmentId)
             .AsSplitQuery()
             .ToListAsync(ct);
@@ -56,14 +58,14 @@ public class AdminService : IAdminService
             DepartmentId = d.DepartmentId,
             Name = d.Name,
             Description = d.Description,
-            ManagerUserId = d.ManagerUserId,
-            ManagerName = d.ManagerUser?.FullName,
-            ManagerEmployeeCode = d.ManagerUser?.EmployeeCode,
+            ManagerUserId = null,
+            ManagerName = null,
+            ManagerEmployeeCode = null,
             Status = d.Status,
             CreatedAt = d.CreatedAt,
             UpdatedAt = d.UpdatedAt,
             ServicesCount = d.DepartmentServices.Count,
-            DentistsCount = d.DentistDepartments.Count(dd => dd.Status == "Active")
+            DentistsCount = d.DentistProfiles.Count
         }).ToList();
 
         return ApiResponse<List<AdminDepartmentDto>>.Ok(dtos);
@@ -73,9 +75,8 @@ public class AdminService : IAdminService
     {
         var d = await _dbContext.Departments
             .AsNoTracking()
-            .Include(d => d.ManagerUser)
             .Include(d => d.DepartmentServices)
-            .Include(d => d.DentistDepartments)
+            .Include(d => d.DentistProfiles)
             .AsSplitQuery()
             .FirstOrDefaultAsync(d => d.DepartmentId == departmentId, ct);
 
@@ -89,14 +90,14 @@ public class AdminService : IAdminService
             DepartmentId = d.DepartmentId,
             Name = d.Name,
             Description = d.Description,
-            ManagerUserId = d.ManagerUserId,
-            ManagerName = d.ManagerUser?.FullName,
-            ManagerEmployeeCode = d.ManagerUser?.EmployeeCode,
+            ManagerUserId = null,
+            ManagerName = null,
+            ManagerEmployeeCode = null,
             Status = d.Status,
             CreatedAt = d.CreatedAt,
             UpdatedAt = d.UpdatedAt,
             ServicesCount = d.DepartmentServices.Count,
-            DentistsCount = d.DentistDepartments.Count(dd => dd.Status == "Active")
+            DentistsCount = d.DentistProfiles.Count
         };
 
         return ApiResponse<AdminDepartmentDto>.Ok(dto);
@@ -118,22 +119,10 @@ public class AdminService : IAdminService
             return ApiResponse<AdminDepartmentDto>.Fail($"Chuyên khoa '{trimmedName}' đã tồn tại trong hệ thống.");
         }
 
-        if (request.ManagerUserId.HasValue)
-        {
-            var staffExists = await _dbContext.StaffProfiles
-                .AnyAsync(s => s.UserId == request.ManagerUserId.Value, ct);
-
-            if (!staffExists)
-            {
-                return ApiResponse<AdminDepartmentDto>.Fail("Nhân sự được chỉ định không tồn tại trong danh sách nhân sự.");
-            }
-        }
-
         var department = new Department
         {
             Name = trimmedName,
             Description = request.Description?.Trim(),
-            ManagerUserId = request.ManagerUserId,
             Status = string.Equals(request.Status, "Inactive", StringComparison.OrdinalIgnoreCase) ? "Inactive" : "Active",
             CreatedAt = DateTime.UtcNow
         };
@@ -147,7 +136,7 @@ public class AdminService : IAdminService
             "Department",
             department.DepartmentId.ToString(),
             null,
-            JsonSerializer.Serialize(new { department.Name, department.ManagerUserId, department.Status }),
+            JsonSerializer.Serialize(new { department.Name, department.Status }),
             ct);
 
         return await GetDepartmentByIdAsync(department.DepartmentId, ct);
@@ -177,28 +166,16 @@ public class AdminService : IAdminService
             return ApiResponse<AdminDepartmentDto>.Fail($"Tên chuyên khoa '{trimmedName}' đã được sử dụng bởi khoa khác.");
         }
 
-        if (request.ManagerUserId.HasValue)
-        {
-            var staffExists = await _dbContext.StaffProfiles
-                .AnyAsync(s => s.UserId == request.ManagerUserId.Value, ct);
-
-            if (!staffExists)
-            {
-                return ApiResponse<AdminDepartmentDto>.Fail("Nhân sự được chỉ định không tồn tại.");
-            }
-        }
-
-        var oldValues = JsonSerializer.Serialize(new { department.Name, department.ManagerUserId, department.Status });
+        var oldValues = JsonSerializer.Serialize(new { department.Name, department.Status });
 
         department.Name = trimmedName;
         department.Description = request.Description?.Trim();
-        department.ManagerUserId = request.ManagerUserId;
         department.Status = string.Equals(request.Status, "Inactive", StringComparison.OrdinalIgnoreCase) ? "Inactive" : "Active";
         department.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);
 
-        var newValues = JsonSerializer.Serialize(new { department.Name, department.ManagerUserId, department.Status });
+        var newValues = JsonSerializer.Serialize(new { department.Name, department.Status });
 
         await _auditLogService.LogAsync(
             adminUserId,
@@ -249,9 +226,6 @@ public class AdminService : IAdminService
         var query = _dbContext.DepartmentServices
             .AsNoTracking()
             .Include(s => s.Department)
-            .Include(s => s.Workflows)
-                .ThenInclude(w => w.Steps)
-            .AsSplitQuery()
             .AsQueryable();
 
         if (departmentId.HasValue && departmentId.Value > 0)
@@ -270,57 +244,26 @@ public class AdminService : IAdminService
             .ThenBy(s => s.DepartmentServiceId)
             .ToListAsync(ct);
 
-        var dtos = services.Select(s =>
+        var dtos = services.Select(s => new AdminDepartmentServiceDto
         {
-            var activeWf = s.Workflows?.FirstOrDefault(w => w.IsActive);
-            var latestWf = activeWf ?? s.Workflows?.OrderByDescending(w => w.Version).FirstOrDefault();
-            var targetWf = activeWf ?? latestWf;
-            var hasActive = activeWf != null && activeWf.Steps.Any();
-            var approvalStatus = activeWf != null ? (activeWf.ApprovalStatus ?? "Approved") : (latestWf != null ? (latestWf.ApprovalStatus ?? "Draft") : "None");
-
-            return new AdminDepartmentServiceDto
-            {
-                DepartmentServiceId = s.DepartmentServiceId,
-                ServiceCode = s.ServiceCode ?? $"SRV-{s.DepartmentId}-{s.DepartmentServiceId:D3}",
-                DepartmentId = s.DepartmentId,
-                DepartmentName = s.Department?.Name ?? string.Empty,
-                ServiceName = s.ServiceName,
-                Description = s.Description,
-                DurationMinutes = s.DurationMinutes,
-                Price = s.Price,
-                Status = s.Status,
-                ServiceType = s.ServiceType ?? "Treatment",
-                RequiresExclusiveRoom = s.RequiresExclusiveRoom,
-                RequiresConsultationFirst = s.RequiresConsultationFirst,
-                MinLeadTimeHours = s.MinLeadTimeHours,
-                BookingInstructions = s.BookingInstructions,
-                WorkflowStepCount = targetWf?.Steps?.Count ?? 0,
-                HasActiveWorkflow = hasActive,
-                WorkflowApprovalStatus = approvalStatus,
-                ActiveWorkflow = targetWf != null ? new ServiceWorkflowDto
-                {
-                    WorkflowId = targetWf.WorkflowId,
-                    DepartmentServiceId = targetWf.DepartmentServiceId,
-                    WorkflowName = targetWf.WorkflowName,
-                    Version = targetWf.Version,
-                    IsActive = targetWf.IsActive,
-                    ApprovalStatus = targetWf.ApprovalStatus ?? (targetWf.IsActive ? "Approved" : "Draft"),
-                    ApprovedByUserId = targetWf.ApprovedByUserId,
-                    ApprovedAt = targetWf.ApprovedAt,
-                    Description = targetWf.Description,
-                    Steps = targetWf.Steps.OrderBy(st => st.StepOrder).Select(st => new ServiceWorkflowStepDto
-                    {
-                        StepId = st.StepId,
-                        WorkflowId = st.WorkflowId,
-                        StepName = st.StepName,
-                        Description = st.Description,
-                        StepOrder = st.StepOrder,
-                        IsRequired = st.IsRequired,
-                        CompletionRequirement = st.CompletionRequirement,
-                        ExpectedDataType = st.ExpectedDataType
-                    }).ToList()
-                } : null
-            };
+            DepartmentServiceId = s.DepartmentServiceId,
+            ServiceCode = s.ServiceCode ?? $"SRV-{s.DepartmentId}-{s.DepartmentServiceId:D3}",
+            DepartmentId = s.DepartmentId,
+            DepartmentName = s.Department?.Name ?? string.Empty,
+            ServiceName = s.ServiceName,
+            Description = s.Description,
+            DurationMinutes = s.DurationMinutes,
+            Price = s.Price,
+            Status = s.Status,
+            ServiceType = s.DiagnosticType ?? "Treatment",
+            RequiresExclusiveRoom = false,
+            RequiresConsultationFirst = false,
+            MinLeadTimeHours = 2,
+            BookingInstructions = null,
+            WorkflowStepCount = 0,
+            HasActiveWorkflow = false,
+            WorkflowApprovalStatus = "Approved",
+            ActiveWorkflow = null
         }).ToList();
 
         return ApiResponse<List<AdminDepartmentServiceDto>>.Ok(dtos);
@@ -331,21 +274,12 @@ public class AdminService : IAdminService
         var s = await _dbContext.DepartmentServices
             .AsNoTracking()
             .Include(s => s.Department)
-            .Include(s => s.Workflows)
-                .ThenInclude(w => w.Steps)
-            .AsSplitQuery()
             .FirstOrDefaultAsync(s => s.DepartmentServiceId == serviceId, ct);
 
         if (s == null)
         {
             return ApiResponse<AdminDepartmentServiceDto>.Fail("Không tìm thấy dịch vụ.");
         }
-
-        var activeWf = s.Workflows?.FirstOrDefault(w => w.IsActive);
-        var latestWf = activeWf ?? s.Workflows?.OrderByDescending(w => w.Version).FirstOrDefault();
-        var targetWf = activeWf ?? latestWf;
-        var hasActive = activeWf != null && activeWf.Steps.Any();
-        var approvalStatus = activeWf != null ? (activeWf.ApprovalStatus ?? "Approved") : (latestWf != null ? (latestWf.ApprovalStatus ?? "Draft") : "None");
 
         var dto = new AdminDepartmentServiceDto
         {
@@ -358,37 +292,15 @@ public class AdminService : IAdminService
             DurationMinutes = s.DurationMinutes,
             Price = s.Price,
             Status = s.Status,
-            ServiceType = s.ServiceType ?? "Treatment",
-            RequiresExclusiveRoom = s.RequiresExclusiveRoom,
-            RequiresConsultationFirst = s.RequiresConsultationFirst,
-            MinLeadTimeHours = s.MinLeadTimeHours,
-            BookingInstructions = s.BookingInstructions,
-            WorkflowStepCount = targetWf?.Steps?.Count ?? 0,
-            HasActiveWorkflow = hasActive,
-            WorkflowApprovalStatus = approvalStatus,
-            ActiveWorkflow = targetWf != null ? new ServiceWorkflowDto
-            {
-                WorkflowId = targetWf.WorkflowId,
-                DepartmentServiceId = targetWf.DepartmentServiceId,
-                WorkflowName = targetWf.WorkflowName,
-                Version = targetWf.Version,
-                IsActive = targetWf.IsActive,
-                ApprovalStatus = targetWf.ApprovalStatus ?? (targetWf.IsActive ? "Approved" : "Draft"),
-                ApprovedByUserId = targetWf.ApprovedByUserId,
-                ApprovedAt = targetWf.ApprovedAt,
-                Description = targetWf.Description,
-                Steps = targetWf.Steps.OrderBy(st => st.StepOrder).Select(st => new ServiceWorkflowStepDto
-                {
-                    StepId = st.StepId,
-                    WorkflowId = st.WorkflowId,
-                    StepName = st.StepName,
-                    Description = st.Description,
-                    StepOrder = st.StepOrder,
-                    IsRequired = st.IsRequired,
-                    CompletionRequirement = st.CompletionRequirement,
-                    ExpectedDataType = st.ExpectedDataType
-                }).ToList()
-            } : null
+            ServiceType = s.DiagnosticType ?? "Treatment",
+            RequiresExclusiveRoom = false,
+            RequiresConsultationFirst = false,
+            MinLeadTimeHours = 2,
+            BookingInstructions = null,
+            WorkflowStepCount = 0,
+            HasActiveWorkflow = false,
+            WorkflowApprovalStatus = "Approved",
+            ActiveWorkflow = null
         };
 
         return ApiResponse<AdminDepartmentServiceDto>.Ok(dto);
@@ -428,7 +340,6 @@ public class AdminService : IAdminService
             return ApiResponse<AdminDepartmentServiceDto>.Fail($"Dịch vụ '{trimmedName}' đã tồn tại trong chuyên khoa này.");
         }
 
-        // Validate ServiceCode
         string serviceCode;
         if (!string.IsNullOrWhiteSpace(request.ServiceCode))
         {
@@ -458,7 +369,6 @@ public class AdminService : IAdminService
             } while (await _dbContext.DepartmentServices.AnyAsync(s => s.ServiceCode == serviceCode, ct));
         }
 
-        // Validate Workflow Steps if provided
         if (request.WorkflowSteps != null && request.WorkflowSteps.Any())
         {
             if (request.WorkflowSteps.Any(st => string.IsNullOrWhiteSpace(st.StepName)))
@@ -477,57 +387,18 @@ public class AdminService : IAdminService
         var service = new DepartmentService
         {
             ServiceCode = serviceCode,
-            DepartmentId = request.DepartmentId,
+            DepartmentId = (int)request.DepartmentId,
             ServiceName = trimmedName,
             Description = request.Description?.Trim(),
             DurationMinutes = request.DurationMinutes.Value,
             Price = request.Price,
+            DiagnosticType = serviceType,
             Status = string.Equals(request.Status, "Inactive", StringComparison.OrdinalIgnoreCase) ? "Inactive" : "Active",
-            ServiceType = serviceType,
-            RequiresExclusiveRoom = request.RequiresExclusiveRoom,
-            RequiresConsultationFirst = request.RequiresConsultationFirst,
-            MinLeadTimeHours = request.MinLeadTimeHours >= 0 ? request.MinLeadTimeHours : 2,
-            BookingInstructions = request.BookingInstructions?.Trim()
+            CreatedAt = DateTime.UtcNow
         };
 
         _dbContext.DepartmentServices.Add(service);
         await _dbContext.SaveChangesAsync(ct);
-
-        // Add initial workflow if steps provided
-        if (request.WorkflowSteps != null && request.WorkflowSteps.Any())
-        {
-            var wf = new ServiceWorkflow
-            {
-                DepartmentServiceId = service.DepartmentServiceId,
-                WorkflowName = $"Quy trình: {service.ServiceName}",
-                Version = 1,
-                IsActive = true,
-                ApprovalStatus = "Approved",
-                ApprovedByUserId = adminUserId,
-                ApprovedAt = DateTime.UtcNow,
-                Description = service.Description,
-                CreatedAt = DateTime.UtcNow,
-                CreatedByUserId = adminUserId
-            };
-
-            int order = 1;
-            foreach (var st in request.WorkflowSteps.OrderBy(s => s.StepOrder))
-            {
-                wf.Steps.Add(new ServiceWorkflowStep
-                {
-                    StepName = st.StepName.Trim(),
-                    Description = st.Description?.Trim(),
-                    StepOrder = order++,
-                    IsRequired = st.IsRequired,
-                    CompletionRequirement = st.CompletionRequirement?.Trim(),
-                    ExpectedDataType = string.IsNullOrWhiteSpace(st.ExpectedDataType) ? "None" : st.ExpectedDataType.Trim(),
-                    CreatedAt = DateTime.UtcNow
-                });
-            }
-
-            _dbContext.ServiceWorkflows.Add(wf);
-            await _dbContext.SaveChangesAsync(ct);
-        }
 
         await _auditLogService.LogAsync(
             adminUserId,
@@ -544,8 +415,6 @@ public class AdminService : IAdminService
     public async Task<ApiResponse<AdminDepartmentServiceDto>> UpdateServiceAsync(long serviceId, UpdateDepartmentServiceRequest request, long? adminUserId = null, CancellationToken ct = default)
     {
         var service = await _dbContext.DepartmentServices
-            .Include(s => s.Workflows)
-                .ThenInclude(w => w.Steps)
             .FirstOrDefaultAsync(s => s.DepartmentServiceId == serviceId, ct);
 
         if (service == null)
@@ -585,7 +454,6 @@ public class AdminService : IAdminService
             return ApiResponse<AdminDepartmentServiceDto>.Fail($"Tên dịch vụ '{trimmedName}' đã được sử dụng trong chuyên khoa này.");
         }
 
-        // Validate ServiceCode
         if (!string.IsNullOrWhiteSpace(request.ServiceCode))
         {
             var reqCode = request.ServiceCode.Trim().ToUpperInvariant();
@@ -600,23 +468,14 @@ public class AdminService : IAdminService
 
         var oldValues = JsonSerializer.Serialize(new { service.ServiceCode, service.ServiceName, service.DepartmentId, service.Price, service.Status });
 
-        var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric", "Implant", "Orthodontics", "General", "Endodontics", "Periodontics", "Examination" };
-        if (!string.IsNullOrWhiteSpace(request.ServiceType) && validTypes.Contains(request.ServiceType, StringComparer.OrdinalIgnoreCase))
-        {
-            service.ServiceType = request.ServiceType;
-        }
-        service.DepartmentId = request.DepartmentId;
+        service.DepartmentId = (int)request.DepartmentId;
         service.ServiceName = trimmedName;
         service.Description = request.Description?.Trim();
         service.DurationMinutes = request.DurationMinutes.Value;
         service.Price = request.Price;
         service.Status = string.Equals(request.Status, "Inactive", StringComparison.OrdinalIgnoreCase) ? "Inactive" : "Active";
-        service.RequiresExclusiveRoom = request.RequiresExclusiveRoom;
-        service.RequiresConsultationFirst = request.RequiresConsultationFirst;
-        service.MinLeadTimeHours = request.MinLeadTimeHours >= 0 ? request.MinLeadTimeHours : 2;
-        service.BookingInstructions = request.BookingInstructions?.Trim();
+        service.UpdatedAt = DateTime.UtcNow;
 
-        // Handle Workflow Steps with Versioning
         if (request.WorkflowSteps != null && request.WorkflowSteps.Any())
         {
             if (request.WorkflowSteps.Any(st => string.IsNullOrWhiteSpace(st.StepName)))
@@ -627,45 +486,6 @@ public class AdminService : IAdminService
             {
                 return ApiResponse<AdminDepartmentServiceDto>.Fail("Thứ tự các bước quy trình không được trùng nhau.");
             }
-
-            var activeWf = service.Workflows.FirstOrDefault(w => w.IsActive);
-            int newVersion = service.Workflows.Any() ? service.Workflows.Max(w => w.Version) + 1 : 1;
-            foreach (var active in service.Workflows.Where(w => w.IsActive))
-            {
-                active.IsActive = false;
-                active.UpdatedAt = DateTime.UtcNow;
-            }
-
-            var newWf = new ServiceWorkflow
-            {
-                DepartmentServiceId = service.DepartmentServiceId,
-                WorkflowName = $"Quy trình: {service.ServiceName} (v{newVersion})",
-                Version = newVersion,
-                IsActive = true,
-                ApprovalStatus = "Approved",
-                ApprovedByUserId = adminUserId,
-                ApprovedAt = DateTime.UtcNow,
-                Description = service.Description,
-                CreatedAt = DateTime.UtcNow,
-                CreatedByUserId = adminUserId
-            };
-
-            int order = 1;
-            foreach (var st in request.WorkflowSteps.OrderBy(s => s.StepOrder))
-            {
-                newWf.Steps.Add(new ServiceWorkflowStep
-                {
-                    StepName = st.StepName.Trim(),
-                    Description = st.Description?.Trim(),
-                    StepOrder = order++,
-                    IsRequired = st.IsRequired,
-                    CompletionRequirement = st.CompletionRequirement?.Trim(),
-                    ExpectedDataType = string.IsNullOrWhiteSpace(st.ExpectedDataType) ? "None" : st.ExpectedDataType.Trim(),
-                    CreatedAt = DateTime.UtcNow
-                });
-            }
-
-            _dbContext.ServiceWorkflows.Add(newWf);
         }
 
         await _dbContext.SaveChangesAsync(ct);
@@ -686,48 +506,25 @@ public class AdminService : IAdminService
 
     public async Task<ApiResponse<ServiceWorkflowDto>> GetWorkflowAsync(long serviceId, int? version = null, CancellationToken ct = default)
     {
-        var query = _dbContext.ServiceWorkflows
+        var service = await _dbContext.DepartmentServices
             .AsNoTracking()
-            .Include(w => w.Steps)
-            .Where(w => w.DepartmentServiceId == serviceId);
+            .FirstOrDefaultAsync(s => s.DepartmentServiceId == serviceId, ct);
 
-        if (version.HasValue)
-        {
-            query = query.Where(w => w.Version == version.Value);
-        }
-        else
-        {
-            query = query.OrderByDescending(w => w.IsActive).ThenByDescending(w => w.Version);
-        }
-
-        var wf = await query.FirstOrDefaultAsync(ct);
-        if (wf == null)
+        if (service == null)
         {
             return ApiResponse<ServiceWorkflowDto>.Fail("Không tìm thấy quy trình cho dịch vụ này.");
         }
 
         var dto = new ServiceWorkflowDto
         {
-            WorkflowId = wf.WorkflowId,
-            DepartmentServiceId = wf.DepartmentServiceId,
-            WorkflowName = wf.WorkflowName,
-            Version = wf.Version,
-            IsActive = wf.IsActive,
-            ApprovalStatus = wf.ApprovalStatus ?? (wf.IsActive ? "Approved" : "Draft"),
-            ApprovedByUserId = wf.ApprovedByUserId,
-            ApprovedAt = wf.ApprovedAt,
-            Description = wf.Description,
-            Steps = wf.Steps.OrderBy(s => s.StepOrder).Select(s => new ServiceWorkflowStepDto
-            {
-                StepId = s.StepId,
-                WorkflowId = s.WorkflowId,
-                StepName = s.StepName,
-                Description = s.Description,
-                StepOrder = s.StepOrder,
-                IsRequired = s.IsRequired,
-                CompletionRequirement = s.CompletionRequirement,
-                ExpectedDataType = s.ExpectedDataType
-            }).ToList()
+            WorkflowId = service.DepartmentServiceId,
+            DepartmentServiceId = service.DepartmentServiceId,
+            WorkflowName = $"Quy trình: {service.ServiceName}",
+            Version = version ?? 1,
+            IsActive = true,
+            ApprovalStatus = "Approved",
+            Description = service.Description,
+            Steps = new List<ServiceWorkflowStepDto>()
         };
 
         return ApiResponse<ServiceWorkflowDto>.Ok(dto);
@@ -736,8 +533,6 @@ public class AdminService : IAdminService
     public async Task<ApiResponse<ServiceWorkflowDto>> ConfigureWorkflowAsync(long serviceId, ConfigureWorkflowRequest request, long? adminUserId = null, CancellationToken ct = default)
     {
         var service = await _dbContext.DepartmentServices
-            .Include(s => s.Workflows)
-                .ThenInclude(w => w.Steps)
             .FirstOrDefaultAsync(s => s.DepartmentServiceId == serviceId, ct);
 
         if (service == null)
@@ -760,66 +555,47 @@ public class AdminService : IAdminService
             return ApiResponse<ServiceWorkflowDto>.Fail("Thứ tự các bước quy trình không được trùng nhau.");
         }
 
-        var activeWf = service.Workflows.FirstOrDefault(w => w.IsActive);
-        int newVersion = service.Workflows.Any() ? service.Workflows.Max(w => w.Version) + 1 : 1;
         bool activate = request.ActivateImmediately;
         string approval = !string.IsNullOrWhiteSpace(request.ApprovalStatus) ? request.ApprovalStatus.Trim() : (activate ? "Approved" : "Draft");
-
-        if (activate)
-        {
-            foreach (var active in service.Workflows.Where(w => w.IsActive))
-            {
-                active.IsActive = false;
-                active.UpdatedAt = DateTime.UtcNow;
-            }
-        }
-
         var workflowName = !string.IsNullOrWhiteSpace(request.WorkflowName)
             ? request.WorkflowName.Trim()
-            : $"Quy trình: {service.ServiceName} (v{newVersion})";
-
-        var newWf = new ServiceWorkflow
-        {
-            DepartmentServiceId = service.DepartmentServiceId,
-            WorkflowName = workflowName,
-            Version = newVersion,
-            IsActive = activate,
-            ApprovalStatus = approval,
-            ApprovedByUserId = approval == "Approved" ? adminUserId : null,
-            ApprovedAt = approval == "Approved" ? DateTime.UtcNow : null,
-            Description = request.Description?.Trim() ?? service.Description,
-            CreatedAt = DateTime.UtcNow,
-            CreatedByUserId = adminUserId
-        };
+            : $"Quy trình: {service.ServiceName} (v1)";
 
         int order = 1;
-        foreach (var st in request.Steps.OrderBy(s => s.StepOrder))
+        var steps = request.Steps.OrderBy(s => s.StepOrder).Select(st => new ServiceWorkflowStepDto
         {
-            newWf.Steps.Add(new ServiceWorkflowStep
-            {
-                StepName = st.StepName.Trim(),
-                Description = st.Description?.Trim(),
-                StepOrder = order++,
-                IsRequired = st.IsRequired,
-                CompletionRequirement = st.CompletionRequirement?.Trim(),
-                ExpectedDataType = string.IsNullOrWhiteSpace(st.ExpectedDataType) ? "None" : st.ExpectedDataType.Trim(),
-                CreatedAt = DateTime.UtcNow
-            });
-        }
-
-        _dbContext.ServiceWorkflows.Add(newWf);
-        await _dbContext.SaveChangesAsync(ct);
+            StepId = order,
+            WorkflowId = service.DepartmentServiceId,
+            StepName = st.StepName.Trim(),
+            Description = st.Description?.Trim(),
+            StepOrder = order++,
+            IsRequired = st.IsRequired,
+            CompletionRequirement = st.CompletionRequirement?.Trim(),
+            ExpectedDataType = string.IsNullOrWhiteSpace(st.ExpectedDataType) ? "None" : st.ExpectedDataType.Trim()
+        }).ToList();
 
         await _auditLogService.LogAsync(
             adminUserId,
             "CONFIGURE",
             "ServiceWorkflow",
-            newWf.WorkflowId.ToString(),
-            activeWf != null ? JsonSerializer.Serialize(new { activeWf.WorkflowId, activeWf.Version }) : null,
-            JsonSerializer.Serialize(new { newWf.WorkflowId, newWf.Version, StepCount = newWf.Steps.Count }),
+            service.DepartmentServiceId.ToString(),
+            null,
+            JsonSerializer.Serialize(new { service.DepartmentServiceId, StepCount = steps.Count }),
             ct);
 
-        return await GetWorkflowAsync(serviceId, newVersion, ct);
+        return ApiResponse<ServiceWorkflowDto>.Ok(new ServiceWorkflowDto
+        {
+            WorkflowId = service.DepartmentServiceId,
+            DepartmentServiceId = service.DepartmentServiceId,
+            WorkflowName = workflowName,
+            Version = 1,
+            IsActive = activate,
+            ApprovalStatus = approval,
+            ApprovedByUserId = approval == "Approved" ? adminUserId : null,
+            ApprovedAt = approval == "Approved" ? DateTime.UtcNow : null,
+            Description = request.Description?.Trim() ?? service.Description,
+            Steps = steps
+        });
     }
 
     public async Task<ApiResponse> ToggleServiceStatusAsync(long serviceId, long? adminUserId = null, CancellationToken ct = default)
@@ -870,7 +646,7 @@ public class AdminService : IAdminService
             DepartmentId = r.DepartmentId,
             DepartmentName = r.Department?.Name,
             Status = r.Status,
-            IsExclusive = r.IsExclusive,
+            IsExclusive = false,
             ChairsCount = r.DentalChairs.Count,
             ActiveChairsCount = r.DentalChairs.Count(c => c.Status == "Active")
         }).ToList();
@@ -899,7 +675,7 @@ public class AdminService : IAdminService
             DepartmentId = r.DepartmentId,
             DepartmentName = r.Department?.Name,
             Status = r.Status,
-            IsExclusive = r.IsExclusive,
+            IsExclusive = false,
             ChairsCount = r.DentalChairs.Count,
             ActiveChairsCount = r.DentalChairs.Count(c => c.Status == "Active")
         };
@@ -930,9 +706,10 @@ public class AdminService : IAdminService
         {
             RoomCode = trimmedCode,
             RoomName = string.IsNullOrWhiteSpace(request.RoomName) ? $"Phòng {trimmedCode}" : request.RoomName.Trim(),
-            DepartmentId = request.DepartmentId,
+            DepartmentId = (int)(request.DepartmentId ?? 1),
+            RoomType = "Standard",
             Status = status,
-            IsExclusive = request.IsExclusive
+            CreatedAt = DateTime.UtcNow
         };
 
         _dbContext.Rooms.Add(room);
@@ -983,10 +760,9 @@ public class AdminService : IAdminService
         room.RoomName = string.IsNullOrWhiteSpace(request.RoomName) ? room.RoomName : request.RoomName.Trim();
         if (request.DepartmentId.HasValue)
         {
-            room.DepartmentId = request.DepartmentId.Value;
+            room.DepartmentId = (int)request.DepartmentId.Value;
         }
         room.Status = status;
-        room.IsExclusive = request.IsExclusive;
 
         await _dbContext.SaveChangesAsync(ct);
 
@@ -1024,6 +800,122 @@ public class AdminService : IAdminService
 
         var oldStatus = room.Status;
         room.Status = normalizedStatus;
+
+        if (string.Equals(normalizedStatus, "Maintenance", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalizedStatus, "Inactive", StringComparison.OrdinalIgnoreCase))
+        {
+            var now = DateTime.UtcNow;
+            var futureAppointments = await _dbContext.AppointmentServices
+                .Where(s => (s.RoomId == (int)roomId || (s.DentalChair != null && s.DentalChair.RoomId == (int)roomId)) &&
+                            (s.Status == AppointmentStatus.Confirmed || s.Status == AppointmentStatus.PendingReceptionReview || s.Status == AppointmentStatus.PendingDepartmentReview) &&
+                            s.ScheduledStart >= now)
+                .ToListAsync(ct);
+
+            foreach (var svc in futureAppointments)
+            {
+                svc.PendingActionType = "Reschedule";
+                svc.Notes = $"{svc.Notes} | [Cảnh báo: Phòng {room.RoomCode} chuyển {normalizedStatus} - Cần đổi phòng]".Trim(' ', '|');
+                svc.UpdatedAt = now;
+            }
+
+            var inServiceAppt = await _dbContext.AppointmentServices
+                .Where(s => (s.RoomId == (int)roomId || (s.DentalChair != null && s.DentalChair.RoomId == (int)roomId)) &&
+                            s.Status == AppointmentStatus.InService)
+                .FirstOrDefaultAsync(ct);
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    if (inServiceAppt?.AssignedDentistUserId.HasValue == true)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            inServiceAppt.AssignedDentistUserId.Value,
+                            inServiceAppt.AppointmentId,
+                            "RoomMaintenanceAlert",
+                            "Cảnh báo bảo trì phòng khám",
+                            $"Cảnh báo khẩn cấp: Phòng khám {room.RoomName} ({room.RoomCode}) đang được đưa vào diện bảo trì. Vui lòng hoàn tất hoặc chuyển ca điều trị an toàn cho bệnh nhân.",
+                            ct);
+                    }
+
+                    var receptionists = await _dbContext.UserAccounts
+                        .AsNoTracking()
+                        .Where(u => u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active)
+                        .Select(u => u.UserId)
+                        .ToListAsync(ct);
+
+                    var reasonDesc = string.Equals(normalizedStatus, "Maintenance", StringComparison.OrdinalIgnoreCase)
+                        ? "đang trong quá trình bảo trì"
+                        : "đã ngừng hoạt động";
+
+                    var msg = $"Phòng khám {room.RoomName} ({room.RoomCode}) {reasonDesc}. Vui lòng kiểm tra và điều phối lại các lịch hẹn bị ảnh hưởng ({futureAppointments.Count} ca hẹn).";
+
+                    foreach (var recId in receptionists)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            recId,
+                            null,
+                            "RoomMaintenanceAlert",
+                            "Cảnh báo bảo trì phòng khám",
+                            msg,
+                            ct);
+                    }
+
+                    var affectedDentistIds = futureAppointments
+                        .Where(s => s.AssignedDentistUserId.HasValue)
+                        .Select(s => s.AssignedDentistUserId!.Value)
+                        .Distinct()
+                        .ToList();
+
+                    foreach (var dentistId in affectedDentistIds)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            dentistId,
+                            null,
+                            "RoomMaintenanceAlert",
+                            "Cảnh báo bảo trì phòng khám",
+                            $"Phòng khám {room.RoomName} ({room.RoomCode}) đã chuyển sang chế độ bảo trì. Một số lịch khám sắp tới của bạn cần được điều phối lại phòng.",
+                            ct);
+                    }
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to send notifications for room {RoomId} status update", roomId);
+                }
+            }
+        }
+        else if (string.Equals(normalizedStatus, "Active", StringComparison.OrdinalIgnoreCase) &&
+                 (string.Equals(oldStatus, "Maintenance", StringComparison.OrdinalIgnoreCase) || string.Equals(oldStatus, "Inactive", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var receptionists = await _dbContext.UserAccounts
+                        .AsNoTracking()
+                        .Where(u => u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active)
+                        .Select(u => u.UserId)
+                        .ToListAsync(ct);
+
+                    var msg = $"Thông báo phục hồi: Phòng khám {room.RoomName} ({room.RoomCode}) đã hoàn tất bảo trì và sẵn sàng hoạt động trở lại.";
+
+                    foreach (var recId in receptionists)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            recId,
+                            null,
+                            "RoomRestoredAlert",
+                            "Phòng khám đã hoạt động trở lại",
+                            msg,
+                            ct);
+                    }
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to notify receptionists about room {RoomId} restored to active", roomId);
+                }
+            }
+        }
 
         await _dbContext.SaveChangesAsync(ct);
 
@@ -1127,9 +1019,11 @@ public class AdminService : IAdminService
 
         var chair = new DentalChair
         {
-            RoomId = request.RoomId,
+            RoomId = (int)request.RoomId,
             ChairCode = trimmedCode,
-            Status = status
+            ChairName = $"Ghế {trimmedCode}",
+            Status = status,
+            CreatedAt = DateTime.UtcNow
         };
 
         _dbContext.DentalChairs.Add(chair);
@@ -1184,7 +1078,7 @@ public class AdminService : IAdminService
 
         var oldValues = JsonSerializer.Serialize(new { chair.RoomId, chair.ChairCode, chair.Status });
 
-        chair.RoomId = request.RoomId;
+        chair.RoomId = (int)request.RoomId;
         chair.ChairCode = trimmedCode;
         chair.Status = status;
 
@@ -1207,6 +1101,7 @@ public class AdminService : IAdminService
     public async Task<ApiResponse> UpdateChairStatusAsync(long chairId, string status, long? adminUserId = null, CancellationToken ct = default)
     {
         var chair = await _dbContext.DentalChairs
+            .Include(c => c.Room)
             .FirstOrDefaultAsync(c => c.DentalChairId == chairId, ct);
 
         if (chair == null)
@@ -1224,6 +1119,124 @@ public class AdminService : IAdminService
 
         var oldStatus = chair.Status;
         chair.Status = normalizedStatus;
+        chair.UpdatedAt = DateTime.UtcNow;
+
+        if (string.Equals(normalizedStatus, "Maintenance", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalizedStatus, "Inactive", StringComparison.OrdinalIgnoreCase))
+        {
+            var now = DateTime.UtcNow;
+            var futureAppointments = await _dbContext.AppointmentServices
+                .Where(s => s.DentalChairId == chair.DentalChairId &&
+                            (s.Status == AppointmentStatus.Confirmed || s.Status == AppointmentStatus.PendingReceptionReview || s.Status == AppointmentStatus.PendingDepartmentReview) &&
+                            s.ScheduledStart >= now)
+                .ToListAsync(ct);
+
+            foreach (var svc in futureAppointments)
+            {
+                svc.PendingActionType = "Reschedule";
+                svc.Notes = $"{svc.Notes} | [Cảnh báo: Ghế {chair.ChairCode} chuyển {normalizedStatus} - Cần đổi ghế]".Trim(' ', '|');
+                svc.UpdatedAt = now;
+            }
+
+            var inServiceAppt = await _dbContext.AppointmentServices
+                .Where(s => s.DentalChairId == chair.DentalChairId && s.Status == AppointmentStatus.InService)
+                .FirstOrDefaultAsync(ct);
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    if (inServiceAppt?.AssignedDentistUserId.HasValue == true)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            inServiceAppt.AssignedDentistUserId.Value,
+                            inServiceAppt.AppointmentId,
+                            "ChairMaintenanceAlert",
+                            "Cảnh báo bảo trì ghế nha khoa",
+                            $"Cảnh báo khẩn cấp: Ghế nha khoa {chair.ChairCode} đang được quản trị viên đưa vào diện bảo trì. Vui lòng kết thúc hoặc chuyển vị trí điều trị an toàn cho bệnh nhân.",
+                            ct);
+                    }
+
+                    var receptionists = await _dbContext.UserAccounts
+                        .AsNoTracking()
+                        .Where(u => u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active)
+                        .Select(u => u.UserId)
+                        .ToListAsync(ct);
+
+                    var roomName = chair.Room?.RoomName ?? $"Phòng #{chair.RoomId}";
+                    var reasonDesc = string.Equals(normalizedStatus, "Maintenance", StringComparison.OrdinalIgnoreCase)
+                        ? "đang trong quá trình bảo trì"
+                        : "đã ngừng hoạt động";
+
+                    var msg = $"Ghế nha khoa {chair.ChairCode} tại {roomName} {reasonDesc}. Vui lòng kiểm tra và điều phối lại các lịch hẹn bị ảnh hưởng ({futureAppointments.Count} ca hẹn).";
+
+                    foreach (var recId in receptionists)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            recId,
+                            null,
+                            "ChairMaintenanceAlert",
+                            "Cảnh báo bảo trì ghế nha khoa",
+                            msg,
+                            ct);
+                    }
+
+                    var affectedDentistIds = futureAppointments
+                        .Where(s => s.AssignedDentistUserId.HasValue)
+                        .Select(s => s.AssignedDentistUserId!.Value)
+                        .Distinct()
+                        .ToList();
+
+                    foreach (var dentistId in affectedDentistIds)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            dentistId,
+                            null,
+                            "ChairMaintenanceAlert",
+                            "Cảnh báo bảo trì ghế nha khoa",
+                            $"Ghế nha khoa {chair.ChairCode} tại {roomName} đã được chuyển sang chế độ bảo trì. Một số lịch khám sắp tới của bạn cần được điều phối lại ghế.",
+                            ct);
+                    }
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to notify staff about chair {ChairId} status update", chairId);
+                }
+            }
+        }
+        else if (string.Equals(normalizedStatus, "Active", StringComparison.OrdinalIgnoreCase) &&
+                 (string.Equals(oldStatus, "Maintenance", StringComparison.OrdinalIgnoreCase) || string.Equals(oldStatus, "Inactive", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var receptionists = await _dbContext.UserAccounts
+                        .AsNoTracking()
+                        .Where(u => u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active)
+                        .Select(u => u.UserId)
+                        .ToListAsync(ct);
+
+                    var roomName = chair.Room?.RoomName ?? $"Phòng #{chair.RoomId}";
+                    var msg = $"Thông báo phục hồi: Ghế nha khoa {chair.ChairCode} tại {roomName} đã hoàn tất bảo trì và sẵn sàng hoạt động trở lại.";
+
+                    foreach (var recId in receptionists)
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            recId,
+                            null,
+                            "ChairRestoredAlert",
+                            "Ghế nha khoa đã hoạt động trở lại",
+                            msg,
+                            ct);
+                    }
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogWarning(notifEx, "Failed to notify receptionists about chair {ChairId} restored to active", chairId);
+                }
+            }
+        }
 
         await _dbContext.SaveChangesAsync(ct);
 
@@ -1335,7 +1348,6 @@ public class AdminService : IAdminService
         var activeChairs = await _dbContext.DentalChairs.CountAsync(c => c.Status == "Active", ct);
         var maintenanceChairs = await _dbContext.DentalChairs.CountAsync(c => c.Status == "Maintenance", ct);
 
-        // Appointments counts
         var apptStats = await _dbContext.Appointments
             .AsNoTracking()
             .GroupBy(a => a.Status)
@@ -1353,12 +1365,10 @@ public class AdminService : IAdminService
         var completionRate = totalAppointments > 0 ? Math.Round((double)completedAppts / totalAppointments * 100, 1) : 0;
         var cancellationRate = totalAppointments > 0 ? Math.Round((double)cancelledAppts / totalAppointments * 100, 1) : 0;
 
-        // Revenue calculation:
-        // 1. From Invoices where Status == 'Paid'
         var paidInvoiceRevenue = await _dbContext.Invoices
             .AsNoTracking()
             .Where(i => i.Status == "Paid")
-            .SumAsync(i => (decimal?)i.TotalAmount, ct) ?? 0;
+            .SumAsync(i => (decimal?)i.FinalAmount, ct) ?? 0;
 
         decimal totalRevenue = paidInvoiceRevenue;
         if (totalRevenue <= 0)
@@ -1366,29 +1376,29 @@ public class AdminService : IAdminService
             var performedServiceRevenue = await _dbContext.PerformedServices
                 .AsNoTracking()
                 .Where(p => p.TreatmentSession.Appointment.Status == AppointmentStatus.Completed)
-                .SumAsync(p => (decimal?)p.Amount, ct) ?? 0;
+                .SumAsync(p => (decimal?)(p.Quantity * p.UnitPrice), ct) ?? 0;
 
             totalRevenue = performedServiceRevenue > 0
                 ? performedServiceRevenue
-                : (await _dbContext.Appointments
+                : (await _dbContext.AppointmentServices
                     .AsNoTracking()
-                    .Where(a => a.Status == AppointmentStatus.Completed && a.RequestedService != null)
-                    .SumAsync(a => (decimal?)a.RequestedService!.Price, ct) ?? 0);
+                    .Where(aps => aps.Appointment.Status == AppointmentStatus.Completed)
+                    .SumAsync(aps => (decimal?)aps.UnitPrice, ct) ?? 0);
         }
 
-        // Monthly Revenues for the current year (1 single batch query instead of 12 full table scans)
         var currentYear = DateTime.UtcNow.Year;
         var startOfYear = new DateTime(currentYear, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var endOfYear = startOfYear.AddYears(1);
 
         var yearAppts = await _dbContext.Appointments
             .AsNoTracking()
-            .Where(a => a.ScheduledStart >= startOfYear && a.ScheduledStart < endOfYear)
+            .Include(a => a.AppointmentServices)
+            .Where(a => a.CreatedAt >= startOfYear && a.CreatedAt < endOfYear)
             .Select(a => new
             {
-                Month = a.ScheduledStart!.Value.Month,
+                Month = a.CreatedAt.Month,
                 IsCompleted = a.Status == AppointmentStatus.Completed,
-                Price = a.RequestedService != null ? a.RequestedService.Price : 0
+                Price = a.AppointmentServices.Sum(aps => aps.UnitPrice)
             })
             .ToListAsync(ct);
 
@@ -1405,20 +1415,20 @@ public class AdminService : IAdminService
                 AppointmentCount = inMonth.Count
             });
         }
-        // Department breakdown
-        var deptStatsQuery = await _dbContext.Appointments
+
+        var deptStatsQuery = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .Include(a => a.Department)
-            .Include(a => a.RequestedService)
-            .Where(a => a.DepartmentId != null)
-            .GroupBy(a => new { a.DepartmentId, DepartmentName = a.Department != null ? a.Department.Name : "Khác" })
+            .Include(aps => aps.DepartmentService)
+                .ThenInclude(ds => ds.Department)
+            .Include(aps => aps.Appointment)
+            .GroupBy(aps => new { aps.DepartmentId, DepartmentName = aps.DepartmentService.Department != null ? aps.DepartmentService.Department.Name : "Khác" })
             .Select(g => new
             {
-                DepartmentId = g.Key.DepartmentId!.Value,
+                DepartmentId = g.Key.DepartmentId,
                 g.Key.DepartmentName,
-                Count = g.Count(),
-                Revenue = g.Where(a => a.Status == AppointmentStatus.Completed && a.RequestedService != null)
-                           .Sum(a => a.RequestedService!.Price)
+                Count = g.Select(aps => aps.AppointmentId).Distinct().Count(),
+                Revenue = g.Where(aps => aps.Appointment.Status == AppointmentStatus.Completed)
+                           .Sum(aps => aps.UnitPrice)
             })
             .ToListAsync(ct);
 
@@ -1431,18 +1441,16 @@ public class AdminService : IAdminService
             Percentage = totalAppointments > 0 ? Math.Round((double)d.Count / totalAppointments * 100, 1) : 0
         }).OrderByDescending(d => d.AppointmentCount).ToList();
 
-        // Top Services
-        var topServicesQuery = await _dbContext.Appointments
+        var topServicesQuery = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .Include(a => a.RequestedService)
-            .ThenInclude(s => s!.Department)
-            .Where(a => a.RequestedServiceId != null && a.RequestedService != null)
-            .GroupBy(a => new
+            .Include(aps => aps.DepartmentService)
+                .ThenInclude(s => s.Department)
+            .GroupBy(aps => new
             {
-                ServiceId = a.RequestedServiceId!.Value,
-                ServiceName = a.RequestedService!.ServiceName,
-                DepartmentName = a.RequestedService.Department != null ? a.RequestedService.Department.Name : string.Empty,
-                Price = a.RequestedService.Price
+                ServiceId = aps.DepartmentServiceId,
+                ServiceName = aps.DepartmentService.ServiceName,
+                DepartmentName = aps.DepartmentService.Department != null ? aps.DepartmentService.Department.Name : string.Empty,
+                Price = aps.DepartmentService.Price
             })
             .Select(g => new TopServiceStatItemDto
             {
@@ -1457,7 +1465,6 @@ public class AdminService : IAdminService
             .Take(5)
             .ToListAsync(ct);
 
-        // Recent Audit Logs
         var recentAuditLogs = await _dbContext.AuditLogs
             .AsNoTracking()
             .Include(a => a.User)
@@ -1517,16 +1524,15 @@ public class AdminService : IAdminService
         {
             var apptsInMonth = await _dbContext.Appointments
                 .AsNoTracking()
-                .Include(a => a.RequestedService)
-                .Where(a => a.ScheduledStart != null &&
-                            a.ScheduledStart.Value.Year == targetYear &&
-                            a.ScheduledStart.Value.Month == m)
+                .Include(a => a.AppointmentServices)
+                .Where(a => a.CreatedAt.Year == targetYear &&
+                            a.CreatedAt.Month == m)
                 .ToListAsync(ct);
 
             var count = apptsInMonth.Count;
             var rev = apptsInMonth
-                .Where(a => a.Status == AppointmentStatus.Completed && a.RequestedService != null)
-                .Sum(a => a.RequestedService?.Price ?? 0);
+                .Where(a => a.Status == AppointmentStatus.Completed)
+                .Sum(a => a.AppointmentServices.Sum(aps => aps.UnitPrice));
 
             totalYearRevenue += rev;
             totalYearAppts += count;
@@ -1541,21 +1547,20 @@ public class AdminService : IAdminService
             });
         }
 
-        var deptBreakdownQuery = await _dbContext.Appointments
+        var deptBreakdownQuery = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .Include(a => a.Department)
-            .Include(a => a.RequestedService)
-            .Where(a => a.ScheduledStart != null &&
-                        a.ScheduledStart.Value.Year == targetYear &&
-                        a.DepartmentId != null)
-            .GroupBy(a => new { a.DepartmentId, DepartmentName = a.Department != null ? a.Department.Name : "Khác" })
+            .Include(aps => aps.DepartmentService)
+                .ThenInclude(ds => ds.Department)
+            .Include(aps => aps.Appointment)
+            .Where(aps => aps.Appointment.CreatedAt.Year == targetYear)
+            .GroupBy(aps => new { aps.DepartmentId, DepartmentName = aps.DepartmentService.Department != null ? aps.DepartmentService.Department.Name : "Khác" })
             .Select(g => new
             {
-                DepartmentId = g.Key.DepartmentId!.Value,
+                DepartmentId = g.Key.DepartmentId,
                 g.Key.DepartmentName,
-                Count = g.Count(),
-                Revenue = g.Where(a => a.Status == AppointmentStatus.Completed && a.RequestedService != null)
-                           .Sum(a => a.RequestedService!.Price)
+                Count = g.Select(aps => aps.AppointmentId).Distinct().Count(),
+                Revenue = g.Where(aps => aps.Appointment.Status == AppointmentStatus.Completed)
+                           .Sum(aps => aps.UnitPrice)
             })
             .ToListAsync(ct);
 
@@ -1595,16 +1600,16 @@ public class AdminService : IAdminService
         var noShowCount = apptStats.FirstOrDefault(x => x.Status == AppointmentStatus.NoShow)?.Count ?? 0;
         var completionRate = totalAppointments > 0 ? Math.Round((double)completedCount / totalAppointments * 100, 1) : 0;
 
-        var deptBreakdownQuery = await _dbContext.Appointments
+        var deptBreakdownQuery = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .Include(a => a.Department)
-            .Where(a => a.DepartmentId != null)
-            .GroupBy(a => new { a.DepartmentId, DepartmentName = a.Department != null ? a.Department.Name : "Khác" })
+            .Include(aps => aps.DepartmentService)
+                .ThenInclude(ds => ds.Department)
+            .GroupBy(aps => new { aps.DepartmentId, DepartmentName = aps.DepartmentService.Department != null ? aps.DepartmentService.Department.Name : "Khác" })
             .Select(g => new
             {
-                DepartmentId = g.Key.DepartmentId!.Value,
+                DepartmentId = g.Key.DepartmentId,
                 g.Key.DepartmentName,
-                Count = g.Count()
+                Count = g.Select(aps => aps.AppointmentId).Distinct().Count()
             })
             .ToListAsync(ct);
 
@@ -1616,17 +1621,16 @@ public class AdminService : IAdminService
             Percentage = totalAppointments > 0 ? Math.Round((double)d.Count / totalAppointments * 100, 1) : 0
         }).OrderByDescending(d => d.AppointmentCount).ToList();
 
-        var topServices = await _dbContext.Appointments
+        var topServices = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .Include(a => a.RequestedService)
-            .ThenInclude(s => s!.Department)
-            .Where(a => a.RequestedServiceId != null && a.RequestedService != null)
-            .GroupBy(a => new
+            .Include(aps => aps.DepartmentService)
+                .ThenInclude(s => s.Department)
+            .GroupBy(aps => new
             {
-                ServiceId = a.RequestedServiceId!.Value,
-                ServiceName = a.RequestedService!.ServiceName,
-                DepartmentName = a.RequestedService.Department != null ? a.RequestedService.Department.Name : string.Empty,
-                Price = a.RequestedService.Price
+                ServiceId = aps.DepartmentServiceId,
+                ServiceName = aps.DepartmentService.ServiceName,
+                DepartmentName = aps.DepartmentService.Department != null ? aps.DepartmentService.Department.Name : string.Empty,
+                Price = aps.DepartmentService.Price
             })
             .Select(g => new TopServiceStatItemDto
             {
@@ -1680,9 +1684,7 @@ public class AdminService : IAdminService
                 (u.Email != null && u.Email.ToLower().Contains(q)) ||
                 (u.PhoneNumber != null && u.PhoneNumber.Contains(q)) ||
                 (u.StaffProfile != null && u.StaffProfile.FullName.ToLower().Contains(q)) ||
-                (u.StaffProfile != null && u.StaffProfile.EmployeeCode.ToLower().Contains(q)) ||
-                (u.PatientProfile != null && u.PatientProfile.FullName.ToLower().Contains(q)) ||
-                (u.PatientProfile != null && u.PatientProfile.PatientCode.ToLower().Contains(q)));
+                (u.PatientProfile != null && u.PatientProfile.FullName.ToLower().Contains(q)));
         }
 
         var users = await query
@@ -1695,7 +1697,7 @@ public class AdminService : IAdminService
             Email = u.Email,
             PhoneNumber = u.PhoneNumber,
             FullName = u.StaffProfile?.FullName ?? u.PatientProfile?.FullName ?? (u.Email ?? "Chưa đặt tên"),
-            Code = u.StaffProfile?.EmployeeCode ?? u.PatientProfile?.PatientCode,
+            Code = $"USR-{u.UserId:D4}",
             Role = u.Role,
             Status = u.Status,
             Specialty = u.StaffProfile?.DentistProfile?.Qualification,
@@ -1756,41 +1758,40 @@ public class AdminService : IAdminService
     }
 
     // ==========================================
-    // DENTIST DEPARTMENT ALLOCATIONS
+    // DENTIST DEPARTMENT ALLOCATIONS (DentistProfiles.DepartmentId 1:N)
     // ==========================================
     public async Task<ApiResponse<List<DentistDepartmentAllocationDto>>> GetDentistAllocationsAsync(long? departmentId = null, CancellationToken ct = default)
     {
-        var query = _dbContext.DentistDepartments
+        var query = _dbContext.DentistProfiles
             .AsNoTracking()
-            .Include(dd => dd.DentistUser)
-                .ThenInclude(dp => dp.User)
-                    .ThenInclude(sp => sp.User)
-            .Include(dd => dd.Department)
+            .Include(dp => dp.StaffProfile)
+                .ThenInclude(sp => sp.User)
+            .Include(dp => dp.Department)
             .AsQueryable();
 
         if (departmentId.HasValue && departmentId.Value > 0)
         {
-            query = query.Where(dd => dd.DepartmentId == departmentId.Value);
+            query = query.Where(dp => dp.DepartmentId == departmentId.Value);
         }
 
         var list = await query
-            .OrderBy(dd => dd.Department.Name)
-            .ThenBy(dd => dd.DentistUser.User.FullName)
+            .OrderBy(dp => dp.Department.Name)
+            .ThenBy(dp => dp.StaffProfile.FullName)
             .ToListAsync(ct);
 
-        var dtos = list.Select(dd => new DentistDepartmentAllocationDto
+        var dtos = list.Select(dp => new DentistDepartmentAllocationDto
         {
-            DentistDepartmentId = dd.DentistDepartmentId,
-            DentistUserId = dd.DentistUserId,
-            DentistName = dd.DentistUser?.User?.FullName ?? $"BS #{dd.DentistUserId}",
-            DentistCode = dd.DentistUser?.User?.EmployeeCode,
-            DentistEmail = dd.DentistUser?.User?.User?.Email,
-            DentistPhone = dd.DentistUser?.User?.User?.PhoneNumber,
-            Specialty = dd.DentistUser?.Qualification,
-            DepartmentId = dd.DepartmentId,
-            DepartmentName = dd.Department?.Name ?? $"Khoa #{dd.DepartmentId}",
-            Status = dd.Status,
-            AssignedAt = dd.AssignedAt
+            DentistDepartmentId = dp.UserId,
+            DentistUserId = dp.UserId,
+            DentistName = dp.StaffProfile?.FullName ?? $"BS #{dp.UserId}",
+            DentistCode = $"DNT-{dp.UserId:D4}",
+            DentistEmail = dp.StaffProfile?.User?.Email,
+            DentistPhone = dp.StaffProfile?.User?.PhoneNumber,
+            Specialty = dp.Qualification,
+            DepartmentId = dp.DepartmentId,
+            DepartmentName = dp.Department?.Name ?? $"Khoa #{dp.DepartmentId}",
+            Status = dp.StaffProfile?.EmploymentStatus ?? "Active",
+            AssignedAt = dp.StaffProfile?.CreatedAt ?? DateTime.UtcNow
         }).ToList();
 
         return ApiResponse<List<DentistDepartmentAllocationDto>>.Ok(dtos);
@@ -1815,7 +1816,7 @@ public class AdminService : IAdminService
         }
 
         var dentist = await _dbContext.DentistProfiles
-            .Include(dp => dp.User)
+            .Include(dp => dp.StaffProfile)
                 .ThenInclude(sp => sp.User)
             .FirstOrDefaultAsync(dp => dp.UserId == request.DentistUserId, ct);
 
@@ -1824,52 +1825,31 @@ public class AdminService : IAdminService
             return ApiResponse<DentistDepartmentAllocationDto>.Fail("Không tìm thấy hồ sơ bác sĩ.");
         }
 
-        var existing = await _dbContext.DentistDepartments
-            .FirstOrDefaultAsync(dd => dd.DentistUserId == request.DentistUserId && dd.DepartmentId == request.DepartmentId, ct);
-
-        DentistDepartment record;
-        if (existing != null)
-        {
-            existing.Status = "Active";
-            existing.AssignedAt = DateTime.UtcNow;
-            record = existing;
-        }
-        else
-        {
-            record = new DentistDepartment
-            {
-                DentistUserId = request.DentistUserId,
-                DepartmentId = request.DepartmentId,
-                Status = "Active",
-                AssignedAt = DateTime.UtcNow
-            };
-            _dbContext.DentistDepartments.Add(record);
-        }
-
+        dentist.DepartmentId = (int)request.DepartmentId;
         await _dbContext.SaveChangesAsync(ct);
 
         await _auditLogService.LogAsync(
             adminUserId,
             "ASSIGN_DENTIST_DEPT",
-            "DentistDepartment",
-            record.DentistDepartmentId.ToString(),
+            "DentistProfile",
+            dentist.UserId.ToString(),
             null,
-            JsonSerializer.Serialize(new { record.DentistUserId, record.DepartmentId, record.Status }),
+            JsonSerializer.Serialize(new { DentistUserId = dentist.UserId, dentist.DepartmentId }),
             ct);
 
         var dto = new DentistDepartmentAllocationDto
         {
-            DentistDepartmentId = record.DentistDepartmentId,
-            DentistUserId = record.DentistUserId,
-            DentistName = dentist.User?.FullName ?? $"BS #{record.DentistUserId}",
-            DentistCode = dentist.User?.EmployeeCode,
-            DentistEmail = dentist.User?.User?.Email,
-            DentistPhone = dentist.User?.User?.PhoneNumber,
+            DentistDepartmentId = dentist.UserId,
+            DentistUserId = dentist.UserId,
+            DentistName = dentist.StaffProfile?.FullName ?? $"BS #{dentist.UserId}",
+            DentistCode = $"DNT-{dentist.UserId:D4}",
+            DentistEmail = dentist.StaffProfile?.User?.Email,
+            DentistPhone = dentist.StaffProfile?.User?.PhoneNumber,
             Specialty = dentist.Qualification,
-            DepartmentId = record.DepartmentId,
+            DepartmentId = dentist.DepartmentId,
             DepartmentName = dept.Name,
-            Status = record.Status,
-            AssignedAt = record.AssignedAt
+            Status = dentist.StaffProfile?.EmploymentStatus ?? "Active",
+            AssignedAt = DateTime.UtcNow
         };
 
         return ApiResponse<DentistDepartmentAllocationDto>.Ok(dto, "Phân bổ bác sĩ vào chuyên khoa thành công.");
@@ -1877,31 +1857,29 @@ public class AdminService : IAdminService
 
     public async Task<ApiResponse> ToggleDentistAllocationStatusAsync(long dentistDepartmentId, long? adminUserId = null, CancellationToken ct = default)
     {
-        var record = await _dbContext.DentistDepartments
-            .Include(dd => dd.DentistUser)
-                .ThenInclude(dp => dp.User)
-            .Include(dd => dd.Department)
-            .FirstOrDefaultAsync(dd => dd.DentistDepartmentId == dentistDepartmentId, ct);
+        var dentist = await _dbContext.DentistProfiles
+            .Include(dp => dp.StaffProfile)
+            .FirstOrDefaultAsync(dp => dp.UserId == dentistDepartmentId, ct);
 
-        if (record == null)
+        if (dentist == null || dentist.StaffProfile == null)
         {
             return ApiResponse.Fail("Không tìm thấy bản ghi phân bổ bác sĩ.");
         }
 
-        var oldStatus = record.Status;
-        record.Status = record.Status == "Active" ? "Inactive" : "Active";
+        var oldStatus = dentist.StaffProfile.EmploymentStatus;
+        dentist.StaffProfile.EmploymentStatus = dentist.StaffProfile.EmploymentStatus == "Active" ? "Inactive" : "Active";
         await _dbContext.SaveChangesAsync(ct);
 
         await _auditLogService.LogAsync(
             adminUserId,
             "TOGGLE_DENTIST_DEPT_STATUS",
-            "DentistDepartment",
-            record.DentistDepartmentId.ToString(),
+            "DentistProfile",
+            dentist.UserId.ToString(),
             JsonSerializer.Serialize(new { Status = oldStatus }),
-            JsonSerializer.Serialize(new { Status = record.Status }),
+            JsonSerializer.Serialize(new { Status = dentist.StaffProfile.EmploymentStatus }),
             ct);
 
-        return ApiResponse.Ok($"Đã cập nhật trạng thái phân bổ bác sĩ thành '{record.Status}'.");
+        return ApiResponse.Ok($"Đã cập nhật trạng thái phân bổ bác sĩ thành '{dentist.StaffProfile.EmploymentStatus}'.");
     }
 
     // ==========================================
@@ -1949,27 +1927,16 @@ public class AdminService : IAdminService
             PhoneNumber = request.PhoneNumber?.Trim(),
             Role = normalizedRole!,
             Status = AccountStatus.Active,
-            CreatedAt = DateTime.UtcNow,
-            EmailVerifiedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow
         };
 
         _dbContext.UserAccounts.Add(user);
         await _dbContext.SaveChangesAsync(ct);
 
-        var prefix = normalizedRole switch
-        {
-            UserRole.Dentist => "DNT",
-            UserRole.Receptionist => "REC",
-            UserRole.SystemAdministrator => "ADM",
-            _ => "STF"
-        };
-        var empCode = string.IsNullOrWhiteSpace(request.StaffCode) ? $"{prefix}-{user.UserId:D4}" : request.StaffCode.Trim().ToUpper();
-
         var staffProfile = new StaffProfile
         {
             UserId = user.UserId,
             FullName = request.FullName.Trim(),
-            EmployeeCode = empCode,
             EmploymentStatus = "Active",
             CreatedAt = DateTime.UtcNow
         };
@@ -1977,16 +1944,24 @@ public class AdminService : IAdminService
 
         if (normalizedRole == UserRole.Dentist)
         {
-            var qualification = !string.IsNullOrWhiteSpace(request.Education) 
-                ? request.Education.Trim() 
+            var qualification = !string.IsNullOrWhiteSpace(request.Education)
+                ? request.Education.Trim()
                 : (!string.IsNullOrWhiteSpace(request.Specialty) ? request.Specialty.Trim() : "Bác sĩ Chuyên khoa Răng Hàm Mặt");
-            var licenseNum = !string.IsNullOrWhiteSpace(request.StaffCode) 
-                ? request.StaffCode.Trim() 
+            var licenseNum = !string.IsNullOrWhiteSpace(request.StaffCode)
+                ? request.StaffCode.Trim()
                 : $"LIC-{user.UserId:D4}";
+
+            int departmentId = (int)(request.DepartmentId ?? 0);
+            if (departmentId <= 0)
+            {
+                var firstDept = await _dbContext.Departments.AsNoTracking().OrderBy(d => d.DepartmentId).FirstOrDefaultAsync(ct);
+                departmentId = firstDept?.DepartmentId ?? 1;
+            }
 
             var dentistProfile = new DentistProfile
             {
                 UserId = user.UserId,
+                DepartmentId = departmentId,
                 YearsOfExperience = request.ExperienceYears ?? 3,
                 Qualification = qualification,
                 LicenseNumber = licenseNum,
@@ -1995,22 +1970,6 @@ public class AdminService : IAdminService
                     : "Bác sĩ chuyên khoa tại phòng khám DentalCare."
             };
             _dbContext.DentistProfiles.Add(dentistProfile);
-
-            if (request.DepartmentId.HasValue && request.DepartmentId.Value > 0)
-            {
-                var dept = await _dbContext.Departments.FindAsync(new object[] { request.DepartmentId.Value }, ct);
-                if (dept != null)
-                {
-                    var allocation = new DentistDepartment
-                    {
-                        DentistUserId = user.UserId,
-                        DepartmentId = dept.DepartmentId,
-                        Status = "Active",
-                        AssignedAt = DateTime.UtcNow
-                    };
-                    _dbContext.DentistDepartments.Add(allocation);
-                }
-            }
         }
 
         await _dbContext.SaveChangesAsync(ct);
@@ -2021,7 +1980,7 @@ public class AdminService : IAdminService
             "UserAccount",
             user.UserId.ToString(),
             null,
-            JsonSerializer.Serialize(new { user.Email, user.Role, staffProfile.FullName, staffProfile.EmployeeCode }),
+            JsonSerializer.Serialize(new { user.Email, user.Role, staffProfile.FullName }),
             ct);
 
         var resultDto = new AdminUserDto
@@ -2030,7 +1989,7 @@ public class AdminService : IAdminService
             Email = user.Email,
             PhoneNumber = user.PhoneNumber,
             FullName = staffProfile.FullName,
-            Code = staffProfile.EmployeeCode,
+            Code = $"USR-{user.UserId:D4}",
             Role = user.Role,
             Status = user.Status,
             Specialty = request.Specialty,
@@ -2090,7 +2049,7 @@ public class AdminService : IAdminService
             Email = user.Email,
             PhoneNumber = user.PhoneNumber,
             FullName = user.StaffProfile.FullName,
-            Code = user.StaffProfile.EmployeeCode,
+            Code = $"USR-{user.UserId:D4}",
             Role = user.Role,
             Status = user.Status,
             Specialty = user.StaffProfile.DentistProfile?.Qualification,

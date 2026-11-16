@@ -24,12 +24,11 @@ public class ReceptionistShiftProvider : IStaffShiftProvider
 
     public async Task<List<StaffShiftDto>> GetShiftsForStaffAsync(long userId, DateOnly date, CancellationToken ct = default)
     {
-        var schedules = await _dbContext.ReceptionistWorkSchedules
+        var schedules = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Include(s => s.ShiftTemplate)
-            .Include(s => s.ReceptionistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Where(s => s.ReceptionistUserId == userId && s.WorkDate == date && s.Status == "Scheduled" && s.IsPublished)
+            .Include(s => s.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Where(s => s.StaffRole == "Receptionist" && s.StaffUserId == userId && s.WorkDate == date && s.Status != "Cancelled")
             .OrderBy(s => s.StartTime)
             .ToListAsync(ct);
 
@@ -38,30 +37,23 @@ public class ReceptionistShiftProvider : IStaffShiftProvider
             return new List<StaffShiftDto>();
         }
 
-        var approvedLeaves = await _dbContext.ReceptionistLeaveRequestPeriods
+        var approvedLeaves = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(p => p.LeaveRequest)
-            .Where(p => p.LeaveRequest.ReceptionistUserId == userId && p.LeaveDate == date && p.Status == "Approved")
+            .Where(lr => lr.StaffRole == "Receptionist" && lr.StaffUserId == userId && lr.Status == "Approved" && lr.StartDate <= date && lr.EndDate >= date)
             .ToListAsync(ct);
 
-        var incidents = await _dbContext.ReceptionistCoverageIncidents
-            .AsNoTracking()
-            .Where(i => i.AffectedReceptionistUserId == userId && i.WorkDate == date && i.IncidentType == "EmergencyAbsence")
-            .ToListAsync(ct);
-
-        return schedules.Select(s => MapToStaffShiftDto(s, approvedLeaves, incidents)).ToList();
+        return schedules.Select(s => MapToStaffShiftDto(s, approvedLeaves)).ToList();
     }
 
     public async Task<List<StaffShiftDto>> GetAllShiftsForDateAsync(DateOnly date, CancellationToken ct = default)
     {
-        var schedules = await _dbContext.ReceptionistWorkSchedules
+        var schedules = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Include(s => s.ShiftTemplate)
-            .Include(s => s.ReceptionistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Where(s => s.WorkDate == date && s.Status == "Scheduled" && s.IsPublished)
+            .Include(s => s.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Where(s => s.StaffRole == "Receptionist" && s.WorkDate == date && s.Status != "Cancelled")
             .OrderBy(s => s.StartTime)
-            .ThenBy(s => s.ReceptionistUserId)
+            .ThenBy(s => s.StaffUserId)
             .ToListAsync(ct);
 
         if (!schedules.Any())
@@ -69,30 +61,23 @@ public class ReceptionistShiftProvider : IStaffShiftProvider
             return new List<StaffShiftDto>();
         }
 
-        var userIds = schedules.Select(s => s.ReceptionistUserId).Distinct().ToList();
+        var userIds = schedules.Select(s => s.StaffUserId).Distinct().ToList();
 
-        var approvedLeaves = await _dbContext.ReceptionistLeaveRequestPeriods
+        var approvedLeaves = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(p => p.LeaveRequest)
-            .Where(p => userIds.Contains(p.LeaveRequest.ReceptionistUserId) && p.LeaveDate == date && p.Status == "Approved")
+            .Where(lr => lr.StaffRole == "Receptionist" && userIds.Contains(lr.StaffUserId) && lr.Status == "Approved" && lr.StartDate <= date && lr.EndDate >= date)
             .ToListAsync(ct);
 
-        var incidents = await _dbContext.ReceptionistCoverageIncidents
-            .AsNoTracking()
-            .Where(i => i.AffectedReceptionistUserId.HasValue && userIds.Contains(i.AffectedReceptionistUserId.Value) && i.WorkDate == date && i.IncidentType == "EmergencyAbsence")
-            .ToListAsync(ct);
-
-        return schedules.Select(s => MapToStaffShiftDto(s, approvedLeaves, incidents)).ToList();
+        return schedules.Select(s => MapToStaffShiftDto(s, approvedLeaves)).ToList();
     }
 
     public async Task<List<StaffShiftDto>> GetShiftsForStaffRangeAsync(long userId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default)
     {
-        var schedules = await _dbContext.ReceptionistWorkSchedules
+        var schedules = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Include(s => s.ShiftTemplate)
-            .Include(s => s.ReceptionistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Where(s => s.ReceptionistUserId == userId && s.WorkDate >= fromDate && s.WorkDate <= toDate && s.Status == "Scheduled" && s.IsPublished)
+            .Include(s => s.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Where(s => s.StaffRole == "Receptionist" && s.StaffUserId == userId && s.WorkDate >= fromDate && s.WorkDate <= toDate && s.Status != "Cancelled")
             .OrderBy(s => s.WorkDate)
             .ThenBy(s => s.StartTime)
             .ToListAsync(ct);
@@ -102,31 +87,24 @@ public class ReceptionistShiftProvider : IStaffShiftProvider
             return new List<StaffShiftDto>();
         }
 
-        var approvedLeaves = await _dbContext.ReceptionistLeaveRequestPeriods
+        var approvedLeaves = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(p => p.LeaveRequest)
-            .Where(p => p.LeaveRequest.ReceptionistUserId == userId && p.LeaveDate >= fromDate && p.LeaveDate <= toDate && p.Status == "Approved")
+            .Where(lr => lr.StaffRole == "Receptionist" && lr.StaffUserId == userId && lr.Status == "Approved" && lr.StartDate <= toDate && lr.EndDate >= fromDate)
             .ToListAsync(ct);
 
-        var incidents = await _dbContext.ReceptionistCoverageIncidents
-            .AsNoTracking()
-            .Where(i => i.AffectedReceptionistUserId == userId && i.WorkDate >= fromDate && i.WorkDate <= toDate && i.IncidentType == "EmergencyAbsence")
-            .ToListAsync(ct);
-
-        return schedules.Select(s => MapToStaffShiftDto(s, approvedLeaves, incidents)).ToList();
+        return schedules.Select(s => MapToStaffShiftDto(s, approvedLeaves)).ToList();
     }
 
     public async Task<List<StaffShiftDto>> GetAllShiftsRangeAsync(DateOnly fromDate, DateOnly toDate, CancellationToken ct = default)
     {
-        var schedules = await _dbContext.ReceptionistWorkSchedules
+        var schedules = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Include(s => s.ShiftTemplate)
-            .Include(s => s.ReceptionistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Where(s => s.WorkDate >= fromDate && s.WorkDate <= toDate && s.Status == "Scheduled" && s.IsPublished)
+            .Include(s => s.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Where(s => s.StaffRole == "Receptionist" && s.WorkDate >= fromDate && s.WorkDate <= toDate && s.Status != "Cancelled")
             .OrderBy(s => s.WorkDate)
             .ThenBy(s => s.StartTime)
-            .ThenBy(s => s.ReceptionistUserId)
+            .ThenBy(s => s.StaffUserId)
             .ToListAsync(ct);
 
         if (!schedules.Any())
@@ -134,38 +112,30 @@ public class ReceptionistShiftProvider : IStaffShiftProvider
             return new List<StaffShiftDto>();
         }
 
-        var userIds = schedules.Select(s => s.ReceptionistUserId).Distinct().ToList();
+        var userIds = schedules.Select(s => s.StaffUserId).Distinct().ToList();
 
-        var approvedLeaves = await _dbContext.ReceptionistLeaveRequestPeriods
+        var approvedLeaves = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Include(p => p.LeaveRequest)
-            .Where(p => userIds.Contains(p.LeaveRequest.ReceptionistUserId) && p.LeaveDate >= fromDate && p.LeaveDate <= toDate && p.Status == "Approved")
+            .Where(lr => lr.StaffRole == "Receptionist" && userIds.Contains(lr.StaffUserId) && lr.Status == "Approved" && lr.StartDate <= toDate && lr.EndDate >= fromDate)
             .ToListAsync(ct);
 
-        var incidents = await _dbContext.ReceptionistCoverageIncidents
-            .AsNoTracking()
-            .Where(i => i.AffectedReceptionistUserId.HasValue && userIds.Contains(i.AffectedReceptionistUserId.Value) && i.WorkDate >= fromDate && i.WorkDate <= toDate && i.IncidentType == "EmergencyAbsence")
-            .ToListAsync(ct);
-
-        return schedules.Select(s => MapToStaffShiftDto(s, approvedLeaves, incidents)).ToList();
+        return schedules.Select(s => MapToStaffShiftDto(s, approvedLeaves)).ToList();
     }
 
     private static StaffShiftDto MapToStaffShiftDto(
-        Persistence.Entities.ReceptionistWorkSchedule s,
-        List<Persistence.Entities.ReceptionistLeaveRequestPeriod> approvedLeaves,
-        List<Persistence.Entities.ReceptionistCoverageIncident> incidents)
+        Persistence.Entities.StaffWorkSchedule s,
+        List<Persistence.Entities.StaffLeaveRequest> approvedLeaves)
     {
-        var shiftName = s.ShiftTemplate?.TemplateName
-            ?? $"Ca Lễ Tân ({s.StartTime:HH\\:mm} - {s.EndTime:HH\\:mm})";
+        var shiftName = $"Ca Lễ Tân ({s.StartTime:HH\\:mm} - {s.EndTime:HH\\:mm})";
 
         var dto = new StaffShiftDto
         {
-            ShiftIdentifier = $"RECEP_SCHED_{s.ReceptionistScheduleId}",
-            SourceScheduleId = s.ReceptionistScheduleId,
-            SourceScheduleType = "ReceptionistWorkSchedule",
-            UserId = s.ReceptionistUserId,
-            StaffName = s.ReceptionistUser?.StaffProfile?.FullName ?? $"Lễ tân #{s.ReceptionistUserId}",
-            StaffCode = s.ReceptionistUser?.StaffProfile?.EmployeeCode ?? $"REC-{s.ReceptionistUserId:D4}",
+            ShiftIdentifier = $"RECEP_SCHED_{s.WorkScheduleId}",
+            SourceScheduleId = s.WorkScheduleId,
+            SourceScheduleType = "StaffWorkSchedule",
+            UserId = s.StaffUserId,
+            StaffName = s.StaffUser?.FullName ?? $"Lễ tân #{s.StaffUserId}",
+            StaffCode = $"REC-{s.StaffUserId:D4}",
             Role = UserRole.Receptionist,
             WorkDate = s.WorkDate,
             StartTime = s.StartTime,
@@ -173,13 +143,12 @@ public class ReceptionistShiftProvider : IStaffShiftProvider
             ShiftName = shiftName,
             DepartmentId = null,
             DepartmentName = "Bộ phận Lễ tân & Tiếp đón",
-            Status = "Scheduled",
+            Status = s.Status,
             Note = s.Notes
         };
 
-        // Check Approved Leaves
         var userLeavesOnDate = approvedLeaves
-            .Where(p => p.LeaveRequest.ReceptionistUserId == s.ReceptionistUserId && p.LeaveDate == s.WorkDate)
+            .Where(lr => lr.StaffUserId == s.StaffUserId && lr.StartDate <= s.WorkDate && lr.EndDate >= s.WorkDate)
             .ToList();
 
         foreach (var leave in userLeavesOnDate)
@@ -192,19 +161,18 @@ public class ReceptionistShiftProvider : IStaffShiftProvider
             {
                 dto.IsApprovedLeave = true;
                 dto.Status = "ApprovedLeave";
-                dto.LeaveType = leave.LeaveRequest.LeaveType;
+                dto.LeaveType = leave.LeaveType;
                 dto.LeaveHours = (decimal)(s.EndTime - s.StartTime).TotalHours;
-                dto.Note = (dto.Note + $" | Nghỉ phép ({leave.LeaveRequest.LeaveType}): {leave.LeaveRequest.Reason}").TrimStart(' ', '|');
+                dto.Note = (dto.Note + $" | Nghỉ phép ({leave.LeaveType}): {leave.Reason}").TrimStart(' ', '|');
                 break;
             }
 
-            // Check partial overlap
             if (leave.StartTime.HasValue && leave.EndTime.HasValue
                 && leave.StartTime.Value < s.EndTime && leave.EndTime.Value > s.StartTime)
             {
                 dto.IsApprovedLeave = true;
                 dto.Status = "PartialLeave";
-                dto.LeaveType = leave.LeaveRequest.LeaveType;
+                dto.LeaveType = leave.LeaveType;
 
                 var overlapStart = leave.StartTime.Value > s.StartTime ? leave.StartTime.Value : s.StartTime;
                 var overlapEnd = leave.EndTime.Value < s.EndTime ? leave.EndTime.Value : s.EndTime;
@@ -213,21 +181,14 @@ public class ReceptionistShiftProvider : IStaffShiftProvider
                 dto.LeaveStartTime = overlapStart;
                 dto.LeaveEndTime = overlapEnd;
                 dto.LeaveHours = Math.Max(0, overlapHours);
-                dto.Note = (dto.Note + $" | Nghỉ phép một phần ({overlapStart:HH\\:mm} - {overlapEnd:HH\\:mm}): {leave.LeaveRequest.Reason}").TrimStart(' ', '|');
+                dto.Note = (dto.Note + $" | Nghỉ phép một phần ({overlapStart:HH\\:mm} - {overlapEnd:HH\\:mm}): {leave.Reason}").TrimStart(' ', '|');
             }
         }
 
-        // Check Emergency Absence
-        var incident = incidents.FirstOrDefault(i =>
-            i.AffectedReceptionistUserId == s.ReceptionistUserId &&
-            i.WorkDate == s.WorkDate &&
-            i.ShiftStartTime == s.StartTime);
-
-        if (incident != null)
+        if (s.Status == "AbsenceReported")
         {
             dto.IsEmergencyAbsence = true;
             dto.Status = "EmergencyAbsence";
-            dto.Note = (dto.Note + $" | Vắng mặt khẩn cấp/sự cố: {incident.Reason}").TrimStart(' ', '|');
         }
 
         return dto;

@@ -100,6 +100,7 @@
             <input type="hidden" asp-for="DoctorSelectionMode" id="hiddenDoctorSelectionMode" value="@Model.DoctorSelectionMode" />
             <input type="hidden" asp-for="RequestedDentistUserId" id="hiddenDentistId" />
             <input type="hidden" asp-for="ScheduledStart" id="hiddenScheduledStart" />
+            <div id="hiddenAdditionalServicesContainer"></div>
 
             <div class="row g-4">
                 <!-- MAIN FORM STEPS (Cột Bên Trái 8/12) -->
@@ -270,6 +271,12 @@
                                         </div>
                                     </div>
 
+                                    <!-- Thanh hiển thị dịch vụ đã chọn (hỗ trợ multi-service) -->
+                                    <div id="selectedServicesPillsBar" class="alert alert-light border d-flex flex-wrap align-items-center gap-2 py-2 px-3 mb-3 d-none">
+                                        <strong class="text-primary small"><i class="bi bi-check2-circle me-1"></i>Đã chọn:</strong>
+                                        <div id="selectedServicesPillsList" class="d-flex flex-wrap gap-2"></div>
+                                    </div>
+
                                     <div class="row g-3" id="serviceListContainer" style="max-height: 520px; overflow-y: auto; padding-right: 4px;">
                                         @foreach (var s in Model.Services)
                                         {
@@ -280,7 +287,8 @@
                                                  data-dept-name="@s.DepartmentName"
                                                  data-name="@s.ServiceName"
                                                  data-duration="@s.DurationMinutes"
-                                                 data-price="@((s.Price ?? 0).ToString("N0")) đ">
+                                                 data-price="@((s.Price ?? 0).ToString("N0")) đ"
+                                                 data-price-num="@(s.Price ?? 0)">
                                                 <div class="card service-card p-3 h-100 rounded-3 border @(isSelected ? "active border-primary" : "")">
                                                     <div class="d-flex justify-content-between align-items-start mb-2">
                                                         <span class="badge bg-light text-primary border small text-truncate" style="max-width: 180px;">
@@ -296,9 +304,14 @@
                                                     </p>
                                                     <div class="mt-auto pt-2 border-top d-flex justify-content-between align-items-center">
                                                         <span class="fw-bold text-primary fs-6">@((s.Price ?? 0).ToString("N0")) đ</span>
-                                                        <button type="button" class="btn btn-outline-primary btn-sm px-3 fw-semibold">
-                                                            @(isSelected ? "Đã chọn" : "Chọn dịch vụ")
-                                                        </button>
+                                                        <div class="d-flex gap-1">
+                                                            <button type="button" class="btn btn-outline-primary btn-sm px-2 fw-semibold btn-select-main" onclick="event.stopPropagation(); selectPrimaryService(@s.DepartmentServiceId, '@Html.Raw(s.ServiceName)', @s.DepartmentId, '@Html.Raw(s.DepartmentName)', @s.DurationMinutes, '@((s.Price ?? 0).ToString("N0")) đ', @(s.Price ?? 0))">
+                                                                @(isSelected ? "Đã chọn" : "Chọn chính")
+                                                            </button>
+                                                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 fw-semibold btn-toggle-addon" id="btn-addon-@s.DepartmentServiceId" onclick="event.stopPropagation(); toggleAdditionalService(@s.DepartmentServiceId, '@Html.Raw(s.ServiceName)', @s.DepartmentId, '@Html.Raw(s.DepartmentName)', @s.DurationMinutes, @(s.Price ?? 0))">
+                                                                + Thêm
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -646,7 +659,7 @@
                                             <strong class="text-dark fs-6" id="summaryCategoryText">Khám Tổng Quát</strong>
                                         </div>
                                         <div class="col-sm-6">
-                                            <small class="text-muted d-block">Dịch vụ / Gói khám:</small>
+                                            <small class="text-muted d-block">Dịch vụ chính / Gói khám:</small>
                                             <strong class="text-primary fs-6" id="summaryService">--</strong>
                                         </div>
                                         <div class="col-sm-6">
@@ -663,9 +676,13 @@
                                             <div class="small text-muted" id="summaryDate">--</div>
                                         </div>
                                         <div class="col-sm-6">
-                                            <small class="text-muted d-block">Chi phí dự kiến & Thời lượng:</small>
+                                            <small class="text-muted d-block">Tổng chi phí dự kiến & Thời lượng:</small>
                                             <strong class="text-danger fs-5" id="summaryPrice">--</strong>
                                             <span class="badge bg-light text-muted border ms-2" id="summaryDuration">-- phút</span>
+                                        </div>
+                                        <div class="col-12 d-none" id="summaryAdditionalServicesSection">
+                                            <small class="text-muted d-block mb-1 fw-semibold"><i class="bi bi-plus-circle text-success me-1"></i>Dịch vụ bổ sung đi kèm:</small>
+                                            <div id="summaryAdditionalServicesList" class="d-flex flex-wrap gap-2"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -726,8 +743,12 @@
                                 <div class="text-muted small" id="sideDeptName">
                                     <i class="bi bi-hospital me-1"></i>Khoa Răng Hàm Mặt Tổng Quát
                                 </div>
+                                <div id="sideAdditionalServicesContainer" class="mt-2 pt-2 border-top d-none">
+                                    <small class="text-muted d-block mb-1" style="font-size: 0.75rem;">+ DỊCH VỤ BỔ SUNG:</small>
+                                    <div id="sideAdditionalServicesList" class="small"></div>
+                                </div>
                                 <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
-                                    <span class="small text-muted"><i class="bi bi-clock me-1"></i>Thời lượng: <strong id="sideDurationText">30 phút</strong></span>
+                                    <span class="small text-muted"><i class="bi bi-clock me-1"></i>Tổng thời lượng: <strong id="sideDurationText">30 phút</strong></span>
                                     <span class="fw-bold text-danger fs-6" id="sidePriceText">100.000 đ</span>
                                 </div>
                             </div>
@@ -1031,12 +1052,20 @@
             deptId: parseInt('@Model.DepartmentId') || 1,
             deptName: 'Khoa Răng Hàm Mặt Tổng Quát',
             duration: 30,
-            price: '100.000 đ'
+            price: '100.000 đ',
+            priceNum: 100000
         };
+        let additionalServices = [];
         let doctorSelectionMode = '@Model.DoctorSelectionMode' || 'ClinicAssignment';
         let selectedDentist = { id: null, name: '' };
         let selectedSlot = null;
         let isSubmitting = false;
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return text.toString().replace(/[&<>"']/g, m => map[m]);
+        }
 
         // Combos dataset injected from Model
         const availableCombosData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Combos, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }));
@@ -1096,7 +1125,7 @@
             document.getElementById('hiddenSelectedComboCode').value = code;
             document.getElementById('hiddenBookingCategory').value = 'Combo';
 
-            selectService(combo.serviceId, `[Combo] ${combo.title}`, combo.departmentId, combo.departmentName, combo.durationMinutes, `${combo.comboPrice.toLocaleString('vi-VN')} đ`);
+            selectService(combo.serviceId, `[Combo] ${combo.title}`, combo.departmentId, combo.departmentName, combo.durationMinutes, `${combo.comboPrice.toLocaleString('vi-VN')} đ`, combo.comboPrice);
 
             // UI highlight
             document.querySelectorAll('.combo-card').forEach(c => {
@@ -1161,7 +1190,7 @@
             document.getElementById('hiddenBookingCategory').value = 'GeneralCheckup';
             document.getElementById('hiddenSelectedComboCode').value = '';
 
-            selectService(1, 'Khám tổng quát & Tư vấn', 1, 'Khoa Răng Hàm Mặt Tổng Quát', 30, '100.000 đ');
+            selectService(1, 'Khám tổng quát & Tư vấn', 1, 'Khoa Răng Hàm Mặt Tổng Quát', 30, '100.000 đ', 100000);
 
             if (proceedToStep2) {
                 goToStep(2);
@@ -1206,22 +1235,123 @@
             if (emptyAlert) emptyAlert.classList.toggle('d-none', visibleCount > 0);
         }
 
-        function selectService(id, name, deptId, deptName, duration, price) {
-            selectedService = { id, name, deptId, deptName, duration, price };
+        function selectPrimaryService(id, name, deptId, deptName, duration, price, priceNum) {
+            additionalServices = additionalServices.filter(s => s.id !== id);
+            selectService(id, name, deptId, deptName, duration, price, priceNum);
+            goToStep(2);
+        }
+
+        function toggleAdditionalService(id, name, deptId, deptName, duration, priceNum) {
+            if (selectedService && selectedService.id === id) {
+                alert('Dịch vụ này hiện đang được chọn làm dịch vụ chính.');
+                return;
+            }
+            const idx = additionalServices.findIndex(s => s.id === id);
+            if (idx >= 0) {
+                additionalServices.splice(idx, 1);
+            } else {
+                additionalServices.push({
+                    id: id,
+                    name: name,
+                    deptId: deptId,
+                    deptName: deptName,
+                    duration: duration,
+                    price: `${(priceNum || 0).toLocaleString('vi-VN')} đ`,
+                    priceNum: priceNum || 0
+                });
+            }
+            updateSelectedServicesUI();
+        }
+
+        function removeAdditionalService(id) {
+            additionalServices = additionalServices.filter(s => s.id !== id);
+            updateSelectedServicesUI();
+        }
+
+        function updateSelectedServicesUI() {
+            document.querySelectorAll('.service-card').forEach(c => c.classList.remove('active', 'border-primary'));
+            if (selectedService && selectedService.id) {
+                const primaryCard = document.querySelector(`.service-item[data-service-id="${selectedService.id}"] .service-card`);
+                if (primaryCard) primaryCard.classList.add('active', 'border-primary');
+            }
+
+            document.querySelectorAll('.btn-toggle-addon').forEach(btn => {
+                const id = parseInt(btn.id.replace('btn-addon-', ''));
+                if (additionalServices.some(s => s.id === id)) {
+                    btn.classList.remove('btn-outline-secondary');
+                    btn.classList.add('btn-success');
+                    btn.innerHTML = '<i class="bi bi-check2"></i> Đã thêm';
+                } else {
+                    btn.classList.remove('btn-success');
+                    btn.classList.add('btn-outline-secondary');
+                    btn.innerHTML = '+ Thêm';
+                }
+            });
+
+            const pillsBar = document.getElementById('selectedServicesPillsBar');
+            const pillsList = document.getElementById('selectedServicesPillsList');
+            if (pillsBar && pillsList) {
+                let pillsHtml = '';
+                if (selectedService && selectedService.name) {
+                    pillsHtml += `<span class="badge bg-primary px-2 py-1"><i class="bi bi-star-fill me-1 small"></i>Chính: ${escapeHtml(selectedService.name)}</span>`;
+                }
+                additionalServices.forEach(s => {
+                    pillsHtml += `<span class="badge bg-secondary px-2 py-1 d-inline-flex align-items-center gap-1">+ ${escapeHtml(s.name)} <button type="button" class="btn-close btn-close-white" style="font-size: 0.5rem;" onclick="removeAdditionalService(${s.id})"></button></span>`;
+                });
+                pillsList.innerHTML = pillsHtml;
+                pillsBar.classList.toggle('d-none', (!selectedService || !selectedService.name) && additionalServices.length === 0);
+            }
+
+            let totalDuration = selectedService ? (selectedService.duration || 30) : 30;
+            let totalPriceNum = selectedService ? (selectedService.priceNum || 0) : 0;
+            additionalServices.forEach(s => {
+                totalDuration += (s.duration || 30);
+                totalPriceNum += (s.priceNum || 0);
+            });
+
+            if (selectedService) {
+                document.getElementById('sideServiceName').innerText = selectedService.name;
+                document.getElementById('sideDeptName').innerHTML = `<i class="bi bi-hospital me-1"></i>${selectedService.deptName}`;
+            }
+            document.getElementById('sideDurationText').innerText = `${totalDuration} phút`;
+            document.getElementById('sidePriceText').innerText = totalPriceNum > 0 ? `${totalPriceNum.toLocaleString('vi-VN')} đ` : (selectedService ? selectedService.price : '--');
+
+            const sideAddonsContainer = document.getElementById('sideAdditionalServicesContainer');
+            const sideAddonsList = document.getElementById('sideAdditionalServicesList');
+            if (sideAddonsContainer && sideAddonsList) {
+                if (additionalServices.length > 0) {
+                    sideAddonsContainer.classList.remove('d-none');
+                    sideAddonsList.innerHTML = additionalServices.map(s => `
+                        <div class="d-flex justify-content-between align-items-center text-muted mb-1">
+                            <span class="text-truncate" style="max-width: 160px;">&bull; ${escapeHtml(s.name)}</span>
+                            <span>${s.price}</span>
+                        </div>
+                    `).join('');
+                } else {
+                    sideAddonsContainer.classList.add('d-none');
+                }
+            }
+
+            const hiddenContainer = document.getElementById('hiddenAdditionalServicesContainer');
+            if (hiddenContainer) {
+                let hiddenHtml = '';
+                if (selectedService && selectedService.id) {
+                    hiddenHtml += `<input type="hidden" name="SelectedServiceIds" value="${selectedService.id}" />`;
+                }
+                additionalServices.forEach(s => {
+                    hiddenHtml += `<input type="hidden" name="SelectedServiceIds" value="${s.id}" />`;
+                });
+                hiddenContainer.innerHTML = hiddenHtml;
+            }
+        }
+
+        function selectService(id, name, deptId, deptName, duration, price, priceNum) {
+            const parsedNum = priceNum !== undefined ? priceNum : (parseInt((price || '').replace(/[^0-9]/g, '')) || 0);
+            selectedService = { id, name, deptId, deptName, duration, price, priceNum: parsedNum };
             document.getElementById('hiddenServiceId').value = id;
             document.getElementById('hiddenDepartmentId').value = deptId;
-
-            // UI highlight for service items
-            document.querySelectorAll('.service-card').forEach(c => c.classList.remove('active'));
-            const selectedItem = document.querySelector(`.service-item[data-service-id="${id}"] .service-card`);
-            if (selectedItem) selectedItem.classList.add('active');
-
-            // Update sidebar
-            document.getElementById('sideServiceName').innerText = name;
-            document.getElementById('sideDeptName').innerHTML = `<i class="bi bi-hospital me-1"></i>${deptName}`;
-            document.getElementById('sideDurationText').innerText = `${duration} phút`;
-            document.getElementById('sidePriceText').innerText = price;
             document.getElementById('step2DeptName').innerText = deptName;
+            updateSelectedServicesUI();
         }
 
         // ============================================
@@ -1565,8 +1695,33 @@
 
             document.getElementById('summaryService').innerText = selectedService.name || '--';
             document.getElementById('summaryDept').innerText = selectedService.deptName || '--';
-            document.getElementById('summaryDuration').innerText = `${selectedService.duration} phút`;
-            document.getElementById('summaryPrice').innerText = selectedService.price || '--';
+
+            let totalDuration = selectedService ? (selectedService.duration || 30) : 30;
+            let totalPriceNum = selectedService ? (selectedService.priceNum || 0) : 0;
+            additionalServices.forEach(s => {
+                totalDuration += (s.duration || 30);
+                totalPriceNum += (s.priceNum || 0);
+            });
+
+            document.getElementById('summaryDuration').innerText = `${totalDuration} phút`;
+            document.getElementById('summaryPrice').innerText = totalPriceNum > 0 ? `${totalPriceNum.toLocaleString('vi-VN')} đ` : (selectedService ? selectedService.price : '--');
+
+            const sumAddonsSec = document.getElementById('summaryAdditionalServicesSection');
+            const sumAddonsList = document.getElementById('summaryAdditionalServicesList');
+            if (sumAddonsSec && sumAddonsList) {
+                if (additionalServices.length > 0) {
+                    sumAddonsSec.classList.remove('d-none');
+                    sumAddonsList.innerHTML = additionalServices.map(s => `
+                        <span class="badge bg-light text-dark border p-2">
+                            <i class="bi bi-plus-circle text-success me-1"></i>${escapeHtml(s.name)}
+                            <span class="text-danger fw-bold ms-1">(${s.price})</span>
+                            <span class="text-muted ms-1">khoa ${escapeHtml(s.deptName)}</span>
+                        </span>
+                    `).join('');
+                } else {
+                    sumAddonsSec.classList.add('d-none');
+                }
+            }
 
             const dentistDisplay = doctorSelectionMode === 'PreferredDentist' && selectedDentist.id
                 ? `BS. ${selectedDentist.name} (Bác sĩ yêu cầu)`
@@ -1606,6 +1761,9 @@
                 e.preventDefault();
                 return false;
             }
+
+            // Sync hidden inputs for all selected services
+            updateSelectedServicesUI();
 
             isSubmitting = true;
             const submitBtn = document.getElementById('btnSubmitBooking');

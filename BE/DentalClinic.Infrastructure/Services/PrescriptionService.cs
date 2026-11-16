@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.Prescriptions.DTOs;
+using DentalClinic.Domain.Common;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
@@ -31,32 +32,29 @@ public class PrescriptionService : IPrescriptionService
     {
         var query = _dbContext.Prescriptions
             .Include(p => p.PrescriptionItems)
-            .Include(p => p.TreatmentSession)
-                .ThenInclude(s => s.DentistUser)
-                    .ThenInclude(d => d.User)
+                .ThenInclude(pi => pi.Medicine)
+            .Include(p => p.Dentist)
+                .ThenInclude(d => d.StaffProfile)
+            .Include(p => p.Dentist)
+                .ThenInclude(d => d.Department)
+            .Include(p => p.Patient)
+                .ThenInclude(pu => pu.User)
             .Include(p => p.TreatmentSession)
                 .ThenInclude(s => s.Appointment)
-                    .ThenInclude(a => a.PatientUser)
-                        .ThenInclude(pu => pu.User)
-            .Include(p => p.TreatmentSession)
-                .ThenInclude(s => s.Appointment)
-                    .ThenInclude(a => a.Department)
-            .Where(p => p.TreatmentSession.DentistUserId == dentistUserId ||
-                        p.TreatmentSession.Appointment.AssignedDentistUserId == dentistUserId)
+            .Where(p => p.DentistUserId == dentistUserId || p.TreatmentSession.DentistUserId == dentistUserId)
             .AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(search))
         {
             var k = search.Trim().ToLowerInvariant();
             query = query.Where(p =>
-                p.TreatmentSession.Appointment.AppointmentCode.ToLower().Contains(k) ||
-                p.TreatmentSession.Appointment.PatientUser.FullName.ToLower().Contains(k) ||
-                p.TreatmentSession.Appointment.PatientUser.PatientCode.ToLower().Contains(k) ||
-                p.PrescriptionItems.Any(pi => pi.MedicationName.ToLower().Contains(k)));
+                p.AppointmentId.ToString().Contains(k) ||
+                p.Patient.FullName.ToLower().Contains(k) ||
+                p.PrescriptionItems.Any(pi => pi.Medicine.MedicineName.ToLower().Contains(k)));
         }
 
         var prescriptions = await query
-            .OrderByDescending(p => p.IssuedAt)
+            .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(ct);
 
         var dtoList = prescriptions.Select(MapToDto).ToList();
@@ -67,18 +65,17 @@ public class PrescriptionService : IPrescriptionService
     {
         var prescriptions = await _dbContext.Prescriptions
             .Include(p => p.PrescriptionItems)
-            .Include(p => p.TreatmentSession)
-                .ThenInclude(s => s.DentistUser)
-                    .ThenInclude(d => d.User)
+                .ThenInclude(pi => pi.Medicine)
+            .Include(p => p.Dentist)
+                .ThenInclude(d => d.StaffProfile)
+            .Include(p => p.Dentist)
+                .ThenInclude(d => d.Department)
+            .Include(p => p.Patient)
+                .ThenInclude(pu => pu.User)
             .Include(p => p.TreatmentSession)
                 .ThenInclude(s => s.Appointment)
-                    .ThenInclude(a => a.PatientUser)
-                        .ThenInclude(pu => pu.User)
-            .Include(p => p.TreatmentSession)
-                .ThenInclude(s => s.Appointment)
-                    .ThenInclude(a => a.Department)
-            .Where(p => p.TreatmentSession.Appointment.PatientUserId == patientUserId)
-            .OrderByDescending(p => p.IssuedAt)
+            .Where(p => p.PatientUserId == patientUserId)
+            .OrderByDescending(p => p.CreatedAt)
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -90,16 +87,15 @@ public class PrescriptionService : IPrescriptionService
     {
         var pres = await _dbContext.Prescriptions
             .Include(p => p.PrescriptionItems)
-            .Include(p => p.TreatmentSession)
-                .ThenInclude(s => s.DentistUser)
-                    .ThenInclude(d => d.User)
+                .ThenInclude(pi => pi.Medicine)
+            .Include(p => p.Dentist)
+                .ThenInclude(d => d.StaffProfile)
+            .Include(p => p.Dentist)
+                .ThenInclude(d => d.Department)
+            .Include(p => p.Patient)
+                .ThenInclude(pu => pu.User)
             .Include(p => p.TreatmentSession)
                 .ThenInclude(s => s.Appointment)
-                    .ThenInclude(a => a.PatientUser)
-                        .ThenInclude(pu => pu.User)
-            .Include(p => p.TreatmentSession)
-                .ThenInclude(s => s.Appointment)
-                    .ThenInclude(a => a.Department)
             .FirstOrDefaultAsync(p => p.PrescriptionId == prescriptionId, ct);
 
         if (pres == null)
@@ -113,14 +109,15 @@ public class PrescriptionService : IPrescriptionService
     public async Task<ApiResponse<List<PrescriptionEligibleAppointmentDto>>> GetEligibleAppointmentsForPrescriptionAsync(long dentistUserId, CancellationToken ct = default)
     {
         var appointments = await _dbContext.Appointments
-            .Include(a => a.PatientUser)
+            .Include(a => a.Patient)
                 .ThenInclude(pu => pu.User)
-            .Include(a => a.Department)
-            .Include(a => a.RequestedService)
+            .Include(a => a.AppointmentServices)
+                .ThenInclude(s => s.DepartmentService)
+                    .ThenInclude(ds => ds.Department)
             .Include(a => a.TreatmentSessions)
                 .ThenInclude(ts => ts.Prescription)
-            .Where(a => a.AssignedDentistUserId == dentistUserId)
-            .OrderByDescending(a => a.ScheduledStart)
+            .Where(a => a.AppointmentServices.Any(s => s.AssignedDentistUserId == dentistUserId))
+            .OrderByDescending(a => a.CreatedAt)
             .Take(50)
             .AsNoTracking()
             .ToListAsync(ct);
@@ -128,17 +125,18 @@ public class PrescriptionService : IPrescriptionService
         var list = appointments.Select(a =>
         {
             var sessionWithPres = a.TreatmentSessions.FirstOrDefault(s => s.Prescription != null);
+            var svc = a.AppointmentServices.FirstOrDefault(s => s.AssignedDentistUserId == dentistUserId) ?? a.AppointmentServices.FirstOrDefault();
             return new PrescriptionEligibleAppointmentDto
             {
                 AppointmentId = a.AppointmentId,
-                AppointmentCode = a.AppointmentCode,
+                AppointmentCode = $"APT-{a.AppointmentId:D6}",
                 PatientUserId = a.PatientUserId,
-                PatientName = a.PatientUser.FullName,
-                PatientCode = a.PatientUser.PatientCode,
-                PatientPhone = a.PatientUser.User?.PhoneNumber,
-                DepartmentName = a.Department?.Name ?? "Chuyên khoa Răng Hàm Mặt",
-                ServiceName = a.RequestedService?.ServiceName ?? "Khám nha khoa",
-                ScheduledStart = a.ScheduledStart,
+                PatientName = a.Patient.FullName,
+                PatientCode = $"BN-{a.PatientUserId}",
+                PatientPhone = a.Patient.User?.PhoneNumber,
+                DepartmentName = svc?.DepartmentService?.Department?.Name ?? "Chuyên khoa Răng Hàm Mặt",
+                ServiceName = svc?.DepartmentService?.ServiceName ?? "Khám nha khoa",
+                ScheduledStart = svc?.ScheduledStart ?? a.CreatedAt,
                 Status = a.Status,
                 HasPrescription = sessionWithPres != null,
                 PrescriptionId = sessionWithPres?.Prescription?.PrescriptionId
@@ -156,7 +154,8 @@ public class PrescriptionService : IPrescriptionService
         }
 
         var appointment = await _dbContext.Appointments
-            .Include(a => a.PatientUser)
+            .Include(a => a.Patient)
+            .Include(a => a.AppointmentServices)
             .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId, ct);
 
         if (appointment == null)
@@ -164,22 +163,23 @@ public class PrescriptionService : IPrescriptionService
             return ApiResponse<PrescriptionDto>.Fail("Không tìm thấy thông tin ca khám.");
         }
 
-        if (appointment.AssignedDentistUserId.HasValue && appointment.AssignedDentistUserId.Value != dentistUserId)
+        var dentistSvc = appointment.AppointmentServices.FirstOrDefault(s => s.AssignedDentistUserId == dentistUserId)
+                         ?? appointment.AppointmentServices.FirstOrDefault();
+
+        if (dentistSvc == null)
+        {
+            return ApiResponse<PrescriptionDto>.Fail("Ca khám này chưa có dịch vụ được chỉ định.");
+        }
+
+        if (dentistSvc.AssignedDentistUserId.HasValue && dentistSvc.AssignedDentistUserId.Value != dentistUserId)
         {
             return ApiResponse<PrescriptionDto>.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
         }
 
-        if (appointment.Status != AppointmentStatus.InService && appointment.Status != AppointmentStatus.Completed)
+        if (appointment.Status != AppointmentStatus.InProgress && appointment.Status != AppointmentStatus.InService && appointment.Status != AppointmentStatus.Completed)
         {
             return ApiResponse<PrescriptionDto>.Fail($"Bác sĩ chỉ có thể kê đơn thuốc sau khi ca khám đã bắt đầu diễn ra hoặc đã hoàn tất khám (Trạng thái hiện tại: {appointment.Status}).");
         }
-
-        if (!appointment.DepartmentId.HasValue || appointment.DepartmentId.Value <= 0)
-        {
-            return ApiResponse<PrescriptionDto>.Fail("Không xác định được chuyên khoa phụ trách ca khám để lập đơn thuốc.");
-        }
-
-        var deptId = appointment.DepartmentId.Value;
 
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? tx = null;
         if (_dbContext.Database.IsRelational())
@@ -189,7 +189,6 @@ public class PrescriptionService : IPrescriptionService
 
         try
         {
-            // Tìm hoặc tạo TreatmentSession cho Appointment này
             var session = await _dbContext.TreatmentSessions
                 .Include(s => s.Prescription)
                     .ThenInclude(p => p!.PrescriptionItems)
@@ -197,59 +196,15 @@ public class PrescriptionService : IPrescriptionService
 
             if (session == null)
             {
-                var appointmentNote = $"Đợt khám {appointment.AppointmentCode}";
-
-                // Tìm hoặc tạo kế hoạch điều trị riêng cho ca khám này (tránh chiếm dụng item của kế hoạch chỉnh nha/phẫu thuật khác)
-                var plan = await _dbContext.TreatmentPlans
-                    .FirstOrDefaultAsync(tp => tp.PatientUserId == appointment.PatientUserId &&
-                                               tp.DepartmentId == deptId &&
-                                               tp.TreatmentPlanItems.Any(tpi => tpi.Note == appointmentNote), ct);
-
-                if (plan == null)
-                {
-                    plan = new TreatmentPlan
-                    {
-                        PatientUserId = appointment.PatientUserId,
-                        DepartmentId = deptId,
-                        CreatedByDentistUserId = dentistUserId,
-                        Status = "Completed",
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    _dbContext.TreatmentPlans.Add(plan);
-                    await _dbContext.SaveChangesAsync(ct);
-                }
-
-                // Tìm hoặc tạo TreatmentPlanItem dành riêng cho ca khám này
-                var item = await _dbContext.TreatmentPlanItems
-                    .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId && tpi.Note == appointmentNote, ct);
-
-                if (item == null)
-                {
-                    var maxSeq = await _dbContext.TreatmentPlanItems
-                        .Where(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId)
-                        .Select(tpi => (int?)tpi.SequenceNo)
-                        .MaxAsync(ct) ?? 0;
-
-                    item = new TreatmentPlanItem
-                    {
-                        TreatmentPlanId = plan.TreatmentPlanId,
-                        SequenceNo = maxSeq + 1,
-                        Status = "Completed",
-                        AssignedDentistUserId = dentistUserId,
-                        Note = appointmentNote
-                    };
-                    _dbContext.TreatmentPlanItems.Add(item);
-                    await _dbContext.SaveChangesAsync(ct);
-                }
-
-                // Tạo TreatmentSession
                 session = new TreatmentSession
                 {
-                    TreatmentPlanItemId = item.TreatmentPlanItemId,
                     AppointmentId = appointment.AppointmentId,
+                    AppointmentServiceId = dentistSvc.AppointmentServiceId,
+                    PatientUserId = appointment.PatientUserId,
                     DentistUserId = dentistUserId,
-                    SessionDate = DateTime.UtcNow,
-                    TreatmentResult = "Khám & Kê đơn thuốc"
+                    SessionDate = ClinicTimeHelper.TodayDateOnly,
+                    Notes = "Khám & Kê đơn thuốc",
+                    CreatedAt = DateTime.UtcNow
                 };
                 _dbContext.TreatmentSessions.Add(session);
                 await _dbContext.SaveChangesAsync(ct);
@@ -260,9 +215,13 @@ public class PrescriptionService : IPrescriptionService
             {
                 pres = new Prescription
                 {
-                    TreatmentSessionId = session.TreatmentSessionId,
-                    GeneralInstructions = request.GeneralInstructions?.Trim(),
-                    IssuedAt = DateTime.UtcNow
+                    TreatmentSessionId = session.SessionId,
+                    AppointmentId = appointment.AppointmentId,
+                    PatientUserId = appointment.PatientUserId,
+                    DentistUserId = dentistUserId,
+                    Notes = request.GeneralInstructions?.Trim(),
+                    Status = "Active",
+                    CreatedAt = DateTime.UtcNow
                 };
                 _dbContext.Prescriptions.Add(pres);
                 await _dbContext.SaveChangesAsync(ct);
@@ -270,10 +229,9 @@ public class PrescriptionService : IPrescriptionService
             else
             {
                 pres = session.Prescription;
-                pres.GeneralInstructions = request.GeneralInstructions?.Trim();
-                pres.IssuedAt = DateTime.UtcNow;
+                pres.Notes = request.GeneralInstructions?.Trim();
+                pres.UpdatedAt = DateTime.UtcNow;
 
-                // Xóa các items cũ nếu có (idempotent update)
                 if (pres.PrescriptionItems.Any())
                 {
                     _dbContext.PrescriptionItems.RemoveRange(pres.PrescriptionItems);
@@ -281,17 +239,39 @@ public class PrescriptionService : IPrescriptionService
                 }
             }
 
-            // Thêm các thuốc vào đơn
+            var addedMedicineIds = new HashSet<long>();
             foreach (var item in request.Items.Where(i => !string.IsNullOrWhiteSpace(i.MedicationName)))
             {
+                var medName = item.MedicationName.Trim();
+                var med = await _dbContext.Medicines
+                    .FirstOrDefaultAsync(m => m.MedicineName.ToLower() == medName.ToLower(), ct);
+
+                if (med == null || !med.IsActive)
+                {
+                    return ApiResponse<PrescriptionDto>.Fail($"Thuốc '{medName}' không tồn tại hoặc đã ngừng cung cấp trong danh mục dược.");
+                }
+
+                if (addedMedicineIds.Contains(med.MedicineId))
+                {
+                    return ApiResponse<PrescriptionDto>.Fail($"Đơn thuốc không được chứa trùng lặp cùng một loại thuốc ('{med.MedicineName}').");
+                }
+                addedMedicineIds.Add(med.MedicineId);
+
+                var qty = item.Quantity > 0 ? item.Quantity : 10;
+
                 var pItem = new PrescriptionItem
                 {
                     PrescriptionId = pres.PrescriptionId,
-                    MedicationName = item.MedicationName.Trim(),
-                    Dosage = item.Dosage?.Trim(),
-                    Frequency = item.Frequency?.Trim(),
-                    Duration = item.Duration?.Trim(),
-                    Instructions = item.Instructions?.Trim()
+                    AppointmentId = appointment.AppointmentId,
+                    MedicineId = med.MedicineId,
+                    Dosage = item.Dosage?.Trim() ?? "Theo chỉ định",
+                    Frequency = item.Frequency?.Trim() ?? "Ngày 2 lần",
+                    Instructions = string.IsNullOrWhiteSpace(item.Duration)
+                        ? item.Instructions?.Trim()
+                        : $"{item.Duration.Trim()} - {item.Instructions?.Trim()}".Trim(' ', '-'),
+                    Quantity = qty,
+                    QuantityDispensed = 0,
+                    CreatedAt = DateTime.UtcNow
                 };
                 _dbContext.PrescriptionItems.Add(pItem);
             }
@@ -305,16 +285,15 @@ public class PrescriptionService : IPrescriptionService
 
             var fullPres = await _dbContext.Prescriptions
                 .Include(p => p.PrescriptionItems)
-                .Include(p => p.TreatmentSession)
-                    .ThenInclude(s => s.DentistUser)
-                        .ThenInclude(d => d.User)
+                    .ThenInclude(pi => pi.Medicine)
+                .Include(p => p.Dentist)
+                    .ThenInclude(d => d.StaffProfile)
+                .Include(p => p.Dentist)
+                    .ThenInclude(d => d.Department)
+                .Include(p => p.Patient)
+                    .ThenInclude(pu => pu.User)
                 .Include(p => p.TreatmentSession)
                     .ThenInclude(s => s.Appointment)
-                        .ThenInclude(a => a.PatientUser)
-                            .ThenInclude(pu => pu.User)
-                .Include(p => p.TreatmentSession)
-                    .ThenInclude(s => s.Appointment)
-                        .ThenInclude(a => a.Department)
                 .FirstAsync(p => p.PrescriptionId == pres.PrescriptionId, ct);
 
             return ApiResponse<PrescriptionDto>.Ok(MapToDto(fullPres), "Đã kê đơn thuốc thành công!");
@@ -339,9 +318,9 @@ public class PrescriptionService : IPrescriptionService
 
     private static PrescriptionDto MapToDto(Prescription p)
     {
-        var patient = p.TreatmentSession?.Appointment?.PatientUser;
-        var dentist = p.TreatmentSession?.DentistUser;
-        var dept = p.TreatmentSession?.Appointment?.Department;
+        var patient = p.Patient;
+        var dentist = p.Dentist;
+        var dept = dentist?.Department;
 
         int? age = null;
         if (patient?.DateOfBirth.HasValue == true)
@@ -353,26 +332,26 @@ public class PrescriptionService : IPrescriptionService
         {
             PrescriptionId = p.PrescriptionId,
             TreatmentSessionId = p.TreatmentSessionId,
-            AppointmentId = p.TreatmentSession?.AppointmentId ?? 0,
-            AppointmentCode = p.TreatmentSession?.Appointment?.AppointmentCode ?? string.Empty,
-            PatientUserId = patient?.UserId ?? 0,
+            AppointmentId = p.AppointmentId,
+            AppointmentCode = $"APT-{p.AppointmentId:D6}",
+            PatientUserId = p.PatientUserId,
             PatientName = patient?.FullName ?? "Bệnh nhân",
-            PatientCode = patient?.PatientCode ?? string.Empty,
+            PatientCode = $"BN-{p.PatientUserId}",
             PatientPhone = patient?.User?.PhoneNumber,
             PatientGender = patient?.Gender,
             PatientAge = age,
-            DentistUserId = dentist?.UserId ?? 0,
-            DentistName = dentist?.User?.FullName ?? "Bác sĩ điều trị",
+            DentistUserId = p.DentistUserId,
+            DentistName = dentist?.StaffProfile?.FullName ?? "Bác sĩ điều trị",
             DepartmentName = dept?.Name ?? "Chuyên khoa Răng Hàm Mặt",
-            GeneralInstructions = p.GeneralInstructions,
-            IssuedAt = p.IssuedAt,
+            GeneralInstructions = p.Notes,
+            IssuedAt = p.CreatedAt,
             Items = p.PrescriptionItems.Select(pi => new PrescriptionItemDto
             {
                 PrescriptionItemId = pi.PrescriptionItemId,
-                MedicationName = pi.MedicationName,
+                MedicationName = pi.Medicine?.MedicineName ?? "Thuốc nha khoa",
                 Dosage = pi.Dosage,
                 Frequency = pi.Frequency,
-                Duration = pi.Duration,
+                Duration = pi.Instructions,
                 Instructions = pi.Instructions
             }).ToList()
         };

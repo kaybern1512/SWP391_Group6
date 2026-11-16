@@ -479,10 +479,10 @@ public class AppointmentsController : ControllerBase
     [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<StartAppointmentResultDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> DentistStartAppointment(long id, CancellationToken ct)
+    public async Task<IActionResult> DentistStartAppointment(long id, [FromQuery] long? appointmentServiceId = null, CancellationToken ct = default)
     {
         var dentistUserId = GetCurrentUserId();
-        var result = await _appointmentService.DentistStartAppointmentAsync(id, dentistUserId, ct);
+        var result = await _appointmentService.DentistStartAppointmentAsync(id, dentistUserId, appointmentServiceId, ct);
         if (!result.Success)
         {
             return BadRequest(result);
@@ -494,7 +494,7 @@ public class AppointmentsController : ControllerBase
     [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> DentistCompleteAppointment(long id, [FromBody] CompleteAppointmentRequest? request, CancellationToken ct)
+    public async Task<IActionResult> DentistCompleteAppointment(long id, [FromBody] CompleteAppointmentRequest? request, CancellationToken ct = default)
     {
         var dentistUserId = GetCurrentUserId();
         var result = await _appointmentService.DentistCompleteAppointmentAsync(
@@ -504,6 +504,7 @@ public class AppointmentsController : ControllerBase
             request?.FollowUpReason,
             request?.RecommendedFollowUpDate,
             request?.FollowUpReasonCategory,
+            request?.AppointmentServiceId,
             ct);
         if (!result.Success)
         {

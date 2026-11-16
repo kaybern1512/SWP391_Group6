@@ -1,0 +1,81 @@
+erDiagram
+    Departments {
+      int DepartmentId PK
+      varchar DepartmentCode UK
+      nvarchar DepartmentName
+      varchar Status
+    }
+    DepartmentServices {
+      int DepartmentServiceId PK
+      int DepartmentId FK
+      varchar ServiceCode UK
+      nvarchar ServiceName
+      decimal Price
+      int DurationMinutes
+      varchar DiagnosticType
+      varchar Status
+    }
+    ServiceCombos {
+      int ComboId PK
+      varchar ComboCode UK
+      nvarchar ComboName
+      decimal TotalOriginalPrice
+      decimal DiscountedPrice
+      bit IsActive
+    }
+    ServiceComboItems {
+      int ComboItemId PK
+      int ComboId FK
+      int DepartmentServiceId FK
+      int Quantity
+      decimal AllocatedUnitPrice
+    }
+    Rooms {
+      int RoomId PK
+      int DepartmentId FK
+      varchar RoomCode UK
+      nvarchar RoomName
+      varchar RoomType
+      varchar Status
+    }
+    DentalChairs {
+      int DentalChairId PK
+      int RoomId FK
+      varchar ChairCode UK
+      nvarchar ChairName
+      varchar Status
+    }
+    Appointments {
+      bigint AppointmentId PK
+      varchar AppointmentCode UK
+      bigint PatientUserId FK
+      int ComboId FK
+      varchar BookingSource
+      varchar Status
+      datetime2 ScheduledCreatedAt
+    }
+    AppointmentServices {
+      bigint AppointmentServiceId PK
+      bigint AppointmentId FK
+      int DepartmentServiceId FK
+      bigint AssignedDentistUserId FK
+      int RoomId FK
+      int DentalChairId FK
+      date ServiceDate
+      datetime2 ScheduledStart
+      datetime2 ScheduledEnd
+      int QueueNumber
+      decimal UnitPrice
+      varchar Status
+      varchar PendingActionType
+    }
+    Departments ||--o{ DepartmentServices : "catalogs"
+    Departments ||--o{ Rooms : "houses"
+    Rooms ||--o{ DentalChairs : "contains_composite_UK"
+    ServiceCombos ||--o{ ServiceComboItems : "bundles"
+    DepartmentServices ||--o{ ServiceComboItems : "item_of"
+    ServiceCombos ||--o{ Appointments : "booked_combo"
+    Appointments ||--o{ AppointmentServices : "lines"
+    DepartmentServices ||--o{ AppointmentServices : "schedules"
+    Rooms ||--o{ AppointmentServices : "room_alloc"
+    DentalChairs ||--o{ AppointmentServices : "chair_room_composite_FK"

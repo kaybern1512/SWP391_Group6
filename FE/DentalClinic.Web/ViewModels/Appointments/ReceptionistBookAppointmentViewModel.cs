@@ -19,6 +19,8 @@ public class ReceptionistBookAppointmentViewModel
     [Display(Name = "Dịch vụ khám")]
     public long RequestedServiceId { get; set; }
 
+    public List<long>? AdditionalServiceIds { get; set; }
+
     [Display(Name = "Bác sĩ mong muốn (không bắt buộc)")]
     public long? RequestedDentistUserId { get; set; }
 

@@ -1,0 +1,28 @@
+flowchart TD
+    classDef scr fill:#E3F2FD,stroke:#1565C0,stroke-width:1.5px,color:#000
+    classDef mod fill:#FFF3E0,stroke:#EF6C00,stroke-width:1.5px,stroke-dasharray: 4 2,color:#000
+
+    HOME["SCR-COM-01: Public Home & Price Catalog<br/>(/)"]:::scr
+    LOGIN["SCR-COM-02: User Login & Register<br/>(/Account/Login, /Account/Register)"]:::scr
+    DASH["SCR-PAT-01: Patient Dashboard<br/>(/Patient/Dashboard)"]:::scr
+    BOOK["SCR-PAT-02: Multi-Step Booking Wizard<br/>(/Patient/Appointment/Services)<br/>[Tabs: Combo | Single Service | General]"]:::scr
+    SUCC["SCR-PAT-03: Booking Confirmation<br/>(/Patient/Appointment/Success)"]:::scr
+    APPT["SCR-PAT-04: My Appointments List & Detail<br/>(/Patient/Appointment)"]:::scr
+    RESCH["SCR-PAT-05: Reschedule / Disruption Modal<br/>(/Patient/Appointment/Reschedule/{id})"]:::mod
+    EMR["SCR-PAT-06: EMR & 32-Tooth Odontogram<br/>(/Patient/MedicalRecord)"]:::scr
+    PLAN["SCR-PAT-07: My Treatment Plans<br/>(/Patient/TreatmentPlans)"]:::scr
+    PRESC["SCR-PAT-08: Electronic Prescriptions<br/>(/Patient/Prescriptions)"]:::scr
+    INV["SCR-PAT-09: Invoices & VietQR Modal<br/>(/Patient/Invoices)"]:::scr
+    FDBK["SCR-PAT-10: Visit Feedback Form<br/>(/Patient/Appointment/Feedback/{id})"]:::mod
+
+    HOME --> LOGIN
+    LOGIN --> DASH
+    DASH --> BOOK
+    BOOK --> SUCC --> APPT
+    DASH --> APPT
+    APPT --> RESCH
+    APPT --> FDBK
+    DASH --> EMR
+    DASH --> PLAN
+    DASH --> PRESC
+    DASH --> INV

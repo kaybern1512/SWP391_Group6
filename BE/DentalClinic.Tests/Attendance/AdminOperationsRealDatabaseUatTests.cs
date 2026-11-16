@@ -245,15 +245,15 @@ public class AdminOperationsRealDatabaseUatTests
             .ToListAsync();
         db.ReceptionistWorkSchedules.RemoveRange(oldSchedules);
 
-        var oldLeaves = await db.ReceptionistLeaveRequests
+        var oldLeaves = await db.StaffLeaveRequests
             .Include(l => l.Periods)
-            .Where(l => l.ReceptionistUserId == receptionistUserId && l.StartDate <= today && l.EndDate >= today)
+            .Where(l => l.StaffRole == "Receptionist" && l.StaffUserId == receptionistUserId && l.StartDate <= today && l.EndDate >= today)
             .ToListAsync();
         foreach (var ol in oldLeaves)
         {
-            db.ReceptionistLeaveRequestPeriods.RemoveRange(ol.Periods);
+            db.StaffLeaveRequestPeriods.RemoveRange(ol.Periods);
         }
-        db.ReceptionistLeaveRequests.RemoveRange(oldLeaves);
+        db.StaffLeaveRequests.RemoveRange(oldLeaves);
         await db.SaveChangesAsync();
 
         // Create an all-day shift covering today (00:00 to 23:59)
@@ -272,20 +272,21 @@ public class AdminOperationsRealDatabaseUatTests
         db.ReceptionistWorkSchedules.Add(schedule);
 
         // 2. Add approved full-day leave
-        var fullDayLeave = new ReceptionistLeaveRequest
+        var fullDayLeave = new StaffLeaveRequest
         {
-            ReceptionistUserId = receptionistUserId,
+            StaffUserId = receptionistUserId,
+            StaffRole = "Receptionist",
             LeaveType = "FullDay",
             StartDate = today,
             EndDate = today,
             Reason = "UAT-03 Nghỉ phép cả ngày việc gia đình",
             Status = "Approved",
-            ApprovedBy = 1,
-            ApprovedAt = DateTime.UtcNow,
+            ReviewedByUserId = 1,
+            ReviewedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow
         };
-        db.ReceptionistLeaveRequests.Add(fullDayLeave);
-        db.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod
+        db.StaffLeaveRequests.Add(fullDayLeave);
+        db.StaffLeaveRequestPeriods.Add(new StaffLeaveRequestPeriod
         {
             LeaveRequest = fullDayLeave,
             LeaveDate = today,
@@ -310,16 +311,17 @@ public class AdminOperationsRealDatabaseUatTests
 
         // 4. Test Partial-Day Leave:
         // Remove FullDay leave
-        db.ReceptionistLeaveRequestPeriods.RemoveRange(fullDayLeave.Periods);
-        db.ReceptionistLeaveRequests.Remove(fullDayLeave);
+        db.StaffLeaveRequestPeriods.RemoveRange(fullDayLeave.Periods);
+        db.StaffLeaveRequests.Remove(fullDayLeave);
         await db.SaveChangesAsync();
 
         // Subcase 4A: Partial leave that covers current time -> Clock-in MUST BE BLOCKED
         var currentLeaveStart = currentTime.AddMinutes(-15);
         var currentLeaveEnd = currentTime.AddMinutes(45);
-        var partialLeaveCurrent = new ReceptionistLeaveRequest
+        var partialLeaveCurrent = new StaffLeaveRequest
         {
-            ReceptionistUserId = receptionistUserId,
+            StaffUserId = receptionistUserId,
+            StaffRole = "Receptionist",
             LeaveType = "Hourly",
             StartDate = today,
             EndDate = today,
@@ -327,12 +329,12 @@ public class AdminOperationsRealDatabaseUatTests
             EndTime = currentLeaveEnd,
             Reason = "UAT-03 Khám sức khỏe định kỳ",
             Status = "Approved",
-            ApprovedBy = 1,
-            ApprovedAt = DateTime.UtcNow,
+            ReviewedByUserId = 1,
+            ReviewedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow
         };
-        db.ReceptionistLeaveRequests.Add(partialLeaveCurrent);
-        db.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod
+        db.StaffLeaveRequests.Add(partialLeaveCurrent);
+        db.StaffLeaveRequestPeriods.Add(new StaffLeaveRequestPeriod
         {
             LeaveRequest = partialLeaveCurrent,
             LeaveDate = today,
@@ -347,16 +349,17 @@ public class AdminOperationsRealDatabaseUatTests
         Assert.Contains("nghỉ phép một phần", resPartialInside.Message);
 
         // Subcase 4B: Partial leave OUTSIDE current time -> Clock-in MUST SUCCEED (not blocked outside leave window)
-        db.ReceptionistLeaveRequestPeriods.RemoveRange(partialLeaveCurrent.Periods);
-        db.ReceptionistLeaveRequests.Remove(partialLeaveCurrent);
+        db.StaffLeaveRequestPeriods.RemoveRange(partialLeaveCurrent.Periods);
+        db.StaffLeaveRequests.Remove(partialLeaveCurrent);
         await db.SaveChangesAsync();
 
         // Leave is placed 2 hours into the future
         var futureLeaveStart = currentTime.AddHours(2);
         var futureLeaveEnd = currentTime.AddHours(5);
-        var partialLeaveFuture = new ReceptionistLeaveRequest
+        var partialLeaveFuture = new StaffLeaveRequest
         {
-            ReceptionistUserId = receptionistUserId,
+            StaffUserId = receptionistUserId,
+            StaffRole = "Receptionist",
             LeaveType = "Hourly",
             StartDate = today,
             EndDate = today,
@@ -364,12 +367,12 @@ public class AdminOperationsRealDatabaseUatTests
             EndTime = futureLeaveEnd,
             Reason = "UAT-03 Đi việc riêng buổi chiều",
             Status = "Approved",
-            ApprovedBy = 1,
-            ApprovedAt = DateTime.UtcNow,
+            ReviewedByUserId = 1,
+            ReviewedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow
         };
-        db.ReceptionistLeaveRequests.Add(partialLeaveFuture);
-        db.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod
+        db.StaffLeaveRequests.Add(partialLeaveFuture);
+        db.StaffLeaveRequestPeriods.Add(new StaffLeaveRequestPeriod
         {
             LeaveRequest = partialLeaveFuture,
             LeaveDate = today,
@@ -404,9 +407,10 @@ public class AdminOperationsRealDatabaseUatTests
         long dentistUserId = 3; // dentist@dentalcare.com
 
         // 1. Submit leave
-        var leave = new DentistLeaveRequest
+        var leave = new StaffLeaveRequest
         {
-            DentistUserId = dentistUserId,
+            StaffUserId = dentistUserId,
+            StaffRole = "Dentist",
             LeaveType = "FullDay",
             StartDate = leaveDate,
             EndDate = leaveDate,
@@ -414,7 +418,7 @@ public class AdminOperationsRealDatabaseUatTests
             Status = DentistLeaveStatus.Pending,
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(leave);
+        db.StaffLeaveRequests.Add(leave);
         await db.SaveChangesAsync();
 
         // 2. Query Dashboard before approval
@@ -440,7 +444,7 @@ public class AdminOperationsRealDatabaseUatTests
 
         // 4. Verify leave is Approved in SQL Server
         using var dbVerify = CreateRealDbContext();
-        var leaveInDb = await dbVerify.DentistLeaveRequests.FindAsync(leave.LeaveRequestId);
+        var leaveInDb = await dbVerify.StaffLeaveRequests.FindAsync(leave.LeaveRequestId);
         Assert.NotNull(leaveInDb);
         Assert.Equal(DentistLeaveStatus.Approved, leaveInDb.Status);
     }
@@ -505,9 +509,10 @@ public class AdminOperationsRealDatabaseUatTests
         Assert.Contains("chốt sổ", shiftResLocked.Message);
 
         // Test Dentist Leave approval blocked when Locked
-        var pendingLeave = new DentistLeaveRequest
+        var pendingLeave = new StaffLeaveRequest
         {
-            DentistUserId = 3,
+            StaffUserId = 3,
+            StaffRole = "Dentist",
             LeaveType = "Annual",
             StartDate = testDate,
             EndDate = testDate,
@@ -515,7 +520,7 @@ public class AdminOperationsRealDatabaseUatTests
             Status = DentistLeaveStatus.Pending,
             CreatedAt = DateTime.UtcNow
         };
-        db.DentistLeaveRequests.Add(pendingLeave);
+        db.StaffLeaveRequests.Add(pendingLeave);
         await db.SaveChangesAsync();
 
         var mockReminder = new Mock<IAppointmentReminderService>();
@@ -577,8 +582,8 @@ public class AdminOperationsRealDatabaseUatTests
         // Clean up created schedule & leave
         var createdSchedule = await dbVerify.ReceptionistWorkSchedules.FindAsync(shiftResReopened.Data.ReceptionistScheduleId);
         if (createdSchedule != null) dbVerify.ReceptionistWorkSchedules.Remove(createdSchedule);
-        var leaveToClean = await dbVerify.DentistLeaveRequests.FindAsync(pendingLeave.LeaveRequestId);
-        if (leaveToClean != null) dbVerify.DentistLeaveRequests.Remove(leaveToClean);
+        var leaveToClean = await dbVerify.StaffLeaveRequests.FindAsync(pendingLeave.LeaveRequestId);
+        if (leaveToClean != null) dbVerify.StaffLeaveRequests.Remove(leaveToClean);
         await dbVerify.SaveChangesAsync();
     }
 }

@@ -1,0 +1,31 @@
+sequenceDiagram
+    autonumber
+    actor Den as Dentist
+    actor Adm as SystemAdministrator
+    participant Svc as DentistLeaveService
+    participant Avail as ClinicalStaffAvailabilityService
+    participant Disr as AppointmentDisruptionService
+    participant DB as SQL Server
+
+    Den->>Svc: SubmitLeaveRequestAsync(dentistUserId, StartDate, EndDate, StartTime, EndTime, Reason)
+    Svc->>Avail: ValidateXrayShiftLeaveCoverageAsync(dentistUserId, dates, times)
+    Avail->>DB: Check DentistProfiles.CanPerformXray & remaining on-duty X-ray Dentists per shift
+    alt Leave leaves an operational X-ray shift with 0 qualified Dentists
+      Avail-->>Svc: Coverage Invalid (0 on-duty X-ray dentists)
+      Svc-->>Den: Reject submission (Mandatory rule: >= 1 qualified X-ray dentist per shift)
+    else At least 1 qualified X-ray dentist remains (or non-X-ray shift)
+      Svc->>DB: INSERT StaffLeaveRequests (Status='Pending')
+      DB-->>Den: Leave Request Pending
+
+      Adm->>Svc: GetLeaveImpactAnalysisAsync(leaveRequestId)
+      Svc->>DB: Query overlapping AppointmentServices for StaffUserId
+      DB-->>Adm: Impact summary (Affected appointments & replacement doctors)
+
+      Adm->>Svc: ApproveLeaveRequestAsync(leaveRequestId, adminUserId)
+      Svc->>Avail: Re-verify X-ray shift coverage under transaction lock
+      Svc->>DB: UPDATE StaffLeaveRequests SET Status='Approved', ReviewedByUserId=@admin
+      Svc->>Disr: FlagAffectedAppointmentsForLeaveAsync(leaveRequest)
+      Disr->>DB: UPDATE AppointmentServices SET PendingActionType='Reschedule' (or 'ChangeDentist')
+      Disr->>DB: INSERT Notifications (Affected Patients & Receptionists) + AuditLogs
+      DB-->>Adm: Leave Approved & Disruption Recovery Triggered
+    end

@@ -1,0 +1,45 @@
+flowchart LR
+    classDef actor fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#000,font-weight:bold
+    classDef uc fill:#E8F5E9,stroke:#2E7D32,stroke-width:1.5px,color:#000
+    classDef sub fill:#FFF8E1,stroke:#F57F17,stroke-width:1px,color:#000
+
+    REC(["Actor: Receptionist"]):::actor
+
+    subgraph RecBoundary ["Receptionist Desk & Billing Subsystem"]
+      UC_R1(["UC-REC-01: Review Appointment Requests"]):::uc
+      UC_R2(["UC-REC-02: Confirm & Assign Dentist/Room/Chair"]):::uc
+      UC_R3(["UC-REC-03: Register & Check-In Walk-In Patient"]):::uc
+      UC_R4(["UC-REC-04: Check In Arrived Patient"]):::uc
+      UC_R5(["UC-REC-05: Manage Daily Queue & No-Shows"]):::uc
+      UC_R6(["UC-REC-06: Process Appointment Disruption"]):::uc
+      UC_R7(["UC-REC-07: Schedule X-Ray Session in Room R003"]):::uc
+      UC_R8(["UC-REC-08: Generate Patient Invoice"]):::uc
+      UC_R9(["UC-REC-09: Record Partial or Full Payment"]):::uc
+      UC_R10(["UC-REC-10: Generate Printable Receipt & Refund"]):::uc
+      UC_R11(["UC-REC-11: Request Receptionist Leave"]):::uc
+      UC_R12(["UC-REC-12: Manage Shift Swap & Handover"]):::uc
+      UC_R13(["UC-REC-13: Draft & Submit Blog for Review"]):::uc
+
+      INC_RES(["Validate Room/Chair Active & Free"]):::sub
+      INC_STT(["Allocate Sequential Daily QueueNumber"]):::sub
+      EXT_ZERO(["Complete Zero-Total 100% Discount Invoice"]):::sub
+    end
+
+    REC --> UC_R1
+    REC --> UC_R2
+    REC --> UC_R3
+    REC --> UC_R4
+    REC --> UC_R5
+    REC --> UC_R6
+    REC --> UC_R7
+    REC --> UC_R8
+    REC --> UC_R9
+    REC --> UC_R10
+    REC --> UC_R11
+    REC --> UC_R12
+    REC --> UC_R13
+
+    UC_R2 -. "<<include>>" .-> INC_RES
+    UC_R4 -. "<<include>>" .-> INC_STT
+    UC_R3 -. "<<include>>" .-> INC_STT
+    EXT_ZERO -. "<<extend>>" .-> UC_R8

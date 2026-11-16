@@ -1,0 +1,43 @@
+flowchart TB
+    classDef web fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#000
+    classDef api fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#000
+    classDef app fill:#FFF3E0,stroke:#EF6C00,stroke-width:2px,color:#000
+    classDef inf fill:#F3E5F5,stroke:#6A1B9A,stroke-width:2px,color:#000
+    classDef dom fill:#FCE4EC,stroke:#880E4F,stroke-width:2px,color:#000
+    classDef db fill:#ECEFF1,stroke:#37474F,stroke-width:2px,color:#000
+
+    subgraph FE ["FE / Presentation Layer: DentalClinic.Web (Port 7129)"]
+      FE_CTRL["Controllers (47 MVC Controllers)<br/>Patient | Receptionist | Dentist | Admin"]:::web
+      FE_SVC["Services (Typed HttpClient API Proxies)"]:::web
+      FE_VIEW["Views (101 Razor .cshtml Views) & ViewModels"]:::web
+    end
+
+    subgraph BE_API ["BE / API Host Layer: DentalClinic.Api (Port 7350)"]
+      API_CTRL["Controllers (26 REST API Controllers)<br/>JWT Bearer + 4-Role Authorize Policies"]:::api
+      API_BG["Hosted Background Services<br/>AppointmentReminderBackgroundService"]:::api
+    end
+
+    subgraph BE_APP ["BE / Application Layer: DentalClinic.Application"]
+      APP_IF["Common.Interfaces (36 Service Contracts)"]:::app
+      APP_DTO["Features.*.DTOs (Request/Response Contracts)"]:::app
+    end
+
+    subgraph BE_INF ["BE / Infrastructure Layer: DentalClinic.Infrastructure"]
+      INF_SVC["Services (42 Business & Clinical Services)"]:::inf
+      INF_DB["Persistence: DentalClinicDbContext<br/>+ 37 Database-First Entity Classes"]:::inf
+    end
+
+    subgraph BE_DOM ["BE / Domain Layer: DentalClinic.Domain"]
+      DOM_ENT["Core Domain Enums, Constants (UserRole) & Value Rules"]:::dom
+    end
+
+    SQL[("Microsoft SQL Server Express<br/>DentalCare_SWP391_UAT_Fixture_TEST<br/>(38 Canonical Physical Tables)")]:::db
+
+    FE_VIEW --> FE_CTRL --> FE_SVC
+    FE_SVC == "HTTPS REST JSON (Port 7350)" ==> API_CTRL
+    API_CTRL --> APP_IF
+    API_BG --> APP_IF
+    INF_SVC -. "Implements" .-> APP_IF
+    APP_IF --> APP_DTO --> DOM_ENT
+    INF_SVC --> INF_DB --> DOM_ENT
+    INF_DB == "EF Core 8 SqlClient" ==> SQL

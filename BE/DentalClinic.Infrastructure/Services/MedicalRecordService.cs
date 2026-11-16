@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,10 +27,8 @@ public class MedicalRecordService : IMedicalRecordService
 
     private static readonly string[] All32Teeth = new[]
     {
-        // Hàm trên (Maxillary): Phải sang Trái (18 -> 11, 21 -> 28)
         "18", "17", "16", "15", "14", "13", "12", "11",
         "21", "22", "23", "24", "25", "26", "27", "28",
-        // Hàm dưới (Mandibular): Trái sang Phải (38 -> 31, 41 -> 48)
         "48", "47", "46", "45", "44", "43", "42", "41",
         "31", "32", "33", "34", "35", "36", "37", "38"
     };
@@ -86,7 +85,6 @@ public class MedicalRecordService : IMedicalRecordService
 
         if (record == null)
         {
-            // Tự động khởi tạo hồ sơ bệnh án điện tử nếu chưa có
             var newRecord = new DentalMedicalRecord
             {
                 PatientUserId = patientUserId,
@@ -99,57 +97,71 @@ public class MedicalRecordService : IMedicalRecordService
 
         var clinicalEntries = await _dbContext.ClinicalEntries
             .AsNoTracking()
-            .Where(c => c.MedicalRecordId == record.MedicalRecordId)
-            .Include(c => c.DentistUser)
-                .ThenInclude(d => d.User)
+            .Where(c => c.MedicalRecordId == record.RecordId)
+            .Include(c => c.Dentist)
+                .ThenInclude(d => d.StaffProfile)
             .Include(c => c.Appointment)
-            .Include(c => c.OdontogramEntries)
-            .Include(c => c.ImagingRecords)
             .ToListAsync(ct);
+
+        var odontogramEntries = await _dbContext.OdontogramEntries
+            .AsNoTracking()
+            .Where(o => o.MedicalRecordId == record.RecordId && o.IsActive)
+            .OrderBy(o => o.CreatedAt)
+            .ToListAsync(ct);
+
+        var apptIds = clinicalEntries.Where(c => c.AppointmentId.HasValue).Select(c => c.AppointmentId!.Value).Distinct().ToList();
+        var diagnostics = await _dbContext.Diagnostics
+            .AsNoTracking()
+            .Include(d => d.AppointmentService)
+            .Where(d => apptIds.Contains(d.AppointmentService.AppointmentId))
+            .ToListAsync(ct);
+
+        var oDtoList = odontogramEntries.Select(o => new OdontogramEntryDto
+        {
+            OdontogramEntryId = o.OdontogramId,
+            ToothNumber = o.ToothNumber,
+            Surface = o.Surface ?? "All",
+            Condition = o.Condition,
+            Note = o.DiagnosisNotes
+        }).ToList();
 
         var clinicalDtoList = clinicalEntries
             .OrderByDescending(c => c.CreatedAt)
             .Select(c => new ClinicalEntryDto
             {
-                ClinicalEntryId = c.ClinicalEntryId,
+                ClinicalEntryId = c.EntryId,
                 MedicalRecordId = c.MedicalRecordId,
                 AppointmentId = c.AppointmentId,
-                AppointmentCode = c.Appointment?.AppointmentCode,
+                AppointmentCode = c.AppointmentId.HasValue ? $"APT-{c.AppointmentId.Value:D6}" : null,
                 DentistUserId = c.DentistUserId,
-                DentistName = c.DentistUser?.User?.FullName ?? "Bác sĩ điều trị",
-                Symptoms = c.Symptoms,
-                ClinicalFindings = c.ClinicalFindings,
-                Diagnosis = c.Diagnosis,
-                DentalConditions = c.DentalConditions,
-                ClinicalNotes = c.ClinicalNotes,
+                DentistName = c.Dentist?.StaffProfile?.FullName ?? "Bác sĩ điều trị",
+                Symptoms = c.ChiefComplaint,
+                ClinicalFindings = c.ClinicalExamination,
+                Diagnosis = c.Diagnosis ?? string.Empty,
+                DentalConditions = c.TreatmentDone,
+                ClinicalNotes = c.TreatmentDone,
                 CreatedAt = c.CreatedAt,
-                OdontogramEntries = c.OdontogramEntries.Select(o => new OdontogramEntryDto
-                {
-                    OdontogramEntryId = o.OdontogramEntryId,
-                    ToothNumber = o.ToothNumber,
-                    Surface = o.Surface,
-                    Condition = o.Condition,
-                    Note = o.Note
-                }).ToList(),
-                ImagingRecords = c.ImagingRecords.Select(img => new ImagingRecordDto
-                {
-                    ImagingRecordId = img.ImagingRecordId,
-                    ClinicalEntryId = img.ClinicalEntryId,
-                    ImagingType = img.ImagingType,
-                    FileUrl = img.FileUrl,
-                    ResultSummary = img.ResultSummary,
-                    CreatedAt = img.CreatedAt
-                }).ToList()
+                OdontogramEntries = oDtoList,
+                ImagingRecords = diagnostics
+                    .Where(d => c.AppointmentId.HasValue && d.AppointmentService.AppointmentId == c.AppointmentId.Value)
+                    .Select(img => new ImagingRecordDto
+                    {
+                        ImagingRecordId = img.DiagnosticId,
+                        ClinicalEntryId = c.EntryId,
+                        ImagingType = img.ImagingType ?? "X-Ray",
+                        FileUrl = img.FileUrl,
+                        ResultSummary = img.Findings ?? img.ClinicalIndication,
+                        CreatedAt = img.CreatedAt
+                    }).ToList()
             }).ToList();
 
-        // Tính toán trạng thái hiện thời của 32 răng (lấy trạng thái mới nhất ghi nhận cho mỗi răng)
-        var currentOdontogram = ComputeCurrentOdontogram(clinicalEntries);
+        var currentOdontogram = ComputeCurrentOdontogramFromList(odontogramEntries);
 
         var dto = new MedicalRecordDto
         {
-            MedicalRecordId = record.MedicalRecordId,
+            MedicalRecordId = record.RecordId,
             PatientUserId = patient.UserId,
-            PatientCode = patient.PatientCode,
+            PatientCode = $"BN-{patient.UserId}",
             PatientName = patient.FullName,
             PatientPhone = patient.User?.PhoneNumber,
             Gender = patient.Gender,
@@ -181,7 +193,7 @@ public class MedicalRecordService : IMedicalRecordService
         }
 
         var dentist = await _dbContext.DentistProfiles
-            .Include(d => d.User)
+            .Include(d => d.StaffProfile)
             .FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
 
         if (dentist == null)
@@ -203,23 +215,59 @@ public class MedicalRecordService : IMedicalRecordService
             await _dbContext.SaveChangesAsync(ct);
         }
 
+        long? apptSvcId = null;
+        DentalClinic.Infrastructure.Persistence.Entities.Appointment? appointment = null;
+        if (request.AppointmentId.HasValue)
+        {
+            appointment = await _dbContext.Appointments
+                .Include(a => a.AppointmentServices)
+                .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId.Value, ct);
+
+            if (appointment == null)
+            {
+                return ApiResponse<ClinicalEntryDto>.Fail("Không tìm thấy ca khám chỉ định.");
+            }
+
+            if (appointment.PatientUserId != request.PatientUserId)
+            {
+                return ApiResponse<ClinicalEntryDto>.Fail("Mã bệnh nhân không khớp với ca khám chỉ định.");
+            }
+
+            if (request.AppointmentServiceId.HasValue)
+            {
+                var svc = appointment.AppointmentServices.FirstOrDefault(s => s.AppointmentServiceId == request.AppointmentServiceId.Value);
+                if (svc == null)
+                {
+                    return ApiResponse<ClinicalEntryDto>.Fail("Dịch vụ chỉ định không thuộc ca khám này.");
+                }
+                apptSvcId = svc.AppointmentServiceId;
+            }
+            else
+            {
+                var svc = appointment.AppointmentServices.FirstOrDefault(s => s.AssignedDentistUserId == dentistUserId)
+                    ?? appointment.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+                apptSvcId = svc?.AppointmentServiceId;
+            }
+        }
+
         var entry = new ClinicalEntry
         {
-            MedicalRecordId = record.MedicalRecordId,
+            MedicalRecordId = record.RecordId,
+            PatientUserId = request.PatientUserId,
             AppointmentId = request.AppointmentId,
+            AppointmentServiceId = apptSvcId,
             DentistUserId = dentistUserId,
-            Symptoms = request.Symptoms?.Trim(),
-            ClinicalFindings = request.ClinicalFindings?.Trim(),
+            ChiefComplaint = request.Symptoms?.Trim(),
+            ClinicalExamination = request.ClinicalFindings?.Trim(),
             Diagnosis = request.Diagnosis.Trim(),
-            DentalConditions = request.DentalConditions?.Trim(),
-            ClinicalNotes = request.ClinicalNotes?.Trim(),
+            TreatmentDone = string.IsNullOrWhiteSpace(request.ClinicalNotes) ? request.DentalConditions?.Trim() : request.ClinicalNotes.Trim(),
             CreatedAt = DateTime.UtcNow
         };
 
         _dbContext.ClinicalEntries.Add(entry);
         await _dbContext.SaveChangesAsync(ct);
 
-        // Lưu các răng có chẩn đoán/thay đổi trạng thái
+        var createdTeeth = new List<OdontogramEntryDto>();
         if (request.ToothConditions != null && request.ToothConditions.Any())
         {
             foreach (var tooth in request.ToothConditions)
@@ -228,77 +276,77 @@ public class MedicalRecordService : IMedicalRecordService
                 {
                     var oEntry = new OdontogramEntry
                     {
-                        ClinicalEntryId = entry.ClinicalEntryId,
+                        MedicalRecordId = record.RecordId,
+                        DentistUserId = dentistUserId,
                         ToothNumber = tooth.ToothNumber.Trim(),
                         Surface = tooth.Surface?.Trim() ?? "All",
                         Condition = string.IsNullOrWhiteSpace(tooth.Condition) ? "Healthy" : tooth.Condition.Trim(),
-                        Note = tooth.Note?.Trim()
+                        DiagnosisNotes = tooth.Note?.Trim(),
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
                     };
                     _dbContext.OdontogramEntries.Add(oEntry);
+                    createdTeeth.Add(new OdontogramEntryDto
+                    {
+                        ToothNumber = oEntry.ToothNumber,
+                        Surface = oEntry.Surface,
+                        Condition = oEntry.Condition,
+                        Note = oEntry.DiagnosisNotes
+                    });
                 }
             }
             await _dbContext.SaveChangesAsync(ct);
         }
 
-        // Lưu chỉ định chụp X-quang / chẩn đoán hình ảnh nếu có
-        if (request.ImagingOrders != null && request.ImagingOrders.Any())
+        if (request.ImagingOrders != null && request.ImagingOrders.Any() && apptSvcId.HasValue)
         {
+            var svc = await _dbContext.AppointmentServices.AsNoTracking().FirstOrDefaultAsync(s => s.AppointmentServiceId == apptSvcId.Value, ct);
+            int deptSvcId = svc?.DepartmentServiceId ?? 1;
             foreach (var img in request.ImagingOrders)
             {
                 if (!string.IsNullOrWhiteSpace(img.ImagingType))
                 {
-                    var imgRecord = new ImagingRecord
+                    var diag = new Diagnostic
                     {
-                        ClinicalEntryId = entry.ClinicalEntryId,
+                        AppointmentServiceId = apptSvcId.Value,
+                        DepartmentServiceId = deptSvcId,
+                        OrderingDentistUserId = dentistUserId,
+                        ClinicalIndication = img.ResultSummary?.Trim() ?? "Chỉ định chụp phim",
                         ImagingType = img.ImagingType.Trim(),
                         FileUrl = img.FileUrl?.Trim(),
-                        ResultSummary = img.ResultSummary?.Trim(),
+                        Findings = img.ResultSummary?.Trim(),
+                        Status = string.IsNullOrWhiteSpace(img.FileUrl) ? "Ordered" : "Completed",
                         CreatedAt = DateTime.UtcNow
                     };
-                    _dbContext.ImagingRecords.Add(imgRecord);
+                    _dbContext.Diagnostics.Add(diag);
                 }
             }
             await _dbContext.SaveChangesAsync(ct);
         }
 
-        if (request.AppointmentId.HasValue)
+        if (request.AppointmentId.HasValue && request.CompleteAppointment && appointment != null)
         {
-            var appointment = await _dbContext.Appointments
-                .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId.Value, ct);
+            var activeServices = appointment.AppointmentServices
+                .Where(s => s.Status != AppointmentStatus.Cancelled && s.Status != AppointmentStatus.NoShow)
+                .ToList();
 
-            if (appointment != null)
+            var currentSvc = activeServices.FirstOrDefault(s => s.AppointmentServiceId == apptSvcId);
+            if (currentSvc != null)
             {
-                if (request.CompleteAppointment)
-                {
-                    if (appointment.Status != AppointmentStatus.Completed && appointment.Status != AppointmentStatus.Cancelled)
-                    {
-                        var oldStatus = appointment.Status;
-                        appointment.Status = AppointmentStatus.Completed;
-                        appointment.CompletedAt = DateTime.UtcNow;
+                currentSvc.Status = AppointmentStatus.Completed;
+                currentSvc.UpdatedAt = DateTime.UtcNow;
+            }
 
-                        _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
-                        {
-                            AppointmentId = appointment.AppointmentId,
-                            OldStatus = oldStatus,
-                            NewStatus = AppointmentStatus.Completed,
-                            ChangedByUserId = dentistUserId,
-                            Note = "Bác sĩ hoàn tất khám và lưu chẩn đoán bệnh án.",
-                            ChangedAt = DateTime.UtcNow
-                        });
-                    }
-                }
-                else
-                {
-                    _dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
-                    {
-                        AppointmentId = appointment.AppointmentId,
-                        OldStatus = appointment.Status,
-                        NewStatus = appointment.Status,
-                        ChangedByUserId = dentistUserId,
-                        Note = "Bác sĩ ghi nhận chẩn đoán lâm sàng & sơ đồ răng bệnh án.",
-                        ChangedAt = DateTime.UtcNow
-                    });
-                }
+            if (activeServices.All(s => s.Status == AppointmentStatus.Completed))
+            {
+                appointment.Status = AppointmentStatus.Completed;
+                appointment.CompletedAt = DateTime.UtcNow;
+                appointment.UpdatedAt = DateTime.UtcNow;
+            }
+            else if (activeServices.Any(s => s.Status == AppointmentStatus.InService))
+            {
+                appointment.Status = AppointmentStatus.InProgress;
+                appointment.UpdatedAt = DateTime.UtcNow;
             }
         }
 
@@ -306,35 +354,24 @@ public class MedicalRecordService : IMedicalRecordService
         await _dbContext.SaveChangesAsync(ct);
 
         var savedEntry = await _dbContext.ClinicalEntries
-            .AsSplitQuery()
-            .Include(c => c.DentistUser)
             .Include(c => c.Appointment)
-            .Include(c => c.OdontogramEntries)
-            .Include(c => c.ImagingRecords)
-            .FirstOrDefaultAsync(c => c.ClinicalEntryId == entry.ClinicalEntryId, ct);
+            .FirstOrDefaultAsync(c => c.EntryId == entry.EntryId, ct);
 
         var resultDto = new ClinicalEntryDto
         {
-            ClinicalEntryId = savedEntry!.ClinicalEntryId,
+            ClinicalEntryId = savedEntry!.EntryId,
             MedicalRecordId = savedEntry.MedicalRecordId,
             AppointmentId = savedEntry.AppointmentId,
-            AppointmentCode = savedEntry.Appointment?.AppointmentCode,
+            AppointmentCode = savedEntry.AppointmentId.HasValue ? $"APT-{savedEntry.AppointmentId.Value:D6}" : null,
             DentistUserId = savedEntry.DentistUserId,
-            DentistName = dentist.User?.FullName ?? "Bác sĩ điều trị",
-            Symptoms = savedEntry.Symptoms,
-            ClinicalFindings = savedEntry.ClinicalFindings,
-            Diagnosis = savedEntry.Diagnosis,
-            DentalConditions = savedEntry.DentalConditions,
-            ClinicalNotes = savedEntry.ClinicalNotes,
+            DentistName = dentist.StaffProfile?.FullName ?? "Bác sĩ điều trị",
+            Symptoms = savedEntry.ChiefComplaint,
+            ClinicalFindings = savedEntry.ClinicalExamination,
+            Diagnosis = savedEntry.Diagnosis ?? string.Empty,
+            DentalConditions = savedEntry.TreatmentDone,
+            ClinicalNotes = savedEntry.TreatmentDone,
             CreatedAt = savedEntry.CreatedAt,
-            OdontogramEntries = savedEntry.OdontogramEntries.Select(o => new OdontogramEntryDto
-            {
-                OdontogramEntryId = o.OdontogramEntryId,
-                ToothNumber = o.ToothNumber,
-                Surface = o.Surface,
-                Condition = o.Condition,
-                Note = o.Note
-            }).ToList()
+            OdontogramEntries = createdTeeth
         };
 
         return ApiResponse<ClinicalEntryDto>.Ok(resultDto, "Đã ghi nhận chẩn đoán bệnh án điện tử thành công.");
@@ -351,7 +388,6 @@ public class MedicalRecordService : IMedicalRecordService
         {
             var k = keyword.Trim().ToLowerInvariant();
             query = query.Where(p =>
-                p.PatientCode.ToLower().Contains(k) ||
                 p.FullName.ToLower().Contains(k) ||
                 (p.User.PhoneNumber != null && p.User.PhoneNumber.Contains(k)) ||
                 (p.User.Email != null && p.User.Email.ToLower().Contains(k)));
@@ -363,7 +399,7 @@ public class MedicalRecordService : IMedicalRecordService
             .Select(p => new PatientLookupDto
             {
                 PatientUserId = p.UserId,
-                PatientCode = p.PatientCode,
+                PatientCode = $"BN-{p.UserId}",
                 FullName = p.FullName,
                 PhoneNumber = p.User.PhoneNumber,
                 Email = p.User.Email,
@@ -384,7 +420,6 @@ public class MedicalRecordService : IMedicalRecordService
 
         if (record == null)
         {
-            // Trả về mặc định 32 răng khỏe mạnh
             var emptyOdontogram = All32Teeth.Select(t => new OdontogramEntryDto
             {
                 ToothNumber = t,
@@ -394,27 +429,23 @@ public class MedicalRecordService : IMedicalRecordService
             return ApiResponse<List<OdontogramEntryDto>>.Ok(emptyOdontogram);
         }
 
-        var clinicalEntries = await _dbContext.ClinicalEntries
+        var odontogramEntries = await _dbContext.OdontogramEntries
             .AsNoTracking()
-            .Where(c => c.MedicalRecordId == record.MedicalRecordId)
-            .Include(c => c.OdontogramEntries)
+            .Where(o => o.MedicalRecordId == record.RecordId && o.IsActive)
+            .OrderBy(o => o.CreatedAt)
             .ToListAsync(ct);
 
-        var result = ComputeCurrentOdontogram(clinicalEntries);
+        var result = ComputeCurrentOdontogramFromList(odontogramEntries);
         return ApiResponse<List<OdontogramEntryDto>>.Ok(result);
     }
 
-    private static List<OdontogramEntryDto> ComputeCurrentOdontogram(IEnumerable<ClinicalEntry> entries)
+    private static List<OdontogramEntryDto> ComputeCurrentOdontogramFromList(IEnumerable<OdontogramEntry> entries)
     {
         var toothLatestCondition = new Dictionary<string, OdontogramEntry>();
 
-        // Duyệt các lần khám từ cũ đến mới để lần khám mới nhất ghi đè trạng thái răng
-        foreach (var entry in entries.OrderBy(e => e.CreatedAt))
+        foreach (var tooth in entries.OrderBy(e => e.CreatedAt))
         {
-            foreach (var tooth in entry.OdontogramEntries)
-            {
-                toothLatestCondition[tooth.ToothNumber] = tooth;
-            }
+            toothLatestCondition[tooth.ToothNumber] = tooth;
         }
 
         var list = new List<OdontogramEntryDto>();
@@ -424,11 +455,11 @@ public class MedicalRecordService : IMedicalRecordService
             {
                 list.Add(new OdontogramEntryDto
                 {
-                    OdontogramEntryId = oEntry.OdontogramEntryId,
+                    OdontogramEntryId = oEntry.OdontogramId,
                     ToothNumber = toothNum,
-                    Surface = oEntry.Surface,
+                    Surface = oEntry.Surface ?? "All",
                     Condition = oEntry.Condition,
-                    Note = oEntry.Note
+                    Note = oEntry.DiagnosisNotes
                 });
             }
             else
@@ -455,34 +486,61 @@ public class MedicalRecordService : IMedicalRecordService
 
         var entry = await _dbContext.ClinicalEntries
             .Include(c => c.MedicalRecord)
-            .FirstOrDefaultAsync(c => c.ClinicalEntryId == request.ClinicalEntryId, ct);
+            .FirstOrDefaultAsync(c => c.EntryId == request.ClinicalEntryId, ct);
 
         if (entry == null)
         {
             return ApiResponse<ImagingRecordDto>.Fail("Không tìm thấy đợt khám lâm sàng tương ứng.");
         }
 
-        var imagingRecord = new ImagingRecord
+        long apptSvcId = entry.AppointmentServiceId ?? 0;
+        int deptSvcId = 1;
+        if (apptSvcId <= 0 && entry.AppointmentId.HasValue)
         {
-            ClinicalEntryId = request.ClinicalEntryId,
+            var svc = await _dbContext.AppointmentServices.AsNoTracking().FirstOrDefaultAsync(s => s.AppointmentId == entry.AppointmentId.Value, ct);
+            if (svc != null)
+            {
+                apptSvcId = svc.AppointmentServiceId;
+                deptSvcId = svc.DepartmentServiceId;
+            }
+        }
+        else if (apptSvcId > 0)
+        {
+            var svc = await _dbContext.AppointmentServices.AsNoTracking().FirstOrDefaultAsync(s => s.AppointmentServiceId == apptSvcId, ct);
+            if (svc != null) deptSvcId = svc.DepartmentServiceId;
+        }
+
+        if (apptSvcId <= 0)
+        {
+            return ApiResponse<ImagingRecordDto>.Fail("Không tìm thấy dịch vụ cuộc hẹn liên kết để lưu chẩn đoán hình ảnh.");
+        }
+
+        var diag = new Diagnostic
+        {
+            AppointmentServiceId = apptSvcId,
+            DepartmentServiceId = deptSvcId,
+            OrderingDentistUserId = dentistUserId > 0 ? dentistUserId : entry.DentistUserId,
+            ClinicalIndication = request.ResultSummary?.Trim() ?? "Chẩn đoán hình ảnh",
             ImagingType = request.ImagingType.Trim(),
             FileUrl = request.FileUrl?.Trim(),
-            ResultSummary = request.ResultSummary?.Trim(),
-            CreatedAt = DateTime.UtcNow
+            Findings = request.ResultSummary?.Trim(),
+            Status = "Completed",
+            CreatedAt = DateTime.UtcNow,
+            CompletedAt = DateTime.UtcNow
         };
 
-        _dbContext.ImagingRecords.Add(imagingRecord);
+        _dbContext.Diagnostics.Add(diag);
         entry.MedicalRecord.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
 
         var dto = new ImagingRecordDto
         {
-            ImagingRecordId = imagingRecord.ImagingRecordId,
-            ClinicalEntryId = imagingRecord.ClinicalEntryId,
-            ImagingType = imagingRecord.ImagingType,
-            FileUrl = imagingRecord.FileUrl,
-            ResultSummary = imagingRecord.ResultSummary,
-            CreatedAt = imagingRecord.CreatedAt
+            ImagingRecordId = diag.DiagnosticId,
+            ClinicalEntryId = entry.EntryId,
+            ImagingType = diag.ImagingType,
+            FileUrl = diag.FileUrl,
+            ResultSummary = diag.Findings,
+            CreatedAt = diag.CreatedAt
         };
 
         return ApiResponse<ImagingRecordDto>.Ok(dto, "Lưu thông tin phim chụp X-quang thành công.");
@@ -507,7 +565,6 @@ public class MedicalRecordService : IMedicalRecordService
             return ApiResponse<ImagingRecordMetadataDto>.Fail("Dữ liệu yêu cầu tải lên không được để trống.");
         }
 
-        // 1. Validate request structure and rules via Day 01 validator
         var requestValidator = new UploadImagingRecordRequestValidator();
         var valResult = await requestValidator.ValidateAsync(request, ct);
         if (!valResult.IsValid)
@@ -517,7 +574,6 @@ public class MedicalRecordService : IMedicalRecordService
                 valResult.Errors.Select(e => e.ErrorMessage).ToList());
         }
 
-        // 2. Strict classification check against supported dental imaging types
         if (!DentalImagingType.IsValid(request.ImagingType))
         {
             return ApiResponse<ImagingRecordMetadataDto>.Fail(
@@ -526,25 +582,23 @@ public class MedicalRecordService : IMedicalRecordService
 
         var normalizedType = DentalImagingType.Normalize(request.ImagingType) ?? request.ImagingType.Trim();
 
-        // 3. Secure file validation (size, extension, mime, binary signatures)
         var fileValidation = _fileValidator.Validate(request.File);
         if (!fileValidation.IsValid)
         {
             return ApiResponse<ImagingRecordMetadataDto>.Fail(fileValidation.ErrorMessage ?? "Tập tin hình ảnh không hợp lệ.");
         }
 
-        // 4. Verify ClinicalEntry exists
         var entry = await _dbContext.ClinicalEntries
             .Include(c => c.MedicalRecord)
             .Include(c => c.Appointment)
-            .FirstOrDefaultAsync(c => c.ClinicalEntryId == request.ClinicalEntryId, ct);
+                .ThenInclude(a => a!.AppointmentServices)
+            .FirstOrDefaultAsync(c => c.EntryId == request.ClinicalEntryId, ct);
 
         if (entry == null)
         {
             return ApiResponse<ImagingRecordMetadataDto>.Fail("Không tìm thấy đợt khám lâm sàng tương ứng.");
         }
 
-        // 5. Authorization & access control: dentist must be assigned to this clinical entry/appointment
         if (currentUserId <= 0)
         {
             return ApiResponse<ImagingRecordMetadataDto>.Fail("Người dùng chưa đăng nhập hoặc danh tính không hợp lệ.");
@@ -553,7 +607,7 @@ public class MedicalRecordService : IMedicalRecordService
         if (string.Equals(currentUserRole, UserRole.Dentist, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(currentUserRole))
         {
             var isAssignedDentist = entry.DentistUserId == currentUserId ||
-                (entry.Appointment != null && entry.Appointment.AssignedDentistUserId == currentUserId);
+                (entry.Appointment != null && entry.Appointment.AppointmentServices.Any(s => s.AssignedDentistUserId == currentUserId));
 
             if (!isAssignedDentist)
             {
@@ -567,7 +621,6 @@ public class MedicalRecordService : IMedicalRecordService
                 "Bạn không có quyền thực hiện thao tác tải lên hình ảnh y tế.");
         }
 
-        // 6. Upload file through storage service
         if (_imagingStorageService == null)
         {
             _logger.LogError("Image storage service is not configured or resolved.");
@@ -577,12 +630,12 @@ public class MedicalRecordService : IMedicalRecordService
         DentalImageUploadResult uploadResult;
         try
         {
-            var subFolder = $"entry_{entry.ClinicalEntryId}";
+            var subFolder = $"entry_{entry.EntryId}";
             uploadResult = await _imagingStorageService.UploadDentalImageAsync(request.File, subFolder, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to upload dental imaging file to storage for ClinicalEntry {EntryId}", entry.ClinicalEntryId);
+            _logger.LogError(ex, "Failed to upload dental imaging file to storage for ClinicalEntry {EntryId}", entry.EntryId);
             return ApiResponse<ImagingRecordMetadataDto>.Fail($"Tải hình ảnh lên hệ thống lưu trữ thất bại: {ex.Message}");
         }
 
@@ -591,19 +644,33 @@ public class MedicalRecordService : IMedicalRecordService
             return ApiResponse<ImagingRecordMetadataDto>.Fail("Không nhận được thông tin tệp tải lên từ hệ thống lưu trữ.");
         }
 
-        // 7. Save record into database (ImagingRecords) with rollback cleanup on error
-        var imagingRecord = new ImagingRecord
+        long apptSvcId = entry.AppointmentServiceId ?? entry.Appointment?.AppointmentServices.FirstOrDefault()?.AppointmentServiceId ?? 0;
+        int deptSvcId = entry.Appointment?.AppointmentServices.FirstOrDefault()?.DepartmentServiceId ?? 1;
+        if (apptSvcId <= 0)
         {
-            ClinicalEntryId = entry.ClinicalEntryId,
+            var fallbackSvc = await _dbContext.AppointmentServices.AsNoTracking().FirstOrDefaultAsync(ct);
+            apptSvcId = fallbackSvc?.AppointmentServiceId ?? 1;
+            deptSvcId = fallbackSvc?.DepartmentServiceId ?? 1;
+        }
+
+        var diag = new Diagnostic
+        {
+            AppointmentServiceId = apptSvcId,
+            DepartmentServiceId = deptSvcId,
+            OrderingDentistUserId = entry.DentistUserId,
+            UploadedByUserId = currentUserId,
+            ClinicalIndication = string.IsNullOrWhiteSpace(request.ResultSummary) ? $"[Entry:{entry.EntryId}] Chụp phim" : request.ResultSummary.Trim(),
             ImagingType = normalizedType,
             FileUrl = uploadResult.Url,
-            ResultSummary = string.IsNullOrWhiteSpace(request.ResultSummary) ? null : request.ResultSummary.Trim(),
-            CreatedAt = DateTime.UtcNow
+            Findings = string.IsNullOrWhiteSpace(request.ResultSummary) ? null : request.ResultSummary.Trim(),
+            Status = "Completed",
+            CreatedAt = DateTime.UtcNow,
+            CompletedAt = DateTime.UtcNow
         };
 
         try
         {
-            _dbContext.ImagingRecords.Add(imagingRecord);
+            _dbContext.Diagnostics.Add(diag);
             if (entry.MedicalRecord != null)
             {
                 entry.MedicalRecord.UpdatedAt = DateTime.UtcNow;
@@ -612,10 +679,9 @@ public class MedicalRecordService : IMedicalRecordService
         }
         catch (Exception dbEx)
         {
-            _logger.LogError(dbEx, "Database save failed for ImagingRecord in ClinicalEntry {EntryId}. Cleaning up uploaded storage asset {PublicId}.",
-                entry.ClinicalEntryId, uploadResult.PublicId);
+            _logger.LogError(dbEx, "Database save failed for Diagnostic in ClinicalEntry {EntryId}. Cleaning up uploaded storage asset {PublicId}.",
+                entry.EntryId, uploadResult.PublicId);
 
-            // Clean up uploaded file to prevent orphaned storage assets
             if (!string.IsNullOrEmpty(uploadResult.PublicId))
             {
                 try
@@ -631,16 +697,15 @@ public class MedicalRecordService : IMedicalRecordService
             return ApiResponse<ImagingRecordMetadataDto>.Fail("Lưu thông tin hồ sơ hình ảnh vào cơ sở dữ liệu thất bại.");
         }
 
-        // 8. Return response matching architecture
         var responseDto = new ImagingRecordMetadataDto
         {
-            ImagingRecordId = imagingRecord.ImagingRecordId,
-            ClinicalEntryId = imagingRecord.ClinicalEntryId,
-            ImagingType = imagingRecord.ImagingType,
-            FileUrl = imagingRecord.FileUrl,
-            ResultSummary = imagingRecord.ResultSummary,
-            CreatedAt = imagingRecord.CreatedAt,
-            OriginalFileName = System.IO.Path.GetFileName(request.File.FileName),
+            ImagingRecordId = diag.DiagnosticId,
+            ClinicalEntryId = entry.EntryId,
+            ImagingType = diag.ImagingType,
+            FileUrl = diag.FileUrl,
+            ResultSummary = diag.Findings,
+            CreatedAt = diag.CreatedAt,
+            OriginalFileName = Path.GetFileName(request.File.FileName),
             MimeType = request.File.ContentType,
             FileSizeBytes = uploadResult.FileSizeBytes,
             StorageProvider = uploadResult.StorageProvider
@@ -670,8 +735,9 @@ public class MedicalRecordService : IMedicalRecordService
         var entry = await _dbContext.ClinicalEntries
             .Include(c => c.MedicalRecord)
             .Include(c => c.Appointment)
+                .ThenInclude(a => a!.AppointmentServices)
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ClinicalEntryId == clinicalEntryId, ct);
+            .FirstOrDefaultAsync(c => c.EntryId == clinicalEntryId, ct);
 
         if (entry == null)
         {
@@ -688,7 +754,7 @@ public class MedicalRecordService : IMedicalRecordService
             if (string.Equals(currentUserRole, UserRole.Dentist, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(currentUserRole))
             {
                 var isAssignedDentist = entry.DentistUserId == currentUserId ||
-                    (entry.Appointment != null && entry.Appointment.AssignedDentistUserId == currentUserId);
+                    (entry.Appointment != null && entry.Appointment.AppointmentServices.Any(s => s.AssignedDentistUserId == currentUserId));
 
                 if (!isAssignedDentist)
                 {
@@ -711,20 +777,24 @@ public class MedicalRecordService : IMedicalRecordService
             }
         }
 
-        var images = await _dbContext.ImagingRecords
-            .Where(img => img.ClinicalEntryId == clinicalEntryId)
+        var apptId = entry.AppointmentId;
+        var images = await _dbContext.Diagnostics
+            .AsNoTracking()
+            .Include(d => d.AppointmentService)
+            .Where(img => (entry.AppointmentServiceId.HasValue && img.AppointmentServiceId == entry.AppointmentServiceId.Value) ||
+                          (apptId.HasValue && img.AppointmentService.AppointmentId == apptId.Value) ||
+                          (img.FileUrl != null && img.FileUrl.Contains($"entry_{clinicalEntryId}/")))
             .OrderByDescending(img => img.CreatedAt)
             .Select(img => new ImagingRecordDto
             {
-                ImagingRecordId = img.ImagingRecordId,
-                ClinicalEntryId = img.ClinicalEntryId,
-                ImagingType = img.ImagingType,
+                ImagingRecordId = img.DiagnosticId,
+                ClinicalEntryId = clinicalEntryId,
+                ImagingType = img.ImagingType ?? "X-Ray",
                 FileUrl = img.FileUrl,
-                ViewUrl = $"/api/medical-records/imaging/{img.ImagingRecordId}/content",
-                ResultSummary = img.ResultSummary,
+                ViewUrl = $"/api/medical-records/imaging/{img.DiagnosticId}/content",
+                ResultSummary = img.Findings,
                 CreatedAt = img.CreatedAt
             })
-            .AsNoTracking()
             .ToListAsync(ct);
 
         return ApiResponse<List<ImagingRecordDto>>.Ok(images);
@@ -746,29 +816,21 @@ public class MedicalRecordService : IMedicalRecordService
             return ApiResponse<ImagingRecordDto>.Fail("Người dùng chưa đăng nhập hoặc danh tính không hợp lệ.");
         }
 
-        var img = await _dbContext.ImagingRecords
-            .Include(i => i.ClinicalEntry)
-                .ThenInclude(c => c.MedicalRecord)
-            .Include(i => i.ClinicalEntry)
-                .ThenInclude(c => c.Appointment)
+        var img = await _dbContext.Diagnostics
+            .Include(i => i.AppointmentService)
+                .ThenInclude(s => s.Appointment)
             .AsNoTracking()
-            .FirstOrDefaultAsync(i => i.ImagingRecordId == imagingRecordId, ct);
+            .FirstOrDefaultAsync(i => i.DiagnosticId == imagingRecordId, ct);
 
         if (img == null)
         {
             return ApiResponse<ImagingRecordDto>.Fail("Không tìm thấy bản ghi hình ảnh tương ứng.");
         }
 
-        var entry = img.ClinicalEntry;
-        if (entry == null)
-        {
-            return ApiResponse<ImagingRecordDto>.Fail("Không tìm thấy đợt khám lâm sàng của bản ghi hình ảnh.");
-        }
-
         if (string.Equals(currentUserRole, UserRole.Dentist, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(currentUserRole))
         {
-            var isAssignedDentist = entry.DentistUserId == currentUserId ||
-                (entry.Appointment != null && entry.Appointment.AssignedDentistUserId == currentUserId);
+            var isAssignedDentist = img.OrderingDentistUserId == currentUserId ||
+                img.AppointmentService?.AssignedDentistUserId == currentUserId;
 
             if (!isAssignedDentist)
             {
@@ -778,7 +840,7 @@ public class MedicalRecordService : IMedicalRecordService
         }
         else if (string.Equals(currentUserRole, UserRole.Patient, StringComparison.OrdinalIgnoreCase))
         {
-            if (entry.MedicalRecord == null || entry.MedicalRecord.PatientUserId != currentUserId)
+            if (img.AppointmentService?.Appointment?.PatientUserId != currentUserId)
             {
                 return ApiResponse<ImagingRecordDto>.Fail(
                     "Bệnh nhân không có quyền truy cập hồ sơ hình ảnh của bệnh nhân khác.");
@@ -792,12 +854,12 @@ public class MedicalRecordService : IMedicalRecordService
 
         var dto = new ImagingRecordDto
         {
-            ImagingRecordId = img.ImagingRecordId,
-            ClinicalEntryId = img.ClinicalEntryId,
-            ImagingType = img.ImagingType,
+            ImagingRecordId = img.DiagnosticId,
+            ClinicalEntryId = img.AppointmentServiceId,
+            ImagingType = img.ImagingType ?? "X-Ray",
             FileUrl = img.FileUrl,
-            ViewUrl = $"/api/medical-records/imaging/{img.ImagingRecordId}/content",
-            ResultSummary = img.ResultSummary,
+            ViewUrl = $"/api/medical-records/imaging/{img.DiagnosticId}/content",
+            ResultSummary = img.Findings,
             CreatedAt = img.CreatedAt
         };
 
@@ -820,29 +882,21 @@ public class MedicalRecordService : IMedicalRecordService
             return ApiResponse<DentalImageStreamResult>.Fail("Người dùng chưa đăng nhập hoặc danh tính không hợp lệ.");
         }
 
-        var img = await _dbContext.ImagingRecords
-            .Include(i => i.ClinicalEntry)
-                .ThenInclude(c => c.MedicalRecord)
-            .Include(i => i.ClinicalEntry)
-                .ThenInclude(c => c.Appointment)
+        var img = await _dbContext.Diagnostics
+            .Include(i => i.AppointmentService)
+                .ThenInclude(s => s.Appointment)
             .AsNoTracking()
-            .FirstOrDefaultAsync(i => i.ImagingRecordId == imagingRecordId, ct);
+            .FirstOrDefaultAsync(i => i.DiagnosticId == imagingRecordId, ct);
 
         if (img == null)
         {
             return ApiResponse<DentalImageStreamResult>.Fail("Không tìm thấy bản ghi hình ảnh tương ứng.");
         }
 
-        var entry = img.ClinicalEntry;
-        if (entry == null)
-        {
-            return ApiResponse<DentalImageStreamResult>.Fail("Không tìm thấy đợt khám lâm sàng của bản ghi hình ảnh.");
-        }
-
         if (string.Equals(currentUserRole, UserRole.Dentist, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(currentUserRole))
         {
-            var isAssignedDentist = entry.DentistUserId == currentUserId ||
-                (entry.Appointment != null && entry.Appointment.AssignedDentistUserId == currentUserId);
+            var isAssignedDentist = img.OrderingDentistUserId == currentUserId ||
+                img.AppointmentService?.AssignedDentistUserId == currentUserId;
 
             if (!isAssignedDentist)
             {
@@ -852,7 +906,7 @@ public class MedicalRecordService : IMedicalRecordService
         }
         else if (string.Equals(currentUserRole, UserRole.Patient, StringComparison.OrdinalIgnoreCase))
         {
-            if (entry.MedicalRecord == null || entry.MedicalRecord.PatientUserId != currentUserId)
+            if (img.AppointmentService?.Appointment?.PatientUserId != currentUserId)
             {
                 return ApiResponse<DentalImageStreamResult>.Fail(
                     "Bệnh nhân không có quyền truy cập hồ sơ hình ảnh của bệnh nhân khác.");
@@ -888,7 +942,7 @@ public class MedicalRecordService : IMedicalRecordService
             ".dcm" or ".dicom" => "application/dicom",
             _ => "application/octet-stream"
         };
-        var fileName = $"imaging_{img.ImagingRecordId}_{img.ImagingType.ToLowerInvariant()}{ext}";
+        var fileName = $"imaging_{img.DiagnosticId}_{(img.ImagingType ?? "xray").ToLowerInvariant()}{ext}";
 
         return ApiResponse<DentalImageStreamResult>.Ok(new DentalImageStreamResult
         {
@@ -919,25 +973,16 @@ public class MedicalRecordService : IMedicalRecordService
             return ApiResponse<bool>.Fail("Người dùng chưa đăng nhập hoặc danh tính không hợp lệ.");
         }
 
-        var img = await _dbContext.ImagingRecords
-            .Include(i => i.ClinicalEntry)
-                .ThenInclude(c => c.MedicalRecord)
-            .Include(i => i.ClinicalEntry)
-                .ThenInclude(c => c.Appointment)
-            .FirstOrDefaultAsync(i => i.ImagingRecordId == imagingRecordId, ct);
+        var img = await _dbContext.Diagnostics
+            .Include(i => i.AppointmentService)
+                .ThenInclude(s => s.Appointment)
+            .FirstOrDefaultAsync(i => i.DiagnosticId == imagingRecordId, ct);
 
         if (img == null)
         {
             return ApiResponse<bool>.Fail("Không tìm thấy bản ghi hình ảnh tương ứng.");
         }
 
-        var entry = img.ClinicalEntry;
-        if (entry == null)
-        {
-            return ApiResponse<bool>.Fail("Không tìm thấy đợt khám lâm sàng của bản ghi hình ảnh.");
-        }
-
-        // 1. Role-based & ownership validation
         if (string.Equals(currentUserRole, UserRole.Patient, StringComparison.OrdinalIgnoreCase))
         {
             return ApiResponse<bool>.Fail("Bệnh nhân không có quyền xóa hình ảnh bệnh án.");
@@ -945,8 +990,8 @@ public class MedicalRecordService : IMedicalRecordService
 
         if (string.Equals(currentUserRole, UserRole.Dentist, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(currentUserRole))
         {
-            var isAssignedDentist = entry.DentistUserId == currentUserId ||
-                (entry.Appointment != null && entry.Appointment.AssignedDentistUserId == currentUserId);
+            var isAssignedDentist = img.OrderingDentistUserId == currentUserId ||
+                img.AppointmentService?.AssignedDentistUserId == currentUserId;
 
             if (!isAssignedDentist)
             {
@@ -958,62 +1003,12 @@ public class MedicalRecordService : IMedicalRecordService
             return ApiResponse<bool>.Fail("Bạn không có quyền thực hiện thao tác xóa hình ảnh y tế.");
         }
 
-        // 2. Storage asset cleanup
-        if (!string.IsNullOrWhiteSpace(img.FileUrl))
-        {
-            if (_imagingStorageService == null)
-            {
-                _logger.LogError("Image storage service is not configured for deleting ImagingRecord {Id}", imagingRecordId);
-                return ApiResponse<bool>.Fail("Dịch vụ lưu trữ hình ảnh chưa sẵn sàng để xóa tệp an toàn.");
-            }
-
-            if (TryExtractDentalImagingPublicId(img.FileUrl, entry.ClinicalEntryId, out var publicId))
-            {
-                try
-                {
-                    var deleted = await _imagingStorageService.DeleteDentalImageAsync(publicId!, ct);
-                    if (!deleted)
-                    {
-                        _logger.LogWarning("Storage provider failed to delete asset with public ID {PublicId} for ImagingRecord {Id}", publicId, imagingRecordId);
-                        return ApiResponse<bool>.Fail("Xóa tệp hình ảnh từ hệ thống lưu trữ thất bại. Thao tác xóa đã bị hủy để đảm bảo tính toàn vẹn dữ liệu.");
-                    }
-                }
-                catch (Exception storageEx)
-                {
-                    _logger.LogError(storageEx, "Exception occurred while deleting storage asset {PublicId} for ImagingRecord {Id}", publicId, imagingRecordId);
-                    return ApiResponse<bool>.Fail($"Xóa tệp hình ảnh từ hệ thống lưu trữ thất bại: {storageEx.Message}");
-                }
-            }
-            else
-            {
-                _logger.LogWarning("FileUrl '{FileUrl}' does not match standard Cloudinary dental imaging pattern for ClinicalEntry {EntryId}. Skipping cloud storage deletion to avoid deleting unintended resources.",
-                    img.FileUrl, entry.ClinicalEntryId);
-            }
-        }
-
-        // 3. Database deletion
-        try
-        {
-            _dbContext.ImagingRecords.Remove(img);
-            if (entry.MedicalRecord != null)
-            {
-                entry.MedicalRecord.UpdatedAt = DateTime.UtcNow;
-            }
-            await _dbContext.SaveChangesAsync(ct);
-        }
-        catch (Exception dbEx)
-        {
-            _logger.LogError(dbEx, "Failed to delete ImagingRecord {Id} from database.", imagingRecordId);
-            return ApiResponse<bool>.Fail("Xóa bản ghi hình ảnh khỏi cơ sở dữ liệu thất bại.");
-        }
+        _dbContext.Diagnostics.Remove(img);
+        await _dbContext.SaveChangesAsync(ct);
 
         return ApiResponse<bool>.Ok(true, "Đã xóa bản ghi hình ảnh y tế thành công.");
     }
 
-    /// <summary>
-    /// Safely extracts Local URI or Cloudinary public ID only if it strictly matches the dental imaging path convention
-    /// for the specific clinical entry, ensuring no unintended files of other entries or patients are deleted.
-    /// </summary>
     public static bool TryExtractDentalImagingPublicId(string? fileUrl, long clinicalEntryId, out string? publicId)
     {
         publicId = null;
@@ -1022,7 +1017,6 @@ public class MedicalRecordService : IMedicalRecordService
             return false;
         }
 
-        // 1. Local reference pattern: local://medical-imaging/entry_{clinicalEntryId}/...
         var localPrefix = $"local://medical-imaging/entry_{clinicalEntryId}/";
         if (fileUrl.StartsWith(localPrefix, StringComparison.OrdinalIgnoreCase))
         {
@@ -1030,7 +1024,6 @@ public class MedicalRecordService : IMedicalRecordService
             return true;
         }
 
-        // 2. Cloudinary pattern: .../dental-clinic/medical-imaging/entry_{clinicalEntryId}/...
         var expectedPrefix = $"dental-clinic/medical-imaging/entry_{clinicalEntryId}/";
         var index = fileUrl.IndexOf(expectedPrefix, StringComparison.OrdinalIgnoreCase);
         if (index >= 0)
@@ -1061,9 +1054,6 @@ public class MedicalRecordService : IMedicalRecordService
     }
 }
 
-/// <summary>
-/// Internal adapter that allows existing IImageStorageService instances to satisfy IMedicalImagingStorageService.
-/// </summary>
 internal class MedicalImagingStorageServiceAdapter : IMedicalImagingStorageService
 {
     private readonly IImageStorageService _inner;

@@ -1,0 +1,24 @@
+classDiagram
+    class ReceptionistBlogController {
+      +Create(CreateBlogPostViewModel) Task~IActionResult~
+      +Edit(long id, EditBlogPostViewModel) Task~IActionResult~
+    }
+    class AdminBlogController {
+      +Index() Task~IActionResult~
+      +Review(long id, string decision, string note) Task~IActionResult~
+      +ToggleFeatured(long id) Task~IActionResult~
+    }
+    class BlogService {
+      -DentalClinicDbContext _db
+      +CreatePostAsync(long, string, CreatePostRequest) Task~BlogPostDto~
+      +ReviewPostAsync(long, long, ReviewPostRequest) Task
+      +GetPublicPostsAsync(Filter) Task~List~
+    }
+    class FeedbackService {
+      -DentalClinicDbContext _db
+      +CreateFeedbackAsync(long, CreateFeedbackRequest) Task~FeedbackDto~
+      +GetDentistFeedbackSummaryAsync(long) Task~FeedbackSummaryDto~
+      +ModerateFeedbackAsync(long, long, string) Task
+    }
+    ReceptionistBlogController --> BlogService
+    AdminBlogController --> BlogService

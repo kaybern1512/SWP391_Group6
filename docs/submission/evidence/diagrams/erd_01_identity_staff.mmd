@@ -1,0 +1,73 @@
+erDiagram
+    UserAccounts {
+      bigint UserId PK
+      varchar UserCode UK
+      nvarchar FullName
+      varchar Email UK
+      varchar PhoneNumber UK
+      varchar Role "Patient|Receptionist|Dentist|SystemAdministrator"
+      varchar Status "Active|Inactive|Locked"
+    }
+    PatientProfiles {
+      bigint UserId PK,FK
+      date DateOfBirth
+      varchar Gender
+      nvarchar Allergies
+      nvarchar MedicalHistorySummary
+    }
+    StaffProfiles {
+      bigint UserId PK,FK
+      int PrimaryDepartmentId FK
+      varchar StaffTitle
+      date HireDate
+      varchar EmploymentStatus
+    }
+    DentistProfiles {
+      bigint UserId PK,FK
+      int DepartmentId FK
+      nvarchar_max Specialization
+      varchar LicenseNumber UK
+      bit CanPerformXray
+    }
+    Departments {
+      int DepartmentId PK
+      varchar DepartmentCode UK
+      nvarchar DepartmentName UK
+      varchar Status
+    }
+    StaffWorkSchedules {
+      bigint ScheduleId PK
+      bigint StaffUserId FK
+      varchar StaffRole
+      int RoomId FK
+      date WorkDate
+      time StartTime
+      time EndTime
+      varchar Status
+    }
+    StaffLeaveRequests {
+      bigint LeaveRequestId PK
+      bigint StaffUserId FK
+      date StartDate
+      date EndDate
+      varchar Status
+      bigint ReviewedByUserId FK
+    }
+    StaffAttendanceRecords {
+      bigint AttendanceId PK
+      bigint StaffUserId FK
+      bigint ScheduleId FK
+      date WorkDate
+      datetime2 ClockInTime
+      datetime2 ClockOutTime
+      varchar Status
+    }
+    UserAccounts ||--o| PatientProfiles : "1:1 PK/FK"
+    UserAccounts ||--o| StaffProfiles : "1:1 PK/FK"
+    UserAccounts ||--o| DentistProfiles : "1:1 PK/FK"
+    Departments ||--o{ StaffProfiles : "assigns"
+    Departments ||--o{ DentistProfiles : "assigns"
+    UserAccounts ||--o{ StaffWorkSchedules : "rostered_in"
+    UserAccounts ||--o{ StaffLeaveRequests : "requests"
+    UserAccounts ||--o{ StaffAttendanceRecords : "clocks"
+    StaffWorkSchedules ||--o{ StaffAttendanceRecords : "tracks"

@@ -1,0 +1,30 @@
+sequenceDiagram
+    autonumber
+    actor Den as Treating Dentist
+    participant MVC as DentistMedicalRecordController
+    participant API as MedicalRecordController / AppointmentsController
+    participant Svc as MedicalRecordService / AppointmentService
+    participant DB as SQL Server
+
+    Den->>MVC: POST /Dentist/Appointments/{id}/Start
+    MVC->>API: POST /api/dentist/appointments/{id}/start
+    API->>Svc: DentistStartAppointmentAsync(id, dentistUserId)
+    Svc->>DB: Verify AssignedDentistUserId == dentistUserId & Status == 'CheckedIn'
+    Svc->>DB: UPDATE Appointments SET Status='InProgress'
+    Svc->>DB: UPDATE AppointmentServices SET Status='InService', ActualStart=SYSDATETIME()
+
+    Den->>MVC: POST /Dentist/MedicalRecords/CreateEntry (Complaint, Diagnosis, Tooth Conditions)
+    MVC->>API: POST /api/medical-records/entry
+    API->>Svc: CreateClinicalEntryAsync(dentistUserId, request)
+    Svc->>DB: Ensure DentalMedicalRecords exists for PatientUserId
+    Svc->>DB: INSERT ClinicalEntries (ChiefComplaint, ExaminationNotes, Diagnosis, TreatmentSummary)
+    Svc->>DB: UPSERT OdontogramEntries (ToothNumber 11..48, SurfaceCode, ConditionCode)
+    DB-->>MVC: Entry & 32-Tooth FDI Odontogram Saved
+
+    Den->>MVC: Complete Consultation
+    MVC->>API: POST /api/dentist/appointments/{id}/complete
+    API->>Svc: DentistCompleteAppointmentAsync(id, dentistUserId)
+    Svc->>DB: Verify ClinicalEntries exists & no pending Diagnostics/Tasks
+    Svc->>DB: UPDATE AppointmentServices SET Status='Completed', ActualEnd=SYSDATETIME()
+    Svc->>DB: UPDATE Appointments SET Status='Completed', CompletedAt=SYSDATETIME()
+    DB-->>MVC: Consultation Completed

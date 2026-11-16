@@ -60,15 +60,18 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
 
         if (user.Role == UserRole.Dentist)
         {
-            futureShiftsCount = await _dbContext.DentistWorkSchedules
+            futureShiftsCount = await _dbContext.StaffWorkSchedules
                 .AsNoTracking()
-                .CountAsync(ws => ws.DentistUserId == userId && ws.WorkDate >= today && ws.Status == "Scheduled", ct);
+                .CountAsync(ws => ws.StaffUserId == userId && ws.StaffRole == UserRole.Dentist && ws.WorkDate >= today && ws.Status == "Scheduled", ct);
 
-            futureAppointmentsCount = await _dbContext.Appointments
+            futureAppointmentsCount = await _dbContext.AppointmentServices
                 .AsNoTracking()
-                .CountAsync(a => (a.AssignedDentistUserId == userId || (a.AssignedDentistUserId == null && a.RequestedDentistUserId == userId))
-                                 && a.ScheduledStart != null && a.ScheduledStart.Value >= nowUtc
-                                 && ActiveAppointmentStatuses.Contains(a.Status), ct);
+                .Where(s => (s.AssignedDentistUserId == userId || (s.AssignedDentistUserId == null && s.RequestedDentistUserId == userId))
+                            && s.ScheduledStart >= nowUtc
+                            && ActiveAppointmentStatuses.Contains(s.Status))
+                .Select(s => s.AppointmentId)
+                .Distinct()
+                .CountAsync(ct);
 
             if (futureAppointmentsCount > 0)
             {
@@ -82,9 +85,9 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
         }
         else if (user.Role == UserRole.Receptionist)
         {
-            futureShiftsCount = await _dbContext.ReceptionistWorkSchedules
+            futureShiftsCount = await _dbContext.StaffWorkSchedules
                 .AsNoTracking()
-                .CountAsync(ws => ws.ReceptionistUserId == userId && ws.WorkDate >= today && ws.Status == "Scheduled", ct);
+                .CountAsync(ws => ws.StaffUserId == userId && ws.StaffRole == UserRole.Receptionist && ws.WorkDate >= today && ws.Status == "Scheduled", ct);
 
             if (futureShiftsCount > 0)
             {
@@ -101,20 +104,21 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
                 warnings.Add($"CẢNH BÁO NGUY HIỂM: Khóa tài khoản này sẽ làm số lượng tiếp tân hoạt động chỉ còn {remainingActiveCount} người (dưới 2 người tối thiểu), gây gián đoạn quy trình tiếp đón và trực quầy!");
             }
 
-            // Check if upcoming assigned shifts will drop below 2 scheduled receptionists
-            var upcomingShifts = await _dbContext.ReceptionistWorkSchedules
+            var upcomingShifts = await _dbContext.StaffWorkSchedules
                 .AsNoTracking()
-                .Where(ws => ws.ReceptionistUserId == userId && ws.WorkDate >= today && ws.Status == "Scheduled")
-                .Select(ws => new { ws.WorkDate, ws.ShiftTemplateId })
+                .Where(ws => ws.StaffUserId == userId && ws.StaffRole == UserRole.Receptionist && ws.WorkDate >= today && ws.Status == "Scheduled")
+                .Select(ws => new { ws.WorkDate, ws.StartTime, ws.EndTime })
                 .Distinct()
                 .Take(10)
                 .ToListAsync(ct);
 
             foreach (var shift in upcomingShifts)
             {
-                var othersOnDuty = await _dbContext.ReceptionistWorkSchedules
+                var othersOnDuty = await _dbContext.StaffWorkSchedules
                     .AsNoTracking()
-                    .CountAsync(ws => ws.WorkDate == shift.WorkDate && ws.ShiftTemplateId == shift.ShiftTemplateId && ws.ReceptionistUserId != userId && ws.Status == "Scheduled", ct);
+                    .CountAsync(ws => ws.WorkDate == shift.WorkDate && ws.StaffRole == UserRole.Receptionist
+                                      && ws.StartTime == shift.StartTime && ws.EndTime == shift.EndTime
+                                      && ws.StaffUserId != userId && ws.Status == "Scheduled", ct);
 
                 if (othersOnDuty < 2)
                 {
@@ -143,7 +147,7 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
     {
         var service = await _dbContext.DepartmentServices
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.DepartmentServiceId == serviceId, ct);
+            .FirstOrDefaultAsync(s => s.DepartmentServiceId == (int)serviceId, ct);
 
         if (service == null)
         {
@@ -151,21 +155,21 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
         }
 
         var nowUtc = DateTime.UtcNow;
-        var futureAppointments = await _dbContext.Appointments
+        var futureServices = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .Where(a => a.RequestedServiceId == serviceId && a.ScheduledStart != null && a.ScheduledStart.Value >= nowUtc && ActiveAppointmentStatuses.Contains(a.Status))
-            .OrderBy(a => a.ScheduledStart)
+            .Where(s => s.DepartmentServiceId == (int)serviceId && s.ScheduledStart >= nowUtc && ActiveAppointmentStatuses.Contains(s.Status))
+            .OrderBy(s => s.ScheduledStart)
             .ToListAsync(ct);
 
         var warnings = new List<string>();
-        if (futureAppointments.Any())
+        var distinctApptCount = futureServices.Select(s => s.AppointmentId).Distinct().Count();
+        if (distinctApptCount > 0)
         {
-            warnings.Add($"Dịch vụ '{service.ServiceName}' đang có {futureAppointments.Count} lịch hẹn sắp tới chưa hoàn thành. Ngưng kích hoạt dịch vụ có thể ảnh hưởng đến điều trị của bệnh nhân.");
+            warnings.Add($"Dịch vụ '{service.ServiceName}' đang có {distinctApptCount} lịch hẹn sắp tới chưa hoàn thành. Ngưng kích hoạt dịch vụ có thể ảnh hưởng đến điều trị của bệnh nhân.");
         }
 
-        var affectedDates = futureAppointments
-            .Where(a => a.ScheduledStart.HasValue)
-            .Select(a => ClinicTimeHelper.ToClinicTime(a.ScheduledStart!.Value).ToString("dd/MM/yyyy HH:mm"))
+        var affectedDates = futureServices
+            .Select(s => ClinicTimeHelper.ToClinicTime(s.ScheduledStart).ToString("dd/MM/yyyy HH:mm"))
             .Distinct()
             .Take(10)
             .ToList();
@@ -174,7 +178,7 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
         {
             DepartmentServiceId = service.DepartmentServiceId,
             ServiceName = service.ServiceName,
-            FutureAppointmentsCount = futureAppointments.Count,
+            FutureAppointmentsCount = distinctApptCount,
             AffectedDates = affectedDates,
             Warnings = warnings
         };
@@ -186,7 +190,7 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
     {
         var room = await _dbContext.Rooms
             .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.RoomId == roomId, ct);
+            .FirstOrDefaultAsync(r => r.RoomId == (int)roomId, ct);
 
         if (room == null)
         {
@@ -194,9 +198,12 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
         }
 
         var nowUtc = DateTime.UtcNow;
-        var futureApptCount = await _dbContext.Appointments
+        var futureApptCount = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .CountAsync(a => a.RoomId == roomId && a.ScheduledStart != null && a.ScheduledStart.Value >= nowUtc && ActiveAppointmentStatuses.Contains(a.Status), ct);
+            .Where(s => s.RoomId == (int)roomId && s.ScheduledStart >= nowUtc && ActiveAppointmentStatuses.Contains(s.Status))
+            .Select(s => s.AppointmentId)
+            .Distinct()
+            .CountAsync(ct);
 
         var warnings = new List<string>();
         if (futureApptCount > 0)
@@ -221,7 +228,7 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
         var chair = await _dbContext.DentalChairs
             .AsNoTracking()
             .Include(c => c.Room)
-            .FirstOrDefaultAsync(c => c.DentalChairId == chairId, ct);
+            .FirstOrDefaultAsync(c => c.DentalChairId == (int)chairId, ct);
 
         if (chair == null)
         {
@@ -229,9 +236,12 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
         }
 
         var nowUtc = DateTime.UtcNow;
-        var futureApptCount = await _dbContext.Appointments
+        var futureApptCount = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .CountAsync(a => a.DentalChairId == chairId && a.ScheduledStart != null && a.ScheduledStart.Value >= nowUtc && ActiveAppointmentStatuses.Contains(a.Status), ct);
+            .Where(s => s.DentalChairId == (int)chairId && s.ScheduledStart >= nowUtc && ActiveAppointmentStatuses.Contains(s.Status))
+            .Select(s => s.AppointmentId)
+            .Distinct()
+            .CountAsync(ct);
 
         var warnings = new List<string>();
         if (futureApptCount > 0)
@@ -255,7 +265,7 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
     {
         var service = await _dbContext.DepartmentServices
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.DepartmentServiceId == serviceId, ct);
+            .FirstOrDefaultAsync(s => s.DepartmentServiceId == (int)serviceId, ct);
 
         if (service == null)
         {
@@ -264,7 +274,7 @@ public class AdminImpactAnalysisService : IAdminImpactAnalysisService
 
         var pastInvoicesCount = await _dbContext.Invoices
             .AsNoTracking()
-            .CountAsync(i => i.Appointment.RequestedServiceId == serviceId, ct);
+            .CountAsync(i => i.Appointment.AppointmentServices.Any(s => s.DepartmentServiceId == (int)serviceId), ct);
 
         var dto = new PriceChangeImpactDto
         {

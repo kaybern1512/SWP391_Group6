@@ -314,7 +314,7 @@
 <div class="modal fade" id="uploadResultModal" tabindex="-1" aria-labelledby="uploadResultLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form asp-controller="DentistXrayQueue" asp-action="UploadResult" method="post">
+            <form asp-controller="DentistXrayQueue" asp-action="UploadResult" method="post" enctype="multipart/form-data">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="sessionId" id="modalSessionId" />
                 <input type="hidden" name="diagnosticOrderId" id="modalOrderId" />
@@ -343,14 +343,14 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Kết luận chẩn đoán hình ảnh (Findings) <span class="text-danger">*</span></label>
-                        <textarea name="findings" class="form-control" rows="4" required placeholder="Ghi nhận cấu trúc xương hàm, hệ thống răng, các tổn thương nghi ngờ sâu răng, nang quanh chóp hoặc mọc lệch..."></textarea>
+                        <textarea name="findings" id="modalFindings" class="form-control" rows="4" required placeholder="Ghi nhận cấu trúc xương hàm, hệ thống răng, các tổn thương nghi ngờ sâu răng, nang quanh chóp hoặc mọc lệch..."></textarea>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Đường dẫn file ảnh chẩn đoán (File URL / DICOM / JPEG)</label>
-                        <input type="text" name="fileUrl" class="form-control" value="/uploads/xray/sample_digital_panoramic.jpg" />
+                        <label class="form-label fw-semibold">Tệp hình ảnh chẩn đoán (JPEG / PNG / DICOM) <span class="text-danger">*</span></label>
+                        <input type="file" name="imageFile" id="modalImageFile" class="form-control" accept="image/jpeg,image/png,image/jpg,.dcm,.dicom" required />
                         <div class="form-text small text-muted">
-                            Hệ thống tự động đồng bộ từ máy chụp kỹ thuật số Vatech Pax-i hoặc PACS lưu trữ nội bộ.
+                            Tải lên tệp ảnh chụp thực tế từ máy chụp kỹ thuật số Vatech Pax-i hoặc PACS nội bộ (tối đa 15 MB).
                         </div>
                     </div>
                 </div>

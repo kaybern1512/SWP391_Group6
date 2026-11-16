@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace DentalClinic.Infrastructure.Persistence.Entities;
 
@@ -9,17 +8,11 @@ public partial class DepartmentReferral
 
     public long? TreatmentSessionId { get; set; }
 
-    public long? SourceAppointmentId { get; set; }
+    public int FromDepartmentId { get; set; }
 
-    public long? DestinationAppointmentId { get; set; }
+    public int ToDepartmentId { get; set; }
 
-    public long? CareEpisodeId { get; set; }
-
-    public long? RequestedServiceId { get; set; }
-
-    public long FromDepartmentId { get; set; }
-
-    public long ToDepartmentId { get; set; }
+    public int? RequestedServiceId { get; set; }
 
     public long? AssignedDentistUserId { get; set; }
 
@@ -27,31 +20,33 @@ public partial class DepartmentReferral
 
     public string Reason { get; set; } = null!;
 
+    public string? ClinicalInstructions { get; set; }
+
     public string Urgency { get; set; } = "Normal";
 
-    public string Status { get; set; } = null!;
+    public string Status { get; set; } = "Pending";
 
-    public string? ClinicalInstructions { get; set; }
+    public long? SourceAppointmentServiceId { get; set; }
+
+    public long? DestinationAppointmentServiceId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime? ReviewedAt { get; set; }
 
-    public virtual DentistProfile? AssignedDentistUser { get; set; }
+    public virtual TreatmentSession? TreatmentSession { get; set; }
 
     public virtual Department FromDepartment { get; set; } = null!;
 
-    public virtual StaffProfile? ReviewedByUser { get; set; }
-
     public virtual Department ToDepartment { get; set; } = null!;
 
-    public virtual TreatmentSession? TreatmentSession { get; set; }
-
-    public virtual Appointment? SourceAppointment { get; set; }
-
-    public virtual Appointment? DestinationAppointment { get; set; }
-
-    public virtual CareEpisode? CareEpisode { get; set; }
-
     public virtual DepartmentService? RequestedService { get; set; }
+
+    public virtual DentistProfile? AssignedDentist { get; set; }
+
+    public virtual UserAccount? ReviewedByUser { get; set; }
+
+    public virtual AppointmentService? SourceAppointmentService { get; set; }
+
+    public virtual AppointmentService? DestinationAppointmentService { get; set; }
 }

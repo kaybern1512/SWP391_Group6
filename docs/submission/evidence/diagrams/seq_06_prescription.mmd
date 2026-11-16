@@ -1,0 +1,33 @@
+sequenceDiagram
+    autonumber
+    actor Den as Dentist
+    participant MVC as DentistPrescriptionController
+    participant API as PrescriptionController / MedicineController
+    participant PSvc as PrescriptionService
+    participant MSvc as MedicineService
+    participant DB as SQL Server
+
+    Den->>MVC: POST /Dentist/Prescriptions/Create (AppointmentId, Notes, PrescriptionItems)
+    MVC->>API: POST /api/prescriptions
+    API->>PSvc: CreatePrescriptionAsync(dentistUserId, request)
+    PSvc->>DB: Verify Medicines.IsActive == 1 & Quantity > 0
+    PSvc->>DB: INSERT Prescriptions (PrescriptionCode, Status='Active')
+    PSvc->>DB: INSERT PrescriptionItems (MedicineId, Quantity, Dosage, Frequency, DurationDays, QuantityDispensed=0)
+    DB-->>MVC: Prescription Created
+
+    Den->>MVC: POST /Dentist/Prescriptions/Dispense (PrescriptionId, ItemsToDispense)
+    MVC->>API: POST /api/medicines/dispensations
+    API->>MSvc: DispenseMedicineAsync(dentistUserId, dispenseRequest)
+    MSvc->>DB: BEGIN TRANSACTION
+    MSvc->>DB: SELECT Medicines WITH (UPDLOCK) WHERE MedicineId IN (...)
+    alt StockQuantity < Requested Quantity
+      MSvc->>DB: ROLLBACK
+      MSvc-->>MVC: 400 Bad Request (Insufficient stock - CK_Medicines_StockQuantity >= 0)
+    else Sufficient Stock
+      MSvc->>DB: UPDATE Medicines SET StockQuantity = StockQuantity - @qty
+      MSvc->>DB: UPDATE PrescriptionItems SET QuantityDispensed=@qty, UnitPriceAtDispense=Medicines.UnitPrice, DispensedByUserId=@userId, DispensedAt=SYSDATETIME()
+      MSvc->>DB: UPDATE Prescriptions SET Status='Dispensed'
+      MSvc->>DB: INSERT AuditLogs (Action='DispenseMedicine')
+      MSvc->>DB: COMMIT
+      DB-->>MVC: Dispensed & Ready for Billing
+    end

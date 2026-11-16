@@ -12,6 +12,7 @@ using DentalClinic.Infrastructure.Hubs;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using DentalClinic.Infrastructure.Services;
+using AppointmentService = DentalClinic.Infrastructure.Services.AppointmentService;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;

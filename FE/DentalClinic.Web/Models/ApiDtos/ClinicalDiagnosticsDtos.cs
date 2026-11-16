@@ -41,6 +41,7 @@ public class BookImagingSessionRequest
     public DateTime ScheduledStartUtc { get; set; }
     public string Priority { get; set; } = "Normal";
     public string? Notes { get; set; }
+    public long? AssignedDentistUserId { get; set; }
 }
 
 public class ImagingSessionDto

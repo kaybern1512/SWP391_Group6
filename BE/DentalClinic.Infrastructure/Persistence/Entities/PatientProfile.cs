@@ -7,8 +7,6 @@ public partial class PatientProfile
 {
     public long UserId { get; set; }
 
-    public string PatientCode { get; set; } = null!;
-
     public string FullName { get; set; } = null!;
 
     public DateOnly? DateOfBirth { get; set; }
@@ -27,16 +25,21 @@ public partial class PatientProfile
 
     public DateTime? UpdatedAt { get; set; }
 
-    public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
+    public virtual UserAccount User { get; set; } = null!;
 
     public virtual DentalMedicalRecord? DentalMedicalRecord { get; set; }
 
-    public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
-
     public virtual ICollection<TreatmentPlan> TreatmentPlans { get; set; } = new List<TreatmentPlan>();
-    public virtual ICollection<DiagnosticOrder> DiagnosticOrders { get; set; } = new List<DiagnosticOrder>();
-    public virtual ICollection<ImagingSession> ImagingSessions { get; set; } = new List<ImagingSession>();
-    public virtual ICollection<ClinicalConsultation> ClinicalConsultations { get; set; } = new List<ClinicalConsultation>();
 
-    public virtual UserAccount User { get; set; } = null!;
+    public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
+
+    public virtual ICollection<ClinicalEntry> ClinicalEntries { get; set; } = new List<ClinicalEntry>();
+
+    public virtual ICollection<TreatmentSession> TreatmentSessions { get; set; } = new List<TreatmentSession>();
+
+    public virtual ICollection<Prescription> Prescriptions { get; set; } = new List<Prescription>();
+
+    public virtual ICollection<FollowUpSchedule> FollowUpSchedules { get; set; } = new List<FollowUpSchedule>();
+
+    public virtual ICollection<VisitFeedback> VisitFeedbacks { get; set; } = new List<VisitFeedback>();
 }

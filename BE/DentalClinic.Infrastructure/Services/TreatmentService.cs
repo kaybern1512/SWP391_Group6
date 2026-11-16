@@ -5,12 +5,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
-using DentalClinic.Application.Features.Treatments.DTOs;
 using DentalClinic.Application.Features.Appointments.DTOs;
+using DentalClinic.Application.Features.Treatments.DTOs;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using AppointmentServiceEntity = DentalClinic.Infrastructure.Persistence.Entities.AppointmentService;
 
 namespace DentalClinic.Infrastructure.Services;
 
@@ -28,22 +29,27 @@ public class TreatmentService : ITreatmentService
     {
         var query = _dbContext.TreatmentPlans
             .AsNoTracking()
-            .Include(tp => tp.PatientUser)
+            .Include(tp => tp.Patient)
                 .ThenInclude(p => p.User)
-            .Include(tp => tp.Department)
-            .Include(tp => tp.CreatedByDentistUser)
-                .ThenInclude(d => d.User)
+            .Include(tp => tp.CreatedByDentist)
+                .ThenInclude(d => d.StaffProfile)
+                    .ThenInclude(s => s.User)
+            .Include(tp => tp.CreatedByDentist)
+                .ThenInclude(d => d.Department)
             .Include(tp => tp.TreatmentPlanItems)
                 .ThenInclude(tpi => tpi.DepartmentService)
-            .Include(tp => tp.TreatmentPlanItems)
-                .ThenInclude(tpi => tpi.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
+            .Include(tp => tp.TreatmentSessions)
+                .ThenInclude(ts => ts.Dentist)
+                    .ThenInclude(d => d.StaffProfile)
+                        .ThenInclude(s => s.User)
+            .Include(tp => tp.TreatmentSessions)
+                .ThenInclude(ts => ts.PerformedServices)
+                    .ThenInclude(ps => ps.DepartmentService)
             .AsQueryable();
 
         if (dentistId > 0)
         {
-            query = query.Where(tp => tp.CreatedByDentistUserId == dentistId 
-                || tp.TreatmentPlanItems.Any(tpi => tpi.AssignedDentistUserId == dentistId));
+            query = query.Where(tp => tp.CreatedByDentistUserId == dentistId);
         }
 
         if (!string.IsNullOrWhiteSpace(status))
@@ -52,16 +58,16 @@ public class TreatmentService : ITreatmentService
         }
         else
         {
-            query = query.Where(tp => !tp.TreatmentPlanItems.Any(tpi => tpi.Note != null && tpi.Note.StartsWith("[DirectCare]")));
+            query = query.Where(tp => !tp.TreatmentPlanItems.Any(tpi => tpi.Notes != null && tpi.Notes.StartsWith("[DirectCare]")));
         }
 
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim().ToLower();
-            query = query.Where(tp => tp.PatientUser.FullName.ToLower().Contains(s)
-                || tp.PatientUser.PatientCode.ToLower().Contains(s)
-                || (tp.PatientUser.User.PhoneNumber != null && tp.PatientUser.User.PhoneNumber.Contains(s))
-                || tp.Department.Name.ToLower().Contains(s));
+            query = query.Where(tp =>
+                tp.Patient.FullName.ToLower().Contains(s) ||
+                (tp.Patient.User.PhoneNumber != null && tp.Patient.User.PhoneNumber.Contains(s)) ||
+                (tp.Title != null && tp.Title.ToLower().Contains(s)));
         }
 
         var plans = await query
@@ -77,27 +83,24 @@ public class TreatmentService : ITreatmentService
         var plan = await _dbContext.TreatmentPlans
             .AsNoTracking()
             .AsSplitQuery()
-            .Include(tp => tp.PatientUser)
+            .Include(tp => tp.Patient)
                 .ThenInclude(p => p.User)
-            .Include(tp => tp.Department)
-            .Include(tp => tp.CreatedByDentistUser)
-                .ThenInclude(d => d.User)
+            .Include(tp => tp.CreatedByDentist)
+                .ThenInclude(d => d.StaffProfile)
+                    .ThenInclude(s => s.User)
+            .Include(tp => tp.CreatedByDentist)
+                .ThenInclude(d => d.Department)
             .Include(tp => tp.TreatmentPlanItems)
                 .ThenInclude(tpi => tpi.DepartmentService)
-            .Include(tp => tp.TreatmentPlanItems)
-                .ThenInclude(tpi => tpi.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
-            .Include(tp => tp.TreatmentPlanItems)
-                .ThenInclude(tpi => tpi.TreatmentSessions)
-                    .ThenInclude(ts => ts.DentistUser)
-                        .ThenInclude(d => d!.User)
-            .Include(tp => tp.TreatmentPlanItems)
-                .ThenInclude(tpi => tpi.TreatmentSessions)
-                    .ThenInclude(ts => ts.Appointment)
-            .Include(tp => tp.TreatmentPlanItems)
-                .ThenInclude(tpi => tpi.TreatmentSessions)
-                    .ThenInclude(ts => ts.PerformedServices)
-                        .ThenInclude(ps => ps.DepartmentService)
+            .Include(tp => tp.TreatmentSessions)
+                .ThenInclude(ts => ts.Dentist)
+                    .ThenInclude(d => d.StaffProfile)
+                        .ThenInclude(s => s.User)
+            .Include(tp => tp.TreatmentSessions)
+                .ThenInclude(ts => ts.Appointment)
+            .Include(tp => tp.TreatmentSessions)
+                .ThenInclude(ts => ts.PerformedServices)
+                    .ThenInclude(ps => ps.DepartmentService)
             .FirstOrDefaultAsync(tp => tp.TreatmentPlanId == planId, ct);
 
         if (plan == null)
@@ -128,25 +131,30 @@ public class TreatmentService : ITreatmentService
             return ApiResponse<TreatmentPlanDto>.Fail("Không tìm thấy thông tin bác sĩ điều trị.");
         }
 
-        var deptId = request.DepartmentId;
-        if (deptId <= 0)
+        var now = DateTime.UtcNow;
+        var medRecord = await _dbContext.DentalMedicalRecords
+            .FirstOrDefaultAsync(r => r.PatientUserId == request.PatientUserId, ct);
+        if (medRecord == null)
         {
-            var firstDept = await _dbContext.DentistDepartments
-                .Where(dd => dd.DentistUserId == dentistUserId)
-                .OrderBy(dd => dd.DepartmentId)
-                .Select(dd => dd.DepartmentId)
-                .FirstOrDefaultAsync(ct);
-            deptId = firstDept > 0 ? firstDept : 1;
+            medRecord = new DentalMedicalRecord
+            {
+                PatientUserId = request.PatientUserId,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            _dbContext.DentalMedicalRecords.Add(medRecord);
+            await _dbContext.SaveChangesAsync(ct);
         }
 
         var plan = new TreatmentPlan
         {
+            MedicalRecordId = medRecord.RecordId,
             PatientUserId = request.PatientUserId,
-            DepartmentId = deptId,
             CreatedByDentistUserId = dentistUserId,
-            Status = !string.IsNullOrWhiteSpace(request.Status) ? request.Status : "Planned",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            Title = "Phác đồ điều trị nha khoa",
+            Status = !string.IsNullOrWhiteSpace(request.Status) ? request.Status : "Draft",
+            CreatedAt = now,
+            UpdatedAt = now,
             EstimatedTotal = 0
         };
 
@@ -159,24 +167,21 @@ public class TreatmentService : ITreatmentService
             int seq = 1;
             foreach (var itemInput in request.Items)
             {
+                var est = itemInput.EstimatedCost ?? 0m;
                 var item = new TreatmentPlanItem
                 {
                     TreatmentPlanId = plan.TreatmentPlanId,
-                    DepartmentServiceId = itemInput.DepartmentServiceId,
-                    AssignedDentistUserId = itemInput.AssignedDentistUserId ?? dentistUserId,
+                    DepartmentServiceId = (int)(itemInput.DepartmentServiceId ?? 1),
                     ToothNumber = itemInput.ToothNumber,
                     SequenceNo = itemInput.SequenceNo > 0 ? itemInput.SequenceNo : seq++,
-                    ExpectedDate = itemInput.ExpectedDate,
-                    EstimatedCost = itemInput.EstimatedCost,
-                    Status = !string.IsNullOrWhiteSpace(itemInput.Status) ? itemInput.Status : "Pending",
-                    Note = itemInput.Note
+                    EstimatedCost = est,
+                    Status = !string.IsNullOrWhiteSpace(itemInput.Status) ? itemInput.Status : "Planned",
+                    Notes = itemInput.Note,
+                    CreatedAt = now,
+                    UpdatedAt = now
                 };
 
-                if (item.EstimatedCost.HasValue)
-                {
-                    totalEstimated += item.EstimatedCost.Value;
-                }
-
+                totalEstimated += est;
                 _dbContext.TreatmentPlanItems.Add(item);
             }
 
@@ -201,35 +206,35 @@ public class TreatmentService : ITreatmentService
 
         int maxSeq = plan.TreatmentPlanItems.Any() ? plan.TreatmentPlanItems.Max(i => i.SequenceNo) : 0;
         int nextSeq = input.SequenceNo > 0 ? input.SequenceNo : (maxSeq + 1);
+        var now = DateTime.UtcNow;
+        var est = input.EstimatedCost ?? 0m;
 
         var item = new TreatmentPlanItem
         {
             TreatmentPlanId = planId,
-            DepartmentServiceId = input.DepartmentServiceId,
-            AssignedDentistUserId = input.AssignedDentistUserId ?? plan.CreatedByDentistUserId,
+            DepartmentServiceId = (int)(input.DepartmentServiceId ?? 1),
             ToothNumber = input.ToothNumber,
             SequenceNo = nextSeq,
-            ExpectedDate = input.ExpectedDate,
-            EstimatedCost = input.EstimatedCost,
-            Status = !string.IsNullOrWhiteSpace(input.Status) ? input.Status : "Pending",
-            Note = input.Note
+            EstimatedCost = est,
+            Status = !string.IsNullOrWhiteSpace(input.Status) ? input.Status : "Planned",
+            Notes = input.Note,
+            CreatedAt = now,
+            UpdatedAt = now
         };
 
         _dbContext.TreatmentPlanItems.Add(item);
 
-        plan.EstimatedTotal = (plan.EstimatedTotal ?? 0) + (input.EstimatedCost ?? 0);
-        plan.UpdatedAt = DateTime.UtcNow;
+        plan.EstimatedTotal += est;
+        plan.UpdatedAt = now;
 
         await _dbContext.SaveChangesAsync(ct);
 
         var createdItem = await _dbContext.TreatmentPlanItems
             .AsNoTracking()
             .Include(i => i.DepartmentService)
-            .Include(i => i.AssignedDentistUser)
-                .ThenInclude(d => d!.User)
-            .FirstOrDefaultAsync(i => i.TreatmentPlanItemId == item.TreatmentPlanItemId, ct);
+            .FirstOrDefaultAsync(i => i.PlanItemId == item.PlanItemId, ct);
 
-        return ApiResponse<TreatmentPlanItemDto>.Ok(MapItemToDto(createdItem!));
+        return ApiResponse<TreatmentPlanItemDto>.Ok(MapItemToDto(createdItem!, plan, new List<TreatmentSession>()));
     }
 
     public async Task<ApiResponse<bool>> UpdateTreatmentPlanStatusAsync(
@@ -254,7 +259,7 @@ public class TreatmentService : ITreatmentService
         var item = await _dbContext.TreatmentPlanItems
             .Include(i => i.TreatmentPlan)
                 .ThenInclude(p => p.TreatmentPlanItems)
-            .FirstOrDefaultAsync(i => i.TreatmentPlanItemId == itemId, ct);
+            .FirstOrDefaultAsync(i => i.PlanItemId == itemId, ct);
 
         if (item == null)
         {
@@ -262,9 +267,9 @@ public class TreatmentService : ITreatmentService
         }
 
         item.Status = status;
+        item.UpdatedAt = DateTime.UtcNow;
         item.TreatmentPlan.UpdatedAt = DateTime.UtcNow;
 
-        // Nếu tất cả các giai đoạn đã hoàn thành, tự động đánh dấu kế hoạch hoàn thành
         if (item.TreatmentPlan.TreatmentPlanItems.All(i => i.Status == "Completed"))
         {
             item.TreatmentPlan.Status = "Completed";
@@ -279,15 +284,12 @@ public class TreatmentService : ITreatmentService
     {
         var query = _dbContext.TreatmentSessions
             .AsNoTracking()
-            .Include(ts => ts.DentistUser)
-                .ThenInclude(d => d.User)
+            .Include(ts => ts.Dentist)
+                .ThenInclude(d => d.StaffProfile)
+                    .ThenInclude(s => s.User)
             .Include(ts => ts.Appointment)
-                .ThenInclude(a => a.PatientUser)
-            .Include(ts => ts.TreatmentPlanItem)
-                .ThenInclude(tpi => tpi.DepartmentService)
-            .Include(ts => ts.TreatmentPlanItem)
-                .ThenInclude(tpi => tpi.TreatmentPlan)
-                    .ThenInclude(tp => tp.PatientUser)
+            .Include(ts => ts.Patient)
+                .ThenInclude(p => p.User)
             .Include(ts => ts.PerformedServices)
                 .ThenInclude(ps => ps.DepartmentService)
             .AsQueryable();
@@ -300,11 +302,10 @@ public class TreatmentService : ITreatmentService
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim().ToLower();
-            query = query.Where(ts => 
-                (ts.Appointment.PatientUser != null && ts.Appointment.PatientUser.FullName.ToLower().Contains(s))
-                || (ts.TreatmentPlanItem.TreatmentPlan.PatientUser != null && ts.TreatmentPlanItem.TreatmentPlan.PatientUser.FullName.ToLower().Contains(s))
-                || (ts.ClinicalNote != null && ts.ClinicalNote.ToLower().Contains(s))
-                || (ts.TreatmentResult != null && ts.TreatmentResult.ToLower().Contains(s)));
+            query = query.Where(ts =>
+                ts.Patient.FullName.ToLower().Contains(s) ||
+                (ts.Notes != null && ts.Notes.ToLower().Contains(s)) ||
+                (ts.ClinicalObservations != null && ts.ClinicalObservations.ToLower().Contains(s)));
         }
 
         var sessions = await query
@@ -318,10 +319,18 @@ public class TreatmentService : ITreatmentService
     public async Task<ApiResponse<TreatmentSessionDto>> CreateTreatmentSessionAsync(
         long dentistUserId, CreateTreatmentSessionRequest request, CancellationToken ct = default)
     {
+        var dentist = await _dbContext.DentistProfiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.UserId == dentistUserId, ct);
+        if (dentist == null)
+        {
+            return ApiResponse<TreatmentSessionDto>.Fail("Không tìm thấy thông tin bác sĩ điều trị.");
+        }
+
         var item = await _dbContext.TreatmentPlanItems
             .Include(i => i.TreatmentPlan)
                 .ThenInclude(p => p.TreatmentPlanItems)
-            .FirstOrDefaultAsync(i => i.TreatmentPlanItemId == request.TreatmentPlanItemId, ct);
+            .FirstOrDefaultAsync(i => i.PlanItemId == request.TreatmentPlanItemId, ct);
 
         if (item == null)
         {
@@ -331,10 +340,9 @@ public class TreatmentService : ITreatmentService
         long appointmentId = request.AppointmentId;
         if (appointmentId <= 0)
         {
-            // Tìm lịch hẹn phù hợp gần nhất của bệnh nhân
             var latestAppt = await _dbContext.Appointments
                 .Where(a => a.PatientUserId == item.TreatmentPlan.PatientUserId)
-                .OrderByDescending(a => a.ScheduledStart)
+                .OrderByDescending(a => a.CreatedAt)
                 .Select(a => a.AppointmentId)
                 .FirstOrDefaultAsync(ct);
 
@@ -348,44 +356,85 @@ public class TreatmentService : ITreatmentService
             }
         }
 
-        var appt = await _dbContext.Appointments.FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
+        var appt = await _dbContext.Appointments
+            .Include(a => a.AppointmentServices)
+            .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
         if (appt == null)
         {
             return ApiResponse<TreatmentSessionDto>.Fail("Không tìm thấy ca khám tương ứng.");
         }
 
-        // Section 7: Mỗi TreatmentSession gắn với Appointment thực tế. Không tự tạo Session cho các lần khám trong tương lai.
-        if (appt.ScheduledStart > DateTime.UtcNow.AddHours(2) && appt.Status != AppointmentStatus.InService && appt.Status != AppointmentStatus.CheckedIn)
+        if (item.TreatmentPlan.PatientUserId != appt.PatientUserId)
         {
-            return ApiResponse<TreatmentSessionDto>.Fail("Không được tự tạo buổi điều trị (TreatmentSession) cho các lần khám trong tương lai.");
+            return ApiResponse<TreatmentSessionDto>.Fail("Kế hoạch điều trị không thuộc về bệnh nhân của ca khám này.");
         }
+
+        AppointmentServiceEntity? targetService = null;
+        if (request.AppointmentServiceId.HasValue)
+        {
+            targetService = appt.AppointmentServices.FirstOrDefault(s => s.AppointmentServiceId == request.AppointmentServiceId.Value);
+            if (targetService == null)
+            {
+                return ApiResponse<TreatmentSessionDto>.Fail("Dịch vụ chỉ định không thuộc ca khám này.");
+            }
+        }
+        else
+        {
+            targetService = appt.AppointmentServices.FirstOrDefault(s => s.AssignedDentistUserId == dentistUserId)
+                ?? appt.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+        }
+
+        if (targetService == null)
+        {
+            return ApiResponse<TreatmentSessionDto>.Fail("Ca khám chưa có dịch vụ liên kết.");
+        }
+
+        var now = DateTime.UtcNow;
+        var sessionDate = request.SessionDate != default
+            ? DateOnly.FromDateTime(request.SessionDate)
+            : DateOnly.FromDateTime(now);
 
         var session = new TreatmentSession
         {
-            TreatmentPlanItemId = request.TreatmentPlanItemId,
             AppointmentId = appointmentId,
+            AppointmentServiceId = targetService.AppointmentServiceId,
+            PatientUserId = appt.PatientUserId,
+            TreatmentPlanId = item.TreatmentPlanId,
             DentistUserId = dentistUserId,
-            SessionDate = request.SessionDate != default ? request.SessionDate : DateTime.UtcNow,
-            TreatmentResult = request.TreatmentResult ?? "Tiến triển tốt",
-            ClinicalNote = request.ClinicalNote
+            SessionDate = sessionDate,
+            Notes = request.ClinicalNote,
+            ClinicalObservations = request.TreatmentResult ?? "Tiến triển tốt",
+            CreatedAt = now,
+            UpdatedAt = now
         };
 
         _dbContext.TreatmentSessions.Add(session);
         await _dbContext.SaveChangesAsync(ct);
 
-        // Thêm các dịch vụ thực hiện (PerformedServices)
         if (request.Services != null && request.Services.Any())
         {
             foreach (var svc in request.Services)
             {
                 if (svc.DepartmentServiceId > 0)
                 {
+                    if (svc.Quantity <= 0)
+                    {
+                        return ApiResponse<TreatmentSessionDto>.Fail("Số lượng dịch vụ thực hiện phải lớn hơn 0.");
+                    }
+                    if (svc.UnitPrice < 0)
+                    {
+                        return ApiResponse<TreatmentSessionDto>.Fail("Đơn giá dịch vụ không được âm.");
+                    }
+
                     var perf = new PerformedService
                     {
-                        TreatmentSessionId = session.TreatmentSessionId,
-                        DepartmentServiceId = svc.DepartmentServiceId,
+                        TreatmentSessionId = session.SessionId,
+                        AppointmentId = appointmentId,
+                        AppointmentServiceId = targetService.AppointmentServiceId,
+                        DepartmentServiceId = (int)svc.DepartmentServiceId,
                         Quantity = svc.Quantity > 0 ? svc.Quantity : 1,
-                        UnitPrice = svc.UnitPrice
+                        UnitPrice = svc.UnitPrice >= 0 ? svc.UnitPrice : 0,
+                        CreatedAt = now
                     };
                     _dbContext.PerformedServices.Add(perf);
                 }
@@ -393,11 +442,11 @@ public class TreatmentService : ITreatmentService
             await _dbContext.SaveChangesAsync(ct);
         }
 
-        // Cập nhật trạng thái của giai đoạn (TreatmentPlanItem)
         if (!string.IsNullOrWhiteSpace(request.MarkPhaseStatus))
         {
             item.Status = request.MarkPhaseStatus;
-            item.TreatmentPlan.UpdatedAt = DateTime.UtcNow;
+            item.UpdatedAt = now;
+            item.TreatmentPlan.UpdatedAt = now;
 
             if (item.TreatmentPlan.TreatmentPlanItems.All(i => i.Status == "Completed"))
             {
@@ -413,18 +462,15 @@ public class TreatmentService : ITreatmentService
 
         var loadedSession = await _dbContext.TreatmentSessions
             .AsNoTracking()
-            .Include(ts => ts.DentistUser)
-                .ThenInclude(d => d.User)
+            .Include(ts => ts.Dentist)
+                .ThenInclude(d => d.StaffProfile)
+                    .ThenInclude(s => s.User)
             .Include(ts => ts.Appointment)
-                .ThenInclude(a => a.PatientUser)
-            .Include(ts => ts.TreatmentPlanItem)
-                .ThenInclude(tpi => tpi.DepartmentService)
-            .Include(ts => ts.TreatmentPlanItem)
-                .ThenInclude(tpi => tpi.TreatmentPlan)
-                    .ThenInclude(tp => tp.PatientUser)
+            .Include(ts => ts.Patient)
+                .ThenInclude(p => p.User)
             .Include(ts => ts.PerformedServices)
                 .ThenInclude(ps => ps.DepartmentService)
-            .FirstOrDefaultAsync(ts => ts.TreatmentSessionId == session.TreatmentSessionId, ct);
+            .FirstOrDefaultAsync(ts => ts.SessionId == session.SessionId, ct);
 
         return ApiResponse<TreatmentSessionDto>.Ok(MapSessionToDto(loadedSession!));
     }
@@ -432,39 +478,30 @@ public class TreatmentService : ITreatmentService
     public async Task<ApiResponse<TreatmentProgressSummaryDto>> GetDepartmentTreatmentProgressAsync(
         long managerUserId, long? departmentId, string? search, CancellationToken ct = default)
     {
-        List<long> managedDeptIds;
-        if (departmentId.HasValue && departmentId.Value > 0)
-        {
-            managedDeptIds = new List<long> { departmentId.Value };
-        }
-        else
-        {
-            managedDeptIds = await _dbContext.Departments
-                .AsNoTracking()
-                .Select(d => d.DepartmentId)
-                .ToListAsync(ct);
-        }
-
         var query = _dbContext.TreatmentPlans
             .AsNoTracking()
-            .Include(tp => tp.PatientUser)
+            .Include(tp => tp.Patient)
                 .ThenInclude(p => p.User)
-            .Include(tp => tp.Department)
-            .Include(tp => tp.CreatedByDentistUser)
-                .ThenInclude(d => d.User)
+            .Include(tp => tp.CreatedByDentist)
+                .ThenInclude(d => d.StaffProfile)
+                    .ThenInclude(s => s.User)
+            .Include(tp => tp.CreatedByDentist)
+                .ThenInclude(d => d.Department)
             .Include(tp => tp.TreatmentPlanItems)
                 .ThenInclude(tpi => tpi.DepartmentService)
-            .Include(tp => tp.TreatmentPlanItems)
-                .ThenInclude(tpi => tpi.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
-            .Where(tp => managedDeptIds.Contains(tp.DepartmentId));
+            .AsQueryable();
+
+        if (departmentId.HasValue && departmentId.Value > 0)
+        {
+            query = query.Where(tp => tp.CreatedByDentist.DepartmentId == departmentId.Value);
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim().ToLower();
-            query = query.Where(tp => tp.PatientUser.FullName.ToLower().Contains(s)
-                || tp.PatientUser.PatientCode.ToLower().Contains(s)
-                || tp.Department.Name.ToLower().Contains(s));
+            query = query.Where(tp =>
+                tp.Patient.FullName.ToLower().Contains(s) ||
+                tp.CreatedByDentist.Department.Name.ToLower().Contains(s));
         }
 
         var plans = await query
@@ -490,7 +527,7 @@ public class TreatmentService : ITreatmentService
     {
         var item = await _dbContext.TreatmentPlanItems
             .Include(i => i.TreatmentPlan)
-            .FirstOrDefaultAsync(i => i.TreatmentPlanItemId == itemId, ct);
+            .FirstOrDefaultAsync(i => i.PlanItemId == itemId, ct);
 
         if (item == null)
         {
@@ -503,7 +540,6 @@ public class TreatmentService : ITreatmentService
             return ApiResponse<bool>.Fail("Không tìm thấy thông tin bác sĩ được chỉ định.");
         }
 
-        item.AssignedDentistUserId = dentistUserId;
         item.TreatmentPlan.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
 
@@ -516,25 +552,24 @@ public class TreatmentService : ITreatmentService
         var plans = await _dbContext.TreatmentPlans
             .AsNoTracking()
             .AsSplitQuery()
-            .Include(tp => tp.PatientUser)
+            .Include(tp => tp.Patient)
                 .ThenInclude(p => p.User)
-            .Include(tp => tp.Department)
-            .Include(tp => tp.CreatedByDentistUser)
-                .ThenInclude(d => d.User)
+            .Include(tp => tp.CreatedByDentist)
+                .ThenInclude(d => d.StaffProfile)
+                    .ThenInclude(s => s.User)
+            .Include(tp => tp.CreatedByDentist)
+                .ThenInclude(d => d.Department)
             .Include(tp => tp.TreatmentPlanItems)
                 .ThenInclude(tpi => tpi.DepartmentService)
-            .Include(tp => tp.TreatmentPlanItems)
-                .ThenInclude(tpi => tpi.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
-            .Include(tp => tp.TreatmentPlanItems)
-                .ThenInclude(tpi => tpi.TreatmentSessions)
-                    .ThenInclude(ts => ts.DentistUser)
-                        .ThenInclude(d => d!.User)
-            .Include(tp => tp.TreatmentPlanItems)
-                .ThenInclude(tpi => tpi.TreatmentSessions)
-                    .ThenInclude(ts => ts.PerformedServices)
-                        .ThenInclude(ps => ps.DepartmentService)
-            .Where(tp => tp.PatientUserId == patientUserId && !tp.TreatmentPlanItems.Any(tpi => tpi.Note != null && tpi.Note.StartsWith("[DirectCare]")))
+            .Include(tp => tp.TreatmentSessions)
+                .ThenInclude(ts => ts.Dentist)
+                    .ThenInclude(d => d.StaffProfile)
+                        .ThenInclude(s => s.User)
+            .Include(tp => tp.TreatmentSessions)
+                .ThenInclude(ts => ts.PerformedServices)
+                    .ThenInclude(ps => ps.DepartmentService)
+            .Where(tp => tp.PatientUserId == patientUserId &&
+                         !tp.TreatmentPlanItems.Any(tpi => tpi.Notes != null && tpi.Notes.StartsWith("[DirectCare]")))
             .OrderByDescending(tp => tp.CreatedAt)
             .ThenBy(tp => tp.TreatmentPlanId)
             .ToListAsync(ct);
@@ -552,7 +587,7 @@ public class TreatmentService : ITreatmentService
             {
                 PatientUserId = p.UserId,
                 FullName = p.FullName,
-                PatientCode = p.PatientCode,
+                PatientCode = $"BN-{p.UserId:D4}",
                 PhoneNumber = p.User.PhoneNumber
             })
             .ToListAsync(ct);
@@ -594,23 +629,23 @@ public class TreatmentService : ITreatmentService
     {
         var query = _dbContext.DentistProfiles
             .AsNoTracking()
-            .Include(d => d.User)
-            .Include(d => d.DentistDepartments)
+            .Include(d => d.StaffProfile)
+                .ThenInclude(s => s.User)
             .AsQueryable();
 
         if (departmentId.HasValue && departmentId.Value > 0)
         {
-            query = query.Where(d => d.DentistDepartments.Any(dd => dd.DepartmentId == departmentId.Value));
+            query = query.Where(d => d.DepartmentId == departmentId.Value);
         }
 
         var dentists = await query
-            .OrderBy(d => d.User.FullName)
+            .OrderBy(d => d.StaffProfile.FullName)
             .Select(d => new TreatmentDentistOptionDto
             {
                 DentistUserId = d.UserId,
-                FullName = d.User.FullName,
+                FullName = d.StaffProfile.FullName,
                 Specialization = d.Qualification,
-                DepartmentId = d.DentistDepartments.Select(dd => dd.DepartmentId).FirstOrDefault()
+                DepartmentId = d.DepartmentId
             })
             .ToListAsync(ct);
 
@@ -624,135 +659,40 @@ public class TreatmentService : ITreatmentService
             .AsNoTracking()
             .Include(tpi => tpi.DepartmentService)
             .Include(tpi => tpi.TreatmentPlan)
-                .ThenInclude(tp => tp.PatientUser)
+                .ThenInclude(tp => tp.Patient)
+                    .ThenInclude(p => p.User)
+            .Include(tpi => tpi.TreatmentPlan)
+                .ThenInclude(tp => tp.Patient)
                     .ThenInclude(p => p.Appointments)
             .Where(tpi => tpi.TreatmentPlan.Status != "Cancelled")
-            .OrderBy(tpi => tpi.TreatmentPlan.PatientUser.FullName)
+            .OrderBy(tpi => tpi.TreatmentPlan.Patient.FullName)
             .ThenBy(tpi => tpi.SequenceNo)
             .ToListAsync(ct);
 
         var result = items.Select(i =>
         {
-            var latestAppt = i.TreatmentPlan.PatientUser?.Appointments
-                .OrderByDescending(a => a.ScheduledStart)
+            var latestAppt = i.TreatmentPlan.Patient?.Appointments
+                .OrderByDescending(a => a.CreatedAt)
                 .FirstOrDefault();
 
             return new TreatmentEligiblePhaseDto
             {
-                TreatmentPlanItemId = i.TreatmentPlanItemId,
+                TreatmentPlanItemId = i.PlanItemId,
                 TreatmentPlanId = i.TreatmentPlanId,
                 PatientUserId = i.TreatmentPlan.PatientUserId,
-                PatientName = i.TreatmentPlan.PatientUser?.FullName ?? "N/A",
-                PatientCode = i.TreatmentPlan.PatientUser?.PatientCode ?? "N/A",
+                PatientName = i.TreatmentPlan.Patient?.FullName ?? "N/A",
+                PatientCode = $"BN-{i.TreatmentPlan.PatientUserId:D4}",
                 SequenceNo = i.SequenceNo,
                 ServiceName = i.DepartmentService?.ServiceName ?? "Dịch vụ nha khoa",
                 ToothNumber = i.ToothNumber,
                 PhaseStatus = i.Status,
                 EstimatedCost = i.EstimatedCost,
                 AssociatedAppointmentId = latestAppt?.AppointmentId,
-                AssociatedAppointmentCode = latestAppt?.AppointmentCode
+                AssociatedAppointmentCode = latestAppt != null ? $"APT-{latestAppt.AppointmentId:D6}" : null
             };
         }).ToList();
 
         return ApiResponse<List<TreatmentEligiblePhaseDto>>.Ok(result);
-    }
-
-    // ==========================================
-    // MAPPERS
-    // ==========================================
-
-    private static TreatmentPlanDto MapToDto(TreatmentPlan plan)
-    {
-        var total = plan.TreatmentPlanItems.Count;
-        var completed = plan.TreatmentPlanItems.Count(i => i.Status == "Completed");
-        var pct = total > 0 ? (int)Math.Round((double)completed * 100 / total) : 0;
-
-        return new TreatmentPlanDto
-        {
-            TreatmentPlanId = plan.TreatmentPlanId,
-            PatientUserId = plan.PatientUserId,
-            PatientName = plan.PatientUser?.FullName ?? "N/A",
-            PatientCode = plan.PatientUser?.PatientCode ?? "N/A",
-            PatientPhone = plan.PatientUser?.User?.PhoneNumber,
-            DepartmentId = plan.DepartmentId,
-            DepartmentName = plan.Department?.Name ?? "Chuyên khoa",
-            CreatedByDentistUserId = plan.CreatedByDentistUserId,
-            CreatedByDentistName = plan.CreatedByDentistUser?.User?.FullName ?? "Bác sĩ điều trị",
-            Status = plan.Status,
-            EstimatedTotal = plan.EstimatedTotal,
-            CreatedAt = plan.CreatedAt,
-            UpdatedAt = plan.UpdatedAt,
-            TotalItemsCount = total,
-            CompletedItemsCount = completed,
-            ProgressPercentage = pct,
-            Items = plan.TreatmentPlanItems
-                .OrderBy(i => i.SequenceNo)
-                .Select(MapItemToDto)
-                .ToList()
-        };
-    }
-
-    private static TreatmentPlanItemDto MapItemToDto(TreatmentPlanItem item)
-    {
-        return new TreatmentPlanItemDto
-        {
-            TreatmentPlanItemId = item.TreatmentPlanItemId,
-            TreatmentPlanId = item.TreatmentPlanId,
-            DepartmentServiceId = item.DepartmentServiceId,
-            ServiceName = item.DepartmentService?.ServiceName ?? "Thủ thuật nha khoa",
-            ServicePrice = item.DepartmentService?.Price,
-            AssignedDentistUserId = item.AssignedDentistUserId,
-            AssignedDentistName = item.AssignedDentistUser?.User?.FullName,
-            ToothNumber = item.ToothNumber,
-            SequenceNo = item.SequenceNo,
-            ExpectedDate = item.ExpectedDate,
-            EstimatedCost = item.EstimatedCost,
-            Status = item.Status,
-            Note = item.Note,
-            Sessions = item.TreatmentSessions
-                .OrderByDescending(s => s.SessionDate)
-                .Select(MapSessionToDto)
-                .ToList()
-        };
-    }
-
-    private static TreatmentSessionDto MapSessionToDto(TreatmentSession session)
-    {
-        var patientName = session.Appointment?.PatientUser?.FullName 
-            ?? session.TreatmentPlanItem?.TreatmentPlan?.PatientUser?.FullName 
-            ?? "Bệnh nhân";
-
-        var patientCode = session.Appointment?.PatientUser?.PatientCode 
-            ?? session.TreatmentPlanItem?.TreatmentPlan?.PatientUser?.PatientCode 
-            ?? string.Empty;
-
-        return new TreatmentSessionDto
-        {
-            TreatmentSessionId = session.TreatmentSessionId,
-            TreatmentPlanItemId = session.TreatmentPlanItemId,
-            AppointmentId = session.AppointmentId,
-            AppointmentCode = session.Appointment?.AppointmentCode,
-            DentistUserId = session.DentistUserId,
-            DentistName = session.DentistUser?.User?.FullName ?? "Bác sĩ",
-            SessionDate = session.SessionDate,
-            TreatmentResult = session.TreatmentResult,
-            ClinicalNote = session.ClinicalNote,
-            PhaseServiceName = session.TreatmentPlanItem?.DepartmentService?.ServiceName,
-            PhaseToothNumber = session.TreatmentPlanItem?.ToothNumber,
-            PhaseSequenceNo = session.TreatmentPlanItem?.SequenceNo ?? 0,
-            PatientName = patientName,
-            PatientCode = patientCode,
-            PerformedServices = session.PerformedServices.Select(ps => new PerformedServiceDto
-            {
-                PerformedServiceId = ps.PerformedServiceId,
-                TreatmentSessionId = ps.TreatmentSessionId,
-                DepartmentServiceId = ps.DepartmentServiceId,
-                ServiceName = ps.DepartmentService?.ServiceName ?? "Dịch vụ",
-                Quantity = ps.Quantity,
-                UnitPrice = ps.UnitPrice,
-                Amount = ps.Quantity * ps.UnitPrice
-            }).ToList()
-        };
     }
 
     public async Task<ApiResponse<AppointmentDto>> CreatePlanFollowUpAppointmentAsync(
@@ -771,216 +711,118 @@ public class TreatmentService : ITreatmentService
             return ApiResponse<AppointmentDto>.Fail("Thời gian tái khám phải là thời điểm trong tương lai.");
 
         var plan = await _dbContext.TreatmentPlans
-            .Include(tp => tp.PatientUser)
+            .Include(tp => tp.Patient)
                 .ThenInclude(p => p.User)
-            .Include(tp => tp.Department)
+            .Include(tp => tp.CreatedByDentist)
+                .ThenInclude(d => d.Department)
             .Include(tp => tp.TreatmentPlanItems)
             .FirstOrDefaultAsync(tp => tp.TreatmentPlanId == planId, ct);
 
         if (plan == null)
             return ApiResponse<AppointmentDto>.Fail("Không tìm thấy phác đồ điều trị chỉ định.");
 
-        // Kiểm tra quyền hạn của bác sĩ đối với phác đồ điều trị
-        var isDoctorInDept = await _dbContext.DentistDepartments
-            .AnyAsync(dd => dd.DentistUserId == dentistUserId && dd.DepartmentId == plan.DepartmentId && dd.Status == "Active", ct);
-
-        if (plan.CreatedByDentistUserId != dentistUserId && !isDoctorInDept)
-        {
-            return ApiResponse<AppointmentDto>.Fail("Bác sĩ không có quyền thao tác trên phác đồ điều trị này.");
-        }
-
         var proposedEnd = request.ScheduledStart.AddMinutes(request.DurationMinutes ?? 30);
         var targetDentistId = request.RequestedDentistUserId ?? dentistUserId;
 
-        var isRelational = _dbContext.Database.IsRelational();
-        var tx = isRelational ? await _dbContext.Database.BeginTransactionAsync(ct) : null;
-        IDisposable? lockScope = null;
-        try
+        int deptId = plan.CreatedByDentist?.DepartmentId ?? 1;
+        int serviceId = 1;
+        decimal unitPrice = 0m;
+
+        if (request.PlanItemId.HasValue)
         {
-            var targetDate = request.ScheduledStart.Date;
-            var lockKeys = new[]
+            var item = plan.TreatmentPlanItems.FirstOrDefault(i => i.PlanItemId == request.PlanItemId.Value);
+            if (item != null)
             {
-                SqlAppLockHelper.DentistMasterKey(targetDentistId),
-                SqlAppLockHelper.DentistKey(targetDentistId, targetDate),
-                SqlAppLockHelper.PatientKey(plan.PatientUserId, targetDate),
-                SqlAppLockHelper.PlanKey(planId)
-            };
-            lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct);
-
-            // Chống trùng lặp (WF-11: khoảng thời gian giao nhau hoặc +/- 1 giờ cho cùng phác đồ)
-            var windowStart = request.ScheduledStart.AddHours(-1);
-            var windowEnd = request.ScheduledStart.AddHours(1);
-            var hasDuplicate = await _dbContext.Appointments.AnyAsync(a =>
-                a.PatientUserId == plan.PatientUserId &&
-                a.DepartmentId == plan.DepartmentId &&
-                (a.Status == AppointmentStatus.PendingReceptionReview || a.Status == AppointmentStatus.PendingDepartmentReview || a.Status == AppointmentStatus.Confirmed) &&
-                a.ScheduledStart.HasValue &&
-                ((a.ScheduledStart.Value >= windowStart && a.ScheduledStart.Value <= windowEnd) ||
-                 (a.ScheduledStart.Value < proposedEnd && a.ScheduledEnd > request.ScheduledStart)), ct);
-
-            if (hasDuplicate)
-            {
-                if (tx != null) await tx.RollbackAsync(ct);
-                return ApiResponse<AppointmentDto>.Fail("Đã có lịch hẹn tái khám đang chờ duyệt hoặc đã xác nhận trong khung giờ gần thời điểm này.");
+                serviceId = item.DepartmentServiceId;
+                unitPrice = item.EstimatedCost;
             }
+        }
+        else if (plan.TreatmentPlanItems.Any())
+        {
+            var first = plan.TreatmentPlanItems.OrderBy(i => i.SequenceNo).First();
+            serviceId = first.DepartmentServiceId;
+            unitPrice = first.EstimatedCost;
+        }
 
-            // Lấy thông tin giai đoạn nếu có
-            long? serviceId = null;
-            if (request.PlanItemId.HasValue)
-            {
-                var item = plan.TreatmentPlanItems.FirstOrDefault(i => i.TreatmentPlanItemId == request.PlanItemId.Value);
-                if (item != null)
-                {
-                    serviceId = item.DepartmentServiceId;
-                }
-            }
+        var now = DateTime.UtcNow;
+        var appt = new Appointment
+        {
+            PatientUserId = plan.PatientUserId,
+            ReasonForVisit = $"[Tái khám phác đồ #{plan.TreatmentPlanId}] {request.Reason.Trim()}",
+            BookingSource = BookingSource.Receptionist,
+            Status = AppointmentStatus.PendingReceptionReview,
+            CreatedByUserId = dentistUserId,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
 
-            string apptCode;
-            do
-            {
-                apptCode = "APP-" + DateTime.UtcNow.ToString("yyyyMMdd") + "-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
-            } while (await _dbContext.Appointments.AnyAsync(a => a.AppointmentCode == apptCode, ct));
+        _dbContext.Appointments.Add(appt);
+        await _dbContext.SaveChangesAsync(ct);
 
-            var appt = new Appointment
+        var apptItem = new AppointmentServiceEntity
+        {
+            AppointmentId = appt.AppointmentId,
+            DepartmentId = deptId,
+            DepartmentServiceId = serviceId,
+            TreatmentPlanItemId = request.PlanItemId,
+            RequestedDentistUserId = targetDentistId,
+            AssignedDentistUserId = targetDentistId,
+            ServiceDate = DateOnly.FromDateTime(request.ScheduledStart),
+            ScheduledStart = request.ScheduledStart,
+            ScheduledEnd = proposedEnd,
+            UnitPrice = unitPrice,
+            Status = AppointmentStatus.PendingReceptionReview,
+            Notes = request.Reason.Trim(),
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        _dbContext.AppointmentServices.Add(apptItem);
+        await _dbContext.SaveChangesAsync(ct);
+
+        var latestSession = await _dbContext.TreatmentSessions
+            .Where(s => s.TreatmentPlanId == planId)
+            .OrderByDescending(s => s.SessionDate)
+            .FirstOrDefaultAsync(ct);
+
+        if (latestSession != null)
+        {
+            var followUp = new FollowUpSchedule
             {
-                AppointmentCode = apptCode,
+                TreatmentSessionId = latestSession.SessionId,
+                DentistUserId = dentistUserId,
                 PatientUserId = plan.PatientUserId,
-                DepartmentId = plan.DepartmentId,
-                RequestedServiceId = serviceId,
-                RequestedDentistUserId = targetDentistId,
-                AssignedDentistUserId = targetDentistId,
-                TreatmentPlanItemId = request.PlanItemId,
-                ScheduledStart = request.ScheduledStart,
-                ScheduledEnd = proposedEnd,
-                ReasonForVisit = $"[Tái khám phác đồ #{plan.TreatmentPlanId}] {request.Reason.Trim()}",
-                BookingSource = BookingSource.Receptionist,
-                Status = AppointmentStatus.PendingReceptionReview, // 4-Role Model: Chuyển Lễ tân điều phối
-                CreatedByUserId = dentistUserId,
-                CreatedAt = DateTime.UtcNow
+                RecommendedDate = DateOnly.FromDateTime(request.ScheduledStart),
+                RecommendedServiceId = serviceId,
+                ClinicalReason = request.Reason.Trim(),
+                Status = "Scheduled",
+                ResultingAppointmentId = appt.AppointmentId,
+                CreatedAt = now,
+                UpdatedAt = now
             };
-
-            _dbContext.Appointments.Add(appt);
-
-            const int maxRetries = 3;
-            int retryCount = 0;
-            while (true)
-            {
-                try
-                {
-                    await _dbContext.SaveChangesAsync(ct);
-                    break;
-                }
-                catch (DbUpdateException ex) when (SqlAppLockHelper.IsUniqueConstraintViolation(ex))
-                {
-                    if (retryCount >= maxRetries)
-                    {
-                        if (tx != null) await tx.RollbackAsync(ct);
-                        return ApiResponse<AppointmentDto>.Fail("Không thể tạo cuộc hẹn do xung đột mã cuộc hẹn liên tiếp. Vui lòng thử lại sau.");
-                    }
-                    retryCount++;
-                    appt.AppointmentCode = "APP-" + DateTime.UtcNow.ToString("yyyyMMdd") + "-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
-                }
-            }
-
-            // Thêm lịch sử trạng thái
-            var history = new AppointmentStatusHistory
-            {
-                AppointmentId = appt.AppointmentId,
-                OldStatus = null,
-                NewStatus = AppointmentStatus.PendingReceptionReview,
-                ChangedByUserId = dentistUserId,
-                Note = $"Bác sĩ chỉ định tái khám từ phác đồ #{plan.TreatmentPlanId}",
-                ChangedAt = DateTime.UtcNow
-            };
-            _dbContext.AppointmentStatusHistories.Add(history);
-
-            // Tạo bản ghi FollowUpSchedule liên kết Appointment (WF-11 điều 03)
-            var latestSession = await _dbContext.TreatmentSessions
-                .Where(s => s.TreatmentPlanItem.TreatmentPlanId == planId)
-                .OrderByDescending(s => s.SessionDate)
-                .FirstOrDefaultAsync(ct);
-
-            if (latestSession != null)
-            {
-                var followUp = new FollowUpSchedule
-                {
-                    TreatmentSessionId = latestSession.TreatmentSessionId,
-                    RecommendedDate = request.ScheduledStart,
-                    Reason = request.Reason.Trim(),
-                    Status = "Scheduled",
-                    AppointmentId = appt.AppointmentId
-                };
-                _dbContext.FollowUpSchedules.Add(followUp);
-            }
-
-            // 4-Role Model: Tạo thông báo cho Lễ tân phụ trách tiếp nhận và điều phối
-            var recUserIds = await _dbContext.UserAccounts
-                .Where(u => u.Role == "Receptionist")
-                .Select(u => u.UserId)
-                .ToListAsync(ct);
-
-            foreach (var recUserId in recUserIds)
-            {
-                _dbContext.Notifications.Add(new Notification
-                {
-                    UserId = recUserId,
-                    AppointmentId = appt.AppointmentId,
-                    Type = "FollowUpReviewRequired",
-                    Channel = "InApp",
-                    Subject = "Lịch tái khám mới cần sắp xếp phòng/ghế",
-                    Content = $"Bác sĩ vừa lập lịch tái khám mã {appt.AppointmentCode} cho bệnh nhân {plan.PatientUser?.FullName}. Vui lòng kiểm tra và hỗ trợ xác nhận.",
-                    DeliveryStatus = "Sent",
-                    SentAt = DateTime.UtcNow
-                });
-            }
-
-            // Tạo thông báo cho Bệnh nhân
-            _dbContext.Notifications.Add(new Notification
-            {
-                UserId = plan.PatientUserId,
-                AppointmentId = appt.AppointmentId,
-                Type = "FollowUpScheduled",
-                Channel = "InApp",
-                Subject = "Đã đề xuất lịch tái khám theo phác đồ",
-                Content = $"Bác sĩ đã lên lịch tái khám cho bạn vào {request.ScheduledStart:dd/MM/yyyy HH:mm} (Mã: {appt.AppointmentCode}). Lịch đang được chuyển Lễ tân xác nhận phòng/ghế.",
-                DeliveryStatus = "Sent",
-                SentAt = DateTime.UtcNow
-            });
-
+            _dbContext.FollowUpSchedules.Add(followUp);
             await _dbContext.SaveChangesAsync(ct);
-            if (tx != null) await tx.CommitAsync(ct);
+        }
 
-            var dto = new AppointmentDto
-            {
-                AppointmentId = appt.AppointmentId,
-                AppointmentCode = appt.AppointmentCode,
-                PatientUserId = appt.PatientUserId,
-                PatientName = plan.PatientUser?.FullName ?? string.Empty,
-                DepartmentId = appt.DepartmentId,
-                DepartmentName = plan.Department?.Name,
-                RequestedServiceId = appt.RequestedServiceId,
-                RequestedDentistUserId = appt.RequestedDentistUserId,
-                AssignedDentistUserId = appt.AssignedDentistUserId,
-                ScheduledStart = appt.ScheduledStart,
-                ScheduledEnd = appt.ScheduledEnd,
-                ReasonForVisit = appt.ReasonForVisit,
-                BookingSource = appt.BookingSource,
-                Status = appt.Status,
-                CreatedAt = appt.CreatedAt
-            };
+        var dto = new AppointmentDto
+        {
+            AppointmentId = appt.AppointmentId,
+            AppointmentCode = $"APT-{appt.AppointmentId:D6}",
+            PatientUserId = appt.PatientUserId,
+            PatientName = plan.Patient?.FullName ?? string.Empty,
+            DepartmentId = deptId,
+            DepartmentName = plan.CreatedByDentist?.Department?.Name,
+            RequestedServiceId = serviceId,
+            RequestedDentistUserId = targetDentistId,
+            AssignedDentistUserId = targetDentistId,
+            ScheduledStart = request.ScheduledStart,
+            ScheduledEnd = proposedEnd,
+            ReasonForVisit = appt.ReasonForVisit ?? string.Empty,
+            BookingSource = appt.BookingSource,
+            Status = appt.Status,
+            CreatedAt = appt.CreatedAt
+        };
 
-            return ApiResponse<AppointmentDto>.Ok(dto, "Lập lịch hẹn tái khám từ phác đồ thành công. Lịch đã được chuyển tới Lễ tân để điều phối phòng/ghế.");
-        }
-        catch
-        {
-            if (tx != null) await tx.RollbackAsync(ct);
-            throw;
-        }
-        finally
-        {
-            lockScope?.Dispose();
-            if (tx != null) await tx.DisposeAsync();
-        }
+        return ApiResponse<AppointmentDto>.Ok(dto, "Lập lịch hẹn tái khám từ phác đồ thành công.");
     }
 
     public async Task<ApiResponse<List<PerformedServiceDto>>> GetPerformedServicesByAppointmentAsync(long appointmentId, CancellationToken ct = default)
@@ -988,8 +830,7 @@ public class TreatmentService : ITreatmentService
         var services = await _dbContext.PerformedServices
             .AsNoTracking()
             .Include(ps => ps.DepartmentService)
-            .Include(ps => ps.TreatmentSession)
-            .Where(ps => ps.TreatmentSession.AppointmentId == appointmentId)
+            .Where(ps => ps.AppointmentId == appointmentId)
             .OrderBy(ps => ps.PerformedServiceId)
             .Select(ps => new PerformedServiceDto
             {
@@ -999,7 +840,7 @@ public class TreatmentService : ITreatmentService
                 ServiceName = ps.DepartmentService.ServiceName,
                 Quantity = ps.Quantity,
                 UnitPrice = ps.UnitPrice,
-                Amount = ps.Amount ?? (ps.Quantity * ps.UnitPrice)
+                Amount = ps.Quantity * ps.UnitPrice
             })
             .ToListAsync(ct);
 
@@ -1014,7 +855,18 @@ public class TreatmentService : ITreatmentService
             return ApiResponse<PerformedServiceDto>.Fail("Vui lòng chọn dịch vụ điều trị thực tế đã thực hiện.");
         }
 
+        if (request.Quantity <= 0)
+        {
+            return ApiResponse<PerformedServiceDto>.Fail("Số lượng dịch vụ phải lớn hơn 0.");
+        }
+
+        if (request.UnitPrice.HasValue && request.UnitPrice.Value < 0)
+        {
+            return ApiResponse<PerformedServiceDto>.Fail("Đơn giá dịch vụ không được âm.");
+        }
+
         var appointment = await _dbContext.Appointments
+            .Include(a => a.AppointmentServices)
             .Include(a => a.TreatmentSessions)
             .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
 
@@ -1023,15 +875,24 @@ public class TreatmentService : ITreatmentService
             return ApiResponse<PerformedServiceDto>.Fail("Không tìm thấy thông tin ca khám.");
         }
 
-        if (appointment.AssignedDentistUserId.HasValue && appointment.AssignedDentistUserId.Value != dentistUserId)
+        AppointmentServiceEntity? targetService = null;
+        if (request.AppointmentServiceId.HasValue)
         {
-            return ApiResponse<PerformedServiceDto>.Fail("Bạn không phải là bác sĩ được phân công cho ca khám này.");
+            targetService = appointment.AppointmentServices.FirstOrDefault(s => s.AppointmentServiceId == request.AppointmentServiceId.Value);
+            if (targetService == null)
+            {
+                return ApiResponse<PerformedServiceDto>.Fail("Dịch vụ chỉ định không thuộc ca khám này.");
+            }
+        }
+        else
+        {
+            targetService = appointment.AppointmentServices.FirstOrDefault(s => s.AssignedDentistUserId == dentistUserId)
+                ?? appointment.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
         }
 
-        var nonBillableStatuses = new[] { "Cancelled", "Withdrawn", "Rejected", "NoShow" };
-        if (nonBillableStatuses.Contains(appointment.Status))
+        if (targetService == null)
         {
-            return ApiResponse<PerformedServiceDto>.Fail($"Ca khám đang ở trạng thái '{appointment.Status}', không thể ghi nhận dịch vụ thực hiện.");
+            return ApiResponse<PerformedServiceDto>.Fail("Ca khám chưa có dịch vụ liên kết.");
         }
 
         var service = await _dbContext.DepartmentServices.FirstOrDefaultAsync(s => s.DepartmentServiceId == request.DepartmentServiceId, ct);
@@ -1041,143 +902,24 @@ public class TreatmentService : ITreatmentService
         }
 
         decimal unitPrice = request.UnitPrice.HasValue && request.UnitPrice.Value >= 0 ? request.UnitPrice.Value : service.Price;
-        int quantity = request.Quantity > 0 ? request.Quantity : 1;
+        int quantity = request.Quantity;
+        var now = DateTime.UtcNow;
 
-        // Tìm hoặc tạo TreatmentSession cho Appointment này
-        var session = appointment.TreatmentSessions.FirstOrDefault();
+        var session = appointment.TreatmentSessions.FirstOrDefault(s => s.AppointmentServiceId == targetService.AppointmentServiceId);
         if (session == null)
         {
-            var deptId = appointment.DepartmentId ?? service.DepartmentId;
-            var appointmentNote = $"Đợt khám {appointment.AppointmentCode}";
-
-            TreatmentPlanItem? item = null;
-
-            // 1. Explicit linking: TreatmentPlanItemId provided in request
-            if (request.TreatmentPlanItemId.HasValue && request.TreatmentPlanItemId.Value > 0)
-            {
-                var planItem = await _dbContext.TreatmentPlanItems
-                    .Include(tpi => tpi.TreatmentPlan)
-                    .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanItemId == request.TreatmentPlanItemId.Value, ct);
-
-                if (planItem == null)
-                {
-                    return ApiResponse<PerformedServiceDto>.Fail($"Không tìm thấy giai đoạn điều trị #{request.TreatmentPlanItemId.Value}.");
-                }
-
-                if (planItem.TreatmentPlan.PatientUserId != appointment.PatientUserId)
-                {
-                    return ApiResponse<PerformedServiceDto>.Fail("Giai đoạn phác đồ được chỉ định không thuộc về bệnh nhân của ca khám này.");
-                }
-
-                item = planItem;
-            }
-            // 1b. Explicit relational linking from Appointment
-            else if (appointment.TreatmentPlanItemId.HasValue && appointment.TreatmentPlanItemId.Value > 0)
-            {
-                var planItem = await _dbContext.TreatmentPlanItems
-                    .Include(tpi => tpi.TreatmentPlan)
-                    .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanItemId == appointment.TreatmentPlanItemId.Value, ct);
-
-                if (planItem != null && planItem.TreatmentPlan.PatientUserId == appointment.PatientUserId)
-                {
-                    item = planItem;
-                }
-            }
-            // 2. Explicit linking: TreatmentPlanId provided in request
-            else if (request.TreatmentPlanId.HasValue && request.TreatmentPlanId.Value > 0)
-            {
-                var linkedPlan = await _dbContext.TreatmentPlans
-                    .Include(tp => tp.TreatmentPlanItems)
-                    .FirstOrDefaultAsync(tp => tp.TreatmentPlanId == request.TreatmentPlanId.Value && tp.PatientUserId == appointment.PatientUserId, ct);
-
-                if (linkedPlan == null)
-                {
-                    return ApiResponse<PerformedServiceDto>.Fail($"Không tìm thấy phác đồ điều trị #{request.TreatmentPlanId.Value} của bệnh nhân.");
-                }
-
-                item = linkedPlan.TreatmentPlanItems
-                    .FirstOrDefault(tpi => tpi.DepartmentServiceId == request.DepartmentServiceId && tpi.Status != "Completed")
-                    ?? linkedPlan.TreatmentPlanItems.FirstOrDefault(tpi => tpi.Status != "Completed")
-                    ?? linkedPlan.TreatmentPlanItems.FirstOrDefault();
-            }
-            // 3. Fallback backward-compatibility: parse ReasonForVisit if explicitly tagged
-            else if (!string.IsNullOrEmpty(appointment.ReasonForVisit) && appointment.ReasonForVisit.Contains("[Tái khám phác đồ #"))
-            {
-                var match = System.Text.RegularExpressions.Regex.Match(appointment.ReasonForVisit, @"\[Tái khám phác đồ #(\d+)\]");
-                if (match.Success && long.TryParse(match.Groups[1].Value, out var parsedPlanId))
-                {
-                    var linkedPlan = await _dbContext.TreatmentPlans
-                        .Include(tp => tp.TreatmentPlanItems)
-                        .FirstOrDefaultAsync(tp => tp.TreatmentPlanId == parsedPlanId && tp.PatientUserId == appointment.PatientUserId, ct);
-
-                    if (linkedPlan != null)
-                    {
-                        item = linkedPlan.TreatmentPlanItems
-                            .FirstOrDefault(tpi => tpi.DepartmentServiceId == request.DepartmentServiceId && tpi.Status != "Completed")
-                            ?? linkedPlan.TreatmentPlanItems.FirstOrDefault(tpi => tpi.Status != "Completed")
-                            ?? linkedPlan.TreatmentPlanItems.FirstOrDefault();
-                    }
-                }
-            }
-
-            // 4. Nếu ca khám vãng lai / đơn lẻ không gắn phác đồ dài hạn, dùng bản ghi DirectCare để cách ly,
-            // Sử dụng Status = 'Completed' và Note prefix [DirectCare] để tuyệt đối tuân thủ SQL Server CHECK constraint
-            if (item == null)
-            {
-                var directCareTag = $"[DirectCare] Đợt khám {appointment.AppointmentCode}";
-                var plan = await _dbContext.TreatmentPlans
-                    .FirstOrDefaultAsync(tp => tp.PatientUserId == appointment.PatientUserId &&
-                                               tp.DepartmentId == deptId &&
-                                               tp.Status == "Completed" &&
-                                               tp.TreatmentPlanItems.Any(tpi => tpi.Note == directCareTag), ct);
-
-                if (plan == null)
-                {
-                    plan = new TreatmentPlan
-                    {
-                        PatientUserId = appointment.PatientUserId,
-                        DepartmentId = deptId,
-                        CreatedByDentistUserId = dentistUserId,
-                        Status = "Completed",
-                                                CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    _dbContext.TreatmentPlans.Add(plan);
-                    await _dbContext.SaveChangesAsync(ct);
-                }
-
-                item = await _dbContext.TreatmentPlanItems
-                    .FirstOrDefaultAsync(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId && tpi.Note == directCareTag, ct);
-
-                if (item == null)
-                {
-                    var maxSeq = await _dbContext.TreatmentPlanItems
-                        .Where(tpi => tpi.TreatmentPlanId == plan.TreatmentPlanId)
-                        .Select(tpi => (int?)tpi.SequenceNo)
-                        .MaxAsync(ct) ?? 0;
-
-                    item = new TreatmentPlanItem
-                    {
-                        TreatmentPlanId = plan.TreatmentPlanId,
-                        DepartmentServiceId = request.DepartmentServiceId,
-                        SequenceNo = maxSeq + 1,
-                        Status = "Completed",
-                        AssignedDentistUserId = dentistUserId,
-                        Note = directCareTag
-                    };
-                    _dbContext.TreatmentPlanItems.Add(item);
-                    await _dbContext.SaveChangesAsync(ct);
-                }
-            }
-
             session = new TreatmentSession
             {
-                TreatmentPlanItemId = item.TreatmentPlanItemId,
                 AppointmentId = appointment.AppointmentId,
+                AppointmentServiceId = targetService.AppointmentServiceId,
+                PatientUserId = appointment.PatientUserId,
+                TreatmentPlanId = request.TreatmentPlanId,
                 DentistUserId = dentistUserId,
-                SessionDate = DateTime.UtcNow,
-                TreatmentResult = "Thực hiện thủ thuật lâm sàng",
-                ClinicalNote = request.Note
+                SessionDate = DateOnly.FromDateTime(now),
+                Notes = request.Note,
+                ClinicalObservations = "Thực hiện thủ thuật lâm sàng",
+                CreatedAt = now,
+                UpdatedAt = now
             };
             _dbContext.TreatmentSessions.Add(session);
             await _dbContext.SaveChangesAsync(ct);
@@ -1185,11 +927,14 @@ public class TreatmentService : ITreatmentService
 
         var performed = new PerformedService
         {
-            TreatmentSessionId = session.TreatmentSessionId,
+            TreatmentSessionId = session.SessionId,
+            AppointmentId = appointment.AppointmentId,
+            AppointmentServiceId = targetService.AppointmentServiceId,
             DepartmentServiceId = service.DepartmentServiceId,
             Quantity = quantity,
             UnitPrice = unitPrice,
-            Amount = quantity * unitPrice
+            Notes = request.Note,
+            CreatedAt = now
         };
 
         _dbContext.PerformedServices.Add(performed);
@@ -1198,12 +943,12 @@ public class TreatmentService : ITreatmentService
         var dto = new PerformedServiceDto
         {
             PerformedServiceId = performed.PerformedServiceId,
-            TreatmentSessionId = session.TreatmentSessionId,
+            TreatmentSessionId = session.SessionId,
             DepartmentServiceId = service.DepartmentServiceId,
             ServiceName = service.ServiceName,
             Quantity = performed.Quantity,
             UnitPrice = performed.UnitPrice,
-            Amount = performed.Amount ?? (quantity * unitPrice)
+            Amount = quantity * unitPrice
         };
 
         return ApiResponse<PerformedServiceDto>.Ok(dto, "Đã ghi nhận dịch vụ thực hiện tại ghế thành công.");
@@ -1214,7 +959,6 @@ public class TreatmentService : ITreatmentService
         var performed = await _dbContext.PerformedServices
             .Include(p => p.InvoiceItems)
             .Include(p => p.TreatmentSession)
-                .ThenInclude(s => s.Appointment)
             .FirstOrDefaultAsync(p => p.PerformedServiceId == performedServiceId, ct);
 
         if (performed == null)
@@ -1227,15 +971,98 @@ public class TreatmentService : ITreatmentService
             return ApiResponse<bool>.Fail("Dịch vụ này đã được xuất hóa đơn thanh toán, không thể xóa.");
         }
 
-        if (performed.TreatmentSession.DentistUserId != dentistUserId &&
-            performed.TreatmentSession.Appointment?.AssignedDentistUserId != dentistUserId)
-        {
-            return ApiResponse<bool>.Fail("Bạn không có quyền xóa dịch vụ thực hiện này.");
-        }
-
         _dbContext.PerformedServices.Remove(performed);
         await _dbContext.SaveChangesAsync(ct);
 
         return ApiResponse<bool>.Ok(true, "Đã xóa dịch vụ thực hiện thành công.");
+    }
+
+    private static TreatmentPlanDto MapToDto(TreatmentPlan plan)
+    {
+        var total = plan.TreatmentPlanItems.Count;
+        var completed = plan.TreatmentPlanItems.Count(i => i.Status == "Completed");
+        var pct = total > 0 ? (int)Math.Round((double)completed * 100 / total) : 0;
+
+        return new TreatmentPlanDto
+        {
+            TreatmentPlanId = plan.TreatmentPlanId,
+            PatientUserId = plan.PatientUserId,
+            PatientName = plan.Patient?.FullName ?? "N/A",
+            PatientCode = $"BN-{plan.PatientUserId:D4}",
+            PatientPhone = plan.Patient?.User?.PhoneNumber,
+            DepartmentId = plan.CreatedByDentist?.DepartmentId ?? 1,
+            DepartmentName = plan.CreatedByDentist?.Department?.Name ?? "Chuyên khoa",
+            CreatedByDentistUserId = plan.CreatedByDentistUserId,
+            CreatedByDentistName = plan.CreatedByDentist?.StaffProfile?.FullName ?? "Bác sĩ điều trị",
+            Status = plan.Status,
+            EstimatedTotal = plan.EstimatedTotal,
+            CreatedAt = plan.CreatedAt,
+            UpdatedAt = plan.UpdatedAt,
+            TotalItemsCount = total,
+            CompletedItemsCount = completed,
+            ProgressPercentage = pct,
+            Items = plan.TreatmentPlanItems
+                .OrderBy(i => i.SequenceNo)
+                .Select(i => MapItemToDto(i, plan, plan.TreatmentSessions))
+                .ToList()
+        };
+    }
+
+    private static TreatmentPlanItemDto MapItemToDto(TreatmentPlanItem item, TreatmentPlan plan, ICollection<TreatmentSession> sessions)
+    {
+        return new TreatmentPlanItemDto
+        {
+            TreatmentPlanItemId = item.PlanItemId,
+            TreatmentPlanId = item.TreatmentPlanId,
+            DepartmentServiceId = item.DepartmentServiceId,
+            ServiceName = item.DepartmentService?.ServiceName ?? "Thủ thuật nha khoa",
+            ServicePrice = item.DepartmentService?.Price,
+            AssignedDentistUserId = plan.CreatedByDentistUserId,
+            AssignedDentistName = plan.CreatedByDentist?.StaffProfile?.FullName,
+            ToothNumber = item.ToothNumber,
+            SequenceNo = item.SequenceNo,
+            ExpectedDate = null,
+            EstimatedCost = item.EstimatedCost,
+            Status = item.Status,
+            Note = item.Notes,
+            Sessions = sessions
+                .OrderByDescending(s => s.SessionDate)
+                .Select(MapSessionToDto)
+                .ToList()
+        };
+    }
+
+    private static TreatmentSessionDto MapSessionToDto(TreatmentSession session)
+    {
+        var patientName = session.Patient?.FullName ?? "Bệnh nhân";
+        var patientCode = $"BN-{session.PatientUserId:D4}";
+
+        return new TreatmentSessionDto
+        {
+            TreatmentSessionId = session.SessionId,
+            TreatmentPlanItemId = session.TreatmentPlanId ?? 0,
+            AppointmentId = session.AppointmentId,
+            AppointmentCode = $"APT-{session.AppointmentId:D6}",
+            DentistUserId = session.DentistUserId,
+            DentistName = session.Dentist?.StaffProfile?.FullName ?? "Bác sĩ",
+            SessionDate = session.SessionDate.ToDateTime(new TimeOnly(8, 0)),
+            TreatmentResult = session.ClinicalObservations,
+            ClinicalNote = session.Notes,
+            PhaseServiceName = session.PerformedServices.FirstOrDefault()?.DepartmentService?.ServiceName,
+            PhaseToothNumber = session.PerformedServices.FirstOrDefault()?.ToothNumber,
+            PhaseSequenceNo = 1,
+            PatientName = patientName,
+            PatientCode = patientCode,
+            PerformedServices = session.PerformedServices.Select(ps => new PerformedServiceDto
+            {
+                PerformedServiceId = ps.PerformedServiceId,
+                TreatmentSessionId = ps.TreatmentSessionId,
+                DepartmentServiceId = ps.DepartmentServiceId,
+                ServiceName = ps.DepartmentService?.ServiceName ?? "Dịch vụ",
+                Quantity = ps.Quantity,
+                UnitPrice = ps.UnitPrice,
+                Amount = ps.Quantity * ps.UnitPrice
+            }).ToList()
+        };
     }
 }

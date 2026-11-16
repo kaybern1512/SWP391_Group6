@@ -16,6 +16,16 @@ public class PatientBookViewModel
     public long RequestedServiceId { get; set; }
 
     /// <summary>
+    /// Danh sách các dịch vụ lẻ được chọn thêm (cho phép đặt nhiều dịch vụ hoặc combo kèm dịch vụ lẻ)
+    /// </summary>
+    public List<long> SelectedServiceIds { get; set; } = new();
+
+    /// <summary>
+    /// Danh sách chi tiết các dịch vụ thành phần được cấu hình
+    /// </summary>
+    public List<BookingServiceItemRequest> ServiceItems { get; set; } = new();
+
+    /// <summary>
     /// Hình thức đặt lịch theo sơ đồ luồng mới:
     /// "GeneralCheckup" = Khám tổng quát / Chưa biết nhu cầu (Khám tư vấn)
     /// "Combo" = Combo dịch vụ (Xem chi tiết & đặt trọn gói)

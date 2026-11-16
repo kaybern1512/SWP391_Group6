@@ -5,43 +5,41 @@ namespace DentalClinic.Infrastructure.Persistence.Entities;
 
 public partial class DepartmentService
 {
-    public long DepartmentServiceId { get; set; }
+    public int DepartmentServiceId { get; set; }
 
-    public string? ServiceCode { get; set; }
+    public int DepartmentId { get; set; }
 
-    public long DepartmentId { get; set; }
+    public string ServiceCode { get; set; } = null!;
 
     public string ServiceName { get; set; } = null!;
 
     public string? Description { get; set; }
 
-    public int? DurationMinutes { get; set; }
-
     public decimal Price { get; set; }
 
-    public string Status { get; set; } = null!;
+    public int DurationMinutes { get; set; } = 30;
 
-    public string ServiceType { get; set; } = "Treatment";
+    public string? DiagnosticType { get; set; }
 
-    public bool RequiresExclusiveRoom { get; set; } = false;
+    public string Status { get; set; } = "Active";
 
-    public bool RequiresConsultationFirst { get; set; } = false;
+    public DateTime CreatedAt { get; set; }
 
-    public int MinLeadTimeHours { get; set; } = 2;
-
-    public string? BookingInstructions { get; set; }
-
-    public bool RequiresTreatmentPlan { get; set; } = false;
-
-    public bool RequiresFollowUp { get; set; } = false;
-
-    public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
+    public DateTime? UpdatedAt { get; set; }
 
     public virtual Department Department { get; set; } = null!;
 
-    public virtual ICollection<PerformedService> PerformedServices { get; set; } = new List<PerformedService>();
+    public virtual ICollection<ServiceComboItem> ServiceComboItems { get; set; } = new List<ServiceComboItem>();
 
     public virtual ICollection<TreatmentPlanItem> TreatmentPlanItems { get; set; } = new List<TreatmentPlanItem>();
 
-    public virtual ICollection<ServiceWorkflow> Workflows { get; set; } = new List<ServiceWorkflow>();
+    public virtual ICollection<AppointmentService> AppointmentServices { get; set; } = new List<AppointmentService>();
+
+    public virtual ICollection<PerformedService> PerformedServices { get; set; } = new List<PerformedService>();
+
+    public virtual ICollection<DepartmentReferral> DepartmentReferrals { get; set; } = new List<DepartmentReferral>();
+
+    public virtual ICollection<Diagnostic> Diagnostics { get; set; } = new List<Diagnostic>();
+
+    public virtual ICollection<FollowUpSchedule> FollowUpSchedules { get; set; } = new List<FollowUpSchedule>();
 }

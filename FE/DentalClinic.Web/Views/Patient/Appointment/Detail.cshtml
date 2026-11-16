@@ -40,6 +40,10 @@
                     case "CheckedIn":
                         <span class="badge bg-teal text-white fs-6 px-3 py-2" style="background-color: #0d9488;">Đã Check-in</span>
                         break;
+                    case "InProgress":
+                    case "InService":
+                        <span class="badge bg-primary fs-6 px-3 py-2"><i class="bi bi-play-circle me-1"></i>Đang Điều Trị</span>
+                        break;
                     case "Completed":
                         <span class="badge bg-secondary fs-6 px-3 py-2">Đã Hoàn Thành</span>
                         break;
@@ -132,58 +136,152 @@
     <!-- MAIN APPOINTMENT DETAILS -->
     <div class="row g-4 mb-4">
         <div class="col-lg-8">
+            <!-- SERVICES BREAKDOWN CARD -->
+            @if (appt.Services != null && appt.Services.Count > 0)
+            {
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0 fw-semibold text-dark">
+                            <i class="bi bi-card-checklist me-2 text-primary"></i>Danh Sách Dịch Vụ Khám (@appt.Services.Count dịch vụ)
+                        </h5>
+                        @if (!string.IsNullOrEmpty(appt.ComboTitle))
+                        {
+                            <span class="badge bg-warning text-dark px-3 py-2"><i class="bi bi-stars me-1"></i>Gói: @appt.ComboTitle</span>
+                        }
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3">#</th>
+                                        <th>Dịch Vụ & Chuyên Khoa</th>
+                                        <th>Bác Sĩ Phụ Trách</th>
+                                        <th>Phòng & Ghế</th>
+                                        <th>Khung Giờ</th>
+                                        <th>STT Khoa</th>
+                                        <th>Trạng Thái</th>
+                                        <th class="text-end pe-3">Đơn Giá</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (int i = 0; i < appt.Services.Count; i++)
+                                    {
+                                        var s = appt.Services[i];
+                                        <tr>
+                                            <td class="ps-3 fw-bold text-muted">@(i + 1)</td>
+                                            <td>
+                                                <div class="fw-bold text-dark">@s.ServiceName</div>
+                                                <small class="text-muted"><i class="bi bi-building me-1"></i>@s.DepartmentName</small>
+                                            </td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(s.AssignedDentistName))
+                                                {
+                                                    <span class="fw-semibold text-success"><i class="bi bi-person-check me-1"></i>@s.AssignedDentistName</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted fst-italic">@(s.RequestedDentistName != null ? $"Yêu cầu: {s.RequestedDentistName}" : "Chờ phân công")</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="small fw-semibold">@(s.RoomName ?? "(Chưa xếp phòng)")</div>
+                                                <div class="small text-muted">@(s.ChairCode != null ? $"Ghế: {s.ChairCode}" : "(Chưa xếp ghế)")</div>
+                                            </td>
+                                            <td>
+                                                <div class="small fw-bold text-primary">@s.ScheduledStart.ToString("HH:mm") - @s.ScheduledEnd.ToString("HH:mm")</div>
+                                                <div class="small text-muted">@s.ScheduledStart.ToString("dd/MM/yyyy")</div>
+                                            </td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(s.QueueCode))
+                                                {
+                                                    <span class="badge bg-primary-subtle text-primary border fw-bold px-2 py-1">@s.QueueCode</span>
+                                                }
+                                                else if (s.QueueNumber.HasValue)
+                                                {
+                                                    <span class="badge bg-primary-subtle text-primary border fw-bold px-2 py-1">STT: @s.QueueNumber.Value</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small">--</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @switch (s.Status)
+                                                {
+                                                    case "Requested":
+                                                        <span class="badge bg-warning-subtle text-warning border px-2 py-1">Yêu cầu</span>
+                                                        break;
+                                                    case "Confirmed":
+                                                        <span class="badge bg-info-subtle text-info border px-2 py-1">Đã xếp</span>
+                                                        break;
+                                                    case "CheckedIn":
+                                                        <span class="badge bg-primary-subtle text-primary border px-2 py-1">Đã Check-in</span>
+                                                        break;
+                                                    case "Waiting":
+                                                        <span class="badge bg-warning text-dark px-2 py-1">Chờ gọi</span>
+                                                        break;
+                                                    case "Called":
+                                                        <span class="badge bg-primary px-2 py-1">Đã gọi vào</span>
+                                                        break;
+                                                    case "InService":
+                                                        <span class="badge bg-success px-2 py-1"><i class="bi bi-play-fill me-1"></i>Đang làm</span>
+                                                        break;
+                                                    case "Completed":
+                                                        <span class="badge bg-secondary px-2 py-1"><i class="bi bi-check2 me-1"></i>Xong</span>
+                                                        break;
+                                                    case "Cancelled":
+                                                        <span class="badge bg-danger-subtle text-danger px-2 py-1">Đã hủy</span>
+                                                        break;
+                                                    default:
+                                                        <span class="badge bg-light text-dark border px-2 py-1">@s.Status</span>
+                                                        break;
+                                                }
+                                            </td>
+                                            <td class="text-end pe-3 fw-bold text-dark">
+                                                @s.UnitPrice.ToString("N0") đ
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr>
+                                        <td colspan="7" class="text-end fw-bold">Tổng chi phí dự kiến:</td>
+                                        <td class="text-end pe-3 fw-bold text-primary fs-6">
+                                            @appt.Services.Sum(x => x.UnitPrice).ToString("N0") đ
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            }
+
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-header bg-white py-3">
                     <h5 class="card-title mb-0 fw-semibold text-dark">
-                        <i class="bi bi-info-circle me-2 text-primary"></i>Thông Tin Chi Tiết Lịch Hẹn
+                        <i class="bi bi-info-circle me-2 text-primary"></i>Thông Tin Tổng Quan Ca Khám
                     </h5>
                 </div>
                 <div class="card-body p-4">
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="text-muted small">Chuyên khoa:</label>
-                            <div class="fw-bold fs-6">@appt.DepartmentName</div>
+                            <label class="text-muted small">Mã lịch hẹn:</label>
+                            <div class="fw-bold fs-6 text-primary">@appt.AppointmentCode</div>
                         </div>
                         <div class="col-md-6">
-                            <label class="text-muted small">Dịch vụ yêu cầu:</label>
-                            <div class="fw-bold fs-6 text-primary">@appt.ServiceName</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="text-muted small">Giá dịch vụ niêm yết:</label>
-                            <div class="fw-semibold">@(appt.ServicePrice.HasValue ? appt.ServicePrice.Value.ToString("N0") + " đ" : "--")</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="text-muted small">Thời lượng dự kiến:</label>
-                            <div class="fw-semibold">@(appt.DurationMinutes ?? 30) phút</div>
-                        </div>
-
-                        <hr class="my-3" />
-
-                        <div class="col-md-6">
-                            <label class="text-muted small">Bác sĩ mong muốn (Yêu cầu lúc đặt):</label>
-                            <div>@(appt.RequestedDentistName ?? "Để phòng khám phân công bác sĩ phù hợp")</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="text-muted small">Bác sĩ phụ trách chính thức:</label>
-                            <div class="fw-bold text-success fs-6">@(appt.AssignedDentistName ?? "(Đang chờ phòng khám phân công bác sĩ)")</div>
+                            <label class="text-muted small">Thời gian bắt đầu:</label>
+                            <div class="fw-bold text-dark">@(appt.ScheduledStart?.ToString("dd/MM/yyyy HH:mm") ?? "--")</div>
                         </div>
 
                         <div class="col-md-6">
-                            <label class="text-muted small">Phòng khám điều trị:</label>
-                            <div class="fw-semibold">@(appt.RoomName ?? "(Chưa xếp phòng)")</div>
+                            <label class="text-muted small">Bác sĩ phụ trách chính:</label>
+                            <div class="fw-semibold text-success">@(appt.AssignedDentistName ?? "(Theo từng dịch vụ)")</div>
                         </div>
                         <div class="col-md-6">
-                            <label class="text-muted small">Ghế nha khoa:</label>
-                            <div class="fw-semibold">@(appt.DentalChairName ?? "(Chưa xếp ghế)")</div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="text-muted small">Thời gian bắt đầu dự kiến:</label>
-                            <div class="fw-bold text-primary">@(appt.ScheduledStart?.ToString("dd/MM/yyyy HH:mm") ?? "--")</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="text-muted small">Thời gian kết thúc dự kiến:</label>
-                            <div class="fw-bold text-primary">@(appt.ScheduledEnd?.ToString("dd/MM/yyyy HH:mm") ?? "--")</div>
+                            <label class="text-muted small">Phòng / Ghế điều trị:</label>
+                            <div class="fw-semibold">@(appt.RoomName != null ? $"{appt.RoomName} / {appt.DentalChairName}" : "(Theo từng dịch vụ)")</div>
                         </div>
 
                         <div class="col-12">

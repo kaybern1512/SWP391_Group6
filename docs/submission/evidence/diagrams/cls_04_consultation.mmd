@@ -1,0 +1,29 @@
+classDiagram
+    class DentistAppointmentController {
+      +Details(long id) Task~IActionResult~
+      +Start(long id) Task~IActionResult~
+    }
+    class DentistMedicalRecordController {
+      -IMedicalRecordApiService _emrApi
+      +Index(long? patientId, long? appointmentId) Task~IActionResult~
+      +CreateEntry(CreateClinicalEntryViewModel) Task~IActionResult~
+    }
+    class MedicalRecordController {
+      -IMedicalRecordService _service
+      +GetByPatientId(long patientUserId) Task~ActionResult~
+      +CreateClinicalEntry(CreateClinicalEntryRequest) Task~ActionResult~
+      +GetCurrentOdontogram(long patientUserId) Task~ActionResult~
+    }
+    class MedicalRecordService {
+      -DentalClinicDbContext _db
+      +GetMedicalRecordByPatientIdAsync(long) Task~MedicalRecordDto~
+      +CreateClinicalEntryAsync(long, CreateClinicalEntryRequest) Task~ClinicalEntryDto~
+      +GetCurrentOdontogramAsync(long) Task~List~OdontogramEntryDto~~
+    }
+    class AppointmentService {
+      +DentistStartAppointmentAsync(long, long) Task
+      +DentistCompleteAppointmentAsync(long, long, CompleteRequest) Task
+    }
+    DentistAppointmentController --> AppointmentService
+    DentistMedicalRecordController --> MedicalRecordController
+    MedicalRecordController --> MedicalRecordService

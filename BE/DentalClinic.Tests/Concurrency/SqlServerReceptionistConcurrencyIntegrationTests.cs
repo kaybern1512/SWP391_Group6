@@ -88,12 +88,12 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
     private static async Task CleanTestDataForDateRangeAsync(DateOnly fromDate, DateOnly toDate)
     {
         using var db = CreateDbContext();
-        var leaves = await db.ReceptionistLeaveRequests
-            .Where(l => l.StartDate <= toDate && l.EndDate >= fromDate)
+        var leaves = await db.StaffLeaveRequests
+            .Where(l => l.StaffRole == "Receptionist" && l.StartDate <= toDate && l.EndDate >= fromDate)
             .ToListAsync();
         if (leaves.Any())
         {
-            db.ReceptionistLeaveRequests.RemoveRange(leaves);
+            db.StaffLeaveRequests.RemoveRange(leaves);
         }
 
         var swaps = await db.ReceptionistShiftSwapRequests
@@ -160,20 +160,21 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
             );
 
             // 2. User A already has an APPROVED leave on 2026-11-20 (1st approved)
-            var leaveA = new ReceptionistLeaveRequest
+            var leaveA = new StaffLeaveRequest
             {
-                ReceptionistUserId = userA,
+                StaffUserId = userA,
+                StaffRole = "Receptionist",
                 LeaveType = "FullDay",
                 StartDate = targetDate,
                 EndDate = targetDate,
                 Reason = "A đã được duyệt trước",
                 Status = "Approved",
-                ApprovedBy = 1,
-                ApprovedAt = DateTime.UtcNow,
+                ReviewedByUserId = 1,
+                ReviewedAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow
             };
-            dbSetup.ReceptionistLeaveRequests.Add(leaveA);
-            dbSetup.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod
+            dbSetup.StaffLeaveRequests.Add(leaveA);
+            dbSetup.StaffLeaveRequestPeriods.Add(new StaffLeaveRequestPeriod
             {
                 LeaveRequest = leaveA,
                 LeaveDate = targetDate,
@@ -181,9 +182,10 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
             });
 
             // 3. User B and User C submit pending leave requests
-            var leaveB = new ReceptionistLeaveRequest
+            var leaveB = new StaffLeaveRequest
             {
-                ReceptionistUserId = userB,
+                StaffUserId = userB,
+                StaffRole = "Receptionist",
                 LeaveType = "FullDay",
                 StartDate = targetDate,
                 EndDate = targetDate,
@@ -191,9 +193,10 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
                 Status = "Pending",
                 CreatedAt = DateTime.UtcNow
             };
-            var leaveC = new ReceptionistLeaveRequest
+            var leaveC = new StaffLeaveRequest
             {
-                ReceptionistUserId = userC,
+                StaffUserId = userC,
+                StaffRole = "Receptionist",
                 LeaveType = "FullDay",
                 StartDate = targetDate,
                 EndDate = targetDate,
@@ -201,9 +204,9 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
                 Status = "Pending",
                 CreatedAt = DateTime.UtcNow
             };
-            dbSetup.ReceptionistLeaveRequests.AddRange(leaveB, leaveC);
-            dbSetup.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod { LeaveRequest = leaveB, LeaveDate = targetDate, Status = "Pending" });
-            dbSetup.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod { LeaveRequest = leaveC, LeaveDate = targetDate, Status = "Pending" });
+            dbSetup.StaffLeaveRequests.AddRange(leaveB, leaveC);
+            dbSetup.StaffLeaveRequestPeriods.Add(new StaffLeaveRequestPeriod { LeaveRequest = leaveB, LeaveDate = targetDate, Status = "Pending" });
+            dbSetup.StaffLeaveRequestPeriods.Add(new StaffLeaveRequestPeriod { LeaveRequest = leaveC, LeaveDate = targetDate, Status = "Pending" });
 
             await dbSetup.SaveChangesAsync();
             leaveBId = leaveB.LeaveRequestId;
@@ -241,17 +244,17 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
 
         using (var dbVerify = CreateDbContext())
         {
-            var approvedLeaves = await dbVerify.ReceptionistLeaveRequests
-                .Where(l => l.StartDate <= targetDate && l.EndDate >= targetDate && l.Status == "Approved")
+            var approvedLeaves = await dbVerify.StaffLeaveRequests
+                .Where(l => l.StaffRole == "Receptionist" && l.StartDate <= targetDate && l.EndDate >= targetDate && l.Status == "Approved")
                 .ToListAsync();
 
             // Total distinct approved users MUST BE EXACTLY 2 (User A + whichever won the race)
-            var distinctUsers = approvedLeaves.Select(l => l.ReceptionistUserId).Distinct().ToList();
+            var distinctUsers = approvedLeaves.Select(l => l.StaffUserId).Distinct().ToList();
             Assert.Equal(2, distinctUsers.Count);
             Assert.Contains(userA, distinctUsers);
 
-            var pendingLeaves = await dbVerify.ReceptionistLeaveRequests
-                .Where(l => l.StartDate <= targetDate && l.EndDate >= targetDate && l.Status == "Pending")
+            var pendingLeaves = await dbVerify.StaffLeaveRequests
+                .Where(l => l.StaffRole == "Receptionist" && l.StartDate <= targetDate && l.EndDate >= targetDate && l.Status == "Pending")
                 .ToListAsync();
             Assert.Single(pendingLeaves); // The loser remained Pending
         }
@@ -305,9 +308,10 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
             dbSetup.ReceptionistShiftSwapRequests.Add(swap);
 
             // C requests leave for Morning Shift
-            var leaveC = new ReceptionistLeaveRequest
+            var leaveC = new StaffLeaveRequest
             {
-                ReceptionistUserId = userC,
+                StaffUserId = userC,
+                StaffRole = "Receptionist",
                 LeaveType = "HalfDayMorning",
                 StartDate = targetDate,
                 EndDate = targetDate,
@@ -317,8 +321,8 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
                 Status = "Pending",
                 CreatedAt = DateTime.UtcNow
             };
-            dbSetup.ReceptionistLeaveRequests.Add(leaveC);
-            dbSetup.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod { LeaveRequest = leaveC, LeaveDate = targetDate, Status = "Pending" });
+            dbSetup.StaffLeaveRequests.Add(leaveC);
+            dbSetup.StaffLeaveRequestPeriods.Add(new StaffLeaveRequestPeriod { LeaveRequest = leaveC, LeaveDate = targetDate, Status = "Pending" });
 
             await dbSetup.SaveChangesAsync();
             swapId = swap.SwapRequestId;
@@ -386,9 +390,10 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
             userC = users[1];
 
             // User B has pending leave for whole day 2026-11-22
-            var leaveB = new ReceptionistLeaveRequest
+            var leaveB = new StaffLeaveRequest
             {
-                ReceptionistUserId = userB,
+                StaffUserId = userB,
+                StaffRole = "Receptionist",
                 LeaveType = "FullDay",
                 StartDate = targetDate,
                 EndDate = targetDate,
@@ -396,8 +401,8 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
                 Status = "Pending",
                 CreatedAt = DateTime.UtcNow
             };
-            dbSetup.ReceptionistLeaveRequests.Add(leaveB);
-            dbSetup.ReceptionistLeaveRequestPeriods.Add(new ReceptionistLeaveRequestPeriod { LeaveRequest = leaveB, LeaveDate = targetDate, Status = "Pending" });
+            dbSetup.StaffLeaveRequests.Add(leaveB);
+            dbSetup.StaffLeaveRequestPeriods.Add(new StaffLeaveRequestPeriod { LeaveRequest = leaveB, LeaveDate = targetDate, Status = "Pending" });
 
             // User C has a morning shift
             dbSetup.ReceptionistWorkSchedules.Add(new ReceptionistWorkSchedule
@@ -445,7 +450,7 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
 
         using (var dbVerify = CreateDbContext())
         {
-            var isLeaveApproved = await dbVerify.ReceptionistLeaveRequests
+            var isLeaveApproved = await dbVerify.StaffLeaveRequests
                 .AnyAsync(l => l.LeaveRequestId == leaveBId && l.Status == "Approved");
 
             if (isLeaveApproved)
@@ -527,8 +532,8 @@ public class SqlServerReceptionistConcurrencyIntegrationTests
 
         using (var dbVerify = CreateDbContext())
         {
-            var userLeavesInDb = await dbVerify.ReceptionistLeaveRequests
-                .Where(l => l.ReceptionistUserId == userB && l.StartDate == targetDate)
+            var userLeavesInDb = await dbVerify.StaffLeaveRequests
+                .Where(l => l.StaffRole == "Receptionist" && l.StaffUserId == userB && l.StartDate == targetDate)
                 .ToListAsync();
 
             Assert.Single(userLeavesInDb); // Exactly 1 row in SQL Server, 0 duplicate records!

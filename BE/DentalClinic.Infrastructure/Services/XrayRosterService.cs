@@ -26,107 +26,119 @@ public class XrayRosterService : IXrayRosterService
 
     public async Task<List<XrayDentistRosterDto>> GetRostersAsync(XrayRosterFilterRequest request, CancellationToken ct = default)
     {
-        var query = _dbContext.XrayDentistRosters
+        var query = _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Include(r => r.Room)
-            .Include(r => r.Equipment)
-            .Include(r => r.DentistUser)
-                .ThenInclude(u => u.StaffProfile)
-                    .ThenInclude(s => s!.DentistProfile)
-            .Include(r => r.BackupDentistUser)
-                .ThenInclude(u => u!.StaffProfile)
-            .AsQueryable();
+            .Include(ws => ws.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Include(ws => ws.StaffUser)
+                .ThenInclude(sp => sp.DentistProfile!)
+                    .ThenInclude(dp => dp.Department)
+                        .ThenInclude(d => d.Rooms)
+            .Where(ws => ws.StaffRole == "Dentist");
 
         if (request.WorkDate.HasValue)
         {
-            query = query.Where(r => r.WorkDate == request.WorkDate.Value);
-        }
-
-        if (request.RoomId.HasValue)
-        {
-            query = query.Where(r => r.RoomId == request.RoomId.Value);
+            query = query.Where(ws => ws.WorkDate == request.WorkDate.Value);
         }
 
         if (request.DentistUserId.HasValue)
         {
-            query = query.Where(r => r.DentistUserId == request.DentistUserId.Value || r.BackupDentistUserId == request.DentistUserId.Value);
+            query = query.Where(ws => ws.StaffUserId == request.DentistUserId.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            query = query.Where(r => r.Status == request.Status);
+            var mappedStatus = request.Status == "Active" ? "Scheduled" : request.Status;
+            query = query.Where(ws => ws.Status == mappedStatus || ws.Status == request.Status);
         }
 
-        var rosters = await query
-            .OrderBy(r => r.WorkDate)
-            .ThenBy(r => r.StartTime)
+        if (request.RoomId.HasValue)
+        {
+            var roomIdInt = (int)request.RoomId.Value;
+            query = query.Where(ws => ws.StaffUser.DentistProfile != null &&
+                                      ws.StaffUser.DentistProfile.Department.Rooms.Any(rm => rm.RoomId == roomIdInt));
+        }
+
+        var schedules = await query
+            .OrderBy(ws => ws.WorkDate)
+            .ThenBy(ws => ws.StartTime)
             .ToListAsync(ct);
 
-        // Fetch leave requests for dentists to check leave status
-        var dentistIds = rosters.Select(r => r.DentistUserId).Distinct().ToList();
-        var leaves = await _dbContext.DentistLeaveRequests
+        var dentistIds = schedules.Select(ws => ws.StaffUserId).Distinct().ToList();
+        var leaves = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Where(l => dentistIds.Contains(l.DentistUserId) && l.Status == "Approved")
+            .Where(l => l.StaffRole == "Dentist" && dentistIds.Contains(l.StaffUserId) && l.Status == "Approved")
             .ToListAsync(ct);
 
-        return rosters.Select(r => MapToDto(r, leaves)).ToList();
+        return schedules.Select(ws => MapToDto(ws, leaves, request.RoomId.HasValue ? (int?)request.RoomId.Value : null)).ToList();
     }
 
     public async Task<XrayDentistRosterDto?> GetRosterByIdAsync(long rosterId, CancellationToken ct = default)
     {
-        var r = await _dbContext.XrayDentistRosters
+        var ws = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Include(x => x.Room)
-            .Include(x => x.Equipment)
-            .Include(x => x.DentistUser)
-                .ThenInclude(u => u.StaffProfile)
-                    .ThenInclude(s => s!.DentistProfile)
-            .Include(x => x.BackupDentistUser)
-                .ThenInclude(u => u!.StaffProfile)
-            .FirstOrDefaultAsync(x => x.RosterId == rosterId, ct);
+            .Include(x => x.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Include(x => x.StaffUser)
+                .ThenInclude(sp => sp.DentistProfile!)
+                    .ThenInclude(dp => dp.Department)
+                        .ThenInclude(d => d.Rooms)
+            .FirstOrDefaultAsync(x => x.WorkScheduleId == rosterId && x.StaffRole == "Dentist", ct);
 
-        if (r == null) return null;
+        if (ws == null) return null;
 
-        var leaves = await _dbContext.DentistLeaveRequests
+        var leaves = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Where(l => l.DentistUserId == r.DentistUserId && l.Status == "Approved")
+            .Where(l => l.StaffRole == "Dentist" && l.StaffUserId == ws.StaffUserId && l.Status == "Approved")
             .ToListAsync(ct);
 
-        return MapToDto(r, leaves);
+        return MapToDto(ws, leaves, null);
     }
 
     public async Task<XrayDentistRosterDto?> GetActiveRosterForRoomAsync(long roomId, DateTime atDateTimeUtc, CancellationToken ct = default)
     {
-        // Convert to local clinic time (+7 GMT for Vietnam)
         var vnZone = TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? "SE Asia Standard Time" : "Asia/Ho_Chi_Minh");
         var localDateTime = TimeZoneInfo.ConvertTimeFromUtc(atDateTimeUtc, vnZone);
         var workDate = DateOnly.FromDateTime(localDateTime);
         var timeOfDay = TimeOnly.FromDateTime(localDateTime);
+        var roomIdInt = (int)roomId;
 
-        var r = await _dbContext.XrayDentistRosters
+        var wsList = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Include(x => x.Room)
-            .Include(x => x.Equipment)
-            .Include(x => x.DentistUser)
-                .ThenInclude(u => u.StaffProfile)
-                    .ThenInclude(s => s!.DentistProfile)
-            .Include(x => x.BackupDentistUser)
-                .ThenInclude(u => u!.StaffProfile)
-            .Where(x => x.RoomId == roomId &&
+            .Include(x => x.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Include(x => x.StaffUser)
+                .ThenInclude(sp => sp.DentistProfile!)
+                    .ThenInclude(dp => dp.Department)
+                        .ThenInclude(d => d.Rooms)
+            .Where(x => x.StaffRole == "Dentist" &&
                         x.WorkDate == workDate &&
-                        x.Status == "Active" &&
+                        x.Status == "Scheduled" &&
                         x.StartTime <= timeOfDay &&
-                        x.EndTime >= timeOfDay)
-            .FirstOrDefaultAsync(ct);
-
-        if (r == null) return null;
-
-        var leaves = await _dbContext.DentistLeaveRequests
-            .AsNoTracking()
-            .Where(l => l.DentistUserId == r.DentistUserId && l.Status == "Approved")
+                        x.EndTime >= timeOfDay &&
+                        x.StaffUser.DentistProfile != null &&
+                        x.StaffUser.DentistProfile.Department.Rooms.Any(rm => rm.RoomId == roomIdInt))
             .ToListAsync(ct);
 
-        return MapToDto(r, leaves);
+        if (!wsList.Any()) return null;
+
+        var dentistIds = wsList.Select(x => x.StaffUserId).Distinct().ToList();
+        var leaves = await _dbContext.StaffLeaveRequests
+            .AsNoTracking()
+            .Where(l => l.StaffRole == "Dentist" &&
+                        dentistIds.Contains(l.StaffUserId) &&
+                        l.Status == "Approved" &&
+                        l.StartDate <= workDate &&
+                        l.EndDate >= workDate &&
+                        (!l.StartTime.HasValue || !l.EndTime.HasValue ||
+                         (l.StartTime.Value <= timeOfDay && l.EndTime.Value >= timeOfDay)))
+            .ToListAsync(ct);
+
+        // Prioritize the on-duty dentist who is actively available (not on approved leave)
+        var activeWs = wsList.FirstOrDefault(ws => !leaves.Any(l => l.StaffUserId == ws.StaffUserId))
+                       ?? wsList.First();
+
+        return MapToDto(activeWs, leaves, roomIdInt);
     }
 
     public async Task<List<QualifiedDentistDto>> GetQualifiedDentistsAsync(CancellationToken ct = default)
@@ -135,20 +147,21 @@ public class XrayRosterService : IXrayRosterService
             .AsNoTracking()
             .Include(u => u.StaffProfile)
                 .ThenInclude(s => s!.DentistProfile)
-            .Where(u => u.Role == UserRole.Dentist && u.Status == "Active")
+                    .ThenInclude(dp => dp!.Department)
+            .Where(u => u.Role == UserRole.Dentist && u.Status == "Active" && u.StaffProfile != null && u.StaffProfile.DentistProfile != null)
             .ToListAsync(ct);
 
         return dentists.Select(u => new QualifiedDentistDto
         {
             UserId = u.UserId,
-            FullName = u.StaffProfile?.FullName ?? u.Email,
-            Email = u.Email,
+            FullName = u.StaffProfile?.FullName ?? u.Email ?? $"Bác sĩ #{u.UserId}",
+            Email = u.Email ?? string.Empty,
             PhoneNumber = u.PhoneNumber,
             LicenseNumber = u.StaffProfile?.DentistProfile?.LicenseNumber,
             Qualification = u.StaffProfile?.DentistProfile?.Qualification,
-            HasRadiationSafetyCert = u.StaffProfile?.DentistProfile?.HasRadiationSafetyCert ?? false,
-            RadiationCertNumber = u.StaffProfile?.DentistProfile?.RadiationCertNumber,
-            RadiationCertExpiryDate = u.StaffProfile?.DentistProfile?.RadiationCertExpiryDate
+            HasRadiationSafetyCert = !string.IsNullOrWhiteSpace(u.StaffProfile?.DentistProfile?.LicenseNumber),
+            RadiationCertNumber = u.StaffProfile?.DentistProfile?.LicenseNumber,
+            RadiationCertExpiryDate = null
         })
         .OrderByDescending(d => d.HasRadiationSafetyCert)
         .ThenBy(d => d.FullName)
@@ -162,32 +175,19 @@ public class XrayRosterService : IXrayRosterService
             throw new InvalidOperationException("Thời gian kết thúc ca trực phải lớn hơn thời gian bắt đầu.");
         }
 
-        // 1. Qualification Check: Dentist MUST have Radiation Safety Certificate
         var dentistProfile = await _dbContext.DentistProfiles
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.UserId == request.DentistUserId, ct);
 
-        if (dentistProfile == null || !dentistProfile.HasRadiationSafetyCert)
+        if (dentistProfile == null)
         {
-            throw new InvalidOperationException("Bác sĩ chưa có chứng chỉ an toàn bức xạ, không đủ điều kiện phân công trực phòng X-quang.");
+            throw new InvalidOperationException("Không tìm thấy hồ sơ bác sĩ.");
         }
 
-        if (request.BackupDentistUserId.HasValue && request.BackupDentistUserId.Value > 0)
-        {
-            var backupProfile = await _dbContext.DentistProfiles
-                .AsNoTracking()
-                .FirstOrDefaultAsync(d => d.UserId == request.BackupDentistUserId.Value, ct);
-
-            if (backupProfile == null || !backupProfile.HasRadiationSafetyCert)
-            {
-                throw new InvalidOperationException("Bác sĩ dự phòng chưa có chứng chỉ an toàn bức xạ.");
-            }
-        }
-
-        // 2. Conflict Check with Approved Leave
-        var onLeave = await _dbContext.DentistLeaveRequests
+        var onLeave = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .AnyAsync(l => l.DentistUserId == request.DentistUserId &&
+            .AnyAsync(l => l.StaffRole == "Dentist" &&
+                           l.StaffUserId == request.DentistUserId &&
                            l.Status == "Approved" &&
                            l.StartDate <= request.WorkDate &&
                            l.EndDate >= request.WorkDate, ct);
@@ -197,14 +197,11 @@ public class XrayRosterService : IXrayRosterService
             throw new InvalidOperationException($"Bác sĩ đang trong thời gian nghỉ phép đã được duyệt vào ngày {request.WorkDate:dd/MM/yyyy}, không thể phân công trực.");
         }
 
-        // 3. Conflict Check with Normal Clinical Appointments
         var startDateTime = request.WorkDate.ToDateTime(request.StartTime);
         var endDateTime = request.WorkDate.ToDateTime(request.EndTime);
 
-        var clinicalConflict = await _dbContext.Appointments
+        var clinicalConflict = await _dbContext.AppointmentServices
             .AsNoTracking()
-            .Include(a => a.PatientUser)
-                .ThenInclude(p => p.User)
             .Where(a => a.AssignedDentistUserId == request.DentistUserId &&
                         (a.Status == AppointmentStatus.Confirmed || a.Status == AppointmentStatus.CheckedIn || a.Status == AppointmentStatus.InService) &&
                         a.ScheduledStart < endDateTime &&
@@ -214,80 +211,59 @@ public class XrayRosterService : IXrayRosterService
         if (clinicalConflict != null)
         {
             throw new InvalidOperationException(
-                $"Bác sĩ đã có lịch hẹn khám lâm sàng ({clinicalConflict.AppointmentCode}) " +
-                $"trong khung giờ {clinicalConflict.ScheduledStart:HH\\:mm} - {clinicalConflict.ScheduledEnd:HH\\:mm}. " +
-                $"Vui lòng điều chuyển lịch khám trước khi phân công trực phòng X-quang.");
+                $"Bác sĩ đã có lịch hẹn dịch vụ (#{clinicalConflict.AppointmentServiceId}) " +
+                $"trong khung giờ {clinicalConflict.ScheduledStart:HH\\:mm} - {clinicalConflict.ScheduledEnd:HH\\:mm}.");
         }
 
-        // 4. Overlap Check for Room / Equipment
-        var roomConflict = await _dbContext.XrayDentistRosters
-            .AsNoTracking()
-            .AnyAsync(r => r.RoomId == request.RoomId &&
-                           r.WorkDate == request.WorkDate &&
-                           r.Status == "Active" &&
-                           r.StartTime < request.EndTime &&
-                           r.EndTime > request.StartTime, ct);
-
-        if (roomConflict)
+        var schedule = new StaffWorkSchedule
         {
-            throw new InvalidOperationException("Phòng X-quang đã có bác sĩ trực trong khung giờ này.");
-        }
-
-        var roster = new XrayDentistRoster
-        {
-            RoomId = request.RoomId,
-            EquipmentId = request.EquipmentId,
-            DentistUserId = request.DentistUserId,
-            BackupDentistUserId = request.BackupDentistUserId > 0 ? request.BackupDentistUserId : null,
+            StaffUserId = request.DentistUserId,
+            StaffRole = "Dentist",
             WorkDate = request.WorkDate,
-            ShiftType = string.IsNullOrWhiteSpace(request.ShiftType) ? "Morning" : request.ShiftType.Trim(),
             StartTime = request.StartTime,
             EndTime = request.EndTime,
-            Status = "Active",
+            Status = "Scheduled",
             Notes = request.Notes?.Trim(),
-            CreatedByUserId = adminUserId,
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow
         };
 
-        _dbContext.XrayDentistRosters.Add(roster);
+        _dbContext.StaffWorkSchedules.Add(schedule);
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Assigned X-ray duty roster #{RosterId}: Room {RoomId}, Dentist {DentistId}, Date {Date}, Shift {Shift}",
-            roster.RosterId, roster.RoomId, roster.DentistUserId, roster.WorkDate, roster.ShiftType);
+        _logger.LogInformation("Assigned dentist work schedule #{WorkScheduleId}: Dentist {DentistId}, Date {Date}",
+            schedule.WorkScheduleId, schedule.StaffUserId, schedule.WorkDate);
 
-        return (await GetRosterByIdAsync(roster.RosterId, ct))!;
+        return (await GetRosterByIdAsync(schedule.WorkScheduleId, ct))!;
     }
 
     public async Task<XrayDentistRosterDto> ReplaceDentistAsync(long rosterId, ReplaceXrayDentistRequest request, long adminUserId, CancellationToken ct = default)
     {
-        var roster = await _dbContext.XrayDentistRosters
-            .FirstOrDefaultAsync(r => r.RosterId == rosterId, ct);
+        var schedule = await _dbContext.StaffWorkSchedules
+            .FirstOrDefaultAsync(r => r.WorkScheduleId == rosterId && r.StaffRole == "Dentist", ct);
 
-        if (roster == null)
+        if (schedule == null)
         {
-            throw new InvalidOperationException("Không tìm thấy phân công trực phòng X-quang.");
+            throw new InvalidOperationException("Không tìm thấy ca làm việc của bác sĩ.");
         }
 
-        if (roster.Status != "Active")
+        if (schedule.Status != "Scheduled")
         {
-            throw new InvalidOperationException($"Không thể điều chuyển ca trực ở trạng thái '{roster.Status}'.");
+            throw new InvalidOperationException($"Không thể điều chuyển ca làm việc ở trạng thái '{schedule.Status}'.");
         }
 
-        // Qualification check on replacement dentist
         var dentistProfile = await _dbContext.DentistProfiles
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.UserId == request.NewDentistUserId, ct);
 
-        if (dentistProfile == null || !dentistProfile.HasRadiationSafetyCert)
+        if (dentistProfile == null)
         {
-            throw new InvalidOperationException("Bác sĩ thay thế chưa có chứng chỉ an toàn bức xạ.");
+            throw new InvalidOperationException("Không tìm thấy hồ sơ bác sĩ thay thế.");
         }
 
-        // Conflict check with clinical appointments
-        var startDateTime = roster.WorkDate.ToDateTime(roster.StartTime);
-        var endDateTime = roster.WorkDate.ToDateTime(roster.EndTime);
+        var startDateTime = schedule.WorkDate.ToDateTime(schedule.StartTime);
+        var endDateTime = schedule.WorkDate.ToDateTime(schedule.EndTime);
 
-        var clinicalConflict = await _dbContext.Appointments
+        var clinicalConflict = await _dbContext.AppointmentServices
             .AsNoTracking()
             .Where(a => a.AssignedDentistUserId == request.NewDentistUserId &&
                         (a.Status == AppointmentStatus.Confirmed || a.Status == AppointmentStatus.CheckedIn || a.Status == AppointmentStatus.InService) &&
@@ -297,37 +273,31 @@ public class XrayRosterService : IXrayRosterService
 
         if (clinicalConflict != null)
         {
-            throw new InvalidOperationException($"Bác sĩ thay thế đã có lịch khám lâm sàng ({clinicalConflict.AppointmentCode}) trong khoảng thời gian này.");
+            throw new InvalidOperationException($"Bác sĩ thay thế đã có lịch khám (#{clinicalConflict.AppointmentServiceId}) trong khoảng thời gian này.");
         }
 
-        roster.DentistUserId = request.NewDentistUserId;
-        if (request.NewBackupDentistUserId.HasValue && request.NewBackupDentistUserId.Value > 0)
-        {
-            roster.BackupDentistUserId = request.NewBackupDentistUserId.Value;
-        }
-        roster.Notes = string.IsNullOrWhiteSpace(roster.Notes)
+        schedule.StaffUserId = request.NewDentistUserId;
+        schedule.Notes = string.IsNullOrWhiteSpace(schedule.Notes)
             ? $"[Điều chuyển]: {request.Reason.Trim()}"
-            : $"{roster.Notes} | [Điều chuyển]: {request.Reason.Trim()}";
-        roster.UpdatedAtUtc = DateTime.UtcNow;
+            : $"{schedule.Notes} | [Điều chuyển]: {request.Reason.Trim()}";
+        schedule.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);
-        _logger.LogInformation("Replaced dentist on X-ray duty roster #{RosterId} with Dentist #{NewDentistId}", rosterId, request.NewDentistUserId);
-
-        return (await GetRosterByIdAsync(roster.RosterId, ct))!;
+        return (await GetRosterByIdAsync(schedule.WorkScheduleId, ct))!;
     }
 
     public async Task<bool> CancelRosterAsync(long rosterId, string reason, long adminUserId, CancellationToken ct = default)
     {
-        var roster = await _dbContext.XrayDentistRosters
-            .FirstOrDefaultAsync(r => r.RosterId == rosterId, ct);
+        var schedule = await _dbContext.StaffWorkSchedules
+            .FirstOrDefaultAsync(r => r.WorkScheduleId == rosterId && r.StaffRole == "Dentist", ct);
 
-        if (roster == null) return false;
+        if (schedule == null) return false;
 
-        roster.Status = "Cancelled";
-        roster.Notes = string.IsNullOrWhiteSpace(roster.Notes)
+        schedule.Status = "Cancelled";
+        schedule.Notes = string.IsNullOrWhiteSpace(schedule.Notes)
             ? $"[Hủy ca trực]: {reason.Trim()}"
-            : $"{roster.Notes} | [Hủy ca trực]: {reason.Trim()}";
-        roster.UpdatedAtUtc = DateTime.UtcNow;
+            : $"{schedule.Notes} | [Hủy ca trực]: {reason.Trim()}";
+        schedule.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);
         return true;
@@ -336,77 +306,100 @@ public class XrayRosterService : IXrayRosterService
     public async Task<bool> IsDentistOnXrayDutyAsync(long dentistUserId, DateTime startUtc, DateTime endUtc, CancellationToken ct = default)
     {
         var vnZone = TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? "SE Asia Standard Time" : "Asia/Ho_Chi_Minh");
-        var localStart = TimeZoneInfo.ConvertTimeFromUtc(startUtc, vnZone);
-        var localEnd = TimeZoneInfo.ConvertTimeFromUtc(endUtc, vnZone);
+        var localStart = startUtc.Kind == DateTimeKind.Utc 
+            ? TimeZoneInfo.ConvertTimeFromUtc(startUtc, vnZone) 
+            : startUtc;
+        var localEnd = endUtc.Kind == DateTimeKind.Utc 
+            ? TimeZoneInfo.ConvertTimeFromUtc(endUtc, vnZone) 
+            : endUtc;
 
         var startDate = DateOnly.FromDateTime(localStart);
         var startTime = TimeOnly.FromDateTime(localStart);
-        var endTime = TimeOnly.FromDateTime(localEnd);
+        var endTime = localEnd.Date > localStart.Date ? new TimeOnly(23, 59, 59) : TimeOnly.FromDateTime(localEnd);
 
-        return await _dbContext.XrayDentistRosters
+        var hasDutySchedule = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .AnyAsync(r => r.DentistUserId == dentistUserId &&
+            .AnyAsync(r => r.StaffRole == "Dentist" &&
+                           r.StaffUserId == dentistUserId &&
                            r.WorkDate == startDate &&
-                           r.Status == "Active" &&
+                           r.Status == "Scheduled" &&
                            r.StartTime < endTime &&
                            r.EndTime > startTime, ct);
+
+        if (!hasDutySchedule) return false;
+
+        var isOnApprovedLeave = await _dbContext.StaffLeaveRequests
+            .AsNoTracking()
+            .AnyAsync(l => l.StaffRole == "Dentist" &&
+                           l.StaffUserId == dentistUserId &&
+                           l.Status == "Approved" &&
+                           l.StartDate <= startDate &&
+                           l.EndDate >= startDate &&
+                           (!l.StartTime.HasValue || !l.EndTime.HasValue ||
+                            (l.StartTime.Value < endTime && l.EndTime.Value > startTime)), ct);
+
+        return !isOnApprovedLeave;
     }
 
     public async Task<List<XrayDentistRosterDto>> GetDentistXrayScheduleAsync(long dentistUserId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default)
     {
-        var query = await _dbContext.XrayDentistRosters
+        var schedules = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Include(r => r.Room)
-            .Include(r => r.Equipment)
-            .Include(r => r.DentistUser)
-                .ThenInclude(u => u.StaffProfile)
-                    .ThenInclude(s => s!.DentistProfile)
-            .Include(r => r.BackupDentistUser)
-                .ThenInclude(u => u!.StaffProfile)
-            .Where(r => (r.DentistUserId == dentistUserId || r.BackupDentistUserId == dentistUserId) &&
+            .Include(r => r.StaffUser)
+                .ThenInclude(sp => sp.User)
+            .Include(r => r.StaffUser)
+                .ThenInclude(sp => sp.DentistProfile!)
+                    .ThenInclude(dp => dp.Department)
+                        .ThenInclude(d => d.Rooms)
+            .Where(r => r.StaffRole == "Dentist" &&
+                        r.StaffUserId == dentistUserId &&
                         r.WorkDate >= fromDate &&
                         r.WorkDate <= toDate &&
-                        r.Status == "Active")
+                        r.Status == "Scheduled")
             .OrderBy(r => r.WorkDate)
             .ThenBy(r => r.StartTime)
             .ToListAsync(ct);
 
-        var leaves = await _dbContext.DentistLeaveRequests
+        var leaves = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Where(l => l.DentistUserId == dentistUserId && l.Status == "Approved")
+            .Where(l => l.StaffRole == "Dentist" && l.StaffUserId == dentistUserId && l.Status == "Approved")
             .ToListAsync(ct);
 
-        return query.Select(r => MapToDto(r, leaves)).ToList();
+        return schedules.Select(ws => MapToDto(ws, leaves, null)).ToList();
     }
 
-    private static XrayDentistRosterDto MapToDto(XrayDentistRoster r, List<DentistLeaveRequest> leaves)
+    private static XrayDentistRosterDto MapToDto(StaffWorkSchedule ws, List<StaffLeaveRequest> leaves, int? preferredRoomId)
     {
-        var isLeave = leaves.Any(l => l.DentistUserId == r.DentistUserId && l.StartDate <= r.WorkDate && l.EndDate >= r.WorkDate);
+        var isLeave = leaves.Any(l => l.StaffUserId == ws.StaffUserId && l.StartDate <= ws.WorkDate && l.EndDate >= ws.WorkDate);
+        var deptRooms = ws.StaffUser?.DentistProfile?.Department?.Rooms;
+        var room = preferredRoomId.HasValue
+            ? deptRooms?.FirstOrDefault(rm => rm.RoomId == preferredRoomId.Value)
+            : deptRooms?.FirstOrDefault();
 
         return new XrayDentistRosterDto
         {
-            RosterId = r.RosterId,
-            RoomId = r.RoomId,
-            RoomCode = r.Room?.RoomCode ?? "XRAY-01",
-            RoomName = r.Room?.RoomName ?? "Phòng Chụp X-quang",
-            EquipmentId = r.EquipmentId,
-            EquipmentCode = r.Equipment?.EquipmentCode ?? "XRAY-MACH-01",
-            EquipmentName = r.Equipment?.EquipmentName ?? "Máy Chụp X-Quang Kỹ Thuật Số",
-            DentistUserId = r.DentistUserId,
-            DentistFullName = r.DentistUser?.StaffProfile?.FullName ?? r.DentistUser?.Email ?? $"Bác sĩ #{r.DentistUserId}",
-            LicenseNumber = r.DentistUser?.StaffProfile?.DentistProfile?.LicenseNumber,
-            HasRadiationSafetyCert = r.DentistUser?.StaffProfile?.DentistProfile?.HasRadiationSafetyCert ?? false,
-            RadiationCertNumber = r.DentistUser?.StaffProfile?.DentistProfile?.RadiationCertNumber,
-            BackupDentistUserId = r.BackupDentistUserId,
-            BackupDentistFullName = r.BackupDentistUser?.StaffProfile?.FullName ?? (r.BackupDentistUserId.HasValue ? $"Bác sĩ #{r.BackupDentistUserId}" : null),
-            WorkDate = r.WorkDate,
-            ShiftType = r.ShiftType,
-            StartTime = r.StartTime,
-            EndTime = r.EndTime,
-            Status = r.Status,
-            Notes = r.Notes,
+            RosterId = ws.WorkScheduleId,
+            RoomId = room?.RoomId ?? 0,
+            RoomCode = room?.RoomCode ?? "XRAY-01",
+            RoomName = room?.RoomName ?? ws.StaffUser?.DentistProfile?.Department?.Name ?? "Phòng Chẩn đoán hình ảnh",
+            EquipmentId = 0,
+            EquipmentCode = "DIAG-01",
+            EquipmentName = "Hệ thống Chẩn đoán hình ảnh",
+            DentistUserId = ws.StaffUserId,
+            DentistFullName = ws.StaffUser?.FullName ?? ws.StaffUser?.User?.Email ?? $"Bác sĩ #{ws.StaffUserId}",
+            LicenseNumber = ws.StaffUser?.DentistProfile?.LicenseNumber,
+            HasRadiationSafetyCert = !string.IsNullOrWhiteSpace(ws.StaffUser?.DentistProfile?.LicenseNumber),
+            RadiationCertNumber = ws.StaffUser?.DentistProfile?.LicenseNumber,
+            BackupDentistUserId = null,
+            BackupDentistFullName = null,
+            WorkDate = ws.WorkDate,
+            ShiftType = ws.StartTime.Hour < 12 ? "Morning" : "Afternoon",
+            StartTime = ws.StartTime,
+            EndTime = ws.EndTime,
+            Status = ws.Status == "Scheduled" ? "Active" : ws.Status,
+            Notes = ws.Notes,
             IsDentistOnLeave = isLeave,
-            CreatedAtUtc = r.CreatedAtUtc
+            CreatedAtUtc = ws.CreatedAt
         };
     }
 }

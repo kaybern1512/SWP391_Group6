@@ -253,7 +253,7 @@ public class BlogService : IBlogService
                     Name = c.Name,
                     Slug = c.Slug,
                     PostCount = c.BlogPosts.Count(p => p.Status == BlogPostStatus.Published),
-                    CreatedAt = c.CreatedAt
+                    CreatedAt = DateTime.UtcNow
                 })
                 .OrderBy(c => c.Name)
                 .ToListAsync(ct);
@@ -394,20 +394,6 @@ public class BlogService : IBlogService
             _dbContext.BlogPosts.Add(post);
             await _dbContext.SaveChangesAsync(ct);
 
-            // Associate any uploaded media belonging to this author used in content
-            var unlinkedMedia = await _dbContext.BlogPostMedia
-                .Where(m => m.UploadedByUserId == authorUserId && m.BlogPostId == null && post.Content.Contains(m.FileUrl))
-                .ToListAsync(ct);
-
-            if (unlinkedMedia.Count > 0)
-            {
-                foreach (var media in unlinkedMedia)
-                {
-                    media.BlogPostId = post.BlogPostId;
-                }
-                await _dbContext.SaveChangesAsync(ct);
-            }
-
             // Re-load relationships for mapping
             await _dbContext.Entry(post).Reference(p => p.Category).LoadAsync(ct);
             await _dbContext.Entry(post).Reference(p => p.AuthorUser).Query()
@@ -495,16 +481,6 @@ public class BlogService : IBlogService
                 }
             }
 
-            // Link any orphan media used in content
-            var unlinkedMedia = await _dbContext.BlogPostMedia
-                .Where(m => m.BlogPostId == null && post.Content.Contains(m.FileUrl))
-                .ToListAsync(ct);
-
-            foreach (var media in unlinkedMedia)
-            {
-                media.BlogPostId = post.BlogPostId;
-            }
-
             await _dbContext.SaveChangesAsync(ct);
             await _dbContext.Entry(post).Reference(p => p.Category).LoadAsync(ct);
 
@@ -547,14 +523,6 @@ public class BlogService : IBlogService
             var deletedTitle = post.Title;
             var deletedStatus = post.Status;
 
-            // Delete all associated media files from Cloudinary
-            var mediaList = await _dbContext.BlogPostMedia.Where(m => m.BlogPostId == postId).ToListAsync(ct);
-            foreach (var media in mediaList)
-            {
-                await _mediaStorageService.DeleteMediaAsync(media.PublicId, media.MediaType, ct);
-            }
-            _dbContext.BlogPostMedia.RemoveRange(mediaList);
-
             _dbContext.BlogPosts.Remove(post);
             await _dbContext.SaveChangesAsync(ct);
 
@@ -563,11 +531,11 @@ public class BlogService : IBlogService
                 "DeleteBlogPost",
                 "BlogPost",
                 postId.ToString(),
-                JsonSerializer.Serialize(new { Title = deletedTitle, Status = deletedStatus, DeletedMediaCount = mediaList.Count }),
+                JsonSerializer.Serialize(new { Title = deletedTitle, Status = deletedStatus }),
                 null,
                 ct);
 
-            return ApiResponse<bool>.Ok(true, "Xóa bài viết và toàn bộ tệp phương tiện thành công.");
+            return ApiResponse<bool>.Ok(true, "Xóa bài viết thành công.");
         }
         catch (Exception ex)
         {
@@ -775,8 +743,7 @@ public class BlogService : IBlogService
             var category = new BlogCategory
             {
                 Name = request.Name.Trim(),
-                Slug = slug,
-                CreatedAt = DateTime.UtcNow
+                Slug = slug
             };
 
             _dbContext.BlogCategories.Add(category);
@@ -797,7 +764,7 @@ public class BlogService : IBlogService
                 Name = category.Name,
                 Slug = category.Slug,
                 PostCount = 0,
-                CreatedAt = category.CreatedAt
+                CreatedAt = DateTime.UtcNow
             }, "Tạo chuyên mục thành công.");
         }
         catch (Exception ex)
@@ -856,7 +823,7 @@ public class BlogService : IBlogService
                 Name = category.Name,
                 Slug = category.Slug,
                 PostCount = category.BlogPosts.Count(p => p.Status == BlogPostStatus.Published),
-                CreatedAt = category.CreatedAt
+                CreatedAt = DateTime.UtcNow
             }, "Cập nhật chuyên mục thành công.");
         }
         catch (Exception ex)
@@ -935,41 +902,42 @@ public class BlogService : IBlogService
                 uploadResult = await _mediaStorageService.UploadVideoAsync(fileStream, fileName, validation.ContentType, null, ct);
             }
 
-            var media = new BlogPostMedia
+            if (blogPostId.HasValue && blogPostId.Value > 0)
             {
-                BlogPostId = blogPostId,
-                UploadedByUserId = userId,
-                MediaType = uploadResult.MediaType,
-                FileUrl = uploadResult.Url,
-                PublicId = uploadResult.PublicId,
-                ThumbnailUrl = uploadResult.ThumbnailUrl,
-                ContentType = uploadResult.ContentType,
-                SizeBytes = uploadResult.SizeBytes,
-                DurationSeconds = uploadResult.DurationSeconds,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            _dbContext.BlogPostMedia.Add(media);
-            await _dbContext.SaveChangesAsync(ct);
+                var post = await _dbContext.BlogPosts.FirstOrDefaultAsync(p => p.BlogPostId == blogPostId.Value, ct);
+                if (post != null)
+                {
+                    if (uploadResult.MediaType == "Image" && string.IsNullOrWhiteSpace(post.ThumbnailUrl))
+                    {
+                        post.ThumbnailUrl = uploadResult.Url;
+                    }
+                    else if (uploadResult.MediaType == "Video")
+                    {
+                        post.VideoUrl = uploadResult.Url;
+                    }
+                    post.UpdatedAt = DateTime.UtcNow;
+                    await _dbContext.SaveChangesAsync(ct);
+                }
+            }
 
             await _auditLogService.LogAsync(
                 userId,
                 "UploadBlogMedia",
-                "BlogPostMedia",
-                media.MediaId.ToString(),
+                "BlogPost",
+                (blogPostId ?? 0).ToString(),
                 null,
-                JsonSerializer.Serialize(new { media.MediaType, media.FileUrl, media.PublicId, media.SizeBytes }),
+                JsonSerializer.Serialize(new { uploadResult.MediaType, uploadResult.Url, uploadResult.PublicId, uploadResult.SizeBytes }),
                 ct);
 
             return ApiResponse<UploadBlogMediaResponse>.Ok(new UploadBlogMediaResponse
             {
-                MediaId = media.MediaId,
-                Url = media.FileUrl,
-                ThumbnailUrl = media.ThumbnailUrl,
-                MediaType = media.MediaType,
-                ContentType = media.ContentType,
-                SizeBytes = media.SizeBytes,
-                DurationSeconds = media.DurationSeconds
+                MediaId = blogPostId ?? DateTime.UtcNow.Ticks,
+                Url = uploadResult.Url,
+                ThumbnailUrl = uploadResult.ThumbnailUrl,
+                MediaType = uploadResult.MediaType,
+                ContentType = uploadResult.ContentType,
+                SizeBytes = uploadResult.SizeBytes,
+                DurationSeconds = uploadResult.DurationSeconds
             }, "Tải lên phương tiện thành công.");
         }
         catch (Exception ex)
@@ -983,28 +951,28 @@ public class BlogService : IBlogService
     {
         try
         {
-            var media = await _dbContext.BlogPostMedia.FirstOrDefaultAsync(m => m.MediaId == mediaId, ct);
-            if (media == null)
+            var post = await _dbContext.BlogPosts.FirstOrDefaultAsync(p => p.BlogPostId == mediaId, ct);
+            if (post == null)
             {
-                return ApiResponse<bool>.Fail("Không tìm thấy tệp phương tiện.");
+                return ApiResponse<bool>.Fail("Không tìm thấy bài viết gắn với phương tiện.");
             }
 
-            if (!isAdmin && media.UploadedByUserId != userId)
+            if (!isAdmin && post.AuthorUserId != userId)
             {
                 return ApiResponse<bool>.Fail("Bạn không có quyền xóa tệp phương tiện này.");
             }
 
-            await _mediaStorageService.DeleteMediaAsync(media.PublicId, media.MediaType, ct);
-
-            _dbContext.BlogPostMedia.Remove(media);
+            post.VideoUrl = null;
+            post.EmbedVideoId = null;
+            post.UpdatedAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync(ct);
 
             await _auditLogService.LogAsync(
                 userId,
                 "DeleteBlogMedia",
-                "BlogPostMedia",
+                "BlogPost",
                 mediaId.ToString(),
-                JsonSerializer.Serialize(new { media.MediaType, media.FileUrl, media.PublicId }),
+                null,
                 null,
                 ct);
 
@@ -1017,36 +985,9 @@ public class BlogService : IBlogService
         }
     }
 
-    public async Task<ApiResponse<int>> CleanupOrphanMediaAsync(CancellationToken ct = default)
+    public Task<ApiResponse<int>> CleanupOrphanMediaAsync(CancellationToken ct = default)
     {
-        try
-        {
-            var cutoff = DateTime.UtcNow.AddHours(-24);
-            var orphans = await _dbContext.BlogPostMedia
-                .Where(m => m.BlogPostId == null && m.CreatedAt < cutoff)
-                .Take(50)
-                .ToListAsync(ct);
-
-            int count = 0;
-            foreach (var orphan in orphans)
-            {
-                await _mediaStorageService.DeleteMediaAsync(orphan.PublicId, orphan.MediaType, ct);
-                _dbContext.BlogPostMedia.Remove(orphan);
-                count++;
-            }
-
-            if (count > 0)
-            {
-                await _dbContext.SaveChangesAsync(ct);
-            }
-
-            return ApiResponse<int>.Ok(count, $"Đã dọn dẹp {count} tệp phương tiện mồ côi.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Lỗi khi dọn dẹp media mồ côi.");
-            return ApiResponse<int>.Fail("Không thể hoàn tất dọn dẹp media mồ côi.");
-        }
+        return Task.FromResult(ApiResponse<int>.Ok(0, "BlogPosts lưu trữ trực tiếp media; không có bảng media mồ côi."));
     }
 
     // ==========================================

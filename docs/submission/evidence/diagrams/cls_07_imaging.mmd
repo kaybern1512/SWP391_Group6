@@ -1,0 +1,40 @@
+classDiagram
+    class DentistXrayQueueController {
+      -IClinicalDiagnosticsApiService _api
+      +Index() Task~IActionResult~
+      +StartSession(long sessionId) Task~IActionResult~
+      +AcquireImage(long sessionId) Task~IActionResult~
+      +CompleteSession(long sessionId, CompleteImagingViewModel) Task~IActionResult~
+    }
+    class ReceptionistImagingQueueController {
+      +Index() Task~IActionResult~
+      +Book(BookImagingSessionViewModel) Task~IActionResult~
+      +CheckIn(long sessionId) Task~IActionResult~
+    }
+    class ClinicalDiagnosticsController {
+      -IImagingService _imagingService
+      -IXrayRosterService _rosterService
+      +CreateOrder(CreateDiagnosticOrderRequest) Task~ActionResult~
+      +BookSession(BookImagingSessionRequest) Task~ActionResult~
+      +CheckInSession(long sessionId) Task~ActionResult~
+      +StartSession(long sessionId) Task~ActionResult~
+      +UploadResult(UploadDiagnosticResultRequest) Task~ActionResult~
+      +CompleteSession(long sessionId) Task~ActionResult~
+      +ReviewResult(long resultId) Task~ActionResult~
+    }
+    class ImagingService {
+      -DentalClinicDbContext _db
+      -IMedicalImagingStorageService _storage
+      +CreateDiagnosticOrderAsync(long, CreateDiagnosticOrderRequest) Task~DiagnosticDto~
+      +BookImagingSessionAsync(long, BookImagingSessionRequest) Task
+      +CompleteImagingSessionAsync(long, CompleteImagingSessionRequest) Task
+      +ReviewDiagnosticResultAsync(long, long) Task
+    }
+    class XrayRosterService {
+      +GetQualifiedDentistsAsync() Task~List~
+      +IsDentistOnXrayDutyAsync(long, DateOnly, TimeOnly) Task~bool~
+    }
+    DentistXrayQueueController --> ClinicalDiagnosticsController
+    ReceptionistImagingQueueController --> ClinicalDiagnosticsController
+    ClinicalDiagnosticsController --> ImagingService
+    ClinicalDiagnosticsController --> XrayRosterService

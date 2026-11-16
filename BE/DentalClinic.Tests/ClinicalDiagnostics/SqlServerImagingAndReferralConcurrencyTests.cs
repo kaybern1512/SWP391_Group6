@@ -512,6 +512,12 @@ public class SqlServerImagingAndReferralConcurrencyTests
                 .Where(r => r.DestinationAppointmentId.HasValue && apptIds.Contains(r.DestinationAppointmentId.Value))
                 .ToListAsync();
             foreach (var r in referencingReferrals) r.DestinationAppointmentId = null;
+
+            var histories = await seedDb.AppointmentStatusHistories
+                .Where(h => apptIds.Contains(h.AppointmentId))
+                .ToListAsync();
+            seedDb.AppointmentStatusHistories.RemoveRange(histories);
+
             seedDb.Appointments.RemoveRange(existingAppts);
             await seedDb.SaveChangesAsync();
         }

@@ -136,7 +136,7 @@ public class AdminControllerAuthorizationRegressionTests
                 PhoneNumber = "0901111222",
                 Role = UserRole.Patient,
                 Status = AccountStatus.Active,
-                PatientProfile = new PatientProfile { FullName = "Nguyen Van A", PatientCode = "PAT-202610-0001" }
+                PatientProfile = new PatientProfile { FullName = "Nguyen Van A" }
             },
             new UserAccount
             {
@@ -145,14 +145,14 @@ public class AdminControllerAuthorizationRegressionTests
                 PhoneNumber = "0903333444",
                 Role = UserRole.Patient,
                 Status = AccountStatus.Unverified,
-                PatientProfile = new PatientProfile { FullName = "Tran Thi B", PatientCode = "PAT-202610-0002" }
+                PatientProfile = new PatientProfile { FullName = "Tran Thi B" }
             }
         );
         await dbContext.SaveChangesAsync();
 
-        var loggerMock = new Mock<ILogger<AppointmentService>>();
+        var loggerMock = new Mock<ILogger<DentalClinic.Infrastructure.Services.AppointmentService>>();
         var notifMock = new Mock<DentalClinic.Application.Common.Interfaces.INotificationService>();
-        var service = new AppointmentService(dbContext, notifMock.Object, loggerMock.Object);
+        var service = new DentalClinic.Infrastructure.Services.AppointmentService(dbContext, notifMock.Object, loggerMock.Object);
 
         // Act
         var result = await service.GetPatientsAsync();

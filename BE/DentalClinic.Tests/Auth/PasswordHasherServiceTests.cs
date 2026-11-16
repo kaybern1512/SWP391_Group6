@@ -24,6 +24,10 @@ public class PasswordHasherServiceTests
 
         var isValid = _hasher.VerifyPassword(hash, password);
         Assert.True(isValid);
+
+        // Verify UAT seed hash against DentalCare@2026!
+        const string uatSeedHash = "AQAAAAIAAYagAAAAEOSafMFmAjzIfTb/sM36E9mswEpHRLJb8tEUD2tuiCemMPJmVJpAUNmndmK3zQvYZQ==";
+        Assert.True(_hasher.VerifyPassword(uatSeedHash, "DentalCare@2026!"));
     }
 
     [Fact]

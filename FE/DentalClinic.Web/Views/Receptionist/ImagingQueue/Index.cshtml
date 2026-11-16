@@ -17,7 +17,10 @@
             </p>
         </div>
         <div class="d-flex gap-2">
-            <button type="button" class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#checkInModal">
+            <button type="button" class="btn btn-success shadow-sm" data-bs-toggle="modal" data-bs-target="#bookImagingModal" id="btnOpenBookModal">
+                <i class="bi bi-calendar-plus me-1"></i> Đặt Lịch & Phân Bổ Ca Chụp
+            </button>
+            <button type="button" class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#checkInModal" id="btnOpenCheckInModal">
                 <i class="bi bi-person-check-fill me-1"></i> Tiếp Nhận / Check-in Ca Chụp
             </button>
             <a href="@Url.Action("Index", "ReceptionistImagingQueue")" class="btn btn-outline-secondary shadow-sm">
@@ -436,6 +439,57 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Book Imaging Session Modal -->
+<div class="modal fade" id="bookImagingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form asp-controller="ReceptionistImagingQueue" asp-action="Book" method="post" id="bookImagingForm">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-calendar-plus-fill text-success me-2"></i>Đặt Lịch & Phân Bổ Bác Sĩ Chụp X-Quang
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mã Chỉ Định Chụp (Diagnostic Order ID) <span class="text-danger">*</span></label>
+                        <input type="number" name="DiagnosticOrderId" id="inputBookDiagnosticOrderId" class="form-control" required placeholder="Nhập mã chỉ định từ ca khám..." />
+                        <div class="form-text">Mã chỉ định cận lâm sàng do bác sĩ điều trị tạo.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Phòng / Thiết Bị Chụp X-Quang <span class="text-danger">*</span></label>
+                        <select name="EquipmentId" id="selectBookEquipmentId" class="form-select" required>
+                            @foreach (var eq in (ViewBag.Equipments as List<DentalClinic.Web.Models.ApiDtos.ImagingEquipmentDto> ?? new()))
+                            {
+                                <option value="@eq.EquipmentId" selected="@(eq.RoomCode == "R003" || eq.RoomId == 5)">@eq.RoomCode - @eq.RoomName (@eq.SupportedDiagnosticTypes)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Bác Sĩ Phụ Trách Ca Chụp <span class="text-danger">*</span></label>
+                        <select name="AssignedDentistUserId" id="selectBookDentistUserId" class="form-select" required>
+                            <option value="9" selected>BS. Tran Hung (Bác sĩ Chẩn đoán hình ảnh)</option>
+                            <option value="10">BS. Nguyen Van Xray (Bác sĩ Chẩn đoán hình ảnh)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Thời Gian Đặt Lịch Chụp (Giờ Việt Nam) <span class="text-danger">*</span></label>
+                        <input type="datetime-local" name="ScheduledStartUtc" id="inputBookScheduledStart" class="form-control" required value="2026-11-30T14:00" />
+                        <div class="form-text">Khung giờ chụp phải nằm trong ca trực thực tế của bác sĩ (VD: 14:00 ngày 30/11/2026).</div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-success fw-semibold" id="btnSubmitBookImaging">
+                        <i class="bi bi-calendar-check me-1"></i>Xác Nhận Đặt Lịch
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

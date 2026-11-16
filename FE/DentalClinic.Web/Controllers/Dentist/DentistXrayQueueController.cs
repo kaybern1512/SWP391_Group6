@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using DentalClinic.Web.Helpers;
+using DentalClinic.Web.Models.Api;
 using DentalClinic.Web.Models.ApiDtos;
 using DentalClinic.Web.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -80,21 +81,35 @@ public class DentistXrayQueueController : Controller
         [FromForm] long sessionId,
         [FromForm] long? equipmentId,
         [FromForm] string? findings,
-        [FromForm] string? fileUrl,
-        [FromForm] long? roomId)
+        [FromForm] Microsoft.AspNetCore.Http.IFormFile? imageFile = null,
+        [FromForm] string? fileUrl = null,
+        [FromForm] long? roomId = null)
     {
-        var req = new UploadDiagnosticResultRequest
+        ApiResult<DiagnosticResultDto> uploadRes;
+        if (imageFile != null && imageFile.Length > 0)
         {
-            DiagnosticOrderId = diagnosticOrderId,
-            ImagingSessionId = sessionId,
-            EquipmentId = equipmentId,
-            SourceType = "Internal",
-            FileUrl = string.IsNullOrWhiteSpace(fileUrl) ? "/uploads/xray/sample_digital_panoramic.jpg" : fileUrl.Trim(),
-            ImageFormat = "JPEG",
-            Findings = string.IsNullOrWhiteSpace(findings) ? "Hình ảnh đạt chuẩn kỹ thuật số. Cung răng và cấu trúc xương hàm rõ nét." : findings.Trim()
-        };
+            uploadRes = await _imagingApiService.UploadResultFileAsync(
+                imageFile,
+                diagnosticOrderId > 0 ? diagnosticOrderId : sessionId,
+                sessionId,
+                equipmentId,
+                string.IsNullOrWhiteSpace(findings) ? "Hình ảnh đạt chuẩn kỹ thuật số. Cung răng và cấu trúc xương hàm rõ nét." : findings.Trim());
+        }
+        else
+        {
+            var req = new UploadDiagnosticResultRequest
+            {
+                DiagnosticOrderId = diagnosticOrderId,
+                ImagingSessionId = sessionId,
+                EquipmentId = equipmentId,
+                SourceType = "Internal",
+                FileUrl = string.IsNullOrWhiteSpace(fileUrl) ? "/uploads/xray/sample_digital_panoramic.jpg" : fileUrl.Trim(),
+                ImageFormat = "JPEG",
+                Findings = string.IsNullOrWhiteSpace(findings) ? "Hình ảnh đạt chuẩn kỹ thuật số. Cung răng và cấu trúc xương hàm rõ nét." : findings.Trim()
+            };
+            uploadRes = await _imagingApiService.UploadResultAsync(req);
+        }
 
-        var uploadRes = await _imagingApiService.UploadResultAsync(req);
         if (uploadRes.IsSuccess)
         {
             var completeRes = await _imagingApiService.CompleteSessionAsync(sessionId);

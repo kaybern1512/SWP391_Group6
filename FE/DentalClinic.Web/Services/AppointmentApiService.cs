@@ -281,7 +281,15 @@ public class AppointmentApiService : IAppointmentApiService
 
     public async Task<ApiResult<StartAppointmentResultDto>> DentistStartAppointmentAsync(long id)
     {
-        return await SendPostAsync<object, StartAppointmentResultDto>($"/api/dentist/appointments/{id}/start", new object());
+        return await DentistStartAppointmentAsync(id, null);
+    }
+
+    public async Task<ApiResult<StartAppointmentResultDto>> DentistStartAppointmentAsync(long id, long? appointmentServiceId)
+    {
+        var url = appointmentServiceId.HasValue && appointmentServiceId.Value > 0
+            ? $"/api/dentist/appointments/{id}/start?appointmentServiceId={appointmentServiceId.Value}"
+            : $"/api/dentist/appointments/{id}/start";
+        return await SendPostAsync<object, StartAppointmentResultDto>(url, new object());
     }
 
     public async Task<ApiResult> DentistCompleteAppointmentAsync(
@@ -291,12 +299,24 @@ public class AppointmentApiService : IAppointmentApiService
         DateTime? recommendedFollowUpDate = null,
         string? followUpReasonCategory = null)
     {
+        return await DentistCompleteAppointmentAsync(id, notes, followUpReason, recommendedFollowUpDate, followUpReasonCategory, null);
+    }
+
+    public async Task<ApiResult> DentistCompleteAppointmentAsync(
+        long id,
+        string? notes,
+        string? followUpReason,
+        DateTime? recommendedFollowUpDate,
+        string? followUpReasonCategory,
+        long? appointmentServiceId)
+    {
         var body = new CompleteAppointmentRequest
         {
             Notes = notes,
             FollowUpReason = followUpReason,
             RecommendedFollowUpDate = recommendedFollowUpDate,
-            FollowUpReasonCategory = followUpReasonCategory
+            FollowUpReasonCategory = followUpReasonCategory,
+            AppointmentServiceId = appointmentServiceId
         };
         return await SendPostActionAsync($"/api/dentist/appointments/{id}/complete", body);
     }

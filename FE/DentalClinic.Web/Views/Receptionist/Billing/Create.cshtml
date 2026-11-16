@@ -137,7 +137,7 @@
                                 {
                                     @foreach (var item in Model.SuggestedItems)
                                     {
-                                        <tr class="item-row" data-performed-id="@item.PerformedServiceId">
+                                        <tr class="item-row" data-performed-id="@item.PerformedServiceId" data-prescription-item-id="@item.PrescriptionItemId">
                                             <td>
                                                 <input type="text" class="form-control form-control-sm item-desc" value="@item.Description" required />
                                                 @if (item.Description.StartsWith("[Thuốc]"))
@@ -457,6 +457,7 @@
                     const qty = parseInt(row.querySelector('.item-qty').value) || 0;
                     let priceVal = row.querySelector('.item-price').value; if (typeof priceVal === 'string') priceVal = priceVal.replace(',', '.'); const price = parseFloat(priceVal) || 0;
                     const perfId = row.getAttribute('data-performed-id');
+                    const prescId = row.getAttribute('data-prescription-item-id');
 
                     if (!desc) {
                         alert('Vui lòng nhập tên dịch vụ cho tất cả các dòng chi phí.');
@@ -470,6 +471,7 @@
 
                     items.push({
                         performedServiceId: (perfId && perfId.trim() !== '') ? parseInt(perfId) : null,
+                        prescriptionItemId: (prescId && prescId.trim() !== '') ? parseInt(prescId) : null,
                         description: desc,
                         quantity: qty,
                         unitPrice: price

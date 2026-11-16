@@ -1,0 +1,21 @@
+sequenceDiagram
+    autonumber
+    actor Den as Dentist
+    actor Rec as Receptionist
+    participant PSvc as PostCareService
+    participant BgJob as AppointmentReminderBackgroundService
+    participant RemSvc as AppointmentReminderService
+    participant DB as SQL Server
+
+    Den->>PSvc: CreateFollowUpAsync(dentistUserId, SourceAppointmentId, RecommendedDate, Reason)
+    PSvc->>DB: INSERT FollowUpSchedules (Status='Proposed', RecommendedDate, Reason)
+    Note right of DB: FollowUpSchedule is a clinical recommendation,<br/>NOT an auto-confirmed Appointment!
+
+    Rec->>PSvc: Coordinate & confirm follow-up slot with Patient
+    PSvc->>DB: INSERT new Appointments & UPDATE FollowUpSchedules SET ResultingAppointmentId=@newId, Status='Scheduled'
+
+    loop Periodic Background Tick
+      BgJob->>RemSvc: ProcessDueRemindersAsync(utcNow)
+      RemSvc->>DB: SELECT Notifications WHERE DeliveryStatus='Pending' AND ScheduledFor <= @utcNow
+      RemSvc->>DB: Deliver InApp / Email notification & UPDATE Notifications SET DeliveryStatus='Sent', SentAt=@utcNow
+    end

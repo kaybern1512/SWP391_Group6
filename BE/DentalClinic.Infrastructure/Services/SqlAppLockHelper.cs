@@ -57,6 +57,9 @@ public static class SqlAppLockHelper
     /// <summary>Lock key for receptionist daily coverage and leave approval synchronization.</summary>
     public static string ReceptionistCoverageDateKey(DateOnly date) => $"Lock_Receptionist_Coverage_{date:yyyyMMdd}";
 
+    /// <summary>Lock key for dentist daily coverage and leave approval synchronization.</summary>
+    public static string DentistCoverageDateKey(DateOnly date) => $"Lock_Dentist_Coverage_{date:yyyyMMdd}";
+
     /// <summary>Lock key for receptionist schedule on a specific calendar date.</summary>
     public static string ReceptionistUserDateKey(long receptionistUserId, DateOnly date) => $"Lock_Receptionist_{receptionistUserId}_{date:yyyyMMdd}";
 

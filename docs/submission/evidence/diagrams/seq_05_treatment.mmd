@@ -1,0 +1,23 @@
+sequenceDiagram
+    autonumber
+    actor Den as Dentist
+    participant MVC as DentistTreatmentPlanController
+    participant API as TreatmentController
+    participant Svc as TreatmentService
+    participant DB as SQL Server
+
+    Den->>MVC: POST /Dentist/TreatmentPlans/Create (Title, PatientUserId, Items)
+    MVC->>API: POST /api/treatments/plans
+    API->>Svc: CreateTreatmentPlanAsync(dentistUserId, request)
+    Svc->>DB: INSERT TreatmentPlans (PlanCode, Status='Active', EstimatedTotal)
+    Svc->>DB: INSERT TreatmentPlanItems (SequenceNo, DepartmentServiceId, EstimatedCost, Status='Planned')
+    DB-->>MVC: TreatmentPlan Created
+
+    Den->>MVC: POST /Dentist/TreatmentPlans/RecordSession (PlanId, PlanItemId, AppointmentId, Procedures)
+    MVC->>API: POST /api/treatments/sessions
+    API->>Svc: CreateTreatmentSessionAsync(dentistUserId, sessionRequest)
+    Svc->>DB: INSERT TreatmentSessions (TreatmentPlanId, TreatmentPlanItemId, AppointmentId, SessionDate)
+    Svc->>DB: INSERT PerformedServices (TreatmentSessionId, AppointmentId, DepartmentServiceId, Quantity, UnitPrice)
+    Svc->>DB: UPDATE TreatmentPlanItems SET Status='Completed'
+    Svc->>DB: Check if all items Completed -> UPDATE TreatmentPlans SET Status='Completed'
+    DB-->>MVC: Session & PerformedServices Recorded for Billing

@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    actor Rec as Receptionist
+    participant MVC as ReceptionistBillingController
+    participant API as BillingController
+    participant Svc as BillingService
+    participant DB as SQL Server
+
+    Rec->>MVC: GET /Receptionist/Billing/Create/{appointmentId}
+    MVC->>API: GET /api/billing/appointments/{appointmentId}/preparation
+    API->>Svc: GetBillingPreparationAsync(appointmentId)
+    Svc->>DB: Query PerformedServices + dispensed PrescriptionItems
+    DB-->>MVC: Aggregated Billable Items (Demo-Fixture Prices)
+
+    Rec->>MVC: POST /Receptionist/Billing/Create (DiscountAmount)
+    MVC->>API: POST /api/billing/invoices
+    API->>Svc: CreateInvoiceAsync(recUserId, request)
+    Svc->>DB: Ensure each item satisfies CK_InvoiceItems_SourceLink (PerformedServiceId XOR PrescriptionItemId)
+    alt FinalAmount == 0 (100% Discount / Zero-Total Invoice)
+      Svc->>DB: INSERT Invoices (TotalAmount, DiscountAmount, FinalAmount=0, Status='Paid')
+      Svc->>DB: INSERT InvoiceItems (No fake 0-amount Payment row inserted, preserving CK_Payments_Amount > 0)
+    else FinalAmount > 0
+      Svc->>DB: INSERT Invoices (TotalAmount, DiscountAmount, FinalAmount, Status='Unpaid')
+      Svc->>DB: INSERT InvoiceItems
+    end
+    DB-->>MVC: Invoice Created
+
+    Rec->>MVC: POST /Receptionist/Billing/Pay (InvoiceId, Amount, Method='Cash'|'BankTransfer'|'CreditCard')
+    MVC->>API: POST /api/billing/payments
+    API->>Svc: ProcessPaymentAsync(recUserId, paymentRequest)
+    Svc->>DB: BEGIN TRANSACTION WITH (UPDLOCK) on Invoices
+    Svc->>DB: INSERT Payments (Amount > 0, Method, PaymentType='Partial'|'Final', Status='Successful')
+    Svc->>DB: Compute sum(Payments) -> UPDATE Invoices SET Status = ('PartiallyPaid' or 'Paid')
+    Svc->>DB: COMMIT
+    DB-->>MVC: Payment Recorded & Printable Receipt Ready

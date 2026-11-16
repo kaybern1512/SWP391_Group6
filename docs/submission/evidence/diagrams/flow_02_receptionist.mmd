@@ -1,0 +1,24 @@
+flowchart TD
+    classDef scr fill:#E8F5E9,stroke:#2E7D32,stroke-width:1.5px,color:#000
+    classDef mod fill:#FFF3E0,stroke:#EF6C00,stroke-width:1.5px,stroke-dasharray: 4 2,color:#000
+
+    RDASH["SCR-REC-01: Receptionist Dashboard & Today Check-In<br/>(/Receptionist/Dashboard)"]:::scr
+    WALKIN(["Modal: Walk-In Registration & Check-In<br/>(POST /Receptionist/Appointments/WalkInCheckIn)"]):::mod
+    REQS["SCR-REC-02: Appointment Requests Queue<br/>(/Receptionist/Appointments/Requests)"]:::scr
+    REV["SCR-REC-03: Request Review & Room/Chair Allocation<br/>(/Receptionist/Appointments/Review/{id})"]:::scr
+    DISR["SCR-REC-04: Disruption Coordination<br/>(/Receptionist/Appointments/Disruptions)"]:::scr
+    IMGQ["SCR-REC-05: Receptionist Imaging Queue & R003 Booking<br/>(/Receptionist/ImagingQueue)"]:::scr
+    BILLC["SCR-REC-06: Invoice Creation & Preparation<br/>(/Receptionist/Billing/Create/{appointmentId})"]:::scr
+    BILLD["SCR-REC-07: Invoice Detail, Payment & Refund Modal<br/>(/Receptionist/Billing/Detail/{id})"]:::scr
+    PRINT(["Print View: Official Clinic Receipt<br/>(/Receptionist/Billing/Print/{id})"]):::mod
+    WF["SCR-REC-08: Personal Schedule, Leave, Swap & Handover<br/>(/Receptionist/Schedule, /Leave, /ShiftSwap, /Handover)"]:::scr
+    BLOG["SCR-REC-09: Blog Draft Editor<br/>(/Receptionist/Blog)"]:::scr
+
+    RDASH --> WALKIN
+    RDASH --> REQS
+    REQS --> REV
+    REQS --> DISR
+    RDASH --> IMGQ
+    RDASH --> BILLC --> BILLD --> PRINT
+    RDASH --> WF
+    RDASH --> BLOG

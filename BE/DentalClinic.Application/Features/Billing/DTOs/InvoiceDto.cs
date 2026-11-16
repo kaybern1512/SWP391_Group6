@@ -7,7 +7,7 @@ public class InvoiceDto
 {
     public long InvoiceId { get; set; }
     public string InvoiceCode { get; set; } = string.Empty;
-    public long AppointmentId { get; set; }
+    public long? AppointmentId { get; set; }
     public string? AppointmentCode { get; set; }
     public long PatientUserId { get; set; }
     public string? PatientCode { get; set; }

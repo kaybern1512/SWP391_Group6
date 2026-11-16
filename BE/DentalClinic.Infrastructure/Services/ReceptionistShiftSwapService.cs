@@ -6,20 +6,21 @@ using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.ReceptionistWorkforce.DTOs;
+using DentalClinic.Domain.Common;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
-using DentalClinic.Domain.Enums;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DentalClinic.Infrastructure.Services;
 
 public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
 {
     private readonly DentalClinicDbContext _dbContext;
-    private readonly IReceptionistCoverageService _coverageService;
     private readonly INotificationService _notificationService;
     private readonly IAuditLogService _auditLogService;
 
+    [ActivatorUtilitiesConstructor]
     public ReceptionistShiftSwapService(
         DentalClinicDbContext dbContext,
         IReceptionistCoverageService coverageService,
@@ -27,9 +28,158 @@ public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
         IAuditLogService auditLogService)
     {
         _dbContext = dbContext;
-        _coverageService = coverageService;
         _notificationService = notificationService;
         _auditLogService = auditLogService;
+    }
+
+    private class SwapCycleState
+    {
+        public AuditLog CreateLog { get; set; } = null!;
+        public long SourceScheduleId { get; set; }
+        public long RequestingUserId { get; set; }
+        public long TargetUserId { get; set; }
+        public long? TargetScheduleId { get; set; }
+        public string Reason { get; set; } = string.Empty;
+        public string Status { get; set; } = "PendingCounterparty";
+        public AuditLog? PeerResponseLog { get; set; }
+        public string? PeerNote { get; set; }
+        public AuditLog? AdminDecisionLog { get; set; }
+        public string? AdminReason { get; set; }
+        public AuditLog? WithdrawLog { get; set; }
+    }
+
+    private static (long targetUserId, long? targetScheduleId, string reason) ParseCreatePayload(string? payload)
+    {
+        long targetUserId = 0;
+        long? targetScheduleId = null;
+        string reason = string.Empty;
+        if (string.IsNullOrWhiteSpace(payload)) return (0, null, string.Empty);
+        var parts = payload.Split(';');
+        foreach (var part in parts)
+        {
+            if (part.StartsWith("Target:", StringComparison.OrdinalIgnoreCase))
+            {
+                long.TryParse(part.Substring(7), out targetUserId);
+            }
+            else if (part.StartsWith("TargetSchedule:", StringComparison.OrdinalIgnoreCase))
+            {
+                if (long.TryParse(part.Substring(15), out var tsId) && tsId > 0)
+                    targetScheduleId = tsId;
+            }
+            else if (part.StartsWith("Reason:", StringComparison.OrdinalIgnoreCase))
+            {
+                reason = part.Substring(7);
+            }
+        }
+        return (targetUserId, targetScheduleId, reason);
+    }
+
+    private static (string status, string? note) ParsePeerResponsePayload(string? payload)
+    {
+        string status = string.Empty;
+        string? note = null;
+        if (string.IsNullOrWhiteSpace(payload)) return (string.Empty, null);
+        var parts = payload.Split(';');
+        foreach (var part in parts)
+        {
+            if (part.StartsWith("Status:", StringComparison.OrdinalIgnoreCase))
+                status = part.Substring(7);
+            else if (part.StartsWith("Note:", StringComparison.OrdinalIgnoreCase))
+                note = part.Substring(5);
+        }
+        return (status, note);
+    }
+
+    private static (string status, string? reason) ParseAdminDecisionPayload(string? payload)
+    {
+        string status = string.Empty;
+        string? reason = null;
+        if (string.IsNullOrWhiteSpace(payload)) return (string.Empty, null);
+        var parts = payload.Split(';');
+        foreach (var part in parts)
+        {
+            if (part.StartsWith("Status:", StringComparison.OrdinalIgnoreCase))
+                status = part.Substring(7);
+            else if (part.StartsWith("Reason:", StringComparison.OrdinalIgnoreCase))
+                reason = part.Substring(7);
+        }
+        return (status, reason);
+    }
+
+    private async Task<SwapCycleState?> GetSwapCycleStateAsync(long scheduleId, CancellationToken ct)
+    {
+        var logs = await _dbContext.AuditLogs
+            .AsNoTracking()
+            .Where(l => l.EntityName == "StaffWorkSchedule" && l.EntityId == scheduleId.ToString())
+            .OrderByDescending(l => l.CreatedAt)
+            .ThenByDescending(l => l.AuditLogId)
+            .ToListAsync(ct);
+
+        var createLog = logs.FirstOrDefault(l => l.Action == "CREATE_SHIFT_SWAP_REQUEST");
+        if (createLog == null) return null;
+
+        var (targetUserId, targetScheduleId, reason) = ParseCreatePayload(createLog.NewValues);
+        long requestingUserId = createLog.UserId ?? 0;
+        if (requestingUserId == 0 && long.TryParse(createLog.OldValues, out var oldUid))
+        {
+            requestingUserId = oldUid;
+        }
+
+        var cycleLogs = logs
+            .Where(l => l.CreatedAt >= createLog.CreatedAt && l.AuditLogId != createLog.AuditLogId)
+            .ToList();
+
+        var peerLog = cycleLogs.FirstOrDefault(l => l.Action == "ACCEPT_SHIFT_SWAP_PEER" || l.Action == "DECLINE_SHIFT_SWAP");
+        var adminLog = cycleLogs.FirstOrDefault(l => l.Action == "APPROVE_SHIFT_SWAP" || l.Action == "REJECT_SHIFT_SWAP");
+        var withdrawLog = cycleLogs.FirstOrDefault(l => l.Action == "WITHDRAW_SHIFT_SWAP");
+
+        string status;
+        if (withdrawLog != null)
+        {
+            status = "Withdrawn";
+        }
+        else if (adminLog != null)
+        {
+            status = adminLog.Action == "APPROVE_SHIFT_SWAP" ? "Approved" : "Rejected";
+        }
+        else if (peerLog != null)
+        {
+            status = peerLog.Action == "ACCEPT_SHIFT_SWAP_PEER" ? "PendingAdminApproval" : "Declined";
+        }
+        else
+        {
+            status = "PendingCounterparty";
+        }
+
+        string? peerNote = null;
+        if (peerLog != null)
+        {
+            var (_, pNote) = ParsePeerResponsePayload(peerLog.NewValues);
+            peerNote = pNote;
+        }
+
+        string? adminReason = null;
+        if (adminLog != null)
+        {
+            var (_, aReason) = ParseAdminDecisionPayload(adminLog.NewValues);
+            adminReason = aReason;
+        }
+
+        return new SwapCycleState
+        {
+            CreateLog = createLog,
+            SourceScheduleId = scheduleId,
+            RequestingUserId = requestingUserId,
+            TargetUserId = targetUserId,
+            TargetScheduleId = targetScheduleId,
+            Reason = reason,
+            Status = status,
+            PeerResponseLog = peerLog,
+            PeerNote = peerNote,
+            AdminDecisionLog = adminLog,
+            AdminReason = adminReason,
+            WithdrawLog = withdrawLog
+        };
     }
 
     public async Task<ApiResponse<ReceptionistShiftSwapRequestDto>> CreateSwapRequestAsync(
@@ -47,117 +197,147 @@ public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
             return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Vui lòng nhập lý do đổi ca trực.");
         }
 
-        // Validate source schedule
-        var sourceSchedule = await _dbContext.ReceptionistWorkSchedules
-            .Include(s => s.ReceptionistUser)
-            .FirstOrDefaultAsync(s => s.ReceptionistScheduleId == request.SourceScheduleId, ct);
+        var sourceSchedule = await _dbContext.StaffWorkSchedules
+            .Include(s => s.StaffUser)
+            .FirstOrDefaultAsync(s => s.WorkScheduleId == request.SourceScheduleId && s.StaffRole == "Receptionist", ct);
 
         if (sourceSchedule == null || sourceSchedule.Status != "Scheduled")
         {
             return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Ca trực cần đổi không tồn tại hoặc đã bị hủy.");
         }
 
-        if (sourceSchedule.ReceptionistUserId != requestingUserId)
+        if (sourceSchedule.StaffUserId != requestingUserId)
         {
             return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Bạn chỉ có thể tạo yêu cầu đổi ca cho ca trực của chính mình.");
         }
 
-        // Validate target schedule if two-way
-        ReceptionistWorkSchedule? targetSchedule = null;
-        if (request.TargetScheduleId.HasValue)
+        if (sourceSchedule.WorkDate < ClinicTimeHelper.TodayDateOnly)
         {
-            targetSchedule = await _dbContext.ReceptionistWorkSchedules
-                .Include(s => s.ReceptionistUser)
-                .FirstOrDefaultAsync(s => s.ReceptionistScheduleId == request.TargetScheduleId.Value, ct);
+            return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Không thể đổi ca trực trong quá khứ.");
+        }
+
+        var targetUser = await _dbContext.UserAccounts
+            .Include(u => u.StaffProfile)
+            .FirstOrDefaultAsync(u => u.UserId == request.TargetReceptionistUserId && u.Role == "Receptionist" && u.Status == "Active", ct);
+
+        if (targetUser?.StaffProfile == null || targetUser.StaffProfile.EmploymentStatus != "Active")
+        {
+            return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Lễ tân nhận đề xuất không tồn tại hoặc đã ngừng hoạt động.");
+        }
+
+        var existingCycle = await GetSwapCycleStateAsync(sourceSchedule.WorkScheduleId, ct);
+        if (existingCycle != null && (existingCycle.Status == "PendingCounterparty" || existingCycle.Status == "PendingAdminApproval"))
+        {
+            return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Ca trực này đã có yêu cầu đổi ca đang chờ xử lý.");
+        }
+
+        bool targetHasLeave = await _dbContext.StaffLeaveRequests
+            .AnyAsync(l => l.StaffUserId == request.TargetReceptionistUserId &&
+                           l.Status == "Approved" &&
+                           l.StartDate <= sourceSchedule.WorkDate &&
+                           l.EndDate >= sourceSchedule.WorkDate, ct);
+
+        if (targetHasLeave)
+        {
+            return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Đồng nghiệp được chọn đã có đơn nghỉ phép được duyệt trong ngày trực này.");
+        }
+
+        bool targetHasConflict = await _dbContext.StaffWorkSchedules
+            .AnyAsync(s => s.StaffUserId == request.TargetReceptionistUserId &&
+                           s.WorkScheduleId != (request.TargetScheduleId ?? 0) &&
+                           s.WorkDate == sourceSchedule.WorkDate &&
+                           s.Status == "Scheduled" &&
+                           s.StartTime < sourceSchedule.EndTime &&
+                           s.EndTime > sourceSchedule.StartTime, ct);
+
+        if (targetHasConflict)
+        {
+            return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Đồng nghiệp được chọn đã có ca trực khác trùng thời gian trong ngày này.");
+        }
+
+        StaffWorkSchedule? targetSchedule = null;
+        if (request.TargetScheduleId.HasValue && request.TargetScheduleId.Value > 0)
+        {
+            targetSchedule = await _dbContext.StaffWorkSchedules
+                .FirstOrDefaultAsync(s => s.WorkScheduleId == request.TargetScheduleId.Value && s.StaffRole == "Receptionist", ct);
 
             if (targetSchedule == null || targetSchedule.Status != "Scheduled")
             {
                 return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Ca trực đối ứng của đồng nghiệp không tồn tại hoặc đã bị hủy.");
             }
 
-            if (targetSchedule.ReceptionistUserId != request.TargetReceptionistUserId)
+            if (targetSchedule.StaffUserId != request.TargetReceptionistUserId)
             {
                 return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Ca trực đối ứng không thuộc về lễ tân được chọn.");
             }
+
+            bool requesterHasLeave = await _dbContext.StaffLeaveRequests
+                .AnyAsync(l => l.StaffUserId == requestingUserId &&
+                               l.Status == "Approved" &&
+                               l.StartDate <= targetSchedule.WorkDate &&
+                               l.EndDate >= targetSchedule.WorkDate, ct);
+
+            if (requesterHasLeave)
+            {
+                return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Bạn đã có đơn nghỉ phép được duyệt trong ngày của ca trực đối ứng.");
+            }
+
+            bool requesterHasConflict = await _dbContext.StaffWorkSchedules
+                .AnyAsync(s => s.StaffUserId == requestingUserId &&
+                               s.WorkScheduleId != sourceSchedule.WorkScheduleId &&
+                               s.WorkDate == targetSchedule.WorkDate &&
+                               s.Status == "Scheduled" &&
+                               s.StartTime < targetSchedule.EndTime &&
+                               s.EndTime > targetSchedule.StartTime, ct);
+
+            if (requesterHasConflict)
+            {
+                return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Bạn đã có ca trực khác trùng thời gian với ca đối ứng trong ngày đó.");
+            }
         }
 
-        // Check target user approved leaves
-        bool targetHasLeave = await _dbContext.ReceptionistLeaveRequestPeriods
-            .AnyAsync(p => p.LeaveRequest.ReceptionistUserId == request.TargetReceptionistUserId &&
-                           p.LeaveDate == sourceSchedule.WorkDate &&
-                           p.Status == "Approved" &&
-                           (!p.StartTime.HasValue || (p.StartTime.Value < sourceSchedule.EndTime && p.EndTime > sourceSchedule.StartTime)), ct);
+        string reqName = sourceSchedule.StaffUser?.FullName ?? $"Lễ tân #{requestingUserId}";
+        string tgtName = targetUser.StaffProfile?.FullName ?? $"Lễ tân #{request.TargetReceptionistUserId}";
 
-        if (targetHasLeave)
-        {
-            return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Đồng nghiệp được chọn đã có đơn nghỉ phép được duyệt trong khoảng giờ ca trực này.");
-        }
+        string targetSchedPart = request.TargetScheduleId.HasValue && request.TargetScheduleId.Value > 0
+            ? $"TargetSchedule:{request.TargetScheduleId.Value};"
+            : string.Empty;
 
-        // Check if there is already an active swap request for these schedules
-        bool activeSwapExists = await _dbContext.ReceptionistShiftSwapRequests
-            .AnyAsync(s => (s.SourceScheduleId == request.SourceScheduleId || (request.TargetScheduleId.HasValue && s.TargetScheduleId == request.TargetScheduleId.Value)) &&
-                           (s.Status == "PendingCounterparty" || s.Status == "PendingAdminApproval"), ct);
-
-        if (activeSwapExists)
-        {
-            return ApiResponse<ReceptionistShiftSwapRequestDto>.Fail("Ca trực này đang có một yêu cầu đổi ca khác đang chờ xử lý.");
-        }
-
-        var swap = new ReceptionistShiftSwapRequest
-        {
-            RequestingReceptionistUserId = requestingUserId,
-            TargetReceptionistUserId = request.TargetReceptionistUserId,
-            SourceScheduleId = request.SourceScheduleId,
-            TargetScheduleId = request.TargetScheduleId,
-            Reason = request.Reason.Trim(),
-            Status = "PendingCounterparty",
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _dbContext.ReceptionistShiftSwapRequests.Add(swap);
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Notify target receptionist
-        var reqProfile = await _dbContext.StaffProfiles.FirstOrDefaultAsync(sp => sp.UserId == requestingUserId, ct);
-        string reqName = reqProfile?.FullName ?? $"Lễ tân #{requestingUserId}";
+        await _auditLogService.LogAsync(
+            requestingUserId,
+            "CREATE_SHIFT_SWAP_REQUEST",
+            "StaffWorkSchedule",
+            sourceSchedule.WorkScheduleId.ToString(),
+            requestingUserId.ToString(),
+            $"Target:{request.TargetReceptionistUserId};{targetSchedPart}Reason:{request.Reason.Trim()}",
+            ct);
 
         await _notificationService.CreateNotificationAsync(
             request.TargetReceptionistUserId,
             null,
             "ShiftSwapRequested",
             $"{reqName} gửi yêu cầu đổi ca trực",
-            $"{reqName} đề xuất đổi ca trực ngày {sourceSchedule.WorkDate:dd/MM/yyyy} ({sourceSchedule.StartTime:hh\\:mm}-{sourceSchedule.EndTime:hh\\:mm}). Lý do: {request.Reason}",
+            $"{reqName} đề xuất đổi ca trực ngày {sourceSchedule.WorkDate:dd/MM/yyyy} ({sourceSchedule.StartTime:HH\\:mm}-{sourceSchedule.EndTime:HH\\:mm}). Lý do: {request.Reason.Trim()}",
             ct);
-
-        await _auditLogService.LogAsync(
-            requestingUserId,
-            "CREATE_SHIFT_SWAP_REQUEST",
-            "ReceptionistShiftSwapRequest",
-            swap.SwapRequestId.ToString(),
-            null,
-            $"Target: {request.TargetReceptionistUserId}, SourceSchedule: {request.SourceScheduleId}",
-            ct);
-
-        var tgtProfile = await _dbContext.StaffProfiles.FirstOrDefaultAsync(sp => sp.UserId == request.TargetReceptionistUserId, ct);
 
         var dto = new ReceptionistShiftSwapRequestDto
         {
-            SwapRequestId = swap.SwapRequestId,
-            RequestingReceptionistUserId = swap.RequestingReceptionistUserId,
+            SwapRequestId = sourceSchedule.WorkScheduleId,
+            RequestingReceptionistUserId = requestingUserId,
             RequestingReceptionistName = reqName,
-            TargetReceptionistUserId = swap.TargetReceptionistUserId,
-            TargetReceptionistName = tgtProfile?.FullName ?? $"Lễ tân #{request.TargetReceptionistUserId}",
-            SourceScheduleId = swap.SourceScheduleId,
+            TargetReceptionistUserId = request.TargetReceptionistUserId,
+            TargetReceptionistName = tgtName,
+            SourceScheduleId = sourceSchedule.WorkScheduleId,
             SourceWorkDate = sourceSchedule.WorkDate,
             SourceStartTime = sourceSchedule.StartTime,
             SourceEndTime = sourceSchedule.EndTime,
-            TargetScheduleId = swap.TargetScheduleId,
+            TargetScheduleId = targetSchedule?.WorkScheduleId,
             TargetWorkDate = targetSchedule?.WorkDate,
             TargetStartTime = targetSchedule?.StartTime,
             TargetEndTime = targetSchedule?.EndTime,
-            Reason = swap.Reason,
-            Status = swap.Status,
-            CreatedAt = swap.CreatedAt
+            Reason = request.Reason.Trim(),
+            Status = "PendingCounterparty",
+            CreatedAt = DateTime.UtcNow
         };
 
         return ApiResponse<ReceptionistShiftSwapRequestDto>.Ok(dto, "Đã gửi đề xuất đổi ca thành công tới đồng nghiệp.");
@@ -169,98 +349,69 @@ public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
         RespondShiftSwapRequest request,
         CancellationToken ct = default)
     {
-        var swap = await _dbContext.ReceptionistShiftSwapRequests
-            .Include(s => s.SourceSchedule)
-            .Include(s => s.TargetSchedule)
-            .FirstOrDefaultAsync(s => s.SwapRequestId == swapRequestId, ct);
-
-        if (swap == null)
+        var cycle = await GetSwapCycleStateAsync(swapRequestId, ct);
+        if (cycle == null)
         {
-            return ApiResponse<bool>.Fail("Không tìm thấy yêu cầu đổi ca trực.");
+            return ApiResponse<bool>.Fail("Yêu cầu đổi ca không tồn tại.");
         }
 
-        if (swap.TargetReceptionistUserId != counterpartyUserId)
+        if (cycle.TargetUserId != counterpartyUserId)
         {
-            return ApiResponse<bool>.Fail("Bạn không phải người nhận của yêu cầu đổi ca này.");
+            return ApiResponse<bool>.Fail("Bạn không phải là người nhận đề xuất đổi ca này.");
         }
 
-        if (swap.Status != "PendingCounterparty")
+        if (cycle.Status != "PendingCounterparty")
         {
-            return ApiResponse<bool>.Fail($"Yêu cầu này không ở trạng thái chờ phản hồi (trạng thái hiện tại: {swap.Status}).");
+            return ApiResponse<bool>.Fail($"Không thể phản hồi yêu cầu đổi ca ở trạng thái {cycle.Status}.");
         }
 
-        swap.CounterpartyResponseAt = DateTime.UtcNow;
-        swap.CounterpartyNote = request.Note?.Trim();
-        swap.UpdatedAt = DateTime.UtcNow;
-
-        var targetProfile = await _dbContext.StaffProfiles.FirstOrDefaultAsync(sp => sp.UserId == counterpartyUserId, ct);
-        string targetName = targetProfile?.FullName ?? $"Lễ tân #{counterpartyUserId}";
-
-        if (!request.Accept)
-        {
-            swap.Status = "Declined";
-            await _dbContext.SaveChangesAsync(ct);
-
-            await _notificationService.CreateNotificationAsync(
-                swap.RequestingReceptionistUserId,
-                null,
-                "ShiftSwapDeclined",
-                "Đồng nghiệp đã từ chối yêu cầu đổi ca",
-                $"{targetName} đã từ chối yêu cầu đổi ca trực ngày {swap.SourceSchedule.WorkDate:dd/MM/yyyy}. Ghi chú: {request.Note ?? "Không có"}",
-                ct);
-
-            await _auditLogService.LogAsync(
-                counterpartyUserId,
-                "DECLINE_SHIFT_SWAP",
-                "ReceptionistShiftSwapRequest",
-                swapRequestId.ToString(),
-                "PendingCounterparty",
-                "Declined",
-                ct);
-
-            return ApiResponse<bool>.Ok(true, "Đã gửi phản hồi từ chối đổi ca.");
-        }
-
-        // Counterparty accepted -> forward to Admin for approval
-        swap.Status = "PendingAdminApproval";
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Notify Admin
-        var adminIds = await _dbContext.UserAccounts
-            .Where(u => u.Role == "SystemAdministrator" && u.Status == "Active")
-            .Select(u => u.UserId)
-            .ToListAsync(ct);
-
-        foreach (var adminId in adminIds)
-        {
-            await _notificationService.CreateNotificationAsync(
-                adminId,
-                null,
-                "ShiftSwapAdminPending",
-                "Yêu cầu đổi ca trực đang chờ phê duyệt",
-                $"Yêu cầu đổi ca giữa {swap.RequestingReceptionistUserId} và {targetName} ngày {swap.SourceSchedule.WorkDate:dd/MM/yyyy} đã được đồng thuận và đang chờ Quản trị viên duyệt.",
-                ct);
-        }
-
-        // Notify requesting user
-        await _notificationService.CreateNotificationAsync(
-            swap.RequestingReceptionistUserId,
-            null,
-            "ShiftSwapAcceptedByPeer",
-            "Đồng nghiệp đã đồng ý đổi ca",
-            $"{targetName} đã đồng ý đổi ca trực. Yêu cầu đã được chuyển tới Quản trị viên để phê duyệt chính thức.",
-            ct);
+        var notePart = !string.IsNullOrWhiteSpace(request.Note) ? $";Note:{request.Note.Trim()}" : string.Empty;
 
         await _auditLogService.LogAsync(
             counterpartyUserId,
-            "ACCEPT_SHIFT_SWAP_PEER",
-            "ReceptionistShiftSwapRequest",
+            request.Accept ? "ACCEPT_SHIFT_SWAP_PEER" : "DECLINE_SHIFT_SWAP",
+            "StaffWorkSchedule",
             swapRequestId.ToString(),
             "PendingCounterparty",
-            "PendingAdminApproval",
+            $"Status:{(request.Accept ? "PendingAdminApproval" : "Declined")}{notePart}",
             ct);
 
-        return ApiResponse<bool>.Ok(true, "Bạn đã đồng ý đổi ca. Yêu cầu đã được chuyển tới Quản trị viên để duyệt.");
+        var sourceSchedule = await _dbContext.StaffWorkSchedules
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.WorkScheduleId == swapRequestId, ct);
+
+        var counterpartyProfile = await _dbContext.StaffProfiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == counterpartyUserId, ct);
+
+        string counterpartyName = counterpartyProfile?.FullName ?? $"Lễ tân #{counterpartyUserId}";
+        string dateStr = sourceSchedule != null ? $" ngày {sourceSchedule.WorkDate:dd/MM/yyyy}" : string.Empty;
+
+        if (request.Accept)
+        {
+            await _notificationService.CreateNotificationAsync(
+                cycle.RequestingUserId,
+                null,
+                "ShiftSwapPeerAccepted",
+                "Đồng nghiệp đã đồng ý đổi ca trực",
+                $"{counterpartyName} đã đồng ý đổi ca trực{dateStr}. Yêu cầu đã được chuyển tới Quản trị viên để phê duyệt.",
+                ct);
+        }
+        else
+        {
+            string reasonStr = !string.IsNullOrWhiteSpace(request.Note) ? $". Lý do: {request.Note.Trim()}" : string.Empty;
+            await _notificationService.CreateNotificationAsync(
+                cycle.RequestingUserId,
+                null,
+                "ShiftSwapPeerDeclined",
+                "Đồng nghiệp từ chối đổi ca trực",
+                $"{counterpartyName} đã từ chối yêu cầu đổi ca trực{dateStr}{reasonStr}",
+                ct);
+        }
+
+        return ApiResponse<bool>.Ok(true, request.Accept
+            ? "Bạn đã đồng ý đổi ca. Yêu cầu đã được chuyển tới Quản trị viên để duyệt."
+            : "Đã gửi phản hồi từ chối đổi ca.");
     }
 
     public async Task<ApiResponse<bool>> WithdrawSwapRequestAsync(
@@ -268,30 +419,43 @@ public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
         long requestingUserId,
         CancellationToken ct = default)
     {
-        var swap = await _dbContext.ReceptionistShiftSwapRequests.FirstOrDefaultAsync(s => s.SwapRequestId == swapRequestId, ct);
-        if (swap == null) return ApiResponse<bool>.Fail("Không tìm thấy yêu cầu đổi ca.");
-
-        if (swap.RequestingReceptionistUserId != requestingUserId)
+        var cycle = await GetSwapCycleStateAsync(swapRequestId, ct);
+        if (cycle == null)
         {
-            return ApiResponse<bool>.Fail("Bạn không có quyền rút yêu cầu đổi ca của người khác.");
+            return ApiResponse<bool>.Fail("Yêu cầu đổi ca không tồn tại.");
         }
 
-        if (swap.Status != "PendingCounterparty" && swap.Status != "PendingAdminApproval")
+        if (cycle.RequestingUserId != requestingUserId)
         {
-            return ApiResponse<bool>.Fail($"Không thể rút yêu cầu ở trạng thái {swap.Status}.");
+            return ApiResponse<bool>.Fail("Bạn chỉ có thể rút yêu cầu đổi ca do chính mình tạo.");
         }
 
-        swap.Status = "Withdrawn";
-        swap.UpdatedAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync(ct);
+        if (cycle.Status != "PendingCounterparty" && cycle.Status != "PendingAdminApproval")
+        {
+            return ApiResponse<bool>.Fail($"Không thể rút yêu cầu đổi ca ở trạng thái {cycle.Status}.");
+        }
 
         await _auditLogService.LogAsync(
             requestingUserId,
             "WITHDRAW_SHIFT_SWAP",
-            "ReceptionistShiftSwapRequest",
+            "StaffWorkSchedule",
             swapRequestId.ToString(),
+            cycle.Status,
+            "Status:Withdrawn",
+            ct);
+
+        var reqProfile = await _dbContext.StaffProfiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == requestingUserId, ct);
+
+        string reqName = reqProfile?.FullName ?? $"Lễ tân #{requestingUserId}";
+
+        await _notificationService.CreateNotificationAsync(
+            cycle.TargetUserId,
             null,
-            "Withdrawn by requester",
+            "ShiftSwapWithdrawn",
+            "Đề xuất đổi ca đã được rút lại",
+            $"{reqName} đã rút lại đề xuất đổi ca trực ca #{swapRequestId}.",
             ct);
 
         return ApiResponse<bool>.Ok(true, "Đã rút yêu cầu đổi ca thành công.");
@@ -303,290 +467,329 @@ public class ReceptionistShiftSwapService : IReceptionistShiftSwapService
         AdminDecideShiftSwapRequest request,
         CancellationToken ct = default)
     {
-        var swap = await _dbContext.ReceptionistShiftSwapRequests
-            .Include(s => s.SourceSchedule)
-            .Include(s => s.TargetSchedule)
-            .FirstOrDefaultAsync(s => s.SwapRequestId == swapRequestId, ct);
+        var sourceSchedule = await _dbContext.StaffWorkSchedules
+            .FirstOrDefaultAsync(s => s.WorkScheduleId == swapRequestId && s.StaffRole == "Receptionist", ct);
 
-        if (swap == null)
+        if (sourceSchedule == null)
         {
-            return ApiResponse<bool>.Fail("Không tìm thấy yêu cầu đổi ca trực.");
+            return ApiResponse<bool>.Fail("Không tìm thấy ca làm việc của yêu cầu đổi ca.");
         }
 
-        if (swap.Status != "PendingAdminApproval")
+        var cycle = await GetSwapCycleStateAsync(swapRequestId, ct);
+        if (cycle == null)
         {
-            return ApiResponse<bool>.Fail($"Yêu cầu không ở trạng thái chờ Admin duyệt (trạng thái hiện tại: {swap.Status}).");
+            return ApiResponse<bool>.Fail("Không tìm thấy yêu cầu đổi ca.");
         }
 
-        var lockKeys = new List<string>
+        if (cycle.Status == "PendingCounterparty")
         {
-            SqlAppLockHelper.ReceptionistSwapKey(swapRequestId),
-            SqlAppLockHelper.ReceptionistCoverageDateKey(swap.SourceSchedule.WorkDate)
-        };
-        if (swap.TargetSchedule != null && swap.TargetSchedule.WorkDate != swap.SourceSchedule.WorkDate)
-        {
-            lockKeys.Add(SqlAppLockHelper.ReceptionistCoverageDateKey(swap.TargetSchedule.WorkDate));
+            return ApiResponse<bool>.Fail("Yêu cầu đổi ca chưa được đồng nghiệp chấp thuận (đang chờ đồng nghiệp phản hồi).");
         }
 
-        using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
-
-        if (!request.Approve)
+        if (cycle.Status != "PendingAdminApproval")
         {
-            swap.Status = "Rejected";
-            swap.AdminDecisionBy = adminUserId;
-            swap.AdminDecisionAt = DateTime.UtcNow;
-            swap.AdminDecisionReason = request.Reason?.Trim() ?? "Từ chối bởi Quản trị viên";
-            swap.UpdatedAt = DateTime.UtcNow;
-
-            await _dbContext.SaveChangesAsync(ct);
-
-            // Notify both
-            await _notificationService.CreateNotificationAsync(
-                swap.RequestingReceptionistUserId,
-                null,
-                "ShiftSwapRejected",
-                "Yêu cầu đổi ca trực bị từ chối",
-                $"Yêu cầu đổi ca trực ngày {swap.SourceSchedule.WorkDate:dd/MM/yyyy} đã bị Quản trị viên từ chối. Lý do: {swap.AdminDecisionReason}",
-                ct);
-
-            await _notificationService.CreateNotificationAsync(
-                swap.TargetReceptionistUserId,
-                null,
-                "ShiftSwapRejected",
-                "Yêu cầu đổi ca trực bị từ chối",
-                $"Yêu cầu đổi ca trực ngày {swap.SourceSchedule.WorkDate:dd/MM/yyyy} đã bị Quản trị viên từ chối. Lý do: {swap.AdminDecisionReason}",
-                ct);
-
-            return ApiResponse<bool>.Ok(true, "Đã từ chối yêu cầu đổi ca trực.");
+            return ApiResponse<bool>.Fail($"Yêu cầu đổi ca đã kết thúc ở trạng thái {cycle.Status}.");
         }
 
-        // APPROVE: Atomic transaction
-        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? tx = null;
-        if (_dbContext.Database.IsRelational())
+        if (request.Approve)
         {
-            tx = await _dbContext.Database.BeginTransactionAsync(ct);
-        }
-
-        try
-        {
-            bool isLockedPeriod = await _dbContext.IsPeriodLockedAsync(swap.SourceSchedule.WorkDate, ct);
-            if (!isLockedPeriod && swap.TargetSchedule != null)
+            if (sourceSchedule.Status != "Scheduled")
             {
-                isLockedPeriod = await _dbContext.IsPeriodLockedAsync(swap.TargetSchedule.WorkDate, ct);
-            }
-            if (isLockedPeriod)
-            {
-                if (tx != null) await tx.RollbackAsync(ct);
-                return ApiResponse<bool>.Fail("Không thể duyệt đổi ca hồi tố trong kỳ công đã được chốt sổ. Vui lòng mở lại kỳ công trước khi thực hiện.");
+                return ApiResponse<bool>.Fail("Ca trực nguồn hiện không ở trạng thái sẵn sàng để đổi.");
             }
 
-            // Verify source schedule still Scheduled
-            if (swap.SourceSchedule.Status != "Scheduled")
-            {
-                if (tx != null) await tx.RollbackAsync(ct);
-                return ApiResponse<bool>.Fail("Ca trực nguồn đã bị thay đổi hoặc hủy.");
-            }
+            bool targetHasLeave = await _dbContext.StaffLeaveRequests
+                .AnyAsync(l => l.StaffUserId == cycle.TargetUserId &&
+                               l.Status == "Approved" &&
+                               l.StartDate <= sourceSchedule.WorkDate &&
+                               l.EndDate >= sourceSchedule.WorkDate, ct);
 
-            // Check if target receptionist has approved leave overlapping source schedule
-            bool targetHasLeave = await _dbContext.ReceptionistLeaveRequestPeriods
-                .AnyAsync(p => p.LeaveRequest.ReceptionistUserId == swap.TargetReceptionistUserId &&
-                               p.LeaveDate == swap.SourceSchedule.WorkDate &&
-                               p.Status == "Approved" &&
-                               (!p.StartTime.HasValue || (p.StartTime.Value < swap.SourceSchedule.EndTime && p.EndTime > swap.SourceSchedule.StartTime)), ct);
             if (targetHasLeave)
             {
-                if (tx != null) await tx.RollbackAsync(ct);
-                return ApiResponse<bool>.Fail("Không thể duyệt đổi ca vì lễ tân nhận ca đã có lịch nghỉ phép được phê duyệt trong khoảng thời gian này.");
+                return ApiResponse<bool>.Fail("Lễ tân nhận ca đã có đơn nghỉ phép được duyệt trong ngày trực này.");
             }
 
-            // Check if target receptionist already has an overlapping active shift (other than target schedule)
-            bool targetHasOverlap = await _dbContext.ReceptionistWorkSchedules
-                .AnyAsync(s => s.ReceptionistUserId == swap.TargetReceptionistUserId &&
-                               s.WorkDate == swap.SourceSchedule.WorkDate &&
+            bool targetHasConflict = await _dbContext.StaffWorkSchedules
+                .AnyAsync(s => s.StaffUserId == cycle.TargetUserId &&
+                               s.WorkScheduleId != (cycle.TargetScheduleId ?? 0) &&
+                               s.WorkDate == sourceSchedule.WorkDate &&
                                s.Status == "Scheduled" &&
-                               s.ReceptionistScheduleId != (swap.TargetScheduleId ?? 0) &&
-                               s.StartTime < swap.SourceSchedule.EndTime && s.EndTime > swap.SourceSchedule.StartTime, ct);
-            if (targetHasOverlap)
+                               s.StartTime < sourceSchedule.EndTime &&
+                               s.EndTime > sourceSchedule.StartTime, ct);
+
+            if (targetHasConflict)
             {
-                if (tx != null) await tx.RollbackAsync(ct);
-                return ApiResponse<bool>.Fail("Không thể duyệt đổi ca vì lễ tân nhận ca đã có lịch trực trùng giờ.");
+                return ApiResponse<bool>.Fail("Lễ tân nhận ca đã có ca trực khác trùng thời gian trong ngày này.");
             }
 
-            if (swap.TargetSchedule != null)
+            StaffWorkSchedule? targetSchedule = null;
+            if (cycle.TargetScheduleId.HasValue && cycle.TargetScheduleId.Value > 0)
             {
-                // Check if requesting receptionist has approved leave overlapping target schedule
-                bool reqHasLeave = await _dbContext.ReceptionistLeaveRequestPeriods
-                    .AnyAsync(p => p.LeaveRequest.ReceptionistUserId == swap.RequestingReceptionistUserId &&
-                                   p.LeaveDate == swap.TargetSchedule.WorkDate &&
-                                   p.Status == "Approved" &&
-                                   (!p.StartTime.HasValue || (p.StartTime.Value < swap.TargetSchedule.EndTime && p.EndTime > swap.TargetSchedule.StartTime)), ct);
-                if (reqHasLeave)
+                targetSchedule = await _dbContext.StaffWorkSchedules
+                    .FirstOrDefaultAsync(s => s.WorkScheduleId == cycle.TargetScheduleId.Value && s.StaffRole == "Receptionist", ct);
+
+                if (targetSchedule == null || targetSchedule.Status != "Scheduled")
                 {
-                    if (tx != null) await tx.RollbackAsync(ct);
-                    return ApiResponse<bool>.Fail("Không thể duyệt đổi ca vì lễ tân yêu cầu đã có lịch nghỉ phép được phê duyệt trong khoảng thời gian này.");
+                    return ApiResponse<bool>.Fail("Ca trực đối ứng không tồn tại hoặc không ở trạng thái hợp lệ.");
                 }
 
-                // Check if requesting receptionist already has an overlapping active shift (other than source schedule)
-                bool reqHasOverlap = await _dbContext.ReceptionistWorkSchedules
-                    .AnyAsync(s => s.ReceptionistUserId == swap.RequestingReceptionistUserId &&
-                                   s.WorkDate == swap.TargetSchedule.WorkDate &&
+                if (targetSchedule.StaffUserId != cycle.TargetUserId)
+                {
+                    return ApiResponse<bool>.Fail("Ca trực đối ứng không còn thuộc về lễ tân được đổi.");
+                }
+
+                bool requesterHasLeave = await _dbContext.StaffLeaveRequests
+                    .AnyAsync(l => l.StaffUserId == cycle.RequestingUserId &&
+                                   l.Status == "Approved" &&
+                                   l.StartDate <= targetSchedule.WorkDate &&
+                                   l.EndDate >= targetSchedule.WorkDate, ct);
+
+                if (requesterHasLeave)
+                {
+                    return ApiResponse<bool>.Fail("Lễ tân yêu cầu đã có đơn nghỉ phép được duyệt trong ngày của ca đối ứng.");
+                }
+
+                bool requesterHasConflict = await _dbContext.StaffWorkSchedules
+                    .AnyAsync(s => s.StaffUserId == cycle.RequestingUserId &&
+                                   s.WorkScheduleId != sourceSchedule.WorkScheduleId &&
+                                   s.WorkDate == targetSchedule.WorkDate &&
                                    s.Status == "Scheduled" &&
-                                   s.ReceptionistScheduleId != swap.SourceScheduleId &&
-                                   s.StartTime < swap.TargetSchedule.EndTime && s.EndTime > swap.TargetSchedule.StartTime, ct);
-                if (reqHasOverlap)
+                                   s.StartTime < targetSchedule.EndTime &&
+                                   s.EndTime > targetSchedule.StartTime, ct);
+
+                if (requesterHasConflict)
                 {
-                    if (tx != null) await tx.RollbackAsync(ct);
-                    return ApiResponse<bool>.Fail("Không thể duyệt đổi ca vì lễ tân yêu cầu đã có lịch trực trùng giờ.");
+                    return ApiResponse<bool>.Fail("Lễ tân yêu cầu đã có ca trực khác trùng thời gian với ca đối ứng trong ngày đó.");
                 }
             }
 
-            // Perform atomic swap
-            if (swap.TargetSchedule != null)
+            // Attendance safeguard: Cannot swap a schedule that already has attendance records
+            var hasAttendance = await _dbContext.StaffAttendanceRecords
+                .AnyAsync(a => a.WorkScheduleId == sourceSchedule.WorkScheduleId ||
+                               (targetSchedule != null && a.WorkScheduleId == targetSchedule.WorkScheduleId), ct);
+            if (hasAttendance)
             {
-                if (swap.TargetSchedule.Status != "Scheduled")
+                return ApiResponse<bool>.Fail("Không thể đổi ca làm việc đã có dữ liệu chấm công / điểm danh.");
+            }
+
+            if (_dbContext.Database.IsSqlServer())
+            {
+                await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE dbo.StaffWorkSchedules SET StaffUserId = {cycle.TargetUserId}, UpdatedAt = {DateTime.UtcNow} WHERE WorkScheduleId = {sourceSchedule.WorkScheduleId}", ct);
+
+                if (targetSchedule != null)
                 {
-                    if (tx != null) await tx.RollbackAsync(ct);
-                    return ApiResponse<bool>.Fail("Ca trực đối ứng đã bị thay đổi hoặc hủy.");
+                    await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+                        $"UPDATE dbo.StaffWorkSchedules SET StaffUserId = {cycle.RequestingUserId}, UpdatedAt = {DateTime.UtcNow} WHERE WorkScheduleId = {targetSchedule.WorkScheduleId}", ct);
                 }
-
-                // Two-way swap
-                long tempUserId = swap.SourceSchedule.ReceptionistUserId;
-                swap.SourceSchedule.ReceptionistUserId = swap.TargetSchedule.ReceptionistUserId;
-                swap.TargetSchedule.ReceptionistUserId = tempUserId;
-
-                swap.SourceSchedule.Notes = (swap.SourceSchedule.Notes + $" | [Đã hoán đổi từ #{swap.SourceSchedule.ReceptionistScheduleId}]").TrimStart(' ', '|');
-                swap.TargetSchedule.Notes = (swap.TargetSchedule.Notes + $" | [Đã hoán đổi từ #{swap.TargetSchedule.ReceptionistScheduleId}]").TrimStart(' ', '|');
-                swap.SourceSchedule.UpdatedAt = DateTime.UtcNow;
-                swap.TargetSchedule.UpdatedAt = DateTime.UtcNow;
             }
             else
             {
-                // One-way transfer
-                swap.SourceSchedule.ReceptionistUserId = swap.TargetReceptionistUserId;
-                swap.SourceSchedule.Notes = (swap.SourceSchedule.Notes + " | [Đã chuyển ca trực]").TrimStart(' ', '|');
-                swap.SourceSchedule.UpdatedAt = DateTime.UtcNow;
+                // For InMemory test provider: replace entities to honor EF Core alternate key immutability
+                _dbContext.StaffWorkSchedules.Remove(sourceSchedule);
+                if (targetSchedule != null)
+                {
+                    _dbContext.StaffWorkSchedules.Remove(targetSchedule);
+                }
+                await _dbContext.SaveChangesAsync(ct);
+
+                var updatedSource = new StaffWorkSchedule
+                {
+                    WorkScheduleId = sourceSchedule.WorkScheduleId,
+                    StaffUserId = cycle.TargetUserId,
+                    StaffRole = sourceSchedule.StaffRole,
+                    WorkDate = sourceSchedule.WorkDate,
+                    StartTime = sourceSchedule.StartTime,
+                    EndTime = sourceSchedule.EndTime,
+                    Status = sourceSchedule.Status,
+                    Notes = sourceSchedule.Notes,
+                    CreatedAt = sourceSchedule.CreatedAt,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _dbContext.StaffWorkSchedules.Add(updatedSource);
+
+                if (targetSchedule != null)
+                {
+                    var updatedTarget = new StaffWorkSchedule
+                    {
+                        WorkScheduleId = targetSchedule.WorkScheduleId,
+                        StaffUserId = cycle.RequestingUserId,
+                        StaffRole = targetSchedule.StaffRole,
+                        WorkDate = targetSchedule.WorkDate,
+                        StartTime = targetSchedule.StartTime,
+                        EndTime = targetSchedule.EndTime,
+                        Status = targetSchedule.Status,
+                        Notes = targetSchedule.Notes,
+                        CreatedAt = targetSchedule.CreatedAt,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    _dbContext.StaffWorkSchedules.Add(updatedTarget);
+                }
+                await _dbContext.SaveChangesAsync(ct);
             }
-
-            swap.Status = "Approved";
-            swap.AdminDecisionBy = adminUserId;
-            swap.AdminDecisionAt = DateTime.UtcNow;
-            swap.AdminDecisionReason = request.Reason?.Trim() ?? "Đã phê duyệt";
-            swap.UpdatedAt = DateTime.UtcNow;
-
-            await _dbContext.SaveChangesAsync(ct);
-            if (tx != null) await tx.CommitAsync(ct);
-
-            // Notify both users
-            await _notificationService.CreateNotificationAsync(
-                swap.RequestingReceptionistUserId,
-                null,
-                "ShiftSwapApproved",
-                "Yêu cầu đổi ca trực đã được phê duyệt",
-                $"Yêu cầu đổi ca trực ngày {swap.SourceSchedule.WorkDate:dd/MM/yyyy} đã được Quản trị viên phê duyệt chính thức. Lịch làm việc của bạn đã được cập nhật.",
-                ct);
-
-            await _notificationService.CreateNotificationAsync(
-                swap.TargetReceptionistUserId,
-                null,
-                "ShiftSwapApproved",
-                "Yêu cầu đổi ca trực đã được phê duyệt",
-                $"Yêu cầu đổi ca trực ngày {swap.SourceSchedule.WorkDate:dd/MM/yyyy} đã được Quản trị viên phê duyệt chính thức. Lịch làm việc của bạn đã được cập nhật.",
-                ct);
-
-            await _auditLogService.LogAsync(
-                adminUserId,
-                "APPROVE_SHIFT_SWAP",
-                "ReceptionistShiftSwapRequest",
-                swapRequestId.ToString(),
-                "PendingAdminApproval",
-                "Approved and shifts reassigned",
-                ct);
-
-            return ApiResponse<bool>.Ok(true, "Đã phê duyệt và hoán đổi ca trực thành công.");
         }
-        catch (Exception ex)
+
+        var reasonPart = !string.IsNullOrWhiteSpace(request.Reason) ? $";Reason:{request.Reason.Trim()}" : string.Empty;
+
+        await _auditLogService.LogAsync(
+            adminUserId,
+            request.Approve ? "APPROVE_SHIFT_SWAP" : "REJECT_SHIFT_SWAP",
+            "StaffWorkSchedule",
+            swapRequestId.ToString(),
+            "PendingAdminApproval",
+            $"Status:{(request.Approve ? "Approved" : "Rejected")}{reasonPart}",
+            ct);
+
+        if (request.Approve)
         {
-            if (tx != null) await tx.RollbackAsync(ct);
-            return ApiResponse<bool>.Fail($"Lỗi khi phê duyệt hoán đổi ca: {ex.Message}");
+            await _notificationService.CreateNotificationAsync(
+                cycle.RequestingUserId,
+                null,
+                "ShiftSwapApproved",
+                "Yêu cầu đổi ca trực đã được phê duyệt",
+                $"Quản trị viên đã phê duyệt yêu cầu đổi ca ngày {sourceSchedule.WorkDate:dd/MM/yyyy}.",
+                ct);
+
+            await _notificationService.CreateNotificationAsync(
+                cycle.TargetUserId,
+                null,
+                "ShiftSwapApproved",
+                "Ca trực hoán đổi đã được phê duyệt",
+                $"Quản trị viên đã phê duyệt phân công ca trực ngày {sourceSchedule.WorkDate:dd/MM/yyyy} cho bạn.",
+                ct);
         }
+        else
+        {
+            string rejectReason = !string.IsNullOrWhiteSpace(request.Reason) ? $". Lý do: {request.Reason.Trim()}" : string.Empty;
+
+            await _notificationService.CreateNotificationAsync(
+                cycle.RequestingUserId,
+                null,
+                "ShiftSwapRejected",
+                "Yêu cầu đổi ca trực bị từ chối",
+                $"Quản trị viên đã từ chối yêu cầu đổi ca ngày {sourceSchedule.WorkDate:dd/MM/yyyy}{rejectReason}",
+                ct);
+
+            await _notificationService.CreateNotificationAsync(
+                cycle.TargetUserId,
+                null,
+                "ShiftSwapRejected",
+                "Yêu cầu đổi ca trực bị từ chối",
+                $"Quản trị viên đã từ chối yêu cầu đổi ca trực ngày {sourceSchedule.WorkDate:dd/MM/yyyy}{rejectReason}",
+                ct);
+        }
+
+        return ApiResponse<bool>.Ok(true, request.Approve
+            ? "Đã phê duyệt và thực hiện hoán đổi ca trực thành công."
+            : "Đã từ chối yêu cầu đổi ca trực.");
     }
 
     public async Task<ApiResponse<List<ReceptionistShiftSwapRequestDto>>> GetSwapRequestsAsync(
         ReceptionistSwapFilterRequest request,
         CancellationToken ct = default)
     {
-        var query = _dbContext.ReceptionistShiftSwapRequests
+        var distinctScheduleIds = await _dbContext.AuditLogs
             .AsNoTracking()
-            .Include(s => s.RequestingReceptionistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Include(s => s.TargetReceptionistUser)
-                .ThenInclude(u => u.StaffProfile)
-            .Include(s => s.SourceSchedule)
-            .Include(s => s.TargetSchedule)
-            .Include(s => s.AdminDecisionByUser)
-                .ThenInclude(u => u!.StaffProfile)
-            .AsQueryable();
-
-        if (request.UserId.HasValue && request.UserId.Value > 0)
-        {
-            query = query.Where(s => s.RequestingReceptionistUserId == request.UserId.Value || s.TargetReceptionistUserId == request.UserId.Value);
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Status))
-        {
-            query = query.Where(s => s.Status == request.Status);
-        }
-
-        if (request.FromDate.HasValue)
-        {
-            query = query.Where(s => s.SourceSchedule.WorkDate >= request.FromDate.Value);
-        }
-
-        if (request.ToDate.HasValue)
-        {
-            query = query.Where(s => s.SourceSchedule.WorkDate <= request.ToDate.Value);
-        }
-
-        var list = await query
-            .OrderByDescending(s => s.CreatedAt)
+            .Where(l => l.EntityName == "StaffWorkSchedule" && l.Action == "CREATE_SHIFT_SWAP_REQUEST")
+            .Select(l => l.EntityId)
+            .Distinct()
             .ToListAsync(ct);
 
-        var dtos = list.Select(s => new ReceptionistShiftSwapRequestDto
-        {
-            SwapRequestId = s.SwapRequestId,
-            RequestingReceptionistUserId = s.RequestingReceptionistUserId,
-            RequestingReceptionistName = s.RequestingReceptionistUser.StaffProfile != null ? s.RequestingReceptionistUser.StaffProfile.FullName : (s.RequestingReceptionistUser.Email ?? "Lễ tân"),
-            TargetReceptionistUserId = s.TargetReceptionistUserId,
-            TargetReceptionistName = s.TargetReceptionistUser.StaffProfile != null ? s.TargetReceptionistUser.StaffProfile.FullName : (s.TargetReceptionistUser.Email ?? "Lễ tân"),
-            SourceScheduleId = s.SourceScheduleId,
-            SourceWorkDate = s.SourceSchedule.WorkDate,
-            SourceStartTime = s.SourceSchedule.StartTime,
-            SourceEndTime = s.SourceSchedule.EndTime,
-            TargetScheduleId = s.TargetScheduleId,
-            TargetWorkDate = s.TargetSchedule?.WorkDate,
-            TargetStartTime = s.TargetSchedule?.StartTime,
-            TargetEndTime = s.TargetSchedule?.EndTime,
-            Reason = s.Reason,
-            Status = s.Status,
-            CounterpartyResponseAt = s.CounterpartyResponseAt,
-            CounterpartyNote = s.CounterpartyNote,
-            AdminDecisionBy = s.AdminDecisionBy,
-            AdminDecisionByName = s.AdminDecisionByUser?.StaffProfile?.FullName,
-            AdminDecisionAt = s.AdminDecisionAt,
-            AdminDecisionReason = s.AdminDecisionReason,
-            CreatedAt = s.CreatedAt
-        }).ToList();
+        var list = new List<ReceptionistShiftSwapRequestDto>();
 
-        return ApiResponse<List<ReceptionistShiftSwapRequestDto>>.Ok(dtos);
+        foreach (var idStr in distinctScheduleIds)
+        {
+            if (!long.TryParse(idStr, out var scheduleId)) continue;
+
+            var cycle = await GetSwapCycleStateAsync(scheduleId, ct);
+            if (cycle == null) continue;
+
+            if (!string.IsNullOrWhiteSpace(request.Status) &&
+                !string.Equals(cycle.Status, request.Status, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (request.UserId.HasValue && request.UserId.Value > 0 &&
+                cycle.RequestingUserId != request.UserId.Value &&
+                cycle.TargetUserId != request.UserId.Value)
+            {
+                continue;
+            }
+
+            var sourceSchedule = await _dbContext.StaffWorkSchedules
+                .AsNoTracking()
+                .Include(s => s.StaffUser)
+                .FirstOrDefaultAsync(s => s.WorkScheduleId == scheduleId, ct);
+
+            if (sourceSchedule == null) continue;
+
+            if (request.FromDate.HasValue && sourceSchedule.WorkDate < request.FromDate.Value)
+                continue;
+            if (request.ToDate.HasValue && sourceSchedule.WorkDate > request.ToDate.Value)
+                continue;
+
+            StaffWorkSchedule? targetSchedule = null;
+            if (cycle.TargetScheduleId.HasValue && cycle.TargetScheduleId.Value > 0)
+            {
+                targetSchedule = await _dbContext.StaffWorkSchedules
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.WorkScheduleId == cycle.TargetScheduleId.Value, ct);
+            }
+
+            var reqProfile = await _dbContext.StaffProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.UserId == cycle.RequestingUserId, ct);
+
+            var tgtProfile = await _dbContext.StaffProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.UserId == cycle.TargetUserId, ct);
+
+            string? adminName = null;
+            if (cycle.AdminDecisionLog?.UserId != null)
+            {
+                var adminProfile = await _dbContext.StaffProfiles
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.UserId == cycle.AdminDecisionLog.UserId, ct);
+                adminName = adminProfile?.FullName;
+            }
+
+            list.Add(new ReceptionistShiftSwapRequestDto
+            {
+                SwapRequestId = sourceSchedule.WorkScheduleId,
+                RequestingReceptionistUserId = cycle.RequestingUserId,
+                RequestingReceptionistName = reqProfile?.FullName ?? $"Lễ tân #{cycle.RequestingUserId}",
+                TargetReceptionistUserId = cycle.TargetUserId,
+                TargetReceptionistName = tgtProfile?.FullName ?? $"Lễ tân #{cycle.TargetUserId}",
+                SourceScheduleId = sourceSchedule.WorkScheduleId,
+                SourceWorkDate = sourceSchedule.WorkDate,
+                SourceStartTime = sourceSchedule.StartTime,
+                SourceEndTime = sourceSchedule.EndTime,
+                TargetScheduleId = targetSchedule?.WorkScheduleId ?? cycle.TargetScheduleId,
+                TargetWorkDate = targetSchedule?.WorkDate,
+                TargetStartTime = targetSchedule?.StartTime,
+                TargetEndTime = targetSchedule?.EndTime,
+                Reason = cycle.Reason,
+                Status = cycle.Status,
+                CounterpartyResponseAt = cycle.PeerResponseLog?.CreatedAt,
+                CounterpartyNote = cycle.PeerNote,
+                AdminDecisionBy = cycle.AdminDecisionLog?.UserId,
+                AdminDecisionByName = adminName,
+                AdminDecisionAt = cycle.AdminDecisionLog?.CreatedAt,
+                AdminDecisionReason = cycle.AdminReason,
+                CreatedAt = cycle.CreateLog.CreatedAt
+            });
+        }
+
+        return ApiResponse<List<ReceptionistShiftSwapRequestDto>>.Ok(
+            list.OrderByDescending(r => r.CreatedAt).ToList());
     }
 
     public async Task<ApiResponse<List<ReceptionistShiftSwapRequestDto>>> GetMySwapRequestsAsync(
         long receptionistUserId,
         CancellationToken ct = default)
     {
-        return await GetSwapRequestsAsync(new ReceptionistSwapFilterRequest
-        {
-            UserId = receptionistUserId
-        }, ct);
+        var all = await GetSwapRequestsAsync(new ReceptionistSwapFilterRequest { UserId = receptionistUserId }, ct);
+        return all;
     }
 }

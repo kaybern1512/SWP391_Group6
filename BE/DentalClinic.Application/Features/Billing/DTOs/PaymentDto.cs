@@ -10,6 +10,7 @@ public class PaymentDto
     public string PaidByPatientName { get; set; } = string.Empty;
     public string Method { get; set; } = string.Empty; // Cash, BankTransfer, CreditCard
     public string MethodDisplayName { get; set; } = string.Empty; // Tiền mặt, Chuyển khoản, Thẻ tín dụng
+    public string PaymentType { get; set; } = "Final"; // Deposit, Partial, Final, Refund
     public decimal Amount { get; set; }
     public string? TransactionReference { get; set; }
     public string Status { get; set; } = string.Empty;

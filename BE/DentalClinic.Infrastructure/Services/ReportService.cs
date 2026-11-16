@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -37,7 +36,7 @@ public class ReportService : IReportService
         CancellationToken ct = default)
     {
         var end = toDate?.Date.AddDays(1).AddTicks(-1) ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
-        var start = fromDate?.Date ?? end.Date.AddDays(-29); // Default 30 days
+        var start = fromDate?.Date ?? end.Date.AddDays(-29);
 
         var query = _dbContext.Invoices
             .AsNoTracking()
@@ -45,27 +44,34 @@ public class ReportService : IReportService
             .Include(i => i.InvoiceItems)
             .Include(i => i.Payments)
             .Include(i => i.GeneratedByUser)
+                .ThenInclude(u => u.StaffProfile)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.PatientUser)
+                .ThenInclude(a => a.Patient)
+                    .ThenInclude(p => p.User)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.AssignedDentistUser)
-                    .ThenInclude(d => d!.User)
+                .ThenInclude(a => a.AppointmentServices)
+                    .ThenInclude(s => s.AssignedDentist)
+                        .ThenInclude(d => d!.StaffProfile)
             .Include(i => i.Appointment)
-                .ThenInclude(a => a.Department)
+                .ThenInclude(a => a.AppointmentServices)
+                    .ThenInclude(s => s.DepartmentService)
+                        .ThenInclude(ds => ds.Department)
             .Where(i => i.CreatedAt >= start && i.CreatedAt <= end);
 
         if (departmentId.HasValue && departmentId.Value > 0)
         {
-            query = query.Where(i => i.Appointment.DepartmentId == departmentId.Value);
+            var deptIdInt = (int)departmentId.Value;
+            query = query.Where(i => i.Appointment.AppointmentServices.Any(s => s.DepartmentId == deptIdInt));
         }
 
         var invoices = await query.OrderByDescending(i => i.CreatedAt).ThenBy(i => i.InvoiceId).ToListAsync(ct);
 
-        var totalRevenue = invoices.Sum(i => i.TotalAmount);
-        var totalPaid = invoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" || p.Status == "Paid" || p.Status == "Completed").Sum(p => p.Amount);
+        var totalRevenue = invoices.Sum(i => i.FinalAmount);
+        var totalIncoming = invoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" && p.PaymentType != "Refund").Sum(p => p.Amount);
+        var totalRefunded = invoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" && p.PaymentType == "Refund").Sum(p => p.Amount);
+        var totalPaid = Math.Max(0, totalIncoming - totalRefunded);
         var totalRemaining = Math.Max(0, totalRevenue - totalPaid);
 
-        // Daily trend calculation
         var dailyMap = new Dictionary<string, (decimal revenue, decimal paid, int count)>();
         for (var d = start.Date; d <= end.Date; d = d.AddDays(1))
         {
@@ -78,8 +84,10 @@ public class ReportService : IReportService
             if (dailyMap.ContainsKey(key))
             {
                 var cur = dailyMap[key];
-                var invPaid = inv.Payments.Where(p => p.Status == "Successful" || p.Status == "Paid" || p.Status == "Completed").Sum(p => p.Amount);
-                dailyMap[key] = (cur.revenue + inv.TotalAmount, cur.paid + invPaid, cur.count + 1);
+                var invIncoming = inv.Payments.Where(p => p.Status == "Successful" && p.PaymentType != "Refund").Sum(p => p.Amount);
+                var invRefunded = inv.Payments.Where(p => p.Status == "Successful" && p.PaymentType == "Refund").Sum(p => p.Amount);
+                var invPaid = Math.Max(0, invIncoming - invRefunded);
+                dailyMap[key] = (cur.revenue + inv.FinalAmount, cur.paid + invPaid, cur.count + 1);
             }
         }
 
@@ -96,19 +104,22 @@ public class ReportService : IReportService
             };
         }).OrderBy(x => x.Date).ToList();
 
-        // Department distribution
         var allDepartments = await _dbContext.Departments.AsNoTracking().ToListAsync(ct);
         var deptDistribution = new List<DepartmentStatisticDto>();
 
         foreach (var dept in allDepartments)
         {
-            var deptInvoices = invoices.Where(i => i.Appointment.DepartmentId == dept.DepartmentId).ToList();
+            var deptInvoices = invoices
+                .Where(i => i.Appointment.AppointmentServices.Any(s => s.DepartmentId == dept.DepartmentId))
+                .ToList();
             if (deptInvoices.Any() || departmentId == dept.DepartmentId)
             {
-                var rev = deptInvoices.Sum(i => i.TotalAmount);
-                var paid = deptInvoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" || p.Status == "Paid" || p.Status == "Completed").Sum(p => p.Amount);
+                var rev = deptInvoices.Sum(i => i.FinalAmount);
+                var deptIncoming = deptInvoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" && p.PaymentType != "Refund").Sum(p => p.Amount);
+                var deptRefunded = deptInvoices.SelectMany(i => i.Payments).Where(p => p.Status == "Successful" && p.PaymentType == "Refund").Sum(p => p.Amount);
+                var paid = Math.Max(0, deptIncoming - deptRefunded);
                 var pct = totalRevenue > 0 ? Math.Round((double)(rev * 100 / totalRevenue), 1) : 0;
-                var dentistCount = await _dbContext.DentistDepartments.CountAsync(dd => dd.DepartmentId == dept.DepartmentId, ct);
+                var dentistCount = await _dbContext.DentistProfiles.CountAsync(d => d.DepartmentId == dept.DepartmentId, ct);
                 var completedAppts = deptInvoices.Count(i => i.Appointment.Status == AppointmentStatus.Completed);
 
                 deptDistribution.Add(new DepartmentStatisticDto
@@ -155,8 +166,7 @@ public class ReportService : IReportService
     {
         var dept = await _dbContext.Departments
             .AsNoTracking()
-            .Include(d => d.ManagerUser)
-            .FirstOrDefaultAsync(d => d.DepartmentId == departmentId, ct);
+            .FirstOrDefaultAsync(d => d.DepartmentId == (int)departmentId, ct);
 
         if (dept == null)
             return ApiResponse<DepartmentPerformanceReportDto>.Fail("Không tìm thấy thông tin chuyên khoa.");
@@ -174,7 +184,7 @@ public class ReportService : IReportService
         {
             DepartmentId = dept.DepartmentId,
             DepartmentName = dept.Name,
-            ManagerName = dept.ManagerUser?.FullName ?? "Chưa phân bổ",
+            ManagerName = dentistList.FirstOrDefault()?.DentistName ?? "Quản trị phòng khám",
             FromDate = fromDate,
             ToDate = toDate,
             TotalDentists = dentistList.Count,
@@ -197,50 +207,49 @@ public class ReportService : IReportService
         var end = toDate?.Date.AddDays(1).AddTicks(-1) ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
         var start = fromDate?.Date ?? end.Date.AddMonths(-6);
 
-        // Get dentists list
         var dentistQuery = _dbContext.DentistProfiles
             .AsNoTracking()
-            .Include(d => d.User)
-            .Include(d => d.DentistDepartments)
-                .ThenInclude(dd => dd.Department)
+            .Include(d => d.StaffProfile)
+            .Include(d => d.Department)
             .AsQueryable();
 
         if (departmentId.HasValue && departmentId.Value > 0)
         {
-            dentistQuery = dentistQuery.Where(d => d.DentistDepartments.Any(dd => dd.DepartmentId == departmentId.Value));
+            var deptIdInt = (int)departmentId.Value;
+            dentistQuery = dentistQuery.Where(d => d.DepartmentId == deptIdInt);
         }
 
         var dentists = await dentistQuery.ToListAsync(ct);
 
-        // Query appointments in range
-        var apptQuery = _dbContext.Appointments
+        var serviceQuery = _dbContext.AppointmentServices
             .AsNoTracking()
-            .Include(a => a.PatientUser)
-            .Include(a => a.Invoice)
-            .Include(a => a.VisitFeedback)
-            .Include(a => a.Department)
-            .Where(a => a.AssignedDentistUserId != null &&
-                        a.CreatedAt >= start && a.CreatedAt <= end);
+            .Include(s => s.Appointment)
+                .ThenInclude(a => a.Patient)
+            .Include(s => s.Appointment)
+                .ThenInclude(a => a.Invoice)
+            .Include(s => s.VisitFeedback)
+            .Where(s => s.AssignedDentistUserId != null &&
+                        s.CreatedAt >= start && s.CreatedAt <= end);
 
         if (departmentId.HasValue && departmentId.Value > 0)
         {
-            apptQuery = apptQuery.Where(a => a.DepartmentId == departmentId.Value);
+            var deptIdInt = (int)departmentId.Value;
+            serviceQuery = serviceQuery.Where(s => s.DepartmentId == deptIdInt);
         }
 
-        var appointments = await apptQuery.ToListAsync(ct);
+        var apptServices = await serviceQuery.ToListAsync(ct);
 
         var result = new List<DentistPerformanceDto>();
 
         foreach (var d in dentists)
         {
-            var dept = d.DentistDepartments.FirstOrDefault()?.Department;
-            var dAppts = appointments.Where(a => a.AssignedDentistUserId == d.UserId).ToList();
+            var dServices = apptServices.Where(s => s.AssignedDentistUserId == d.UserId).ToList();
 
-            var total = dAppts.Count;
-            var completed = dAppts.Count(a => a.Status == AppointmentStatus.Completed);
+            var total = dServices.Count;
+            var completed = dServices.Count(s => s.Status == "Completed");
             var compRate = total > 0 ? Math.Round((double)completed * 100 / total, 1) : 0;
 
-            var feedbacks = dAppts.Where(a => a.VisitFeedback != null).Select(a => a.VisitFeedback!).ToList();
+            var feedbacks = dServices.Where(s => s.VisitFeedback != null).Select(s => s.VisitFeedback!).ToList();
             var totalFb = feedbacks.Count;
             var avgRating = totalFb > 0 ? Math.Round(feedbacks.Average(f => (double)f.DentistRating), 1) : 5.0;
 
@@ -250,30 +259,30 @@ public class ReportService : IReportService
             var twoStar = feedbacks.Count(f => f.DentistRating == 2);
             var oneStar = feedbacks.Count(f => f.DentistRating == 1);
 
-            var rev = dAppts.Where(a => a.Invoice != null).Sum(a => a.Invoice!.TotalAmount);
+            var rev = dServices.Where(s => s.Status == "Completed").Sum(s => s.UnitPrice);
 
-            var recentFb = dAppts
-                .Where(a => a.VisitFeedback != null)
-                .OrderByDescending(a => a.VisitFeedback!.CreatedAt)
+            var recentFb = dServices
+                .Where(s => s.VisitFeedback != null)
+                .OrderByDescending(s => s.VisitFeedback!.CreatedAt)
                 .Take(5)
-                .Select(a => new FeedbackItemSummaryDto
+                .Select(s => new FeedbackItemSummaryDto
                 {
-                    FeedbackId = a.VisitFeedback!.FeedbackId,
-                    PatientName = a.PatientUser?.FullName ?? "Bệnh nhân",
-                    DentistRating = a.VisitFeedback.DentistRating,
-                    ClinicRating = a.VisitFeedback.ClinicRating,
-                    Comment = a.VisitFeedback.Comment,
-                    CreatedAt = a.VisitFeedback.CreatedAt
+                    FeedbackId = s.VisitFeedback!.FeedbackId,
+                    PatientName = s.Appointment?.Patient?.FullName ?? "Bệnh nhân",
+                    DentistRating = (byte)s.VisitFeedback.DentistRating,
+                    ClinicRating = (byte)s.VisitFeedback.ClinicRating,
+                    Comment = s.VisitFeedback.Comments,
+                    CreatedAt = s.VisitFeedback.CreatedAt
                 })
                 .ToList();
 
             result.Add(new DentistPerformanceDto
             {
                 DentistUserId = d.UserId,
-                DentistName = d.User?.FullName ?? "Bác sĩ",
-                EmployeeCode = d.User?.EmployeeCode,
-                DepartmentId = dept?.DepartmentId ?? 0,
-                DepartmentName = dept?.Name ?? "--",
+                DentistName = d.StaffProfile?.FullName ?? "Bác sĩ",
+                EmployeeCode = $"BS-{d.UserId:D4}",
+                DepartmentId = d.DepartmentId,
+                DepartmentName = d.Department?.Name ?? "--",
                 TotalAppointments = total,
                 CompletedAppointments = completed,
                 CompletionRate = compRate,
@@ -302,7 +311,6 @@ public class ReportService : IReportService
         var invoices = report.Data?.Invoices ?? new List<InvoiceDto>();
 
         var sb = new StringBuilder();
-        // UTF-8 BOM is added when encoding to bytes
         sb.AppendLine("Mã Hóa Đơn,Mã Lịch Hẹn,Bệnh Nhân,Số Điện Thoại,Bác Sĩ Phụ Trách,Chuyên Khoa,Ngày Lập,Tổng Tiền (VNĐ),Đã Thu (VNĐ),Còn Lại (VNĐ),Trạng Thái");
 
         foreach (var inv in invoices)
@@ -376,40 +384,41 @@ public class ReportService : IReportService
 
     private static InvoiceDto MapToInvoiceDto(Invoice invoice, ClinicProfile? clinic)
     {
-        var subTotal = invoice.InvoiceItems.Sum(i => i.Quantity * i.UnitPrice);
-        var paidAmount = invoice.Payments.Where(p => p.Status == "Successful" || p.Status == "Paid" || p.Status == "Completed").Sum(p => p.Amount);
-        var remainingAmount = Math.Max(0, invoice.TotalAmount - paidAmount);
-        var discountAmount = subTotal > invoice.TotalAmount ? (subTotal - invoice.TotalAmount) : 0m;
+        var incoming = invoice.Payments.Where(p => p.Status == "Successful" && p.PaymentType != "Refund").Sum(p => p.Amount);
+        var refunded = invoice.Payments.Where(p => p.Status == "Successful" && p.PaymentType == "Refund").Sum(p => p.Amount);
+        var paidAmount = Math.Max(0, incoming - refunded);
+        var remainingAmount = Math.Max(0, invoice.FinalAmount - paidAmount);
+        var primaryService = invoice.Appointment?.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
 
         return new InvoiceDto
         {
             InvoiceId = invoice.InvoiceId,
             InvoiceCode = invoice.InvoiceCode,
             AppointmentId = invoice.AppointmentId,
-            AppointmentCode = invoice.Appointment?.AppointmentCode,
+            AppointmentCode = $"APT-{invoice.AppointmentId:D6}",
             PatientUserId = invoice.Appointment?.PatientUserId ?? 0,
-            PatientCode = invoice.Appointment?.PatientUser?.PatientCode,
-            PatientName = invoice.Appointment?.PatientUser?.FullName ?? "Bệnh nhân",
-            PatientPhoneNumber = invoice.Appointment?.PatientUser?.EmergencyContact,
-            PatientEmail = invoice.Appointment?.PatientUser?.User?.Email,
-            PatientAddress = invoice.Appointment?.PatientUser?.Address,
-            DentistName = invoice.Appointment?.AssignedDentistUser?.User?.FullName ?? "Chưa phân bổ",
-            DepartmentName = invoice.Appointment?.Department?.Name ?? "Nha khoa",
+            PatientCode = invoice.Appointment != null ? $"PT-{invoice.Appointment.PatientUserId:D6}" : null,
+            PatientName = invoice.Appointment?.Patient?.FullName ?? "Bệnh nhân",
+            PatientPhoneNumber = invoice.Appointment?.Patient?.User?.PhoneNumber ?? invoice.Appointment?.Patient?.EmergencyContact,
+            PatientEmail = invoice.Appointment?.Patient?.User?.Email,
+            PatientAddress = invoice.Appointment?.Patient?.Address,
+            DentistName = primaryService?.AssignedDentist?.StaffProfile?.FullName ?? "Chưa phân bổ",
+            DepartmentName = primaryService?.DepartmentService?.Department?.Name ?? "Nha khoa",
             GeneratedByUserId = invoice.GeneratedByUserId,
-            GeneratedByName = invoice.GeneratedByUser?.FullName ?? "Nhân viên thu ngân",
-            SubTotal = subTotal,
-            DiscountAmount = discountAmount,
-            TotalAmount = invoice.TotalAmount,
+            GeneratedByName = invoice.GeneratedByUser?.StaffProfile?.FullName ?? "Nhân viên thu ngân",
+            SubTotal = invoice.TotalAmount,
+            DiscountAmount = invoice.DiscountAmount,
+            TotalAmount = invoice.FinalAmount,
             PaidAmount = paidAmount,
             RemainingAmount = remainingAmount,
             Status = invoice.Status,
             CreatedAt = invoice.CreatedAt,
-            AppointmentDate = invoice.Appointment?.ScheduledStart,
+            AppointmentDate = primaryService?.ScheduledStart,
             ReasonForVisit = invoice.Appointment?.ReasonForVisit,
 
-            ClinicName = clinic?.Name ?? "NHA KHOA ĐA CHUYÊN KHOA DENTALCARE",
+            ClinicName = clinic?.ClinicName ?? "NHA KHOA ĐA CHUYÊN KHOA DENTALCARE",
             ClinicAddress = clinic?.Address ?? "123 Đường Nguyễn Tri Phương, Phường 5, Quận 10, TP. Hồ Chí Minh",
-            ClinicPhone = clinic?.PhoneNumber ?? "028 3822 9999",
+            ClinicPhone = clinic?.Hotline ?? "028 3822 9999",
             ClinicEmail = clinic?.Email ?? "contact@dentalcare.vn"
         };
     }

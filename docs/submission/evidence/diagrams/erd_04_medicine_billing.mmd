@@ -1,0 +1,71 @@
+erDiagram
+    Medicines {
+      bigint MedicineId PK
+      varchar MedicineCode UK
+      nvarchar MedicineName
+      nvarchar Unit
+      decimal UnitPrice
+      int StockQuantity "CHECK >= 0"
+      int MinimumStockAlert
+      bit IsActive
+    }
+    Prescriptions {
+      bigint PrescriptionId PK
+      varchar PrescriptionCode UK
+      bigint AppointmentId FK
+      bigint PatientUserId FK
+      bigint DentistUserId FK
+      varchar Status "Active|Dispensed|Cancelled"
+    }
+    PrescriptionItems {
+      bigint PrescriptionItemId PK
+      bigint PrescriptionId FK
+      bigint MedicineId FK
+      int Quantity
+      int QuantityDispensed
+      decimal UnitPriceAtDispense
+      bigint DispensedByUserId FK
+      datetime2 DispensedAt
+    }
+    PerformedServices {
+      bigint PerformedServiceId PK
+      bigint AppointmentId FK
+      int DepartmentServiceId FK
+      int Quantity
+      decimal UnitPrice
+    }
+    Invoices {
+      bigint InvoiceId PK
+      varchar InvoiceCode UK
+      bigint AppointmentId UK,FK
+      bigint PatientUserId FK
+      decimal TotalAmount
+      decimal DiscountAmount
+      decimal FinalAmount
+      varchar Status "Unpaid|PartiallyPaid|Paid|Cancelled"
+    }
+    InvoiceItems {
+      bigint InvoiceItemId PK
+      bigint InvoiceId FK
+      bigint PerformedServiceId FK
+      bigint PrescriptionItemId FK
+      nvarchar ItemDescription
+      int Quantity
+      decimal UnitPrice
+      decimal LineTotal "Computed"
+    }
+    Payments {
+      bigint PaymentId PK
+      varchar PaymentCode UK
+      bigint InvoiceId FK
+      decimal Amount "CHECK > 0"
+      varchar Method "Cash|CreditCard|BankTransfer|Online"
+      varchar PaymentType "Deposit|Partial|Final|Refund"
+      varchar Status "Pending|Successful|Failed|Cancelled"
+    }
+    Prescriptions ||--o{ PrescriptionItems : "contains"
+    Medicines ||--o{ PrescriptionItems : "dispenses"
+    Invoices ||--o{ InvoiceItems : "lines"
+    PerformedServices ||--o{ InvoiceItems : "XOR_source_service"
+    PrescriptionItems ||--o{ InvoiceItems : "XOR_source_drug"
+    Invoices ||--o{ Payments : "settled_by"
