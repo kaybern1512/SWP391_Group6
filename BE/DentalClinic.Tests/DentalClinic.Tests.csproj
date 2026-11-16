@@ -34,6 +34,7 @@
     <Compile Include="Booking/VietnamTimezoneStandardizationTests.cs" />
     <Compile Include="Booking/BookingCoreIntegrityTests.cs" />
     <Compile Include="Clinical/ClinicalExecutionIntegrityTests.cs" />
+    <Compile Include="Clinical/ClinicalBillingAcceptanceTests.cs" />
     <Compile Include="Diagnostics/DiagnosticsAndReferralIntegrityTests.cs" />
     <Compile Include="Medicine/PrescriptionAndDispensingIntegrityTests.cs" />
     <Compile Include="Billing/InvoiceAndPaymentIntegrityTests.cs" />

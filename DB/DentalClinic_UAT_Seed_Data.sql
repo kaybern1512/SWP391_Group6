@@ -14,7 +14,7 @@ BEGIN
     RETURN;
 END;
 
-IF @CurrentDb NOT IN (N'DentalCare_SWP391_Refactor_UAT', N'DentalCare_SWP391_FunctionalE2E_TEST', N'DentalCare_SWP391_Encoding_TEST', N'DentalCare_SWP391_Refactor_QA', N'DentalCare_SWP391_Refactor_TEST_Integration')
+IF @CurrentDb NOT IN (N'DentalCare_SWP391_Refactor_UAT', N'DentalCare_SWP391_FunctionalE2E_TEST', N'DentalCare_SWP391_Encoding_TEST', N'DentalCare_SWP391_Refactor_QA', N'DentalCare_SWP391_Refactor_TEST_Integration', N'DentalCare_SWP391_UAT_Fixture_TEST')
 BEGIN
     RAISERROR(N'ABORTED: This script must only run on approved UAT/QA/TEST databases! Current: [%s]', 16, 1, @CurrentDb);
     RETURN;

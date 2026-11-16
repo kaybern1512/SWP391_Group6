@@ -374,7 +374,7 @@
 {
     <div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <form asp-action="Pay" method="post" class="modal-content border-0 shadow">
+            <form asp-action="Pay" method="post" id="paymentForm" class="modal-content border-0 shadow">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="InvoiceId" value="@Model.InvoiceId" />
 
@@ -506,7 +506,7 @@
 {
     <div class="modal fade" id="refundModal" tabindex="-1" aria-labelledby="refundModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <form asp-action="Refund" method="post" class="modal-content border-0 shadow">
+            <form asp-action="Refund" method="post" id="refundForm" class="modal-content border-0 shadow">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="InvoiceId" value="@Model.InvoiceId" />
                 <div class="modal-header bg-danger text-white">
@@ -614,6 +614,43 @@
                         payAmountInput.value = '@Model.RemainingAmount';
                         if (methodBank && methodBank.checked) {
                             updateQrCode();
+                        }
+                    });
+                }
+
+                // Double-submit protection
+                const paymentForm = document.getElementById('paymentForm');
+                if (paymentForm) {
+                    paymentForm.addEventListener('submit', function (e) {
+                        const btn = paymentForm.querySelector('button[type="submit"]');
+                        if (btn) {
+                            if (btn.dataset.submitted === 'true') {
+                                e.preventDefault();
+                                return false;
+                            }
+                            btn.dataset.submitted = 'true';
+                            setTimeout(() => {
+                                btn.disabled = true;
+                                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang xử lý thu tiền...';
+                            }, 10);
+                        }
+                    });
+                }
+
+                const refundForm = document.getElementById('refundForm');
+                if (refundForm) {
+                    refundForm.addEventListener('submit', function (e) {
+                        const btn = refundForm.querySelector('button[type="submit"]');
+                        if (btn) {
+                            if (btn.dataset.submitted === 'true') {
+                                e.preventDefault();
+                                return false;
+                            }
+                            btn.dataset.submitted = 'true';
+                            setTimeout(() => {
+                                btn.disabled = true;
+                                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang xử lý hoàn tiền...';
+                            }, 10);
                         }
                     });
                 }

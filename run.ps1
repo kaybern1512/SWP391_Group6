@@ -1,5 +1,5 @@
 # DentalCare System Launcher
-Set-Location -Path "D:\SWP"
+Set-Location -Path $PSScriptRoot
 
 Write-Host "===================================================" -ForegroundColor Cyan
 Write-Host "     DENTALCARE CLINIC MANAGEMENT SYSTEM" -ForegroundColor Yellow
@@ -17,13 +17,13 @@ if ($svc -and $svc.Status -ne "Running") {
 
 # 2. Khoi chay Backend
 Write-Host "[2/3] Dang khoi chay Backend API (https://localhost:7350)..." -ForegroundColor Green
-Start-Process cmd.exe -ArgumentList '/k "cd /d D:\SWP && dotnet run --project BE\DentalClinic.Api --launch-profile https"'
+Start-Process cmd.exe -ArgumentList "/k cd /d `"$PSScriptRoot`" && dotnet run --project BE\DentalClinic.Api --launch-profile https"
 
 Start-Sleep -Seconds 4
 
 # 3. Khoi chay Frontend
 Write-Host "[3/3] Dang khoi chay Frontend Web (https://localhost:7129)..." -ForegroundColor Green
-Start-Process cmd.exe -ArgumentList '/k "cd /d D:\SWP && dotnet run --project FE\DentalClinic.Web --launch-profile https"'
+Start-Process cmd.exe -ArgumentList "/k cd /d `"$PSScriptRoot`" && dotnet run --project FE\DentalClinic.Web --launch-profile https"
 
 Start-Sleep -Seconds 5
 

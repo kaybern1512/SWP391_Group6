@@ -3133,5 +3133,29 @@
                 }
             }
         }
+
+        // Double-submit protection for clinical operations
+        document.addEventListener('DOMContentLoaded', function () {
+            const guardedActions = ['CreateEntry', 'AddAdditionalService', 'CreatePrescriptionQuick', 'DispenseMedicineQuick', 'CompleteExam', 'UploadImaging'];
+            document.querySelectorAll('form').forEach(form => {
+                const action = form.getAttribute('action') || '';
+                if (guardedActions.some(a => action.indexOf(a) !== -1)) {
+                    form.addEventListener('submit', function (e) {
+                        const btn = form.querySelector('button[type="submit"]');
+                        if (btn) {
+                            if (btn.dataset.submitted === 'true') {
+                                e.preventDefault();
+                                return false;
+                            }
+                            btn.dataset.submitted = 'true';
+                            setTimeout(() => {
+                                btn.disabled = true;
+                                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang xử lý...';
+                            }, 10);
+                        }
+                    });
+                }
+            });
+        });
     </script>
 }
