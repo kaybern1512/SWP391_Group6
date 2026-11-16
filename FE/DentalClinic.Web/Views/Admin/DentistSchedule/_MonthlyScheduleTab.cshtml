@@ -189,11 +189,27 @@
                 {
                     var day = schedule.Days[i];
                     bool isToday = day.Date == today;
+                    var morningCount = day.Shifts.Count(s => s.StartTime.Hour < 12);
+                    var afternoonCount = day.Shifts.Count(s => s.StartTime.Hour >= 12);
+                    var leaveCount = day.IsOnLeave ? 1 : 0;
+                    var apptCount = day.ConfirmedAppointmentsCount;
                     string dayCardClass = !day.IsCurrentMonth
                         ? "bg-light text-muted opacity-50"
                         : (isToday ? "bg-primary-subtle bg-opacity-25 border-primary border-2" : "bg-white");
 
-                    <div class="col-12 col-md border-bottom border-end p-2 d-flex flex-column @dayCardClass" style="min-height: 140px; min-width: 14.28%;">
+                    <div class="col-12 col-md border-bottom border-end p-2 d-flex flex-column @dayCardClass day-calendar-cell"
+                         style="min-height: 125px; min-width: 14.28%; cursor: pointer;"
+                         data-date="@day.Date.ToString("yyyy-MM-dd")"
+                         data-date-display="@day.Date.ToString("dd/MM/yyyy") (@day.DayOfWeekName)"
+                         data-morning-count="@morningCount"
+                         data-afternoon-count="@afternoonCount"
+                         data-leave-count="@leaveCount"
+                         data-appt-count="@apptCount"
+                         data-on-leave="@(day.IsOnLeave ? "true" : "false")"
+                         data-leave-reason="@(day.LeaveReason ?? "")"
+                         data-shifts='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(day.Shifts.Select(sh => new { startTime = sh.StartTime.ToString("HH:mm"), endTime = sh.EndTime.ToString("HH:mm"), dentistName = sh.DentistName, deptName = sh.DepartmentName, note = sh.Note ?? "" })))'
+                         onclick="openDayDetailFromCell(this)">
+                        
                         <!-- Day Header -->
                         <div class="d-flex justify-content-between align-items-center mb-1">
                             <span class="fw-bold @(day.IsWeekend ? (day.DayOfWeek == 7 ? "text-danger" : "text-primary") : "text-dark")" style="font-size: 0.95rem;">
@@ -203,59 +219,39 @@
                             {
                                 <span class="badge bg-primary text-white" style="font-size: 9px;">Hôm nay</span>
                             }
-                            @if (day.ConfirmedAppointmentsCount > 0)
+                            @if (apptCount > 0)
                             {
-                                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 9px;" title="@day.ConfirmedAppointmentsCount lịch hẹn đã xác nhận">
-                                    <i class="bi bi-person-check-fill me-1"></i>@day.ConfirmedAppointmentsCount
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 9px;" title="@apptCount lịch hẹn / cảnh báo">
+                                    <i class="bi bi-calendar-event me-1"></i>@apptCount
                                 </span>
                             }
                         </div>
 
-                        <!-- Leave Status -->
-                        @if (day.IsOnLeave)
-                        {
-                            <div class="badge bg-warning-subtle text-warning border border-warning-subtle text-wrap text-start p-1 mb-1" style="font-size: 10px;">
-                                <i class="bi bi-slash-circle me-1"></i>Nghỉ: @(string.IsNullOrWhiteSpace(day.LeaveReason) ? "Nghỉ phép" : day.LeaveReason)
+                        <!-- Shift & Attendance Overview Badges -->
+                        <div class="d-flex flex-column gap-1 flex-grow-1 justify-content-center">
+                            <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 11px;">
+                                <span><i class="bi bi-sun me-1"></i>Sáng:</span>
+                                <span class="fw-bold">@morningCount BS</span>
                             </div>
-                        }
-
-                        <!-- Shifts List -->
-                        <div class="shifts-container flex-grow-1 overflow-auto mb-1" style="max-height: 110px;">
-                            @if (day.Shifts.Count > 0)
+                            <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size: 11px;">
+                                <span><i class="bi bi-sunset me-1"></i>Chiều:</span>
+                                <span class="fw-bold">@afternoonCount BS</span>
+                            </div>
+                            @if (day.IsOnLeave)
                             {
-                                @foreach (var s in day.Shifts)
-                                {
-                                    <div class="shift-pill p-1 px-2 rounded mb-1 border d-flex justify-content-between align-items-center @(s.Status == "Scheduled" ? "bg-white border-primary-subtle" : "bg-light text-muted")" style="font-size: 11px;">
-                                        <div class="d-flex align-items-center text-truncate">
-                                            <i class="bi bi-clock-fill text-primary me-1" style="font-size: 10px;"></i>
-                                            <strong>@s.StartTime.ToString("HH:mm")-@s.EndTime.ToString("HH:mm")</strong>
-                                        </div>
-                                        <span class="badge bg-light text-secondary border ms-1" style="font-size: 9px;">@s.DepartmentName</span>
-                                    </div>
-                                }
+                                <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 11px;">
+                                    <span><i class="bi bi-person-x me-1"></i>Nghỉ:</span>
+                                    <span class="fw-bold">1 người</span>
+                                </div>
                             }
-                            else if (!day.IsOnLeave && day.IsCurrentMonth)
+                            @if (apptCount > 0)
                             {
-                                <div class="text-center text-muted py-2" style="font-size: 11px;">
-                                    <span class="fst-italic opacity-75">Chưa phân ca</span>
+                                <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 11px;">
+                                    <span><i class="bi bi-exclamation-triangle me-1"></i>Cảnh báo:</span>
+                                    <span class="fw-bold">@apptCount ca</span>
                                 </div>
                             }
                         </div>
-
-                        <!-- Action Button -->
-                        @if (day.IsCurrentMonth)
-                        {
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-secondary py-0 px-1 w-100 mt-auto text-xs btn-daily-override"
-                                    data-date="@day.Date.ToString("yyyy-MM-dd")"
-                                    data-on-leave="@(day.IsOnLeave ? "true" : "false")"
-                                    data-leave-reason="@(day.LeaveReason ?? "")"
-                                    data-appt-count="@day.ConfirmedAppointmentsCount"
-                                    data-shifts='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(day.Shifts.Select(sh => new { startTime = sh.StartTime.ToString("HH:mm"), endTime = sh.EndTime.ToString("HH:mm"), note = sh.Note ?? "" })))'
-                                    onclick="handleDailyOverrideClick(this)">
-                                <i class="bi bi-pencil-square me-1"></i>Sửa ca ngày
-                            </button>
-                        }
                     </div>
 
                     @* Break rows every 7 days on desktop *@
@@ -281,7 +277,71 @@
 </div>
 
 <!-- ========================================================================= -->
-<!-- =========================================================================
+<!-- MODAL: CHI TIẾT NGÀY PHÂN CÔNG LỊCH TRỰC (THAY THẾ NÚT SỬA LẶP LẠI)        -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="monthDayDetailModal" tabindex="-1" aria-labelledby="monthDayDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title font-heading fw-bold" id="monthDayDetailModalLabel">
+                    <i class="bi bi-calendar-day text-primary me-2"></i>Chi Tiết Ngày: <span id="mddDateDisplay" class="text-primary"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- Overview Statistics -->
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <div class="p-2 rounded bg-primary-subtle text-primary border border-primary-subtle text-center">
+                            <div class="small fw-semibold">Ca Sáng (08:00 - 12:00)</div>
+                            <div class="fs-5 fw-bold" id="mddMorningCount">0 BS</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 rounded bg-info-subtle text-info-emphasis border border-info-subtle text-center">
+                            <div class="small fw-semibold">Ca Chiều (13:30 - 17:30)</div>
+                            <div class="fs-5 fw-bold" id="mddAfternoonCount">0 BS</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 rounded bg-warning-subtle text-warning-emphasis border border-warning-subtle text-center">
+                            <div class="small fw-semibold">Bác Sĩ Nghỉ Phép</div>
+                            <div class="fs-5 fw-bold" id="mddLeaveCount">0 người</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 rounded bg-danger-subtle text-danger border border-danger-subtle text-center">
+                            <div class="small fw-semibold">Lịch Hẹn / Cảnh Báo</div>
+                            <div class="fs-5 fw-bold" id="mddApptCount">0 ca</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Leave reason banner if any -->
+                <div id="mddLeaveAlert" class="alert alert-warning py-2 small mb-3" style="display: none;">
+                    <i class="bi bi-info-circle me-1 fw-bold"></i>
+                    <strong>Ghi chú vắng mặt:</strong> <span id="mddLeaveReason"></span>
+                </div>
+
+                <!-- Shifts Detail List -->
+                <div class="mb-3">
+                    <h6 class="fw-bold small text-muted text-uppercase mb-2">Danh sách ca trực phân công</h6>
+                    <div id="mddShiftsList" class="d-flex flex-column gap-2" style="max-height: 220px; overflow-y: auto;">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-dc-primary" id="btnOpenOverrideFromDetail" onclick="handleOpenOverrideFromDetail()">
+                    <i class="bi bi-pencil-square me-1"></i>Điều Chỉnh Ca Trực / Nghỉ Phép
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
 <!-- MODAL 2: COPY SCHEDULE FROM PREVIOUS MONTH -->
 <!-- ========================================================================= -->
 <div class="modal fade" id="copyMonthModal" tabindex="-1" aria-labelledby="copyMonthModalLabel" aria-hidden="true">
@@ -528,6 +588,79 @@
             alert('Lỗi kết nối máy chủ.');
             btnApply.disabled = false;
             btnApply.innerHTML = '<i class="bi bi-copy me-1"></i>Thực Hiện Sao Chép';
+        }
+    }
+
+    let currentDetailCellData = null;
+
+    function openDayDetailFromCell(cell) {
+        try {
+            currentDetailCellData = {
+                date: cell.getAttribute('data-date'),
+                dateDisplay: cell.getAttribute('data-date-display'),
+                morningCount: cell.getAttribute('data-morning-count'),
+                afternoonCount: cell.getAttribute('data-afternoon-count'),
+                leaveCount: cell.getAttribute('data-leave-count'),
+                apptCount: cell.getAttribute('data-appt-count'),
+                onLeave: cell.getAttribute('data-on-leave') === 'true',
+                leaveReason: cell.getAttribute('data-leave-reason') || '',
+                shifts: JSON.parse(cell.getAttribute('data-shifts') || '[]')
+            };
+
+            document.getElementById('mddDateDisplay').textContent = currentDetailCellData.dateDisplay || currentDetailCellData.date;
+            document.getElementById('mddMorningCount').textContent = (currentDetailCellData.morningCount || 0) + ' BS';
+            document.getElementById('mddAfternoonCount').textContent = (currentDetailCellData.afternoonCount || 0) + ' BS';
+            document.getElementById('mddLeaveCount').textContent = (currentDetailCellData.leaveCount || 0) + ' người';
+            document.getElementById('mddApptCount').textContent = (currentDetailCellData.apptCount || 0) + ' ca';
+
+            const leaveAlert = document.getElementById('mddLeaveAlert');
+            if (currentDetailCellData.onLeave) {
+                leaveAlert.style.display = 'block';
+                document.getElementById('mddLeaveReason').textContent = currentDetailCellData.leaveReason || 'Nghỉ phép';
+            } else {
+                leaveAlert.style.display = 'none';
+            }
+
+            const shiftsList = document.getElementById('mddShiftsList');
+            shiftsList.innerHTML = '';
+            if (!currentDetailCellData.shifts || currentDetailCellData.shifts.length === 0) {
+                shiftsList.innerHTML = '<div class="text-center text-muted small py-3 border rounded bg-light">Chưa có ca trực nào được phân công trong ngày này.</div>';
+            } else {
+                currentDetailCellData.shifts.forEach(s => {
+                    const shiftDiv = document.createElement('div');
+                    shiftDiv.className = 'p-2 rounded border bg-white d-flex justify-content-between align-items-center';
+                    shiftDiv.innerHTML = `
+                        <div>
+                            <div class="fw-bold text-dark small"><i class="bi bi-clock me-1 text-primary"></i>${s.startTime} - ${s.endTime}</div>
+                            <div class="text-muted small">${s.dentistName ? s.dentistName : 'Bác sĩ'} ${s.deptName ? '• ' + s.deptName : ''}</div>
+                        </div>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">${s.note || 'Ca trực'}</span>
+                    `;
+                    shiftsList.appendChild(shiftDiv);
+                });
+            }
+
+            const detailModal = new bootstrap.Modal(document.getElementById('monthDayDetailModal'));
+            detailModal.show();
+        } catch (e) {
+            console.error('Failed to open day detail modal:', e);
+        }
+    }
+
+    function handleOpenOverrideFromDetail() {
+        if (!currentDetailCellData) return;
+        const detailModalEl = document.getElementById('monthDayDetailModal');
+        const modalInstance = bootstrap.Modal.getInstance(detailModalEl);
+        if (modalInstance) modalInstance.hide();
+
+        if (typeof openDailyOverrideModal === 'function') {
+            openDailyOverrideModal(
+                currentDetailCellData.date,
+                currentDetailCellData.onLeave,
+                currentDetailCellData.leaveReason,
+                parseInt(currentDetailCellData.apptCount || '0', 10),
+                currentDetailCellData.shifts
+            );
         }
     }
 

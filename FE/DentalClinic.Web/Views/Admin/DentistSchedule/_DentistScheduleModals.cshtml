@@ -205,21 +205,24 @@
                     <div class="row g-2 mb-3">
                         <div class="col-6">
                             <label class="form-label small fw-semibold">Bác sĩ <span class="text-danger">*</span></label>
-                            <select id="overrideDentistId" class="form-select form-select-sm" required>
-                                @foreach (var d in Model.Dentists)
+                            <select id="overrideDentistId" class="form-select form-select-sm" required onchange="handleOverrideDentistChange()">
+                                @foreach (var d in Model.Allocations)
                                 {
-                                    <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
+                                    <option value="@d.DentistUserId" data-department-id="@d.DepartmentId" data-department-name="@d.DepartmentName" selected="@(Model.SelectedDentistId == d.DentistUserId)">@d.DentistName</option>
+                                }
+                                @if (!Model.Allocations.Any())
+                                {
+                                    @foreach (var d in Model.Dentists)
+                                    {
+                                        <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
+                                    }
                                 }
                             </select>
                         </div>
                         <div class="col-6">
-                            <label class="form-label small fw-semibold">Chuyên khoa <span class="text-danger">*</span></label>
-                            <select id="overrideDepartmentId" class="form-select form-select-sm" required>
-                                @foreach (var d in Model.Departments)
-                                {
-                                    <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
-                                }
-                            </select>
+                            <label class="form-label small fw-semibold text-muted">Chuyên khoa trực thuộc</label>
+                            <input type="text" id="overrideDepartmentName" class="form-control form-control-sm bg-light" readonly placeholder="Tự động điền theo bác sĩ" />
+                            <input type="hidden" id="overrideDepartmentId" value="@(Model.SelectedDepartmentId ?? 1)" />
                         </div>
                     </div>
 
@@ -282,6 +285,120 @@
 </div>
 
 <!-- ========================================================================= -->
+<!-- MODAL 3: REGISTER / RECORD DENTIST LEAVE (REDESIGNED PROCESS)             -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="registerLeaveModal" tabindex="-1" aria-labelledby="registerLeaveModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content shadow-lg border-0">
+            <form asp-controller="AdminDentistSchedule" asp-action="RegisterLeave" method="post" id="registerLeaveForm">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title font-heading fw-bold" id="registerLeaveModalLabel">
+                        <i class="bi bi-calendar-plus text-primary me-2"></i>Đăng Ký / Ghi Nhận Nghỉ Phép Bác Sĩ
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <!-- Dentist Selection -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Bác sĩ xin nghỉ <span class="text-danger">*</span></label>
+                            <select name="dentistUserId" id="registerLeaveDentistId" class="form-select" required onchange="handleRegisterLeaveDentistChange()">
+                                <option value="">-- Chọn bác sĩ --</option>
+                                @foreach (var d in Model.Allocations)
+                                {
+                                    <option value="@d.DentistUserId" data-department-name="@d.DepartmentName">
+                                        @d.DentistName (@d.DepartmentName)
+                                    </option>
+                                }
+                                @if (!Model.Allocations.Any())
+                                {
+                                    @foreach (var d in Model.Dentists)
+                                    {
+                                        <option value="@d.UserId" data-department-name="Nha khoa Tổng quát">
+                                            @d.FullName
+                                        </option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <!-- Read-only Department -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-muted">Chuyên khoa trực thuộc</label>
+                            <input type="text" id="registerLeaveDeptName" class="form-control bg-light" readonly placeholder="Tự động điền theo hồ sơ bác sĩ" />
+                        </div>
+
+                        <!-- Date Range -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Từ ngày <span class="text-danger">*</span></label>
+                            <input type="date" name="startDate" id="registerLeaveStartDate" class="form-control" value="@minDateStr" min="@minDateStr" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Đến ngày <span class="text-danger">*</span></label>
+                            <input type="date" name="endDate" id="registerLeaveEndDate" class="form-control" value="@minDateStr" min="@minDateStr" required />
+                        </div>
+
+                        <!-- Shift Scope -->
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold mb-2">Phạm vi ca nghỉ <span class="text-danger">*</span></label>
+                            <div class="d-flex flex-wrap gap-3 p-3 bg-light rounded-3 border">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="shiftScope" id="scopeFullDay" value="FullDay" checked>
+                                    <label class="form-check-label fw-semibold text-dark" for="scopeFullDay">
+                                        <i class="bi bi-clock-history me-1 text-primary"></i>Nghỉ cả ngày (08:00 - 17:30)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="shiftScope" id="scopeMorning" value="Morning">
+                                    <label class="form-check-label fw-semibold text-dark" for="scopeMorning">
+                                        <i class="bi bi-sun me-1 text-warning"></i>Chỉ nghỉ ca sáng (08:00 - 12:00)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="shiftScope" id="scopeAfternoon" value="Afternoon">
+                                    <label class="form-check-label fw-semibold text-dark" for="scopeAfternoon">
+                                        <i class="bi bi-sunset me-1 text-info"></i>Chỉ nghỉ ca chiều (13:30 - 17:30)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Leave Type -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Loại nghỉ phép <span class="text-danger">*</span></label>
+                            <select name="leaveType" id="registerLeaveType" class="form-select" required>
+                                <option value="AnnualLeave" selected>Nghỉ phép năm (Annual Leave)</option>
+                                <option value="SickLeave">Nghỉ ốm / Khám chữa bệnh (Sick Leave)</option>
+                                <option value="UnpaidLeave">Nghỉ không lương (Unpaid Leave)</option>
+                                <option value="ConferenceLeave">Hội nghị / Đào tạo Y khoa (Conference Leave)</option>
+                            </select>
+                        </div>
+
+                        <!-- Reason -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Lý do nghỉ phép <span class="text-danger">*</span></label>
+                            <input type="text" name="reason" id="registerLeaveReason" class="form-control" placeholder="VD: Việc cá nhân, khám sức khỏe, tham gia hội thảo..." required />
+                        </div>
+
+                        <!-- Notes -->
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Ghi chú vận hành / Bàn giao ca trực</label>
+                            <textarea name="notes" id="registerLeaveNotes" class="form-control" rows="2" placeholder="Ghi chú nội bộ cho quản trị viên và điều phối lịch khám..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">
+                        <i class="bi bi-check2-circle me-1"></i>Ghi Nhận Nghỉ Phép
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
 <!-- JAVASCRIPT LOGIC (TWO FIXED SHIFTS, LEAVE ISOLATION, SINGLE AJAX)        -->
 <!-- ========================================================================= -->
 <script>
@@ -296,13 +413,43 @@
         // Reset leave state when switching doctors in override modal (Fixes leave state leakage!)
         const overrideDentistSelect = document.getElementById('overrideDentistId');
         if (overrideDentistSelect) {
+            handleOverrideDentistChange();
             overrideDentistSelect.addEventListener('change', function () {
-                document.getElementById('overrideIsDayOff').checked = false;
-                document.getElementById('overrideLeaveReason').value = '';
-                toggleDayOffSection();
+                handleOverrideDentistChange();
             });
         }
     });
+
+    function handleOverrideDentistChange() {
+        const sel = document.getElementById('overrideDentistId');
+        const opt = sel ? sel.selectedOptions[0] : null;
+        if (opt) {
+            const deptName = opt.getAttribute('data-department-name') || '';
+            const deptId = opt.getAttribute('data-department-id') || '';
+            const nameEl = document.getElementById('overrideDepartmentName');
+            const idEl = document.getElementById('overrideDepartmentId');
+            if (nameEl) nameEl.value = deptName;
+            if (idEl) idEl.value = deptId;
+        }
+        document.getElementById('overrideIsDayOff').checked = false;
+        document.getElementById('overrideLeaveReason').value = '';
+        toggleDayOffSection();
+    }
+
+    function handleRegisterLeaveDentistChange() {
+        const sel = document.getElementById('registerLeaveDentistId');
+        const opt = sel ? sel.selectedOptions[0] : null;
+        const deptNameInput = document.getElementById('registerLeaveDeptName');
+        if (opt && opt.value) {
+            deptNameInput.value = opt.getAttribute('data-department-name') || '';
+        } else {
+            deptNameInput.value = '';
+        }
+        // State isolation: clear inputs when doctor changes
+        document.getElementById('registerLeaveReason').value = '';
+        document.getElementById('registerLeaveNotes').value = '';
+        document.getElementById('scopeFullDay').checked = true;
+    }
 
     // Handle Bulk Preview AJAX
     async function handleBulkPreview() {
@@ -482,6 +629,7 @@
     function openDailyOverrideModal(dateStr, isOnLeave, leaveReason, apptCount, shiftsJson) {
         document.getElementById('overrideDate').value = dateStr;
         document.getElementById('overrideDateDisplay').value = dateStr;
+        handleOverrideDentistChange();
 
         const isDayOffCb = document.getElementById('overrideIsDayOff');
         isDayOffCb.checked = isOnLeave;

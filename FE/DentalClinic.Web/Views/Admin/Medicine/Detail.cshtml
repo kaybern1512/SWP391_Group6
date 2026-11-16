@@ -39,8 +39,11 @@
             <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editMedicineModal">
                 <i class="bi bi-pencil-square me-1"></i> Sửa Thông Tin
             </button>
+            <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#adjustStockModal">
+                <i class="bi bi-sliders me-1"></i> Điều Chỉnh Tồn Kho
+            </button>
             <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#importBatchModal">
-                <i class="bi bi-box-arrow-in-down me-1"></i> Nhập Lô Thuốc Mới
+                <i class="bi bi-box-arrow-in-down me-1"></i> Nhập Thêm Kho
             </button>
         </div>
     </div>
@@ -50,7 +53,7 @@
         <div class="col-12 col-sm-6 col-xl-3">
             <div class="card-dc h-100 p-3">
                 <span class="text-muted small fw-semibold">Tồn Kho Khả Dụng</span>
-                <div class="h3 fw-bold my-1 @(med.IsLowStock ? "text-warning" : "text-success")">
+                <div class="h3 fw-bold my-1 @(med.TotalAvailableStock <= 0 ? "text-danger" : (med.IsLowStock ? "text-warning" : "text-success"))">
                     @med.TotalAvailableStock @med.Unit
                 </div>
                 <span class="text-muted small">Định mức cảnh báo: @med.MinimumStockAlert @med.Unit</span>
@@ -69,31 +72,38 @@
 
         <div class="col-12 col-sm-6 col-xl-3">
             <div class="card-dc h-100 p-3">
-                <span class="text-muted small fw-semibold">Tổng Số Lô Hàng</span>
-                <div class="h3 fw-bold my-1 text-dark">
-                    @med.Batches.Count
-                </div>
-                <span class="text-muted small">Lô còn tồn khả dụng: @med.ActiveBatchesCount</span>
+                <span class="text-muted small fw-semibold">Trạng Thái Tồn Kho</span>
+                @if (med.TotalAvailableStock <= 0)
+                {
+                    <div class="h5 fw-bold my-1 text-danger">
+                        <i class="bi bi-x-circle me-1"></i> Hết Hàng (0)
+                    </div>
+                    <span class="text-muted small text-danger">Cần bổ sung kho thuốc</span>
+                }
+                else if (med.IsLowStock)
+                {
+                    <div class="h5 fw-bold my-1 text-warning">
+                        <i class="bi bi-exclamation-triangle me-1"></i> Tồn Kho Thấp
+                    </div>
+                    <span class="text-muted small text-warning">Dưới định mức tối thiểu</span>
+                }
+                else
+                {
+                    <div class="h5 fw-bold my-1 text-success">
+                        <i class="bi bi-check-circle me-1"></i> Tồn An Toàn
+                    </div>
+                    <span class="text-muted small text-success">Đạt tiêu chuẩn cấp phát</span>
+                }
             </div>
         </div>
 
         <div class="col-12 col-sm-6 col-xl-3">
             <div class="card-dc h-100 p-3">
-                <span class="text-muted small fw-semibold">Tình Trạng Hạn Dùng</span>
-                @if (med.HasNearExpiryBatch)
-                {
-                    <div class="h5 fw-bold my-1 text-danger">
-                        <i class="bi bi-hourglass-bottom me-1"></i> Có Lô Cận Hạn
-                    </div>
-                    <span class="text-muted small text-danger">Ưu tiên cấp theo nguyên tắc FEFO</span>
-                }
-                else
-                {
-                    <div class="h5 fw-bold my-1 text-success">
-                        <i class="bi bi-shield-check me-1"></i> An Toàn
-                    </div>
-                    <span class="text-muted small">Tất cả các lô đều trên 60 ngày</span>
-                }
+                <span class="text-muted small fw-semibold">Dạng Bào Chế & Hàm Lượng</span>
+                <div class="h5 fw-bold my-1 text-dark text-truncate" title="@(med.DosageForm ?? "Dạng chuẩn")">
+                    @(med.DosageForm ?? "Dạng chuẩn")
+                </div>
+                <span class="text-muted small">Hàm lượng: @(med.Concentration ?? "N/A")</span>
             </div>
         </div>
     </div>
@@ -101,8 +111,8 @@
     <!-- Navigation Tabs -->
     <ul class="nav nav-tabs mb-4" id="medicineTab" role="tablist">
         <li class="nav-item" role="presentation">
-            <button class="nav-link active fw-semibold" id="batches-tab" data-bs-toggle="tab" data-bs-target="#batchesTabContent" type="button" role="tab">
-                <i class="bi bi-boxes me-2"></i> Danh Sách Lô Hàng (@med.Batches.Count)
+            <button class="nav-link active fw-semibold" id="stock-tab" data-bs-toggle="tab" data-bs-target="#stockTabContent" type="button" role="tab">
+                <i class="bi bi-boxes me-2"></i> Quản Lý Tồn Kho & Thông Tin Thuốc
             </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -113,108 +123,92 @@
     </ul>
 
     <div class="tab-content" id="medicineTabContent">
-        <!-- TAB 1: DANH SÁCH LÔ HÀNG -->
-        <div class="tab-pane fade show active" id="batchesTabContent" role="tabpanel">
-            <div class="card-dc">
-                <div class="card-dc-header d-flex justify-content-between align-items-center">
-                    <div class="fw-bold"><i class="bi bi-boxes text-primary me-2"></i>Các Lô Thuốc Trong Kho (FEFO)</div>
-                    <button type="button" class="btn btn-sm btn-dc-primary" data-bs-toggle="modal" data-bs-target="#importBatchModal">
-                        <i class="bi bi-plus-lg me-1"></i> Nhập Lô Mới
-                    </button>
+        <!-- TAB 1: THÔNG TIN TỒN KHO & QUẢN LÝ -->
+        <div class="tab-pane fade show active" id="stockTabContent" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-lg-7">
+                    <div class="card-dc h-100">
+                        <div class="card-dc-header d-flex justify-content-between align-items-center">
+                            <div class="fw-bold"><i class="bi bi-clipboard-pulse text-primary me-2"></i>Chi Tiết Mặt Hàng Dược Phẩm</div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editMedicineModal">
+                                <i class="bi bi-pencil me-1"></i> Chỉnh sửa
+                            </button>
+                        </div>
+                        <div class="card-dc-body p-4">
+                            <div class="row g-3">
+                                <div class="col-sm-6">
+                                    <div class="text-muted small">Mã Thuốc</div>
+                                    <div class="fw-bold fs-6 font-monospace text-primary">@med.MedicineCode</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-muted small">Tên Thuốc</div>
+                                    <div class="fw-bold fs-6">@med.MedicineName</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-muted small">Hoạt Chất Chính</div>
+                                    <div class="fw-semibold">@(med.ActiveIngredient ?? "Chưa rõ")</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-muted small">Hàm Lượng / Quy Cách</div>
+                                    <div class="fw-semibold">@(med.Concentration ?? "N/A")</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-muted small">Dạng Bào Chế</div>
+                                    <div>@(med.DosageForm ?? "Dạng chuẩn")</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-muted small">Đơn Vị Tính</div>
+                                    <div><span class="badge bg-secondary-subtle text-secondary">@med.Unit</span></div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-muted small">Đơn Giá Bán</div>
+                                    <div class="fw-bold text-success">@med.UnitPrice.ToString("N0") VNĐ</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-muted small">Định Mức Cảnh Báo Tối Thiểu</div>
+                                    <div class="fw-semibold">@med.MinimumStockAlert @med.Unit</div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="text-muted small">Chỉ Định & Hướng Dẫn Sử Dụng</div>
+                                    <div class="p-2 rounded bg-light border mt-1 small">
+                                        @(string.IsNullOrWhiteSpace(med.UsageInstructions) ? "Chưa có ghi chú chỉ định." : med.UsageInstructions)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-dc-body p-0">
-                    <div class="table-responsive">
-                        <table class="table-dc mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Số Lô (Batch)</th>
-                                    <th>Hạn Sử Dụng (Expiry)</th>
-                                    <th class="text-center">Số Nhập Ban Đầu</th>
-                                    <th class="text-center">Tồn Khả Dụng</th>
-                                    <th class="text-end">Giá Vốn Nhập</th>
-                                    <th class="text-center">Trạng Thái</th>
-                                    <th class="text-end">Thao Tác Kiểm Kê</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @if (med.Batches.Count == 0)
-                                {
-                                    <tr>
-                                        <td colspan="7" class="text-center py-4 text-muted">
-                                            <i class="bi bi-box fs-2 d-block mb-2"></i>
-                                            Chưa có lô hàng nào được nhập cho loại thuốc này.
-                                        </td>
-                                    </tr>
-                                }
-                                else
-                                {
-                                    @foreach (var b in med.Batches)
-                                    {
-                                        <tr>
-                                            <td>
-                                                <span class="badge bg-light text-dark border font-monospace fw-bold">@b.BatchNumber</span>
-                                                <div class="text-muted small">Nhập: @b.ReceivedDate.ToString("dd/MM/yyyy")</div>
-                                            </td>
-                                            <td>
-                                                <div class="fw-bold @(b.IsExpired ? "text-danger" : (b.IsNearExpiry ? "text-warning" : "text-dark"))">
-                                                    @b.ExpiryDate.ToString("dd/MM/yyyy")
-                                                </div>
-                                                @if (b.IsExpired)
-                                                {
-                                                    <span class="badge bg-danger small">Đã hết hạn (@b.DaysUntilExpiry ngày)</span>
-                                                }
-                                                else if (b.IsNearExpiry)
-                                                {
-                                                    <span class="badge bg-warning text-dark small">Cận hạn (còn @b.DaysUntilExpiry ngày)</span>
-                                                }
-                                                else
-                                                {
-                                                    <span class="text-muted small">Còn @b.DaysUntilExpiry ngày</span>
-                                                }
-                                            </td>
-                                            <td class="text-center text-muted">@b.QuantityReceived @med.Unit</td>
-                                            <td class="text-center">
-                                                @if (b.QuantityAvailable <= 0)
-                                                {
-                                                    <span class="badge bg-secondary-subtle text-secondary">Hết lô (0)</span>
-                                                }
-                                                else
-                                                {
-                                                    <span class="badge bg-success-subtle text-success fw-bold fs-6">
-                                                        @b.QuantityAvailable @med.Unit
-                                                    </span>
-                                                }
-                                            </td>
-                                            <td class="text-end text-muted">@b.CostPrice.ToString("N0") đ</td>
-                                            <td class="text-center">
-                                                @if (b.Status == "Available")
-                                                {
-                                                    <span class="badge bg-success-subtle text-success">Khả dụng</span>
-                                                }
-                                                else if (b.Status == "Depleted")
-                                                {
-                                                    <span class="badge bg-secondary-subtle text-secondary">Đã hết</span>
-                                                }
-                                                else
-                                                {
-                                                    <span class="badge bg-danger-subtle text-danger">Khóa</span>
-                                                }
-                                            </td>
-                                            <td class="text-end">
-                                                <button type="button" class="btn btn-sm btn-outline-warning" 
-                                                        data-bs-toggle="modal" data-bs-target="#adjustStockModal"
-                                                        data-batch-id="@b.MedicineBatchId"
-                                                        data-batch-num="@b.BatchNumber"
-                                                        data-qty-avail="@b.QuantityAvailable"
-                                                        title="Điều chỉnh kiểm kê tồn kho">
-                                                    <i class="bi bi-pencil-square me-1"></i> Điều Chỉnh Tồn
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    }
-                                }
-                            </tbody>
-                        </table>
+
+                <div class="col-lg-5">
+                    <div class="card-dc h-100">
+                        <div class="card-dc-header">
+                            <div class="fw-bold"><i class="bi bi-box-seam text-primary me-2"></i>Thao Tác Kho Nhanh</div>
+                        </div>
+                        <div class="card-dc-body p-4 d-flex flex-column justify-content-between">
+                            <div>
+                                <div class="alert alert-info py-2 small mb-4">
+                                    <i class="bi bi-info-circle-fill me-1"></i>
+                                    Kho dược phẩm quản lý tồn kho trực tiếp theo đơn vị <strong>@med.Unit</strong>. Mọi thao tác nhập hoặc điều chỉnh đều tự động ghi nhật ký kiểm toán.
+                                </div>
+
+                                <div class="p-3 border rounded-3 bg-light mb-3 text-center">
+                                    <div class="text-muted small mb-1">Số Lượng Tồn Kho Hiện Tại</div>
+                                    <div class="display-6 fw-bold @(med.TotalAvailableStock <= 0 ? "text-danger" : (med.IsLowStock ? "text-warning" : "text-success"))">
+                                        @med.TotalAvailableStock
+                                    </div>
+                                    <div class="fw-semibold text-muted">@med.Unit</div>
+                                </div>
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#importBatchModal">
+                                    <i class="bi bi-box-arrow-in-down me-2"></i> Nhập Thêm Kho
+                                </button>
+                                <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#adjustStockModal">
+                                    <i class="bi bi-sliders me-2"></i> Điều Chỉnh Tồn Kho Kiểm Kê
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -236,7 +230,6 @@
                                 <tr>
                                     <th>Thời Gian</th>
                                     <th>Loại Giao Dịch</th>
-                                    <th>Số Lô</th>
                                     <th class="text-center">Biến Động</th>
                                     <th class="text-center">Trước $\rightarrow$ Sau</th>
                                     <th>Lý Do Giải Trình</th>
@@ -248,7 +241,7 @@
                                 @if (med.RecentTransactions.Count == 0)
                                 {
                                     <tr>
-                                        <td colspan="8" class="text-center py-4 text-muted">
+                                        <td colspan="7" class="text-center py-4 text-muted">
                                             <i class="bi bi-journal-text fs-2 d-block mb-2"></i>
                                             Chưa có giao dịch biến động nào được ghi nhận.
                                         </td>
@@ -282,7 +275,6 @@
                                                     <span class="badge bg-secondary-subtle text-secondary">@tx.TransactionType</span>
                                                 }
                                             </td>
-                                            <td><span class="badge bg-light text-dark border font-monospace">@tx.BatchNumber</span></td>
                                             <td class="text-center fw-bold @(tx.TransactionType == "AdjustmentDecrease" || tx.TransactionType == "Dispense" ? "text-danger" : "text-success")">
                                                 @(tx.TransactionType == "AdjustmentDecrease" || tx.TransactionType == "Dispense" ? "-" : "+")@tx.Quantity @med.Unit
                                             </td>
@@ -302,36 +294,30 @@
     </div>
 </div>
 
-<!-- MODAL: NHẬP LÔ THUỐC MỚI -->
+<!-- MODAL: NHẬP THÊM KHO THUỐC -->
 <div class="modal fade" id="importBatchModal" tabindex="-1" aria-labelledby="importBatchModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
             <form method="post" asp-controller="AdminMedicine" asp-action="ImportBatch" asp-route-id="@med.MedicineId">
                 @Html.AntiForgeryToken()
+                <input type="hidden" name="BatchNumber" value="STOCK-@med.MedicineCode" />
+                <input type="hidden" name="ExpiryDate" value="@DateTime.Today.AddYears(1).ToString("yyyy-MM-dd")" />
+
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title fw-bold" id="importBatchModalLabel">
-                        <i class="bi bi-box-arrow-in-down me-2"></i> Nhập Lô Thuốc Mới
+                        <i class="bi bi-box-arrow-in-down me-2"></i> Nhập Thêm Kho Dược Phẩm
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
                     <div class="alert alert-info py-2 small mb-3">
-                        <i class="bi bi-info-circle me-1"></i> Đang nhập lô cho thuốc: <strong>@med.MedicineName</strong> (@med.MedicineCode)
+                        <i class="bi bi-info-circle me-1"></i> Đang nhập bổ sung kho cho thuốc: <strong>@med.MedicineName</strong> (@med.MedicineCode)
                     </div>
 
                     <div class="row g-3">
                         <div class="col-12 col-md-6">
-                            <label class="form-label fw-semibold">Số Lô Sản Xuất <span class="text-danger">*</span></label>
-                            <input type="text" name="BatchNumber" class="form-control font-monospace" placeholder="VD: BATCH-2026-01" required />
-                        </div>
-                        <div class="col-12 col-md-6">
-                            <label class="form-label fw-semibold">Hạn Sử Dụng (Expiry) <span class="text-danger">*</span></label>
-                            <input type="date" name="ExpiryDate" class="form-control" value="@DateTime.Today.AddMonths(18).ToString("yyyy-MM-dd")" min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" required />
-                        </div>
-
-                        <div class="col-12 col-md-6">
                             <label class="form-label fw-semibold">Số Lượng Nhập (@med.Unit) <span class="text-danger">*</span></label>
-                            <input type="number" name="Quantity" class="form-control" min="1" placeholder="VD: 200" required />
+                            <input type="number" name="Quantity" class="form-control" min="1" placeholder="VD: 100" required />
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label fw-semibold">Giá Vốn Nhập (VNĐ)</label>
@@ -344,8 +330,8 @@
                         </div>
 
                         <div class="col-12">
-                            <label class="form-label fw-semibold">Lý Do / Nguồn Gốc Nhập</label>
-                            <input type="text" name="Reason" class="form-control" value="Nhập kho theo hóa đơn giao hàng" required />
+                            <label class="form-label fw-semibold">Lý Do / Nguồn Gốc Nhập <span class="text-danger">*</span></label>
+                            <input type="text" name="Reason" class="form-control" value="Nhập thêm kho theo hóa đơn giao hàng" required />
                         </div>
                     </div>
                 </div>
@@ -366,7 +352,7 @@
         <div class="modal-content border-0 shadow">
             <form method="post" asp-controller="AdminMedicine" asp-action="AdjustStock" id="adjustStockForm">
                 @Html.AntiForgeryToken()
-                <input type="hidden" name="batchId" id="adjBatchId" />
+                <input type="hidden" name="batchId" id="adjBatchId" value="@med.MedicineId" />
                 <input type="hidden" name="medicineId" value="@med.MedicineId" />
 
                 <div class="modal-header bg-warning text-dark">
@@ -382,16 +368,16 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label text-muted small">Lô Đang Điều Chỉnh:</label>
-                        <div class="fw-bold fs-6 font-monospace" id="adjBatchDisplay">-</div>
-                        <div class="text-muted small">Tồn khả dụng hiện tại: <strong id="adjQtyAvailDisplay">0</strong> @med.Unit</div>
+                        <label class="form-label text-muted small">Thuốc Đang Điều Chỉnh:</label>
+                        <div class="fw-bold fs-6">@med.MedicineName <span class="font-monospace text-primary">(@med.MedicineCode)</span></div>
+                        <div class="text-muted small">Tồn khả dụng hiện tại: <strong id="adjQtyAvailDisplay">@med.TotalAvailableStock</strong> @med.Unit</div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Hình Thức Điều Chỉnh <span class="text-danger">*</span></label>
                         <select name="AdjustmentType" id="adjAdjustmentType" class="form-select" required>
                             <option value="Increase">Tăng tồn kho (+) (Kiểm kê thừa / trả hàng lại)</option>
-                            <option value="Decrease">Giảm tồn kho (-) (Kiểm kê hao hụt / thuốc hỏng / hết hạn)</option>
+                            <option value="Decrease">Giảm tồn kho (-) (Kiểm kê hao hụt / thuốc hỏng)</option>
                         </select>
                     </div>
 
@@ -402,7 +388,7 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Lý Do Giải Trình Bắt Buộc <span class="text-danger">*</span></label>
-                        <textarea name="Reason" class="form-control" rows="3" placeholder="Ghi rõ lý do: VD: Kiểm kê định kỳ ngày 03/11 phát hiện thừa 2 viên do đóng vỉ..." required></textarea>
+                        <textarea name="Reason" class="form-control" rows="3" placeholder="Ghi rõ lý do: VD: Kiểm kê định kỳ phát hiện thừa 2 viên..." required></textarea>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
@@ -496,17 +482,6 @@
         const adjustModal = document.getElementById('adjustStockModal');
         if (adjustModal) {
             adjustModal.addEventListener('show.bs.modal', function(event) {
-                const btn = event.relatedTarget;
-                if (!btn) return;
-                const batchId = btn.getAttribute('data-batch-id');
-                const batchNum = btn.getAttribute('data-batch-num');
-                const qtyAvail = btn.getAttribute('data-qty-avail') || '0';
-
-                document.getElementById('adjBatchId').value = batchId;
-                document.getElementById('adjBatchDisplay').textContent = batchNum;
-                document.getElementById('adjQtyAvailDisplay').textContent = qtyAvail;
-
-                // Reset form state on modal open
                 const submitBtn = document.getElementById('btnSubmitAdjust');
                 if (submitBtn) {
                     submitBtn.disabled = false;

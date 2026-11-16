@@ -120,6 +120,16 @@
                                                         <i class="bi bi-emoji-smile me-1"></i>Nha khoa trẻ em
                                                     </span>
                                                     break;
+                                                case "XRay":
+                                                case "Diagnostic":
+                                                case "Imaging":
+                                                case "Panorama":
+                                                case "Intraoral":
+                                                case "CBCT":
+                                                    <span class="badge border" style="background-color: #f3e8ff; color: #7e22ce; border-color: #d8b4fe;">
+                                                        <i class="bi bi-camera-fill me-1"></i>Chẩn đoán hình ảnh (X-Ray)
+                                                    </span>
+                                                    break;
                                                 default:
                                                     <span class="badge bg-success-subtle text-success border border-success-subtle">
                                                         <i class="bi bi-tools me-1"></i>Điều trị
@@ -303,6 +313,7 @@
                             <select name="ServiceType" class="form-select" required>
                                 <option value="Treatment" selected>Điều trị nha khoa (Treatment)</option>
                                 <option value="Consultation">Khám & Tư vấn (Consultation)</option>
+                                <option value="XRay">Chẩn đoán hình ảnh / X-Quang (X-Ray)</option>
                                 <option value="Surgery">Phẫu thuật / Tiểu phẫu (Surgery)</option>
                                 <option value="Cosmetic">Nha khoa Thẩm mỹ (Cosmetic)</option>
                                 <option value="Pediatric">Nha khoa Trẻ em (Pediatric)</option>
@@ -401,6 +412,7 @@
                             <select name="ServiceType" id="editSrvType" class="form-select" required>
                                 <option value="Treatment">Điều trị nha khoa (Treatment)</option>
                                 <option value="Consultation">Khám & Tư vấn (Consultation)</option>
+                                <option value="XRay">Chẩn đoán hình ảnh / X-Quang (X-Ray)</option>
                                 <option value="Surgery">Phẫu thuật / Tiểu phẫu (Surgery)</option>
                                 <option value="Cosmetic">Nha khoa Thẩm mỹ (Cosmetic)</option>
                                 <option value="Pediatric">Nha khoa Trẻ em (Pediatric)</option>

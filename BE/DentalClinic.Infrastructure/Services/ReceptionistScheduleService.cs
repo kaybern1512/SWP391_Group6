@@ -28,17 +28,17 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             TemplateName = "Ca Sáng (08:00 - 12:00)",
             StartTime = new TimeOnly(8, 0),
             EndTime = new TimeOnly(12, 0),
-            MinStaffRequired = 2,
+            MinStaffRequired = 1,
             IsActive = true,
             DisplayOrder = 1
         },
         new ReceptionistShiftTemplateDto
         {
             ShiftTemplateId = 2,
-            TemplateName = "Ca Chiều (13:00 - 17:00)",
-            StartTime = new TimeOnly(13, 0),
-            EndTime = new TimeOnly(17, 0),
-            MinStaffRequired = 2,
+            TemplateName = "Ca Chiều (13:30 - 17:30)",
+            StartTime = new TimeOnly(13, 30),
+            EndTime = new TimeOnly(17, 30),
+            MinStaffRequired = 1,
             IsActive = true,
             DisplayOrder = 2
         }
@@ -178,7 +178,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             {
                 var covering = dayShifts.Where(s => s.Status == "Scheduled" && s.StartTime < tmpl.EndTime && s.EndTime > tmpl.StartTime).ToList();
                 var availStaff = covering.Where(s => !dayApprovedLeaves.Any(al => al.ReceptionistUserId == s.StaffUserId)).Select(s => s.StaffUserId).Distinct().Count();
-                if (covering.Any() && availStaff < (tmpl.MinStaffRequired > 0 ? tmpl.MinStaffRequired : 2))
+                if (covering.Any() && availStaff < (tmpl.MinStaffRequired > 0 ? tmpl.MinStaffRequired : 1))
                 {
                     hasShortage = true;
                     break;
@@ -275,6 +275,26 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         long currentUserId,
         CancellationToken ct = default)
     {
+        if (request.StartTime == default && request.EndTime == default && request.ShiftTemplateId.HasValue)
+        {
+            var tmpl = DefaultShiftTemplates.FirstOrDefault(t => t.ShiftTemplateId == request.ShiftTemplateId.Value);
+            if (tmpl != null)
+            {
+                request.StartTime = tmpl.StartTime;
+                request.EndTime = tmpl.EndTime;
+            }
+        }
+
+        try
+        {
+            StandardWorkShiftPolicy.ValidateNewWorkDate(request.WorkDate);
+            StandardWorkShiftPolicy.ValidateStandardShiftHours(request.StartTime, request.EndTime);
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse<ReceptionistWorkScheduleDto>.Fail(ex.Message);
+        }
+
         if (request.EndTime <= request.StartTime)
         {
             return ApiResponse<ReceptionistWorkScheduleDto>.Fail("Giờ kết thúc ca trực phải lớn hơn giờ bắt đầu.");
@@ -365,6 +385,25 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         long currentUserId,
         CancellationToken ct = default)
     {
+        if (request.StartTime == default && request.EndTime == default && request.ShiftTemplateId.HasValue)
+        {
+            var tmpl = DefaultShiftTemplates.FirstOrDefault(t => t.ShiftTemplateId == request.ShiftTemplateId.Value);
+            if (tmpl != null)
+            {
+                request.StartTime = tmpl.StartTime;
+                request.EndTime = tmpl.EndTime;
+            }
+        }
+
+        try
+        {
+            StandardWorkShiftPolicy.ValidateStandardShiftHours(request.StartTime, request.EndTime);
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse<ReceptionistWorkScheduleDto>.Fail(ex.Message);
+        }
+
         if (request.EndTime <= request.StartTime)
         {
             return ApiResponse<ReceptionistWorkScheduleDto>.Fail("Giờ kết thúc ca trực phải lớn hơn giờ bắt đầu.");

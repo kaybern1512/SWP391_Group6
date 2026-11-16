@@ -381,7 +381,7 @@ public class AdminService : IAdminService
             }
         }
 
-        var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric", "Implant", "Orthodontics", "General", "Endodontics", "Periodontics", "Examination" };
+        var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric", "Implant", "Orthodontics", "General", "Endodontics", "Periodontics", "Examination", "XRay", "Diagnostic", "Imaging" };
         var serviceType = validTypes.Contains(request.ServiceType, StringComparer.OrdinalIgnoreCase) ? request.ServiceType : "Treatment";
 
         var service = new DepartmentService
@@ -468,7 +468,7 @@ public class AdminService : IAdminService
 
         var oldValues = JsonSerializer.Serialize(new { service.ServiceCode, service.ServiceName, service.DepartmentId, service.Price, service.Status });
 
-        var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric", "Implant", "Orthodontics", "General", "Endodontics", "Periodontics", "Examination" };
+        var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric", "Implant", "Orthodontics", "General", "Endodontics", "Periodontics", "Examination", "XRay", "Diagnostic", "Imaging" };
         if (!string.IsNullOrWhiteSpace(request.ServiceType) && validTypes.Contains(request.ServiceType, StringComparer.OrdinalIgnoreCase))
         {
             service.DiagnosticType = request.ServiceType;
@@ -1829,6 +1829,24 @@ public class AdminService : IAdminService
         if (dentist == null)
         {
             return ApiResponse<DentistDepartmentAllocationDto>.Fail("Không tìm thấy hồ sơ bác sĩ.");
+        }
+
+        if (dentist.DepartmentId != (int)request.DepartmentId)
+        {
+            var nowUtc = DateTime.UtcNow;
+            var activeStatuses = new[] { "PendingReceptionReview", "Confirmed", "InProgress", "Scheduled", "CheckedIn" };
+            var upcomingCount = await _dbContext.AppointmentServices
+                .CountAsync(aps => aps.AssignedDentistUserId == dentist.UserId &&
+                                   aps.DepartmentId == dentist.DepartmentId &&
+                                   aps.ScheduledStart >= nowUtc &&
+                                   activeStatuses.Contains(aps.Status), ct);
+
+            if (upcomingCount > 0)
+            {
+                return ApiResponse<DentistDepartmentAllocationDto>.Fail(
+                    $"Không thể chuyển chuyên khoa! Bác sĩ hiện đang có {upcomingCount} lịch hẹn sắp tới tại chuyên khoa hiện tại. " +
+                    "Vui lòng hoàn thành hoặc điều phối lại các lịch hẹn này sang bác sĩ khác trước khi đổi chuyên khoa.");
+            }
         }
 
         dentist.DepartmentId = (int)request.DepartmentId;

@@ -110,6 +110,8 @@ BEGIN
     VALUES
         (1, 'patient@dentalcare.test', '0901111111', 'AQAAAAIAAYagAAAAEOSafMFmAjzIfTb/sM36E9mswEpHRLJb8tEUD2tuiCemMPJmVJpAUNmndmK3zQvYZQ==', 'Patient', 'Active', SYSUTCDATETIME()),
         (2, 'receptionist@dentalcare.test', '0902222222', 'AQAAAAIAAYagAAAAEOSafMFmAjzIfTb/sM36E9mswEpHRLJb8tEUD2tuiCemMPJmVJpAUNmndmK3zQvYZQ==', 'Receptionist', 'Active', SYSUTCDATETIME()),
+        (10, 'receptionist2@dentalcare.test', '0902222223', 'AQAAAAIAAYagAAAAEOSafMFmAjzIfTb/sM36E9mswEpHRLJb8tEUD2tuiCemMPJmVJpAUNmndmK3zQvYZQ==', 'Receptionist', 'Active', SYSUTCDATETIME()),
+        (11, 'receptionist3@dentalcare.test', '0902222224', 'AQAAAAIAAYagAAAAEOSafMFmAjzIfTb/sM36E9mswEpHRLJb8tEUD2tuiCemMPJmVJpAUNmndmK3zQvYZQ==', 'Receptionist', 'Active', SYSUTCDATETIME()),
         (3, 'dentist1@dentalcare.test', '0903333333', 'AQAAAAIAAYagAAAAEOSafMFmAjzIfTb/sM36E9mswEpHRLJb8tEUD2tuiCemMPJmVJpAUNmndmK3zQvYZQ==', 'Dentist', 'Active', SYSUTCDATETIME()),
         (4, 'dentist2@dentalcare.test', '0904444444', 'AQAAAAIAAYagAAAAEOSafMFmAjzIfTb/sM36E9mswEpHRLJb8tEUD2tuiCemMPJmVJpAUNmndmK3zQvYZQ==', 'Dentist', 'Active', SYSUTCDATETIME()),
         (5, 'admin@dentalcare.test', '0905555555', 'AQAAAAIAAYagAAAAEOSafMFmAjzIfTb/sM36E9mswEpHRLJb8tEUD2tuiCemMPJmVJpAUNmndmK3zQvYZQ==', 'SystemAdministrator', 'Active', SYSUTCDATETIME());
@@ -122,6 +124,8 @@ BEGIN
     INSERT INTO StaffProfiles (UserId, FullName, EmploymentStatus, CreatedAt)
     VALUES
         (2, N'Trần Thị Lễ Tân', 'Active', SYSUTCDATETIME()),
+        (10, N'Lễ Tân Demo 02', 'Active', SYSUTCDATETIME()),
+        (11, N'Lễ Tân Demo 03', 'Active', SYSUTCDATETIME()),
         (3, N'Lê Văn Bác Sĩ Một', 'Active', SYSUTCDATETIME()),
         (4, N'Phạm Thị Bác Sĩ Hai', 'Active', SYSUTCDATETIME()),
         (5, N'Hoàng Quản Trị Viên', 'Active', SYSUTCDATETIME());
@@ -144,19 +148,25 @@ BEGIN
         INSERT INTO StaffWorkSchedules (StaffUserId, StaffRole, WorkDate, StartTime, EndTime, Status, CreatedAt)
         VALUES 
             (2, 'Receptionist', @wDate, '08:00', '12:00', 'Scheduled', SYSUTCDATETIME()),
-            (2, 'Receptionist', @wDate, '13:00', '17:00', 'Scheduled', SYSUTCDATETIME());
+            (2, 'Receptionist', @wDate, '13:30', '17:30', 'Scheduled', SYSUTCDATETIME());
+
+        -- Receptionist 2 (User 10)
+        INSERT INTO StaffWorkSchedules (StaffUserId, StaffRole, WorkDate, StartTime, EndTime, Status, CreatedAt)
+        VALUES 
+            (10, 'Receptionist', @wDate, '08:00', '12:00', 'Scheduled', SYSUTCDATETIME()),
+            (10, 'Receptionist', @wDate, '13:30', '17:30', 'Scheduled', SYSUTCDATETIME());
 
         -- Dentist 1 (User 3, Dept 1)
         INSERT INTO StaffWorkSchedules (StaffUserId, StaffRole, WorkDate, StartTime, EndTime, Status, CreatedAt)
         VALUES 
             (3, 'Dentist', @wDate, '08:00', '12:00', 'Scheduled', SYSUTCDATETIME()),
-            (3, 'Dentist', @wDate, '13:00', '17:00', 'Scheduled', SYSUTCDATETIME());
+            (3, 'Dentist', @wDate, '13:30', '17:30', 'Scheduled', SYSUTCDATETIME());
 
         -- Dentist 2 (User 4, Dept 2)
         INSERT INTO StaffWorkSchedules (StaffUserId, StaffRole, WorkDate, StartTime, EndTime, Status, CreatedAt)
         VALUES 
             (4, 'Dentist', @wDate, '08:00', '12:00', 'Scheduled', SYSUTCDATETIME()),
-            (4, 'Dentist', @wDate, '13:00', '17:00', 'Scheduled', SYSUTCDATETIME());
+            (4, 'Dentist', @wDate, '13:30', '17:30', 'Scheduled', SYSUTCDATETIME());
 
         SET @d = @d + 1;
     END;

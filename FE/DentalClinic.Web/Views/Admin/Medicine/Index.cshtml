@@ -15,7 +15,7 @@
                 <span class="badge-dc badge-role-systemadministrator">Dược Phẩm Nội Bộ</span>
             </div>
             <h1 class="page-title"><i class="bi bi-capsule me-2 text-primary"></i>Quản Lý Kho Thuốc & Dược Phẩm</h1>
-            <p class="page-subtitle">Theo dõi danh mục thuốc, quản lý lô hàng, hạn dùng, cảnh báo tồn tối thiểu và kiểm kê biến động kho (WF-15)</p>
+            <p class="page-subtitle">Theo dõi danh mục thuốc nha khoa, kiểm soát tồn kho trực tiếp, định mức tồn kho tối thiểu và kiểm kê biến động kho</p>
         </div>
         <div class="page-actions d-flex gap-2">
             <a asp-controller="AdminMedicine" asp-action="Transactions" class="btn btn-outline-secondary">
@@ -51,7 +51,7 @@
                     </div>
                 </div>
                 <div class="h3 fw-bold mb-1 text-dark">@Model.Summary.TotalStockUnits.ToString("N0")</div>
-                <span class="text-muted small">Trên tổng số <strong>@Model.Summary.TotalBatches</strong> lô hàng</span>
+                <span class="text-muted small">Đơn vị tính trực tiếp theo từng loại thuốc</span>
             </div>
         </div>
 
@@ -71,17 +71,17 @@
         </div>
 
         <div class="col-12 col-sm-6 col-xl-3">
-            <div class="card-dc h-100 p-3 @(Model.Summary.NearExpiryBatchesCount > 0 ? "border-danger" : "")">
+            <div class="card-dc h-100 p-3">
                 <div class="d-flex align-items-center justify-content-between mb-2">
-                    <span class="text-muted small fw-semibold">Lô Thuốc Cận Hạn</span>
-                    <div class="avatar-sm bg-danger-subtle text-danger rounded p-2">
-                        <i class="bi bi-calendar-x fs-5"></i>
+                    <span class="text-muted small fw-semibold">Tồn Kho Đạt Chuẩn</span>
+                    <div class="avatar-sm bg-success-subtle text-success rounded p-2">
+                        <i class="bi bi-shield-check fs-5"></i>
                     </div>
                 </div>
-                <div class="h3 fw-bold mb-1 @(Model.Summary.NearExpiryBatchesCount > 0 ? "text-danger" : "text-dark")">
-                    @Model.Summary.NearExpiryBatchesCount
+                <div class="h3 fw-bold mb-1 text-success">
+                    @(Model.Summary.ActiveMedicines - Model.Summary.LowStockMedicinesCount)
                 </div>
-                <span class="text-muted small">Hạn dùng &le; 60 ngày (Cần luân chuyển)</span>
+                <span class="text-muted small">Mặt hàng đạt trên định mức tối thiểu</span>
             </div>
         </div>
     </div>
@@ -90,13 +90,13 @@
     <div class="card-dc mb-4">
         <div class="card-dc-body p-3">
             <form method="get" asp-controller="AdminMedicine" asp-action="Index" class="row g-2 align-items-center">
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-5">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
                         <input type="text" name="SearchTerm" value="@Model.Filter.SearchTerm" class="form-control" placeholder="Tìm theo tên thuốc, mã thuốc, hoạt chất..." />
                     </div>
                 </div>
-                <div class="col-6 col-md-2">
+                <div class="col-6 col-md-3">
                     <select name="Status" class="form-select form-select-sm">
                         <option value="">-- Tất cả trạng thái --</option>
                         <option value="Active" selected="@(Model.Filter.Status == "Active")">Đang hoạt động</option>
@@ -110,13 +110,7 @@
                         <label class="form-check-label small" for="chkLowStock">Tồn kho thấp</label>
                     </div>
                 </div>
-                <div class="col-6 col-md-2">
-                    <div class="form-check form-check-inline mt-1">
-                        <input class="form-check-input" type="checkbox" name="NearExpiryOnly" value="true" id="chkNearExpiry" @(Model.Filter.NearExpiryOnly == true ? "checked" : "") />
-                        <label class="form-check-label small" for="chkNearExpiry">Có lô cận hạn</label>
-                    </div>
-                </div>
-                <div class="col-6 col-md-2 d-flex gap-1 justify-content-end">
+                <div class="col-12 col-md-2 d-flex gap-1 justify-content-end">
                     <button type="submit" class="btn btn-sm btn-primary flex-grow-1">
                         <i class="bi bi-funnel me-1"></i> Lọc
                     </button>
@@ -147,7 +141,6 @@
                             <th>Dạng / Đơn Vị</th>
                             <th class="text-end">Đơn Giá Bán</th>
                             <th class="text-center">Tồn Khả Dụng</th>
-                            <th class="text-center">Số Lô Hàng</th>
                             <th class="text-center">Trạng Thái</th>
                             <th class="text-end">Thao Tác</th>
                         </tr>
@@ -156,7 +149,7 @@
                         @if (Model.Medicines.Count == 0)
                         {
                             <tr>
-                                <td colspan="8" class="text-center py-4 text-muted">
+                                <td colspan="7" class="text-center py-4 text-muted">
                                     <i class="bi bi-inbox fs-2 d-block mb-2"></i>
                                     Không tìm thấy mặt hàng thuốc nào phù hợp điều kiện lọc.
                                 </td>
@@ -207,15 +200,6 @@
                                                 @med.TotalAvailableStock @med.Unit
                                             </span>
                                         }
-                                        @if (med.HasNearExpiryBatch)
-                                        {
-                                            <div class="badge bg-danger-subtle text-danger small mt-1 d-inline-block" title="Có lô thuốc hạn dùng trong 60 ngày">
-                                                <i class="bi bi-hourglass-bottom me-1"></i>Cận hạn
-                                            </div>
-                                        }
-                                    </td>
-                                    <td class="text-center">
-                                        <span class="badge bg-light text-dark border">@med.ActiveBatchesCount lô</span>
                                     </td>
                                     <td class="text-center">
                                         @if (med.Status == "Active")
@@ -232,8 +216,8 @@
                                         }
                                     </td>
                                     <td class="text-end">
-                                        <a asp-controller="AdminMedicine" asp-action="Detail" asp-route-id="@med.MedicineId" class="btn btn-sm btn-outline-primary" title="Xem chi tiết & quản lý lô">
-                                            <i class="bi bi-box-seam me-1"></i> Quản lý Lô
+                                        <a asp-controller="AdminMedicine" asp-action="Detail" asp-route-id="@med.MedicineId" class="btn btn-sm btn-outline-primary" title="Xem chi tiết & quản lý kho">
+                                            <i class="bi bi-box-seam me-1"></i> Chi Tiết & Tồn Kho
                                         </a>
                                     </td>
                                 </tr>

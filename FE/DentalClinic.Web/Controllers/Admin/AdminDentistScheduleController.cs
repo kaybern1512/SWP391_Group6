@@ -353,4 +353,83 @@ public class AdminDentistScheduleController : Controller
         }
         return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
     }
+
+    [HttpPost("RegisterLeave")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RegisterLeave(
+        long dentistUserId,
+        string leaveType,
+        string startDate,
+        string endDate,
+        string shiftScope,
+        string reason,
+        string? notes)
+    {
+        if (_leaveApi == null)
+        {
+            TempData["ErrorMessage"] = "Dịch vụ quản lý nghỉ phép chưa được khởi tạo.";
+            return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+        }
+
+        if (dentistUserId <= 0)
+        {
+            TempData["ErrorMessage"] = "Vui lòng chọn bác sĩ cần ghi nhận nghỉ phép.";
+            return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+        }
+
+        if (!DateOnly.TryParse(startDate, out var parsedStart) || !DateOnly.TryParse(endDate, out var parsedEnd))
+        {
+            TempData["ErrorMessage"] = "Khoảng ngày nghỉ phép không hợp lệ.";
+            return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+        }
+
+        if (parsedStart < ClinicTimeHelper.TodayDateOnly)
+        {
+            TempData["ErrorMessage"] = "Ngày bắt đầu nghỉ không được ở trong quá khứ.";
+            return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+        }
+
+        if (parsedEnd < parsedStart)
+        {
+            TempData["ErrorMessage"] = "Ngày kết thúc không thể trước ngày bắt đầu.";
+            return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+        }
+
+        TimeOnly? startTime = null;
+        TimeOnly? endTime = null;
+        if (string.Equals(shiftScope, "Morning", StringComparison.OrdinalIgnoreCase))
+        {
+            startTime = new TimeOnly(8, 0);
+            endTime = new TimeOnly(12, 0);
+        }
+        else if (string.Equals(shiftScope, "Afternoon", StringComparison.OrdinalIgnoreCase))
+        {
+            startTime = new TimeOnly(13, 30);
+            endTime = new TimeOnly(17, 30);
+        }
+
+        var req = new CreateDentistLeaveRequest
+        {
+            DentistUserId = dentistUserId,
+            LeaveType = string.IsNullOrWhiteSpace(leaveType) ? "AnnualLeave" : leaveType,
+            StartDate = parsedStart,
+            EndDate = parsedEnd,
+            StartTime = startTime,
+            EndTime = endTime,
+            Reason = string.IsNullOrWhiteSpace(reason) ? "Đăng ký nghỉ phép (Quản trị viên ghi nhận)" : reason.Trim(),
+            Notes = notes?.Trim()
+        };
+
+        var result = await _leaveApi.SubmitLeaveRequestAsync(req);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đăng ký / ghi nhận đơn nghỉ phép thành công.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể đăng ký nghỉ phép.";
+        }
+
+        return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+    }
 }

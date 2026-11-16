@@ -4,9 +4,12 @@
     ViewData["Title"] = "Quản Lý Lịch Trực Lễ Tân & Nghỉ Phép";
     Layout = "~/Views/Shared/_Layout.cshtml";
 
-    string activeTab = ViewBag.ActiveTab ?? "monthly";
+    string activeTab = ViewBag.ActiveTab ?? "weekly";
     int year = ViewBag.Year;
     int month = ViewBag.Month;
+    int weekOffset = ViewBag.WeekOffset ?? 0;
+    DateOnly weekStart = ViewBag.WeekStartDate ?? ClinicTimeHelper.TodayDateOnly;
+    DateOnly weekEnd = ViewBag.WeekEndDate ?? weekStart.AddDays(6);
     long? filterReceptionistId = ViewBag.ReceptionistUserId;
 
     var monthlyData = ViewBag.MonthlyData as MonthlyReceptionistScheduleDto;
@@ -23,6 +26,14 @@
     int nextMonth = month + 1;
     int nextYear = year;
     if (nextMonth > 12) { nextMonth = 1; nextYear++; }
+
+    var today = ClinicTimeHelper.TodayDateOnly;
+    var weekDays = new List<DateOnly>();
+    for (int i = 0; i < 7; i++)
+    {
+        weekDays.Add(weekStart.AddDays(i));
+    }
+    string[] dayNamesVn = { "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ Nhật" };
 }
 
 <div class="container-fluid py-3">
@@ -32,17 +43,35 @@
             <h2 class="h4 fw-bold text-dark mb-1">
                 <i class="bi bi-people-fill text-primary me-2"></i>Quản Lý Lịch Trực Lễ Tân & Nghỉ Phép
             </h2>
-            <p class="text-muted small mb-0">Phân công ca trực, phê duyệt nghỉ phép (Rule 1 & 2), điều phối đổi ca và xử lý thiếu nhân lực</p>
+            <p class="text-muted small mb-0">Phân công ca trực theo tuần/tháng, 2 ca cố định (08:00-12:00, 13:30-17:30), phê duyệt nghỉ phép và đổi ca</p>
         </div>
-        <div class="d-flex gap-2 align-items-center">
-            <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = activeTab, year = prevYear, month = prevMonth, receptionistUserId = filterReceptionistId })" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-chevron-left"></i> Tháng @prevMonth/@prevYear
-            </a>
-            <span class="fw-bold px-2 text-primary">Tháng @month/@year</span>
-            <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = activeTab, year = nextYear, month = nextMonth, receptionistUserId = filterReceptionistId })" class="btn btn-outline-secondary btn-sm">
-                Tháng @nextMonth/@nextYear <i class="bi bi-chevron-right"></i>
-            </a>
-        </div>
+        @if (activeTab == "weekly")
+        {
+            <div class="d-flex gap-2 align-items-center">
+                <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = "weekly", weekOffset = weekOffset - 1, receptionistUserId = filterReceptionistId })" class="btn btn-outline-secondary btn-sm" title="Tuần trước">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+                <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = "weekly", weekOffset = 0, receptionistUserId = filterReceptionistId })" class="btn btn-sm @(weekOffset == 0 ? "btn-primary text-white" : "btn-outline-secondary")">
+                    @(weekOffset == 0 ? "Tuần Này" : "Về Tuần Này")
+                </a>
+                <span class="fw-bold px-2 text-primary">@weekStart.ToString("dd/MM") - @weekEnd.ToString("dd/MM/yyyy")</span>
+                <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = "weekly", weekOffset = weekOffset + 1, receptionistUserId = filterReceptionistId })" class="btn btn-outline-secondary btn-sm" title="Tuần sau">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        }
+        else
+        {
+            <div class="d-flex gap-2 align-items-center">
+                <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = activeTab, year = prevYear, month = prevMonth, receptionistUserId = filterReceptionistId })" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-chevron-left"></i> Tháng @prevMonth/@prevYear
+                </a>
+                <span class="fw-bold px-2 text-primary">Tháng @month/@year</span>
+                <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = activeTab, year = nextYear, month = nextMonth, receptionistUserId = filterReceptionistId })" class="btn btn-outline-secondary btn-sm">
+                    Tháng @nextMonth/@nextYear <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        }
     </div>
 
     @if (TempData["SuccessMessage"] != null)
@@ -119,33 +148,219 @@
     <!-- Main Navigation Tabs -->
     <ul class="nav nav-pills mb-4 gap-2 bg-white p-2 rounded-3 shadow-sm border" id="receptionistWorkforceTabs">
         <li class="nav-item">
+            <a class="nav-link @(activeTab == "weekly" ? "active" : "")" href="@Url.Action("Index", new { tab = "weekly", weekOffset, receptionistUserId = filterReceptionistId })" id="tabWeeklyBtn">
+                <i class="bi bi-calendar-week me-1"></i> 1. Lịch Trực Theo Tuần
+            </a>
+        </li>
+        <li class="nav-item">
             <a class="nav-link @(activeTab == "monthly" ? "active" : "")" href="@Url.Action("Index", new { tab = "monthly", year, month, receptionistUserId = filterReceptionistId })" id="tabMonthlyBtn">
-                <i class="bi bi-calendar-month me-1"></i> 1. Lịch Trực Theo Tháng
+                <i class="bi bi-calendar-month me-1"></i> 2. Lịch Trực Theo Tháng
             </a>
         </li>
         <li class="nav-item">
             <a class="nav-link @(activeTab == "bulk" ? "active" : "")" href="@Url.Action("Index", new { tab = "bulk", year, month })" id="tabBulkBtn">
-                <i class="bi bi-calendar-plus me-1"></i> 2. Phân Ca & Sao Chép Tháng
+                <i class="bi bi-calendar-plus me-1"></i> 3. Phân Ca & Sao Chép Tháng
             </a>
         </li>
         <li class="nav-item">
             <a class="nav-link @(activeTab == "leaves" ? "active" : "")" href="@Url.Action("Index", new { tab = "leaves", year, month })" id="tabLeavesBtn">
-                <i class="bi bi-calendar2-x me-1"></i> 3. Đơn Xin Nghỉ Phép (@leaves.Count(l => l.Status == "Pending"))
+                <i class="bi bi-calendar2-x me-1"></i> 4. Đơn Xin Nghỉ Phép (@leaves.Count(l => l.Status == "Pending"))
             </a>
         </li>
         <li class="nav-item">
             <a class="nav-link @(activeTab == "swaps" ? "active" : "")" href="@Url.Action("Index", new { tab = "swaps", year, month })" id="tabSwapsBtn">
-                <i class="bi bi-arrow-left-right me-1"></i> 4. Yêu Cầu Đổi Ca (@swaps.Count(s => s.Status == "PendingAdminApproval"))
+                <i class="bi bi-arrow-left-right me-1"></i> 5. Yêu Cầu Đổi Ca (@swaps.Count(s => s.Status == "PendingAdminApproval"))
             </a>
         </li>
         <li class="nav-item">
             <a class="nav-link @(activeTab == "incidents" ? "active" : "")" href="@Url.Action("Index", new { tab = "incidents", year, month })" id="tabIncidentsBtn">
-                <i class="bi bi-exclamation-octagon me-1"></i> 5. Giám Sát Nhân Lực & Sự Cố (@incidents.Count(i => i.Status == "Open"))
+                <i class="bi bi-exclamation-octagon me-1"></i> 6. Giám Sát Nhân Lực & Sự Cố (@incidents.Count(i => i.Status == "Open"))
             </a>
         </li>
     </ul>
 
-    <!-- Tab 1: Monthly Calendar Grid -->
+    <!-- Tab 1: Weekly Calendar Grid -->
+    @if (activeTab == "weekly")
+    {
+        <div class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-3">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="bi bi-calendar2-range text-primary me-2"></i>Lịch Trực Tuần (@weekStart.ToString("dd/MM/yyyy") - @weekEnd.ToString("dd/MM/yyyy"))
+                    </h5>
+                    <form method="get" class="d-inline-flex gap-2 align-items-center">
+                        <input type="hidden" name="tab" value="weekly" />
+                        <input type="hidden" name="weekOffset" value="@weekOffset" />
+                        <select name="receptionistUserId" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">-- Tất cả lễ tân --</option>
+                            @foreach (var r in receptionists)
+                            {
+                                <option value="@r.UserId" selected="@(filterReceptionistId == r.UserId)">@r.FullName (@r.Email)</option>
+                            }
+                        </select>
+                    </form>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createShiftModal">
+                        <i class="bi bi-plus-lg me-1"></i> Thêm Ca Trực
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-bordered mb-0 align-top" style="table-layout: fixed; min-width: 1000px;">
+                        <thead class="table-light text-center">
+                            <tr>
+                                <th style="width: 120px;" class="align-middle bg-light text-muted small fw-bold">Ca Trực</th>
+                                @for (int i = 0; i < 7; i++)
+                                {
+                                    var d = weekDays[i];
+                                    bool isCurToday = (d == today);
+                                    <th class="@(isCurToday ? "bg-primary-subtle border-primary text-primary" : "") p-2">
+                                        <div class="fw-bold @(i >= 5 ? "text-danger" : "text-dark")">@dayNamesVn[i]</div>
+                                        <div class="small text-muted">@d.ToString("dd/MM")</div>
+                                        @if (isCurToday)
+                                        {
+                                            <span class="badge bg-primary text-white mt-1" style="font-size: 9px;">Hôm nay</span>
+                                        }
+                                    </th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- CA SÁNG: 08:00 - 12:00 -->
+                            <tr>
+                                <td class="bg-light align-middle text-center p-2">
+                                    <div class="fw-bold text-warning-emphasis mb-1">
+                                        <i class="bi bi-sun-fill text-warning me-1"></i>Ca Sáng
+                                    </div>
+                                    <span class="badge bg-warning-subtle text-warning border small">08:00 - 12:00</span>
+                                </td>
+                                @for (int i = 0; i < 7; i++)
+                                {
+                                    var d = weekDays[i];
+                                    var dayDto = monthlyData?.Days.FirstOrDefault(x => x.Date == d);
+                                    var morningShifts = dayDto?.Shifts
+                                        .Where(s => s.StartTime < new TimeOnly(13, 0))
+                                        .ToList() ?? new List<ReceptionistWorkScheduleDto>();
+                                    var dayLeaves = dayDto?.ApprovedLeaves ?? new List<ReceptionistLeaveSummaryDto>();
+
+                                    <td class="p-2 @(d == today ? "bg-primary-subtle bg-opacity-10" : "bg-white")" style="min-height: 120px;">
+                                        @if (morningShifts.Any())
+                                        {
+                                            <div class="d-flex flex-column gap-2">
+                                                @foreach (var s in morningShifts)
+                                                {
+                                                    bool isOnLeave = dayLeaves.Any(l => l.ReceptionistUserId == s.ReceptionistUserId);
+                                                    <div class="card p-2 border shadow-xs rounded-3 @(isOnLeave ? "bg-warning-subtle border-warning" : "bg-white border-primary-subtle")">
+                                                        <div class="d-flex justify-content-between align-items-start mb-1">
+                                                            <strong class="small text-dark text-truncate" title="@s.ReceptionistName">
+                                                                <i class="bi bi-person text-primary me-1"></i>@s.ReceptionistName
+                                                            </strong>
+                                                            @if (isOnLeave)
+                                                            {
+                                                                <span class="badge bg-warning text-dark border border-warning" style="font-size: 8px;">Nghỉ phép</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="badge bg-success-subtle text-success" style="font-size: 8px;">Trực ca</span>
+                                                            }
+                                                        </div>
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">@s.StartTime.ToString("HH:mm") - @s.EndTime.ToString("HH:mm")</span>
+                                                            <form method="post" action="@Url.Action("DeleteSchedule")" class="d-inline" onsubmit="return confirm('Hủy ca trực của @s.ReceptionistName?');">
+                                                                <input type="hidden" name="scheduleId" value="@s.ReceptionistScheduleId" />
+                                                                <input type="hidden" name="year" value="@d.Year" />
+                                                                <input type="hidden" name="month" value="@d.Month" />
+                                                                <button type="submit" class="btn btn-link text-danger p-0 border-0" title="Hủy ca">
+                                                                    <i class="bi bi-x-circle"></i>
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="text-center text-muted py-3 small fst-italic opacity-50">
+                                                Trống ca
+                                            </div>
+                                        }
+                                    </td>
+                                }
+                            </tr>
+
+                            <!-- CA CHIỀU: 13:30 - 17:30 -->
+                            <tr>
+                                <td class="bg-light align-middle text-center p-2">
+                                    <div class="fw-bold text-primary mb-1">
+                                        <i class="bi bi-sunset-fill text-primary me-1"></i>Ca Chiều
+                                    </div>
+                                    <span class="badge bg-primary-subtle text-primary border small">13:30 - 17:30</span>
+                                </td>
+                                @for (int i = 0; i < 7; i++)
+                                {
+                                    var d = weekDays[i];
+                                    var dayDto = monthlyData?.Days.FirstOrDefault(x => x.Date == d);
+                                    var afternoonShifts = dayDto?.Shifts
+                                        .Where(s => s.StartTime >= new TimeOnly(13, 0))
+                                        .ToList() ?? new List<ReceptionistWorkScheduleDto>();
+                                    var dayLeaves = dayDto?.ApprovedLeaves ?? new List<ReceptionistLeaveSummaryDto>();
+
+                                    <td class="p-2 @(d == today ? "bg-primary-subtle bg-opacity-10" : "bg-white")" style="min-height: 120px;">
+                                        @if (afternoonShifts.Any())
+                                        {
+                                            <div class="d-flex flex-column gap-2">
+                                                @foreach (var s in afternoonShifts)
+                                                {
+                                                    bool isOnLeave = dayLeaves.Any(l => l.ReceptionistUserId == s.ReceptionistUserId);
+                                                    <div class="card p-2 border shadow-xs rounded-3 @(isOnLeave ? "bg-warning-subtle border-warning" : "bg-white border-primary-subtle")">
+                                                        <div class="d-flex justify-content-between align-items-start mb-1">
+                                                            <strong class="small text-dark text-truncate" title="@s.ReceptionistName">
+                                                                <i class="bi bi-person text-primary me-1"></i>@s.ReceptionistName
+                                                            </strong>
+                                                            @if (isOnLeave)
+                                                            {
+                                                                <span class="badge bg-warning text-dark border border-warning" style="font-size: 8px;">Nghỉ phép</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="badge bg-success-subtle text-success" style="font-size: 8px;">Trực ca</span>
+                                                            }
+                                                        </div>
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">@s.StartTime.ToString("HH:mm") - @s.EndTime.ToString("HH:mm")</span>
+                                                            <form method="post" action="@Url.Action("DeleteSchedule")" class="d-inline" onsubmit="return confirm('Hủy ca trực của @s.ReceptionistName?');">
+                                                                <input type="hidden" name="scheduleId" value="@s.ReceptionistScheduleId" />
+                                                                <input type="hidden" name="year" value="@d.Year" />
+                                                                <input type="hidden" name="month" value="@d.Month" />
+                                                                <button type="submit" class="btn btn-link text-danger p-0 border-0" title="Hủy ca">
+                                                                    <i class="bi bi-x-circle"></i>
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="text-center text-muted py-3 small fst-italic opacity-50">
+                                                Trống ca
+                                            </div>
+                                        }
+                                    </td>
+                                }
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Tab 2: Monthly Calendar Grid -->
     @if (activeTab == "monthly")
     {
         <div class="card border-0 shadow-sm rounded-3 mb-4">
@@ -209,16 +424,20 @@
                                                 var day = monthlyData.Days[dayIndex];
                                                 dayIndex++;
                                                 bool isToday = day.Date == ClinicTimeHelper.TodayDateOnly;
-                                                <td class="p-2 align-top text-start @(isToday ? "border-primary bg-primary-subtle bg-opacity-10" : "") @(day.HasCoverageShortage ? "bg-danger-subtle bg-opacity-25" : "")" style="height: 130px; font-size: 0.82rem;">
+                                                <td class="p-2 align-top text-start @(isToday ? "border-primary bg-primary-subtle bg-opacity-10" : "")" style="height: 130px; font-size: 0.82rem;">
                                                     <div class="d-flex justify-content-between align-items-center mb-1">
                                                         <span class="badge @(isToday ? "bg-primary" : "bg-secondary") rounded-pill">@day.Date.Day</span>
-                                                        @if (day.HasCoverageShortage)
+                                                        @if (day.HasCoverageShortage && day.Shifts.Count == 0 && day.Date >= ClinicTimeHelper.TodayDateOnly)
                                                         {
-                                                            <span class="badge bg-danger" title="Ca trực dưới 2 người!">Thiếu người</span>
+                                                            <span class="badge bg-danger" title="Không có ca trực!">Trống ca</span>
                                                         }
                                                         else if (day.DistinctApprovedLeaveCount > 0)
                                                         {
                                                             <span class="badge bg-warning text-dark" title="@day.DistinctApprovedLeaveCount lễ tân nghỉ">@day.DistinctApprovedLeaveCount nghỉ</span>
+                                                        }
+                                                        else if (day.Shifts.Count > 0)
+                                                        {
+                                                            <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.72rem;">@day.Shifts.Count ca</span>
                                                         }
                                                     </div>
 
@@ -227,10 +446,22 @@
                                                         @foreach (var s in day.Shifts.Take(3))
                                                         {
                                                             <div class="p-1 rounded border bg-white shadow-xs d-flex justify-content-between align-items-center">
-                                                                <span class="text-truncate fw-semibold" style="max-width: 90px;" title="@s.ReceptionistName">
+                                                                <span class="text-truncate fw-semibold" style="max-width: 80px;" title="@s.ReceptionistName">
                                                                     <i class="bi bi-person text-primary"></i> @s.ReceptionistName
                                                                 </span>
-                                                                <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">@s.StartTime.ToString("HH:mm")-@s.EndTime.ToString("HH:mm")</span>
+                                                                <div class="d-flex align-items-center gap-1">
+                                                                    <span class="badge @(s.StartTime < new TimeOnly(13, 0) ? "bg-warning-subtle text-warning-emphasis" : "bg-primary-subtle text-primary") border" style="font-size: 0.68rem;">
+                                                                        @(s.StartTime < new TimeOnly(13, 0) ? "Sáng" : "Chiều")
+                                                                    </span>
+                                                                    <form method="post" action="@Url.Action("DeleteSchedule")" class="d-inline" onsubmit="return confirm('Hủy ca trực của @s.ReceptionistName?');">
+                                                                        <input type="hidden" name="scheduleId" value="@s.ReceptionistScheduleId" />
+                                                                        <input type="hidden" name="year" value="@year" />
+                                                                        <input type="hidden" name="month" value="@month" />
+                                                                        <button type="submit" class="btn btn-link text-danger p-0 border-0" title="Hủy ca">
+                                                                            <i class="bi bi-x-circle" style="font-size: 0.75rem;"></i>
+                                                                        </button>
+                                                                    </form>
+                                                                </div>
                                                             </div>
                                                         }
                                                         @if (day.Shifts.Count > 3)
@@ -676,15 +907,15 @@
                         <label class="form-label fw-semibold">Ngày Làm Việc</label>
                         <input type="date" name="WorkDate" class="form-control" value="@ClinicTimeHelper.Today.ToString("yyyy-MM-dd")" required />
                     </div>
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <label class="form-label fw-semibold">Giờ Bắt Đầu</label>
-                            <input type="time" name="StartTime" class="form-control" value="07:00" required />
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label fw-semibold">Giờ Kết Thúc</label>
-                            <input type="time" name="EndTime" class="form-control" value="13:00" required />
-                        </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ca Làm Việc Cố Định</label>
+                        <select id="receptionistShiftSelect" class="form-select" onchange="updateReceptionistShiftTimes(this.value)">
+                            <option value="morning" data-start="08:00:00" data-end="12:00:00" data-tpl="@(templates.FirstOrDefault(t => t.StartTime == new TimeOnly(8, 0))?.ShiftTemplateId)">Ca Sáng (08:00 - 12:00)</option>
+                            <option value="afternoon" data-start="13:30:00" data-end="17:30:00" data-tpl="@(templates.FirstOrDefault(t => t.StartTime == new TimeOnly(13, 30))?.ShiftTemplateId)">Ca Chiều (13:30 - 17:30)</option>
+                        </select>
+                        <input type="hidden" name="StartTime" id="modalShiftStartTime" value="08:00:00" />
+                        <input type="hidden" name="EndTime" id="modalShiftEndTime" value="12:00:00" />
+                        <input type="hidden" name="ShiftTemplateId" id="modalShiftTemplateId" value="@(templates.FirstOrDefault(t => t.StartTime == new TimeOnly(8, 0))?.ShiftTemplateId)" />
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Ghi Chú</label>
@@ -781,6 +1012,16 @@
 
 @section Scripts {
 <script>
+    function updateReceptionistShiftTimes(val) {
+        const sel = document.getElementById('receptionistShiftSelect');
+        if (!sel) return;
+        const opt = sel.options[sel.selectedIndex];
+        document.getElementById('modalShiftStartTime').value = opt.getAttribute('data-start') || '08:00:00';
+        document.getElementById('modalShiftEndTime').value = opt.getAttribute('data-end') || '12:00:00';
+        const tpl = opt.getAttribute('data-tpl');
+        document.getElementById('modalShiftTemplateId').value = tpl || '';
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         // Bulk Preview
         const btnPreview = document.getElementById('btnPreviewBulk');
