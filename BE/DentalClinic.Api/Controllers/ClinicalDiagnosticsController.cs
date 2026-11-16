@@ -522,14 +522,11 @@ public class ClinicalDiagnosticsController : ControllerBase
                     : (result.CreatedAt > DateTime.MinValue ? result.CreatedAt : DateTime.UtcNow);
                 var safeStart = rawTime > DateTime.MinValue.AddHours(1) ? rawTime.AddHours(-1) : DateTime.MinValue;
                 var safeEnd = rawTime < DateTime.MaxValue.AddHours(-12) ? rawTime.AddHours(12) : DateTime.MaxValue;
-                var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(currentUserId, safeStart, safeEnd, ct);
-                var isQualifiedXrayDentist = await _dbContext.DentistProfiles.AsNoTracking()
-                    .AnyAsync(dp => dp.UserId == currentUserId && dp.Qualification != null && (dp.Qualification.Contains("Chẩn đoán hình ảnh") || dp.Qualification.Contains("X-quang")), ct);
 
-                // DATA INTEGRITY: Never trust free-text metadata tags in ClinicalIndication as authorization evidence.
                 // Clinical care circle enforcement: ordering dentist, reviewing dentist, uploading dentist,
-                // assigned treating dentist, or qualified on-duty imaging doctor verified from roster and profile.
-                if (!isOrderingDentist && !isReviewingDentist && !isUploadingDentist && !isAssignedToAppt && !(isXrayDuty && isQualifiedXrayDentist))
+                // or assigned treating dentist. An on-duty X-ray doctor cannot view arbitrary unrelated
+                // patient images merely by knowing the result ID unless directly assigned or part of the care circle.
+                if (!isOrderingDentist && !isReviewingDentist && !isUploadingDentist && !isAssignedToAppt)
                 {
                     return Forbid();
                 }

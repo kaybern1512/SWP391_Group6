@@ -1,0 +1,32 @@
+# ==============================================================================
+# DENTALCARE CLINIC MANAGEMENT SYSTEM — FRONTEND MVC ENVIRONMENT CONFIGURATION
+# SWP391 Group 6 | Architecture: ASP.NET Core 8 MVC Razor Views
+#
+# USAGE INSTRUCTIONS:
+# 1. Windows PowerShell:
+#    Get-Content env_client | Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object {
+#        $name, $value = $_.Split('=', 2)
+#        [System.Environment]::SetEnvironmentVariable($name, $value, "Process")
+#    }
+# 2. Linux / macOS Bash:
+#    export $(grep -v '^#' env_client | xargs)
+# 3. Docker / Docker Compose:
+#    docker run --env-file env_client ...
+# ==============================================================================
+
+# Core ASP.NET Core Runtime Settings
+ASPNETCORE_ENVIRONMENT=Development
+ASPNETCORE_URLS=https://localhost:7129;http://localhost:5129
+
+# Backend API Endpoint URL
+ApiSettings__BaseUrl=https://localhost:7350
+
+# Google OAuth External Authentication (Web Client Credentials)
+Authentication__Google__ClientId=YOUR_GOOGLE_CLIENT_ID
+Authentication__Google__ClientSecret=YOUR_GOOGLE_CLIENT_SECRET
+
+# VietQR Payment Configuration (Standard VietQR.io Quicklink Gateway)
+VietQrSettings__BankId=MB
+VietQrSettings__BankName=MBBank (Ngân hàng TMCP Quân Đội)
+VietQrSettings__AccountNo=039123456789
+VietQrSettings__AccountName=NHA KHOA DENTALCARE
