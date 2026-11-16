@@ -592,12 +592,16 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         var staffProfiles = await _dbContext.UserAccounts
             .AsNoTracking()
             .Include(u => u.StaffProfile)
-            .Where(u => request.ReceptionistUserIds.Contains(u.UserId) && u.Role == UserRole.Receptionist)
+            .Where(u => request.ReceptionistUserIds.Contains(u.UserId))
             .ToListAsync(ct);
 
         var staffMap = staffProfiles.ToDictionary(
             u => u.UserId,
-            u => (Name: u.StaffProfile?.FullName ?? u.Email ?? "Lễ tân", Code: $"EMP-{u.UserId}")
+            u => (
+                Name: u.StaffProfile?.FullName ?? u.Email ?? "Lễ tân",
+                Code: $"EMP-{u.UserId}",
+                IsValid: u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active
+            )
         );
 
         var approvedLeaves = await _dbContext.StaffLeaveRequests
@@ -622,9 +626,11 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         int totalProposed = 0;
         int validCount = 0;
         int duplicateCount = 0;
+        int conflictCount = 0;
         int leaveConflictCount = 0;
         int pendingLeaveConflictCount = 0;
         int pastOrStartedCount = 0;
+        int invalidStaffCount = 0;
         var warnings = new List<string>();
         var errors = new List<string>();
 
@@ -639,7 +645,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
             foreach (var userId in request.ReceptionistUserIds)
             {
-                var staffInfo = staffMap.GetValueOrDefault(userId, (Name: $"Lễ tân {userId}", Code: $"EMP-{userId}"));
+                var staffInfo = staffMap.GetValueOrDefault(userId, (Name: $"Lễ tân {userId}", Code: $"EMP-{userId}", IsValid: false));
 
                 foreach (var shift in targetShifts)
                 {
@@ -655,14 +661,24 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                         EndTime = shift.End,
                         ShiftName = shift.Name,
                         CanApply = true,
-                        Status = "Valid",
-                        Message = "Hợp lệ"
+                        Status = "Available",
+                        Message = "Có thể tạo"
                     };
+
+                    if (!staffInfo.IsValid)
+                    {
+                        item.Status = "InvalidStaff";
+                        item.Message = "Tài khoản nhân sự không hợp lệ hoặc đã bị khóa";
+                        item.CanApply = false;
+                        invalidStaffCount++;
+                        previewItems.Add(item);
+                        continue;
+                    }
 
                     if (date < today)
                     {
                         item.Status = "PastOrStarted";
-                        item.Message = "Không thể phân công ca trực trong quá khứ";
+                        item.Message = "Ca trực thuộc quá khứ";
                         item.CanApply = false;
                         pastOrStartedCount++;
                         previewItems.Add(item);
@@ -698,7 +714,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                         }
                         else
                         {
-                            item.Status = "PendingLeaveConflict";
+                            item.Status = "PendingLeave";
                             item.Message = "Trùng với đơn xin nghỉ phép ĐANG CHỜ DUYỆT";
                             item.CanApply = false;
                             pendingLeaveConflictCount++;
@@ -717,7 +733,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                     if (isDuplicate)
                     {
                         item.Status = "AlreadyExists";
-                        item.Message = "Đã có ca trực trùng giờ này";
+                        item.Message = "Ca tương đương đã tồn tại";
                         item.CanApply = false;
                         duplicateCount++;
                         previewItems.Add(item);
@@ -733,9 +749,9 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                     if (isOverlap)
                     {
                         item.Status = "Conflict";
-                        item.Message = "Trùng giờ với ca trực khác";
+                        item.Message = "Trùng/chồng lấn với ca trực khác";
                         item.CanApply = false;
-                        duplicateCount++;
+                        conflictCount++;
                         previewItems.Add(item);
                         continue;
                     }
@@ -748,15 +764,27 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
         var preview = new ReceptionistBulkSchedulePreviewDto
         {
-            ProposedShiftsCount = totalProposed,
-            OverwrittenShiftsCount = 0,
-            ConflictWithLeaveCount = leaveConflictCount + pendingLeaveConflictCount,
+            // 5 primary summary cards
             TotalProposedShifts = totalProposed,
+            AvailableCount = validCount,
+            AlreadyExistsCount = duplicateCount,
+            LeaveBlockedCount = leaveConflictCount + pendingLeaveConflictCount,
+            OtherConflictCount = conflictCount + pastOrStartedCount + invalidStaffCount,
+
+            // Detailed breakdown
+            ProposedShiftsCount = totalProposed,
             ValidShiftsCount = validCount,
             DuplicateShiftsCount = duplicateCount,
+            ConflictCount = conflictCount,
+            OnApprovedLeaveCount = leaveConflictCount,
+            PendingLeaveCount = pendingLeaveConflictCount,
             LeaveConflictCount = leaveConflictCount,
             PendingLeaveConflictCount = pendingLeaveConflictCount,
             PastOrStartedCount = pastOrStartedCount,
+            InvalidStaffCount = invalidStaffCount,
+            OverwrittenShiftsCount = 0,
+            ConflictWithLeaveCount = leaveConflictCount + pendingLeaveConflictCount,
+
             Warnings = warnings,
             Errors = errors,
             IsValid = errors.Count == 0,
@@ -766,7 +794,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         return ApiResponse<ReceptionistBulkSchedulePreviewDto>.Ok(preview);
     }
 
-    public async Task<ApiResponse<bool>> ApplyBulkScheduleAsync(
+    public async Task<ApiResponse<ReceptionistBulkApplyResultDto>> ApplyBulkScheduleAsync(
         ReceptionistBulkScheduleAssignmentRequest request,
         long currentUserId,
         CancellationToken ct = default)
@@ -774,7 +802,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         var previewRes = await PreviewBulkScheduleAsync(request, ct);
         if (!previewRes.Success || previewRes.Data == null)
         {
-            return ApiResponse<bool>.Fail(previewRes.Message ?? "Dữ liệu phân ca hàng loạt không hợp lệ.");
+            return ApiResponse<ReceptionistBulkApplyResultDto>.Fail(previewRes.Message ?? "Dữ liệu phân ca hàng loạt không hợp lệ.");
         }
 
         var preview = previewRes.Data;
@@ -782,7 +810,17 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
         if (!applicableItems.Any())
         {
-            return ApiResponse<bool>.Ok(true, "Không có ca trực mới nào cần tạo (đã bỏ qua các ca trùng lặp hoặc nghỉ phép).");
+            var noOpResult = new ReceptionistBulkApplyResultDto
+            {
+                RequestedCount = preview.TotalProposedShifts,
+                CreatedCount = 0,
+                AlreadyExistsCount = preview.AlreadyExistsCount,
+                SkippedLeaveCount = preview.LeaveBlockedCount,
+                SkippedConflictCount = preview.OtherConflictCount,
+                Message = "Không có ca trực mới nào cần tạo (đã bỏ qua các ca trùng lặp hoặc nghỉ phép).",
+                Items = preview.Items
+            };
+            return ApiResponse<ReceptionistBulkApplyResultDto>.Ok(noOpResult, noOpResult.Message);
         }
 
         var lockKeys = applicableItems.Select(i => SqlAppLockHelper.ReceptionistCoverageDateKey(i.WorkDate)).Distinct().ToList();
@@ -797,12 +835,16 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         try
         {
             int created = 0;
+            int concurrentLeaveSkipped = 0;
+            int concurrentDuplicateSkipped = 0;
+            int concurrentConflictSkipped = 0;
             var now = DateTime.UtcNow;
 
             foreach (var item in applicableItems)
             {
                 // Invariant & Concurrency Guard: Approved & Pending Leave is ALWAYS protected
                 bool hasApprovedOrPendingLeave = await _dbContext.StaffLeaveRequests
+                    .AsNoTracking()
                     .AnyAsync(l => l.StaffUserId == item.ReceptionistUserId &&
                                    l.StaffRole == UserRole.Receptionist &&
                                    (l.Status == "Approved" || l.Status == "Pending") &&
@@ -813,11 +855,16 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
                 if (hasApprovedOrPendingLeave)
                 {
+                    item.Status = "OnApprovedLeave";
+                    item.CanApply = false;
+                    item.Message = "Bỏ qua do phát hiện lịch nghỉ phép tương tranh";
+                    concurrentLeaveSkipped++;
                     continue;
                 }
 
                 // Idempotency check: don't create duplicates
                 bool alreadyExists = await _dbContext.StaffWorkSchedules
+                    .AsNoTracking()
                     .AnyAsync(s => s.StaffRole == UserRole.Receptionist &&
                                    s.StaffUserId == item.ReceptionistUserId &&
                                    s.WorkDate == item.WorkDate &&
@@ -827,10 +874,15 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
                 if (alreadyExists)
                 {
+                    item.Status = "AlreadyExists";
+                    item.CanApply = false;
+                    item.Message = "Ca tương đương đã tồn tại";
+                    concurrentDuplicateSkipped++;
                     continue;
                 }
 
                 bool isOverlap = await _dbContext.StaffWorkSchedules
+                    .AsNoTracking()
                     .AnyAsync(s => s.StaffRole == UserRole.Receptionist &&
                                    s.StaffUserId == item.ReceptionistUserId &&
                                    s.WorkDate == item.WorkDate &&
@@ -840,6 +892,10 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
 
                 if (isOverlap)
                 {
+                    item.Status = "Conflict";
+                    item.CanApply = false;
+                    item.Message = "Trùng giờ với ca trực khác";
+                    concurrentConflictSkipped++;
                     continue;
                 }
 
@@ -873,7 +929,18 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                 $"Đã tạo {created} ca trực lễ tân thành công",
                 ct);
 
-            return ApiResponse<bool>.Ok(true, $"Đã áp dụng thành công {created} ca trực mới cho lễ tân.");
+            var resultDto = new ReceptionistBulkApplyResultDto
+            {
+                RequestedCount = preview.TotalProposedShifts,
+                CreatedCount = created,
+                AlreadyExistsCount = preview.AlreadyExistsCount + concurrentDuplicateSkipped,
+                SkippedLeaveCount = preview.LeaveBlockedCount + concurrentLeaveSkipped,
+                SkippedConflictCount = preview.OtherConflictCount + concurrentConflictSkipped,
+                Message = $"Đã áp dụng thành công {created} ca trực mới cho lễ tân (Đã có sẵn: {preview.AlreadyExistsCount + concurrentDuplicateSkipped}, Nghỉ phép: {preview.LeaveBlockedCount + concurrentLeaveSkipped}, Xung đột khác: {preview.OtherConflictCount + concurrentConflictSkipped}).",
+                Items = preview.Items
+            };
+
+            return ApiResponse<ReceptionistBulkApplyResultDto>.Ok(resultDto, resultDto.Message);
         }
         catch (Exception ex)
         {
@@ -881,7 +948,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             {
                 await tx.RollbackAsync(ct);
             }
-            return ApiResponse<bool>.Fail($"Lỗi khi lưu phân ca hàng loạt: {ex.Message}");
+            return ApiResponse<ReceptionistBulkApplyResultDto>.Fail($"Lỗi khi lưu phân ca hàng loạt: {ex.Message}");
         }
     }
 

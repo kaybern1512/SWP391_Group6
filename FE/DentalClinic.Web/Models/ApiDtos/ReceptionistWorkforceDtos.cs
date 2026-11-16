@@ -119,25 +119,48 @@ public class ReceptionistBulkPreviewItemDto
     public TimeOnly StartTime { get; set; }
     public TimeOnly EndTime { get; set; }
     public string ShiftName { get; set; } = string.Empty;
-    public string Status { get; set; } = "Valid";
+    public string Status { get; set; } = "Available"; // Available, AlreadyExists, Conflict, OnApprovedLeave, PendingLeave, PastOrStarted, InvalidStaff
     public string Message { get; set; } = string.Empty;
     public bool CanApply { get; set; } = true;
 }
 
 public class ReceptionistBulkSchedulePreviewDto
 {
+    // 5 primary summary cards (Addendum Section 4)
+    public int TotalProposedShifts { get; set; }      // Tổng ca dự kiến
+    public int AvailableCount { get; set; }            // Có thể thêm
+    public int AlreadyExistsCount { get; set; }        // Đã tồn tại
+    public int LeaveBlockedCount { get; set; }         // Bị chặn do nghỉ phép (OnApprovedLeave + PendingLeave)
+    public int OtherConflictCount { get; set; }        // Xung đột khác (Conflict + PastOrStarted + InvalidStaff)
+
+    // Detailed breakdown counts
     public int ProposedShiftsCount { get; set; }
+    public int ValidShiftsCount { get; set; }          // Alias for AvailableCount
+    public int DuplicateShiftsCount { get; set; }      // Alias for AlreadyExistsCount
+    public int ConflictCount { get; set; }
+    public int OnApprovedLeaveCount { get; set; }
+    public int PendingLeaveCount { get; set; }
+    public int LeaveConflictCount { get; set; }        // Alias for OnApprovedLeaveCount
+    public int PendingLeaveConflictCount { get; set; } // Alias for PendingLeaveCount
+    public int PastOrStartedCount { get; set; }
+    public int InvalidStaffCount { get; set; }
     public int OverwrittenShiftsCount { get; set; }
     public int ConflictWithLeaveCount { get; set; }
-    public int TotalProposedShifts { get; set; }
-    public int ValidShiftsCount { get; set; }
-    public int DuplicateShiftsCount { get; set; }
-    public int LeaveConflictCount { get; set; }
-    public int PendingLeaveConflictCount { get; set; }
-    public int PastOrStartedCount { get; set; }
+
     public List<string> Warnings { get; set; } = new();
     public List<string> Errors { get; set; } = new();
     public bool IsValid { get; set; }
+    public List<ReceptionistBulkPreviewItemDto> Items { get; set; } = new();
+}
+
+public class ReceptionistBulkApplyResultDto
+{
+    public int RequestedCount { get; set; }
+    public int CreatedCount { get; set; }
+    public int AlreadyExistsCount { get; set; }
+    public int SkippedLeaveCount { get; set; }
+    public int SkippedConflictCount { get; set; }
+    public string Message { get; set; } = string.Empty;
     public List<ReceptionistBulkPreviewItemDto> Items { get; set; } = new();
 }
 

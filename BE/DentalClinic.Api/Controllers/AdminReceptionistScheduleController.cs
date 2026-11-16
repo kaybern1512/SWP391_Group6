@@ -102,7 +102,7 @@ public class AdminReceptionistScheduleController : ControllerBase
     }
 
     [HttpPost("bulk-apply")]
-    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<ReceptionistBulkApplyResultDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ApplyBulkSchedule([FromBody] ReceptionistBulkScheduleAssignmentRequest request, CancellationToken ct)
     {
         var result = await _scheduleService.ApplyBulkScheduleAsync(request, GetCurrentUserId(), ct);

@@ -1364,60 +1364,53 @@
                     <!-- Bước 2: Khoảng Ngày (Chỉ ngày tương lai) -->
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold small">2. Từ ngày (Tương lai) <span class="text-danger">*</span></label>
-                            <input type="date" id="bulkRecFromDate" class="form-control" min="@today.ToString("yyyy-MM-dd")" value="@today.ToString("yyyy-MM-dd")" onchange="invalidateReceptionistBulkPreview()" required />
+                            <label class="form-label fw-semibold small">Phần B — Từ ngày (Tương lai) <span class="text-danger">*</span></label>
+                            <input type="date" id="bulkRecFromDate" class="form-control" min="@today.ToString("yyyy-MM-dd")" value="@today.ToString("yyyy-MM-dd")" onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();" oninput="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();" required />
                             <div class="form-text text-xs text-muted">Chỉ áp dụng từ ngày hôm nay (@today.ToString("dd/MM/yyyy")) trở đi.</div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold small">Đến ngày <span class="text-danger">*</span></label>
-                            <input type="date" id="bulkRecToDate" class="form-control" min="@today.ToString("yyyy-MM-dd")" value="@today.AddDays(14).ToString("yyyy-MM-dd")" onchange="invalidateReceptionistBulkPreview()" required />
+                            <input type="date" id="bulkRecToDate" class="form-control" min="@today.ToString("yyyy-MM-dd")" value="@today.AddDays(14).ToString("yyyy-MM-dd")" onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();" oninput="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();" required />
                         </div>
                     </div>
 
                     <!-- Bước 3: Thứ Trong Tuần -->
                     <div class="mb-3">
-                        <label class="form-label fw-semibold small mb-2">3. Các ngày trong tuần áp dụng <span class="text-danger">*</span></label>
-                        <div class="d-flex flex-wrap gap-2">
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow1" value="1" checked onchange="invalidateReceptionistBulkPreview()">
-                                <label class="form-check-label fw-semibold" for="recdow1">Thứ 2</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow2" value="2" checked onchange="invalidateReceptionistBulkPreview()">
-                                <label class="form-check-label fw-semibold" for="recdow2">Thứ 3</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow3" value="3" checked onchange="invalidateReceptionistBulkPreview()">
-                                <label class="form-check-label fw-semibold" for="recdow3">Thứ 4</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow4" value="4" checked onchange="invalidateReceptionistBulkPreview()">
-                                <label class="form-check-label fw-semibold" for="recdow4">Thứ 5</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow5" value="5" checked onchange="invalidateReceptionistBulkPreview()">
-                                <label class="form-check-label fw-semibold" for="recdow5">Thứ 6</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow6" value="6" onchange="invalidateReceptionistBulkPreview()">
-                                <label class="form-check-label text-primary fw-semibold" for="recdow6">Thứ 7</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow7" value="7" onchange="invalidateReceptionistBulkPreview()">
-                                <label class="form-check-label text-danger fw-semibold" for="recdow7">Chủ Nhật</label>
-                            </div>
+                        <label class="form-label fw-semibold small mb-2">Phần C — Các ngày áp dụng <span class="text-danger">*</span></label>
+                        <div class="btn-group w-100" role="group" aria-label="Days of week">
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow1" value="1" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-primary btn-sm fw-bold" for="recdow1">T2</label>
+
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow2" value="2" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-primary btn-sm fw-bold" for="recdow2">T3</label>
+
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow3" value="3" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-primary btn-sm fw-bold" for="recdow3">T4</label>
+
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow4" value="4" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-primary btn-sm fw-bold" for="recdow4">T5</label>
+
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow5" value="5" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-primary btn-sm fw-bold" for="recdow5">T6</label>
+
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow6" value="6" onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-primary btn-sm fw-bold" for="recdow6">T7</label>
+
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow0" value="0" onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-danger btn-sm fw-bold" for="recdow0">CN</label>
                         </div>
+                        <div class="form-text text-xs text-muted mt-1">Mặc định áp dụng Thứ 2 tới Thứ 6 (T2–T6).</div>
                     </div>
 
                     <!-- Bước 4: Hai Ca Chuẩn Cố Định (08:00-12:00, 13:30-17:30) -->
                     <div class="mb-3">
-                        <label class="form-label fw-semibold small mb-2">4. Ca trực cố định áp dụng <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold small mb-2">Phần D — Ca làm việc cố định <span class="text-danger">*</span></label>
                         <div class="row g-2">
                             <div class="col-md-6">
                                 <div class="card p-3 border rounded-3 h-100 bg-white">
                                     <div class="form-check form-switch mb-1">
-                                        <input class="form-check-input" type="checkbox" id="bulkRecShiftMorning" value="Morning" checked onchange="invalidateReceptionistBulkPreview()">
-                                        <label class="form-check-label fw-bold text-dark" for="bulkRecShiftMorning">
+                                        <input class="form-check-input" type="checkbox" id="bulkRecShiftMorning" value="Morning" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                                        <label class="form-check-label fw-bold text-dark cursor-pointer" for="bulkRecShiftMorning">
                                             <i class="bi bi-sun-fill text-warning me-1"></i>Ca Sáng
                                         </label>
                                     </div>
@@ -1430,8 +1423,8 @@
                             <div class="col-md-6">
                                 <div class="card p-3 border rounded-3 h-100 bg-white">
                                     <div class="form-check form-switch mb-1">
-                                        <input class="form-check-input" type="checkbox" id="bulkRecShiftAfternoon" value="Afternoon" checked onchange="invalidateReceptionistBulkPreview()">
-                                        <label class="form-check-label fw-bold text-dark" for="bulkRecShiftAfternoon">
+                                        <input class="form-check-input" type="checkbox" id="bulkRecShiftAfternoon" value="Afternoon" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                                        <label class="form-check-label fw-bold text-dark cursor-pointer" for="bulkRecShiftAfternoon">
                                             <i class="bi bi-sunset-fill text-primary me-1"></i>Ca Chiều
                                         </label>
                                     </div>
@@ -1444,36 +1437,113 @@
                         </div>
                     </div>
 
-                    <!-- Lưu ý bảo vệ nghỉ phép -->
-                    <div class="text-xs text-muted fst-italic ps-1 mb-3">
-                        <i class="bi bi-shield-lock text-success me-1"></i>Lưu ý: Hệ thống luôn tự động bảo vệ lịch nghỉ phép đã được duyệt hoặc đang chờ duyệt của lễ tân.
+                    <!-- Phần E: Tóm Tắt Dự Kiến -->
+                    <div class="card bg-light border-0 p-3 rounded-3 mb-3" id="bulkRecSummaryCard">
+                        <div class="fw-bold small text-muted text-uppercase mb-2 d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-calculator text-primary me-1"></i>Phần E — Tóm Tắt Dự Kiến</span>
+                            <span class="text-xs text-muted fst-italic">Cập nhật tự động</span>
+                        </div>
+                        <div class="row text-center g-2">
+                            <div class="col-3">
+                                <div class="p-2 bg-white rounded border">
+                                    <div class="text-xs text-muted">Nhân viên</div>
+                                    <div class="fw-bold text-dark fs-6" id="summaryStaffCount">0</div>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="p-2 bg-white rounded border">
+                                    <div class="text-xs text-muted">Số ngày</div>
+                                    <div class="fw-bold text-dark fs-6" id="summaryDaysCount">0</div>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="p-2 bg-white rounded border">
+                                    <div class="text-xs text-muted">Số ca / ngày</div>
+                                    <div class="fw-bold text-dark fs-6" id="summaryShiftsPerDay">2</div>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="p-2 bg-primary-subtle rounded border border-primary-subtle">
+                                    <div class="text-xs text-primary fw-semibold">Tổng ca dự kiến</div>
+                                    <div class="fw-bold text-primary fs-6" id="summaryTotalExpected">0</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- Bước 5: Xem Trước & Kiểm Tra Xung Đột -->
-                    <div id="bulkRecPreviewSection" class="mt-3 p-3 border rounded bg-white" style="display: none;">
-                        <h6 class="fw-bold d-flex align-items-center justify-content-between mb-2">
-                            <span><i class="bi bi-shield-check text-success me-2"></i>Kết Quả Kiểm Tra Xung Đột (Preview)</span>
+                    <!-- Lưu ý bảo vệ nghỉ phép -->
+                    <div class="text-xs text-muted fst-italic ps-1 mb-3">
+                        <i class="bi bi-shield-lock text-success me-1"></i>Lưu ý: Hệ thống luôn tự động bảo vệ lịch nghỉ phép đã được duyệt hoặc đang chờ duyệt của lễ tân từ database thật.
+                    </div>
+
+                    <!-- Kết Quả Kiểm Tra Xung Đột (Preview từ Real Database) -->
+                    <div id="bulkRecPreviewSection" class="mt-3 p-3 border rounded-3 bg-white" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold mb-0 text-dark">
+                                <i class="bi bi-shield-check text-success me-2"></i>Kết Quả Kiểm Tra Xung Đột (Database Thật)
+                            </h6>
                             <span id="bulkRecPreviewBadge" class="badge bg-secondary">0 ca đề xuất</span>
-                        </h6>
-                        <div class="row g-2 mb-2 text-center text-xs">
-                            <div class="col"><span class="badge bg-success-subtle text-success w-100 py-1" id="statRecValid">0 Hợp lệ</span></div>
-                            <div class="col"><span class="badge bg-warning-subtle text-warning w-100 py-1" id="statRecDuplicate">0 Đã có sẵn</span></div>
-                            <div class="col"><span class="badge bg-danger text-white w-100 py-1" id="statRecLeave">0 Nghỉ phép đã duyệt</span></div>
-                            <div class="col"><span class="badge bg-warning text-dark border border-warning w-100 py-1" id="statRecPendingLeave">0 Nghỉ chờ duyệt</span></div>
                         </div>
-                        <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+
+                        <!-- 5 Thẻ Tổng Quan (Addendum Section 4) -->
+                        <div class="row g-2 mb-3 text-center">
+                            <div class="col">
+                                <div class="p-2 rounded bg-light border">
+                                    <div class="text-xs text-muted">Tổng dự kiến</div>
+                                    <div class="fw-bold fs-6 text-dark" id="statRecTotal">0</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="p-2 rounded bg-success-subtle border border-success-subtle">
+                                    <div class="text-xs text-success fw-semibold">Có thể thêm</div>
+                                    <div class="fw-bold fs-6 text-success" id="statRecValid">0</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="p-2 rounded bg-warning-subtle border border-warning-subtle">
+                                    <div class="text-xs text-warning-emphasis fw-semibold">Đã tồn tại</div>
+                                    <div class="fw-bold fs-6 text-warning-emphasis" id="statRecDuplicate">0</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="p-2 rounded bg-danger-subtle border border-danger-subtle">
+                                    <div class="text-xs text-danger fw-semibold">Bị chặn do nghỉ</div>
+                                    <div class="fw-bold fs-6 text-danger" id="statRecLeaveBlocked">0</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="p-2 rounded bg-secondary-subtle border border-secondary-subtle">
+                                    <div class="text-xs text-secondary fw-semibold">Xung đột khác</div>
+                                    <div class="fw-bold fs-6 text-dark" id="statRecOtherConflicts">0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filter Switch -->
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="chkFilterRecConflictsOnly" onchange="filterBulkPreviewTable()">
+                                <label class="form-check-label small fw-semibold text-danger cursor-pointer" for="chkFilterRecConflictsOnly">
+                                    <i class="bi bi-funnel me-1"></i>Chỉ xem ca bị xung đột / bỏ qua
+                                </label>
+                            </div>
+                            <div class="text-xs text-muted" id="previewFilterCountText">Hiển thị tất cả các ca</div>
+                        </div>
+
+                        <!-- Table: Ngày | Lễ tân | Ca | Trạng thái | Nguyên nhân -->
+                        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
                             <table class="table table-sm table-bordered text-xs mb-0 align-middle">
                                 <thead class="table-light">
                                     <tr>
+                                        <th style="width: 100px;">Ngày</th>
                                         <th>Lễ tân</th>
-                                        <th>Ngày trực</th>
-                                        <th>Ca trực</th>
-                                        <th>Trạng thái</th>
-                                        <th>Ghi chú / Cảnh báo</th>
+                                        <th>Ca</th>
+                                        <th style="width: 130px;">Trạng thái</th>
+                                        <th>Nguyên nhân</th>
                                     </tr>
                                 </thead>
                                 <tbody id="bulkRecPreviewTableBody">
-                                    <!-- Items will be populated dynamically -->
+                                    <!-- Populated dynamically via JS -->
                                 </tbody>
                             </table>
                         </div>
@@ -1481,13 +1551,13 @@
                 </form>
             </div>
             <div class="modal-footer bg-light d-flex justify-content-between">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Hủy</button>
                 <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-outline-primary" id="btnBulkRecPreview" onclick="handleReceptionistBulkPreview()">
-                        <i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột (Preview)
+                    <button type="button" class="btn btn-outline-primary px-3" id="btnBulkRecPreview" onclick="handleReceptionistBulkPreview()">
+                        <i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột
                     </button>
-                    <button type="button" class="btn btn-dc-primary" id="btnBulkRecApply" onclick="handleReceptionistBulkApply()" disabled>
-                        <i class="bi bi-check2-circle me-1"></i>Chỉ Áp Dụng Các Ca Hợp Lệ
+                    <button type="button" class="btn btn-dc-primary px-3" id="btnBulkRecApply" onclick="handleReceptionistBulkApply()" disabled>
+                        <i class="bi bi-check2-circle me-1"></i>Áp Dụng Các Ca Hợp Lệ
                     </button>
                 </div>
             </div>
@@ -1505,6 +1575,47 @@
         if (previewSec) previewSec.style.display = 'none';
         const btnApply = document.getElementById('btnBulkRecApply');
         if (btnApply) btnApply.disabled = true;
+    }
+
+    function updateReceptionistBulkSummary() {
+        const checkedBoxes = document.querySelectorAll('.bulk-receptionist-checkbox:checked');
+        const staffCount = checkedBoxes.length;
+
+        const fromDateStr = document.getElementById('bulkRecFromDate')?.value;
+        const toDateStr = document.getElementById('bulkRecToDate')?.value;
+
+        let daysCount = 0;
+        if (fromDateStr && toDateStr && toDateStr >= fromDateStr) {
+            const checkedDows = Array.from(document.querySelectorAll('.bulk-rec-dow:checked')).map(cb => parseInt(cb.value));
+            const cur = new Date(fromDateStr + 'T00:00:00');
+            const end = new Date(toDateStr + 'T00:00:00');
+
+            while (cur <= end) {
+                const dow = cur.getDay(); // 0 is Sunday, 1..6 is Mon..Sat
+                if (checkedDows.includes(dow) || (dow === 0 && checkedDows.includes(7))) {
+                    daysCount++;
+                }
+                cur.setDate(cur.getDate() + 1);
+            }
+        }
+
+        let shiftsPerDay = 0;
+        if (document.getElementById('bulkRecShiftMorning')?.checked) shiftsPerDay++;
+        if (document.getElementById('bulkRecShiftAfternoon')?.checked) shiftsPerDay++;
+
+        const totalExpected = staffCount * daysCount * shiftsPerDay;
+
+        const elStaff = document.getElementById('summaryStaffCount');
+        if (elStaff) elStaff.innerText = staffCount;
+
+        const elDays = document.getElementById('summaryDaysCount');
+        if (elDays) elDays.innerText = daysCount;
+
+        const elShifts = document.getElementById('summaryShiftsPerDay');
+        if (elShifts) elShifts.innerText = shiftsPerDay;
+
+        const elTotal = document.getElementById('summaryTotalExpected');
+        if (elTotal) elTotal.innerText = totalExpected;
     }
 
     function filterBulkReceptionists() {
@@ -1529,7 +1640,6 @@
             }
         });
         syncBulkReceptionistSelection();
-        invalidateReceptionistBulkPreview();
     }
 
     function syncBulkReceptionistSelection() {
@@ -1548,7 +1658,41 @@
         const countEl = document.getElementById('bulkReceptionistSelectedCount');
         if (countEl) countEl.innerText = selectedIds.length;
 
+        updateReceptionistBulkSummary();
         invalidateReceptionistBulkPreview();
+    }
+
+    function filterBulkPreviewTable() {
+        const onlyConflicts = document.getElementById('chkFilterRecConflictsOnly')?.checked;
+        const rows = document.querySelectorAll('#bulkRecPreviewTableBody tr');
+        let visibleCount = 0;
+        let conflictCount = 0;
+
+        rows.forEach(r => {
+            const canApply = r.getAttribute('data-can-apply') === 'true';
+            if (!canApply) conflictCount++;
+
+            if (onlyConflicts) {
+                if (!canApply) {
+                    r.style.display = '';
+                    visibleCount++;
+                } else {
+                    r.style.display = 'none';
+                }
+            } else {
+                r.style.display = '';
+                visibleCount++;
+            }
+        });
+
+        const filterTextEl = document.getElementById('previewFilterCountText');
+        if (filterTextEl) {
+            if (onlyConflicts) {
+                filterTextEl.innerText = `Đang hiển thị ${visibleCount} ca bị xung đột / bỏ qua`;
+            } else {
+                filterTextEl.innerText = `Hiển thị tất cả ${visibleCount} ca (${conflictCount} ca xung đột)`;
+            }
+        }
     }
 
     async function handleReceptionistBulkPreview() {
@@ -1613,43 +1757,59 @@
                 document.getElementById('bulkRecPreviewSection').style.display = 'block';
                 document.getElementById('bulkRecPreviewBadge').innerText = `${data.totalProposedShifts || data.proposedShiftsCount} ca đề xuất`;
 
-                document.getElementById('statRecValid').innerText = `${data.validShiftsCount} Hợp lệ`;
-                document.getElementById('statRecDuplicate').innerText = `${data.duplicateShiftsCount} Đã có sẵn`;
-                document.getElementById('statRecLeave').innerText = `${data.leaveConflictCount} Nghỉ phép đã duyệt`;
-                document.getElementById('statRecPendingLeave').innerText = `${data.pendingLeaveConflictCount || 0} Nghỉ chờ duyệt`;
+                // 5 thẻ tổng quan
+                const totalShifts = data.totalProposedShifts || data.proposedShiftsCount || 0;
+                const validShifts = data.availableCount ?? data.validShiftsCount ?? 0;
+                const dupShifts = data.alreadyExistsCount ?? data.duplicateShiftsCount ?? 0;
+                const leaveShifts = data.leaveBlockedCount ?? (data.leaveConflictCount + (data.pendingLeaveConflictCount || 0)) ?? 0;
+                const otherShifts = data.otherConflictCount ?? (data.conflictCount + (data.pastOrStartedCount || 0) + (data.invalidStaffCount || 0)) ?? 0;
+
+                document.getElementById('statRecTotal').innerText = totalShifts;
+                document.getElementById('statRecValid').innerText = validShifts;
+                document.getElementById('statRecDuplicate').innerText = dupShifts;
+                document.getElementById('statRecLeaveBlocked').innerText = leaveShifts;
+                document.getElementById('statRecOtherConflicts').innerText = otherShifts;
 
                 const tbody = document.getElementById('bulkRecPreviewTableBody');
                 tbody.innerHTML = '';
 
-                (data.items || []).slice(0, 100).forEach(item => {
+                (data.items || []).forEach(item => {
                     const tr = document.createElement('tr');
-                    let statusBadge = '<span class="badge bg-success-subtle text-success">Hợp lệ</span>';
+                    tr.setAttribute('data-can-apply', item.canApply ? 'true' : 'false');
+                    tr.setAttribute('data-status', item.status);
+
+                    let statusBadge = '<span class="badge bg-success-subtle text-success border border-success-subtle">Có thể thêm</span>';
                     if (item.status === 'AlreadyExists' || item.status === 'Duplicate') {
-                        statusBadge = '<span class="badge bg-warning-subtle text-warning">Trùng lặp</span>';
+                        statusBadge = '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Đã tồn tại</span>';
                     } else if (item.status === 'Conflict' || item.status === 'Overlap') {
-                        statusBadge = '<span class="badge bg-warning text-dark">Giao thoa giờ</span>';
+                        statusBadge = '<span class="badge bg-secondary-subtle text-dark border border-secondary">Chồng lấn lịch</span>';
                     } else if (item.status === 'OnApprovedLeave' || item.status === 'LeaveConflict') {
                         statusBadge = '<span class="badge bg-danger text-white">Nghỉ phép đã duyệt</span>';
-                    } else if (item.status === 'PendingLeaveConflict') {
+                    } else if (item.status === 'PendingLeave' || item.status === 'PendingLeaveConflict') {
                         statusBadge = '<span class="badge bg-warning text-dark border border-warning">Nghỉ chờ duyệt</span>';
                     } else if (item.status === 'PastOrStarted') {
-                        statusBadge = '<span class="badge bg-secondary-subtle text-muted">Đã qua / Đang diễn ra</span>';
+                        statusBadge = '<span class="badge bg-light text-muted border">Quá khứ / Đã qua</span>';
+                    } else if (item.status === 'InvalidStaff') {
+                        statusBadge = '<span class="badge bg-danger text-white">Nhân sự không hợp lệ</span>';
                     }
 
                     const startTimeStr = (item.startTime || '').substring(0, 5);
                     const endTimeStr = (item.endTime || '').substring(0, 5);
 
                     tr.innerHTML = `
-                        <td class="fw-bold">${escapeHtml(item.receptionistName)}</td>
-                        <td>${item.workDate}</td>
-                        <td>${escapeHtml(item.shiftName)} (${startTimeStr} - ${endTimeStr})</td>
+                        <td class="text-nowrap">${item.workDate}</td>
+                        <td class="fw-bold text-dark">${escapeHtml(item.receptionistName)}</td>
+                        <td>${escapeHtml(item.shiftName)} <small class="text-muted">(${startTimeStr}-${endTimeStr})</small></td>
                         <td>${statusBadge}</td>
                         <td class="small text-muted">${escapeHtml(item.message || '')}</td>
                     `;
                     tbody.appendChild(tr);
                 });
 
-                document.getElementById('btnBulkRecApply').disabled = (data.validShiftsCount === 0);
+                filterBulkPreviewTable();
+
+                const btnApply = document.getElementById('btnBulkRecApply');
+                btnApply.disabled = (validShifts === 0);
             } else {
                 alert(res.message || 'Lỗi khi kiểm tra lịch trực lễ tân.');
             }
@@ -1659,7 +1819,7 @@
         } finally {
             isRecBulkPreviewing = false;
             btnPreview.disabled = false;
-            btnPreview.innerHTML = '<i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột (Preview)';
+            btnPreview.innerHTML = '<i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột';
         }
     }
 
@@ -1703,7 +1863,8 @@
             const res = await resp.json();
 
             if (res.isSuccess) {
-                alert(res.message || 'Phân công ca trực lễ tân hàng loạt thành công!');
+                const msg = res.message || 'Phân công ca trực lễ tân hàng loạt thành công!';
+                alert(msg);
                 window.location.reload();
             } else {
                 alert(res.message || 'Lỗi khi áp dụng lịch trực lễ tân.');
@@ -1714,9 +1875,18 @@
         } finally {
             isRecBulkApplying = false;
             btnApply.disabled = false;
-            btnApply.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Chỉ Áp Dụng Các Ca Hợp Lệ';
+            btnApply.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Áp Dụng Các Ca Hợp Lệ';
         }
     }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const bulkModal = document.getElementById('bulkReceptionistScheduleModal');
+        if (bulkModal) {
+            bulkModal.addEventListener('shown.bs.modal', function () {
+                updateReceptionistBulkSummary();
+            });
+        }
+    });
     function escapeHtml(str) {
         if (!str) return '';
         return String(str)
