@@ -80,7 +80,7 @@ public class AdminReceptionistScheduleController : Controller
     }
 
     [HttpPost("CreateSchedule")]
-    public async Task<IActionResult> CreateSchedule([FromForm] CreateReceptionistScheduleRequest request)
+    public async Task<IActionResult> CreateSchedule([FromForm] CreateReceptionistScheduleRequest request, [FromForm] string? tab = "weekly", [FromForm] int? weekOffset = 0)
     {
         var res = await _workforceApi.CreateScheduleAsync(request);
         if (!res.IsSuccess)
@@ -91,11 +91,12 @@ public class AdminReceptionistScheduleController : Controller
         {
             TempData["SuccessMessage"] = "Đã phân công ca trực thành công.";
         }
-        return RedirectToAction(nameof(Index), new { tab = "monthly", year = request.WorkDate.Year, month = request.WorkDate.Month });
+        string returnTab = !string.IsNullOrEmpty(tab) ? tab : "weekly";
+        return RedirectToAction(nameof(Index), new { tab = returnTab, year = request.WorkDate.Year, month = request.WorkDate.Month, weekOffset = weekOffset ?? 0 });
     }
 
     [HttpPost("DeleteSchedule")]
-    public async Task<IActionResult> DeleteSchedule(long scheduleId, int year, int month)
+    public async Task<IActionResult> DeleteSchedule(long scheduleId, int year, int month, [FromForm] string? tab = "weekly", [FromForm] int? weekOffset = 0)
     {
         var res = await _workforceApi.DeleteScheduleAsync(scheduleId);
         if (!res.IsSuccess)
@@ -106,7 +107,8 @@ public class AdminReceptionistScheduleController : Controller
         {
             TempData["SuccessMessage"] = "Đã hủy ca trực thành công.";
         }
-        return RedirectToAction(nameof(Index), new { tab = "monthly", year, month });
+        string returnTab = !string.IsNullOrEmpty(tab) ? tab : "weekly";
+        return RedirectToAction(nameof(Index), new { tab = returnTab, year, month, weekOffset = weekOffset ?? 0 });
     }
 
     [HttpPost("BulkPreview")]
@@ -130,6 +132,14 @@ public class AdminReceptionistScheduleController : Controller
             TempData["SuccessMessage"] = res.Message ?? "Đã áp dụng phân ca hàng loạt thành công.";
         }
         return RedirectToAction(nameof(Index), new { tab = "monthly", year = request.Year, month = request.Month });
+    }
+
+    [HttpPost("BulkApplyJson")]
+    [Produces("application/json")]
+    public async Task<IActionResult> BulkApplyJson([FromBody] ReceptionistBulkScheduleAssignmentRequest request)
+    {
+        var res = await _workforceApi.ApplyBulkScheduleAsync(request);
+        return Json(res);
     }
 
     [HttpPost("CopyMonth")]

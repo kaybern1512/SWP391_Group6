@@ -719,10 +719,18 @@ public class DentistScheduleService : IDentistScheduleService
     {
         if (request.FromDate > request.ToDate)
         {
-            return ApiResponse<BulkSchedulePreviewResultDto>.Fail("Ngày bắt đầu không được lớn hơn ngày kết thúc.");
+            return ApiResponse<BulkSchedulePreviewResultDto>.Fail("Ngày kết thúc không được nhỏ hơn ngày bắt đầu.");
         }
 
-        if (!request.DentistUserIds.Any())
+        var today = ClinicTimeHelper.TodayDateOnly;
+        var nowClinicTime = TimeOnly.FromDateTime(ClinicTimeHelper.Now);
+
+        if (request.FromDate < today)
+        {
+            return ApiResponse<BulkSchedulePreviewResultDto>.Fail("Không thể phân công ca làm việc trong quá khứ.");
+        }
+
+        if (request.DentistUserIds == null || !request.DentistUserIds.Any())
         {
             return ApiResponse<BulkSchedulePreviewResultDto>.Fail("Vui lòng chọn ít nhất một bác sĩ.");
         }
@@ -732,14 +740,47 @@ public class DentistScheduleService : IDentistScheduleService
             return ApiResponse<BulkSchedulePreviewResultDto>.Fail("Vui lòng chọn chuyên khoa làm việc.");
         }
 
-        if (!request.DaysOfWeek.Any())
+        if (request.DaysOfWeek == null || !request.DaysOfWeek.Any())
         {
             return ApiResponse<BulkSchedulePreviewResultDto>.Fail("Vui lòng chọn ít nhất một ngày trong tuần.");
         }
 
-        if (!request.Shifts.Any())
+        if (request.Shifts == null || !request.Shifts.Any())
+        {
+            if (request.ShiftIdentifiers != null && request.ShiftIdentifiers.Any())
+            {
+                request.Shifts = new List<BulkScheduleShiftDto>();
+                foreach (var sId in request.ShiftIdentifiers)
+                {
+                    var shiftInfo = ClinicShiftConstants.GetShiftTimes(sId);
+                    if (shiftInfo.HasValue)
+                    {
+                        request.Shifts.Add(new BulkScheduleShiftDto
+                        {
+                            StartTime = shiftInfo.Value.StartTime,
+                            EndTime = shiftInfo.Value.EndTime,
+                            ShiftIdentifier = sId,
+                            Note = shiftInfo.Value.Name
+                        });
+                    }
+                }
+            }
+        }
+
+        if (request.Shifts == null || !request.Shifts.Any())
         {
             return ApiResponse<BulkSchedulePreviewResultDto>.Fail("Vui lòng thiết lập ít nhất một ca trực.");
+        }
+
+        foreach (var shift in request.Shifts)
+        {
+            if (string.IsNullOrWhiteSpace(shift.ShiftIdentifier))
+            {
+                if (shift.StartTime == ClinicShiftConstants.MorningStartTime && shift.EndTime == ClinicShiftConstants.MorningEndTime)
+                    shift.ShiftIdentifier = ClinicShiftConstants.Morning;
+                else if (shift.StartTime == ClinicShiftConstants.AfternoonStartTime && shift.EndTime == ClinicShiftConstants.AfternoonEndTime)
+                    shift.ShiftIdentifier = ClinicShiftConstants.Afternoon;
+            }
         }
 
         var department = await _dbContext.Departments.FirstOrDefaultAsync(d => d.DepartmentId == request.DepartmentId, ct);
@@ -776,7 +817,7 @@ public class DentistScheduleService : IDentistScheduleService
             .AsNoTracking()
             .Where(l => request.DentistUserIds.Contains(l.StaffUserId) &&
                         l.StaffRole == UserRole.Dentist &&
-                        l.Status == "Approved" &&
+                        (l.Status == "Approved" || l.Status == "Pending") &&
                         l.StartDate <= request.ToDate &&
                         l.EndDate >= request.FromDate)
             .ToListAsync(ct);
@@ -800,7 +841,7 @@ public class DentistScheduleService : IDentistScheduleService
             .ToListAsync(ct);
 
         var previewItems = new List<BulkSchedulePreviewItemDto>();
-        int totalProposed = 0, validCount = 0, duplicateCount = 0, overlapCount = 0, leaveCount = 0, apptConflictCount = 0, deptMismatchCount = 0;
+        int totalProposed = 0, validCount = 0, duplicateCount = 0, overlapCount = 0, leaveCount = 0, pendingLeaveCount = 0, apptConflictCount = 0, deptMismatchCount = 0, pastOrStartedCount = 0;
 
         for (var date = request.FromDate; date <= request.ToDate; date = date.AddDays(1))
         {
@@ -845,19 +886,49 @@ public class DentistScheduleService : IDentistScheduleService
                         continue;
                     }
 
-                    bool hasLeave = leaves.Any(l =>
+                    if (date < today)
+                    {
+                        item.Status = "PastOrStarted";
+                        item.Message = "Không thể phân công ca làm việc trong quá khứ";
+                        item.CanApply = false;
+                        pastOrStartedCount++;
+                        previewItems.Add(item);
+                        continue;
+                    }
+
+                    if (date == today && shift.StartTime <= nowClinicTime)
+                    {
+                        item.Status = "PastOrStarted";
+                        item.Message = "Ca trực đã bắt đầu hoặc đã qua trong ngày hôm nay";
+                        item.CanApply = false;
+                        pastOrStartedCount++;
+                        previewItems.Add(item);
+                        continue;
+                    }
+
+                    var matchingLeave = leaves.FirstOrDefault(l =>
                         l.StaffUserId == dentistId &&
                         l.StartDate <= date &&
                         l.EndDate >= date &&
                         (!l.StartTime.HasValue || !l.EndTime.HasValue ||
                          (shift.StartTime < l.EndTime.Value && shift.EndTime > l.StartTime.Value)));
 
-                    if (hasLeave)
+                    if (matchingLeave != null)
                     {
-                        item.Status = "LeaveConflict";
-                        item.Message = "Trùng với thời gian bác sĩ đã đăng ký nghỉ phép / bận";
-                        item.CanApply = false;
-                        leaveCount++;
+                        if (matchingLeave.Status == "Approved")
+                        {
+                            item.Status = "OnApprovedLeave";
+                            item.Message = "Trùng với lịch NGHỈ PHÉP ĐÃ DUYỆT (bảo vệ tuyệt đối)";
+                            item.CanApply = false;
+                            leaveCount++;
+                        }
+                        else
+                        {
+                            item.Status = "PendingLeaveConflict";
+                            item.Message = "Trùng với đơn xin nghỉ phép ĐANG CHỜ DUYỆT";
+                            item.CanApply = false;
+                            pendingLeaveCount++;
+                        }
                         previewItems.Add(item);
                         continue;
                     }
@@ -935,8 +1006,10 @@ public class DentistScheduleService : IDentistScheduleService
             DuplicateShiftsCount = duplicateCount,
             OverlapShiftsCount = overlapCount,
             LeaveConflictCount = leaveCount,
+            PendingLeaveConflictCount = pendingLeaveCount,
             AppointmentConflictCount = apptConflictCount,
             DepartmentMismatchCount = deptMismatchCount,
+            PastOrStartedCount = pastOrStartedCount,
             Items = previewItems
         });
     }
@@ -950,53 +1023,107 @@ public class DentistScheduleService : IDentistScheduleService
         }
 
         var preview = previewRes.Data;
-        var applicableItems = preview.Items.Where(i => i.CanApply).ToList();
-
-        if (!applicableItems.Any())
-        {
-            return ApiResponse<BulkScheduleApplyResultDto>.Fail("Không có ca trực nào hợp lệ để tạo mới.");
-        }
 
         if (!request.SkipConflicts && preview.Items.Any(i => !i.CanApply))
         {
             return ApiResponse<BulkScheduleApplyResultDto>.Fail($"Có {preview.Items.Count(i => !i.CanApply)} ca trực bị xung đột hoặc trùng lặp.");
         }
 
-        int created = 0;
-        int skipped = preview.Items.Count(i => !i.CanApply);
-        var now = DateTime.UtcNow;
+        var applicableItems = preview.Items.Where(i => i.CanApply).ToList();
 
-        foreach (var item in applicableItems)
+        if (!applicableItems.Any())
         {
-            if (request.OverwriteExisting)
+            if (request.SkipConflicts)
             {
-                var oldShifts = await _dbContext.StaffWorkSchedules
-                    .Where(ws => ws.StaffUserId == item.DentistUserId &&
-                                 ws.StaffRole == UserRole.Dentist &&
-                                 ws.WorkDate == item.WorkDate &&
-                                 ws.Status == "Scheduled" &&
-                                 ws.StartTime < item.EndTime &&
-                                 ws.EndTime > item.StartTime)
-                    .ToListAsync(ct);
-
-                foreach (var os in oldShifts)
+                return ApiResponse<BulkScheduleApplyResultDto>.Ok(new BulkScheduleApplyResultDto
                 {
-                    os.Status = "Cancelled";
-                    os.Notes = (os.Notes ?? "") + " [Ghi đè phân công hàng loạt]";
-                    os.UpdatedAt = now;
-                }
+                    CreatedCount = 0,
+                    SkippedCount = preview.Items.Count,
+                    FailedCount = 0,
+                    Messages = new List<string> { $"Không có ca trực mới nào được tạo (đã bỏ qua {preview.Items.Count} ca trùng lặp hoặc xung đột)." }
+                }, "Đã xử lý xong (không có ca trực mới cần tạo).");
             }
 
-            bool alreadyExists = await _dbContext.StaffWorkSchedules
-                .AnyAsync(ws => ws.StaffUserId == item.DentistUserId &&
-                                ws.StaffRole == UserRole.Dentist &&
-                                ws.WorkDate == item.WorkDate &&
-                                ws.StartTime == item.StartTime &&
-                                ws.EndTime == item.EndTime &&
-                                ws.Status == "Scheduled", ct);
+            return ApiResponse<BulkScheduleApplyResultDto>.Fail("Không có ca trực nào hợp lệ để tạo mới.");
+        }
 
-            if (!alreadyExists)
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? tx = null;
+        if (_dbContext.Database.IsRelational())
+        {
+            tx = await _dbContext.Database.BeginTransactionAsync(ct);
+        }
+
+        try
+        {
+            int created = 0;
+            int skipped = preview.Items.Count(i => !i.CanApply);
+            var now = DateTime.UtcNow;
+
+            foreach (var item in applicableItems)
             {
+                // Invariant & Concurrency Guard: Approved & Pending Leave is ALWAYS protected (LEAVE-01..10)
+                bool hasApprovedOrPendingLeave = await _dbContext.StaffLeaveRequests
+                    .AnyAsync(l => l.StaffUserId == item.DentistUserId &&
+                                   l.StaffRole == UserRole.Dentist &&
+                                   (l.Status == "Approved" || l.Status == "Pending") &&
+                                   l.StartDate <= item.WorkDate &&
+                                   l.EndDate >= item.WorkDate &&
+                                   (!l.StartTime.HasValue || !l.EndTime.HasValue ||
+                                    (item.StartTime < l.EndTime.Value && item.EndTime > l.StartTime.Value)), ct);
+
+                if (hasApprovedOrPendingLeave)
+                {
+                    skipped++;
+                    continue;
+                }
+                if (request.OverwriteExisting)
+                {
+                    var oldShifts = await _dbContext.StaffWorkSchedules
+                        .Where(ws => ws.StaffUserId == item.DentistUserId &&
+                                     ws.StaffRole == UserRole.Dentist &&
+                                     ws.WorkDate == item.WorkDate &&
+                                     ws.Status == "Scheduled" &&
+                                     ws.StartTime < item.EndTime &&
+                                     ws.EndTime > item.StartTime)
+                        .ToListAsync(ct);
+
+                    foreach (var os in oldShifts)
+                    {
+                        os.Status = "Cancelled";
+                        os.Notes = (os.Notes ?? "") + " [Ghi đè phân công hàng loạt]";
+                        os.UpdatedAt = now;
+                    }
+                }
+
+                // Stale preview and idempotency guard (SCH-16 & SCH-17)
+                bool alreadyExists = await _dbContext.StaffWorkSchedules
+                    .AnyAsync(ws => ws.StaffUserId == item.DentistUserId &&
+                                    ws.StaffRole == UserRole.Dentist &&
+                                    ws.WorkDate == item.WorkDate &&
+                                    ws.StartTime == item.StartTime &&
+                                    ws.EndTime == item.EndTime &&
+                                    ws.Status == "Scheduled", ct);
+
+                if (alreadyExists)
+                {
+                    skipped++;
+                    continue;
+                }
+
+                bool isOverlap = await _dbContext.StaffWorkSchedules
+                    .AnyAsync(ws => ws.StaffUserId == item.DentistUserId &&
+                                    ws.StaffRole == UserRole.Dentist &&
+                                    ws.WorkDate == item.WorkDate &&
+                                    ws.StartTime < item.EndTime &&
+                                    ws.EndTime > item.StartTime &&
+                                    ws.Status == "Scheduled", ct);
+
+                if (isOverlap && !request.OverwriteExisting)
+                {
+                    skipped++;
+                    continue;
+                }
+
                 _dbContext.StaffWorkSchedules.Add(new StaffWorkSchedule
                 {
                     StaffUserId = item.DentistUserId,
@@ -1011,23 +1138,40 @@ public class DentistScheduleService : IDentistScheduleService
                 });
                 created++;
             }
-            else
+
+            await _dbContext.SaveChangesAsync(ct);
+            if (tx != null)
             {
-                skipped++;
+                await tx.CommitAsync(ct);
             }
+
+            await _auditLog.LogAsync(
+                currentUserId,
+                "BULK_ASSIGN",
+                "StaffWorkSchedule",
+                $"{created}_shifts",
+                null,
+                JsonSerializer.Serialize(new { CreatedCount = created, SkippedCount = skipped, request.DepartmentId, request.FromDate, request.ToDate }),
+                ct);
+
+            var applyResult = new BulkScheduleApplyResultDto
+            {
+                CreatedCount = created,
+                SkippedCount = skipped,
+                FailedCount = 0,
+                Messages = new List<string> { $"Đã tạo thành công {created} ca trực làm việc mới cho bác sĩ." }
+            };
+
+            return ApiResponse<BulkScheduleApplyResultDto>.Ok(applyResult, $"Áp dụng phân công thành công ({created} ca mới).");
         }
-
-        await _dbContext.SaveChangesAsync(ct);
-
-        var applyResult = new BulkScheduleApplyResultDto
+        catch (Exception ex)
         {
-            CreatedCount = created,
-            SkippedCount = skipped,
-            FailedCount = 0,
-            Messages = new List<string> { $"Đã tạo thành công {created} ca trực làm việc mới cho bác sĩ." }
-        };
-
-        return ApiResponse<BulkScheduleApplyResultDto>.Ok(applyResult, $"Áp dụng phân công thành công ({created} ca mới).");
+            if (tx != null)
+            {
+                await tx.RollbackAsync(ct);
+            }
+            return ApiResponse<BulkScheduleApplyResultDto>.Fail($"Lỗi khi lưu phân công hàng loạt: {ex.Message}");
+        }
     }
 
     public async Task<ApiResponse<CopyMonthSchedulePreviewDto>> PreviewCopyMonthScheduleAsync(CopyMonthScheduleRequest request, CancellationToken ct = default)

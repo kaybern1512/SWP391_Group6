@@ -1,4 +1,5 @@
 @model AdminDentistScheduleManageViewModel
+@using DentalClinic.Web.Helpers
 @{
     var schedule = Model.MonthlySchedule;
     var currentYear = Model.SelectedYear;
@@ -7,88 +8,8 @@
     var prevYear = currentMonth == 1 ? currentYear - 1 : currentYear;
     var nextMonth = currentMonth == 12 ? 1 : currentMonth + 1;
     var nextYear = currentMonth == 12 ? currentYear + 1 : currentYear;
-    var today = DateOnly.FromDateTime(DateTime.Today);
+    var today = ClinicTimeHelper.TodayDateOnly;
 }
-
-<!-- Filters Bar -->
-<div class="card-dc mb-4">
-    <div class="card-dc-body p-3">
-        <form asp-controller="AdminDentistSchedule" asp-action="Index" method="get" class="row g-2 align-items-end">
-            <input type="hidden" name="tab" value="monthly" />
-
-            <!-- Month Navigator -->
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold text-muted mb-1">Tháng & Năm</label>
-                <div class="input-group input-group-sm">
-                    <a asp-controller="AdminDentistSchedule" asp-action="Index"
-                       asp-route-tab="monthly"
-                       asp-route-year="@prevYear"
-                       asp-route-month="@prevMonth"
-                       asp-route-departmentId="@Model.SelectedDepartmentId"
-                       asp-route-dentistUserId="@Model.SelectedDentistId"
-                       class="btn btn-outline-secondary" title="Tháng trước">
-                        <i class="bi bi-chevron-left"></i>
-                    </a>
-                    <select name="month" class="form-select form-select-sm text-center fw-bold" onchange="this.form.submit()">
-                        @for (int m = 1; m <= 12; m++)
-                        {
-                            <option value="@m" selected="@(currentMonth == m)">Tháng @m</option>
-                        }
-                    </select>
-                    <select name="year" class="form-select form-select-sm text-center fw-bold" onchange="this.form.submit()">
-                        @for (int y = DateTime.Today.Year - 1; y <= DateTime.Today.Year + 2; y++)
-                        {
-                            <option value="@y" selected="@(currentYear == y)">@y</option>
-                        }
-                    </select>
-                    <a asp-controller="AdminDentistSchedule" asp-action="Index"
-                       asp-route-tab="monthly"
-                       asp-route-year="@nextYear"
-                       asp-route-month="@nextMonth"
-                       asp-route-departmentId="@Model.SelectedDepartmentId"
-                       asp-route-dentistUserId="@Model.SelectedDentistId"
-                       class="btn btn-outline-secondary" title="Tháng sau">
-                        <i class="bi bi-chevron-right"></i>
-                    </a>
-                </div>
-            </div>
-
-            <!-- Department Filter -->
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold text-muted mb-1">Chuyên khoa</label>
-                <select name="departmentId" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="">-- Tất cả chuyên khoa --</option>
-                    @foreach (var d in Model.Departments)
-                    {
-                        <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
-                    }
-                </select>
-            </div>
-
-            <!-- Dentist Filter -->
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold text-muted mb-1">Bác sĩ nha khoa</label>
-                <select name="dentistUserId" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="">-- Tất cả bác sĩ --</option>
-                    @foreach (var d in Model.Dentists)
-                    {
-                        <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName @(!string.IsNullOrEmpty(d.Code) ? $"({d.Code})" : "")</option>
-                    }
-                </select>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="col-md-3 d-flex gap-2">
-                <button type="submit" class="btn btn-sm btn-dc-primary flex-grow-1">
-                    <i class="bi bi-funnel me-1"></i>Lọc
-                </button>
-                <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="monthly" class="btn btn-sm btn-outline-secondary" title="Đặt lại về mặc định">
-                    <i class="bi bi-arrow-counterclockwise"></i>
-                </a>
-            </div>
-        </form>
-    </div>
-</div>
 
 <!-- KPI Summary Cards -->
 @if (schedule != null)
@@ -170,96 +91,114 @@
         </div>
     </div>
     <div class="card-dc-body p-0">
-        <!-- Day Names Header (7 Columns) -->
-        <div class="row g-0 text-center fw-semibold text-muted border-bottom py-2 bg-light small">
-            <div class="col">Thứ Hai</div>
-            <div class="col">Thứ Ba</div>
-            <div class="col">Thứ Tư</div>
-            <div class="col">Thứ Năm</div>
-            <div class="col">Thứ Sáu</div>
-            <div class="col text-primary">Thứ Bảy</div>
-            <div class="col text-danger">Chủ Nhật</div>
-        </div>
-
         @if (schedule != null && schedule.Days.Count > 0)
         {
-            <!-- Grid Days -->
-            <div class="row g-0">
-                @for (int i = 0; i < schedule.Days.Count; i++)
-                {
-                    var day = schedule.Days[i];
-                    bool isToday = day.Date == today;
-                    var morningCount = day.Shifts.Count(s => s.StartTime.Hour < 12);
-                    var afternoonCount = day.Shifts.Count(s => s.StartTime.Hour >= 12);
-                    var leaveCount = day.IsOnLeave ? 1 : 0;
-                    var apptCount = day.ConfirmedAppointmentsCount;
-                    string dayCardClass = !day.IsCurrentMonth
-                        ? "bg-light text-muted opacity-50"
-                        : (isToday ? "bg-primary-subtle bg-opacity-25 border-primary border-2" : "bg-white");
+            <div class="table-responsive">
+                <table class="table table-bordered mb-0" style="table-layout: fixed; min-width: 950px;" id="dentistMonthlyCalendarTable">
+                    <thead class="table-light text-center small fw-semibold text-muted">
+                        <tr>
+                            <th style="width: 14.28%;">Thứ Hai</th>
+                            <th style="width: 14.28%;">Thứ Ba</th>
+                            <th style="width: 14.28%;">Thứ Tư</th>
+                            <th style="width: 14.28%;">Thứ Năm</th>
+                            <th style="width: 14.28%;">Thứ Sáu</th>
+                            <th style="width: 14.28%;" class="text-primary">Thứ Bảy</th>
+                            <th style="width: 14.28%;" class="text-danger">Chủ Nhật</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            int firstDayDow = (int)schedule.Days.First().Date.DayOfWeek;
+                            int offset = firstDayDow == 0 ? 6 : firstDayDow - 1; // 0=Mon, 6=Sun
+                            int totalCells = offset + schedule.Days.Count;
+                            int rows = (int)Math.Ceiling((double)totalCells / 7);
 
-                    <div class="col-12 col-md border-bottom border-end p-2 d-flex flex-column @dayCardClass day-calendar-cell"
-                         style="min-height: 125px; min-width: 14.28%; cursor: pointer;"
-                         data-date="@day.Date.ToString("yyyy-MM-dd")"
-                         data-date-display="@day.Date.ToString("dd/MM/yyyy") (@day.DayOfWeekName)"
-                         data-morning-count="@morningCount"
-                         data-afternoon-count="@afternoonCount"
-                         data-leave-count="@leaveCount"
-                         data-appt-count="@apptCount"
-                         data-on-leave="@(day.IsOnLeave ? "true" : "false")"
-                         data-leave-reason="@(day.LeaveReason ?? "")"
-                         data-shifts='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(day.Shifts.Select(sh => new { startTime = sh.StartTime.ToString("HH:mm"), endTime = sh.EndTime.ToString("HH:mm"), dentistName = sh.DentistName, deptName = sh.DepartmentName, note = sh.Note ?? "" })))'
-                         onclick="openDayDetailFromCell(this)">
-                        
-                        <!-- Day Header -->
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="fw-bold @(day.IsWeekend ? (day.DayOfWeek == 7 ? "text-danger" : "text-primary") : "text-dark")" style="font-size: 0.95rem;">
-                                @day.Date.Day
-                            </span>
-                            @if (isToday)
+                            int dayIndex = 0;
+                            for (int r = 0; r < rows; r++)
                             {
-                                <span class="badge bg-primary text-white" style="font-size: 9px;">Hôm nay</span>
-                            }
-                            @if (apptCount > 0)
-                            {
-                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 9px;" title="@apptCount lịch hẹn / cảnh báo">
-                                    <i class="bi bi-calendar-event me-1"></i>@apptCount
-                                </span>
-                            }
-                        </div>
+                                <tr>
+                                    @for (int c = 0; c < 7; c++)
+                                    {
+                                        int cellIndex = r * 7 + c;
+                                        if (cellIndex < offset || dayIndex >= schedule.Days.Count)
+                                        {
+                                            <td class="bg-light text-muted p-2 align-top" style="height: 125px; width: 14.28%;"></td>
+                                        }
+                                        else
+                                        {
+                                            var day = schedule.Days[dayIndex++];
+                                            bool isToday = day.Date == today;
+                                            var morningCount = day.Shifts.Count(s => s.StartTime.Hour < 12);
+                                            var afternoonCount = day.Shifts.Count(s => s.StartTime.Hour >= 12);
+                                            var leaveCount = day.IsOnLeave ? 1 : 0;
+                                            var apptCount = day.ConfirmedAppointmentsCount;
+                                            string dayCardClass = !day.IsCurrentMonth
+                                                ? "bg-light text-muted opacity-50"
+                                                : (isToday ? "bg-primary-subtle bg-opacity-25 border-primary border-2" : "bg-white");
 
-                        <!-- Shift & Attendance Overview Badges -->
-                        <div class="d-flex flex-column gap-1 flex-grow-1 justify-content-center">
-                            <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 11px;">
-                                <span><i class="bi bi-sun me-1"></i>Sáng:</span>
-                                <span class="fw-bold">@morningCount BS</span>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size: 11px;">
-                                <span><i class="bi bi-sunset me-1"></i>Chiều:</span>
-                                <span class="fw-bold">@afternoonCount BS</span>
-                            </div>
-                            @if (day.IsOnLeave)
-                            {
-                                <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 11px;">
-                                    <span><i class="bi bi-person-x me-1"></i>Nghỉ:</span>
-                                    <span class="fw-bold">1 người</span>
-                                </div>
-                            }
-                            @if (apptCount > 0)
-                            {
-                                <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 11px;">
-                                    <span><i class="bi bi-exclamation-triangle me-1"></i>Cảnh báo:</span>
-                                    <span class="fw-bold">@apptCount ca</span>
-                                </div>
-                            }
-                        </div>
-                    </div>
+                                            <td class="p-2 align-top @dayCardClass day-calendar-cell"
+                                                style="height: 125px; width: 14.28%; cursor: pointer;"
+                                                data-date="@day.Date.ToString("yyyy-MM-dd")"
+                                                data-date-display="@day.Date.ToString("dd/MM/yyyy") (@day.DayOfWeekName)"
+                                                data-morning-count="@morningCount"
+                                                data-afternoon-count="@afternoonCount"
+                                                data-leave-count="@leaveCount"
+                                                data-appt-count="@apptCount"
+                                                data-on-leave="@(day.IsOnLeave ? "true" : "false")"
+                                                data-leave-reason="@(day.LeaveReason ?? "")"
+                                                data-shifts='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(day.Shifts.Select(sh => new { startTime = sh.StartTime.ToString("HH:mm"), endTime = sh.EndTime.ToString("HH:mm"), dentistName = sh.DentistName, deptName = sh.DepartmentName, note = sh.Note ?? "" })))'
+                                                onclick="openDayDetailFromCell(this)">
+                                                
+                                                <!-- Day Header -->
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <span class="fw-bold @(day.IsWeekend ? (day.DayOfWeek == 7 ? "text-danger" : "text-primary") : "text-dark")" style="font-size: 0.95rem;">
+                                                        @day.Date.Day
+                                                    </span>
+                                                    @if (isToday)
+                                                    {
+                                                        <span class="badge bg-primary text-white" style="font-size: 9px;">Hôm nay</span>
+                                                    }
+                                                    @if (apptCount > 0)
+                                                    {
+                                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 9px;" title="@apptCount lịch hẹn / cảnh báo">
+                                                            <i class="bi bi-calendar-event me-1"></i>@apptCount
+                                                        </span>
+                                                    }
+                                                </div>
 
-                    @* Break rows every 7 days on desktop *@
-                    @if ((i + 1) % 7 == 0 && (i + 1) < schedule.Days.Count)
-                    {
-                        @:</div><div class="row g-0">
-                    }
-                }
+                                                <!-- Shift & Attendance Overview Badges -->
+                                                <div class="d-flex flex-column gap-1 justify-content-center">
+                                                    <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 11px;">
+                                                        <span><i class="bi bi-sun me-1"></i>Sáng:</span>
+                                                        <span class="fw-bold">@morningCount BS</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size: 11px;">
+                                                        <span><i class="bi bi-sunset me-1"></i>Chiều:</span>
+                                                        <span class="fw-bold">@afternoonCount BS</span>
+                                                    </div>
+                                                    @if (day.IsOnLeave)
+                                                    {
+                                                        <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 11px;">
+                                                            <span><i class="bi bi-person-x me-1"></i>Nghỉ:</span>
+                                                            <span class="fw-bold">1 người</span>
+                                                        </div>
+                                                    }
+                                                    @if (apptCount > 0)
+                                                    {
+                                                        <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 11px;">
+                                                            <span><i class="bi bi-exclamation-triangle me-1"></i>Cảnh báo:</span>
+                                                            <span class="fw-bold">@apptCount ca</span>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </td>
+                                        }
+                                    }
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
             </div>
         }
         else

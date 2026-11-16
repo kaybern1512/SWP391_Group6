@@ -256,7 +256,12 @@ public class AdminDentistScheduleController : Controller
 
     [HttpPost("CancelSchedule/{id}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> CancelSchedule(long id, long? returnDentistId)
+    public async Task<IActionResult> CancelSchedule(
+        long id, 
+        long? returnDentistId, 
+        string? returnTab = "schedules", 
+        int? weekOffset = 0, 
+        long? departmentId = null)
     {
         var result = await _scheduleApi.CancelScheduleAsync(id);
         if (result.IsSuccess)
@@ -268,7 +273,13 @@ public class AdminDentistScheduleController : Controller
             TempData["ErrorMessage"] = result.Message ?? "Không thể hủy ca trực.";
         }
 
-        return RedirectToAction(nameof(Index), new { tab = "schedules", dentistUserId = returnDentistId });
+        string targetTab = !string.IsNullOrEmpty(returnTab) ? returnTab : "schedules";
+        return RedirectToAction(nameof(Index), new { 
+            tab = targetTab, 
+            dentistUserId = returnDentistId,
+            departmentId = departmentId,
+            weekOffset = weekOffset
+        });
     }
 
     [HttpPost("CreateAvailability")]

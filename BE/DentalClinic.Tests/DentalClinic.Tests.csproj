@@ -49,6 +49,9 @@
     <Compile Include="Admin/AdminRedesignUnitTests.cs" />
     <Compile Include="Integration/SqlServerRefactorIntegrationTests.cs" />
     <Compile Include="ReceptionistWorkforce/ReceptionistShiftSwapTests.cs" />
+    <Compile Include="DentistSchedule/DentistScheduleServiceTests.cs" />
+    <Compile Include="DentistSchedule/DentistLeaveProtectionTests.cs" />
+    <Compile Include="ReceptionistWorkforce/ReceptionistSafeBulkSchedulingTests.cs" />
     <Compile Include="UnicodeEncoding/*.cs" />
     <Compile Include="Operations/*.cs" />
   </ItemGroup>
