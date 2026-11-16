@@ -236,7 +236,9 @@ public class AdminService : IAdminService
         if (!string.IsNullOrWhiteSpace(search))
         {
             var q = search.Trim().ToLower();
-            query = query.Where(s => s.ServiceName.ToLower().Contains(q) || (s.Description != null && s.Description.ToLower().Contains(q)));
+            query = query.Where(s => (s.ServiceCode != null && s.ServiceCode.ToLower().Contains(q))
+                                  || s.ServiceName.ToLower().Contains(q)
+                                  || (s.Description != null && s.Description.ToLower().Contains(q)));
         }
 
         var services = await query
@@ -260,8 +262,8 @@ public class AdminService : IAdminService
             RequiresConsultationFirst = false,
             MinLeadTimeHours = 2,
             BookingInstructions = null,
-            WorkflowStepCount = 0,
-            HasActiveWorkflow = false,
+            WorkflowStepCount = 1,
+            HasActiveWorkflow = true,
             WorkflowApprovalStatus = "Approved",
             ActiveWorkflow = null
         }).ToList();
@@ -281,6 +283,10 @@ public class AdminService : IAdminService
             return ApiResponse<AdminDepartmentServiceDto>.Fail("Không tìm thấy dịch vụ.");
         }
 
+        var wfRes = await GetWorkflowAsync(s.DepartmentServiceId, null, ct);
+        var activeWf = wfRes.Success ? wfRes.Data : null;
+        var stepCount = activeWf?.Steps?.Count ?? 1;
+
         var dto = new AdminDepartmentServiceDto
         {
             DepartmentServiceId = s.DepartmentServiceId,
@@ -297,10 +303,10 @@ public class AdminService : IAdminService
             RequiresConsultationFirst = false,
             MinLeadTimeHours = 2,
             BookingInstructions = null,
-            WorkflowStepCount = 0,
-            HasActiveWorkflow = false,
+            WorkflowStepCount = stepCount,
+            HasActiveWorkflow = true,
             WorkflowApprovalStatus = "Approved",
-            ActiveWorkflow = null
+            ActiveWorkflow = activeWf
         };
 
         return ApiResponse<AdminDepartmentServiceDto>.Ok(dto);
@@ -400,6 +406,31 @@ public class AdminService : IAdminService
         _dbContext.DepartmentServices.Add(service);
         await _dbContext.SaveChangesAsync(ct);
 
+        bool isXrayType = serviceType == "XRay" || serviceType == "Diagnostic" || serviceType == "Imaging";
+        var initialSteps = request.WorkflowSteps != null && request.WorkflowSteps.Any()
+            ? request.WorkflowSteps
+            : new List<ServiceWorkflowStepInputDto>
+            {
+                new()
+                {
+                    StepName = isXrayType ? "Xác nhận đã chụp X-quang" : "Xác nhận đã thực hiện dịch vụ",
+                    Description = isXrayType ? "Kỹ thuật viên / Bác sĩ chụp phim và tải lên hình ảnh X-quang hợp lệ." : "Bác sĩ kiểm tra kết quả điều trị và ghi chú lâm sàng.",
+                    StepOrder = 1,
+                    IsRequired = true,
+                    CompletionRequirement = isXrayType ? "Hình ảnh X-quang hợp lệ" : "Hoàn tất khám/điều trị",
+                    ExpectedDataType = isXrayType ? "Image" : "None"
+                }
+            };
+
+        await ConfigureWorkflowAsync(service.DepartmentServiceId, new ConfigureWorkflowRequest
+        {
+            WorkflowName = $"Quy trình: {service.ServiceName}",
+            Description = service.Description,
+            ActivateImmediately = true,
+            ApprovalStatus = "Approved",
+            Steps = initialSteps
+        }, adminUserId, ct);
+
         await _auditLogService.LogAsync(
             adminUserId,
             "CREATE",
@@ -443,6 +474,16 @@ public class AdminService : IAdminService
         if (dept == null || dept.Status != "Active")
         {
             return ApiResponse<AdminDepartmentServiceDto>.Fail("Khoa được chọn không tồn tại hoặc đã ngưng hoạt động.");
+        }
+
+        if (service.DepartmentId != (int)request.DepartmentId)
+        {
+            var hasLinkedHistory = await _dbContext.AppointmentServices.AnyAsync(a => a.DepartmentServiceId == serviceId, ct)
+                || await _dbContext.PerformedServices.AnyAsync(p => p.DepartmentServiceId == serviceId, ct);
+            if (hasLinkedHistory)
+            {
+                return ApiResponse<AdminDepartmentServiceDto>.Fail("Không thể đổi chuyên khoa của dịch vụ đã có dữ liệu lịch sử lịch hẹn hoặc điều trị.");
+            }
         }
 
         var trimmedName = request.ServiceName.Trim();
@@ -492,6 +533,15 @@ public class AdminService : IAdminService
             {
                 return ApiResponse<AdminDepartmentServiceDto>.Fail("Thứ tự các bước quy trình không được trùng nhau.");
             }
+
+            await ConfigureWorkflowAsync(serviceId, new ConfigureWorkflowRequest
+            {
+                WorkflowName = $"Quy trình: {service.ServiceName}",
+                Description = service.Description,
+                ActivateImmediately = true,
+                ApprovalStatus = "Approved",
+                Steps = request.WorkflowSteps
+            }, adminUserId, ct);
         }
 
         await _dbContext.SaveChangesAsync(ct);
@@ -521,16 +571,53 @@ public class AdminService : IAdminService
             return ApiResponse<ServiceWorkflowDto>.Fail("Không tìm thấy quy trình cho dịch vụ này.");
         }
 
+        // Check if there is a saved workflow in AuditLogs
+        var auditQuery = _dbContext.AuditLogs
+            .AsNoTracking()
+            .Where(a => a.EntityName == "ServiceWorkflow" && a.EntityId == serviceId.ToString() && a.Action == "CONFIGURE");
+
+        var latestAudit = await auditQuery.OrderByDescending(a => a.CreatedAt).FirstOrDefaultAsync(ct);
+        if (latestAudit != null && !string.IsNullOrWhiteSpace(latestAudit.NewValues))
+        {
+            try
+            {
+                var savedWf = JsonSerializer.Deserialize<ServiceWorkflowDto>(latestAudit.NewValues,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (savedWf != null && savedWf.Steps != null && savedWf.Steps.Any())
+                {
+                    return ApiResponse<ServiceWorkflowDto>.Ok(savedWf);
+                }
+            }
+            catch { }
+        }
+
+        // Canonical default 1-step workflow
+        bool isXray = service.DiagnosticType == "XRay" || service.DiagnosticType == "Diagnostic" || service.DiagnosticType == "Imaging";
+        var defaultSteps = new List<ServiceWorkflowStepDto>
+        {
+            new()
+            {
+                StepId = 1,
+                WorkflowId = service.DepartmentServiceId,
+                StepName = isXray ? "Xác nhận đã chụp X-quang" : "Xác nhận đã thực hiện dịch vụ",
+                Description = isXray ? "Kỹ thuật viên / Bác sĩ chụp phim và tải lên hình ảnh X-quang hợp lệ." : "Bác sĩ kiểm tra kết quả điều trị và ghi chú lâm sàng.",
+                StepOrder = 1,
+                IsRequired = true,
+                CompletionRequirement = isXray ? "Hình ảnh X-quang hợp lệ" : "Hoàn tất khám/điều trị",
+                ExpectedDataType = isXray ? "Image" : "None"
+            }
+        };
+
         var dto = new ServiceWorkflowDto
         {
             WorkflowId = service.DepartmentServiceId,
             DepartmentServiceId = service.DepartmentServiceId,
-            WorkflowName = $"Quy trình: {service.ServiceName}",
+            WorkflowName = $"Quy trình: {service.ServiceName} (v1)",
             Version = version ?? 1,
             IsActive = true,
             ApprovalStatus = "Approved",
             Description = service.Description,
-            Steps = new List<ServiceWorkflowStepDto>()
+            Steps = defaultSteps
         };
 
         return ApiResponse<ServiceWorkflowDto>.Ok(dto);
@@ -565,7 +652,29 @@ public class AdminService : IAdminService
         string approval = !string.IsNullOrWhiteSpace(request.ApprovalStatus) ? request.ApprovalStatus.Trim() : (activate ? "Approved" : "Draft");
         var workflowName = !string.IsNullOrWhiteSpace(request.WorkflowName)
             ? request.WorkflowName.Trim()
-            : $"Quy trình: {service.ServiceName} (v1)";
+            : $"Quy trình: {service.ServiceName}";
+
+        // Safely determine next version without overwriting historical version
+        var latestAudit = await _dbContext.AuditLogs
+            .AsNoTracking()
+            .Where(a => a.EntityName == "ServiceWorkflow" && a.EntityId == serviceId.ToString() && a.Action == "CONFIGURE")
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        int currentVersion = 1;
+        if (latestAudit != null && !string.IsNullOrWhiteSpace(latestAudit.NewValues))
+        {
+            try
+            {
+                var prevDto = JsonSerializer.Deserialize<ServiceWorkflowDto>(latestAudit.NewValues,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (prevDto != null && prevDto.Version > 0)
+                {
+                    currentVersion = prevDto.Version + 1;
+                }
+            }
+            catch { }
+        }
 
         int order = 1;
         var steps = request.Steps.OrderBy(s => s.StepOrder).Select(st => new ServiceWorkflowStepDto
@@ -580,28 +689,106 @@ public class AdminService : IAdminService
             ExpectedDataType = string.IsNullOrWhiteSpace(st.ExpectedDataType) ? "None" : st.ExpectedDataType.Trim()
         }).ToList();
 
-        await _auditLogService.LogAsync(
-            adminUserId,
-            "CONFIGURE",
-            "ServiceWorkflow",
-            service.DepartmentServiceId.ToString(),
-            null,
-            JsonSerializer.Serialize(new { service.DepartmentServiceId, StepCount = steps.Count }),
-            ct);
-
-        return ApiResponse<ServiceWorkflowDto>.Ok(new ServiceWorkflowDto
+        var workflowDto = new ServiceWorkflowDto
         {
             WorkflowId = service.DepartmentServiceId,
             DepartmentServiceId = service.DepartmentServiceId,
-            WorkflowName = workflowName,
-            Version = 1,
+            WorkflowName = $"{workflowName} (v{currentVersion})",
+            Version = currentVersion,
             IsActive = activate,
             ApprovalStatus = approval,
             ApprovedByUserId = approval == "Approved" ? adminUserId : null,
             ApprovedAt = approval == "Approved" ? DateTime.UtcNow : null,
             Description = request.Description?.Trim() ?? service.Description,
             Steps = steps
+        };
+
+        await _auditLogService.LogAsync(
+            adminUserId,
+            "CONFIGURE",
+            "ServiceWorkflow",
+            service.DepartmentServiceId.ToString(),
+            latestAudit?.NewValues,
+            JsonSerializer.Serialize(workflowDto),
+            ct);
+
+        return ApiResponse<ServiceWorkflowDto>.Ok(workflowDto);
+    }
+
+    public async Task<ApiResponse<ServiceDeleteCheckDto>> CheckServiceCanDeleteAsync(long serviceId, CancellationToken ct = default)
+    {
+        var service = await _dbContext.DepartmentServices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.DepartmentServiceId == serviceId, ct);
+
+        if (service == null)
+        {
+            return ApiResponse<ServiceDeleteCheckDto>.Fail("Không tìm thấy dịch vụ.");
+        }
+
+        var apptCount = await _dbContext.AppointmentServices.CountAsync(a => a.DepartmentServiceId == serviceId, ct);
+        var performedCount = await _dbContext.PerformedServices.CountAsync(p => p.DepartmentServiceId == serviceId, ct);
+        var diagCount = await _dbContext.Diagnostics.CountAsync(d => d.DepartmentServiceId == serviceId, ct);
+        var treatmentCount = await _dbContext.TreatmentPlanItems.CountAsync(t => t.DepartmentServiceId == serviceId, ct);
+        var comboCount = await _dbContext.ServiceComboItems.CountAsync(c => c.DepartmentServiceId == serviceId, ct);
+        var followUpCount = await _dbContext.FollowUpSchedules.CountAsync(f => f.RecommendedServiceId == (int)serviceId, ct);
+        var referralCount = await _dbContext.DepartmentReferrals.CountAsync(r => r.RequestedServiceId == (int)serviceId, ct);
+
+        var totalRefs = apptCount + performedCount + diagCount + treatmentCount + comboCount + followUpCount + referralCount;
+        bool canDelete = totalRefs == 0;
+        string? reason = canDelete
+            ? null
+            : "Dịch vụ đã phát sinh dữ liệu lịch sử liên kết (lịch hẹn, điều trị, hóa đơn...). Không thể xóa vĩnh viễn để bảo toàn hồ sơ bệnh án và lịch sử kế toán. Vui lòng chọn 'Ngừng cung cấp' dịch vụ.";
+
+        return ApiResponse<ServiceDeleteCheckDto>.Ok(new ServiceDeleteCheckDto
+        {
+            DepartmentServiceId = service.DepartmentServiceId,
+            ServiceCode = service.ServiceCode,
+            ServiceName = service.ServiceName,
+            CanDelete = canDelete,
+            Reason = reason,
+            ActiveReferenceCount = totalRefs
         });
+    }
+
+    public async Task<ApiResponse> DeleteServiceAsync(long serviceId, long? adminUserId = null, CancellationToken ct = default)
+    {
+        var service = await _dbContext.DepartmentServices
+            .FirstOrDefaultAsync(s => s.DepartmentServiceId == serviceId, ct);
+
+        if (service == null)
+        {
+            return ApiResponse.Fail("Không tìm thấy dịch vụ cần xóa.");
+        }
+
+        var checkResult = await CheckServiceCanDeleteAsync(serviceId, ct);
+        if (!checkResult.Success || checkResult.Data == null || !checkResult.Data.CanDelete)
+        {
+            return ApiResponse.Fail(checkResult.Data?.Reason ?? "Dịch vụ đã phát sinh dữ liệu lịch sử liên kết. Không thể xóa vĩnh viễn. Vui lòng chọn 'Ngừng cung cấp'.");
+        }
+
+        var oldValues = JsonSerializer.Serialize(new
+        {
+            service.DepartmentServiceId,
+            service.ServiceCode,
+            service.ServiceName,
+            service.DepartmentId,
+            service.Price
+        });
+
+        _dbContext.DepartmentServices.Remove(service);
+        await _dbContext.SaveChangesAsync(ct);
+
+        await _auditLogService.LogAsync(
+            adminUserId,
+            "DELETE",
+            "DepartmentService",
+            serviceId.ToString(),
+            oldValues,
+            null,
+            ct);
+
+        return ApiResponse.Ok($"Đã xóa dịch vụ '{service.ServiceName}' thành công.");
     }
 
     public async Task<ApiResponse> ToggleServiceStatusAsync(long serviceId, long? adminUserId = null, CancellationToken ct = default)

@@ -373,4 +373,113 @@ public class AdminWebControllerTests
         var jsonResult = result.Should().BeOfType<JsonResult>().Subject;
         jsonResult.Value.Should().NotBeNull();
     }
+
+    [Fact]
+    public async Task Services_Create_WithoutStepsJson_AutoBuilds_OneStepWorkflow()
+    {
+        CreateDepartmentServiceRequest? capturedReq = null;
+        _apiMock.Setup(x => x.CreateServiceAsync(It.IsAny<CreateDepartmentServiceRequest>()))
+            .Callback<CreateDepartmentServiceRequest>(req => capturedReq = req)
+            .ReturnsAsync(ApiResult<AdminDepartmentServiceDto>.Success(new AdminDepartmentServiceDto
+            {
+                DepartmentServiceId = 55,
+                ServiceName = "Chụp X-quang CT Cone Beam"
+            }));
+
+        var controller = new AdminServiceController(_apiMock.Object)
+        {
+            ControllerContext = CreateAdminContext(),
+            TempData = CreateTempData()
+        };
+
+        var form = new ServiceFormModel
+        {
+            DepartmentId = 3,
+            ServiceCode = "SVC-CT-01",
+            ServiceName = "Chụp X-quang CT Cone Beam",
+            DurationMinutes = 20,
+            Price = 500000m,
+            ServiceType = "XRay",
+            ConfirmationStepName = "Xác nhận đã chụp CT Cone Beam",
+            ConfirmationInstructions = "Tải lên file lát cắt CT",
+            WorkflowStepsJson = null
+        };
+
+        var result = await controller.Create(form);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(AdminServiceController.Index));
+
+        capturedReq.Should().NotBeNull();
+        capturedReq!.WorkflowSteps.Should().NotBeNull();
+        capturedReq.WorkflowSteps!.Should().HaveCount(1);
+        capturedReq.WorkflowSteps[0].StepName.Should().Be("Xác nhận đã chụp CT Cone Beam");
+        capturedReq.WorkflowSteps[0].ExpectedDataType.Should().Be("Image");
+    }
+
+    [Fact]
+    public async Task Services_CanDelete_ReturnsJsonWithCanDelete()
+    {
+        _apiMock.Setup(x => x.CheckServiceCanDeleteAsync(15))
+            .ReturnsAsync(ApiResult<ServiceDeleteCheckDto>.Success(new ServiceDeleteCheckDto
+            {
+                DepartmentServiceId = 15,
+                ServiceCode = "SVC-TEST-15",
+                ServiceName = "Dịch vụ test",
+                CanDelete = true,
+                ActiveReferenceCount = 0
+            }));
+
+        var controller = new AdminServiceController(_apiMock.Object)
+        {
+            ControllerContext = CreateAdminContext()
+        };
+
+        var result = await controller.CanDelete(15);
+        var jsonResult = result.Should().BeOfType<JsonResult>().Subject;
+        jsonResult.Value.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Services_Delete_RedirectsWithSuccessMessage()
+    {
+        _apiMock.Setup(x => x.DeleteServiceAsync(15))
+            .ReturnsAsync(ApiResult.Success("Đã xóa dịch vụ thành công."));
+
+        var controller = new AdminServiceController(_apiMock.Object)
+        {
+            ControllerContext = CreateAdminContext(),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.Delete(15);
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(AdminServiceController.Index));
+        controller.TempData["SuccessMessage"].Should().Be("Đã xóa dịch vụ thành công.");
+    }
+
+    [Fact]
+    public async Task Services_ToggleStatus_RedirectsWithSuccessMessage()
+    {
+        _apiMock.Setup(x => x.GetServiceByIdAsync(15))
+            .ReturnsAsync(ApiResult<AdminDepartmentServiceDto>.Success(new AdminDepartmentServiceDto
+            {
+                DepartmentServiceId = 15,
+                ServiceName = "Trám răng",
+                Status = "Active"
+            }));
+        _apiMock.Setup(x => x.ToggleServiceStatusAsync(15))
+            .ReturnsAsync(ApiResult.Success("Thành công"));
+
+        var controller = new AdminServiceController(_apiMock.Object)
+        {
+            ControllerContext = CreateAdminContext(),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.ToggleStatus(15);
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be(nameof(AdminServiceController.Index));
+        controller.TempData["SuccessMessage"].ToString().Should().Contain("Thành công");
+    }
 }

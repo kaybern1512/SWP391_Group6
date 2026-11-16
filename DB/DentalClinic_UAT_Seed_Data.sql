@@ -46,7 +46,7 @@ BEGIN
     VALUES
         (1, 1, 'SVC-GEN-01', N'Khám & Lấy Cao Răng', N'Vệ sinh răng miệng và lấy vôi răng siêu âm', 200000, 30, NULL, 'Active', SYSUTCDATETIME()),
         (2, 1, 'SVC-FILL-01', N'Trám Răng Composite', N'Trám răng thẩm mỹ bằng vật liệu composite', 350000, 45, NULL, 'Active', SYSUTCDATETIME()),
-        (3, 1, 'SVC-EXT-01', N'Nhổ Răng Khôn', N'Tiểu phẫu nhổ răng số 8', 1200000, 60, 'XRay', 'Active', SYSUTCDATETIME()),
+        (3, 1, 'SVC-EXT-01', N'Nhổ Răng Khôn', N'Tiểu phẫu nhổ răng số 8', 1200000, 60, 'Treatment', 'Active', SYSUTCDATETIME()),
         (4, 2, 'SVC-ORT-01', N'Niềng Răng Mắc Cài Kim Loại', N'Chỉnh nha mắc cài tiêu chuẩn', 15000000, 90, NULL, 'Active', SYSUTCDATETIME()),
         (5, 2, 'SVC-PRO-01', N'Bọc Răng Sứ Cercon', N'Phục hình răng sứ toàn phần cao cấp', 4500000, 60, NULL, 'Active', SYSUTCDATETIME());
     SET IDENTITY_INSERT DepartmentServices OFF;

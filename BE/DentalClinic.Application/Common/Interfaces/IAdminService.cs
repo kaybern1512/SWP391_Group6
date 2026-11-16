@@ -27,6 +27,8 @@ public interface IAdminService
     Task<ApiResponse> ToggleServiceStatusAsync(long serviceId, long? adminUserId = null, CancellationToken ct = default);
     Task<ApiResponse<ServiceWorkflowDto>> GetWorkflowAsync(long serviceId, int? version = null, CancellationToken ct = default);
     Task<ApiResponse<ServiceWorkflowDto>> ConfigureWorkflowAsync(long serviceId, ConfigureWorkflowRequest request, long? adminUserId = null, CancellationToken ct = default);
+    Task<ApiResponse<ServiceDeleteCheckDto>> CheckServiceCanDeleteAsync(long serviceId, CancellationToken ct = default);
+    Task<ApiResponse> DeleteServiceAsync(long serviceId, long? adminUserId = null, CancellationToken ct = default);
 
     // ==========================================
     // ROOMS (Phase 0 Extended)

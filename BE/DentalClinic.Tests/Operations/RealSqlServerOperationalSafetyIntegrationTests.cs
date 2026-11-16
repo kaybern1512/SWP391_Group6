@@ -746,7 +746,7 @@ public class RealSqlServerOperationalSafetyIntegrationTests
 
         var today = DateOnly.FromDateTime(ClinicTimeHelper.ToClinicTime(now));
         var existingShift = await db.StaffWorkSchedules.FirstOrDefaultAsync(
-            ws => ws.StaffUserId == 3 && ws.WorkDate == today && ws.Status == "Scheduled" && ws.StartTime <= new TimeOnly(7, 0) && ws.EndTime >= new TimeOnly(21, 0));
+            ws => ws.StaffUserId == 3 && ws.WorkDate == today && ws.Status == "Scheduled" && ws.StartTime <= new TimeOnly(0, 0) && ws.EndTime >= new TimeOnly(23, 59));
         StaffWorkSchedule? tempShift = null;
         if (existingShift == null)
         {
@@ -755,8 +755,8 @@ public class RealSqlServerOperationalSafetyIntegrationTests
                 StaffUserId = 3,
                 StaffRole = "Dentist",
                 WorkDate = today,
-                StartTime = new TimeOnly(7, 0),
-                EndTime = new TimeOnly(21, 0),
+                StartTime = new TimeOnly(0, 0),
+                EndTime = new TimeOnly(23, 59),
                 Status = "Scheduled",
                 Notes = "Trực phòng X-quang [R003]"
             };

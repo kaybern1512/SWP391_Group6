@@ -44,6 +44,7 @@ public class ServiceManageViewModel
     public List<AdminDepartmentDto> Departments { get; set; } = new();
     public long? SelectedDepartmentId { get; set; }
     public string? SearchKeyword { get; set; }
+    public string? SelectedStatus { get; set; }
     public ServiceFormModel FormModel { get; set; } = new();
 }
 
@@ -85,6 +86,14 @@ public class ServiceFormModel
     public string? BookingInstructions { get; set; }
 
     public string? WorkflowStepsJson { get; set; }
+
+    [StringLength(150, ErrorMessage = "Tên bước xác nhận không quá 150 ký tự")]
+    public string? ConfirmationStepName { get; set; }
+
+    [StringLength(500, ErrorMessage = "Hướng dẫn xác nhận không quá 500 ký tự")]
+    public string? ConfirmationInstructions { get; set; }
+
+    public string? ConfirmationResultType { get; set; }
 }
 
 public class RoomChairManageViewModel
