@@ -199,6 +199,28 @@ public class AdminController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("services/{id:long}/can-delete")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse<ServiceDeleteCheckDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CheckServiceCanDelete(long id, CancellationToken ct)
+    {
+        var result = await _adminService.CheckServiceCanDeleteAsync(id, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpDelete("services/{id:long}")]
+    [Authorize(Roles = UserRole.SystemAdministrator)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DeleteService(long id, CancellationToken ct)
+    {
+        var adminId = GetCurrentUserId();
+        var result = await _adminService.DeleteServiceAsync(id, adminId, ct);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
     // ==========================================
     // ROOMS
     // ==========================================

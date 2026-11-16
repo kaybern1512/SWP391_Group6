@@ -27,6 +27,8 @@ public interface IAdminApiService
     Task<ApiResult> ToggleServiceStatusAsync(long id);
     Task<ApiResult<ServiceWorkflowDto>> GetWorkflowAsync(long serviceId, int? version = null);
     Task<ApiResult<ServiceWorkflowDto>> ConfigureWorkflowAsync(long serviceId, ConfigureWorkflowRequest request);
+    Task<ApiResult<ServiceDeleteCheckDto>> CheckServiceCanDeleteAsync(long id);
+    Task<ApiResult> DeleteServiceAsync(long id);
 
     // Rooms
     Task<ApiResult<List<AdminRoomDto>>> GetRoomsAsync();

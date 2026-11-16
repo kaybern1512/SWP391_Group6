@@ -48,6 +48,7 @@
     <Compile Include="Admin/FourRoleRbacAuthorizationRegressionTests.cs" />
     <Compile Include="Admin/AdminControllerAuthorizationRegressionTests.cs" />
     <Compile Include="Admin/AdminRedesignUnitTests.cs" />
+    <Compile Include="Admin/AdminServiceSimplificationAcceptanceTests.cs" />
     <Compile Include="Integration/SqlServerRefactorIntegrationTests.cs" />
     <Compile Include="ReceptionistWorkforce/ReceptionistShiftSwapTests.cs" />
     <Compile Include="DentistSchedule/DentistScheduleServiceTests.cs" />
