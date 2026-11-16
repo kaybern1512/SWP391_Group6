@@ -134,6 +134,14 @@ public class AdminReceptionistScheduleController : Controller
         return RedirectToAction(nameof(Index), new { tab = "monthly", year = request.Year, month = request.Month });
     }
 
+    [HttpPost("BulkApplyJson")]
+    [Produces("application/json")]
+    public async Task<IActionResult> BulkApplyJson([FromBody] ReceptionistBulkScheduleAssignmentRequest request)
+    {
+        var res = await _workforceApi.ApplyBulkScheduleAsync(request);
+        return Json(res);
+    }
+
     [HttpPost("CopyMonth")]
     public async Task<IActionResult> CopyMonth([FromForm] ReceptionistCopyMonthScheduleRequest request)
     {

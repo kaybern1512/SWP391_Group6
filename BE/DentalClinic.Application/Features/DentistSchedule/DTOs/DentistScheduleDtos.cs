@@ -203,6 +203,7 @@ public class BulkSchedulePreviewResultDto
     public int DuplicateShiftsCount { get; set; }
     public int OverlapShiftsCount { get; set; }
     public int LeaveConflictCount { get; set; }
+    public int PendingLeaveConflictCount { get; set; }
     public int AppointmentConflictCount { get; set; }
     public int DepartmentMismatchCount { get; set; }
     public int PastOrStartedCount { get; set; }

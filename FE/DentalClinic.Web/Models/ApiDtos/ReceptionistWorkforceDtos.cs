@@ -99,10 +99,29 @@ public class ReceptionistBulkScheduleAssignmentRequest
 {
     public int Year { get; set; }
     public int Month { get; set; }
+    public DateOnly? FromDate { get; set; }
+    public DateOnly? ToDate { get; set; }
     public List<long> ReceptionistUserIds { get; set; } = new();
     public List<int> DaysOfWeek { get; set; } = new();
     public long ShiftTemplateId { get; set; }
+    public List<long>? ShiftTemplateIds { get; set; }
+    public List<string>? ShiftIdentifiers { get; set; } // ["Morning", "Afternoon"]
     public bool OverwriteExisting { get; set; }
+    public bool SkipConflicts { get; set; } = true;
+}
+
+public class ReceptionistBulkPreviewItemDto
+{
+    public long ReceptionistUserId { get; set; }
+    public string ReceptionistName { get; set; } = string.Empty;
+    public string EmployeeCode { get; set; } = string.Empty;
+    public DateOnly WorkDate { get; set; }
+    public TimeOnly StartTime { get; set; }
+    public TimeOnly EndTime { get; set; }
+    public string ShiftName { get; set; } = string.Empty;
+    public string Status { get; set; } = "Valid";
+    public string Message { get; set; } = string.Empty;
+    public bool CanApply { get; set; } = true;
 }
 
 public class ReceptionistBulkSchedulePreviewDto
@@ -110,9 +129,16 @@ public class ReceptionistBulkSchedulePreviewDto
     public int ProposedShiftsCount { get; set; }
     public int OverwrittenShiftsCount { get; set; }
     public int ConflictWithLeaveCount { get; set; }
+    public int TotalProposedShifts { get; set; }
+    public int ValidShiftsCount { get; set; }
+    public int DuplicateShiftsCount { get; set; }
+    public int LeaveConflictCount { get; set; }
+    public int PendingLeaveConflictCount { get; set; }
+    public int PastOrStartedCount { get; set; }
     public List<string> Warnings { get; set; } = new();
     public List<string> Errors { get; set; } = new();
     public bool IsValid { get; set; }
+    public List<ReceptionistBulkPreviewItemDto> Items { get; set; } = new();
 }
 
 public class ReceptionistCopyMonthScheduleRequest

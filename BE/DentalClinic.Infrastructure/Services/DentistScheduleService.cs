@@ -817,7 +817,7 @@ public class DentistScheduleService : IDentistScheduleService
             .AsNoTracking()
             .Where(l => request.DentistUserIds.Contains(l.StaffUserId) &&
                         l.StaffRole == UserRole.Dentist &&
-                        l.Status == "Approved" &&
+                        (l.Status == "Approved" || l.Status == "Pending") &&
                         l.StartDate <= request.ToDate &&
                         l.EndDate >= request.FromDate)
             .ToListAsync(ct);
@@ -841,7 +841,7 @@ public class DentistScheduleService : IDentistScheduleService
             .ToListAsync(ct);
 
         var previewItems = new List<BulkSchedulePreviewItemDto>();
-        int totalProposed = 0, validCount = 0, duplicateCount = 0, overlapCount = 0, leaveCount = 0, apptConflictCount = 0, deptMismatchCount = 0, pastOrStartedCount = 0;
+        int totalProposed = 0, validCount = 0, duplicateCount = 0, overlapCount = 0, leaveCount = 0, pendingLeaveCount = 0, apptConflictCount = 0, deptMismatchCount = 0, pastOrStartedCount = 0;
 
         for (var date = request.FromDate; date <= request.ToDate; date = date.AddDays(1))
         {
@@ -906,19 +906,29 @@ public class DentistScheduleService : IDentistScheduleService
                         continue;
                     }
 
-                    bool hasLeave = leaves.Any(l =>
+                    var matchingLeave = leaves.FirstOrDefault(l =>
                         l.StaffUserId == dentistId &&
                         l.StartDate <= date &&
                         l.EndDate >= date &&
                         (!l.StartTime.HasValue || !l.EndTime.HasValue ||
                          (shift.StartTime < l.EndTime.Value && shift.EndTime > l.StartTime.Value)));
 
-                    if (hasLeave)
+                    if (matchingLeave != null)
                     {
-                        item.Status = "LeaveConflict";
-                        item.Message = "Trùng với thời gian bác sĩ đã đăng ký nghỉ phép / bận";
-                        item.CanApply = false;
-                        leaveCount++;
+                        if (matchingLeave.Status == "Approved")
+                        {
+                            item.Status = "OnApprovedLeave";
+                            item.Message = "Trùng với lịch NGHỈ PHÉP ĐÃ DUYỆT (bảo vệ tuyệt đối)";
+                            item.CanApply = false;
+                            leaveCount++;
+                        }
+                        else
+                        {
+                            item.Status = "PendingLeaveConflict";
+                            item.Message = "Trùng với đơn xin nghỉ phép ĐANG CHỜ DUYỆT";
+                            item.CanApply = false;
+                            pendingLeaveCount++;
+                        }
                         previewItems.Add(item);
                         continue;
                     }
@@ -996,6 +1006,7 @@ public class DentistScheduleService : IDentistScheduleService
             DuplicateShiftsCount = duplicateCount,
             OverlapShiftsCount = overlapCount,
             LeaveConflictCount = leaveCount,
+            PendingLeaveConflictCount = pendingLeaveCount,
             AppointmentConflictCount = apptConflictCount,
             DepartmentMismatchCount = deptMismatchCount,
             PastOrStartedCount = pastOrStartedCount,
@@ -1050,6 +1061,21 @@ public class DentistScheduleService : IDentistScheduleService
 
             foreach (var item in applicableItems)
             {
+                // Invariant & Concurrency Guard: Approved & Pending Leave is ALWAYS protected (LEAVE-01..10)
+                bool hasApprovedOrPendingLeave = await _dbContext.StaffLeaveRequests
+                    .AnyAsync(l => l.StaffUserId == item.DentistUserId &&
+                                   l.StaffRole == UserRole.Dentist &&
+                                   (l.Status == "Approved" || l.Status == "Pending") &&
+                                   l.StartDate <= item.WorkDate &&
+                                   l.EndDate >= item.WorkDate &&
+                                   (!l.StartTime.HasValue || !l.EndTime.HasValue ||
+                                    (item.StartTime < l.EndTime.Value && item.EndTime > l.StartTime.Value)), ct);
+
+                if (hasApprovedOrPendingLeave)
+                {
+                    skipped++;
+                    continue;
+                }
                 if (request.OverwriteExisting)
                 {
                     var oldShifts = await _dbContext.StaffWorkSchedules

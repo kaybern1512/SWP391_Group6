@@ -189,11 +189,14 @@
                     </div>
 
                     <!-- Step 5: Options -->
-                    <div class="form-check mb-3">
+                    <div class="form-check mb-1">
                         <input class="form-check-input" type="checkbox" id="bulkOverwrite">
                         <label class="form-check-label small" for="bulkOverwrite">
                             Ghi đè ca trực cũ nếu chưa có lịch hẹn của bệnh nhân
                         </label>
+                    </div>
+                    <div class="text-xs text-muted fst-italic ps-4 mb-3">
+                        <i class="bi bi-shield-lock text-success me-1"></i>Lưu ý: Không bao giờ ghi đè lịch nghỉ phép đã được duyệt hoặc đang chờ duyệt.
                     </div>
 
                     <!-- Preview Section -->
@@ -206,7 +209,8 @@
                             <div class="col"><span class="badge bg-success-subtle text-success w-100 py-1" id="statValid">0 Hợp lệ</span></div>
                             <div class="col"><span class="badge bg-warning-subtle text-warning w-100 py-1" id="statDuplicate">0 Đã có sẵn</span></div>
                             <div class="col"><span class="badge bg-danger-subtle text-danger w-100 py-1" id="statConflict">0 Xung đột/Lịch hẹn</span></div>
-                            <div class="col"><span class="badge bg-secondary-subtle text-secondary w-100 py-1" id="statLeave">0 Trùng nghỉ phép</span></div>
+                            <div class="col"><span class="badge bg-danger text-white w-100 py-1" id="statLeave">0 Nghỉ phép đã duyệt</span></div>
+                            <div class="col"><span class="badge bg-warning-subtle text-warning border border-warning w-100 py-1" id="statPendingLeave">0 Nghỉ chờ duyệt</span></div>
                         </div>
                         <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
                             <table class="table table-sm table-bordered text-xs mb-0 align-middle">
@@ -234,7 +238,7 @@
                         <i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột (Preview)
                     </button>
                     <button type="button" class="btn btn-dc-primary" id="btnBulkApply" onclick="handleBulkApply()" disabled>
-                        <i class="bi bi-check2-circle me-1"></i>Xác Nhận & Áp Dụng
+                        <i class="bi bi-check2-circle me-1"></i>Chỉ Áp Dụng Các Ca Hợp Lệ
                     </button>
                 </div>
             </div>
@@ -694,7 +698,10 @@
                 document.getElementById('statValid').innerText = `${data.validShiftsCount} Hợp lệ`;
                 document.getElementById('statDuplicate').innerText = `${data.duplicateShiftsCount} Đã có sẵn`;
                 document.getElementById('statConflict').innerText = `${data.overlapShiftsCount + data.appointmentConflictCount} Xung đột/Lịch hẹn`;
-                document.getElementById('statLeave').innerText = `${data.leaveConflictCount} Trùng nghỉ phép`;
+                document.getElementById('statLeave').innerText = `${data.leaveConflictCount} Nghỉ phép đã duyệt`;
+                if (document.getElementById('statPendingLeave')) {
+                    document.getElementById('statPendingLeave').innerText = `${data.pendingLeaveConflictCount || 0} Nghỉ chờ duyệt`;
+                }
 
                 const tbody = document.getElementById('bulkPreviewTableBody');
                 tbody.innerHTML = '';
@@ -706,8 +713,10 @@
                         statusBadge = '<span class="badge bg-warning-subtle text-warning">Trùng lặp</span>';
                     } else if (item.status === 'Overlap' || item.status === 'Conflict') {
                         statusBadge = '<span class="badge bg-warning text-dark">Giao thoa giờ</span>';
-                    } else if (item.status === 'LeaveConflict' || item.status === 'OnLeave') {
-                        statusBadge = '<span class="badge bg-danger-subtle text-danger">Trùng nghỉ phép</span>';
+                    } else if (item.status === 'OnApprovedLeave' || item.status === 'LeaveConflict' || item.status === 'OnLeave') {
+                        statusBadge = '<span class="badge bg-danger text-white">Nghỉ phép đã duyệt</span>';
+                    } else if (item.status === 'PendingLeaveConflict' || item.status === 'PendingLeave') {
+                        statusBadge = '<span class="badge bg-warning text-dark border border-warning">Nghỉ chờ duyệt</span>';
                     } else if (item.status === 'AppointmentConflict' || item.status === 'AppointmentImpact') {
                         statusBadge = '<span class="badge bg-danger text-white">Xung đột lịch hẹn</span>';
                     } else if (item.status === 'DepartmentMismatch') {

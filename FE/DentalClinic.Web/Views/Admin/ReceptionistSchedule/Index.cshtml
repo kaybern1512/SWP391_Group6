@@ -303,6 +303,9 @@
                 </form>
 
                 <!-- Nút Phân công ca -->
+                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#bulkReceptionistScheduleModal" id="btnHeaderBulkAssign">
+                    <i class="bi bi-calendar-plus me-1"></i> Phân công hàng loạt
+                </button>
                 <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createShiftModal" id="btnHeaderAssign">
                     <i class="bi bi-plus-lg me-1"></i> Phân công ca
                 </button>
@@ -1283,8 +1286,437 @@
     </div>
 </div>
 
+<!-- ========================================================================= -->
+<!-- MODAL: PHÂN CÔNG LỊCH TRỰC LỄ TÂN HÀNG LOẠT (BULK SCHEDULING)             -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="bulkReceptionistScheduleModal" tabindex="-1" aria-labelledby="bulkReceptionistScheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title font-heading fw-bold" id="bulkReceptionistScheduleModalLabel">
+                    <i class="bi bi-calendar-plus text-primary me-2"></i>Phân Công Lịch Trực Lễ Tân
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="bulkReceptionistScheduleForm" onsubmit="return false;">
+                    <!-- Bước 1: Chọn Lễ Tân -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-semibold small mb-0">1. Chọn nhân viên lễ tân <span class="text-danger">*</span></label>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none me-2 text-primary" onclick="bulkSelectAllReceptionists(true)">Chọn tất cả</button>
+                                <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="bulkSelectAllReceptionists(false)">Bỏ chọn</button>
+                            </div>
+                        </div>
+
+                        <!-- Search box -->
+                        <div class="input-group input-group-sm mb-1">
+                            <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                            <input type="text" id="bulkReceptionistSearch" class="form-control" placeholder="Tìm theo tên hoặc mã nhân viên..." oninput="filterBulkReceptionists()">
+                        </div>
+
+                        <!-- Receptionist Checkbox List Container -->
+                        <div id="bulkReceptionistListContainer" class="border rounded p-2 bg-white" style="max-height: 150px; overflow-y: auto;">
+                            @foreach (var r in receptionists)
+                            {
+                                var rCode = !string.IsNullOrEmpty(r.Code) ? r.Code : $"EMP-{r.UserId}";
+                                <div class="form-check receptionist-item py-1 border-bottom border-light"
+                                     data-receptionist-id="@r.UserId"
+                                     data-search="@r.FullName.ToLowerInvariant() @(r.Email?.ToLowerInvariant() ?? "") @rCode.ToLowerInvariant()">
+                                    <input class="form-check-input bulk-receptionist-checkbox"
+                                           type="checkbox"
+                                           value="@r.UserId"
+                                           data-receptionist-id="@r.UserId"
+                                           id="chk_receptionist_@r.UserId"
+                                           onchange="syncBulkReceptionistSelection()">
+                                    <label class="form-check-label d-flex justify-content-between align-items-center w-100 cursor-pointer" for="chk_receptionist_@r.UserId">
+                                        <div>
+                                            <span class="fw-semibold text-dark">@r.FullName</span>
+                                            <span class="badge bg-light text-secondary border ms-1">@rCode</span>
+                                            <div class="text-xs text-muted">@(r.Email ?? "Lễ tân")</div>
+                                        </div>
+                                        <div>
+                                            @if (r.Status == "Active" || string.IsNullOrEmpty(r.Status))
+                                            {
+                                                <span class="badge bg-success-subtle text-success" style="font-size: 9px;">Hoạt động</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary-subtle text-muted" style="font-size: 9px;">@r.Status</span>
+                                            }
+                                        </div>
+                                    </label>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Hidden select for form submission sync -->
+                        <select id="bulkReceptionistIds" multiple style="display: none;">
+                            @foreach (var r in receptionists)
+                            {
+                                <option value="@r.UserId">@r.FullName</option>
+                            }
+                        </select>
+                        <div class="form-text text-xs text-muted mt-1">Đã chọn: <span id="bulkReceptionistSelectedCount" class="fw-bold text-primary">0</span> nhân sự</div>
+                    </div>
+
+                    <!-- Bước 2: Khoảng Ngày (Chỉ ngày tương lai) -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">2. Từ ngày (Tương lai) <span class="text-danger">*</span></label>
+                            <input type="date" id="bulkRecFromDate" class="form-control" min="@today.ToString("yyyy-MM-dd")" value="@today.ToString("yyyy-MM-dd")" onchange="invalidateReceptionistBulkPreview()" required />
+                            <div class="form-text text-xs text-muted">Chỉ áp dụng từ ngày hôm nay (@today.ToString("dd/MM/yyyy")) trở đi.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Đến ngày <span class="text-danger">*</span></label>
+                            <input type="date" id="bulkRecToDate" class="form-control" min="@today.ToString("yyyy-MM-dd")" value="@today.AddDays(14).ToString("yyyy-MM-dd")" onchange="invalidateReceptionistBulkPreview()" required />
+                        </div>
+                    </div>
+
+                    <!-- Bước 3: Thứ Trong Tuần -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small mb-2">3. Các ngày trong tuần áp dụng <span class="text-danger">*</span></label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow1" value="1" checked onchange="invalidateReceptionistBulkPreview()">
+                                <label class="form-check-label fw-semibold" for="recdow1">Thứ 2</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow2" value="2" checked onchange="invalidateReceptionistBulkPreview()">
+                                <label class="form-check-label fw-semibold" for="recdow2">Thứ 3</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow3" value="3" checked onchange="invalidateReceptionistBulkPreview()">
+                                <label class="form-check-label fw-semibold" for="recdow3">Thứ 4</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow4" value="4" checked onchange="invalidateReceptionistBulkPreview()">
+                                <label class="form-check-label fw-semibold" for="recdow4">Thứ 5</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow5" value="5" checked onchange="invalidateReceptionistBulkPreview()">
+                                <label class="form-check-label fw-semibold" for="recdow5">Thứ 6</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow6" value="6" onchange="invalidateReceptionistBulkPreview()">
+                                <label class="form-check-label text-primary fw-semibold" for="recdow6">Thứ 7</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-rec-dow" type="checkbox" id="recdow7" value="7" onchange="invalidateReceptionistBulkPreview()">
+                                <label class="form-check-label text-danger fw-semibold" for="recdow7">Chủ Nhật</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bước 4: Hai Ca Chuẩn Cố Định (08:00-12:00, 13:30-17:30) -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small mb-2">4. Ca trực cố định áp dụng <span class="text-danger">*</span></label>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <div class="card p-3 border rounded-3 h-100 bg-white">
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" id="bulkRecShiftMorning" value="Morning" checked onchange="invalidateReceptionistBulkPreview()">
+                                        <label class="form-check-label fw-bold text-dark" for="bulkRecShiftMorning">
+                                            <i class="bi bi-sun-fill text-warning me-1"></i>Ca Sáng
+                                        </label>
+                                    </div>
+                                    <div class="text-muted small ps-4">
+                                        <span class="badge bg-warning-subtle text-warning border">08:00 – 12:00</span>
+                                        <span class="ms-1">&bull; 4 giờ làm việc</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card p-3 border rounded-3 h-100 bg-white">
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" id="bulkRecShiftAfternoon" value="Afternoon" checked onchange="invalidateReceptionistBulkPreview()">
+                                        <label class="form-check-label fw-bold text-dark" for="bulkRecShiftAfternoon">
+                                            <i class="bi bi-sunset-fill text-primary me-1"></i>Ca Chiều
+                                        </label>
+                                    </div>
+                                    <div class="text-muted small ps-4">
+                                        <span class="badge bg-primary-subtle text-primary border">13:30 – 17:30</span>
+                                        <span class="ms-1">&bull; 4 giờ làm việc</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lưu ý bảo vệ nghỉ phép -->
+                    <div class="text-xs text-muted fst-italic ps-1 mb-3">
+                        <i class="bi bi-shield-lock text-success me-1"></i>Lưu ý: Hệ thống luôn tự động bảo vệ lịch nghỉ phép đã được duyệt hoặc đang chờ duyệt của lễ tân.
+                    </div>
+
+                    <!-- Bước 5: Xem Trước & Kiểm Tra Xung Đột -->
+                    <div id="bulkRecPreviewSection" class="mt-3 p-3 border rounded bg-white" style="display: none;">
+                        <h6 class="fw-bold d-flex align-items-center justify-content-between mb-2">
+                            <span><i class="bi bi-shield-check text-success me-2"></i>Kết Quả Kiểm Tra Xung Đột (Preview)</span>
+                            <span id="bulkRecPreviewBadge" class="badge bg-secondary">0 ca đề xuất</span>
+                        </h6>
+                        <div class="row g-2 mb-2 text-center text-xs">
+                            <div class="col"><span class="badge bg-success-subtle text-success w-100 py-1" id="statRecValid">0 Hợp lệ</span></div>
+                            <div class="col"><span class="badge bg-warning-subtle text-warning w-100 py-1" id="statRecDuplicate">0 Đã có sẵn</span></div>
+                            <div class="col"><span class="badge bg-danger text-white w-100 py-1" id="statRecLeave">0 Nghỉ phép đã duyệt</span></div>
+                            <div class="col"><span class="badge bg-warning text-dark border border-warning w-100 py-1" id="statRecPendingLeave">0 Nghỉ chờ duyệt</span></div>
+                        </div>
+                        <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                            <table class="table table-sm table-bordered text-xs mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Lễ tân</th>
+                                        <th>Ngày trực</th>
+                                        <th>Ca trực</th>
+                                        <th>Trạng thái</th>
+                                        <th>Ghi chú / Cảnh báo</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bulkRecPreviewTableBody">
+                                    <!-- Items will be populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light d-flex justify-content-between">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-primary" id="btnBulkRecPreview" onclick="handleReceptionistBulkPreview()">
+                        <i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột (Preview)
+                    </button>
+                    <button type="button" class="btn btn-dc-primary" id="btnBulkRecApply" onclick="handleReceptionistBulkApply()" disabled>
+                        <i class="bi bi-check2-circle me-1"></i>Chỉ Áp Dụng Các Ca Hợp Lệ
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
+    let isRecBulkPreviewing = false;
+    let isRecBulkApplying = false;
+
+    function invalidateReceptionistBulkPreview() {
+        const previewSec = document.getElementById('bulkRecPreviewSection');
+        if (previewSec) previewSec.style.display = 'none';
+        const btnApply = document.getElementById('btnBulkRecApply');
+        if (btnApply) btnApply.disabled = true;
+    }
+
+    function filterBulkReceptionists() {
+        const term = (document.getElementById('bulkReceptionistSearch')?.value || '').toLowerCase().trim();
+        const items = document.querySelectorAll('#bulkReceptionistListContainer .receptionist-item');
+        items.forEach(item => {
+            const searchData = item.getAttribute('data-search') || '';
+            if (!term || searchData.includes(term)) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    function bulkSelectAllReceptionists(selectAll) {
+        const items = document.querySelectorAll('#bulkReceptionistListContainer .receptionist-item');
+        items.forEach(item => {
+            if (item.style.display !== 'none') {
+                const cb = item.querySelector('.bulk-receptionist-checkbox');
+                if (cb) cb.checked = selectAll;
+            }
+        });
+        syncBulkReceptionistSelection();
+        invalidateReceptionistBulkPreview();
+    }
+
+    function syncBulkReceptionistSelection() {
+        const checkedBoxes = document.querySelectorAll('.bulk-receptionist-checkbox:checked');
+        const selectedIds = Array.from(checkedBoxes).map(cb => {
+            return cb.value || cb.getAttribute('value') || cb.getAttribute('data-receptionist-id') || cb.id.replace('chk_receptionist_', '');
+        }).filter(id => id && String(id).trim().length > 0).map(id => String(id).trim());
+
+        const selectEl = document.getElementById('bulkReceptionistIds');
+        if (selectEl) {
+            Array.from(selectEl.options).forEach(opt => {
+                opt.selected = selectedIds.includes(String(opt.value).trim());
+            });
+        }
+
+        const countEl = document.getElementById('bulkReceptionistSelectedCount');
+        if (countEl) countEl.innerText = selectedIds.length;
+
+        invalidateReceptionistBulkPreview();
+    }
+
+    async function handleReceptionistBulkPreview() {
+        if (isRecBulkPreviewing) return;
+
+        const recSelect = document.getElementById('bulkReceptionistIds');
+        const recIds = Array.from(recSelect.selectedOptions).map(opt => parseInt(opt.value));
+        const fromDate = document.getElementById('bulkRecFromDate').value;
+        const toDate = document.getElementById('bulkRecToDate').value;
+
+        const dowCheckboxes = document.querySelectorAll('.bulk-rec-dow:checked');
+        const daysOfWeek = Array.from(dowCheckboxes).map(cb => parseInt(cb.value));
+
+        if (recIds.length === 0) { alert('Vui lòng chọn ít nhất một Lễ tân.'); return; }
+        if (!fromDate || !toDate) { alert('Vui lòng chọn khoảng ngày phân công.'); return; }
+
+        const todayVn = '@today.ToString("yyyy-MM-dd")';
+        if (fromDate < todayVn) {
+            alert(`Không thể phân công ca làm việc trong quá khứ. Vui lòng chọn từ ngày hôm nay (${todayVn}) trở đi.`);
+            return;
+        }
+        if (toDate < fromDate) {
+            alert('Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu.');
+            return;
+        }
+        if (daysOfWeek.length === 0) { alert('Vui lòng chọn ít nhất một ngày trong tuần.'); return; }
+
+        const shiftIdentifiers = [];
+        if (document.getElementById('bulkRecShiftMorning').checked) shiftIdentifiers.push('Morning');
+        if (document.getElementById('bulkRecShiftAfternoon').checked) shiftIdentifiers.push('Afternoon');
+        if (shiftIdentifiers.length === 0) {
+            alert('Vui lòng chọn ít nhất một ca trực (Ca Sáng hoặc Ca Chiều).');
+            return;
+        }
+
+        const payload = {
+            receptionistUserIds: recIds,
+            fromDate: fromDate,
+            toDate: toDate,
+            daysOfWeek: daysOfWeek,
+            shiftIdentifiers: shiftIdentifiers,
+            shiftTemplateId: 1,
+            overwriteExisting: false,
+            skipConflicts: true
+        };
+
+        const btnPreview = document.getElementById('btnBulkRecPreview');
+        isRecBulkPreviewing = true;
+        btnPreview.disabled = true;
+        btnPreview.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang kiểm tra...';
+
+        try {
+            const resp = await fetch('/Admin/ReceptionistSchedule/BulkPreview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+
+            if (res.isSuccess && res.data) {
+                const data = res.data;
+                document.getElementById('bulkRecPreviewSection').style.display = 'block';
+                document.getElementById('bulkRecPreviewBadge').innerText = `${data.totalProposedShifts || data.proposedShiftsCount} ca đề xuất`;
+
+                document.getElementById('statRecValid').innerText = `${data.validShiftsCount} Hợp lệ`;
+                document.getElementById('statRecDuplicate').innerText = `${data.duplicateShiftsCount} Đã có sẵn`;
+                document.getElementById('statRecLeave').innerText = `${data.leaveConflictCount} Nghỉ phép đã duyệt`;
+                document.getElementById('statRecPendingLeave').innerText = `${data.pendingLeaveConflictCount || 0} Nghỉ chờ duyệt`;
+
+                const tbody = document.getElementById('bulkRecPreviewTableBody');
+                tbody.innerHTML = '';
+
+                (data.items || []).slice(0, 100).forEach(item => {
+                    const tr = document.createElement('tr');
+                    let statusBadge = '<span class="badge bg-success-subtle text-success">Hợp lệ</span>';
+                    if (item.status === 'AlreadyExists' || item.status === 'Duplicate') {
+                        statusBadge = '<span class="badge bg-warning-subtle text-warning">Trùng lặp</span>';
+                    } else if (item.status === 'Conflict' || item.status === 'Overlap') {
+                        statusBadge = '<span class="badge bg-warning text-dark">Giao thoa giờ</span>';
+                    } else if (item.status === 'OnApprovedLeave' || item.status === 'LeaveConflict') {
+                        statusBadge = '<span class="badge bg-danger text-white">Nghỉ phép đã duyệt</span>';
+                    } else if (item.status === 'PendingLeaveConflict') {
+                        statusBadge = '<span class="badge bg-warning text-dark border border-warning">Nghỉ chờ duyệt</span>';
+                    } else if (item.status === 'PastOrStarted') {
+                        statusBadge = '<span class="badge bg-secondary-subtle text-muted">Đã qua / Đang diễn ra</span>';
+                    }
+
+                    const startTimeStr = (item.startTime || '').substring(0, 5);
+                    const endTimeStr = (item.endTime || '').substring(0, 5);
+
+                    tr.innerHTML = `
+                        <td class="fw-bold">${escapeHtml(item.receptionistName)}</td>
+                        <td>${item.workDate}</td>
+                        <td>${escapeHtml(item.shiftName)} (${startTimeStr} - ${endTimeStr})</td>
+                        <td>${statusBadge}</td>
+                        <td class="small text-muted">${escapeHtml(item.message || '')}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                document.getElementById('btnBulkRecApply').disabled = (data.validShiftsCount === 0);
+            } else {
+                alert(res.message || 'Lỗi khi kiểm tra lịch trực lễ tân.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối khi kiểm tra lịch trực: ' + err.message);
+        } finally {
+            isRecBulkPreviewing = false;
+            btnPreview.disabled = false;
+            btnPreview.innerHTML = '<i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột (Preview)';
+        }
+    }
+
+    async function handleReceptionistBulkApply() {
+        if (isRecBulkApplying) return;
+
+        const recSelect = document.getElementById('bulkReceptionistIds');
+        const recIds = Array.from(recSelect.selectedOptions).map(opt => parseInt(opt.value));
+        const fromDate = document.getElementById('bulkRecFromDate').value;
+        const toDate = document.getElementById('bulkRecToDate').value;
+
+        const dowCheckboxes = document.querySelectorAll('.bulk-rec-dow:checked');
+        const daysOfWeek = Array.from(dowCheckboxes).map(cb => parseInt(cb.value));
+
+        const shiftIdentifiers = [];
+        if (document.getElementById('bulkRecShiftMorning').checked) shiftIdentifiers.push('Morning');
+        if (document.getElementById('bulkRecShiftAfternoon').checked) shiftIdentifiers.push('Afternoon');
+
+        const payload = {
+            receptionistUserIds: recIds,
+            fromDate: fromDate,
+            toDate: toDate,
+            daysOfWeek: daysOfWeek,
+            shiftIdentifiers: shiftIdentifiers,
+            shiftTemplateId: 1,
+            overwriteExisting: false,
+            skipConflicts: true
+        };
+
+        const btnApply = document.getElementById('btnBulkRecApply');
+        isRecBulkApplying = true;
+        btnApply.disabled = true;
+        btnApply.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang áp dụng...';
+
+        try {
+            const resp = await fetch('/Admin/ReceptionistSchedule/BulkApplyJson', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+
+            if (res.isSuccess) {
+                alert(res.message || 'Phân công ca trực lễ tân hàng loạt thành công!');
+                window.location.reload();
+            } else {
+                alert(res.message || 'Lỗi khi áp dụng lịch trực lễ tân.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối khi áp dụng lịch trực: ' + err.message);
+        } finally {
+            isRecBulkApplying = false;
+            btnApply.disabled = false;
+            btnApply.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Chỉ Áp Dụng Các Ca Hợp Lệ';
+        }
+    }
     function escapeHtml(str) {
         if (!str) return '';
         return String(str)
