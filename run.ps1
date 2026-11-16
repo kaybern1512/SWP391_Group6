@@ -6,13 +6,12 @@ Write-Host "     DENTALCARE CLINIC MANAGEMENT SYSTEM" -ForegroundColor Yellow
 Write-Host "===================================================" -ForegroundColor Cyan
 
 # 1. Kiem tra SQL Server
-Write-Host "[1/3] Kiem tra SQL Server (MSSQLSERVER01)..." -ForegroundColor Green
-$svc = Get-Service -Name "MSSQL`$MSSQLSERVER01" -ErrorAction SilentlyContinue
-if ($svc -and $svc.Status -ne "Running") {
-    Write-Host "Dang khoi dong SQL Server service..." -ForegroundColor Yellow
-    Start-Service -Name "MSSQL`$MSSQLSERVER01"
+Write-Host "[1/3] Kiem tra SQL Server..." -ForegroundColor Green
+$svc = Get-Service -Name "MSSQL`$SQLEXPRESS", "MSSQLSERVER", "MSSQL`$MSSQLSERVER01" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" } | Select-Object -First 1
+if ($svc) {
+    Write-Host "SQL Server dang hoat dong tot ($($svc.Name))." -ForegroundColor Gray
 } else {
-    Write-Host "SQL Server dang hoat dong tot." -ForegroundColor Gray
+    Write-Host "Luu y: Kiem tra dich vu SQL Server truoc khi khoi chay." -ForegroundColor Yellow
 }
 
 # 2. Khoi chay Backend

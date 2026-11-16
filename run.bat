@@ -8,13 +8,17 @@ echo     DENTALCARE CLINIC MANAGEMENT SYSTEM
 echo ===================================================
 echo.
 
-echo [1/3] Kiem tra SQL Server (MSSQLSERVER01)...
-sc query "MSSQL$MSSQLSERVER01" | find "RUNNING" >nul
+echo [1/3] Kiem tra SQL Server...
+sc query "MSSQL$SQLEXPRESS" | find "RUNNING" >nul
 if %errorlevel% neq 0 (
-    echo Dang khoi dong SQL Server...
-    net start "MSSQL$MSSQLSERVER01"
+    sc query "MSSQLSERVER" | find "RUNNING" >nul
+    if %errorlevel% neq 0 (
+        echo Luu y: Vui long dam bao SQL Server dang hoat dong.
+    ) else (
+        echo SQL Server dang hoat dong tot (MSSQLSERVER).
+    )
 ) else (
-    echo SQL Server dang hoat dong tot.
+    echo SQL Server dang hoat dong tot (SQLEXPRESS).
 )
 echo.
 
