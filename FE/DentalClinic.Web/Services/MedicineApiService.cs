@@ -81,6 +81,11 @@ public class MedicineApiService : IMedicineApiService
         return await SendPostAsync<StockAdjustmentRequest, MedicineStockTransactionDto>($"/api/medicines/batches/{batchId}/adjust", request);
     }
 
+    public async Task<ApiResult<MedicineStockUpdateResultDto>> UpdateStockAsync(long id, UpdateMedicineStockRequest request)
+    {
+        return await SendPostAsync<UpdateMedicineStockRequest, MedicineStockUpdateResultDto>($"/api/medicines/{id}/stock", request);
+    }
+
     public async Task<ApiResult<List<MedicineStockTransactionDto>>> GetStockTransactionsAsync(long? batchId = null, long? medicineId = null, int page = 1, int pageSize = 50)
     {
         var url = $"/api/medicines/transactions?page={page}&pageSize={pageSize}";

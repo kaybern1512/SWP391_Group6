@@ -764,6 +764,8 @@ public class RealSqlServerOperationalSafetyIntegrationTests
             await db.SaveChangesAsync();
         }
 
+        var scheduledUtc = ClinicTimeHelper.ToUtc(today.ToDateTime(new TimeOnly(10, 0)));
+
         DiagnosticOrderDto createdOrder = null!;
         try
         {
@@ -783,7 +785,7 @@ public class RealSqlServerOperationalSafetyIntegrationTests
             {
                 DiagnosticOrderId = createdOrder.DiagnosticOrderId,
                 AssignedDentistUserId = 3,
-                ScheduledStartUtc = DateTime.UtcNow.AddMinutes(5),
+                ScheduledStartUtc = scheduledUtc,
                 Priority = "Normal",
                 Notes = "Chụp X-quang tại R003"
             };

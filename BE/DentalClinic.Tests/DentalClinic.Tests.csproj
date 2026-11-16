@@ -36,6 +36,7 @@
     <Compile Include="Clinical/ClinicalExecutionIntegrityTests.cs" />
     <Compile Include="Diagnostics/DiagnosticsAndReferralIntegrityTests.cs" />
     <Compile Include="Medicine/PrescriptionAndDispensingIntegrityTests.cs" />
+    <Compile Include="Medicine/AdminMedicineSimplificationAcceptanceTests.cs" />
     <Compile Include="Billing/InvoiceAndPaymentIntegrityTests.cs" />
     <Compile Include="FollowUpFeedback/FollowUpAndFeedbackIntegrityTests.cs" />
     <Compile Include="Auth/*.cs" />

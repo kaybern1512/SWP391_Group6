@@ -92,6 +92,28 @@ public class UpdateMedicineRequest
     public string Status { get; set; } = "Active";
 }
 
+public class UpdateMedicineStockRequest
+{
+    public long MedicineId { get; set; }
+    public string OperationType { get; set; } = "Add"; // "Add", "Deduct", "Reconcile"
+    public int Quantity { get; set; }
+    public string? Reason { get; set; }
+}
+
+public class MedicineStockUpdateResultDto
+{
+    public long MedicineId { get; set; }
+    public string MedicineCode { get; set; } = string.Empty;
+    public string MedicineName { get; set; } = string.Empty;
+    public string OperationType { get; set; } = string.Empty;
+    public int QuantityBefore { get; set; }
+    public int QuantityChange { get; set; }
+    public int QuantityAfter { get; set; }
+    public string Unit { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public DateTime UpdatedAt { get; set; }
+}
+
 public class ImportMedicineBatchRequest
 {
     public long MedicineId { get; set; }

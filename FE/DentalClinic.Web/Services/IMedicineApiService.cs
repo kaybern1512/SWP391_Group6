@@ -15,6 +15,7 @@ public interface IMedicineApiService
     Task<ApiResult<List<MedicineBatchDto>>> GetBatchesAsync(long id);
     Task<ApiResult<MedicineBatchDto>> ImportBatchAsync(long id, ImportMedicineBatchRequest request);
     Task<ApiResult<MedicineStockTransactionDto>> AdjustStockAsync(long batchId, StockAdjustmentRequest request);
+    Task<ApiResult<MedicineStockUpdateResultDto>> UpdateStockAsync(long id, UpdateMedicineStockRequest request);
     Task<ApiResult<List<MedicineStockTransactionDto>>> GetStockTransactionsAsync(long? batchId = null, long? medicineId = null, int page = 1, int pageSize = 50);
     Task<ApiResult<MedicineInventorySummaryDto>> GetInventorySummaryAsync();
     Task<ApiResult<List<MedicineDto>>> GetAvailableForPrescriptionAsync(string? search = null);
