@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 title DentalCare Launcher
-cd /d "D:\SWP"
+cd /d "%~dp0"
 
 echo ===================================================
 echo     DENTALCARE CLINIC MANAGEMENT SYSTEM
@@ -19,12 +19,12 @@ if %errorlevel% neq 0 (
 echo.
 
 echo [2/3] Dang khoi chay Backend API tren https://localhost:7350 ...
-start "DentalCare Backend API (Port 7350)" cmd /k "cd /d D:\SWP && dotnet run --project BE\DentalClinic.Api --launch-profile https"
+start "DentalCare Backend API (Port 7350)" cmd /k "cd /d %~dp0 && dotnet run --project BE\DentalClinic.Api --launch-profile https"
 
 timeout /t 4 /nobreak >nul
 
-echo [3/3] Dang khoi chay Frontend Blazor tren https://localhost:7129 ...
-start "DentalCare Frontend Web (Port 7129)" cmd /k "cd /d D:\SWP && dotnet run --project FE\DentalClinic.Web --launch-profile https"
+echo [3/3] Dang khoi chay Frontend Web tren https://localhost:7129 ...
+start "DentalCare Frontend Web (Port 7129)" cmd /k "cd /d %~dp0 && dotnet run --project FE\DentalClinic.Web --launch-profile https"
 
 timeout /t 5 /nobreak >nul
 
