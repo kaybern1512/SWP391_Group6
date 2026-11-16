@@ -571,17 +571,40 @@ public class AdminService : IAdminService
             return ApiResponse<ServiceWorkflowDto>.Fail("Không tìm thấy quy trình cho dịch vụ này.");
         }
 
-        // Check if there is a saved workflow in AuditLogs
-        var auditQuery = _dbContext.AuditLogs
+        // Check if there is saved workflow history in AuditLogs
+        var auditLogs = await _dbContext.AuditLogs
             .AsNoTracking()
-            .Where(a => a.EntityName == "ServiceWorkflow" && a.EntityId == serviceId.ToString() && a.Action == "CONFIGURE");
+            .Where(a => a.EntityName == "ServiceWorkflow" && a.EntityId == serviceId.ToString() && a.Action == "CONFIGURE")
+            .OrderByDescending(a => a.AuditLogId)
+            .ToListAsync(ct);
 
-        var latestAudit = await auditQuery.OrderByDescending(a => a.CreatedAt).FirstOrDefaultAsync(ct);
-        if (latestAudit != null && !string.IsNullOrWhiteSpace(latestAudit.NewValues))
+        if (version.HasValue)
         {
+            foreach (var audit in auditLogs)
+            {
+                if (string.IsNullOrWhiteSpace(audit.NewValues)) continue;
+                try
+                {
+                    var savedWf = JsonSerializer.Deserialize<ServiceWorkflowDto>(audit.NewValues,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (savedWf != null && savedWf.Version == version.Value)
+                    {
+                        return ApiResponse<ServiceWorkflowDto>.Ok(savedWf);
+                    }
+                }
+                catch { }
+            }
+
+            return ApiResponse<ServiceWorkflowDto>.Fail($"Không tìm thấy phiên bản {version.Value} của quy trình dịch vụ.");
+        }
+
+        // If version == null, find the latest valid configuration
+        foreach (var audit in auditLogs)
+        {
+            if (string.IsNullOrWhiteSpace(audit.NewValues)) continue;
             try
             {
-                var savedWf = JsonSerializer.Deserialize<ServiceWorkflowDto>(latestAudit.NewValues,
+                var savedWf = JsonSerializer.Deserialize<ServiceWorkflowDto>(audit.NewValues,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 if (savedWf != null && savedWf.Steps != null && savedWf.Steps.Any())
                 {
@@ -613,8 +636,8 @@ public class AdminService : IAdminService
             WorkflowId = service.DepartmentServiceId,
             DepartmentServiceId = service.DepartmentServiceId,
             WorkflowName = $"Quy trình: {service.ServiceName} (v1)",
-            Version = version ?? 1,
-            IsActive = true,
+            Version = 1,
+            IsActive = service.Status == "Active",
             ApprovalStatus = "Approved",
             Description = service.Description,
             Steps = defaultSteps
@@ -655,22 +678,26 @@ public class AdminService : IAdminService
             : $"Quy trình: {service.ServiceName}";
 
         // Safely determine next version without overwriting historical version
-        var latestAudit = await _dbContext.AuditLogs
+        var auditLogs = await _dbContext.AuditLogs
             .AsNoTracking()
             .Where(a => a.EntityName == "ServiceWorkflow" && a.EntityId == serviceId.ToString() && a.Action == "CONFIGURE")
-            .OrderByDescending(a => a.CreatedAt)
-            .FirstOrDefaultAsync(ct);
+            .OrderByDescending(a => a.AuditLogId)
+            .ToListAsync(ct);
 
         int currentVersion = 1;
-        if (latestAudit != null && !string.IsNullOrWhiteSpace(latestAudit.NewValues))
+        string? latestNewValues = null;
+        foreach (var audit in auditLogs)
         {
+            if (string.IsNullOrWhiteSpace(audit.NewValues)) continue;
+            if (latestNewValues == null) latestNewValues = audit.NewValues;
             try
             {
-                var prevDto = JsonSerializer.Deserialize<ServiceWorkflowDto>(latestAudit.NewValues,
+                var prevDto = JsonSerializer.Deserialize<ServiceWorkflowDto>(audit.NewValues,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 if (prevDto != null && prevDto.Version > 0)
                 {
-                    currentVersion = prevDto.Version + 1;
+                    currentVersion = Math.Max(currentVersion, prevDto.Version + 1);
+                    break;
                 }
             }
             catch { }
@@ -708,7 +735,7 @@ public class AdminService : IAdminService
             "CONFIGURE",
             "ServiceWorkflow",
             service.DepartmentServiceId.ToString(),
-            latestAudit?.NewValues,
+            latestNewValues,
             JsonSerializer.Serialize(workflowDto),
             ct);
 
@@ -777,7 +804,15 @@ public class AdminService : IAdminService
         });
 
         _dbContext.DepartmentServices.Remove(service);
-        await _dbContext.SaveChangesAsync(ct);
+        try
+        {
+            await _dbContext.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete service {ServiceId} due to database constraints", serviceId);
+            return ApiResponse.Fail("Dịch vụ đã phát sinh dữ liệu lịch sử liên kết ngay trước khi xóa. Không thể xóa vĩnh viễn. Vui lòng chọn 'Ngừng cung cấp'.");
+        }
 
         await _auditLogService.LogAsync(
             adminUserId,
