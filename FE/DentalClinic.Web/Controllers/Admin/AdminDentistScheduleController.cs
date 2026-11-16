@@ -32,21 +32,39 @@ public class AdminDentistScheduleController : Controller
     [HttpGet("")]
     [HttpGet("Index")]
     public async Task<IActionResult> Index(
-        string tab = "monthly",
+        string tab = "weekly",
         long? departmentId = null,
         long? dentistUserId = null,
         int? year = null,
         int? month = null,
         string? fromDate = null,
-        string? toDate = null)
+        string? toDate = null,
+        int? weekOffset = 0)
     {
-        int targetYear = year ?? ClinicTimeHelper.Today.Year;
-        int targetMonth = month ?? ClinicTimeHelper.Today.Month;
+        var today = ClinicTimeHelper.TodayDateOnly;
+        int targetYear = year ?? today.Year;
+        int targetMonth = month ?? today.Month;
         if (targetMonth < 1) { targetMonth = 12; targetYear--; }
         if (targetMonth > 12) { targetMonth = 1; targetYear++; }
 
-        DateOnly? parsedFrom = DateOnly.TryParse(fromDate, out var f) ? f : new DateOnly(targetYear, targetMonth, 1);
-        DateOnly? parsedTo = DateOnly.TryParse(toDate, out var t) ? t : new DateOnly(targetYear, targetMonth, DateTime.DaysInMonth(targetYear, targetMonth));
+        int offset = weekOffset ?? 0;
+        int diffToMon = ((int)today.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        var startOfWeek = today.AddDays(-diffToMon + (offset * 7));
+        var endOfWeek = startOfWeek.AddDays(6);
+
+        DateOnly? parsedFrom;
+        DateOnly? parsedTo;
+
+        if (string.Equals(tab, "weekly", StringComparison.OrdinalIgnoreCase))
+        {
+            parsedFrom = DateOnly.TryParse(fromDate, out var f) ? f : startOfWeek;
+            parsedTo = DateOnly.TryParse(toDate, out var t) ? t : endOfWeek;
+        }
+        else
+        {
+            parsedFrom = DateOnly.TryParse(fromDate, out var f) ? f : new DateOnly(targetYear, targetMonth, 1);
+            parsedTo = DateOnly.TryParse(toDate, out var t) ? t : new DateOnly(targetYear, targetMonth, DateTime.DaysInMonth(targetYear, targetMonth));
+        }
 
         var allocationsTask = _adminApi.GetDentistAllocationsAsync(departmentId);
         var deptsTask = _adminApi.GetDepartmentsAsync();
@@ -100,10 +118,22 @@ public class AdminDentistScheduleController : Controller
             SelectedYear = targetYear,
             SelectedMonth = targetMonth,
             FromDate = parsedFrom,
-            ToDate = parsedTo
+            ToDate = parsedTo,
+            WeekOffset = offset,
+            WeekStartDate = startOfWeek,
+            WeekEndDate = endOfWeek
         };
 
         return View("~/Views/Admin/DentistSchedule/Index.cshtml", vm);
+    }
+
+    [HttpGet("Weekly")]
+    public Task<IActionResult> Weekly(
+        long? departmentId = null,
+        long? dentistUserId = null,
+        int? weekOffset = 0)
+    {
+        return Index("weekly", departmentId, dentistUserId, null, null, null, null, weekOffset);
     }
 
     [HttpGet("Monthly")]

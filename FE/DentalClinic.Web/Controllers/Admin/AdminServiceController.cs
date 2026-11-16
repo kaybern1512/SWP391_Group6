@@ -75,6 +75,11 @@ public class AdminServiceController : Controller
             DurationMinutes = model.DurationMinutes,
             Price = model.Price,
             Status = model.Status ?? "Active",
+            ServiceType = model.ServiceType ?? "Treatment",
+            RequiresExclusiveRoom = model.RequiresExclusiveRoom,
+            RequiresConsultationFirst = model.RequiresConsultationFirst,
+            MinLeadTimeHours = model.MinLeadTimeHours ?? 0,
+            BookingInstructions = model.BookingInstructions?.Trim(),
             WorkflowSteps = steps
         };
 
@@ -124,6 +129,11 @@ public class AdminServiceController : Controller
             DurationMinutes = model.DurationMinutes,
             Price = model.Price,
             Status = model.Status ?? "Active",
+            ServiceType = model.ServiceType ?? "Treatment",
+            RequiresExclusiveRoom = model.RequiresExclusiveRoom,
+            RequiresConsultationFirst = model.RequiresConsultationFirst,
+            MinLeadTimeHours = model.MinLeadTimeHours ?? 0,
+            BookingInstructions = model.BookingInstructions?.Trim(),
             WorkflowSteps = steps
         };
 

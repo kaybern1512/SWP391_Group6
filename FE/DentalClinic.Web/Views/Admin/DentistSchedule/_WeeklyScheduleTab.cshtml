@@ -1,0 +1,244 @@
+@model AdminDentistScheduleManageViewModel
+@using DentalClinic.Web.Helpers
+@{
+    var today = ClinicTimeHelper.TodayDateOnly;
+    var startMon = Model.WeekStartDate;
+    var endSun = Model.WeekEndDate;
+    var weekDays = new List<DateOnly>();
+    for (int i = 0; i < 7; i++)
+    {
+        weekDays.Add(startMon.AddDays(i));
+    }
+    string[] dayNamesVn = { "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ Nhật" };
+}
+
+<!-- Filter Bar & Mode Toggle -->
+<div class="card-dc mb-4 shadow-sm">
+    <div class="card-dc-body p-3">
+        <form asp-controller="AdminDentistSchedule" asp-action="Index" method="get" class="row g-2 align-items-center">
+            <input type="hidden" name="tab" value="weekly" />
+            <input type="hidden" name="weekOffset" value="@Model.WeekOffset" />
+
+            <!-- Chuyên khoa -->
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted mb-1">Chuyên khoa</label>
+                <select name="departmentId" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">-- Tất cả chuyên khoa --</option>
+                    @foreach (var d in Model.Departments)
+                    {
+                        <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Bác sĩ -->
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold text-muted mb-1">Bác sĩ</label>
+                <select name="dentistUserId" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">-- Tất cả bác sĩ --</option>
+                    @foreach (var d in Model.Dentists)
+                    {
+                        <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Điều hướng tuần -->
+            <div class="col-md-3 d-flex align-items-end gap-1 pt-3">
+                <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
+                   asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
+                   asp-route-weekOffset="@(Model.WeekOffset - 1)" class="btn btn-sm btn-outline-secondary" title="Tuần trước">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+                <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
+                   asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
+                   asp-route-weekOffset="0" class="btn btn-sm @(Model.WeekOffset == 0 ? "btn-secondary text-white" : "btn-outline-secondary") flex-grow-1 text-nowrap">
+                    @(Model.WeekOffset == 0 ? "Tuần Này" : "Về Tuần Này")
+                </a>
+                <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
+                   asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
+                   asp-route-weekOffset="@(Model.WeekOffset + 1)" class="btn btn-sm btn-outline-secondary" title="Tuần sau">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+
+            <!-- View Switcher -->
+            <div class="col-md-3 d-flex align-items-end justify-content-end gap-1 pt-3">
+                <div class="btn-group btn-group-sm" role="group">
+                    <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
+                       asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
+                       asp-route-weekOffset="@Model.WeekOffset" class="btn btn-primary active">
+                        <i class="bi bi-calendar-week me-1"></i>Lịch Tuần
+                    </a>
+                    <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="monthly"
+                       asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
+                       asp-route-year="@startMon.Year" asp-route-month="@startMon.Month" class="btn btn-outline-secondary">
+                        <i class="bi bi-calendar3 me-1"></i>Lịch Tháng
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Header info -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center gap-2">
+        <span class="fs-5 fw-bold text-dark">
+            <i class="bi bi-calendar2-range text-primary me-2"></i>Tuần từ @startMon.ToString("dd/MM/yyyy") đến @endSun.ToString("dd/MM/yyyy")
+        </span>
+        @if (Model.WeekOffset == 0)
+        {
+            <span class="badge bg-primary text-white rounded-pill px-2">Tuần hiện tại</span>
+        }
+    </div>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-dc-primary btn-sm" data-bs-toggle="modal" data-bs-target="#bulkScheduleModal">
+            <i class="bi bi-calendar-plus me-1"></i> Phân Công Hàng Loạt
+        </button>
+    </div>
+</div>
+
+<!-- Weekly 7-Column Grid Table -->
+<div class="card-dc shadow-sm mb-4">
+    <div class="card-dc-body p-0">
+        <div class="table-responsive">
+            <table class="table table-bordered align-top mb-0" style="table-layout: fixed; min-width: 1000px;">
+                <!-- Table Header: 7 Days -->
+                <thead class="table-light text-center">
+                    <tr>
+                        <th style="width: 110px;" class="align-middle bg-light text-muted small fw-bold">Ca Trực</th>
+                        @for (int i = 0; i < 7; i++)
+                        {
+                            var d = weekDays[i];
+                            bool isCurToday = (d == today);
+                            <th class="@(isCurToday ? "bg-primary-subtle border-primary text-primary" : "") p-2">
+                                <div class="fw-bold @(i >= 5 ? "text-danger" : "text-dark")">@dayNamesVn[i]</div>
+                                <div class="small text-muted">@d.ToString("dd/MM")</div>
+                                @if (isCurToday)
+                                {
+                                    <span class="badge bg-primary text-white mt-1" style="font-size: 9px;">Hôm nay</span>
+                                }
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- CA SÁNG: 08:00 - 12:00 -->
+                    <tr>
+                        <td class="bg-light align-middle text-center p-2">
+                            <div class="fw-bold text-warning-emphasis mb-1">
+                                <i class="bi bi-sun-fill text-warning me-1"></i>Ca Sáng
+                            </div>
+                            <span class="badge bg-warning-subtle text-warning border small">08:00 - 12:00</span>
+                        </td>
+                        @for (int i = 0; i < 7; i++)
+                        {
+                            var d = weekDays[i];
+                            var morningSchedules = Model.Schedules
+                                .Where(s => s.WorkDate == d && s.StartTime < new TimeOnly(13, 0) && s.Status == "Scheduled")
+                                .ToList();
+                            var dayLeaves = Model.LeaveRequests
+                                .Where(l => l.Status == "Approved" && l.StartDate <= d && l.EndDate >= d)
+                                .ToList();
+
+                            <td class="p-2 @(d == today ? "bg-primary-subtle bg-opacity-10" : "bg-white")" style="min-height: 120px;">
+                                @if (morningSchedules.Any())
+                                {
+                                    <div class="d-flex flex-column gap-2">
+                                        @foreach (var s in morningSchedules)
+                                        {
+                                            bool isOnLeave = dayLeaves.Any(l => l.DentistUserId == s.DentistUserId);
+                                            <div class="card p-2 border shadow-sm rounded-3 @(isOnLeave ? "bg-warning-subtle border-warning" : "bg-white border-primary-subtle")">
+                                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                                    <strong class="small text-dark text-truncate">@s.DentistName</strong>
+                                                    @if (isOnLeave)
+                                                    {
+                                                        <span class="badge bg-warning text-dark border border-warning" style="font-size: 8px;">Nghỉ phép</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-success-subtle text-success" style="font-size: 8px;">Đang trực</span>
+                                                    }
+                                                </div>
+                                                <div class="text-xs text-muted text-truncate mb-1">
+                                                    <i class="bi bi-building me-1"></i>@s.DepartmentName
+                                                </div>
+                                                <div class="text-xs text-primary fw-semibold">
+                                                    <i class="bi bi-clock me-1"></i>@s.StartTime.ToString("HH:mm") - @s.EndTime.ToString("HH:mm")
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="text-center text-muted py-4 small fst-italic opacity-50">
+                                        Trống ca
+                                    </div>
+                                }
+                            </td>
+                        }
+                    </tr>
+
+                    <!-- CA CHIỀU: 13:30 - 17:30 -->
+                    <tr>
+                        <td class="bg-light align-middle text-center p-2">
+                            <div class="fw-bold text-primary mb-1">
+                                <i class="bi bi-sunset-fill text-primary me-1"></i>Ca Chiều
+                            </div>
+                            <span class="badge bg-primary-subtle text-primary border small">13:30 - 17:30</span>
+                        </td>
+                        @for (int i = 0; i < 7; i++)
+                        {
+                            var d = weekDays[i];
+                            var afternoonSchedules = Model.Schedules
+                                .Where(s => s.WorkDate == d && s.StartTime >= new TimeOnly(13, 0) && s.Status == "Scheduled")
+                                .ToList();
+                            var dayLeaves = Model.LeaveRequests
+                                .Where(l => l.Status == "Approved" && l.StartDate <= d && l.EndDate >= d)
+                                .ToList();
+
+                            <td class="p-2 @(d == today ? "bg-primary-subtle bg-opacity-10" : "bg-white")" style="min-height: 120px;">
+                                @if (afternoonSchedules.Any())
+                                {
+                                    <div class="d-flex flex-column gap-2">
+                                        @foreach (var s in afternoonSchedules)
+                                        {
+                                            bool isOnLeave = dayLeaves.Any(l => l.DentistUserId == s.DentistUserId);
+                                            <div class="card p-2 border shadow-sm rounded-3 @(isOnLeave ? "bg-warning-subtle border-warning" : "bg-white border-primary-subtle")">
+                                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                                    <strong class="small text-dark text-truncate">@s.DentistName</strong>
+                                                    @if (isOnLeave)
+                                                    {
+                                                        <span class="badge bg-warning text-dark border border-warning" style="font-size: 8px;">Nghỉ phép</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-success-subtle text-success" style="font-size: 8px;">Đang trực</span>
+                                                    }
+                                                </div>
+                                                <div class="text-xs text-muted text-truncate mb-1">
+                                                    <i class="bi bi-building me-1"></i>@s.DepartmentName
+                                                </div>
+                                                <div class="text-xs text-primary fw-semibold">
+                                                    <i class="bi bi-clock me-1"></i>@s.StartTime.ToString("HH:mm") - @s.EndTime.ToString("HH:mm")
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="text-center text-muted py-4 small fst-italic opacity-50">
+                                        Trống ca
+                                    </div>
+                                }
+                            </td>
+                        }
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

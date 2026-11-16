@@ -925,7 +925,8 @@
                     document.getElementById('editRoomName').value = this.dataset.name || '';
                     document.getElementById('editRoomDepartmentId').value = this.dataset.departmentid || '';
                     document.getElementById('editRoomStatus').value = this.dataset.status || 'Active';
-                    document.getElementById('editRoomIsExclusive').checked = (this.dataset.exclusive === 'true');
+                    const excl = document.getElementById('editRoomIsExclusive');
+                    if (excl) excl.checked = (this.dataset.exclusive === 'true');
                     editRoomModal.show();
                 });
             });

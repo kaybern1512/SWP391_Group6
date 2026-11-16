@@ -165,14 +165,17 @@ public class AdminDentistScheduleManageViewModel
     public List<AdminUserDto> Dentists { get; set; } = new();
     public List<AdminDepartmentDto> Departments { get; set; } = new();
     public List<AdminRoomDto> Rooms { get; set; } = new();
-    public string ActiveTab { get; set; } = "allocations";
+    public string ActiveTab { get; set; } = "weekly";
     public long? SelectedDepartmentId { get; set; }
     public long? SelectedDentistId { get; set; }
     public DateOnly? FromDate { get; set; }
     public DateOnly? ToDate { get; set; }
     public MonthlyDentistScheduleDto? MonthlySchedule { get; set; }
     public int SelectedYear { get; set; } = DateTime.Today.Year;
-        public int SelectedMonth { get; set; } = DateTime.Today.Month;
+    public int SelectedMonth { get; set; } = DateTime.Today.Month;
+    public int WeekOffset { get; set; } = 0;
+    public DateOnly WeekStartDate { get; set; }
+    public DateOnly WeekEndDate { get; set; }
     public List<DentistLeaveRequestDto> LeaveRequests { get; set; } = new();
 }
 

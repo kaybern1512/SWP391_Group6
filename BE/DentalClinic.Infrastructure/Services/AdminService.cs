@@ -468,6 +468,12 @@ public class AdminService : IAdminService
 
         var oldValues = JsonSerializer.Serialize(new { service.ServiceCode, service.ServiceName, service.DepartmentId, service.Price, service.Status });
 
+        var validTypes = new[] { "Consultation", "Treatment", "Surgery", "Cosmetic", "Pediatric", "Implant", "Orthodontics", "General", "Endodontics", "Periodontics", "Examination" };
+        if (!string.IsNullOrWhiteSpace(request.ServiceType) && validTypes.Contains(request.ServiceType, StringComparer.OrdinalIgnoreCase))
+        {
+            service.DiagnosticType = request.ServiceType;
+        }
+
         service.DepartmentId = (int)request.DepartmentId;
         service.ServiceName = trimmedName;
         service.Description = request.Description?.Trim();

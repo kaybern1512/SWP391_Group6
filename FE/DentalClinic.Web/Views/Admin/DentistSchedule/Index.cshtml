@@ -18,11 +18,14 @@
             <p class="page-subtitle">Phân bổ bác sĩ vào chuyên khoa, điều phối ca trực tuần và theo dõi trạng thái nghỉ phép/bận</p>
         </div>
         <div class="page-actions d-flex gap-2">
-            @if (Model.ActiveTab == "monthly")
+            @if (Model.ActiveTab == "weekly" || Model.ActiveTab == "monthly")
             {
-                <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#copyMonthModal">
-                    <i class="bi bi-copy me-1"></i> Sao Chép Tháng Trước
-                </button>
+                if (Model.ActiveTab == "monthly")
+                {
+                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#copyMonthModal">
+                        <i class="bi bi-copy me-1"></i> Sao Chép Tháng Trước
+                    </button>
+                }
                 <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#bulkScheduleModal">
                     <i class="bi bi-calendar-plus me-1"></i> Phân Công Hàng Loạt
                 </button>
@@ -50,6 +53,13 @@
 
     <!-- Navigation Tabs -->
     <ul class="nav nav-tabs-dc mb-4" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link @(Model.ActiveTab == "weekly" ? "active" : "")"
+               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
+               asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId">
+                <i class="bi bi-calendar-week me-2"></i>Lịch Trực Tuần
+            </a>
+        </li>
         <li class="nav-item">
             <a class="nav-link @(Model.ActiveTab == "monthly" ? "active" : "")"
                asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="monthly"
@@ -83,6 +93,12 @@
             </a>
         </li>
     </ul>
+
+    <!-- TAB: WEEKLY SCHEDULING (DEFAULT) -->
+    @if (Model.ActiveTab == "weekly")
+    {
+        <partial name="~/Views/Admin/DentistSchedule/_WeeklyScheduleTab.cshtml" model="Model" />
+    }
 
     <!-- TAB: LEAVE REQUESTS -->
     @if (Model.ActiveTab == "leave-requests")
@@ -613,3 +629,5 @@
         </div>
     </div>
 </div>
+
+<partial name="~/Views/Admin/DentistSchedule/_DentistScheduleModals.cshtml" model="Model" />

@@ -364,7 +364,7 @@
 <div class="modal fade" id="adjustStockModal" tabindex="-1" aria-labelledby="adjustStockModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form method="post" asp-controller="AdminMedicine" asp-action="AdjustStock">
+            <form method="post" asp-controller="AdminMedicine" asp-action="AdjustStock" id="adjustStockForm">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="batchId" id="adjBatchId" />
                 <input type="hidden" name="medicineId" value="@med.MedicineId" />
@@ -389,7 +389,7 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Hình Thức Điều Chỉnh <span class="text-danger">*</span></label>
-                        <select name="AdjustmentType" class="form-select" required>
+                        <select name="AdjustmentType" id="adjAdjustmentType" class="form-select" required>
                             <option value="Increase">Tăng tồn kho (+) (Kiểm kê thừa / trả hàng lại)</option>
                             <option value="Decrease">Giảm tồn kho (-) (Kiểm kê hao hụt / thuốc hỏng / hết hạn)</option>
                         </select>
@@ -397,7 +397,7 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Số Lượng Điều Chỉnh (@med.Unit) <span class="text-danger">*</span></label>
-                        <input type="number" name="Quantity" class="form-control" min="1" placeholder="Nhập số lượng thay đổi tuyệt đối" required />
+                        <input type="number" name="Quantity" id="adjQuantity" class="form-control" min="1" placeholder="Nhập số lượng thay đổi tuyệt đối" required />
                     </div>
 
                     <div class="mb-3">
@@ -407,7 +407,7 @@
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-                    <button type="submit" class="btn btn-warning fw-semibold">
+                    <button type="submit" id="btnSubmitAdjust" class="btn btn-warning fw-semibold">
                         <i class="bi bi-check-lg me-1"></i> Lưu Biên Bản Điều Chỉnh
                     </button>
                 </div>
@@ -500,11 +500,40 @@
                 if (!btn) return;
                 const batchId = btn.getAttribute('data-batch-id');
                 const batchNum = btn.getAttribute('data-batch-num');
-                const qtyAvail = btn.getAttribute('data-qty-avail');
+                const qtyAvail = btn.getAttribute('data-qty-avail') || '0';
 
                 document.getElementById('adjBatchId').value = batchId;
                 document.getElementById('adjBatchDisplay').textContent = batchNum;
                 document.getElementById('adjQtyAvailDisplay').textContent = qtyAvail;
+
+                // Reset form state on modal open
+                const submitBtn = document.getElementById('btnSubmitAdjust');
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Lưu Biên Bản Điều Chỉnh';
+                }
+            });
+        }
+
+        // Double-click protection and negative stock prevention
+        const adjustForm = document.getElementById('adjustStockForm');
+        if (adjustForm) {
+            adjustForm.addEventListener('submit', function(e) {
+                const adjType = document.getElementById('adjAdjustmentType')?.value;
+                const qtyAvail = parseInt(document.getElementById('adjQtyAvailDisplay')?.textContent || '0', 10);
+                const reqQty = parseInt(document.getElementById('adjQuantity')?.value || '0', 10);
+
+                if (adjType === 'Decrease' && reqQty > qtyAvail) {
+                    e.preventDefault();
+                    alert(`Không thể giảm tồn kho! Số lượng yêu cầu giảm (${reqQty}) vượt quá số lượng tồn khả dụng hiện tại (${qtyAvail}).`);
+                    return false;
+                }
+
+                const submitBtn = document.getElementById('btnSubmitAdjust');
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang xử lý...';
+                }
             });
         }
     });
