@@ -563,10 +563,18 @@ public class DentistScheduleService : IDentistScheduleService
 
         var leavesQuery = _dbContext.StaffLeaveRequests
             .AsNoTracking()
+            .Include(l => l.StaffUser)
+                .ThenInclude(sp => sp.DentistProfile)
+                    .ThenInclude(dp => dp!.Department)
             .Where(l => l.StaffRole == UserRole.Dentist &&
-                        l.Status == "Approved" &&
+                        (l.Status == "Approved" || l.Status == "Pending") &&
                         l.StartDate <= lastDayOfMonth &&
                         l.EndDate >= firstDayOfMonth);
+
+        if (request.DepartmentId.HasValue && request.DepartmentId.Value > 0)
+        {
+            leavesQuery = leavesQuery.Where(l => l.StaffUser.DentistProfile != null && l.StaffUser.DentistProfile.DepartmentId == request.DepartmentId.Value);
+        }
 
         if (request.DentistUserId.HasValue && request.DentistUserId.Value > 0)
         {
@@ -586,6 +594,11 @@ public class DentistScheduleService : IDentistScheduleService
 
         var apptsQuery = _dbContext.AppointmentServices
             .AsNoTracking()
+            .Include(a => a.DepartmentService)
+            .Include(a => a.AssignedDentist)
+                .ThenInclude(d => d!.StaffProfile)
+            .Include(a => a.RequestedDentist)
+                .ThenInclude(d => d!.StaffProfile)
             .Where(a => a.ServiceDate >= firstDayOfMonth &&
                         a.ServiceDate <= lastDayOfMonth &&
                         occupiedStatuses.Contains(a.Status));
@@ -634,8 +647,101 @@ public class DentistScheduleService : IDentistScheduleService
                 .Select(MapToScheduleDto)
                 .ToList();
 
-            var dayLeave = leaves.FirstOrDefault(l => l.StartDate <= curDate && l.EndDate >= curDate);
+            var dayLeaves = leaves
+                .Where(l => l.StartDate <= curDate && l.EndDate >= curDate)
+                .Select(l =>
+                {
+                    string periodDisplay = "Cả ngày";
+                    if (l.StartTime.HasValue && l.EndTime.HasValue)
+                    {
+                        if (l.StartTime.Value < new TimeOnly(12, 0) && l.EndTime.Value <= new TimeOnly(13, 0))
+                            periodDisplay = "Buổi sáng";
+                        else if (l.StartTime.Value >= new TimeOnly(12, 0))
+                            periodDisplay = "Buổi chiều";
+                        else
+                            periodDisplay = $"{l.StartTime.Value:HH:mm} - {l.EndTime.Value:HH:mm}";
+                    }
+                    var dp = l.StaffUser?.DentistProfile;
+                    return new DentistDayLeaveDto
+                    {
+                        LeaveRequestId = l.LeaveRequestId,
+                        DentistUserId = l.StaffUserId,
+                        DentistName = l.StaffUser?.FullName ?? "Bác sĩ",
+                        DepartmentName = dp?.Department?.Name ?? string.Empty,
+                        StartDate = l.StartDate,
+                        EndDate = l.EndDate,
+                        PeriodDisplay = periodDisplay,
+                        Status = l.Status,
+                        Reason = l.Reason
+                    };
+                })
+                .ToList();
+
+            var dayLeave = dayLeaves.FirstOrDefault(l => l.Status == "Approved") ?? dayLeaves.FirstOrDefault();
             var dayAppts = appointments.Where(a => a.ServiceDate == curDate).ToList();
+            var dayAppointmentDtos = dayAppts.Select(a =>
+            {
+                var doctorName = a.AssignedDentist?.StaffProfile?.FullName
+                              ?? a.RequestedDentist?.StaffProfile?.FullName
+                              ?? "Chưa phân công";
+                var doctorId = a.AssignedDentistUserId ?? a.RequestedDentistUserId;
+                return new DentistDayAppointmentDto
+                {
+                    AppointmentServiceId = a.AppointmentServiceId,
+                    AppointmentId = a.AppointmentId,
+                    AppointmentCode = $"APT-{a.AppointmentId:D6}",
+                    AssignedDentistUserId = doctorId,
+                    DentistName = doctorName,
+                    ServiceName = a.DepartmentService?.ServiceName ?? "Dịch vụ nha khoa",
+                    ScheduledStart = a.ScheduledStart,
+                    ScheduledEnd = a.ScheduledEnd,
+                    Status = a.Status
+                };
+            }).ToList();
+
+            // Detect conflicts
+            var dayConflicts = new List<DentistDayConflictDto>();
+
+            // Conflict 1: Doctor scheduled while on leave (Approved or Pending)
+            foreach (var s in daySchedules)
+            {
+                var matchingLeave = dayLeaves.FirstOrDefault(l => l.DentistUserId == s.DentistUserId);
+                if (matchingLeave != null)
+                {
+                    bool isApproved = string.Equals(matchingLeave.Status, "Approved", StringComparison.OrdinalIgnoreCase);
+                    dayConflicts.Add(new DentistDayConflictDto
+                    {
+                        DentistUserId = s.DentistUserId,
+                        DentistName = s.DentistName,
+                        TimeRange = $"{s.StartTime:HH:mm} - {s.EndTime:HH:mm}",
+                        Reason = isApproved
+                            ? $"Xếp lịch trực trùng với kỳ nghỉ phép đã duyệt ({matchingLeave.PeriodDisplay})"
+                            : $"Xếp lịch trực trùng với đơn nghỉ phép đang chờ duyệt ({matchingLeave.PeriodDisplay})",
+                        Severity = isApproved ? "Danger" : "Warning"
+                    });
+                }
+            }
+
+            // Conflict 2: Same doctor overlapping shifts
+            var shiftsByDentist = daySchedules.GroupBy(s => s.DentistUserId);
+            foreach (var group in shiftsByDentist)
+            {
+                var dShifts = group.OrderBy(s => s.StartTime).ToList();
+                for (int i = 0; i < dShifts.Count - 1; i++)
+                {
+                    if (dShifts[i].EndTime > dShifts[i + 1].StartTime)
+                    {
+                        dayConflicts.Add(new DentistDayConflictDto
+                        {
+                            DentistUserId = group.Key,
+                            DentistName = dShifts[i].DentistName,
+                            TimeRange = $"{dShifts[i].StartTime:HH:mm} - {dShifts[i + 1].EndTime:HH:mm}",
+                            Reason = "Hai ca trực bị chồng lấn thời gian",
+                            Severity = "Danger"
+                        });
+                    }
+                }
+            }
 
             var dotNetDow = curDate.DayOfWeek;
             int isoDow = dotNetDow == DayOfWeek.Sunday ? 7 : (int)dotNetDow;
@@ -693,7 +799,10 @@ public class DentistScheduleService : IDentistScheduleService
                 Shifts = daySchedules,
                 ShiftType = shiftType,
                 ConfirmedAppointmentsCount = dayAppts.Count,
-                TotalAppointmentsCount = dayAppts.Count
+                TotalAppointmentsCount = dayAppts.Count,
+                Leaves = dayLeaves,
+                Appointments = dayAppointmentDtos,
+                Conflicts = dayConflicts
             });
         }
 

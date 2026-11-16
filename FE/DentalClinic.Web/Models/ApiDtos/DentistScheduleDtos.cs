@@ -115,6 +115,44 @@ public class MonthlyDayScheduleDto
     public string ShiftType { get; set; } = "None"; // None, Morning, Afternoon, FullDay, Evening, Custom, Multiple
     public int ConfirmedAppointmentsCount { get; set; }
     public int TotalAppointmentsCount { get; set; }
+    public List<DentistDayLeaveDto> Leaves { get; set; } = new();
+    public List<DentistDayAppointmentDto> Appointments { get; set; } = new();
+    public List<DentistDayConflictDto> Conflicts { get; set; } = new();
+}
+
+public class DentistDayLeaveDto
+{
+    public long LeaveRequestId { get; set; }
+    public long DentistUserId { get; set; }
+    public string DentistName { get; set; } = string.Empty;
+    public string? DepartmentName { get; set; }
+    public DateOnly StartDate { get; set; }
+    public DateOnly EndDate { get; set; }
+    public string PeriodDisplay { get; set; } = "Cả ngày";
+    public string Status { get; set; } = "Approved"; // "Approved" or "Pending"
+    public string? Reason { get; set; }
+}
+
+public class DentistDayAppointmentDto
+{
+    public long AppointmentServiceId { get; set; }
+    public long AppointmentId { get; set; }
+    public string AppointmentCode { get; set; } = string.Empty;
+    public long? AssignedDentistUserId { get; set; }
+    public string? DentistName { get; set; }
+    public string? ServiceName { get; set; }
+    public DateTime ScheduledStart { get; set; }
+    public DateTime ScheduledEnd { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+public class DentistDayConflictDto
+{
+    public long DentistUserId { get; set; }
+    public string DentistName { get; set; } = string.Empty;
+    public string TimeRange { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public string Severity { get; set; } = "Warning"; // "Warning" or "Danger"
 }
 
 public class MonthlyDentistScheduleDto
