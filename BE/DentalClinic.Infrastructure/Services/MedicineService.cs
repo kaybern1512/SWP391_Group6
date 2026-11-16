@@ -350,6 +350,94 @@ public class MedicineService : IMedicineService
         };
     }
 
+    public async Task<MedicineStockUpdateResultDto> UpdateStockAsync(long medicineId, UpdateMedicineStockRequest request, long userId, CancellationToken ct = default)
+    {
+        if (medicineId <= 0)
+            throw new ArgumentException("ID thuốc không hợp lệ.", nameof(medicineId));
+
+        var medicine = await _context.Medicines.FirstOrDefaultAsync(m => m.MedicineId == medicineId, ct);
+        if (medicine == null)
+            throw new KeyNotFoundException($"Không tìm thấy thuốc với ID {medicineId}.");
+
+        var opType = request.OperationType?.Trim() ?? "Add";
+        var qtyBefore = medicine.StockQuantity;
+        int qtyAfter;
+        int qtyChange;
+        string defaultReason;
+
+        switch (opType.ToLowerInvariant())
+        {
+            case "add":
+            case "increase":
+                if (request.Quantity <= 0)
+                    throw new ArgumentException("Số lượng nhập thêm phải lớn hơn 0.", nameof(request.Quantity));
+                qtyChange = request.Quantity;
+                qtyAfter = qtyBefore + qtyChange;
+                defaultReason = "Nhập thêm hàng vào kho";
+                opType = "Add";
+                break;
+
+            case "deduct":
+            case "decrease":
+                if (request.Quantity <= 0)
+                    throw new ArgumentException("Số lượng giảm tồn phải lớn hơn 0.", nameof(request.Quantity));
+                if (request.Quantity > qtyBefore)
+                    throw new InvalidOperationException($"Số lượng giảm ({request.Quantity}) không được vượt quá số lượng tồn kho hiện tại ({qtyBefore}).");
+                qtyChange = -request.Quantity;
+                qtyAfter = qtyBefore - request.Quantity;
+                defaultReason = "Xuất giảm hao hụt / thuốc hỏng";
+                opType = "Deduct";
+                break;
+
+            case "reconcile":
+            case "setactual":
+                if (request.Quantity < 0)
+                    throw new ArgumentException("Số lượng kiểm kê thực tế không được âm.", nameof(request.Quantity));
+                qtyAfter = request.Quantity;
+                qtyChange = qtyAfter - qtyBefore;
+                defaultReason = "Cập nhật số lượng kiểm kê thực tế";
+                opType = "Reconcile";
+                break;
+
+            default:
+                throw new ArgumentException($"Loại thao tác '{request.OperationType}' không hợp lệ. Chỉ chấp nhận 'Add', 'Deduct' hoặc 'Reconcile'.", nameof(request.OperationType));
+        }
+
+        var reason = string.IsNullOrWhiteSpace(request.Reason) ? defaultReason : request.Reason.Trim();
+        var now = DateTime.UtcNow;
+
+        if (_context.Database.IsSqlServer())
+        {
+            var rowsAffected = await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE Medicines SET StockQuantity = {qtyAfter}, UpdatedAt = {now} WHERE MedicineId = {medicine.MedicineId} AND (StockQuantity + {qtyChange}) >= 0", ct);
+            if (rowsAffected == 0)
+            {
+                throw new InvalidOperationException("Không thể cập nhật tồn kho do có xung đột đồng thời hoặc tồn kho bị âm. Vui lòng tải lại và thử lại.");
+            }
+            await _context.Entry(medicine).ReloadAsync(ct);
+        }
+        else
+        {
+            medicine.StockQuantity = qtyAfter;
+            medicine.UpdatedAt = now;
+            await _context.SaveChangesAsync(ct);
+        }
+
+        return new MedicineStockUpdateResultDto
+        {
+            MedicineId = medicine.MedicineId,
+            MedicineCode = medicine.MedicineCode,
+            MedicineName = medicine.MedicineName,
+            OperationType = opType,
+            QuantityBefore = qtyBefore,
+            QuantityChange = qtyChange,
+            QuantityAfter = medicine.StockQuantity,
+            Unit = medicine.Unit,
+            Reason = reason,
+            UpdatedAt = now
+        };
+    }
+
     public async Task<List<MedicineStockTransactionDto>> GetStockTransactionsAsync(long? medicineBatchId, long? medicineId, int page, int pageSize)
     {
         var query = _context.PrescriptionItems
