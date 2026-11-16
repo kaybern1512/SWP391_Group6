@@ -1,4 +1,4 @@
-@model AdminDentistScheduleManageViewModel
+﻿@model AdminDentistScheduleManageViewModel
 @using DentalClinic.Web.Helpers
 @{
     var today = ClinicTimeHelper.TodayDateOnly;
@@ -23,25 +23,85 @@
                 <form id="bulkScheduleForm" onsubmit="return false;">
                     <!-- Step 1: Doctor & Department -->
                     <div class="row g-3 mb-3">
-                        <div class="col-md-6">
+                        <div class="col-md-5">
                             <label class="form-label fw-semibold small">1. Chuyên khoa làm việc <span class="text-danger">*</span></label>
-                            <select id="bulkDepartmentId" class="form-select" required>
+                            <select id="bulkDepartmentId" class="form-select" onchange="handleBulkDepartmentChange()" required>
                                 <option value="">-- Chọn chuyên khoa --</option>
                                 @foreach (var d in Model.Departments)
                                 {
                                     <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
                                 }
                             </select>
+                            <div class="form-text text-xs text-muted">Lọc bác sĩ và phân công theo khoa.</div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold small">2. Bác sĩ áp dụng (Chọn nhiều) <span class="text-danger">*</span></label>
-                            <select id="bulkDentistIds" class="form-select" multiple size="4" required>
+                        <div class="col-md-7">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-semibold small mb-0">2. Bác sĩ áp dụng <span class="text-danger">*</span></label>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none me-2 text-primary" onclick="bulkSelectAllDoctors(true)">Chọn tất cả</button>
+                                    <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="bulkSelectAllDoctors(false)">Bỏ chọn</button>
+                                </div>
+                            </div>
+
+                            <!-- Search box -->
+                            <div class="input-group input-group-sm mb-1">
+                                <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                                <input type="text" id="bulkDoctorSearch" class="form-control" placeholder="Tìm theo tên hoặc mã bác sĩ..." oninput="filterBulkDoctors()">
+                            </div>
+
+                            <!-- Doctor Checkbox List Container -->
+                            <div id="bulkDoctorListContainer" class="border rounded p-2 bg-white" style="max-height: 150px; overflow-y: auto;">
                                 @foreach (var d in Model.Dentists)
                                 {
-                                    <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName @(!string.IsNullOrEmpty(d.Code) ? $"({d.Code})" : "")</option>
+                                    var deptIds = Model.Allocations.Where(a => a.DentistUserId == d.UserId).Select(a => a.DepartmentId.ToString()).ToList();
+                                    var deptNames = Model.Allocations.Where(a => a.DentistUserId == d.UserId).Select(a => a.DepartmentName).ToList();
+                                    var deptStr = deptNames.Any() ? string.Join(", ", deptNames) : "Chưa phân khoa";
+                                    var deptAttr = string.Join(",", deptIds);
+                                    var isSelected = Model.SelectedDentistId == d.UserId;
+
+                                    <div class="form-check doctor-item py-1 border-bottom border-light"
+                                         data-dentist-id="@d.UserId"
+                                         data-dept-ids="@deptAttr"
+                                         data-search="@d.FullName.ToLowerInvariant() @(d.Code?.ToLowerInvariant() ?? "")">
+                                        <input class="form-check-input bulk-dentist-checkbox"
+                                               type="checkbox"
+                                               value="@d.UserId"
+                                               data-dentist-id="@d.UserId"
+                                               id="chk_dentist_@d.UserId"
+                                               @(isSelected ? "checked" : "")
+                                               onchange="syncBulkDentistSelection()">
+                                        <label class="form-check-label d-flex justify-content-between align-items-center w-100 cursor-pointer" for="chk_dentist_@d.UserId">
+                                            <div>
+                                                <span class="fw-semibold text-dark">@d.FullName</span>
+                                                @if (!string.IsNullOrEmpty(d.Code))
+                                                {
+                                                    <span class="badge bg-light text-secondary border ms-1">@d.Code</span>
+                                                }
+                                                <div class="text-xs text-muted">@deptStr</div>
+                                            </div>
+                                            <div>
+                                                @if (d.Status == "Active")
+                                                {
+                                                    <span class="badge bg-success-subtle text-success" style="font-size: 9px;">Hoạt động</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary-subtle text-muted" style="font-size: 9px;">@d.Status</span>
+                                                }
+                                            </div>
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+
+                            <!-- Hidden multi-select for form submission / compatibility -->
+                            <select id="bulkDentistIds" multiple style="display: none;">
+                                @foreach (var d in Model.Dentists)
+                                {
+                                    <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
                                 }
                             </select>
-                            <div class="form-text text-xs text-muted"><i class="bi bi-info-circle me-1"></i>Giữ phím Ctrl (hoặc Cmd) để chọn nhiều bác sĩ cùng lúc.</div>
+                            <div class="form-text text-xs text-muted mt-1">Đã chọn: <span id="bulkSelectedCount" class="fw-bold text-primary">0</span> bác sĩ</div>
                         </div>
                     </div>
 
@@ -410,6 +470,22 @@
         if (fromDateEl) fromDateEl.min = todayVn;
         if (toDateEl) toDateEl.min = todayVn;
 
+        // Initialize doctor list and department filter
+        handleBulkDepartmentChange();
+
+        // Attach listeners to invalidate preview whenever inputs change
+        ['bulkFromDate', 'bulkToDate'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', invalidateBulkPreview);
+        });
+        document.querySelectorAll('.bulk-dow').forEach(cb => {
+            cb.addEventListener('change', invalidateBulkPreview);
+        });
+        ['shiftMorning', 'shiftAfternoon', 'bulkOverwrite'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', invalidateBulkPreview);
+        });
+
         // Reset leave state when switching doctors in override modal (Fixes leave state leakage!)
         const overrideDentistSelect = document.getElementById('overrideDentistId');
         if (overrideDentistSelect) {
@@ -419,6 +495,97 @@
             });
         }
     });
+
+    let isBulkPreviewing = false;
+    let isBulkApplying = false;
+
+    // Invalidate Bulk Preview when parameters change
+    function invalidateBulkPreview() {
+        const previewSec = document.getElementById('bulkPreviewSection');
+        if (previewSec) previewSec.style.display = 'none';
+        const btnApply = document.getElementById('btnBulkApply');
+        if (btnApply) btnApply.disabled = true;
+    }
+
+    // Filter bulk doctor list based on search term
+    function filterBulkDoctors() {
+        const term = (document.getElementById('bulkDoctorSearch')?.value || '').toLowerCase().trim();
+        const deptId = document.getElementById('bulkDepartmentId')?.value;
+        const items = document.querySelectorAll('#bulkDoctorListContainer .doctor-item');
+
+        items.forEach(item => {
+            const searchData = item.getAttribute('data-search') || '';
+            const deptIdsStr = item.getAttribute('data-dept-ids') || '';
+            const deptIds = deptIdsStr ? deptIdsStr.split(',') : [];
+
+            const matchesDept = !deptId || deptIds.includes(deptId);
+            const matchesSearch = !term || searchData.includes(term);
+
+            if (matchesDept && matchesSearch) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    // Handle department change in bulk schedule modal
+    function handleBulkDepartmentChange() {
+        const deptId = document.getElementById('bulkDepartmentId')?.value;
+        const items = document.querySelectorAll('#bulkDoctorListContainer .doctor-item');
+
+        items.forEach(item => {
+            const deptIdsStr = item.getAttribute('data-dept-ids') || '';
+            const deptIds = deptIdsStr ? deptIdsStr.split(',') : [];
+            const matchesDept = !deptId || deptIds.includes(deptId);
+
+            if (matchesDept) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+                const cb = item.querySelector('.bulk-dentist-checkbox');
+                if (cb) cb.checked = false;
+            }
+        });
+
+        // Re-filter with current search term
+        filterBulkDoctors();
+        syncBulkDentistSelection();
+        invalidateBulkPreview();
+    }
+
+    // Select/Deselect all visible doctors
+    function bulkSelectAllDoctors(selectAll) {
+        const items = document.querySelectorAll('#bulkDoctorListContainer .doctor-item');
+        items.forEach(item => {
+            if (item.style.display !== 'none') {
+                const cb = item.querySelector('.bulk-dentist-checkbox');
+                if (cb) cb.checked = selectAll;
+            }
+        });
+        syncBulkDentistSelection();
+        invalidateBulkPreview();
+    }
+
+    // Synchronize checkboxes with hidden select and count display
+    function syncBulkDentistSelection() {
+        const checkedBoxes = document.querySelectorAll('.bulk-dentist-checkbox:checked');
+        const selectedIds = Array.from(checkedBoxes).map(cb => {
+            return cb.value || cb.getAttribute('value') || cb.getAttribute('data-dentist-id') || cb.id.replace('chk_dentist_', '');
+        }).filter(id => id && String(id).trim().length > 0).map(id => String(id).trim());
+
+        const selectEl = document.getElementById('bulkDentistIds');
+        if (selectEl) {
+            Array.from(selectEl.options).forEach(opt => {
+                opt.selected = selectedIds.includes(String(opt.value).trim());
+            });
+        }
+
+        const countEl = document.getElementById('bulkSelectedCount');
+        if (countEl) countEl.innerText = selectedIds.length;
+
+        invalidateBulkPreview();
+    }
 
     function handleOverrideDentistChange() {
         const sel = document.getElementById('overrideDentistId');
@@ -445,7 +612,6 @@
         } else {
             deptNameInput.value = '';
         }
-        // State isolation: clear inputs when doctor changes
         document.getElementById('registerLeaveReason').value = '';
         document.getElementById('registerLeaveNotes').value = '';
         document.getElementById('scopeFullDay').checked = true;
@@ -453,6 +619,8 @@
 
     // Handle Bulk Preview AJAX
     async function handleBulkPreview() {
+        if (isBulkPreviewing) return;
+
         const deptId = document.getElementById('bulkDepartmentId').value;
         const dentistSelect = document.getElementById('bulkDentistIds');
         const dentistIds = Array.from(dentistSelect.selectedOptions).map(opt => parseInt(opt.value));
@@ -480,11 +648,14 @@
 
         // TWO FIXED SHIFTS ONLY
         const shifts = [];
+        const shiftIdentifiers = [];
         if (document.getElementById('shiftMorning').checked) {
-            shifts.push({ startTime: '08:00', endTime: '12:00', note: 'Ca Sáng' });
+            shifts.push({ shiftIdentifier: 'Morning', startTime: '08:00:00', endTime: '12:00:00', note: 'Ca Sáng' });
+            shiftIdentifiers.push('Morning');
         }
         if (document.getElementById('shiftAfternoon').checked) {
-            shifts.push({ startTime: '13:30', endTime: '17:30', note: 'Ca Chiều' });
+            shifts.push({ shiftIdentifier: 'Afternoon', startTime: '13:30:00', endTime: '17:30:00', note: 'Ca Chiều' });
+            shiftIdentifiers.push('Afternoon');
         }
         if (shifts.length === 0) {
             alert('Vui lòng chọn ít nhất một ca trực (Ca Sáng 08:00-12:00 hoặc Ca Chiều 13:30-17:30).');
@@ -498,10 +669,12 @@
             toDate: toDate,
             daysOfWeek: daysOfWeek,
             shifts: shifts,
+            shiftIdentifiers: shiftIdentifiers,
             overwriteExisting: overwrite
         };
 
         const btnPreview = document.getElementById('btnBulkPreview');
+        isBulkPreviewing = true;
         btnPreview.disabled = true;
         btnPreview.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang kiểm tra...';
 
@@ -526,13 +699,22 @@
                 const tbody = document.getElementById('bulkPreviewTableBody');
                 tbody.innerHTML = '';
 
-                data.items.slice(0, 50).forEach(item => {
+                data.items.slice(0, 100).forEach(item => {
                     const tr = document.createElement('tr');
                     let statusBadge = '<span class="badge bg-success-subtle text-success">Hợp lệ</span>';
-                    if (item.status === 'Duplicate') statusBadge = '<span class="badge bg-warning-subtle text-warning">Trùng lặp</span>';
-                    else if (item.status === 'LeaveConflict') statusBadge = '<span class="badge bg-danger-subtle text-danger">Trùng nghỉ phép</span>';
-                    else if (item.status === 'AppointmentConflict') statusBadge = '<span class="badge bg-danger text-white">Xung đột lịch hẹn</span>';
-                    else if (item.status === 'DepartmentMismatch') statusBadge = '<span class="badge bg-secondary">Sai chuyên khoa</span>';
+                    if (item.status === 'Duplicate' || item.status === 'AlreadyExists') {
+                        statusBadge = '<span class="badge bg-warning-subtle text-warning">Trùng lặp</span>';
+                    } else if (item.status === 'Overlap' || item.status === 'Conflict') {
+                        statusBadge = '<span class="badge bg-warning text-dark">Giao thoa giờ</span>';
+                    } else if (item.status === 'LeaveConflict' || item.status === 'OnLeave') {
+                        statusBadge = '<span class="badge bg-danger-subtle text-danger">Trùng nghỉ phép</span>';
+                    } else if (item.status === 'AppointmentConflict' || item.status === 'AppointmentImpact') {
+                        statusBadge = '<span class="badge bg-danger text-white">Xung đột lịch hẹn</span>';
+                    } else if (item.status === 'DepartmentMismatch') {
+                        statusBadge = '<span class="badge bg-secondary">Sai chuyên khoa</span>';
+                    } else if (item.status === 'PastOrStarted') {
+                        statusBadge = '<span class="badge bg-secondary-subtle text-muted">Đã qua / Đang diễn ra</span>';
+                    }
 
                     tr.innerHTML = `
                         <td class="fw-bold">${escapeHtml(item.dentistName)}</td>
@@ -552,6 +734,7 @@
             console.error(err);
             alert('Lỗi kết nối khi kiểm tra lịch trực: ' + err.message);
         } finally {
+            isBulkPreviewing = false;
             btnPreview.disabled = false;
             btnPreview.innerHTML = '<i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột (Preview)';
         }
@@ -559,6 +742,8 @@
 
     // Handle Bulk Apply AJAX
     async function handleBulkApply() {
+        if (isBulkApplying) return;
+
         const deptId = document.getElementById('bulkDepartmentId').value;
         const dentistSelect = document.getElementById('bulkDentistIds');
         const dentistIds = Array.from(dentistSelect.selectedOptions).map(opt => parseInt(opt.value));
@@ -570,11 +755,14 @@
         const daysOfWeek = Array.from(dowCheckboxes).map(cb => parseInt(cb.value));
 
         const shifts = [];
+        const shiftIdentifiers = [];
         if (document.getElementById('shiftMorning').checked) {
-            shifts.push({ startTime: '08:00', endTime: '12:00', note: 'Ca Sáng' });
+            shifts.push({ shiftIdentifier: 'Morning', startTime: '08:00:00', endTime: '12:00:00', note: 'Ca Sáng' });
+            shiftIdentifiers.push('Morning');
         }
         if (document.getElementById('shiftAfternoon').checked) {
-            shifts.push({ startTime: '13:30', endTime: '17:30', note: 'Ca Chiều' });
+            shifts.push({ shiftIdentifier: 'Afternoon', startTime: '13:30:00', endTime: '17:30:00', note: 'Ca Chiều' });
+            shiftIdentifiers.push('Afternoon');
         }
 
         const payload = {
@@ -584,11 +772,13 @@
             toDate: toDate,
             daysOfWeek: daysOfWeek,
             shifts: shifts,
+            shiftIdentifiers: shiftIdentifiers,
             overwriteExisting: overwrite,
             skipConflicts: true
         };
 
         const btnApply = document.getElementById('btnBulkApply');
+        isBulkApplying = true;
         btnApply.disabled = true;
         btnApply.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang lưu...';
 
@@ -613,6 +803,8 @@
             alert('Lỗi kết nối máy chủ.');
             btnApply.disabled = false;
             btnApply.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Áp Dụng Phân Công';
+        } finally {
+            isBulkApplying = false;
         }
     }
 
@@ -680,10 +872,10 @@
         const shifts = [];
         if (!isDayOff) {
             if (document.getElementById('overrideShiftMorning').checked) {
-                shifts.push({ startTime: '08:00', endTime: '12:00', note: 'Ca Sáng' });
+                shifts.push({ startTime: '08:00:00', endTime: '12:00:00', note: 'Ca Sáng' });
             }
             if (document.getElementById('overrideShiftAfternoon').checked) {
-                shifts.push({ startTime: '13:30', endTime: '17:30', note: 'Ca Chiều' });
+                shifts.push({ startTime: '13:30:00', endTime: '17:30:00', note: 'Ca Chiều' });
             }
         }
 

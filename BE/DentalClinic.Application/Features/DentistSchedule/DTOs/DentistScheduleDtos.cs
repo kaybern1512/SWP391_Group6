@@ -132,10 +132,40 @@ public class MonthlyDentistScheduleDto
     public List<MonthlyDayScheduleDto> Days { get; set; } = new();
 }
 
+public static class ClinicShiftConstants
+{
+    public const string Morning = "Morning";
+    public const string Afternoon = "Afternoon";
+
+    public static readonly TimeOnly MorningStartTime = new(8, 0);
+    public static readonly TimeOnly MorningEndTime = new(12, 0);
+
+    public static readonly TimeOnly AfternoonStartTime = new(13, 30);
+    public static readonly TimeOnly AfternoonEndTime = new(17, 30);
+
+    public static bool IsStandardShift(TimeOnly start, TimeOnly end)
+    {
+        return (start == MorningStartTime && end == MorningEndTime) ||
+               (start == AfternoonStartTime && end == AfternoonEndTime);
+    }
+
+    public static (TimeOnly StartTime, TimeOnly EndTime, string Name)? GetShiftTimes(string? shiftIdentifier)
+    {
+        if (string.IsNullOrWhiteSpace(shiftIdentifier)) return null;
+        var normalized = shiftIdentifier.Trim().ToLowerInvariant();
+        if (normalized is "morning" or "casang" or "ca sáng" or "sang" or "sáng" or "am" or "1")
+            return (MorningStartTime, MorningEndTime, "Ca Sáng");
+        if (normalized is "afternoon" or "cachieu" or "ca chiều" or "chieu" or "chiều" or "pm" or "2")
+            return (AfternoonStartTime, AfternoonEndTime, "Ca Chiều");
+        return null;
+    }
+}
+
 public class BulkScheduleShiftDto
 {
     public TimeOnly StartTime { get; set; }
     public TimeOnly EndTime { get; set; }
+    public string? ShiftIdentifier { get; set; }
     public string? Note { get; set; }
 }
 
@@ -147,6 +177,7 @@ public class BulkScheduleAssignmentRequest
     public DateOnly ToDate { get; set; }
     public List<int> DaysOfWeek { get; set; } = new(); // 1 = Mon ... 7 = Sun (or 0 = Sun)
     public List<BulkScheduleShiftDto> Shifts { get; set; } = new();
+    public List<string>? ShiftIdentifiers { get; set; } // ["Morning", "Afternoon"]
     public bool OverwriteExisting { get; set; }
 }
 
@@ -159,7 +190,7 @@ public class BulkSchedulePreviewItemDto
     public DateOnly WorkDate { get; set; }
     public TimeOnly StartTime { get; set; }
     public TimeOnly EndTime { get; set; }
-    public string Status { get; set; } = "Valid"; // Valid, Duplicate, Overlap, LeaveConflict, AppointmentConflict, DepartmentMismatch
+    public string Status { get; set; } = "Valid"; // Valid, Duplicate, Overlap, LeaveConflict, AppointmentConflict, DepartmentMismatch, PastOrStarted
     public string Message { get; set; } = string.Empty;
     public bool CanApply { get; set; } = true;
     public int AffectedAppointmentsCount { get; set; }
@@ -174,6 +205,7 @@ public class BulkSchedulePreviewResultDto
     public int LeaveConflictCount { get; set; }
     public int AppointmentConflictCount { get; set; }
     public int DepartmentMismatchCount { get; set; }
+    public int PastOrStartedCount { get; set; }
     public List<BulkSchedulePreviewItemDto> Items { get; set; } = new();
 }
 
