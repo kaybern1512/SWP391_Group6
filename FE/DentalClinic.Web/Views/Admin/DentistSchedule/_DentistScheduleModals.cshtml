@@ -37,16 +37,21 @@
                         <div class="col-md-7">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <label class="form-label fw-semibold small mb-0">2. Bác sĩ áp dụng <span class="text-danger">*</span></label>
-                                <div class="btn-group btn-group-sm">
-                                    <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none me-2 text-primary" onclick="bulkSelectAllDoctors(true)">Chọn tất cả</button>
-                                    <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="bulkSelectAllDoctors(false)">Bỏ chọn</button>
+                                <div class="btn-group btn-group-sm" id="bulkDoctorSelectAllGroup">
+                                    <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none me-2 text-primary" id="btnBulkSelectAll" onclick="bulkSelectAllDoctors(true)">Chọn tất cả</button>
+                                    <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" id="btnBulkDeselectAll" onclick="bulkSelectAllDoctors(false)">Bỏ chọn</button>
                                 </div>
                             </div>
 
                             <!-- Search box -->
-                            <div class="input-group input-group-sm mb-1">
+                            <div class="input-group input-group-sm mb-1" id="bulkDoctorSearchGroup">
                                 <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
                                 <input type="text" id="bulkDoctorSearch" class="form-control" placeholder="Tìm theo tên hoặc mã bác sĩ..." oninput="filterBulkDoctors()">
+                            </div>
+
+                            <!-- Guidance Notice when no Department selected -->
+                            <div id="bulkDoctorEmptyDeptNotice" class="border rounded p-3 text-center text-muted small bg-light mb-1" style="display: none;">
+                                <i class="bi bi-info-circle me-1 text-primary"></i>Vui lòng chọn chuyên khoa làm việc trước để tải danh sách bác sĩ tương ứng.
                             </div>
 
                             <!-- Doctor Checkbox List Container -->
@@ -536,12 +541,37 @@
     // Handle department change in bulk schedule modal
     function handleBulkDepartmentChange() {
         const deptId = document.getElementById('bulkDepartmentId')?.value;
-        const items = document.querySelectorAll('#bulkDoctorListContainer .doctor-item');
+        const container = document.getElementById('bulkDoctorListContainer');
+        const emptyNotice = document.getElementById('bulkDoctorEmptyDeptNotice');
+        const searchGroup = document.getElementById('bulkDoctorSearchGroup');
+        const btnSelectAll = document.getElementById('btnBulkSelectAll');
+        const btnDeselectAll = document.getElementById('btnBulkDeselectAll');
 
+        if (!deptId) {
+            if (container) container.style.display = 'none';
+            if (searchGroup) searchGroup.style.display = 'none';
+            if (emptyNotice) emptyNotice.style.display = 'block';
+            if (btnSelectAll) btnSelectAll.disabled = true;
+            if (btnDeselectAll) btnDeselectAll.disabled = true;
+
+            // Uncheck all doctors when no department is selected
+            document.querySelectorAll('.bulk-dentist-checkbox').forEach(cb => cb.checked = false);
+            syncBulkDentistSelection();
+            invalidateBulkPreview();
+            return;
+        }
+
+        if (container) container.style.display = 'block';
+        if (searchGroup) searchGroup.style.display = 'flex';
+        if (emptyNotice) emptyNotice.style.display = 'none';
+        if (btnSelectAll) btnSelectAll.disabled = false;
+        if (btnDeselectAll) btnDeselectAll.disabled = false;
+
+        const items = document.querySelectorAll('#bulkDoctorListContainer .doctor-item');
         items.forEach(item => {
             const deptIdsStr = item.getAttribute('data-dept-ids') || '';
             const deptIds = deptIdsStr ? deptIdsStr.split(',') : [];
-            const matchesDept = !deptId || deptIds.includes(deptId);
+            const matchesDept = deptIds.includes(deptId);
 
             if (matchesDept) {
                 item.style.display = '';

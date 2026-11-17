@@ -134,14 +134,23 @@
     function updateAllTimers() {
         const now = new Date();
 
+        function parseUtcDate(dateStr) {
+            if (!dateStr) return null;
+            let s = dateStr.trim();
+            if (!s.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(s)) {
+                s += 'Z';
+            }
+            return new Date(s);
+        }
+
         // A. Waiting Timers (CheckedIn)
         const waitingNodes = document.querySelectorAll('[data-timer-type="waiting"]');
         waitingNodes.forEach(function (el) {
             const rawTime = el.getAttribute('data-checkin-time');
             if (!rawTime) return;
 
-            const checkInDate = new Date(rawTime);
-            if (isNaN(checkInDate.getTime())) return;
+            const checkInDate = parseUtcDate(rawTime);
+            if (!checkInDate || isNaN(checkInDate.getTime())) return;
 
             const diffMs = now - checkInDate;
             const diffMin = Math.max(0, Math.floor(diffMs / 60000));
