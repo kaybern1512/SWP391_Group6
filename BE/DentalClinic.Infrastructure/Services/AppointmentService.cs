@@ -1794,7 +1794,8 @@ public class AppointmentService : IAppointmentService
                 RoomName = r.RoomName,
                 DepartmentId = r.DepartmentId,
                 Status = r.Status,
-                IsExclusive = string.Equals(r.RoomType, "Exclusive", StringComparison.OrdinalIgnoreCase)
+                IsExclusive = string.Equals(r.RoomType, "Exclusive", StringComparison.OrdinalIgnoreCase),
+                RoomType = r.RoomType
             })
             .ToList();
 
@@ -1924,6 +1925,22 @@ public class AppointmentService : IAppointmentService
         if (room == null)
         {
             return ApiResponse<AppointmentDto>.Fail("Phòng khám không hợp lệ, đã ngưng hoạt động hoặc không thuộc chuyên khoa.");
+        }
+
+        var primaryDeptService = await _dbContext.DepartmentServices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(ds => ds.DepartmentServiceId == primaryItem.DepartmentServiceId, ct);
+
+        bool isXRayService = string.Equals(primaryDeptService?.DiagnosticType, "XRay", StringComparison.OrdinalIgnoreCase);
+        bool isImagingRoom = string.Equals(room.RoomType, "Imaging", StringComparison.OrdinalIgnoreCase);
+
+        if (isXRayService && !isImagingRoom)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Dịch vụ chụp X-quang chỉ được thực hiện tại phòng chụp X-quang chuyên dụng.");
+        }
+        if (!isXRayService && isImagingRoom)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Dịch vụ điều trị không được phân bổ vào phòng chụp X-quang chuyên dụng.");
         }
 
         var (isChairAvail, chairReason) = await _clinicalAvailabilityService.CheckChairAvailabilityAsync(

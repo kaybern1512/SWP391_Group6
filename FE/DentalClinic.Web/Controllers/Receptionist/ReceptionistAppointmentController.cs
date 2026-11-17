@@ -212,10 +212,23 @@ public class ReceptionistAppointmentController : Controller
         var dentistsResult = await _appointmentApiService.GetAvailableDentistsForAppointmentAsync(id);
         var resourcesResult = await _appointmentApiService.GetAvailableResourcesAsync(appt.DepartmentId, start, end);
 
-        var rooms = resourcesResult.Data?.Rooms ?? new();
+        var isXRayService = appt.ServiceName?.Contains("X-quang", StringComparison.OrdinalIgnoreCase) == true;
+
+        var allRooms = resourcesResult.Data?.Rooms ?? new();
+        var rooms = isXRayService
+            ? allRooms.Where(r => string.Equals(r.RoomType, "Imaging", StringComparison.OrdinalIgnoreCase) || r.RoomCode == "R003").ToList()
+            : allRooms.Where(r => !string.Equals(r.RoomType, "Imaging", StringComparison.OrdinalIgnoreCase) && r.RoomCode != "R003").ToList();
+
         var chairs = resourcesResult.Data?.Chairs ?? new();
-        var selectedRoomId = appt.RoomId ?? (rooms.Count > 0 ? rooms[0].RoomId : 0);
+        var selectedRoomId = appt.RoomId.HasValue && rooms.Any(r => r.RoomId == appt.RoomId.Value)
+            ? appt.RoomId.Value
+            : (rooms.Count > 0 ? rooms[0].RoomId : 0);
         var selectedChairId = appt.DentalChairId;
+        if (selectedChairId.HasValue && !chairs.Any(c => c.DentalChairId == selectedChairId.Value && c.RoomId == selectedRoomId))
+        {
+            var validChair = chairs.FirstOrDefault(c => c.RoomId == selectedRoomId);
+            selectedChairId = validChair?.DentalChairId;
+        }
 
         var vm = new DepartmentReviewViewModel
         {

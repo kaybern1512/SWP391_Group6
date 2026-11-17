@@ -693,14 +693,14 @@ public class DentistMedicalRecordController : Controller
         long patientUserId,
         long prescriptionId,
         long medicineId,
-        long batchId,
-        int quantity,
+        long batchId = 0,
+        int quantity = 1,
         long? prescriptionItemId = null,
         string? notes = null)
     {
-        if (_medicineApi == null || prescriptionId <= 0 || batchId <= 0 || quantity <= 0)
+        if (_medicineApi == null || prescriptionId <= 0 || medicineId <= 0 || quantity <= 0)
         {
-            TempData["ErrorMessage"] = "Thông tin cấp phát thuốc không hợp lệ. Vui lòng chọn lô thuốc và nhập số lượng lớn hơn 0.";
+            TempData["ErrorMessage"] = "Thông tin cấp phát thuốc không hợp lệ. Vui lòng chọn thuốc và nhập số lượng lớn hơn 0.";
             return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
         }
 
@@ -714,7 +714,7 @@ public class DentistMedicalRecordController : Controller
                 {
                     PrescriptionItemId = prescriptionItemId,
                     MedicineId = medicineId,
-                    MedicineBatchId = batchId,
+                    MedicineBatchId = batchId > 0 ? batchId : medicineId,
                     Quantity = quantity
                 }
             }

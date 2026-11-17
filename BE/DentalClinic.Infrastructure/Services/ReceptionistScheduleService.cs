@@ -321,6 +321,57 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             return ApiResponse<ReceptionistWorkScheduleDto>.Fail("Không thể phân ca vì lễ tân đã được duyệt nghỉ phép trong khoảng thời gian này.");
         }
 
+        var existing = await _dbContext.StaffWorkSchedules
+            .FirstOrDefaultAsync(s => s.StaffRole == UserRole.Receptionist &&
+                                      s.StaffUserId == request.ReceptionistUserId &&
+                                      s.WorkDate == request.WorkDate &&
+                                      s.StartTime == request.StartTime &&
+                                      s.EndTime == request.EndTime, ct);
+
+        if (existing != null)
+        {
+            if (existing.Status == "Cancelled")
+            {
+                existing.Status = "Scheduled";
+                existing.Notes = request.Notes ?? existing.Notes;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync(ct);
+
+                await _auditLogService.LogAsync(
+                    currentUserId,
+                    "REACTIVATE_RECEPTIONIST_SCHEDULE",
+                    "StaffWorkSchedule",
+                    existing.WorkScheduleId.ToString(),
+                    "Cancelled",
+                    $"Reactivated shift {request.StartTime}-{request.EndTime} for receptionist {request.ReceptionistUserId} on {request.WorkDate:yyyy-MM-dd}",
+                    ct);
+
+                var userExisting = await _dbContext.UserAccounts
+                    .Include(u => u.StaffProfile)
+                    .FirstOrDefaultAsync(u => u.UserId == request.ReceptionistUserId, ct);
+
+                var dtoExisting = new ReceptionistWorkScheduleDto
+                {
+                    ReceptionistScheduleId = existing.WorkScheduleId,
+                    ReceptionistUserId = existing.StaffUserId,
+                    ReceptionistName = userExisting?.StaffProfile?.FullName ?? userExisting?.Email ?? "Lễ tân",
+                    EmployeeCode = $"EMP-{existing.StaffUserId}",
+                    ShiftTemplateId = request.ShiftTemplateId,
+                    WorkDate = existing.WorkDate,
+                    StartTime = existing.StartTime,
+                    EndTime = existing.EndTime,
+                    Status = existing.Status,
+                    IsPublished = true,
+                    Notes = existing.Notes,
+                    CreatedAt = existing.CreatedAt
+                };
+
+                return ApiResponse<ReceptionistWorkScheduleDto>.Ok(dtoExisting, "Khôi phục và kích hoạt ca làm việc thành công.");
+            }
+
+            return ApiResponse<ReceptionistWorkScheduleDto>.Fail("Ca trực này đã tồn tại trong hệ thống.");
+        }
+
         bool overlapping = await _dbContext.StaffWorkSchedules
             .AnyAsync(s => s.StaffRole == UserRole.Receptionist &&
                            s.StaffUserId == request.ReceptionistUserId &&
@@ -862,23 +913,32 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                     continue;
                 }
 
-                // Idempotency check: don't create duplicates
-                bool alreadyExists = await _dbContext.StaffWorkSchedules
-                    .AsNoTracking()
-                    .AnyAsync(s => s.StaffRole == UserRole.Receptionist &&
-                                   s.StaffUserId == item.ReceptionistUserId &&
-                                   s.WorkDate == item.WorkDate &&
-                                   s.StartTime == item.StartTime &&
-                                   s.EndTime == item.EndTime &&
-                                   s.Status == "Scheduled", ct);
+                // Idempotency check: don't create duplicates or violate UQ_StaffWorkSchedules_User_Shift
+                var existingRow = await _dbContext.StaffWorkSchedules
+                    .FirstOrDefaultAsync(s => s.StaffRole == UserRole.Receptionist &&
+                                              s.StaffUserId == item.ReceptionistUserId &&
+                                              s.WorkDate == item.WorkDate &&
+                                              s.StartTime == item.StartTime &&
+                                              s.EndTime == item.EndTime, ct);
 
-                if (alreadyExists)
+                if (existingRow != null)
                 {
-                    item.Status = "AlreadyExists";
-                    item.CanApply = false;
-                    item.Message = "Ca tương đương đã tồn tại";
-                    concurrentDuplicateSkipped++;
-                    continue;
+                    if (existingRow.Status == "Scheduled")
+                    {
+                        item.Status = "AlreadyExists";
+                        item.CanApply = false;
+                        item.Message = "Ca tương đương đã tồn tại";
+                        concurrentDuplicateSkipped++;
+                        continue;
+                    }
+                    if (existingRow.Status == "Cancelled")
+                    {
+                        existingRow.Status = "Scheduled";
+                        existingRow.Notes = $"[Phân công hàng loạt - Khôi phục] {item.ShiftName}";
+                        existingRow.UpdatedAt = now;
+                        created++;
+                        continue;
+                    }
                 }
 
                 bool isOverlap = await _dbContext.StaffWorkSchedules
@@ -1014,11 +1074,18 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                     continue;
                 }
 
-                if (!request.OverwriteExisting)
+                var existingShift = await _dbContext.StaffWorkSchedules
+                    .FirstOrDefaultAsync(ws => ws.StaffRole == UserRole.Receptionist && ws.StaffUserId == s.StaffUserId && ws.WorkDate == tgtDate && ws.StartTime == s.StartTime && ws.EndTime == s.EndTime, ct);
+
+                if (existingShift != null)
                 {
-                    bool exists = await _dbContext.StaffWorkSchedules
-                        .AnyAsync(ws => ws.StaffRole == UserRole.Receptionist && ws.StaffUserId == s.StaffUserId && ws.WorkDate == tgtDate && ws.Status == "Scheduled", ct);
-                    if (exists) continue;
+                    if (existingShift.Status == "Scheduled" && !request.OverwriteExisting)
+                        continue;
+
+                    existingShift.Status = "Scheduled";
+                    existingShift.Notes = $"Sao chép từ ngày {srcDate:dd/MM/yyyy}";
+                    existingShift.UpdatedAt = DateTime.UtcNow;
+                    continue;
                 }
 
                 newShifts.Add(new StaffWorkSchedule
@@ -1066,32 +1133,51 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
 
         var existing = await _dbContext.StaffWorkSchedules
-            .Where(s => s.StaffRole == UserRole.Receptionist && s.WorkDate == request.Date && s.Status == "Scheduled")
+            .Where(s => s.StaffRole == UserRole.Receptionist && s.WorkDate == request.Date)
             .ToListAsync(ct);
 
-        foreach (var ex in existing)
+        var now = DateTime.UtcNow;
+
+        // Cancel previously scheduled shifts that are not in the new request
+        foreach (var ex in existing.Where(s => s.Status == "Scheduled"))
         {
-            ex.Status = "Cancelled";
-            ex.UpdatedAt = DateTime.UtcNow;
+            bool stillRequested = request.Shifts.Any(r => r.ReceptionistUserId == ex.StaffUserId && r.StartTime == ex.StartTime && r.EndTime == ex.EndTime);
+            if (!stillRequested)
+            {
+                ex.Status = "Cancelled";
+                ex.UpdatedAt = now;
+            }
         }
 
-        var newShifts = new List<StaffWorkSchedule>();
+        int appliedCount = 0;
         foreach (var req in request.Shifts)
         {
-            newShifts.Add(new StaffWorkSchedule
+            var match = existing.FirstOrDefault(s => s.StaffUserId == req.ReceptionistUserId && s.StartTime == req.StartTime && s.EndTime == req.EndTime);
+            if (match != null)
             {
-                StaffUserId = req.ReceptionistUserId,
-                StaffRole = UserRole.Receptionist,
-                WorkDate = request.Date,
-                StartTime = req.StartTime,
-                EndTime = req.EndTime,
-                Status = "Scheduled",
-                Notes = req.Notes ?? "Điều chỉnh lịch trong ngày",
-                CreatedAt = DateTime.UtcNow
-            });
+                match.Status = "Scheduled";
+                match.Notes = req.Notes ?? "Điều chỉnh lịch trong ngày";
+                match.UpdatedAt = now;
+                appliedCount++;
+            }
+            else
+            {
+                _dbContext.StaffWorkSchedules.Add(new StaffWorkSchedule
+                {
+                    StaffUserId = req.ReceptionistUserId,
+                    StaffRole = UserRole.Receptionist,
+                    WorkDate = request.Date,
+                    StartTime = req.StartTime,
+                    EndTime = req.EndTime,
+                    Status = "Scheduled",
+                    Notes = req.Notes ?? "Điều chỉnh lịch trong ngày",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+                appliedCount++;
+            }
         }
 
-        _dbContext.StaffWorkSchedules.AddRange(newShifts);
         await _dbContext.SaveChangesAsync(ct);
 
         await _auditLogService.LogAsync(
@@ -1100,7 +1186,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             "StaffWorkSchedule",
             request.Date.ToString("yyyy-MM-dd"),
             null,
-            $"Applied {newShifts.Count} overridden shifts on {request.Date:yyyy-MM-dd}",
+            $"Applied {appliedCount} overridden shifts on {request.Date:yyyy-MM-dd}",
             ct);
 
         return ApiResponse<bool>.Ok(true, $"Đã cập nhật lịch làm việc ngày {request.Date:dd/MM/yyyy} thành công.");

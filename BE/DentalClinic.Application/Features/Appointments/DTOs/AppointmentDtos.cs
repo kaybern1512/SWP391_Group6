@@ -217,8 +217,9 @@ public class RoomOptionDto
     public string RoomCode { get; set; } = string.Empty;
     public string? RoomName { get; set; }
     public long? DepartmentId { get; set; }
-public string Status { get; set; } = "Active";
+    public string Status { get; set; } = "Active";
     public bool IsExclusive { get; set; } = false;
+    public string? RoomType { get; set; }
 }
 
 public class ChairOptionDto

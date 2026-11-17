@@ -1916,41 +1916,41 @@
                     <input type="hidden" name="patientUserId" value="@record.PatientUserId" />
                     <input type="hidden" name="prescriptionId" value="@(Model.ActivePrescription?.PrescriptionId ?? 0)" />
                     <input type="hidden" id="dispenseMedicineIdHidden" name="medicineId" value="0" />
+                    <input type="hidden" name="batchId" value="0" />
 
                     <div class="modal-body p-4">
-                        <div class="alert alert-warning py-2 px-3 small border-0 bg-warning-subtle text-dark mb-3">
-                            <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
-                            DentalCare không có Dược sĩ. Bác sĩ tự chọn lô thuốc còn hạn và cấp phát cho bệnh nhân. Hệ thống tự động trừ tồn kho (FEFO) và chống xuất âm.
+                        <div class="alert alert-info py-2 px-3 small border-0 bg-info-subtle text-dark mb-3">
+                            <i class="bi bi-info-circle-fill text-info me-1"></i>
+                            Cấp phát thuốc trực tiếp tại ghế điều trị. Hệ thống tự động trừ tồn kho khả dụng và cập nhật đơn thuốc của bệnh nhân.
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label fw-semibold">1. Chọn thuốc cần cấp phát: <span class="text-danger">*</span></label>
-                            <select id="dispenseMedicineSelect" class="form-select" onchange="loadBatchesForSelectedMed(this)" required>
+                            <select id="dispenseMedicineSelect" class="form-select" onchange="onDispenseMedicineChanged(this)" required>
                                 <option value="">-- Chọn thuốc trong danh mục kho --</option>
                                 @foreach (var med in Model.AvailableMedicines)
                                 {
                                     <option value="@med.MedicineId" data-stock="@med.TotalAvailableStock" data-unit="@med.Unit">
-                                        @med.MedicineName (@(med.Concentration ?? "")) - Khả dụng: @med.TotalAvailableStock @med.Unit
+                                        @med.MedicineName (@(med.Concentration ?? "")) - Tồn kho: @med.TotalAvailableStock @med.Unit
                                     </option>
                                 }
                             </select>
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">2. Chọn Lô thuốc còn hạn (FEFO): <span class="text-danger">*</span></label>
-                            <select id="dispenseBatchSelect" name="batchId" class="form-select" required onchange="onBatchSelected(this)">
-                                <option value="">-- Vui lòng chọn thuốc trước --</option>
-                            </select>
-                            <div class="form-text small text-muted" id="batchStockInfo"></div>
+                        <div class="mb-3" id="dispenseStockBox" style="display: none;">
+                            <div class="p-2 bg-light border rounded small d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Tồn kho khả dụng:</span>
+                                <span class="fw-bold text-success fs-6" id="dispenseStockText">0 Viên</span>
+                            </div>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-semibold">3. Số lượng thực tế bàn giao cho bệnh nhân: <span class="text-danger">*</span></label>
+                            <label class="form-label fw-semibold">2. Số lượng thực tế bàn giao cho bệnh nhân: <span class="text-danger">*</span></label>
                             <div class="input-group">
-                                <input type="number" id="dispenseQuantityInput" name="quantity" class="form-control" value="6" min="1" max="100" required />
+                                <input type="number" id="dispenseQuantityInput" name="quantity" class="form-control" value="1" min="1" max="100" required />
                                 <span class="input-group-text" id="dispenseUnitText">Viên</span>
                             </div>
-                            <div class="form-text small text-muted">Nếu kê 10 viên và cấp 6 viên, hệ thống chỉ trừ đúng 6 viên trong kho.</div>
+                            <div class="form-text small text-muted">Số lượng cấp phát sẽ được trừ trực tiếp vào kho dược của phòng khám.</div>
                         </div>
 
                         <div class="mb-2">
@@ -3069,67 +3069,33 @@
             }
         }
 
-        async function loadBatchesForSelectedMed(select) {
+        function onDispenseMedicineChanged(select) {
             const medId = select.value;
-            const batchSelect = document.getElementById('dispenseBatchSelect');
-            const stockInfo = document.getElementById('batchStockInfo');
             const unitText = document.getElementById('dispenseUnitText');
             const medHidden = document.getElementById('dispenseMedicineIdHidden');
+            const stockBox = document.getElementById('dispenseStockBox');
+            const stockText = document.getElementById('dispenseStockText');
+            const qtyInput = document.getElementById('dispenseQuantityInput');
+
             if (medHidden) medHidden.value = medId || '0';
-            if (!batchSelect) return;
-
-            batchSelect.innerHTML = '<option value="">Đang tải danh sách lô thuốc...</option>';
-            if (stockInfo) stockInfo.textContent = '';
-
-            const selectedOpt = select.options[select.selectedIndex];
-            if (unitText && selectedOpt && selectedOpt.dataset.unit) {
-                unitText.textContent = selectedOpt.dataset.unit;
-            }
 
             if (!medId) {
-                batchSelect.innerHTML = '<option value="">-- Vui lòng chọn thuốc trước --</option>';
+                if (stockBox) stockBox.style.display = 'none';
                 return;
             }
 
-            try {
-                const resp = await fetch(`/Dentist/MedicalRecords/GetBatchesForMedicine?medicineId=${medId}`);
-                const res = await resp.json();
-                if (res.success && res.data && res.data.length > 0) {
-                    batchSelect.innerHTML = '<option value="">-- Chọn lô thuốc hợp lệ (FEFO) --</option>';
-                    const today = new Date().toISOString().split('T')[0];
-                    let hasValid = false;
-                    res.data.forEach(b => {
-                        const isExpired = b.expiryDate <= today;
-                        const isAvailable = b.status === 'Available' && b.quantityAvailable > 0 && !isExpired;
-                        if (isAvailable) hasValid = true;
-                        const opt = document.createElement('option');
-                        opt.value = b.medicineBatchId;
-                        opt.textContent = `Lô ${b.batchNumber} - HSD: ${b.expiryDate} (Tồn: ${b.quantityAvailable}) ${isExpired ? '[Hết hạn]' : ''}`;
-                        opt.dataset.available = b.quantityAvailable;
-                        opt.disabled = !isAvailable;
-                        batchSelect.appendChild(opt);
-                    });
-                    if (!hasValid) {
-                        batchSelect.innerHTML = '<option value="">Tất cả các lô đã hết hạn hoặc hết tồn kho</option>';
-                    }
-                } else {
-                    batchSelect.innerHTML = '<option value="">Không có lô thuốc nào trong kho</option>';
-                }
-            } catch (e) {
-                batchSelect.innerHTML = '<option value="">Lỗi tải dữ liệu lô thuốc</option>';
-            }
-        }
+            const selectedOpt = select.options[select.selectedIndex];
+            const stock = parseInt(selectedOpt?.dataset.stock || '0', 10);
+            const unit = selectedOpt?.dataset.unit || 'Viên';
 
-        function onBatchSelected(select) {
-            const opt = select.options[select.selectedIndex];
-            const stockInfo = document.getElementById('batchStockInfo');
-            const qtyInput = document.getElementById('dispenseQuantityInput');
-            if (opt && opt.dataset.available) {
-                const avail = parseInt(opt.dataset.available, 10);
-                if (stockInfo) stockInfo.textContent = `Số lượng khả dụng của lô này: ${avail} đơn vị.`;
-                if (qtyInput) {
-                    qtyInput.max = avail;
-                    if (parseInt(qtyInput.value, 10) > avail) qtyInput.value = avail;
+            if (unitText) unitText.textContent = unit;
+            if (stockBox) stockBox.style.display = 'block';
+            if (stockText) stockText.textContent = `${stock} ${unit}`;
+
+            if (qtyInput) {
+                qtyInput.max = Math.max(1, stock);
+                if (parseInt(qtyInput.value, 10) > stock) {
+                    qtyInput.value = Math.max(1, stock);
                 }
             }
         }

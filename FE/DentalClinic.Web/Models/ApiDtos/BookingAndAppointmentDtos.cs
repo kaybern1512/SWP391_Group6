@@ -331,6 +331,7 @@ public class RoomOptionDto
     public string RoomName { get; set; } = string.Empty;
     public long? DepartmentId { get; set; }
     public bool IsOccupied { get; set; }
+    public string? RoomType { get; set; }
 }
 
 public class DentalChairOptionDto
