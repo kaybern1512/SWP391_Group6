@@ -306,6 +306,56 @@ public class CareEpisodeService : ICareEpisodeService
         if (apptService.Status == "Cancelled")
             return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Tác vụ này đã bị hủy.");
 
+        var isXray = string.Equals(apptService.DepartmentService.DiagnosticType, "XRay", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(apptService.DepartmentService.DiagnosticType, "Imaging", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("X-quang", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("X-Quang", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("X-ray", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("Xray", StringComparison.OrdinalIgnoreCase);
+
+        if (isXray)
+        {
+            var hasDiagnosticImage = !string.IsNullOrWhiteSpace(request.EvidenceUrl) ||
+                await _dbContext.Diagnostics.AnyAsync(d =>
+                    (d.AppointmentServiceId == serviceTaskId || (d.AppointmentService.AppointmentId == apptService.AppointmentId && d.DepartmentServiceId == apptService.DepartmentServiceId))
+                    && !string.IsNullOrWhiteSpace(d.FileUrl)
+                    && (d.Status == "Completed" || d.Status == "ResultAvailable" || d.Status == "Acquired"), ct);
+
+            if (!hasDiagnosticImage)
+            {
+                return ApiResponse<EpisodeTaskStepProgressDto>.Fail(
+                    $"Dịch vụ chụp X-quang '{apptService.DepartmentService.ServiceName}' yêu cầu phải có kết quả hình ảnh chụp phim hợp lệ trước khi xác nhận hoàn thành.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.EvidenceUrl))
+            {
+                var existingDiag = await _dbContext.Diagnostics.FirstOrDefaultAsync(d => d.AppointmentServiceId == serviceTaskId, ct);
+                if (existingDiag != null)
+                {
+                    if (string.IsNullOrWhiteSpace(existingDiag.FileUrl))
+                        existingDiag.FileUrl = request.EvidenceUrl.Trim();
+                    existingDiag.Status = "Completed";
+                    existingDiag.CompletedAt ??= DateTime.UtcNow;
+                }
+                else
+                {
+                    _dbContext.Diagnostics.Add(new Diagnostic
+                    {
+                        AppointmentServiceId = serviceTaskId,
+                        DepartmentServiceId = apptService.DepartmentServiceId,
+                        OrderingDentistUserId = dentistUserId,
+                        ClinicalIndication = request.ResultValue?.Trim() ?? "Kết quả chụp phim X-quang",
+                        Status = "Completed",
+                        ImagingType = "XRay",
+                        FileUrl = request.EvidenceUrl.Trim(),
+                        Findings = request.Notes?.Trim() ?? "Đã hoàn thành chụp phim",
+                        CreatedAt = DateTime.UtcNow,
+                        CompletedAt = DateTime.UtcNow
+                    });
+                }
+            }
+        }
+
         if (apptService.Status != "InService")
         {
             apptService.Status = "InService";
@@ -380,6 +430,56 @@ public class CareEpisodeService : ICareEpisodeService
 
         if (apptService.Status == "Cancelled")
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Tác vụ này đã bị hủy.");
+
+        var isXray = string.Equals(apptService.DepartmentService.DiagnosticType, "XRay", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(apptService.DepartmentService.DiagnosticType, "Imaging", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("X-quang", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("X-Quang", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("X-ray", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("Xray", StringComparison.OrdinalIgnoreCase);
+
+        if (isXray)
+        {
+            var hasDiagnosticImage = !string.IsNullOrWhiteSpace(request?.EvidenceUrl) ||
+                await _dbContext.Diagnostics.AnyAsync(d =>
+                    (d.AppointmentServiceId == serviceTaskId || (d.AppointmentService.AppointmentId == apptService.AppointmentId && d.DepartmentServiceId == apptService.DepartmentServiceId))
+                    && !string.IsNullOrWhiteSpace(d.FileUrl)
+                    && (d.Status == "Completed" || d.Status == "ResultAvailable" || d.Status == "Acquired"), ct);
+
+            if (!hasDiagnosticImage)
+            {
+                return ApiResponse<EpisodeServiceTaskDto>.Fail(
+                    $"Dịch vụ chụp X-quang '{apptService.DepartmentService.ServiceName}' yêu cầu phải có kết quả hình ảnh chụp phim hợp lệ trước khi xác nhận hoàn thành.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(request?.EvidenceUrl))
+            {
+                var existingDiag = await _dbContext.Diagnostics.FirstOrDefaultAsync(d => d.AppointmentServiceId == serviceTaskId, ct);
+                if (existingDiag != null)
+                {
+                    if (string.IsNullOrWhiteSpace(existingDiag.FileUrl))
+                        existingDiag.FileUrl = request.EvidenceUrl.Trim();
+                    existingDiag.Status = "Completed";
+                    existingDiag.CompletedAt ??= DateTime.UtcNow;
+                }
+                else
+                {
+                    _dbContext.Diagnostics.Add(new Diagnostic
+                    {
+                        AppointmentServiceId = serviceTaskId,
+                        DepartmentServiceId = apptService.DepartmentServiceId,
+                        OrderingDentistUserId = dentistUserId,
+                        ClinicalIndication = request.ClinicalFindings?.Trim() ?? "Kết quả chụp phim X-quang",
+                        Status = "Completed",
+                        ImagingType = "XRay",
+                        FileUrl = request.EvidenceUrl.Trim(),
+                        Findings = request.ClinicalFindings?.Trim() ?? "Đã hoàn thành chụp phim",
+                        CreatedAt = DateTime.UtcNow,
+                        CompletedAt = DateTime.UtcNow
+                    });
+                }
+            }
+        }
 
         apptService.AssignedDentistUserId ??= dentistUserId;
         apptService.Status = "Completed";

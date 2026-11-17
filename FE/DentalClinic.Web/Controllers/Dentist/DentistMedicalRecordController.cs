@@ -494,14 +494,16 @@ public class DentistMedicalRecordController : Controller
         long appointmentId,
         long patientUserId,
         string? clinicalFindings,
-        string? notes)
+        string? notes,
+        string? evidenceUrl = null)
     {
         if (_careEpisodeApi != null)
         {
             var req = new CompleteServiceTaskRequest
             {
                 ClinicalFindings = clinicalFindings,
-                Notes = notes
+                Notes = notes,
+                EvidenceUrl = evidenceUrl
             };
             var result = await _careEpisodeApi.CompleteServiceTaskAsync(serviceTaskId, req);
             if (result.IsSuccess)

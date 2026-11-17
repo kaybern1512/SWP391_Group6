@@ -1034,8 +1034,11 @@ public class DentistScheduleServiceTests
         await SeedDataAsync(db);
         var service = new DentistScheduleService(db, _mockAuditLog.Object);
 
-        var fromDate = new DateOnly(2026, 11, 17);
-        var toDate = new DateOnly(2026, 11, 30);
+        var today = ClinicTimeHelper.TodayDateOnly;
+        var daysUntilNextMonday = ((int)DayOfWeek.Monday - (int)today.DayOfWeek + 7) % 7;
+        if (daysUntilNextMonday == 0) daysUntilNextMonday = 7;
+        var fromDate = today.AddDays(daysUntilNextMonday);
+        var toDate = fromDate.AddDays(13); // 2 full weeks = 14 calendar days, exactly 10 weekdays Mon-Fri
         var weekdaysMonToFri = new List<int> { 1, 2, 3, 4, 5 }; // Monday to Friday
 
         var request = new BulkScheduleApplyRequest

@@ -503,6 +503,7 @@
                                             <!-- Complete Task Drawer -->
                                             @if (task.Status == "InProgress" && isApptActive)
                                             {
+                                                var isXrayTask = (!string.IsNullOrWhiteSpace(task.ServiceName) && (task.ServiceName.Contains("X-quang", StringComparison.OrdinalIgnoreCase) || task.ServiceName.Contains("XRay", StringComparison.OrdinalIgnoreCase) || task.ServiceName.Contains("X-ray", StringComparison.OrdinalIgnoreCase) || task.ServiceName.Contains("chụp phim", StringComparison.OrdinalIgnoreCase)));
                                                 <div class="collapse p-3 bg-light border-bottom" id="completeTaskCollapse-@task.ServiceTaskId">
                                                     <form asp-action="CompleteServiceTask" method="post">
                                                         @Html.AntiForgeryToken()
@@ -510,11 +511,18 @@
                                                         <input type="hidden" name="appointmentId" value="@(Model.ActiveAppointmentId ?? 0)" />
                                                         <input type="hidden" name="patientUserId" value="@(Model.SelectedPatientUserId ?? 0)" />
                                                         <div class="row g-2 align-items-end">
-                                                            <div class="col-md-5">
+                                                            <div class="@(isXrayTask ? "col-md-4" : "col-md-5")">
                                                                 <label class="form-label small fw-semibold">Ghi nhận lâm sàng / Kết quả thủ thuật:</label>
                                                                 <input type="text" name="clinicalFindings" class="form-control form-control-sm" placeholder="VD: Răng 36 trám composite hoàn tất, khớp cắn chuẩn..." required />
                                                             </div>
-                                                            <div class="col-md-5">
+                                                            @if (isXrayTask)
+                                                            {
+                                                                <div class="col-md-3">
+                                                                    <label class="form-label small fw-semibold text-primary"><i class="bi bi-camera me-1"></i>URL/File ảnh X-quang:</label>
+                                                                    <input type="text" name="evidenceUrl" class="form-control form-control-sm" placeholder="URL ảnh chụp phim X-quang..." />
+                                                                </div>
+                                                            }
+                                                            <div class="@(isXrayTask ? "col-md-3" : "col-md-5")">
                                                                 <label class="form-label small fw-semibold">Ghi chú thêm:</label>
                                                                 <input type="text" name="notes" class="form-control form-control-sm" placeholder="Ghi chú theo dõi..." />
                                                             </div>
