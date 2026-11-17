@@ -124,12 +124,13 @@
 
 @section Scripts {
 <script>
-    const availableServices = [
-        @foreach (var s in Model.Services)
-        {
-            <text>{ id: @s.DepartmentServiceId, name: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(s.ServiceName)), price: @((long)s.Price) },</text>
-        }
-    ];
+    const availableServices = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        Model.Services.Select(s => new {
+            id = s.DepartmentServiceId,
+            name = s.ServiceName,
+            price = s.Price
+        })
+    ));
 
     let phaseCount = 0;
 
@@ -152,6 +153,7 @@
         });
 
         tr.innerHTML = `
+            <input type="hidden" name="Items.Index" value="${phaseCount}" />
             <td class="text-center fw-bold font-monospace bg-light">
                 ${seq}
                 <input type="hidden" name="Items[${phaseCount}].SequenceNo" value="${seq}" />
