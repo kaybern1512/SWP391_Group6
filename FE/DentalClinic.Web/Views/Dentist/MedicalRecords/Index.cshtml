@@ -1010,9 +1010,20 @@
                                     <h6 class="fw-bold text-slate-800 mb-0">Phác Đồ & Liệu Trình Điều Trị Nhiều Buổi</h6>
                                     <small class="text-muted">Áp dụng cho điều trị tủy nhiều lần, chỉnh nha, implant, phục hình.</small>
                                 </div>
-                                <a asp-controller="DentistTreatmentPlan" asp-action="Index" class="btn btn-outline-primary btn-sm fw-semibold">
-                                    <i class="bi bi-box-arrow-up-right me-1"></i> Quản lý toàn bộ phác đồ
-                                </a>
+                                <div class="d-flex align-items-center gap-2">
+                                    @if (Model.SelectedPatientUserId.HasValue)
+                                    {
+                                        <a asp-controller="DentistTreatmentPlan" asp-action="Create" 
+                                           asp-route-patientId="@Model.SelectedPatientUserId" 
+                                           asp-route-appointmentId="@Model.ActiveAppointmentId" 
+                                           class="btn btn-primary btn-sm fw-semibold shadow-sm">
+                                            <i class="bi bi-plus-circle me-1"></i>+ Lập Phác Đồ Cho Ca Này
+                                        </a>
+                                    }
+                                    <a asp-controller="DentistTreatmentPlan" asp-action="Index" class="btn btn-outline-secondary btn-sm fw-semibold">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i> Quản lý toàn bộ phác đồ
+                                    </a>
+                                </div>
                             </div>
 
                             @if (Model.PatientTreatmentPlans.Any())
@@ -1026,6 +1037,9 @@
                                                     <span class="fw-bold text-dark fs-6">Phác Đồ #@plan.TreatmentPlanId</span>
                                                     <span class="badge @(plan.Status == "Completed" ? "bg-success" : "bg-primary")">@plan.Status</span>
                                                     <span class="badge bg-secondary-subtle text-secondary border">@plan.DepartmentName</span>
+                                                    <a asp-controller="DentistTreatmentPlan" asp-action="Detail" asp-route-id="@plan.TreatmentPlanId" class="btn btn-xs btn-outline-primary py-0 px-2 small">
+                                                        Chi tiết
+                                                    </a>
                                                 </div>
                                                 <div class="small text-muted">
                                                     Tiến độ: <strong>@plan.CompletedItemsCount / @plan.TotalItemsCount giai đoạn</strong> (@plan.ProgressPercentage%)
@@ -1043,6 +1057,7 @@
                                                             <th>Răng</th>
                                                             <th>Bác sĩ</th>
                                                             <th>Trạng thái</th>
+                                                            <th class="text-end">Thao tác</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -1058,11 +1073,97 @@
                                                                         @item.Status
                                                                     </span>
                                                                 </td>
+                                                                <td class="text-end">
+                                                                    @if (isApptActive && item.Status != "Completed")
+                                                                    {
+                                                                        <button type="button" class="btn btn-sm btn-success fw-semibold shadow-sm py-1 px-2" 
+                                                                                data-bs-toggle="modal" data-bs-target="#recordSessionModal_@item.TreatmentPlanItemId">
+                                                                            <i class="bi bi-play-circle me-1"></i>Thực Hiện GĐ @item.SequenceNo
+                                                                        </button>
+                                                                    }
+                                                                    else if (item.Status == "Completed")
+                                                                    {
+                                                                        <span class="text-success small fw-semibold"><i class="bi bi-check-circle me-1"></i>Đã xong</span>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <span class="text-muted small">&mdash;</span>
+                                                                    }
+                                                                </td>
                                                             </tr>
                                                         }
                                                     </tbody>
                                                 </table>
                                             </div>
+
+                                            @* Render Modals for Pending Items *@
+                                            @foreach (var item in plan.Items.Where(i => i.Status != "Completed"))
+                                            {
+                                                <div class="modal fade" id="recordSessionModal_@item.TreatmentPlanItemId" tabindex="-1" aria-hidden="true">
+                                                    <div class="modal-dialog modal-dialog-centered">
+                                                        <div class="modal-content border-0 shadow">
+                                                            <form method="post" asp-controller="DentistTreatmentPlan" asp-action="RecordSession">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="TreatmentPlanItemId" value="@item.TreatmentPlanItemId" />
+                                                                <input type="hidden" name="AppointmentId" value="@(Model.ActiveAppointmentId ?? 0)" />
+                                                                <input type="hidden" name="returnAppointmentId" value="@(Model.ActiveAppointmentId ?? 0)" />
+                                                                <input type="hidden" name="Services[0].DepartmentServiceId" value="@(item.DepartmentServiceId ?? 0)" />
+                                                                <input type="hidden" name="Services[0].Quantity" value="1" />
+                                                                <input type="hidden" name="Services[0].UnitPrice" value="@((long)(item.ServicePrice ?? 0))" />
+
+                                                                <div class="modal-header bg-success text-white py-3">
+                                                                    <h6 class="modal-title fw-bold">
+                                                                        <i class="bi bi-clipboard2-check me-2"></i>Ghi Nhận Buổi Điều Trị &mdash; GĐ @item.SequenceNo
+                                                                    </h6>
+                                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                                </div>
+                                                                <div class="modal-body p-3 text-start">
+                                                                    <div class="mb-3">
+                                                                        <div class="small text-muted mb-1">Dịch vụ thủ thuật:</div>
+                                                                        <div class="fw-bold text-dark fs-6">@item.ServiceName @(string.IsNullOrEmpty(item.ToothNumber) ? "" : $"— Răng {item.ToothNumber}")</div>
+                                                                        @if (item.ServicePrice.HasValue && item.ServicePrice.Value > 0)
+                                                                        {
+                                                                            <div class="text-success small fw-semibold mt-1">
+                                                                                <i class="bi bi-tag-fill me-1"></i>Đơn giá dự kiến: @item.ServicePrice.Value.ToString("N0") ₫ (tự động đưa vào viện phí ca này)
+                                                                            </div>
+                                                                        }
+                                                                    </div>
+
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label fw-bold small text-dark">Kết Quả Thủ Thuật <span class="text-danger">*</span></label>
+                                                                        <select name="TreatmentResult" class="form-select form-select-sm" required>
+                                                                            <option value="Thành công tốt đẹp" selected>Thành công tốt đẹp</option>
+                                                                            <option value="Tiến triển thuận lợi">Tiến triển thuận lợi</option>
+                                                                            <option value="Đã xử lý / trám tạm">Đã xử lý / trám tạm</option>
+                                                                            <option value="Cần theo dõi thêm">Cần theo dõi thêm</option>
+                                                                        </select>
+                                                                    </div>
+
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label fw-bold small text-dark">Ghi Chú Lâm Sàng (Clinical Note) <span class="text-danger">*</span></label>
+                                                                        <textarea name="ClinicalNote" class="form-control form-control-sm" rows="3" 
+                                                                                  placeholder="Mô tả cụ thể thao tác: gây tê, làm sạch buồng tủy, đặt thuốc sát trùng..." required></textarea>
+                                                                    </div>
+
+                                                                    <div class="mb-2">
+                                                                        <label class="form-label fw-bold small text-dark">Cập Nhật Trạng Thái Giai Đoạn</label>
+                                                                        <select name="MarkPhaseStatus" class="form-select form-select-sm">
+                                                                            <option value="Completed" selected>Hoàn thành giai đoạn này (Completed)</option>
+                                                                            <option value="InProgress">Đang thực hiện dở dang (InProgress)</option>
+                                                                        </select>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="modal-footer bg-light py-2">
+                                                                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
+                                                                    <button type="submit" class="btn btn-success btn-sm fw-bold">
+                                                                        <i class="bi bi-check-lg me-1"></i>Lưu & Ghi Nhận Buổi Điều Trị
+                                                                    </button>
+                                                                </div>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }
                                         </div>
                                     }
                                 </div>

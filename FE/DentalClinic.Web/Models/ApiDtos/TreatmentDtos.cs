@@ -112,6 +112,7 @@ public class CreateTreatmentSessionRequest
 {
     public long? TreatmentPlanItemId { get; set; }
     public long AppointmentId { get; set; }
+    public long? AppointmentServiceId { get; set; }
     public DateTime SessionDate { get; set; } = DateTime.UtcNow;
     public string? TreatmentResult { get; set; }
     public string? ClinicalNote { get; set; }

@@ -19,6 +19,14 @@
 
     <form method="post" asp-action="Create" id="createPlanForm">
         @Html.AntiForgeryToken()
+        @if (Model.ActiveAppointmentId.HasValue && Model.ActiveAppointmentId.Value > 0)
+        {
+            <input type="hidden" name="returnAppointmentId" value="@Model.ActiveAppointmentId.Value" />
+            <div class="alert alert-info py-2 px-3 mb-3 d-flex align-items-center">
+                <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+                <span>Đang lập phác đồ trong ca khám <strong>#APT-@Model.ActiveAppointmentId.Value</strong>. Sau khi lưu, hệ thống sẽ tự động liên kết và quay về ca khám này.</span>
+            </div>
+        }
 
         <!-- Card Thông Tin Chung -->
         <div class="card border-0 shadow-sm mb-4">
@@ -35,7 +43,8 @@
                             <option value="">-- Chọn bệnh nhân --</option>
                             @foreach (var p in Model.Patients)
                             {
-                                <option value="@p.PatientUserId">
+                                var isPreselected = Model.SelectedPatientUserId.HasValue && Model.SelectedPatientUserId.Value == p.PatientUserId;
+                                <option value="@p.PatientUserId" selected="@(isPreselected ? "selected" : null)">
                                     @p.FullName - Mã: @p.PatientCode @(string.IsNullOrEmpty(p.PhoneNumber) ? "" : $"({p.PhoneNumber})")
                                 </option>
                             }
@@ -118,7 +127,7 @@
     const availableServices = [
         @foreach (var s in Model.Services)
         {
-            <text>{ id: @s.DepartmentServiceId, name: '@Html.Raw(s.ServiceName)', price: @s.Price },</text>
+            <text>{ id: @s.DepartmentServiceId, name: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(s.ServiceName)), price: @((long)s.Price) },</text>
         }
     ];
 

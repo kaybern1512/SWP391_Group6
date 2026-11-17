@@ -123,6 +123,7 @@ public class CreateReceptionistAppointmentRequest
     public bool AutoCheckIn { get; set; } = false;
     public DateTime ScheduledStart { get; set; }
     public string? ReasonForVisit { get; set; }
+    public long? FollowUpId { get; set; }
 }
 
 public class BookingServiceItemRequest
@@ -148,6 +149,7 @@ public class CreateAppointmentRequest
     public bool AutoConfirm { get; set; } = false;
     public DateTime ScheduledStart { get; set; }
     public string? ReasonForVisit { get; set; }
+    public long? FollowUpId { get; set; }
 }
 
 public class AppointmentServiceItemDto

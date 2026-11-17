@@ -398,13 +398,14 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
         [FromQuery] string? date = null,
         [FromQuery] string? reason = null,
         [FromQuery] string? category = null,
-        [FromQuery] string? combo = null)
+        [FromQuery] string? combo = null,
+        [FromQuery] long? followUpId = null)
     {
         var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
         if (eligibilityResult?.StatusCode == 401)
         {
             TempData["ErrorMessage"] = "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.";
-            return RedirectToAction("Login", "Account", new { returnUrl = Url.Action(nameof(Book), "PatientAppointment", new { departmentId, serviceId, dentistId, date, reason, category, combo }) });
+            return RedirectToAction("Login", "Account", new { returnUrl = Url.Action(nameof(Book), "PatientAppointment", new { departmentId, serviceId, dentistId, date, reason, category, combo, followUpId }) });
         }
 
         var eligibility = eligibilityResult?.Data ?? new BookingEligibilityDto();
@@ -420,6 +421,7 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
             DepartmentId = departmentId ?? 0,
             RequestedServiceId = serviceId ?? 0,
             RequestedDentistUserId = dentistId,
+            FollowUpId = followUpId,
             AppointmentDate = !string.IsNullOrWhiteSpace(date) ? date : GetClinicToday().AddDays(1).ToString("yyyy-MM-dd"),
             ReasonForVisit = reason ?? string.Empty,
             PatientFullName = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? User.FindFirst("unique_name")?.Value,
@@ -654,7 +656,8 @@ var filtered = services.Where(s => allowedDeptIds.Contains(s.DepartmentId)).ToLi
             ComboId = model.BookingCategory == "Combo" && matchedCombo != null && matchedCombo.ComboId > 0 ? matchedCombo.ComboId : null,
             RequestedDentistUserId = string.Equals(model.DoctorSelectionMode, "ClinicAssignment", StringComparison.OrdinalIgnoreCase) ? null : model.RequestedDentistUserId,
             ScheduledStart = model.ScheduledStart!.Value,
-            ReasonForVisit = reasonToSubmit
+            ReasonForVisit = reasonToSubmit,
+            FollowUpId = model.FollowUpId
         };
 
         var result = await _appointmentApiService.BookAppointmentAsync(request);

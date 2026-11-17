@@ -51,6 +51,11 @@ public class PatientBookViewModel
     [Display(Name = "Bác sĩ mong muốn")]
     public long? RequestedDentistUserId { get; set; }
 
+    /// <summary>
+    /// Mã chỉ định tái khám liên kết (nếu đặt từ lịch hẹn tái khám)
+    /// </summary>
+    public long? FollowUpId { get; set; }
+
     [Required(ErrorMessage = "Vui lòng chọn ngày khám.")]
     [Display(Name = "Ngày khám")]
     public string AppointmentDate { get; set; } = DateTime.Today.AddDays(1).ToString("yyyy-MM-dd");

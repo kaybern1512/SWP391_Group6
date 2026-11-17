@@ -27,6 +27,8 @@ public class DentistCreateTreatmentPlanViewModel
     public List<TreatmentServiceOptionDto> Services { get; set; } = new();
     public List<TreatmentDentistOptionDto> Dentists { get; set; } = new();
     public CreateTreatmentPlanRequest Request { get; set; } = new();
+    public long? SelectedPatientUserId { get; set; }
+    public long? ActiveAppointmentId { get; set; }
 }
 
 public class DentistTreatmentSessionListViewModel

@@ -64,7 +64,7 @@ public class DentistTreatmentPlanController : Controller
     }
 
     [HttpGet("Create")]
-    public async Task<IActionResult> Create()
+    public async Task<IActionResult> Create([FromQuery] long? patientId = null, [FromQuery] long? appointmentId = null)
     {
         var patientsResult = await _treatmentApiService.GetPatientOptionsAsync();
         var servicesResult = await _treatmentApiService.GetServiceOptionsAsync();
@@ -74,30 +74,43 @@ public class DentistTreatmentPlanController : Controller
         {
             Patients = patientsResult.Data ?? new(),
             Services = servicesResult.Data ?? new(),
-            Dentists = dentistsResult.Data ?? new()
+            Dentists = dentistsResult.Data ?? new(),
+            SelectedPatientUserId = patientId,
+            ActiveAppointmentId = appointmentId
         };
+
+        if (patientId.HasValue && patientId.Value > 0)
+        {
+            vm.Request.PatientUserId = patientId.Value;
+        }
 
         return View("~/Views/Dentist/TreatmentPlans/Create.cshtml", vm);
     }
 
     [HttpPost("Create")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(CreateTreatmentPlanRequest request)
+    public async Task<IActionResult> Create(CreateTreatmentPlanRequest request, [FromForm] long? returnAppointmentId = null)
     {
         if (request.PatientUserId <= 0)
         {
             TempData["ErrorMessage"] = "Vui lòng chọn bệnh nhân tiếp nhận phác đồ.";
-            return RedirectToAction(nameof(Create));
+            return RedirectToAction(nameof(Create), new { patientId = request.PatientUserId, appointmentId = returnAppointmentId });
         }
 
         var result = await _treatmentApiService.CreateTreatmentPlanAsync(request);
         if (!result.IsSuccess || result.Data == null)
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể tạo kế hoạch điều trị.";
-            return RedirectToAction(nameof(Create));
+            return RedirectToAction(nameof(Create), new { patientId = request.PatientUserId, appointmentId = returnAppointmentId });
         }
 
         TempData["SuccessMessage"] = $"Đã tạo phác đồ điều trị thành công (Mã KH: #{result.Data.TreatmentPlanId}).";
+
+        if (returnAppointmentId.HasValue && returnAppointmentId.Value > 0)
+        {
+            return Redirect($"/Dentist/MedicalRecords/Index?appointmentId={returnAppointmentId.Value}#tab-plans");
+        }
+
         return RedirectToAction(nameof(Detail), new { id = result.Data.TreatmentPlanId });
     }
 
@@ -169,11 +182,15 @@ public class DentistTreatmentPlanController : Controller
 
     [HttpPost("RecordSession")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> RecordSession(CreateTreatmentSessionRequest request, long? returnPlanId)
+    public async Task<IActionResult> RecordSession(CreateTreatmentSessionRequest request, long? returnPlanId = null, [FromForm] long? returnAppointmentId = null)
     {
         if (request.TreatmentPlanItemId <= 0)
         {
             TempData["ErrorMessage"] = "Vui lòng chọn giai đoạn phác đồ cần ghi nhận buổi điều trị.";
+            if (returnAppointmentId.HasValue && returnAppointmentId.Value > 0)
+            {
+                return Redirect($"/Dentist/MedicalRecords/Index?appointmentId={returnAppointmentId.Value}#tab-plans");
+            }
             return RedirectToAction(nameof(Sessions));
         }
 
@@ -185,6 +202,11 @@ public class DentistTreatmentPlanController : Controller
         else
         {
             TempData["SuccessMessage"] = "Đã ghi nhận buổi điều trị và dịch vụ thực hiện thành công.";
+        }
+
+        if (returnAppointmentId.HasValue && returnAppointmentId.Value > 0)
+        {
+            return Redirect($"/Dentist/MedicalRecords/Index?appointmentId={returnAppointmentId.Value}#tab-plans");
         }
 
         if (returnPlanId.HasValue && returnPlanId.Value > 0)
