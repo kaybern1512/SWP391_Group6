@@ -14,10 +14,15 @@ namespace DentalClinic.Web.Controllers.Dentist;
 public class DentistTreatmentPlanController : Controller
 {
     private readonly ITreatmentApiService _treatmentApiService;
+    private readonly IAppointmentApiService _appointmentApiService;
 
-    public DentistTreatmentPlanController(ITreatmentApiService treatmentApiService)
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public DentistTreatmentPlanController(
+        ITreatmentApiService treatmentApiService,
+        IAppointmentApiService appointmentApiService)
     {
         _treatmentApiService = treatmentApiService;
+        _appointmentApiService = appointmentApiService;
     }
 
     [HttpGet("")]
@@ -64,8 +69,25 @@ public class DentistTreatmentPlanController : Controller
     }
 
     [HttpGet("Create")]
-    public async Task<IActionResult> Create([FromQuery] long? patientId = null, [FromQuery] long? appointmentId = null)
+    public async Task<IActionResult> Create([FromQuery] long? patientId = null, [FromQuery] long? appointmentId = null, [FromQuery] long? returnAppointmentId = null)
     {
+        var targetApptId = returnAppointmentId ?? appointmentId;
+        string? lockedPatientName = null;
+        string? lockedPatientCode = null;
+        string? lockedPatientPhone = null;
+
+        if (targetApptId.HasValue && targetApptId.Value > 0 && _appointmentApiService != null)
+        {
+            var apptRes = await _appointmentApiService.GetAppointmentDetailAsync(targetApptId.Value);
+            if (apptRes?.IsSuccess == true && apptRes.Data != null)
+            {
+                patientId = apptRes.Data.PatientUserId;
+                lockedPatientName = apptRes.Data.PatientName;
+                lockedPatientCode = apptRes.Data.PatientCode;
+                lockedPatientPhone = apptRes.Data.PatientPhone;
+            }
+        }
+
         var patientsResult = await _treatmentApiService.GetPatientOptionsAsync();
         var servicesResult = await _treatmentApiService.GetServiceOptionsAsync();
         var dentistsResult = await _treatmentApiService.GetDentistOptionsAsync();
@@ -76,7 +98,7 @@ public class DentistTreatmentPlanController : Controller
             Services = servicesResult.Data ?? new(),
             Dentists = dentistsResult.Data ?? new(),
             SelectedPatientUserId = patientId,
-            ActiveAppointmentId = appointmentId
+            ActiveAppointmentId = targetApptId
         };
 
         if (patientId.HasValue && patientId.Value > 0)
@@ -84,31 +106,58 @@ public class DentistTreatmentPlanController : Controller
             vm.Request.PatientUserId = patientId.Value;
         }
 
+        ViewBag.ReturnAppointmentId = targetApptId;
+        ViewBag.LockedPatientName = lockedPatientName;
+        ViewBag.LockedPatientCode = lockedPatientCode;
+        ViewBag.LockedPatientPhone = lockedPatientPhone;
+
         return View("~/Views/Dentist/TreatmentPlans/Create.cshtml", vm);
     }
 
     [HttpPost("Create")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(CreateTreatmentPlanRequest request, [FromForm] long? returnAppointmentId = null)
+    public async Task<IActionResult> Create(CreateTreatmentPlanRequest request, [FromForm] long? returnAppointmentId = null, [FromForm] long? AppointmentId = null)
     {
+        var targetApptId = returnAppointmentId ?? AppointmentId ?? request.AppointmentId;
+        if (targetApptId.HasValue && targetApptId.Value > 0)
+        {
+            request.AppointmentId = targetApptId.Value;
+
+            if (_appointmentApiService != null)
+            {
+                var apptRes = await _appointmentApiService.GetAppointmentDetailAsync(targetApptId.Value);
+                if (apptRes == null || !apptRes.IsSuccess || apptRes.Data == null)
+                {
+                    TempData["ErrorMessage"] = "Không tìm thấy thông tin ca khám để liên kết lập phác đồ.";
+                    return RedirectToAction(nameof(Create), new { returnAppointmentId = targetApptId });
+                }
+
+                if (apptRes.Data.PatientUserId != request.PatientUserId)
+                {
+                    TempData["ErrorMessage"] = "Bệnh nhân trong yêu cầu không khớp với hồ sơ bệnh nhân của ca khám đang thực hiện.";
+                    return RedirectToAction(nameof(Create), new { returnAppointmentId = targetApptId });
+                }
+            }
+        }
+
         if (request.PatientUserId <= 0)
         {
             TempData["ErrorMessage"] = "Vui lòng chọn bệnh nhân tiếp nhận phác đồ.";
-            return RedirectToAction(nameof(Create), new { patientId = request.PatientUserId, appointmentId = returnAppointmentId });
+            return RedirectToAction(nameof(Create), new { patientId = request.PatientUserId, appointmentId = targetApptId });
         }
 
         var result = await _treatmentApiService.CreateTreatmentPlanAsync(request);
         if (!result.IsSuccess || result.Data == null)
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể tạo kế hoạch điều trị.";
-            return RedirectToAction(nameof(Create), new { patientId = request.PatientUserId, appointmentId = returnAppointmentId });
+            return RedirectToAction(nameof(Create), new { patientId = request.PatientUserId, appointmentId = targetApptId });
         }
 
         TempData["SuccessMessage"] = $"Đã tạo phác đồ điều trị thành công (Mã KH: #{result.Data.TreatmentPlanId}).";
 
-        if (returnAppointmentId.HasValue && returnAppointmentId.Value > 0)
+        if (targetApptId.HasValue && targetApptId.Value > 0)
         {
-            return Redirect($"/Dentist/MedicalRecords/Index?appointmentId={returnAppointmentId.Value}#tab-plans");
+            return Redirect($"/Dentist/MedicalRecords/Index?appointmentId={targetApptId.Value}#tab-plans");
         }
 
         return RedirectToAction(nameof(Detail), new { id = result.Data.TreatmentPlanId });

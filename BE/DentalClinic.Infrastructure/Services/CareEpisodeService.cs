@@ -1429,6 +1429,10 @@ public class CareEpisodeService : ICareEpisodeService
 
         if (!hasPerformed)
         {
+            var catalogService = await _dbContext.DepartmentServices
+                .FirstOrDefaultAsync(s => s.DepartmentServiceId == apptService.DepartmentServiceId, ct);
+            var authoritativePrice = catalogService?.Price ?? apptService.UnitPrice;
+
             var performed = new PerformedService
             {
                 TreatmentSessionId = session.SessionId,
@@ -1436,7 +1440,7 @@ public class CareEpisodeService : ICareEpisodeService
                 AppointmentServiceId = apptService.AppointmentServiceId,
                 DepartmentServiceId = apptService.DepartmentServiceId,
                 Quantity = 1,
-                UnitPrice = apptService.UnitPrice,
+                UnitPrice = authoritativePrice,
                 Notes = notes?.Trim() ?? apptService.Notes,
                 CreatedAt = DateTime.UtcNow
             };
@@ -1448,9 +1452,7 @@ public class CareEpisodeService : ICareEpisodeService
     {
         var maxQueue = await _dbContext.AppointmentServices
             .Where(s => s.DepartmentId == departmentId && s.ServiceDate == serviceDate && s.QueueNumber.HasValue)
-            .Select(s => s.QueueNumber!.Value)
-            .DefaultIfEmpty(0)
-            .MaxAsync(ct);
+            .MaxAsync(s => (int?)s.QueueNumber, ct) ?? 0;
 
         return maxQueue + 1;
     }

@@ -87,6 +87,7 @@ public class PerformedServiceDto
 public class CreateTreatmentPlanRequest
 {
     public long PatientUserId { get; set; }
+    public long? AppointmentId { get; set; }
     public long DepartmentId { get; set; }
     public string? Status { get; set; } = "Active";
     public List<CreateTreatmentPlanItemInput> Items { get; set; } = new();

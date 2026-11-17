@@ -56,6 +56,7 @@
     <Compile Include="ReceptionistWorkforce/ReceptionistSafeBulkSchedulingTests.cs" />
     <Compile Include="UnicodeEncoding/*.cs" />
     <Compile Include="Operations/*.cs" />
+    <Compile Include="Treatments/*.cs" />
   </ItemGroup>
 
 </Project>

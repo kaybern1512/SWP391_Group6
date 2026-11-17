@@ -21,11 +21,13 @@ public class TreatmentWebControllerTests
 {
     private readonly Mock<ITreatmentApiService> _apiMock;
     private readonly Mock<IAdminApiService> _adminApiMock;
+    private readonly Mock<IAppointmentApiService> _apptApiMock;
 
     public TreatmentWebControllerTests()
     {
         _apiMock = new Mock<ITreatmentApiService>();
         _adminApiMock = new Mock<IAdminApiService>();
+        _apptApiMock = new Mock<IAppointmentApiService>();
     }
 
     private static ControllerContext CreateContextWithUser(long userId, string role, string name = "User")
@@ -65,7 +67,7 @@ public class TreatmentWebControllerTests
                 }
             }));
 
-        var controller = new DentistTreatmentPlanController(_apiMock.Object)
+        var controller = new DentistTreatmentPlanController(_apiMock.Object, _apptApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(20, "Dentist")
         };
@@ -97,7 +99,7 @@ public class TreatmentWebControllerTests
                 Status = "Active"
             }));
 
-        var controller = new DentistTreatmentPlanController(_apiMock.Object)
+        var controller = new DentistTreatmentPlanController(_apiMock.Object, _apptApiMock.Object)
         {
             ControllerContext = CreateContextWithUser(20, "Dentist"),
             TempData = CreateTempData()
@@ -108,6 +110,38 @@ public class TreatmentWebControllerTests
         var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
         redirect.ActionName.Should().Be("Detail");
         redirect.RouteValues!["id"].Should().Be(99L);
+    }
+
+    [Fact]
+    public async Task DentistTreatmentPlanController_Create_Post_WithMismatchingPatient_RejectsAndRedirects()
+    {
+        var request = new CreateTreatmentPlanRequest
+        {
+            PatientUserId = 999,
+            DepartmentId = 1,
+            Status = "Active"
+        };
+
+        _apptApiMock.Setup(x => x.GetAppointmentDetailAsync(56))
+            .ReturnsAsync(ApiResult<AppointmentDto>.Success(new AppointmentDto
+            {
+                AppointmentId = 56,
+                PatientUserId = 10,
+                PatientName = "Bệnh nhân A"
+            }));
+
+        var controller = new DentistTreatmentPlanController(_apiMock.Object, _apptApiMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(20, "Dentist"),
+            TempData = CreateTempData()
+        };
+
+        var result = await controller.Create(request, returnAppointmentId: 56);
+
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.ActionName.Should().Be("Create");
+        controller.TempData["ErrorMessage"].Should().NotBeNull();
+        _apiMock.Verify(x => x.CreateTreatmentPlanAsync(It.IsAny<CreateTreatmentPlanRequest>()), Times.Never);
     }
 
     [Fact]
