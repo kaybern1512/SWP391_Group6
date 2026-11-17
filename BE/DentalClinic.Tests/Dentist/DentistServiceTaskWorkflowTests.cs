@@ -529,4 +529,60 @@ public class DentistServiceTaskWorkflowTests
         Assert.Single(orderInDb.DiagnosticResults);
         Assert.True(orderInDb.DiagnosticResults.First().IsReviewed);
     }
+
+    [Fact]
+    public async Task CaseG_XrayServiceTask_RequiresValidImageResultBeforeCompletion()
+    {
+        var db = CreateDbContext(nameof(CaseG_XrayServiceTask_RequiresValidImageResultBeforeCompletion));
+        var (patientId, dentistAId, _, _, apptId, _) = await SeedBaseDataAsync(db);
+        var service = new CareEpisodeService(db, _mockLogger.Object, _mockNotification.Object);
+
+        // Add X-ray service (SVC-XRAY-01, DiagnosticType = "XRay")
+        var xrayDeptSvc = new DepartmentService
+        {
+            DepartmentId = 1,
+            DepartmentServiceId = 88,
+            ServiceCode = "SVC-XRAY-01",
+            ServiceName = "Chụp X-quang Panorama toàn cảnh",
+            DiagnosticType = "XRay",
+            Price = 80000m,
+            Status = "Active"
+        };
+        db.DepartmentServices.Add(xrayDeptSvc);
+        await db.SaveChangesAsync();
+
+        var xrayTaskRes = await service.AddServiceTaskAsync(dentistAId, new CreateEpisodeServiceTaskRequest
+        {
+            AppointmentId = apptId,
+            DepartmentServiceId = 88,
+            Quantity = 1
+        });
+        Assert.True(xrayTaskRes.Success);
+        var xrayTaskId = xrayTaskRes.Data.ServiceTaskId;
+
+        await service.StartServiceTaskAsync(dentistAId, xrayTaskId);
+
+        // ATTEMPT 1: Complete X-ray task without any image or evidence -> MUST FAIL
+        var failComplete = await service.CompleteServiceTaskAsync(dentistAId, xrayTaskId, new CompleteServiceTaskRequest
+        {
+            ClinicalFindings = "Đã hoàn thành chụp phim nhưng chưa có ảnh"
+        });
+        Assert.False(failComplete.Success);
+        Assert.Contains("kết quả hình ảnh chụp phim hợp lệ", failComplete.Message);
+
+        // ATTEMPT 2: Complete X-ray task with EvidenceUrl -> MUST SUCCEED
+        var successComplete = await service.CompleteServiceTaskAsync(dentistAId, xrayTaskId, new CompleteServiceTaskRequest
+        {
+            ClinicalFindings = "Phim rõ nét, tiêu xương nhẹ R46",
+            EvidenceUrl = "https://dentalcare.vn/xray-pano-r46.jpg"
+        });
+        Assert.True(successComplete.Success);
+        Assert.Equal("Completed", successComplete.Data.Status);
+
+        // Verify diagnostic was saved in DB
+        var savedDiag = await db.Diagnostics.FirstOrDefaultAsync(d => d.AppointmentServiceId == xrayTaskId);
+        Assert.NotNull(savedDiag);
+        Assert.Equal("https://dentalcare.vn/xray-pano-r46.jpg", savedDiag.FileUrl);
+        Assert.Equal("Completed", savedDiag.Status);
+    }
 }

@@ -245,7 +245,7 @@ public class CareEpisodeService : ICareEpisodeService
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Tác vụ này đã bị hủy.");
 
         apptService.AssignedDentistUserId ??= dentistUserId;
-        apptService.Status = "InProgress";
+        apptService.Status = "InService";
         apptService.UpdatedAt = DateTime.UtcNow;
 
         if (apptService.Appointment.Status == AppointmentStatus.Confirmed || apptService.Appointment.Status == AppointmentStatus.CheckedIn)
@@ -306,9 +306,59 @@ public class CareEpisodeService : ICareEpisodeService
         if (apptService.Status == "Cancelled")
             return ApiResponse<EpisodeTaskStepProgressDto>.Fail("Tác vụ này đã bị hủy.");
 
-        if (apptService.Status != "InProgress")
+        var isXray = string.Equals(apptService.DepartmentService.DiagnosticType, "XRay", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(apptService.DepartmentService.DiagnosticType, "Imaging", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("X-quang", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("X-Quang", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("X-ray", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("Xray", StringComparison.OrdinalIgnoreCase);
+
+        if (isXray)
         {
-            apptService.Status = "InProgress";
+            var hasDiagnosticImage = !string.IsNullOrWhiteSpace(request.EvidenceUrl) ||
+                await _dbContext.Diagnostics.AnyAsync(d =>
+                    (d.AppointmentServiceId == serviceTaskId || (d.AppointmentService.AppointmentId == apptService.AppointmentId && d.DepartmentServiceId == apptService.DepartmentServiceId))
+                    && !string.IsNullOrWhiteSpace(d.FileUrl)
+                    && (d.Status == "Completed" || d.Status == "ResultAvailable" || d.Status == "Acquired"), ct);
+
+            if (!hasDiagnosticImage)
+            {
+                return ApiResponse<EpisodeTaskStepProgressDto>.Fail(
+                    $"Dịch vụ chụp X-quang '{apptService.DepartmentService.ServiceName}' yêu cầu phải có kết quả hình ảnh chụp phim hợp lệ trước khi xác nhận hoàn thành.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.EvidenceUrl))
+            {
+                var existingDiag = await _dbContext.Diagnostics.FirstOrDefaultAsync(d => d.AppointmentServiceId == serviceTaskId, ct);
+                if (existingDiag != null)
+                {
+                    if (string.IsNullOrWhiteSpace(existingDiag.FileUrl))
+                        existingDiag.FileUrl = request.EvidenceUrl.Trim();
+                    existingDiag.Status = "Completed";
+                    existingDiag.CompletedAt ??= DateTime.UtcNow;
+                }
+                else
+                {
+                    _dbContext.Diagnostics.Add(new Diagnostic
+                    {
+                        AppointmentServiceId = serviceTaskId,
+                        DepartmentServiceId = apptService.DepartmentServiceId,
+                        OrderingDentistUserId = dentistUserId,
+                        ClinicalIndication = request.ResultValue?.Trim() ?? "Kết quả chụp phim X-quang",
+                        Status = "Completed",
+                        ImagingType = "XRay",
+                        FileUrl = request.EvidenceUrl.Trim(),
+                        Findings = request.Notes?.Trim() ?? "Đã hoàn thành chụp phim",
+                        CreatedAt = DateTime.UtcNow,
+                        CompletedAt = DateTime.UtcNow
+                    });
+                }
+            }
+        }
+
+        if (apptService.Status != "InService")
+        {
+            apptService.Status = "InService";
             apptService.UpdatedAt = DateTime.UtcNow;
         }
 
@@ -381,6 +431,56 @@ public class CareEpisodeService : ICareEpisodeService
         if (apptService.Status == "Cancelled")
             return ApiResponse<EpisodeServiceTaskDto>.Fail("Tác vụ này đã bị hủy.");
 
+        var isXray = string.Equals(apptService.DepartmentService.DiagnosticType, "XRay", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(apptService.DepartmentService.DiagnosticType, "Imaging", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("X-quang", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("X-Quang", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("X-ray", StringComparison.OrdinalIgnoreCase) ||
+                     apptService.DepartmentService.ServiceName.Contains("Xray", StringComparison.OrdinalIgnoreCase);
+
+        if (isXray)
+        {
+            var hasDiagnosticImage = !string.IsNullOrWhiteSpace(request?.EvidenceUrl) ||
+                await _dbContext.Diagnostics.AnyAsync(d =>
+                    (d.AppointmentServiceId == serviceTaskId || (d.AppointmentService.AppointmentId == apptService.AppointmentId && d.DepartmentServiceId == apptService.DepartmentServiceId))
+                    && !string.IsNullOrWhiteSpace(d.FileUrl)
+                    && (d.Status == "Completed" || d.Status == "ResultAvailable" || d.Status == "Acquired"), ct);
+
+            if (!hasDiagnosticImage)
+            {
+                return ApiResponse<EpisodeServiceTaskDto>.Fail(
+                    $"Dịch vụ chụp X-quang '{apptService.DepartmentService.ServiceName}' yêu cầu phải có kết quả hình ảnh chụp phim hợp lệ trước khi xác nhận hoàn thành.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(request?.EvidenceUrl))
+            {
+                var existingDiag = await _dbContext.Diagnostics.FirstOrDefaultAsync(d => d.AppointmentServiceId == serviceTaskId, ct);
+                if (existingDiag != null)
+                {
+                    if (string.IsNullOrWhiteSpace(existingDiag.FileUrl))
+                        existingDiag.FileUrl = request.EvidenceUrl.Trim();
+                    existingDiag.Status = "Completed";
+                    existingDiag.CompletedAt ??= DateTime.UtcNow;
+                }
+                else
+                {
+                    _dbContext.Diagnostics.Add(new Diagnostic
+                    {
+                        AppointmentServiceId = serviceTaskId,
+                        DepartmentServiceId = apptService.DepartmentServiceId,
+                        OrderingDentistUserId = dentistUserId,
+                        ClinicalIndication = request.ClinicalFindings?.Trim() ?? "Kết quả chụp phim X-quang",
+                        Status = "Completed",
+                        ImagingType = "XRay",
+                        FileUrl = request.EvidenceUrl.Trim(),
+                        Findings = request.ClinicalFindings?.Trim() ?? "Đã hoàn thành chụp phim",
+                        CreatedAt = DateTime.UtcNow,
+                        CompletedAt = DateTime.UtcNow
+                    });
+                }
+            }
+        }
+
         apptService.AssignedDentistUserId ??= dentistUserId;
         apptService.Status = "Completed";
         if (!string.IsNullOrWhiteSpace(request?.Notes))
@@ -391,21 +491,10 @@ public class CareEpisodeService : ICareEpisodeService
 
         await EnsurePerformedServiceRecordedAsync(apptService, dentistUserId, request?.ClinicalFindings, request?.Notes, ct);
 
-        // Aggregate parent appointment status
-        var allActiveTasks = await _dbContext.AppointmentServices
-            .Where(s => s.AppointmentId == apptService.AppointmentId && s.Status != "Cancelled" && s.Status != "NoShow")
-            .ToListAsync(ct);
-
-        if (allActiveTasks.All(s => s.AppointmentServiceId == apptService.AppointmentServiceId || s.Status == "Completed"))
-        {
-            if (apptService.Appointment != null)
-            {
-                apptService.Appointment.Status = "Completed";
-                apptService.Appointment.CompletedAt = DateTime.UtcNow;
-                apptService.Appointment.UpdatedAt = DateTime.UtcNow;
-            }
-        }
-        else if (apptService.Appointment != null && (apptService.Appointment.Status == "CheckedIn" || apptService.Appointment.Status == "Confirmed"))
+        // BUG 03: Completing an individual service task must NOT auto-complete the parent Appointment.
+        // A visit can involve multiple services, prescriptions, or clinical notes.
+        // The dentist must explicitly click "Hoàn Thành Ca Khám" (CompleteExam) to conclude the appointment.
+        if (apptService.Appointment != null && (apptService.Appointment.Status == "CheckedIn" || apptService.Appointment.Status == "Confirmed"))
         {
             apptService.Appointment.Status = "InProgress";
             apptService.Appointment.UpdatedAt = DateTime.UtcNow;
@@ -915,7 +1004,7 @@ public class CareEpisodeService : ICareEpisodeService
         if (apptService == null)
             return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail("Không tìm thấy ca khám chỉ định.");
 
-        if (apptService.Status == "CheckedIn" || apptService.Status == "InProgress")
+        if (apptService.Status == "CheckedIn" || apptService.Status == "InService" || apptService.Status == "InProgress")
         {
             var existingQ = FormatQueueNumber(apptService.DepartmentService?.Department?.Name, apptService.DepartmentId, apptService.QueueNumber ?? 1);
             return ApiResponse<CareEpisodeAppointmentSummaryDto>.Fail($"Ca khám đã được Check-in trước đó (Trạng thái: {apptService.Status}, STT: {existingQ}).");
@@ -927,7 +1016,7 @@ public class CareEpisodeService : ICareEpisodeService
         var isAnotherInService = await _dbContext.AppointmentServices
             .AnyAsync(s => s.AppointmentId == apptService.AppointmentId &&
                            s.AppointmentServiceId != apptService.AppointmentServiceId &&
-                           s.Status == "InProgress", ct);
+                           (s.Status == "InService" || s.Status == "InProgress"), ct);
 
         if (isAnotherInService)
         {
@@ -1340,6 +1429,10 @@ public class CareEpisodeService : ICareEpisodeService
 
         if (!hasPerformed)
         {
+            var catalogService = await _dbContext.DepartmentServices
+                .FirstOrDefaultAsync(s => s.DepartmentServiceId == apptService.DepartmentServiceId, ct);
+            var authoritativePrice = catalogService?.Price ?? apptService.UnitPrice;
+
             var performed = new PerformedService
             {
                 TreatmentSessionId = session.SessionId,
@@ -1347,7 +1440,7 @@ public class CareEpisodeService : ICareEpisodeService
                 AppointmentServiceId = apptService.AppointmentServiceId,
                 DepartmentServiceId = apptService.DepartmentServiceId,
                 Quantity = 1,
-                UnitPrice = apptService.UnitPrice,
+                UnitPrice = authoritativePrice,
                 Notes = notes?.Trim() ?? apptService.Notes,
                 CreatedAt = DateTime.UtcNow
             };
@@ -1359,9 +1452,7 @@ public class CareEpisodeService : ICareEpisodeService
     {
         var maxQueue = await _dbContext.AppointmentServices
             .Where(s => s.DepartmentId == departmentId && s.ServiceDate == serviceDate && s.QueueNumber.HasValue)
-            .Select(s => s.QueueNumber!.Value)
-            .DefaultIfEmpty(0)
-            .MaxAsync(ct);
+            .MaxAsync(s => (int?)s.QueueNumber, ct) ?? 0;
 
         return maxQueue + 1;
     }
@@ -1502,7 +1593,7 @@ public class CareEpisodeService : ICareEpisodeService
         var taskStatus = s.Status switch
         {
             "Completed" => "Completed",
-            "InProgress" => "InProgress",
+            "InService" or "InProgress" => "InProgress",
             "Cancelled" or "NoShow" => "Cancelled",
             _ => "Planned"
         };

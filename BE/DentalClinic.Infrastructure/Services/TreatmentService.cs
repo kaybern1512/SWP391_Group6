@@ -119,6 +119,30 @@ public class TreatmentService : ITreatmentService
             return ApiResponse<TreatmentPlanDto>.Fail("Vui lòng chọn bệnh nhân.");
         }
 
+        if (request.AppointmentId.HasValue && request.AppointmentId.Value > 0)
+        {
+            var appt = await _dbContext.Appointments
+                .Include(a => a.AppointmentServices)
+                .FirstOrDefaultAsync(a => a.AppointmentId == request.AppointmentId.Value, ct);
+
+            if (appt == null)
+            {
+                return ApiResponse<TreatmentPlanDto>.Fail("Không tìm thấy thông tin ca khám để liên kết lập phác đồ.");
+            }
+
+            if (appt.PatientUserId != request.PatientUserId)
+            {
+                return ApiResponse<TreatmentPlanDto>.Fail("Bệnh nhân trong yêu cầu lập phác đồ không khớp với bệnh nhân của ca khám đang thực hiện.");
+            }
+
+            var isAuthorizedDentist = appt.AppointmentServices.Any(s => s.AssignedDentistUserId == dentistUserId || s.RequestedDentistUserId == dentistUserId)
+                || await _dbContext.DentistProfiles.AnyAsync(d => d.UserId == dentistUserId && appt.AppointmentServices.Any(s => s.DepartmentId == d.DepartmentId), ct);
+            if (!isAuthorizedDentist)
+            {
+                return ApiResponse<TreatmentPlanDto>.Fail("Bác sĩ không có thẩm quyền lập phác đồ trên ca khám này.");
+            }
+        }
+
         var patient = await _dbContext.PatientProfiles.FirstOrDefaultAsync(p => p.UserId == request.PatientUserId, ct);
         if (patient == null)
         {
@@ -337,6 +361,11 @@ public class TreatmentService : ITreatmentService
             return ApiResponse<TreatmentSessionDto>.Fail("Không tìm thấy giai đoạn điều trị cần ghi nhận.");
         }
 
+        if (item.Status == "Completed" && string.Equals(request.MarkPhaseStatus, "Completed", StringComparison.OrdinalIgnoreCase))
+        {
+            return ApiResponse<TreatmentSessionDto>.Fail("Giai đoạn điều trị này đã được ghi nhận hoàn thành trước đó.");
+        }
+
         long appointmentId = request.AppointmentId;
         if (appointmentId <= 0)
         {
@@ -411,36 +440,71 @@ public class TreatmentService : ITreatmentService
         _dbContext.TreatmentSessions.Add(session);
         await _dbContext.SaveChangesAsync(ct);
 
+        var servicesToProcess = new List<(long deptServiceId, int quantity)>();
         if (request.Services != null && request.Services.Any())
         {
-            foreach (var svc in request.Services)
+            foreach (var svc in request.Services.Where(s => s.DepartmentServiceId > 0))
             {
-                if (svc.DepartmentServiceId > 0)
+                if (svc.Quantity <= 0)
                 {
-                    if (svc.Quantity <= 0)
-                    {
-                        return ApiResponse<TreatmentSessionDto>.Fail("Số lượng dịch vụ thực hiện phải lớn hơn 0.");
-                    }
-                    if (svc.UnitPrice < 0)
-                    {
-                        return ApiResponse<TreatmentSessionDto>.Fail("Đơn giá dịch vụ không được âm.");
-                    }
-
-                    var perf = new PerformedService
-                    {
-                        TreatmentSessionId = session.SessionId,
-                        AppointmentId = appointmentId,
-                        AppointmentServiceId = targetService.AppointmentServiceId,
-                        DepartmentServiceId = (int)svc.DepartmentServiceId,
-                        Quantity = svc.Quantity > 0 ? svc.Quantity : 1,
-                        UnitPrice = svc.UnitPrice >= 0 ? svc.UnitPrice : 0,
-                        CreatedAt = now
-                    };
-                    _dbContext.PerformedServices.Add(perf);
+                    return ApiResponse<TreatmentSessionDto>.Fail("Số lượng dịch vụ thực hiện phải lớn hơn 0.");
                 }
+                servicesToProcess.Add((svc.DepartmentServiceId, svc.Quantity > 0 ? svc.Quantity : 1));
             }
-            await _dbContext.SaveChangesAsync(ct);
         }
+        else if (item.DepartmentServiceId > 0)
+        {
+            servicesToProcess.Add((item.DepartmentServiceId, 1));
+        }
+
+        foreach (var (deptServiceId, quantity) in servicesToProcess)
+        {
+            var catalogService = await _dbContext.DepartmentServices
+                .FirstOrDefaultAsync(s => s.DepartmentServiceId == (int)deptServiceId, ct);
+            if (catalogService == null)
+            {
+                return ApiResponse<TreatmentSessionDto>.Fail($"Dịch vụ #{deptServiceId} không tồn tại trong danh mục phòng khám.");
+            }
+
+            // Server-authoritative pricing: strictly from catalogService.Price, ignoring client-sent unit price
+            decimal authoritativePrice = catalogService.Price;
+
+            // Deduplication & Reuse: check if this appointment already has a PerformedService for this procedure
+            var matchingApptService = appt.AppointmentServices
+                .FirstOrDefault(s => s.DepartmentServiceId == (int)deptServiceId);
+
+            var existingPerf = await _dbContext.PerformedServices
+                .FirstOrDefaultAsync(ps => ps.AppointmentId == appointmentId
+                                        && ps.DepartmentServiceId == (int)deptServiceId, ct);
+
+            if (existingPerf != null)
+            {
+                existingPerf.TreatmentSessionId = session.SessionId;
+                existingPerf.UnitPrice = authoritativePrice;
+            }
+            else
+            {
+                var perf = new PerformedService
+                {
+                    TreatmentSessionId = session.SessionId,
+                    AppointmentId = appointmentId,
+                    AppointmentServiceId = matchingApptService?.AppointmentServiceId ?? targetService.AppointmentServiceId,
+                    DepartmentServiceId = (int)deptServiceId,
+                    Quantity = quantity,
+                    UnitPrice = authoritativePrice,
+                    Notes = request.ClinicalNote,
+                    CreatedAt = now
+                };
+                _dbContext.PerformedServices.Add(perf);
+            }
+
+            if (matchingApptService != null && matchingApptService.Status != "Completed")
+            {
+                matchingApptService.Status = "Completed";
+                matchingApptService.UpdatedAt = now;
+            }
+        }
+        await _dbContext.SaveChangesAsync(ct);
 
         if (!string.IsNullOrWhiteSpace(request.MarkPhaseStatus))
         {
@@ -901,7 +965,8 @@ public class TreatmentService : ITreatmentService
             return ApiResponse<PerformedServiceDto>.Fail("Dịch vụ không tồn tại trong danh mục.");
         }
 
-        decimal unitPrice = request.UnitPrice.HasValue && request.UnitPrice.Value >= 0 ? request.UnitPrice.Value : service.Price;
+        // Server-authoritative catalog price: ignore client-provided UnitPrice
+        decimal unitPrice = service.Price;
         int quantity = request.Quantity;
         var now = DateTime.UtcNow;
 

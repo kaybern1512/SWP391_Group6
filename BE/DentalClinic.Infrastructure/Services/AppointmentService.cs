@@ -440,6 +440,28 @@ public class AppointmentService : IAppointmentService
 
         await _dbContext.SaveChangesAsync(ct);
 
+        FollowUpSchedule? matchedFollowUp = null;
+        if (request.FollowUpId.HasValue && request.FollowUpId.Value > 0)
+        {
+            matchedFollowUp = await _dbContext.FollowUpSchedules
+                .FirstOrDefaultAsync(f => f.FollowUpId == request.FollowUpId.Value && f.PatientUserId == patientUserId, ct);
+        }
+        else
+        {
+            matchedFollowUp = await _dbContext.FollowUpSchedules
+                .Where(f => f.PatientUserId == patientUserId && (f.Status == "Proposed" || f.Status == "Pending") && f.ResultingAppointmentId == null)
+                .OrderByDescending(f => f.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (matchedFollowUp != null)
+        {
+            matchedFollowUp.Status = "Scheduled";
+            matchedFollowUp.ResultingAppointmentId = appointment.AppointmentId;
+            matchedFollowUp.UpdatedAt = now;
+            await _dbContext.SaveChangesAsync(ct);
+        }
+
         var code = $"APT-{appointment.AppointmentId:D6}";
         await _notificationService.CreateNotificationAsync(
             patientUserId,
@@ -1794,7 +1816,8 @@ public class AppointmentService : IAppointmentService
                 RoomName = r.RoomName,
                 DepartmentId = r.DepartmentId,
                 Status = r.Status,
-                IsExclusive = string.Equals(r.RoomType, "Exclusive", StringComparison.OrdinalIgnoreCase)
+                IsExclusive = string.Equals(r.RoomType, "Exclusive", StringComparison.OrdinalIgnoreCase),
+                RoomType = r.RoomType
             })
             .ToList();
 
@@ -1924,6 +1947,22 @@ public class AppointmentService : IAppointmentService
         if (room == null)
         {
             return ApiResponse<AppointmentDto>.Fail("Phòng khám không hợp lệ, đã ngưng hoạt động hoặc không thuộc chuyên khoa.");
+        }
+
+        var primaryDeptService = await _dbContext.DepartmentServices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(ds => ds.DepartmentServiceId == primaryItem.DepartmentServiceId, ct);
+
+        bool isXRayService = string.Equals(primaryDeptService?.DiagnosticType, "XRay", StringComparison.OrdinalIgnoreCase);
+        bool isImagingRoom = string.Equals(room.RoomType, "Imaging", StringComparison.OrdinalIgnoreCase);
+
+        if (isXRayService && !isImagingRoom)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Dịch vụ chụp X-quang chỉ được thực hiện tại phòng chụp X-quang chuyên dụng.");
+        }
+        if (!isXRayService && isImagingRoom)
+        {
+            return ApiResponse<AppointmentDto>.Fail("Dịch vụ điều trị không được phân bổ vào phòng chụp X-quang chuyên dụng.");
         }
 
         var (isChairAvail, chairReason) = await _clinicalAvailabilityService.CheckChairAvailabilityAsync(
@@ -2548,6 +2587,23 @@ public class AppointmentService : IAppointmentService
             {
                 var latestSession = appointment.TreatmentSessions.OrderByDescending(ts => ts.CreatedAt).FirstOrDefault();
                 var firstService = activeServices.FirstOrDefault();
+                if (latestSession == null && firstService != null)
+                {
+                    latestSession = new TreatmentSession
+                    {
+                        AppointmentId = appointment.AppointmentId,
+                        AppointmentServiceId = firstService.AppointmentServiceId,
+                        PatientUserId = appointment.PatientUserId,
+                        DentistUserId = dentistUserId,
+                        SessionDate = DateOnly.FromDateTime(nowUtc),
+                        Notes = notes,
+                        ClinicalObservations = "Hoàn tất ca khám",
+                        CreatedAt = nowUtc,
+                        UpdatedAt = nowUtc
+                    };
+                    _dbContext.TreatmentSessions.Add(latestSession);
+                    await _dbContext.SaveChangesAsync(ct);
+                }
                 if (latestSession != null)
                 {
                     var existingFu = await _dbContext.FollowUpSchedules

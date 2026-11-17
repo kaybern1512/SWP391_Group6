@@ -19,6 +19,15 @@
 
     <form method="post" asp-action="Create" id="createPlanForm">
         @Html.AntiForgeryToken()
+        @if (Model.ActiveAppointmentId.HasValue && Model.ActiveAppointmentId.Value > 0)
+        {
+            <input type="hidden" name="returnAppointmentId" value="@Model.ActiveAppointmentId.Value" />
+            <input type="hidden" name="AppointmentId" value="@Model.ActiveAppointmentId.Value" />
+            <div class="alert alert-info py-2 px-3 mb-3 d-flex align-items-center">
+                <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+                <span>Đang lập phác đồ trong ca khám <strong>#APT-@Model.ActiveAppointmentId.Value</strong>. Sau khi lưu, hệ thống sẽ tự động liên kết và quay về ca khám này.</span>
+            </div>
+        }
 
         <!-- Card Thông Tin Chung -->
         <div class="card border-0 shadow-sm mb-4">
@@ -31,15 +40,32 @@
                 <div class="row g-3">
                     <div class="col-12 col-md-6">
                         <label class="form-label fw-bold">Chọn Bệnh Nhân Tiếp Nhận <span class="text-danger">*</span></label>
-                        <select name="PatientUserId" class="form-select" required>
-                            <option value="">-- Chọn bệnh nhân --</option>
-                            @foreach (var p in Model.Patients)
-                            {
-                                <option value="@p.PatientUserId">
-                                    @p.FullName - Mã: @p.PatientCode @(string.IsNullOrEmpty(p.PhoneNumber) ? "" : $"({p.PhoneNumber})")
-                                </option>
-                            }
-                        </select>
+                        @if (Model.ActiveAppointmentId.HasValue && Model.ActiveAppointmentId.Value > 0 && Model.SelectedPatientUserId.HasValue)
+                        {
+                            var lockedPatient = Model.Patients?.FirstOrDefault(p => p.PatientUserId == Model.SelectedPatientUserId.Value);
+                            var displayName = lockedPatient != null 
+                                ? $"{lockedPatient.FullName} - Mã: {lockedPatient.PatientCode} ({lockedPatient.PhoneNumber})" 
+                                : (ViewBag.LockedPatientName != null ? $"{ViewBag.LockedPatientName} - Mã: {ViewBag.LockedPatientCode} ({ViewBag.LockedPatientPhone})" : "Bệnh nhân của ca khám");
+                            <div class="input-group">
+                                <span class="input-group-text bg-light text-primary"><i class="bi bi-lock-fill me-1"></i>Cố định</span>
+                                <input type="text" class="form-control bg-light fw-bold" readonly value="@displayName" />
+                                <input type="hidden" name="PatientUserId" value="@Model.SelectedPatientUserId.Value" />
+                            </div>
+                            <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Bệnh nhân được khóa theo ca khám đang diễn ra để đảm bảo toàn vẹn dữ liệu lâm sàng.</small>
+                        }
+                        else
+                        {
+                            <select name="PatientUserId" class="form-select" required>
+                                <option value="">-- Chọn bệnh nhân --</option>
+                                @foreach (var p in Model.Patients)
+                                {
+                                    var isPreselected = Model.SelectedPatientUserId.HasValue && Model.SelectedPatientUserId.Value == p.PatientUserId;
+                                    <option value="@p.PatientUserId" selected="@(isPreselected ? "selected" : null)">
+                                        @p.FullName - Mã: @p.PatientCode @(string.IsNullOrEmpty(p.PhoneNumber) ? "" : $"({p.PhoneNumber})")
+                                    </option>
+                                }
+                            </select>
+                        }
                     </div>
 
                     <div class="col-12 col-md-3">
@@ -115,12 +141,13 @@
 
 @section Scripts {
 <script>
-    const availableServices = [
-        @foreach (var s in Model.Services)
-        {
-            <text>{ id: @s.DepartmentServiceId, name: '@Html.Raw(s.ServiceName)', price: @s.Price },</text>
-        }
-    ];
+    const availableServices = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        Model.Services.Select(s => new {
+            id = s.DepartmentServiceId,
+            name = s.ServiceName,
+            price = s.Price
+        })
+    ));
 
     let phaseCount = 0;
 
@@ -143,6 +170,7 @@
         });
 
         tr.innerHTML = `
+            <input type="hidden" name="Items.Index" value="${phaseCount}" />
             <td class="text-center fw-bold font-monospace bg-light">
                 ${seq}
                 <input type="hidden" name="Items[${phaseCount}].SequenceNo" value="${seq}" />

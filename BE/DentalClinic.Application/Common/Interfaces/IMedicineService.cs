@@ -15,6 +15,7 @@ public interface IMedicineService
     Task<List<MedicineBatchDto>> GetBatchesByMedicineIdAsync(long medicineId);
     Task<MedicineBatchDto> ImportBatchAsync(ImportMedicineBatchRequest request, long userId);
     Task<MedicineStockTransactionDto> AdjustStockAsync(StockAdjustmentRequest request, long userId);
+    Task<MedicineStockUpdateResultDto> UpdateStockAsync(long medicineId, UpdateMedicineStockRequest request, long userId, CancellationToken ct = default);
     Task<List<MedicineStockTransactionDto>> GetStockTransactionsAsync(long? medicineBatchId, long? medicineId, int page, int pageSize);
     Task<MedicineInventorySummaryDto> GetInventorySummaryAsync();
     Task<List<MedicineDto>> GetAvailableMedicinesForDentistAsync(string? searchTerm);

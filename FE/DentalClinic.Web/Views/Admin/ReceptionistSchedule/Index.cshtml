@@ -1,7 +1,8 @@
 @using DentalClinic.Web.Models.ApiDtos
 @using DentalClinic.Web.Helpers
+@using System.Text.Json
 @{
-    ViewData["Title"] = "Quản Lý Lịch Trực Lễ Tân & Nghỉ Phép";
+    ViewData["Title"] = "Lịch Làm Việc Lễ Tân";
     Layout = "~/Views/Shared/_Layout.cshtml";
 
     string activeTab = ViewBag.ActiveTab ?? "weekly";
@@ -18,6 +19,15 @@
     var incidents = ViewBag.Incidents as List<ReceptionistCoverageIncidentDto> ?? new();
     var templates = ViewBag.Templates as List<ReceptionistShiftTemplateDto> ?? new();
     var receptionists = ViewBag.Receptionists as List<AdminUserDto> ?? new();
+
+    int pendingLeavesCount = leaves.Count(l => l.Status == "Pending");
+    int pendingSwapsCount = swaps.Count(s => s.Status == "PendingAdminApproval");
+    int openIncidentsCount = incidents.Count(i => i.Status == "Open");
+
+    var morningTpl = templates.FirstOrDefault(t => t.StartTime < new TimeOnly(13, 0));
+    var afternoonTpl = templates.FirstOrDefault(t => t.StartTime >= new TimeOnly(13, 0));
+    int morningReq = morningTpl?.MinStaffRequired ?? 0;
+    int afternoonReq = afternoonTpl?.MinStaffRequired ?? 0;
 
     int prevMonth = month - 1;
     int prevYear = year;
@@ -36,44 +46,62 @@
     string[] dayNamesVn = { "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ Nhật" };
 }
 
+<style>
+    /* DentalCare Scheduling Custom Styles */
+    .schedule-shift-cell {
+        min-height: 125px;
+        cursor: pointer;
+        transition: all 0.15s ease-in-out;
+        border: 1px solid #e9ecef !important;
+        position: relative;
+    }
+    .schedule-shift-cell:hover {
+        background-color: #f8f9fa !important;
+        box-shadow: inset 0 0 0 1px #0d6efd;
+    }
+    .schedule-shift-cell.active-shift-cell {
+        background-color: #f0f7ff !important;
+        box-shadow: inset 0 0 0 2px #0d6efd !important;
+    }
+    .monthly-day-cell {
+        min-height: 115px;
+        height: 115px;
+        cursor: pointer;
+        transition: all 0.15s ease-in-out;
+        overflow: hidden;
+        border: 1px solid #e9ecef !important;
+    }
+    .monthly-day-cell:hover {
+        background-color: #f8f9fa !important;
+        box-shadow: inset 0 0 0 1px #0d6efd;
+    }
+    .monthly-day-cell.active-shift-cell {
+        background-color: #f0f7ff !important;
+        box-shadow: inset 0 0 0 2px #0d6efd !important;
+    }
+    #shiftDetailsDrawer {
+        width: 460px;
+        max-width: 100vw;
+    }
+    @@media (max-width: 576px) {
+        #shiftDetailsDrawer {
+            width: 100vw;
+        }
+    }
+</style>
+
 <div class="container-fluid py-3">
-    <!-- Header & Navigation -->
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <!-- Header: Tiêu đề & Mô tả phụ -->
+    <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
         <div>
             <h2 class="h4 fw-bold text-dark mb-1">
-                <i class="bi bi-people-fill text-primary me-2"></i>Quản Lý Lịch Trực Lễ Tân & Nghỉ Phép
+                <i class="bi bi-people-fill text-primary me-2"></i>Lịch Làm Việc Lễ Tân
             </h2>
-            <p class="text-muted small mb-0">Phân công ca trực theo tuần/tháng, 2 ca cố định (08:00-12:00, 13:30-17:30), phê duyệt nghỉ phép và đổi ca</p>
+            <p class="text-muted small mb-0">Theo dõi, phân công và quản lý nhân sự theo ca làm việc.</p>
         </div>
-        @if (activeTab == "weekly")
-        {
-            <div class="d-flex gap-2 align-items-center">
-                <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = "weekly", weekOffset = weekOffset - 1, receptionistUserId = filterReceptionistId })" class="btn btn-outline-secondary btn-sm" title="Tuần trước">
-                    <i class="bi bi-chevron-left"></i>
-                </a>
-                <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = "weekly", weekOffset = 0, receptionistUserId = filterReceptionistId })" class="btn btn-sm @(weekOffset == 0 ? "btn-primary text-white" : "btn-outline-secondary")">
-                    @(weekOffset == 0 ? "Tuần Này" : "Về Tuần Này")
-                </a>
-                <span class="fw-bold px-2 text-primary">@weekStart.ToString("dd/MM") - @weekEnd.ToString("dd/MM/yyyy")</span>
-                <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = "weekly", weekOffset = weekOffset + 1, receptionistUserId = filterReceptionistId })" class="btn btn-outline-secondary btn-sm" title="Tuần sau">
-                    <i class="bi bi-chevron-right"></i>
-                </a>
-            </div>
-        }
-        else
-        {
-            <div class="d-flex gap-2 align-items-center">
-                <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = activeTab, year = prevYear, month = prevMonth, receptionistUserId = filterReceptionistId })" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-chevron-left"></i> Tháng @prevMonth/@prevYear
-                </a>
-                <span class="fw-bold px-2 text-primary">Tháng @month/@year</span>
-                <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = activeTab, year = nextYear, month = nextMonth, receptionistUserId = filterReceptionistId })" class="btn btn-outline-secondary btn-sm">
-                    Tháng @nextMonth/@nextYear <i class="bi bi-chevron-right"></i>
-                </a>
-            </div>
-        }
     </div>
 
+    <!-- Alert Messages -->
     @if (TempData["SuccessMessage"] != null)
     {
         <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -91,8 +119,8 @@
 
     <!-- Stat Highlights -->
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white h-100">
                 <div class="d-flex align-items-center">
                     <div class="bg-primary-subtle text-primary p-3 rounded-circle me-3">
                         <i class="bi bi-calendar-week fs-4"></i>
@@ -104,114 +132,207 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white h-100">
                 <div class="d-flex align-items-center">
                     <div class="bg-warning-subtle text-warning p-3 rounded-circle me-3">
                         <i class="bi bi-hourglass-split fs-4"></i>
                     </div>
                     <div>
                         <div class="text-muted small">Đơn nghỉ chờ duyệt</div>
-                        <div class="fs-4 fw-bold text-dark">@leaves.Count(l => l.Status == "Pending")</div>
+                        <div class="fs-4 fw-bold text-dark">@pendingLeavesCount</div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white h-100">
                 <div class="d-flex align-items-center">
                     <div class="bg-info-subtle text-info p-3 rounded-circle me-3">
                         <i class="bi bi-arrow-left-right fs-4"></i>
                     </div>
                     <div>
-                        <div class="text-muted small">Đổi ca chờ Admin duyệt</div>
-                        <div class="fs-4 fw-bold text-dark">@swaps.Count(s => s.Status == "PendingAdminApproval")</div>
+                        <div class="text-muted small">Đổi ca chờ duyệt</div>
+                        <div class="fs-4 fw-bold text-dark">@pendingSwapsCount</div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-3 p-3 bg-white h-100">
                 <div class="d-flex align-items-center">
                     <div class="bg-danger-subtle text-danger p-3 rounded-circle me-3">
                         <i class="bi bi-shield-exclamation fs-4"></i>
                     </div>
                     <div>
                         <div class="text-muted small">Sự cố thiếu nhân sự</div>
-                        <div class="fs-4 fw-bold text-danger">@incidents.Count(i => i.Status == "Open")</div>
+                        <div class="fs-4 fw-bold text-danger">@openIncidentsCount</div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Main Navigation Tabs -->
-    <ul class="nav nav-pills mb-4 gap-2 bg-white p-2 rounded-3 shadow-sm border" id="receptionistWorkforceTabs">
-        <li class="nav-item">
-            <a class="nav-link @(activeTab == "weekly" ? "active" : "")" href="@Url.Action("Index", new { tab = "weekly", weekOffset, receptionistUserId = filterReceptionistId })" id="tabWeeklyBtn">
-                <i class="bi bi-calendar-week me-1"></i> 1. Lịch Trực Theo Tuần
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link @(activeTab == "monthly" ? "active" : "")" href="@Url.Action("Index", new { tab = "monthly", year, month, receptionistUserId = filterReceptionistId })" id="tabMonthlyBtn">
-                <i class="bi bi-calendar-month me-1"></i> 2. Lịch Trực Theo Tháng
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link @(activeTab == "bulk" ? "active" : "")" href="@Url.Action("Index", new { tab = "bulk", year, month })" id="tabBulkBtn">
-                <i class="bi bi-calendar-plus me-1"></i> 3. Phân Ca & Sao Chép Tháng
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link @(activeTab == "leaves" ? "active" : "")" href="@Url.Action("Index", new { tab = "leaves", year, month })" id="tabLeavesBtn">
-                <i class="bi bi-calendar2-x me-1"></i> 4. Đơn Xin Nghỉ Phép (@leaves.Count(l => l.Status == "Pending"))
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link @(activeTab == "swaps" ? "active" : "")" href="@Url.Action("Index", new { tab = "swaps", year, month })" id="tabSwapsBtn">
-                <i class="bi bi-arrow-left-right me-1"></i> 5. Yêu Cầu Đổi Ca (@swaps.Count(s => s.Status == "PendingAdminApproval"))
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link @(activeTab == "incidents" ? "active" : "")" href="@Url.Action("Index", new { tab = "incidents", year, month })" id="tabIncidentsBtn">
-                <i class="bi bi-exclamation-octagon me-1"></i> 6. Giám Sát Nhân Lực & Sự Cố (@incidents.Count(i => i.Status == "Open"))
-            </a>
-        </li>
-    </ul>
+    <!-- Thanh Hành Động Hợp Nhất (Action Bar & Reorganized Navigation) -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white p-2">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <!-- Nhóm xem lịch & Quản lý -->
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="btn-group p-1 bg-light rounded-pill border" role="group">
+                    <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = "weekly", weekOffset, receptionistUserId = filterReceptionistId })" 
+                       class="btn btn-sm rounded-pill px-3 @(activeTab == "weekly" ? "btn-primary text-white shadow-sm" : "btn-light text-secondary")" id="btnTabWeekly">
+                        <i class="bi bi-calendar-week me-1"></i> Lịch Tuần
+                    </a>
+                    <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = "monthly", year, month, receptionistUserId = filterReceptionistId })" 
+                       class="btn btn-sm rounded-pill px-3 @(activeTab == "monthly" ? "btn-primary text-white shadow-sm" : "btn-light text-secondary")" id="btnTabMonthly">
+                        <i class="bi bi-calendar-month me-1"></i> Lịch Tháng
+                    </a>
+                </div>
 
-    <!-- Tab 1: Weekly Calendar Grid -->
+                <!-- Menu Quản Lý Nhân Sự -->
+                <div class="dropdown">
+                    <button class="btn btn-sm @(activeTab != "weekly" && activeTab != "monthly" ? "btn-primary text-white" : "btn-outline-secondary") dropdown-toggle rounded-pill px-3" 
+                            type="button" data-bs-toggle="dropdown" aria-expanded="false" id="workforceManagementDropdown">
+                        <i class="bi bi-sliders me-1"></i> Quản Lý Nhân Sự
+                        @if (pendingLeavesCount > 0 || pendingSwapsCount > 0 || openIncidentsCount > 0)
+                        {
+                            <span class="badge bg-danger rounded-pill ms-1">@(pendingLeavesCount + pendingSwapsCount + openIncidentsCount)</span>
+                        }
+                    </button>
+                    <ul class="dropdown-menu shadow border-0 rounded-3 mt-1">
+                        <li>
+                            <a class="dropdown-item @(activeTab == "bulk" ? "active" : "") d-flex justify-content-between align-items-center py-2" 
+                               href="@Url.Action("Index", new { tab = "bulk", year, month })" id="menuItemBulk">
+                                <span><i class="bi bi-calendar-plus me-2 text-primary"></i>Phân Ca & Sao Chép Tháng</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item @(activeTab == "leaves" ? "active" : "") d-flex justify-content-between align-items-center py-2" 
+                               href="@Url.Action("Index", new { tab = "leaves", year, month })" id="menuItemLeaves">
+                                <span><i class="bi bi-calendar2-x me-2 text-warning"></i>Đơn Xin Nghỉ Phép</span>
+                                @if (pendingLeavesCount > 0)
+                                {
+                                    <span class="badge bg-warning text-dark rounded-pill ms-2">@pendingLeavesCount</span>
+                                }
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item @(activeTab == "swaps" ? "active" : "") d-flex justify-content-between align-items-center py-2" 
+                               href="@Url.Action("Index", new { tab = "swaps", year, month })" id="menuItemSwaps">
+                                <span><i class="bi bi-arrow-left-right me-2 text-info"></i>Yêu Cầu Đổi Ca</span>
+                                @if (pendingSwapsCount > 0)
+                                {
+                                    <span class="badge bg-info text-dark rounded-pill ms-2">@pendingSwapsCount</span>
+                                }
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider my-1"></li>
+                        <li>
+                            <a class="dropdown-item @(activeTab == "incidents" ? "active" : "") d-flex justify-content-between align-items-center py-2" 
+                               href="@Url.Action("Index", new { tab = "incidents", year, month })" id="menuItemIncidents">
+                                <span><i class="bi bi-exclamation-octagon me-2 text-danger"></i>Giám Sát Nhân Lực & Sự Cố</span>
+                                @if (openIncidentsCount > 0)
+                                {
+                                    <span class="badge bg-danger rounded-pill ms-2">@openIncidentsCount</span>
+                                }
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Điều Hướng Thời Gian, Lọc Nhân Viên & Nút Phân Công -->
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <!-- Điều hướng khoảng thời gian -->
+                @if (activeTab == "weekly")
+                {
+                    <div class="d-flex align-items-center gap-1 bg-light p-1 rounded-pill border">
+                        <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = "weekly", weekOffset = weekOffset - 1, receptionistUserId = filterReceptionistId })" 
+                           class="btn btn-outline-secondary btn-sm border-0 rounded-circle" title="Tuần trước" id="btnPrevWeek">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                        <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = "weekly", weekOffset = 0, receptionistUserId = filterReceptionistId })" 
+                           class="btn btn-sm border-0 rounded-pill px-2 @(weekOffset == 0 ? "btn-primary text-white" : "btn-light text-secondary")" id="btnTodayWeek">
+                            Hôm nay
+                        </a>
+                        <span class="fw-bold px-2 text-dark small" id="weekRangeLabel">@weekStart.ToString("dd/MM") - @weekEnd.ToString("dd/MM/yyyy")</span>
+                        <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = "weekly", weekOffset = weekOffset + 1, receptionistUserId = filterReceptionistId })" 
+                           class="btn btn-outline-secondary btn-sm border-0 rounded-circle" title="Tuần sau" id="btnNextWeek">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex align-items-center gap-1 bg-light p-1 rounded-pill border">
+                        <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = activeTab, year = prevYear, month = prevMonth, receptionistUserId = filterReceptionistId })" 
+                           class="btn btn-outline-secondary btn-sm border-0 rounded-circle" title="Tháng trước" id="btnPrevMonth">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                        <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = activeTab, year = today.Year, month = today.Month, receptionistUserId = filterReceptionistId })" 
+                           class="btn btn-sm border-0 rounded-pill px-2 @(year == today.Year && month == today.Month ? "btn-primary text-white" : "btn-light text-secondary")" id="btnTodayMonth">
+                            Hôm nay
+                        </a>
+                        <span class="fw-bold px-2 text-dark small" id="monthRangeLabel">Tháng @month/@year</span>
+                        <a href="@Url.Action("Index", "AdminReceptionistSchedule", new { tab = activeTab, year = nextYear, month = nextMonth, receptionistUserId = filterReceptionistId })" 
+                           class="btn btn-outline-secondary btn-sm border-0 rounded-circle" title="Tháng sau" id="btnNextMonth">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </div>
+                }
+
+                <!-- Bộ lọc nhân viên -->
+                <form method="get" class="d-inline-flex m-0">
+                    <input type="hidden" name="tab" value="@activeTab" />
+                    @if (activeTab == "weekly")
+                    {
+                        <input type="hidden" name="weekOffset" value="@weekOffset" />
+                    }
+                    else
+                    {
+                        <input type="hidden" name="year" value="@year" />
+                        <input type="hidden" name="month" value="@month" />
+                    }
+                    <select name="receptionistUserId" class="form-select form-select-sm rounded-pill" style="min-width: 170px;" onchange="this.form.submit()" id="receptionistFilterSelect">
+                        <option value="">-- Tất cả lễ tân --</option>
+                        @foreach (var r in receptionists)
+                        {
+                            <option value="@r.UserId" selected="@(filterReceptionistId == r.UserId)">@r.FullName</option>
+                        }
+                    </select>
+                </form>
+
+                <!-- Nút Phân công ca -->
+                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#bulkReceptionistScheduleModal" id="btnHeaderBulkAssign">
+                    <i class="bi bi-calendar-plus me-1"></i> Phân công hàng loạt
+                </button>
+                <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createShiftModal" id="btnHeaderAssign">
+                    <i class="bi bi-plus-lg me-1"></i> Phân công ca
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- TAB 1: LỊCH TRỰC THEO TUẦN (WEEKLY VIEW)   -->
+    <!-- ========================================== -->
     @if (activeTab == "weekly")
     {
         <div class="card border-0 shadow-sm rounded-3 mb-4">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div class="d-flex align-items-center gap-3">
-                    <h5 class="mb-0 fw-bold">
-                        <i class="bi bi-calendar2-range text-primary me-2"></i>Lịch Trực Tuần (@weekStart.ToString("dd/MM/yyyy") - @weekEnd.ToString("dd/MM/yyyy"))
-                    </h5>
-                    <form method="get" class="d-inline-flex gap-2 align-items-center">
-                        <input type="hidden" name="tab" value="weekly" />
-                        <input type="hidden" name="weekOffset" value="@weekOffset" />
-                        <select name="receptionistUserId" class="form-select form-select-sm" onchange="this.form.submit()">
-                            <option value="">-- Tất cả lễ tân --</option>
-                            @foreach (var r in receptionists)
-                            {
-                                <option value="@r.UserId" selected="@(filterReceptionistId == r.UserId)">@r.FullName (@r.Email)</option>
-                            }
-                        </select>
-                    </form>
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <div class="fw-bold text-dark">
+                    <i class="bi bi-calendar2-range text-primary me-2"></i>Lưới Lịch Tuần (@weekStart.ToString("dd/MM/yyyy") - @weekEnd.ToString("dd/MM/yyyy"))
                 </div>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createShiftModal">
-                        <i class="bi bi-plus-lg me-1"></i> Thêm Ca Trực
-                    </button>
+                <div class="small text-muted">
+                    <i class="bi bi-info-circle me-1"></i>Nhấp vào bất kỳ ô ca trực nào để xem và quản lý danh sách người trực
                 </div>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-bordered mb-0 align-top" style="table-layout: fixed; min-width: 1000px;">
+                    <table class="table table-bordered mb-0 align-top" style="table-layout: fixed; min-width: 950px;" id="weeklyScheduleTable">
                         <thead class="table-light text-center">
                             <tr>
-                                <th style="width: 120px;" class="align-middle bg-light text-muted small fw-bold">Ca Trực</th>
+                                <th style="width: 130px;" class="align-middle bg-light text-muted small fw-bold">Ca Trực</th>
                                 @for (int i = 0; i < 7; i++)
                                 {
                                     var d = weekDays[i];
@@ -234,7 +355,7 @@
                                     <div class="fw-bold text-warning-emphasis mb-1">
                                         <i class="bi bi-sun-fill text-warning me-1"></i>Ca Sáng
                                     </div>
-                                    <span class="badge bg-warning-subtle text-warning border small">08:00 - 12:00</span>
+                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small">08:00 - 12:00</span>
                                 </td>
                                 @for (int i = 0; i < 7; i++)
                                 {
@@ -245,48 +366,90 @@
                                         .ToList() ?? new List<ReceptionistWorkScheduleDto>();
                                     var dayLeaves = dayDto?.ApprovedLeaves ?? new List<ReceptionistLeaveSummaryDto>();
 
-                                    <td class="p-2 @(d == today ? "bg-primary-subtle bg-opacity-10" : "bg-white")" style="min-height: 120px;">
-                                        @if (morningShifts.Any())
-                                        {
-                                            <div class="d-flex flex-column gap-2">
-                                                @foreach (var s in morningShifts)
+                                    int mCount = morningShifts.Count;
+                                    bool isPast = d < today;
+
+                                    var staffPayload = morningShifts.Select(s => new
+                                    {
+                                        scheduleId = s.ReceptionistScheduleId,
+                                        userId = s.ReceptionistUserId,
+                                        name = s.ReceptionistName,
+                                        code = s.EmployeeCode,
+                                        startTime = s.StartTime.ToString("HH:mm"),
+                                        endTime = s.EndTime.ToString("HH:mm"),
+                                        isOnLeave = dayLeaves.Any(l => l.ReceptionistUserId == s.ReceptionistUserId),
+                                        status = s.Status,
+                                        notes = s.Notes ?? ""
+                                    }).ToList();
+
+                                    <td class="schedule-shift-cell p-2 align-middle text-center @(d == today ? "bg-primary-subtle bg-opacity-10" : "bg-white")"
+                                        data-date="@d.ToString("yyyy-MM-dd")"
+                                        data-date-display="@($"{dayNamesVn[i]}, {d:dd/MM/yyyy}")"
+                                        data-shift="morning"
+                                        data-shift-name="Ca Sáng"
+                                        data-shift-time="08:00 - 12:00"
+                                        data-is-past="@(isPast ? "true" : "false")"
+                                        data-req-count="@morningReq"
+                                        data-staff-json="@JsonSerializer.Serialize(staffPayload)"
+                                        onclick="openShiftDrawerFromCell(this)">
+                                        
+                                        <div class="d-flex flex-column align-items-center justify-content-center py-2">
+                                            <!-- Staff Icon & Count -->
+                                            <div class="fw-bold fs-6 mb-1 text-dark">
+                                                <i class="bi bi-people-fill text-primary me-1"></i> @mCount người
+                                            </div>
+
+                                            <!-- Staffing Requirement Status -->
+                                            <div class="mb-2">
+                                                @if (mCount == 0)
                                                 {
-                                                    bool isOnLeave = dayLeaves.Any(l => l.ReceptionistUserId == s.ReceptionistUserId);
-                                                    <div class="card p-2 border shadow-xs rounded-3 @(isOnLeave ? "bg-warning-subtle border-warning" : "bg-white border-primary-subtle")">
-                                                        <div class="d-flex justify-content-between align-items-start mb-1">
-                                                            <strong class="small text-dark text-truncate" title="@s.ReceptionistName">
-                                                                <i class="bi bi-person text-primary me-1"></i>@s.ReceptionistName
-                                                            </strong>
-                                                            @if (isOnLeave)
-                                                            {
-                                                                <span class="badge bg-warning text-dark border border-warning" style="font-size: 8px;">Nghỉ phép</span>
-                                                            }
-                                                            else
-                                                            {
-                                                                <span class="badge bg-success-subtle text-success" style="font-size: 8px;">Trực ca</span>
-                                                            }
-                                                        </div>
-                                                        <div class="d-flex justify-content-between align-items-center">
-                                                            <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">@s.StartTime.ToString("HH:mm") - @s.EndTime.ToString("HH:mm")</span>
-                                                            <form method="post" action="@Url.Action("DeleteSchedule")" class="d-inline" onsubmit="return confirm('Hủy ca trực của @s.ReceptionistName?');">
-                                                                <input type="hidden" name="scheduleId" value="@s.ReceptionistScheduleId" />
-                                                                <input type="hidden" name="year" value="@d.Year" />
-                                                                <input type="hidden" name="month" value="@d.Month" />
-                                                                <button type="submit" class="btn btn-link text-danger p-0 border-0" title="Hủy ca">
-                                                                    <i class="bi bi-x-circle"></i>
-                                                                </button>
-                                                            </form>
-                                                        </div>
-                                                    </div>
+                                                    @if (isPast)
+                                                    {
+                                                        <span class="badge bg-light text-muted border small fw-normal">
+                                                            0 người trực
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-normal">
+                                                            0 người — Chưa phân công
+                                                        </span>
+                                                    }
+                                                }
+                                                else if (morningReq > 0 && mCount < morningReq)
+                                                {
+                                                    @if (isPast)
+                                                    {
+                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-normal">
+                                                            @mCount người trực
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small fw-normal">
+                                                            @mCount người — Thiếu nhân sự
+                                                        </span>
+                                                    }
+                                                }
+                                                else if (morningReq > 0 && mCount >= morningReq)
+                                                {
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle small fw-normal">
+                                                        Đủ nhân sự
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle small fw-normal">
+                                                        @mCount người trực
+                                                    </span>
                                                 }
                                             </div>
-                                        }
-                                        else
-                                        {
-                                            <div class="text-center text-muted py-3 small fst-italic opacity-50">
-                                                Trống ca
+
+                                            <!-- Action Link -->
+                                            <div class="text-primary small fw-semibold d-inline-flex align-items-center">
+                                                <i class="bi bi-person-lines-fill me-1"></i>Xem người trực
                                             </div>
-                                        }
+                                        </div>
                                     </td>
                                 }
                             </tr>
@@ -297,7 +460,7 @@
                                     <div class="fw-bold text-primary mb-1">
                                         <i class="bi bi-sunset-fill text-primary me-1"></i>Ca Chiều
                                     </div>
-                                    <span class="badge bg-primary-subtle text-primary border small">13:30 - 17:30</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle small">13:30 - 17:30</span>
                                 </td>
                                 @for (int i = 0; i < 7; i++)
                                 {
@@ -308,48 +471,90 @@
                                         .ToList() ?? new List<ReceptionistWorkScheduleDto>();
                                     var dayLeaves = dayDto?.ApprovedLeaves ?? new List<ReceptionistLeaveSummaryDto>();
 
-                                    <td class="p-2 @(d == today ? "bg-primary-subtle bg-opacity-10" : "bg-white")" style="min-height: 120px;">
-                                        @if (afternoonShifts.Any())
-                                        {
-                                            <div class="d-flex flex-column gap-2">
-                                                @foreach (var s in afternoonShifts)
+                                    int aCount = afternoonShifts.Count;
+                                    bool isPast = d < today;
+
+                                    var staffPayload = afternoonShifts.Select(s => new
+                                    {
+                                        scheduleId = s.ReceptionistScheduleId,
+                                        userId = s.ReceptionistUserId,
+                                        name = s.ReceptionistName,
+                                        code = s.EmployeeCode,
+                                        startTime = s.StartTime.ToString("HH:mm"),
+                                        endTime = s.EndTime.ToString("HH:mm"),
+                                        isOnLeave = dayLeaves.Any(l => l.ReceptionistUserId == s.ReceptionistUserId),
+                                        status = s.Status,
+                                        notes = s.Notes ?? ""
+                                    }).ToList();
+
+                                    <td class="schedule-shift-cell p-2 align-middle text-center @(d == today ? "bg-primary-subtle bg-opacity-10" : "bg-white")"
+                                        data-date="@d.ToString("yyyy-MM-dd")"
+                                        data-date-display="@($"{dayNamesVn[i]}, {d:dd/MM/yyyy}")"
+                                        data-shift="afternoon"
+                                        data-shift-name="Ca Chiều"
+                                        data-shift-time="13:30 - 17:30"
+                                        data-is-past="@(isPast ? "true" : "false")"
+                                        data-req-count="@afternoonReq"
+                                        data-staff-json="@JsonSerializer.Serialize(staffPayload)"
+                                        onclick="openShiftDrawerFromCell(this)">
+                                        
+                                        <div class="d-flex flex-column align-items-center justify-content-center py-2">
+                                            <!-- Staff Icon & Count -->
+                                            <div class="fw-bold fs-6 mb-1 text-dark">
+                                                <i class="bi bi-people-fill text-primary me-1"></i> @aCount người
+                                            </div>
+
+                                            <!-- Staffing Requirement Status -->
+                                            <div class="mb-2">
+                                                @if (aCount == 0)
                                                 {
-                                                    bool isOnLeave = dayLeaves.Any(l => l.ReceptionistUserId == s.ReceptionistUserId);
-                                                    <div class="card p-2 border shadow-xs rounded-3 @(isOnLeave ? "bg-warning-subtle border-warning" : "bg-white border-primary-subtle")">
-                                                        <div class="d-flex justify-content-between align-items-start mb-1">
-                                                            <strong class="small text-dark text-truncate" title="@s.ReceptionistName">
-                                                                <i class="bi bi-person text-primary me-1"></i>@s.ReceptionistName
-                                                            </strong>
-                                                            @if (isOnLeave)
-                                                            {
-                                                                <span class="badge bg-warning text-dark border border-warning" style="font-size: 8px;">Nghỉ phép</span>
-                                                            }
-                                                            else
-                                                            {
-                                                                <span class="badge bg-success-subtle text-success" style="font-size: 8px;">Trực ca</span>
-                                                            }
-                                                        </div>
-                                                        <div class="d-flex justify-content-between align-items-center">
-                                                            <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">@s.StartTime.ToString("HH:mm") - @s.EndTime.ToString("HH:mm")</span>
-                                                            <form method="post" action="@Url.Action("DeleteSchedule")" class="d-inline" onsubmit="return confirm('Hủy ca trực của @s.ReceptionistName?');">
-                                                                <input type="hidden" name="scheduleId" value="@s.ReceptionistScheduleId" />
-                                                                <input type="hidden" name="year" value="@d.Year" />
-                                                                <input type="hidden" name="month" value="@d.Month" />
-                                                                <button type="submit" class="btn btn-link text-danger p-0 border-0" title="Hủy ca">
-                                                                    <i class="bi bi-x-circle"></i>
-                                                                </button>
-                                                            </form>
-                                                        </div>
-                                                    </div>
+                                                    @if (isPast)
+                                                    {
+                                                        <span class="badge bg-light text-muted border small fw-normal">
+                                                            0 người trực
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-normal">
+                                                            0 người — Chưa phân công
+                                                        </span>
+                                                    }
+                                                }
+                                                else if (afternoonReq > 0 && aCount < afternoonReq)
+                                                {
+                                                    @if (isPast)
+                                                    {
+                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-normal">
+                                                            @aCount người trực
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small fw-normal">
+                                                            @aCount người — Thiếu nhân sự
+                                                        </span>
+                                                    }
+                                                }
+                                                else if (afternoonReq > 0 && aCount >= afternoonReq)
+                                                {
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle small fw-normal">
+                                                        Đủ nhân sự
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle small fw-normal">
+                                                        @aCount người trực
+                                                    </span>
                                                 }
                                             </div>
-                                        }
-                                        else
-                                        {
-                                            <div class="text-center text-muted py-3 small fst-italic opacity-50">
-                                                Trống ca
+
+                                            <!-- Action Link -->
+                                            <div class="text-primary small fw-semibold d-inline-flex align-items-center">
+                                                <i class="bi bi-person-lines-fill me-1"></i>Xem người trực
                                             </div>
-                                        }
+                                        </div>
                                     </td>
                                 }
                             </tr>
@@ -360,35 +565,23 @@
         </div>
     }
 
-    <!-- Tab 2: Monthly Calendar Grid -->
+    <!-- ========================================== -->
+    <!-- TAB 2: LỊCH TRỰC THEO THÁNG (MONTHLY VIEW) -->
+    <!-- ========================================== -->
     @if (activeTab == "monthly")
     {
         <div class="card border-0 shadow-sm rounded-3 mb-4">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div class="d-flex align-items-center gap-3">
-                    <h5 class="mb-0 fw-bold">Lưới Lịch Làm Việc Tháng @month/@year</h5>
-                    <form method="get" class="d-inline-flex gap-2 align-items-center">
-                        <input type="hidden" name="tab" value="monthly" />
-                        <input type="hidden" name="year" value="@year" />
-                        <input type="hidden" name="month" value="@month" />
-                        <select name="receptionistUserId" class="form-select form-select-sm" onchange="this.form.submit()">
-                            <option value="">-- Tất cả lễ tân --</option>
-                            @foreach (var r in receptionists)
-                            {
-                                <option value="@r.UserId" selected="@(filterReceptionistId == r.UserId)">@r.FullName (@r.Email)</option>
-                            }
-                        </select>
-                    </form>
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <div class="fw-bold text-dark">
+                    <i class="bi bi-calendar-month text-primary me-2"></i>Lưới Lịch Làm Việc Tháng @month/@year
                 </div>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createShiftModal" id="openCreateShiftBtn">
-                        <i class="bi bi-plus-lg me-1"></i> Thêm Ca Trực
-                    </button>
+                <div class="small text-muted">
+                    <i class="bi bi-info-circle me-1"></i>Nhấp vào ngày bất kỳ để xem chi tiết hai ca sáng/chiều
                 </div>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-bordered mb-0 align-middle text-center" style="min-width: 1000px;">
+                    <table class="table table-bordered mb-0 text-center" style="table-layout: fixed; min-width: 950px;" id="monthlyScheduleTable">
                         <thead class="table-light">
                             <tr>
                                 <th style="width: 14.28%;">Thứ 2</th>
@@ -417,56 +610,93 @@
                                             int cellIndex = r * 7 + c;
                                             if (cellIndex < offset || dayIndex >= monthlyData.Days.Count)
                                             {
-                                                <td class="bg-light text-muted p-2" style="height: 120px;"></td>
+                                                <td class="bg-light text-muted p-2" style="height: 115px;"></td>
                                             }
                                             else
                                             {
                                                 var day = monthlyData.Days[dayIndex];
                                                 dayIndex++;
                                                 bool isToday = day.Date == ClinicTimeHelper.TodayDateOnly;
-                                                <td class="p-2 align-top text-start @(isToday ? "border-primary bg-primary-subtle bg-opacity-10" : "")" style="height: 130px; font-size: 0.82rem;">
+                                                bool isPast = day.Date < today;
+
+                                                var dayMorningShifts = day.Shifts.Where(s => s.StartTime < new TimeOnly(13, 0)).ToList();
+                                                var dayAfternoonShifts = day.Shifts.Where(s => s.StartTime >= new TimeOnly(13, 0)).ToList();
+                                                var dayLeaves = day.ApprovedLeaves ?? new List<ReceptionistLeaveSummaryDto>();
+
+                                                var morningPayload = dayMorningShifts.Select(s => new
+                                                {
+                                                    scheduleId = s.ReceptionistScheduleId,
+                                                    userId = s.ReceptionistUserId,
+                                                    name = s.ReceptionistName,
+                                                    code = s.EmployeeCode,
+                                                    startTime = s.StartTime.ToString("HH:mm"),
+                                                    endTime = s.EndTime.ToString("HH:mm"),
+                                                    isOnLeave = dayLeaves.Any(l => l.ReceptionistUserId == s.ReceptionistUserId),
+                                                    status = s.Status,
+                                                    notes = s.Notes ?? ""
+                                                }).ToList();
+
+                                                var afternoonPayload = dayAfternoonShifts.Select(s => new
+                                                {
+                                                    scheduleId = s.ReceptionistScheduleId,
+                                                    userId = s.ReceptionistUserId,
+                                                    name = s.ReceptionistName,
+                                                    code = s.EmployeeCode,
+                                                    startTime = s.StartTime.ToString("HH:mm"),
+                                                    endTime = s.EndTime.ToString("HH:mm"),
+                                                    isOnLeave = dayLeaves.Any(l => l.ReceptionistUserId == s.ReceptionistUserId),
+                                                    status = s.Status,
+                                                    notes = s.Notes ?? ""
+                                                }).ToList();
+
+                                                <td class="monthly-day-cell p-2 align-top text-start @(isToday ? "border-primary bg-primary-subtle bg-opacity-10" : "bg-white")"
+                                                    data-date="@day.Date.ToString("yyyy-MM-dd")"
+                                                    data-date-display="@($"{day.Date:dd/MM/yyyy}")"
+                                                    data-is-past="@(isPast ? "true" : "false")"
+                                                    data-morning-staff-json="@JsonSerializer.Serialize(morningPayload)"
+                                                    data-afternoon-staff-json="@JsonSerializer.Serialize(afternoonPayload)"
+                                                    data-morning-req="@morningReq"
+                                                    data-afternoon-req="@afternoonReq"
+                                                    onclick="openDayDrawerFromCell(this)">
+                                                    
+                                                    <!-- Day Number Header & Alerts -->
                                                     <div class="d-flex justify-content-between align-items-center mb-1">
-                                                        <span class="badge @(isToday ? "bg-primary" : "bg-secondary") rounded-pill">@day.Date.Day</span>
-                                                        @if (day.HasCoverageShortage && day.Shifts.Count == 0 && day.Date >= ClinicTimeHelper.TodayDateOnly)
+                                                        <span class="badge @(isToday ? "bg-primary" : "bg-secondary") rounded-pill">
+                                                            @day.Date.Day
+                                                        </span>
+                                                        @if (day.DistinctApprovedLeaveCount > 0)
                                                         {
-                                                            <span class="badge bg-danger" title="Không có ca trực!">Trống ca</span>
-                                                        }
-                                                        else if (day.DistinctApprovedLeaveCount > 0)
-                                                        {
-                                                            <span class="badge bg-warning text-dark" title="@day.DistinctApprovedLeaveCount lễ tân nghỉ">@day.DistinctApprovedLeaveCount nghỉ</span>
-                                                        }
-                                                        else if (day.Shifts.Count > 0)
-                                                        {
-                                                            <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.72rem;">@day.Shifts.Count ca</span>
+                                                            <span class="badge bg-warning text-dark" style="font-size: 0.7rem;" title="@day.DistinctApprovedLeaveCount lễ tân nghỉ phép">
+                                                                @day.DistinctApprovedLeaveCount nghỉ
+                                                            </span>
                                                         }
                                                     </div>
 
-                                                    <!-- Shifts -->
+                                                    <!-- Shift Summaries (No individual staff names, no overflow) -->
                                                     <div class="d-flex flex-column gap-1">
-                                                        @foreach (var s in day.Shifts.Take(3))
+                                                        <div class="p-1 px-2 rounded bg-warning-subtle text-warning-emphasis border border-warning-subtle d-flex justify-content-between align-items-center">
+                                                            <span style="font-size: 0.72rem;" class="fw-semibold">
+                                                                <i class="bi bi-sun-fill me-1 text-warning"></i>Ca sáng:
+                                                            </span>
+                                                            <span class="badge bg-white text-dark border" style="font-size: 0.7rem;">
+                                                                @dayMorningShifts.Count người
+                                                            </span>
+                                                        </div>
+
+                                                        <div class="p-1 px-2 rounded bg-primary-subtle text-primary border border-primary-subtle d-flex justify-content-between align-items-center">
+                                                            <span style="font-size: 0.72rem;" class="fw-semibold">
+                                                                <i class="bi bi-sunset-fill me-1 text-primary"></i>Ca chiều:
+                                                            </span>
+                                                            <span class="badge bg-white text-dark border" style="font-size: 0.7rem;">
+                                                                @dayAfternoonShifts.Count người
+                                                            </span>
+                                                        </div>
+
+                                                        @if (day.HasCoverageShortage && day.Date >= today)
                                                         {
-                                                            <div class="p-1 rounded border bg-white shadow-xs d-flex justify-content-between align-items-center">
-                                                                <span class="text-truncate fw-semibold" style="max-width: 80px;" title="@s.ReceptionistName">
-                                                                    <i class="bi bi-person text-primary"></i> @s.ReceptionistName
-                                                                </span>
-                                                                <div class="d-flex align-items-center gap-1">
-                                                                    <span class="badge @(s.StartTime < new TimeOnly(13, 0) ? "bg-warning-subtle text-warning-emphasis" : "bg-primary-subtle text-primary") border" style="font-size: 0.68rem;">
-                                                                        @(s.StartTime < new TimeOnly(13, 0) ? "Sáng" : "Chiều")
-                                                                    </span>
-                                                                    <form method="post" action="@Url.Action("DeleteSchedule")" class="d-inline" onsubmit="return confirm('Hủy ca trực của @s.ReceptionistName?');">
-                                                                        <input type="hidden" name="scheduleId" value="@s.ReceptionistScheduleId" />
-                                                                        <input type="hidden" name="year" value="@year" />
-                                                                        <input type="hidden" name="month" value="@month" />
-                                                                        <button type="submit" class="btn btn-link text-danger p-0 border-0" title="Hủy ca">
-                                                                            <i class="bi bi-x-circle" style="font-size: 0.75rem;"></i>
-                                                                        </button>
-                                                                    </form>
-                                                                </div>
+                                                            <div class="text-danger small mt-1 fw-semibold" style="font-size: 0.68rem;">
+                                                                <i class="bi bi-exclamation-triangle-fill me-1"></i>Thiếu nhân sự
                                                             </div>
-                                                        }
-                                                        @if (day.Shifts.Count > 3)
-                                                        {
-                                                            <div class="text-muted small text-center">+@(day.Shifts.Count - 3) ca khác</div>
                                                         }
                                                     </div>
                                                 </td>
@@ -482,7 +712,9 @@
         </div>
     }
 
-    <!-- Tab 2: Bulk Scheduling & Copy Month -->
+    <!-- ========================================== -->
+    <!-- TAB 3: PHÂN CA & SAO CHÉP THÁNG (BULK)     -->
+    <!-- ========================================== -->
     @if (activeTab == "bulk")
     {
         <div class="row g-4">
@@ -618,7 +850,9 @@
         </div>
     }
 
-    <!-- Tab 3: Leave Requests -->
+    <!-- ========================================== -->
+    <!-- TAB 4: ĐƠN XIN NGHỈ PHÉP (LEAVES)          -->
+    <!-- ========================================== -->
     @if (activeTab == "leaves")
     {
         <div class="card border-0 shadow-sm rounded-3">
@@ -714,7 +948,9 @@
         </div>
     }
 
-    <!-- Tab 4: Shift Swaps -->
+    <!-- ========================================== -->
+    <!-- TAB 5: YÊU CẦU ĐỔI CA (SHIFTS SWAPS)        -->
+    <!-- ========================================== -->
     @if (activeTab == "swaps")
     {
         <div class="card border-0 shadow-sm rounded-3">
@@ -807,7 +1043,9 @@
         </div>
     }
 
-    <!-- Tab 5: Coverage Incidents -->
+    <!-- ========================================== -->
+    <!-- TAB 6: GIÁM SÁT NHÂN LỰC & SỰ CỐ           -->
+    <!-- ========================================== -->
     @if (activeTab == "incidents")
     {
         <div class="card border-0 shadow-sm rounded-3">
@@ -884,11 +1122,85 @@
     }
 </div>
 
-<!-- Modal: Thêm Ca Trực Đơn Lẻ -->
+<!-- ========================================== -->
+<!-- RIGHT-SIDE DRAWER: CHI TIẾT CA TRỰC        -->
+<!-- ========================================== -->
+<div class="offcanvas offcanvas-end shadow-lg" tabindex="-1" id="shiftDetailsDrawer" aria-labelledby="shiftDetailsDrawerTitle">
+    <div class="offcanvas-header border-bottom bg-light">
+        <div>
+            <h5 class="offcanvas-title fw-bold text-dark mb-0" id="shiftDetailsDrawerTitle">
+                <i class="bi bi-calendar2-check text-primary me-2"></i>Chi Tiết Ca Trực
+            </h5>
+            <div class="text-muted small mt-1" id="shiftDetailsDrawerSubtitle">
+                Thứ Hai, 16/11/2026 · Ca Sáng (08:00 - 12:00)
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body d-flex flex-column p-0">
+        <div id="shiftDrawerContent" class="flex-grow-1 p-3 overflow-auto">
+            <!-- Nội dung được nạp động từ JS -->
+        </div>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- MODAL: XÁC NHẬN HỦY CA TRỰC                -->
+<!-- ========================================== -->
+<div class="modal fade" id="deleteShiftConfirmModal" tabindex="-1" aria-labelledby="deleteShiftConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="@Url.Action("DeleteSchedule")" id="deleteShiftForm">
+                <input type="hidden" name="scheduleId" id="delScheduleId" value="0" />
+                <input type="hidden" name="year" id="delYear" value="@year" />
+                <input type="hidden" name="month" id="delMonth" value="@month" />
+                <input type="hidden" name="tab" id="delTab" value="@activeTab" />
+                <input type="hidden" name="weekOffset" id="delWeekOffset" value="@weekOffset" />
+
+                <div class="modal-header border-bottom">
+                    <h5 class="modal-title fw-bold text-danger" id="deleteShiftConfirmModalLabel">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Xác Nhận Hủy Phân Công Ca Trực
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-4">
+                    <p class="text-muted mb-3">Bạn có chắc chắn muốn hủy phân công ca trực này không? Thao tác này sẽ xóa ca trực khỏi lịch làm việc.</p>
+                    <div class="card bg-light border p-3 rounded-3">
+                        <div class="mb-2">
+                            <span class="text-muted small">Nhân viên:</span>
+                            <div class="fw-bold text-dark fs-6" id="delStaffNameText">Nguyễn Thị Lan</div>
+                        </div>
+                        <div class="mb-2">
+                            <span class="text-muted small">Ngày làm việc:</span>
+                            <div class="fw-semibold text-dark" id="delDateText">16/11/2026</div>
+                        </div>
+                        <div>
+                            <span class="text-muted small">Ca trực:</span>
+                            <div class="fw-semibold text-primary" id="delShiftText">Ca Sáng (08:00 - 12:00)</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Quay Lại</button>
+                    <button type="submit" class="btn btn-danger px-3" id="btnConfirmDeleteShift">
+                        <i class="bi bi-trash3-fill me-1"></i> Xác Nhận Hủy
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- MODAL: THÊM CA TRỰC ĐƠN LẺ                 -->
+<!-- ========================================== -->
 <div class="modal fade" id="createShiftModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="post" action="@Url.Action("CreateSchedule")">
+            <form method="post" action="@Url.Action("CreateSchedule")" id="createShiftForm">
+                <input type="hidden" name="tab" value="@activeTab" />
+                <input type="hidden" name="weekOffset" value="@weekOffset" />
+
                 <div class="modal-header">
                     <h5 class="modal-title fw-bold">Phân Công Ca Trực Lễ Tân</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -896,7 +1208,7 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Lễ Tân</label>
-                        <select name="ReceptionistUserId" class="form-select" required>
+                        <select name="ReceptionistUserId" class="form-select" required id="modalStaffSelect">
                             @foreach (var r in receptionists)
                             {
                                 <option value="@r.UserId">@r.FullName (@r.Email)</option>
@@ -905,21 +1217,21 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Ngày Làm Việc</label>
-                        <input type="date" name="WorkDate" class="form-control" value="@ClinicTimeHelper.Today.ToString("yyyy-MM-dd")" required />
+                        <input type="date" name="WorkDate" class="form-control" value="@ClinicTimeHelper.Today.ToString("yyyy-MM-dd")" required id="modalWorkDateInput" />
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Ca Làm Việc Cố Định</label>
                         <select id="receptionistShiftSelect" class="form-select" onchange="updateReceptionistShiftTimes(this.value)">
-                            <option value="morning" data-start="08:00:00" data-end="12:00:00" data-tpl="@(templates.FirstOrDefault(t => t.StartTime == new TimeOnly(8, 0))?.ShiftTemplateId)">Ca Sáng (08:00 - 12:00)</option>
-                            <option value="afternoon" data-start="13:30:00" data-end="17:30:00" data-tpl="@(templates.FirstOrDefault(t => t.StartTime == new TimeOnly(13, 30))?.ShiftTemplateId)">Ca Chiều (13:30 - 17:30)</option>
+                            <option value="morning" data-start="08:00:00" data-end="12:00:00" data-tpl="@(templates.FirstOrDefault(t => t.StartTime < new TimeOnly(13, 0))?.ShiftTemplateId)">Ca Sáng (08:00 - 12:00)</option>
+                            <option value="afternoon" data-start="13:30:00" data-end="17:30:00" data-tpl="@(templates.FirstOrDefault(t => t.StartTime >= new TimeOnly(13, 0))?.ShiftTemplateId)">Ca Chiều (13:30 - 17:30)</option>
                         </select>
                         <input type="hidden" name="StartTime" id="modalShiftStartTime" value="08:00:00" />
                         <input type="hidden" name="EndTime" id="modalShiftEndTime" value="12:00:00" />
-                        <input type="hidden" name="ShiftTemplateId" id="modalShiftTemplateId" value="@(templates.FirstOrDefault(t => t.StartTime == new TimeOnly(8, 0))?.ShiftTemplateId)" />
+                        <input type="hidden" name="ShiftTemplateId" id="modalShiftTemplateId" value="@(templates.FirstOrDefault(t => t.StartTime < new TimeOnly(13, 0))?.ShiftTemplateId)" />
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Ghi Chú</label>
-                        <input type="text" name="Notes" class="form-control" placeholder="Tùy chọn..." />
+                        <input type="text" name="Notes" class="form-control" placeholder="Tùy chọn..." id="modalNotesInput" />
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1010,8 +1322,617 @@
     </div>
 </div>
 
+<!-- ========================================================================= -->
+<!-- MODAL: PHÂN CÔNG LỊCH TRỰC LỄ TÂN HÀNG LOẠT (BULK SCHEDULING)             -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="bulkReceptionistScheduleModal" tabindex="-1" aria-labelledby="bulkReceptionistScheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title font-heading fw-bold" id="bulkReceptionistScheduleModalLabel">
+                    <i class="bi bi-calendar-plus text-primary me-2"></i>Phân Công Lịch Trực Lễ Tân
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="bulkReceptionistScheduleForm" onsubmit="return false;">
+                    <!-- Bước 1: Chọn Lễ Tân -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-semibold small mb-0">1. Chọn nhân viên lễ tân <span class="text-danger">*</span></label>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none me-2 text-primary" onclick="bulkSelectAllReceptionists(true)">Chọn tất cả</button>
+                                <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="bulkSelectAllReceptionists(false)">Bỏ chọn</button>
+                            </div>
+                        </div>
+
+                        <!-- Search box -->
+                        <div class="input-group input-group-sm mb-1">
+                            <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                            <input type="text" id="bulkReceptionistSearch" class="form-control" placeholder="Tìm theo tên hoặc mã nhân viên..." oninput="filterBulkReceptionists()">
+                        </div>
+
+                        <!-- Receptionist Checkbox List Container -->
+                        <div id="bulkReceptionistListContainer" class="border rounded p-2 bg-white" style="max-height: 150px; overflow-y: auto;">
+                            @foreach (var r in receptionists)
+                            {
+                                var rCode = !string.IsNullOrEmpty(r.Code) ? r.Code : $"EMP-{r.UserId}";
+                                <div class="form-check receptionist-item py-1 border-bottom border-light"
+                                     data-receptionist-id="@r.UserId"
+                                     data-search="@r.FullName.ToLowerInvariant() @(r.Email?.ToLowerInvariant() ?? "") @rCode.ToLowerInvariant()">
+                                    <input class="form-check-input bulk-receptionist-checkbox"
+                                           type="checkbox"
+                                           value="@r.UserId"
+                                           data-receptionist-id="@r.UserId"
+                                           id="chk_receptionist_@r.UserId"
+                                           onchange="syncBulkReceptionistSelection()">
+                                    <label class="form-check-label d-flex justify-content-between align-items-center w-100 cursor-pointer" for="chk_receptionist_@r.UserId">
+                                        <div>
+                                            <span class="fw-semibold text-dark">@r.FullName</span>
+                                            <span class="badge bg-light text-secondary border ms-1">@rCode</span>
+                                            <div class="text-xs text-muted">@(r.Email ?? "Lễ tân")</div>
+                                        </div>
+                                        <div>
+                                            @if (r.Status == "Active" || string.IsNullOrEmpty(r.Status))
+                                            {
+                                                <span class="badge bg-success-subtle text-success" style="font-size: 9px;">Hoạt động</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary-subtle text-muted" style="font-size: 9px;">@r.Status</span>
+                                            }
+                                        </div>
+                                    </label>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Hidden select for form submission sync -->
+                        <select id="bulkReceptionistIds" multiple style="display: none;">
+                            @foreach (var r in receptionists)
+                            {
+                                <option value="@r.UserId">@r.FullName</option>
+                            }
+                        </select>
+                        <div class="form-text text-xs text-muted mt-1">Đã chọn: <span id="bulkReceptionistSelectedCount" class="fw-bold text-primary">0</span> nhân sự</div>
+                    </div>
+
+                    <!-- Bước 2: Khoảng Ngày (Chỉ ngày tương lai) -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Phần B — Từ ngày (Tương lai) <span class="text-danger">*</span></label>
+                            <input type="date" id="bulkRecFromDate" class="form-control" min="@today.ToString("yyyy-MM-dd")" value="@today.ToString("yyyy-MM-dd")" onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();" oninput="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();" required />
+                            <div class="form-text text-xs text-muted">Chỉ áp dụng từ ngày hôm nay (@today.ToString("dd/MM/yyyy")) trở đi.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Đến ngày <span class="text-danger">*</span></label>
+                            <input type="date" id="bulkRecToDate" class="form-control" min="@today.ToString("yyyy-MM-dd")" value="@today.AddDays(14).ToString("yyyy-MM-dd")" onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();" oninput="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();" required />
+                        </div>
+                    </div>
+
+                    <!-- Bước 3: Thứ Trong Tuần -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small mb-2">Phần C — Các ngày áp dụng <span class="text-danger">*</span></label>
+                        <div class="btn-group w-100" role="group" aria-label="Days of week">
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow1" value="1" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-primary btn-sm fw-bold" for="recdow1">T2</label>
+
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow2" value="2" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-primary btn-sm fw-bold" for="recdow2">T3</label>
+
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow3" value="3" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-primary btn-sm fw-bold" for="recdow3">T4</label>
+
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow4" value="4" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-primary btn-sm fw-bold" for="recdow4">T5</label>
+
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow5" value="5" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-primary btn-sm fw-bold" for="recdow5">T6</label>
+
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow6" value="6" onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-primary btn-sm fw-bold" for="recdow6">T7</label>
+
+                            <input type="checkbox" class="btn-check bulk-rec-dow" id="recdow0" value="0" onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                            <label class="btn btn-outline-danger btn-sm fw-bold" for="recdow0">CN</label>
+                        </div>
+                        <div class="form-text text-xs text-muted mt-1">Mặc định áp dụng Thứ 2 tới Thứ 6 (T2–T6).</div>
+                    </div>
+
+                    <!-- Bước 4: Hai Ca Chuẩn Cố Định (08:00-12:00, 13:30-17:30) -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small mb-2">Phần D — Ca làm việc cố định <span class="text-danger">*</span></label>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <div class="card p-3 border rounded-3 h-100 bg-white">
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" id="bulkRecShiftMorning" value="Morning" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                                        <label class="form-check-label fw-bold text-dark cursor-pointer" for="bulkRecShiftMorning">
+                                            <i class="bi bi-sun-fill text-warning me-1"></i>Ca Sáng
+                                        </label>
+                                    </div>
+                                    <div class="text-muted small ps-4">
+                                        <span class="badge bg-warning-subtle text-warning border">08:00 – 12:00</span>
+                                        <span class="ms-1">&bull; 4 giờ làm việc</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card p-3 border rounded-3 h-100 bg-white">
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" id="bulkRecShiftAfternoon" value="Afternoon" checked onchange="updateReceptionistBulkSummary(); invalidateReceptionistBulkPreview();">
+                                        <label class="form-check-label fw-bold text-dark cursor-pointer" for="bulkRecShiftAfternoon">
+                                            <i class="bi bi-sunset-fill text-primary me-1"></i>Ca Chiều
+                                        </label>
+                                    </div>
+                                    <div class="text-muted small ps-4">
+                                        <span class="badge bg-primary-subtle text-primary border">13:30 – 17:30</span>
+                                        <span class="ms-1">&bull; 4 giờ làm việc</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Phần E: Tóm Tắt Dự Kiến -->
+                    <div class="card bg-light border-0 p-3 rounded-3 mb-3" id="bulkRecSummaryCard">
+                        <div class="fw-bold small text-muted text-uppercase mb-2 d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-calculator text-primary me-1"></i>Phần E — Tóm Tắt Dự Kiến</span>
+                            <span class="text-xs text-muted fst-italic">Cập nhật tự động</span>
+                        </div>
+                        <div class="row text-center g-2">
+                            <div class="col-3">
+                                <div class="p-2 bg-white rounded border">
+                                    <div class="text-xs text-muted">Nhân viên</div>
+                                    <div class="fw-bold text-dark fs-6" id="summaryStaffCount">0</div>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="p-2 bg-white rounded border">
+                                    <div class="text-xs text-muted">Số ngày</div>
+                                    <div class="fw-bold text-dark fs-6" id="summaryDaysCount">0</div>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="p-2 bg-white rounded border">
+                                    <div class="text-xs text-muted">Số ca / ngày</div>
+                                    <div class="fw-bold text-dark fs-6" id="summaryShiftsPerDay">2</div>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="p-2 bg-primary-subtle rounded border border-primary-subtle">
+                                    <div class="text-xs text-primary fw-semibold">Tổng ca dự kiến</div>
+                                    <div class="fw-bold text-primary fs-6" id="summaryTotalExpected">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lưu ý bảo vệ nghỉ phép -->
+                    <div class="text-xs text-muted fst-italic ps-1 mb-3">
+                        <i class="bi bi-shield-lock text-success me-1"></i>Lưu ý: Hệ thống luôn tự động bảo vệ lịch nghỉ phép đã được duyệt hoặc đang chờ duyệt của lễ tân từ database thật.
+                    </div>
+
+                    <!-- Kết Quả Kiểm Tra Xung Đột (Preview từ Real Database) -->
+                    <div id="bulkRecPreviewSection" class="mt-3 p-3 border rounded-3 bg-white" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold mb-0 text-dark">
+                                <i class="bi bi-shield-check text-success me-2"></i>Kết Quả Kiểm Tra Xung Đột (Database Thật)
+                            </h6>
+                            <span id="bulkRecPreviewBadge" class="badge bg-secondary">0 ca đề xuất</span>
+                        </div>
+
+                        <!-- 5 Thẻ Tổng Quan (Addendum Section 4) -->
+                        <div class="row g-2 mb-3 text-center">
+                            <div class="col">
+                                <div class="p-2 rounded bg-light border">
+                                    <div class="text-xs text-muted">Tổng dự kiến</div>
+                                    <div class="fw-bold fs-6 text-dark" id="statRecTotal">0</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="p-2 rounded bg-success-subtle border border-success-subtle">
+                                    <div class="text-xs text-success fw-semibold">Có thể thêm</div>
+                                    <div class="fw-bold fs-6 text-success" id="statRecValid">0</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="p-2 rounded bg-warning-subtle border border-warning-subtle">
+                                    <div class="text-xs text-warning-emphasis fw-semibold">Đã tồn tại</div>
+                                    <div class="fw-bold fs-6 text-warning-emphasis" id="statRecDuplicate">0</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="p-2 rounded bg-danger-subtle border border-danger-subtle">
+                                    <div class="text-xs text-danger fw-semibold">Bị chặn do nghỉ</div>
+                                    <div class="fw-bold fs-6 text-danger" id="statRecLeaveBlocked">0</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="p-2 rounded bg-secondary-subtle border border-secondary-subtle">
+                                    <div class="text-xs text-secondary fw-semibold">Xung đột khác</div>
+                                    <div class="fw-bold fs-6 text-dark" id="statRecOtherConflicts">0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filter Switch -->
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="chkFilterRecConflictsOnly" onchange="filterBulkPreviewTable()">
+                                <label class="form-check-label small fw-semibold text-danger cursor-pointer" for="chkFilterRecConflictsOnly">
+                                    <i class="bi bi-funnel me-1"></i>Chỉ xem ca bị xung đột / bỏ qua
+                                </label>
+                            </div>
+                            <div class="text-xs text-muted" id="previewFilterCountText">Hiển thị tất cả các ca</div>
+                        </div>
+
+                        <!-- Table: Ngày | Lễ tân | Ca | Trạng thái | Nguyên nhân -->
+                        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                            <table class="table table-sm table-bordered text-xs mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 100px;">Ngày</th>
+                                        <th>Lễ tân</th>
+                                        <th>Ca</th>
+                                        <th style="width: 130px;">Trạng thái</th>
+                                        <th>Nguyên nhân</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bulkRecPreviewTableBody">
+                                    <!-- Populated dynamically via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light d-flex justify-content-between">
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Hủy</button>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-primary px-3" id="btnBulkRecPreview" onclick="handleReceptionistBulkPreview()">
+                        <i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột
+                    </button>
+                    <button type="button" class="btn btn-dc-primary px-3" id="btnBulkRecApply" onclick="handleReceptionistBulkApply()" disabled>
+                        <i class="bi bi-check2-circle me-1"></i>Áp Dụng Các Ca Hợp Lệ
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
+    let isRecBulkPreviewing = false;
+    let isRecBulkApplying = false;
+
+    function invalidateReceptionistBulkPreview() {
+        const previewSec = document.getElementById('bulkRecPreviewSection');
+        if (previewSec) previewSec.style.display = 'none';
+        const btnApply = document.getElementById('btnBulkRecApply');
+        if (btnApply) btnApply.disabled = true;
+    }
+
+    function updateReceptionistBulkSummary() {
+        const checkedBoxes = document.querySelectorAll('.bulk-receptionist-checkbox:checked');
+        const staffCount = checkedBoxes.length;
+
+        const fromDateStr = document.getElementById('bulkRecFromDate')?.value;
+        const toDateStr = document.getElementById('bulkRecToDate')?.value;
+
+        let daysCount = 0;
+        if (fromDateStr && toDateStr && toDateStr >= fromDateStr) {
+            const checkedDows = Array.from(document.querySelectorAll('.bulk-rec-dow:checked')).map(cb => parseInt(cb.value));
+            const cur = new Date(fromDateStr + 'T00:00:00');
+            const end = new Date(toDateStr + 'T00:00:00');
+
+            while (cur <= end) {
+                const dow = cur.getDay(); // 0 is Sunday, 1..6 is Mon..Sat
+                if (checkedDows.includes(dow) || (dow === 0 && checkedDows.includes(7))) {
+                    daysCount++;
+                }
+                cur.setDate(cur.getDate() + 1);
+            }
+        }
+
+        let shiftsPerDay = 0;
+        if (document.getElementById('bulkRecShiftMorning')?.checked) shiftsPerDay++;
+        if (document.getElementById('bulkRecShiftAfternoon')?.checked) shiftsPerDay++;
+
+        const totalExpected = staffCount * daysCount * shiftsPerDay;
+
+        const elStaff = document.getElementById('summaryStaffCount');
+        if (elStaff) elStaff.innerText = staffCount;
+
+        const elDays = document.getElementById('summaryDaysCount');
+        if (elDays) elDays.innerText = daysCount;
+
+        const elShifts = document.getElementById('summaryShiftsPerDay');
+        if (elShifts) elShifts.innerText = shiftsPerDay;
+
+        const elTotal = document.getElementById('summaryTotalExpected');
+        if (elTotal) elTotal.innerText = totalExpected;
+    }
+
+    function filterBulkReceptionists() {
+        const term = (document.getElementById('bulkReceptionistSearch')?.value || '').toLowerCase().trim();
+        const items = document.querySelectorAll('#bulkReceptionistListContainer .receptionist-item');
+        items.forEach(item => {
+            const searchData = item.getAttribute('data-search') || '';
+            if (!term || searchData.includes(term)) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    function bulkSelectAllReceptionists(selectAll) {
+        const items = document.querySelectorAll('#bulkReceptionistListContainer .receptionist-item');
+        items.forEach(item => {
+            if (item.style.display !== 'none') {
+                const cb = item.querySelector('.bulk-receptionist-checkbox');
+                if (cb) cb.checked = selectAll;
+            }
+        });
+        syncBulkReceptionistSelection();
+    }
+
+    function syncBulkReceptionistSelection() {
+        const checkedBoxes = document.querySelectorAll('.bulk-receptionist-checkbox:checked');
+        const selectedIds = Array.from(checkedBoxes).map(cb => {
+            return cb.value || cb.getAttribute('value') || cb.getAttribute('data-receptionist-id') || cb.id.replace('chk_receptionist_', '');
+        }).filter(id => id && String(id).trim().length > 0).map(id => String(id).trim());
+
+        const selectEl = document.getElementById('bulkReceptionistIds');
+        if (selectEl) {
+            Array.from(selectEl.options).forEach(opt => {
+                opt.selected = selectedIds.includes(String(opt.value).trim());
+            });
+        }
+
+        const countEl = document.getElementById('bulkReceptionistSelectedCount');
+        if (countEl) countEl.innerText = selectedIds.length;
+
+        updateReceptionistBulkSummary();
+        invalidateReceptionistBulkPreview();
+    }
+
+    function filterBulkPreviewTable() {
+        const onlyConflicts = document.getElementById('chkFilterRecConflictsOnly')?.checked;
+        const rows = document.querySelectorAll('#bulkRecPreviewTableBody tr');
+        let visibleCount = 0;
+        let conflictCount = 0;
+
+        rows.forEach(r => {
+            const canApply = r.getAttribute('data-can-apply') === 'true';
+            if (!canApply) conflictCount++;
+
+            if (onlyConflicts) {
+                if (!canApply) {
+                    r.style.display = '';
+                    visibleCount++;
+                } else {
+                    r.style.display = 'none';
+                }
+            } else {
+                r.style.display = '';
+                visibleCount++;
+            }
+        });
+
+        const filterTextEl = document.getElementById('previewFilterCountText');
+        if (filterTextEl) {
+            if (onlyConflicts) {
+                filterTextEl.innerText = `Đang hiển thị ${visibleCount} ca bị xung đột / bỏ qua`;
+            } else {
+                filterTextEl.innerText = `Hiển thị tất cả ${visibleCount} ca (${conflictCount} ca xung đột)`;
+            }
+        }
+    }
+
+    async function handleReceptionistBulkPreview() {
+        if (isRecBulkPreviewing) return;
+
+        const recSelect = document.getElementById('bulkReceptionistIds');
+        const recIds = Array.from(recSelect.selectedOptions).map(opt => parseInt(opt.value));
+        const fromDate = document.getElementById('bulkRecFromDate').value;
+        const toDate = document.getElementById('bulkRecToDate').value;
+
+        const dowCheckboxes = document.querySelectorAll('.bulk-rec-dow:checked');
+        const daysOfWeek = Array.from(dowCheckboxes).map(cb => parseInt(cb.value));
+
+        if (recIds.length === 0) { alert('Vui lòng chọn ít nhất một Lễ tân.'); return; }
+        if (!fromDate || !toDate) { alert('Vui lòng chọn khoảng ngày phân công.'); return; }
+
+        const todayVn = '@today.ToString("yyyy-MM-dd")';
+        if (fromDate < todayVn) {
+            alert(`Không thể phân công ca làm việc trong quá khứ. Vui lòng chọn từ ngày hôm nay (${todayVn}) trở đi.`);
+            return;
+        }
+        if (toDate < fromDate) {
+            alert('Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu.');
+            return;
+        }
+        if (daysOfWeek.length === 0) { alert('Vui lòng chọn ít nhất một ngày trong tuần.'); return; }
+
+        const shiftIdentifiers = [];
+        if (document.getElementById('bulkRecShiftMorning').checked) shiftIdentifiers.push('Morning');
+        if (document.getElementById('bulkRecShiftAfternoon').checked) shiftIdentifiers.push('Afternoon');
+        if (shiftIdentifiers.length === 0) {
+            alert('Vui lòng chọn ít nhất một ca trực (Ca Sáng hoặc Ca Chiều).');
+            return;
+        }
+
+        const payload = {
+            receptionistUserIds: recIds,
+            fromDate: fromDate,
+            toDate: toDate,
+            daysOfWeek: daysOfWeek,
+            shiftIdentifiers: shiftIdentifiers,
+            shiftTemplateId: 1,
+            overwriteExisting: false,
+            skipConflicts: true
+        };
+
+        const btnPreview = document.getElementById('btnBulkRecPreview');
+        isRecBulkPreviewing = true;
+        btnPreview.disabled = true;
+        btnPreview.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang kiểm tra...';
+
+        try {
+            const resp = await fetch('/Admin/ReceptionistSchedule/BulkPreview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+
+            if (res.isSuccess && res.data) {
+                const data = res.data;
+                document.getElementById('bulkRecPreviewSection').style.display = 'block';
+                document.getElementById('bulkRecPreviewBadge').innerText = `${data.totalProposedShifts || data.proposedShiftsCount} ca đề xuất`;
+
+                // 5 thẻ tổng quan
+                const totalShifts = data.totalProposedShifts || data.proposedShiftsCount || 0;
+                const validShifts = data.availableCount ?? data.validShiftsCount ?? 0;
+                const dupShifts = data.alreadyExistsCount ?? data.duplicateShiftsCount ?? 0;
+                const leaveShifts = data.leaveBlockedCount ?? (data.leaveConflictCount + (data.pendingLeaveConflictCount || 0)) ?? 0;
+                const otherShifts = data.otherConflictCount ?? (data.conflictCount + (data.pastOrStartedCount || 0) + (data.invalidStaffCount || 0)) ?? 0;
+
+                document.getElementById('statRecTotal').innerText = totalShifts;
+                document.getElementById('statRecValid').innerText = validShifts;
+                document.getElementById('statRecDuplicate').innerText = dupShifts;
+                document.getElementById('statRecLeaveBlocked').innerText = leaveShifts;
+                document.getElementById('statRecOtherConflicts').innerText = otherShifts;
+
+                const tbody = document.getElementById('bulkRecPreviewTableBody');
+                tbody.innerHTML = '';
+
+                (data.items || []).forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.setAttribute('data-can-apply', item.canApply ? 'true' : 'false');
+                    tr.setAttribute('data-status', item.status);
+
+                    let statusBadge = '<span class="badge bg-success-subtle text-success border border-success-subtle">Có thể thêm</span>';
+                    if (item.status === 'AlreadyExists' || item.status === 'Duplicate') {
+                        statusBadge = '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Đã tồn tại</span>';
+                    } else if (item.status === 'Conflict' || item.status === 'Overlap') {
+                        statusBadge = '<span class="badge bg-secondary-subtle text-dark border border-secondary">Chồng lấn lịch</span>';
+                    } else if (item.status === 'OnApprovedLeave' || item.status === 'LeaveConflict') {
+                        statusBadge = '<span class="badge bg-danger text-white">Nghỉ phép đã duyệt</span>';
+                    } else if (item.status === 'PendingLeave' || item.status === 'PendingLeaveConflict') {
+                        statusBadge = '<span class="badge bg-warning text-dark border border-warning">Nghỉ chờ duyệt</span>';
+                    } else if (item.status === 'PastOrStarted') {
+                        statusBadge = '<span class="badge bg-light text-muted border">Quá khứ / Đã qua</span>';
+                    } else if (item.status === 'InvalidStaff') {
+                        statusBadge = '<span class="badge bg-danger text-white">Nhân sự không hợp lệ</span>';
+                    }
+
+                    const startTimeStr = (item.startTime || '').substring(0, 5);
+                    const endTimeStr = (item.endTime || '').substring(0, 5);
+
+                    tr.innerHTML = `
+                        <td class="text-nowrap">${item.workDate}</td>
+                        <td class="fw-bold text-dark">${escapeHtml(item.receptionistName)}</td>
+                        <td>${escapeHtml(item.shiftName)} <small class="text-muted">(${startTimeStr}-${endTimeStr})</small></td>
+                        <td>${statusBadge}</td>
+                        <td class="small text-muted">${escapeHtml(item.message || '')}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                filterBulkPreviewTable();
+
+                const btnApply = document.getElementById('btnBulkRecApply');
+                btnApply.disabled = (validShifts === 0);
+            } else {
+                alert(res.message || 'Lỗi khi kiểm tra lịch trực lễ tân.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối khi kiểm tra lịch trực: ' + err.message);
+        } finally {
+            isRecBulkPreviewing = false;
+            btnPreview.disabled = false;
+            btnPreview.innerHTML = '<i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột';
+        }
+    }
+
+    async function handleReceptionistBulkApply() {
+        if (isRecBulkApplying) return;
+
+        const recSelect = document.getElementById('bulkReceptionistIds');
+        const recIds = Array.from(recSelect.selectedOptions).map(opt => parseInt(opt.value));
+        const fromDate = document.getElementById('bulkRecFromDate').value;
+        const toDate = document.getElementById('bulkRecToDate').value;
+
+        const dowCheckboxes = document.querySelectorAll('.bulk-rec-dow:checked');
+        const daysOfWeek = Array.from(dowCheckboxes).map(cb => parseInt(cb.value));
+
+        const shiftIdentifiers = [];
+        if (document.getElementById('bulkRecShiftMorning').checked) shiftIdentifiers.push('Morning');
+        if (document.getElementById('bulkRecShiftAfternoon').checked) shiftIdentifiers.push('Afternoon');
+
+        const payload = {
+            receptionistUserIds: recIds,
+            fromDate: fromDate,
+            toDate: toDate,
+            daysOfWeek: daysOfWeek,
+            shiftIdentifiers: shiftIdentifiers,
+            shiftTemplateId: 1,
+            overwriteExisting: false,
+            skipConflicts: true
+        };
+
+        const btnApply = document.getElementById('btnBulkRecApply');
+        isRecBulkApplying = true;
+        btnApply.disabled = true;
+        btnApply.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang áp dụng...';
+
+        try {
+            const resp = await fetch('/Admin/ReceptionistSchedule/BulkApplyJson', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+
+            if (res.isSuccess) {
+                const msg = res.message || 'Phân công ca trực lễ tân hàng loạt thành công!';
+                alert(msg);
+                window.location.reload();
+            } else {
+                alert(res.message || 'Lỗi khi áp dụng lịch trực lễ tân.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối khi áp dụng lịch trực: ' + err.message);
+        } finally {
+            isRecBulkApplying = false;
+            btnApply.disabled = false;
+            btnApply.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Áp Dụng Các Ca Hợp Lệ';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const bulkModal = document.getElementById('bulkReceptionistScheduleModal');
+        if (bulkModal) {
+            bulkModal.addEventListener('shown.bs.modal', function () {
+                updateReceptionistBulkSummary();
+            });
+        }
+    });
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     function updateReceptionistShiftTimes(val) {
         const sel = document.getElementById('receptionistShiftSelect');
         if (!sel) return;
@@ -1022,7 +1943,344 @@
         document.getElementById('modalShiftTemplateId').value = tpl || '';
     }
 
+    // Mở Modal Phân Công và điền sẵn ngày + ca
+    function openAssignModal(date, shift) {
+        // Đóng Drawer nếu đang mở
+        const drawerEl = document.getElementById('shiftDetailsDrawer');
+        if (drawerEl) {
+            const drawerInstance = bootstrap.Offcanvas.getInstance(drawerEl);
+            if (drawerInstance) {
+                drawerInstance.hide();
+            }
+        }
+
+        const dateInput = document.getElementById('modalWorkDateInput');
+        if (dateInput && date) {
+            dateInput.value = date;
+        }
+
+        const shiftSelect = document.getElementById('receptionistShiftSelect');
+        if (shiftSelect && shift) {
+            shiftSelect.value = (shift === 'afternoon') ? 'afternoon' : 'morning';
+            updateReceptionistShiftTimes(shiftSelect.value);
+        }
+
+        const modalEl = document.getElementById('createShiftModal');
+        if (modalEl) {
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modalInstance.show();
+        }
+    }
+
+    // Mở Modal Xác Nhận Hủy Ca Trực
+    function confirmDeleteShift(scheduleId, staffName, dateStr, shiftStr) {
+        document.getElementById('delScheduleId').value = scheduleId;
+        document.getElementById('delStaffNameText').textContent = staffName;
+        document.getElementById('delDateText').textContent = dateStr;
+        document.getElementById('delShiftText').textContent = shiftStr;
+
+        const modalEl = document.getElementById('deleteShiftConfirmModal');
+        if (modalEl) {
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modalInstance.show();
+        }
+    }
+
+    // Mở Drawer Chi Tiết Ca Trực (từ Lịch Tuần)
+    function openShiftDrawerFromCell(cell) {
+        document.querySelectorAll('.schedule-shift-cell').forEach(c => c.classList.remove('active-shift-cell'));
+        document.querySelectorAll('.monthly-day-cell').forEach(c => c.classList.remove('active-shift-cell'));
+        cell.classList.add('active-shift-cell');
+
+        const date = cell.getAttribute('data-date');
+        const dateDisplay = cell.getAttribute('data-date-display');
+        const shift = cell.getAttribute('data-shift');
+        const shiftName = cell.getAttribute('data-shift-name');
+        const shiftTime = cell.getAttribute('data-shift-time');
+        const isPast = cell.getAttribute('data-is-past') === 'true';
+        const reqCount = parseInt(cell.getAttribute('data-req-count') || '0');
+        let staffList = [];
+        try {
+            staffList = JSON.parse(cell.getAttribute('data-staff-json') || '[]');
+        } catch (e) {
+            console.error('Error parsing staff JSON', e);
+            staffList = [];
+        }
+
+        // Cập nhật Header Drawer
+        document.getElementById('shiftDetailsDrawerTitle').innerHTML = '<i class="bi bi-calendar2-check text-primary me-2"></i>Chi Tiết Ca Trực';
+        document.getElementById('shiftDetailsDrawerSubtitle').textContent = `${dateDisplay} · ${shiftName} (${shiftTime})`;
+
+        // Xóa hoàn toàn trạng thái cũ
+        const contentEl = document.getElementById('shiftDrawerContent');
+        contentEl.innerHTML = '';
+
+        let html = '';
+
+        // Block Thống Kê & Trạng Thái Ca
+        html += `
+        <div class="card bg-light border-0 p-3 rounded-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="text-muted small">Tổng số trực ca:</span>
+                    <div class="fs-5 fw-bold text-dark"><i class="bi bi-people-fill text-primary me-1"></i> ${staffList.length} lễ tân</div>
+                </div>
+                <div>`;
+        if (staffList.length === 0) {
+            html += `<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Chưa phân công</span>`;
+        } else if (reqCount > 0 && staffList.length < reqCount) {
+            html += `<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i>Thiếu nhân sự (${staffList.length}/${reqCount})</span>`;
+        } else if (reqCount > 0 && staffList.length >= reqCount) {
+            html += `<span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i>Đủ nhân sự (${staffList.length}/${reqCount})</span>`;
+        } else {
+            html += `<span class="badge bg-primary-subtle text-primary border border-primary-subtle">${staffList.length} người trực</span>`;
+        }
+        html += `</div>
+            </div>`;
+
+        const hasLeave = staffList.some(s => s.isOnLeave);
+        if (hasLeave) {
+            html += `
+            <div class="alert alert-warning py-2 px-3 small mt-3 mb-0">
+                <i class="bi bi-exclamation-circle-fill me-1"></i>Có nhân sự trong ca đang có đơn nghỉ phép được duyệt.
+            </div>`;
+        }
+        html += `</div>`;
+
+        // Danh Sách Nhân Sự hoặc Empty State
+        if (staffList.length === 0) {
+            html += `
+            <div class="text-center py-5 px-3 bg-white rounded-3 border border-dashed mb-3">
+                <div class="text-muted mb-2"><i class="bi bi-calendar-x fs-1"></i></div>
+                <h6 class="fw-bold text-dark mb-1">Chưa có lễ tân được phân công cho ca này.</h6>
+                <p class="text-muted small mb-3">Hiện chưa có nhân sự nào được chỉ định trực ${shiftName.toLowerCase()} ngày này.</p>
+                ${!isPast ? `
+                <button type="button" class="btn btn-primary btn-sm px-3 rounded-pill" onclick="openAssignModal('${date}', '${shift}')">
+                    <i class="bi bi-person-plus-fill me-1"></i> Phân công nhân viên
+                </button>` : `<span class="badge bg-secondary small">Ca trực đã qua (Chỉ đọc)</span>`}
+            </div>`;
+        } else {
+            html += `<h6 class="fw-bold text-dark mb-2"><i class="bi bi-person-lines-fill text-primary me-1"></i>Danh Sách Lễ Tân Trực Ca (${staffList.length})</h6>`;
+            html += `<div class="d-flex flex-column gap-2 mb-3">`;
+
+            staffList.forEach(s => {
+                const initial = s.name ? s.name.trim().charAt(s.name.trim().length - 1).toUpperCase() : 'L';
+                html += `
+                <div class="card border rounded-3 p-3 shadow-xs bg-white">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center fw-bold" style="width: 38px; height: 38px; flex-shrink: 0;">
+                                ${escapeHtml(initial)}
+                            </div>
+                            <div>
+                                <div class="fw-bold text-dark text-break" style="line-height: 1.35; max-width: 250px;">
+                                    ${escapeHtml(s.name)}
+                                </div>
+                                <div class="text-muted small mt-1">
+                                    ${s.code ? `<span class="badge bg-light text-muted border me-1">${escapeHtml(s.code)}</span>` : ''}
+                                    <span>Lễ tân (Receptionist)</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            ${s.isOnLeave ? '<span class="badge bg-warning text-dark border border-warning" style="font-size: 0.72rem;">Nghỉ phép</span>' : '<span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.72rem;">Trực ca</span>'}
+                        </div>
+                    </div>
+                    <hr class="my-2 opacity-25" />
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="small text-muted">
+                            <i class="bi bi-clock me-1 text-primary"></i>${escapeHtml(s.startTime)} - ${escapeHtml(s.endTime)}
+                        </div>
+                        <div>
+                            ${isPast ? `
+                                <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Không thể hủy ca trong quá khứ">
+                                    <i class="bi bi-lock me-1"></i>Đã qua
+                                </button>
+                            ` : `
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmDeleteShift(${s.scheduleId}, '${escapeHtml(s.name)}', '${escapeHtml(dateDisplay)}', '${escapeHtml(shiftName)} (${escapeHtml(shiftTime)})')">
+                                    <i class="bi bi-trash3 me-1"></i>Hủy ca
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                    ${s.notes ? `<div class="mt-2 small text-muted fst-italic bg-light p-2 rounded"><i class="bi bi-chat-left-text me-1"></i>${escapeHtml(s.notes)}</div>` : ''}
+                </div>`;
+            });
+            html += `</div>`;
+        }
+
+        // Action Footer
+        html += `
+        <div class="d-flex gap-2 pt-3 border-top mt-auto">
+            ${!isPast ? `
+            <button type="button" class="btn btn-primary flex-grow-1 rounded-pill" onclick="openAssignModal('${date}', '${shift}')">
+                <i class="bi bi-plus-lg me-1"></i> Thêm người vào ca
+            </button>` : ''}
+            <button type="button" class="btn btn-outline-secondary rounded-pill px-3" data-bs-dismiss="offcanvas">
+                Đóng
+            </button>
+        </div>`;
+
+        contentEl.innerHTML = html;
+
+        const drawerEl = document.getElementById('shiftDetailsDrawer');
+        const drawerInstance = bootstrap.Offcanvas.getOrCreateInstance(drawerEl);
+        drawerInstance.show();
+    }
+
+    // Mở Drawer Chi Tiết Ngày Làm Việc (từ Lịch Tháng)
+    function openDayDrawerFromCell(cell) {
+        document.querySelectorAll('.schedule-shift-cell').forEach(c => c.classList.remove('active-shift-cell'));
+        document.querySelectorAll('.monthly-day-cell').forEach(c => c.classList.remove('active-shift-cell'));
+        cell.classList.add('active-shift-cell');
+
+        const date = cell.getAttribute('data-date');
+        const dateDisplay = cell.getAttribute('data-date-display');
+        const isPast = cell.getAttribute('data-is-past') === 'true';
+        const morningReq = parseInt(cell.getAttribute('data-morning-req') || '0');
+        const afternoonReq = parseInt(cell.getAttribute('data-afternoon-req') || '0');
+
+        let morningStaff = [];
+        let afternoonStaff = [];
+        try {
+            morningStaff = JSON.parse(cell.getAttribute('data-morning-staff-json') || '[]');
+            afternoonStaff = JSON.parse(cell.getAttribute('data-afternoon-staff-json') || '[]');
+        } catch (e) {
+            console.error('Error parsing month staff JSON', e);
+        }
+
+        document.getElementById('shiftDetailsDrawerTitle').innerHTML = '<i class="bi bi-calendar2-day text-primary me-2"></i>Chi Tiết Ngày Làm Việc';
+        document.getElementById('shiftDetailsDrawerSubtitle').textContent = `Ngày: ${dateDisplay}`;
+
+        const contentEl = document.getElementById('shiftDrawerContent');
+        contentEl.innerHTML = '';
+
+        let html = '';
+
+        // SECTION 1: CA SÁNG (08:00 - 12:00)
+        html += `
+        <div class="card border rounded-3 p-3 mb-3 bg-light shadow-xs">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                    <h6 class="fw-bold text-dark mb-0">
+                        <i class="bi bi-sun-fill text-warning me-1"></i>Ca Sáng (08:00 - 12:00)
+                    </h6>
+                    <span class="small text-muted">${morningStaff.length} người trực</span>
+                </div>
+                ${!isPast ? `
+                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" onclick="openAssignModal('${date}', 'morning')">
+                    <i class="bi bi-plus-lg me-1"></i>Thêm vào ca
+                </button>` : ''}
+            </div>`;
+
+        if (morningStaff.length === 0) {
+            html += `<div class="p-3 text-center bg-white rounded border border-dashed small text-muted">Chưa có lễ tân trực ca sáng.</div>`;
+        } else {
+            html += `<div class="d-flex flex-column gap-2">`;
+            morningStaff.forEach(s => {
+                html += `
+                <div class="card p-2 bg-white border rounded shadow-xs d-flex flex-row justify-content-between align-items-center">
+                    <div>
+                        <div class="fw-bold text-dark small text-break">${escapeHtml(s.name)}</div>
+                        <div class="text-muted" style="font-size: 0.72rem;">${s.code ? escapeHtml(s.code) + ' · ' : ''}08:00 - 12:00</div>
+                    </div>
+                    <div>
+                        ${isPast ? `
+                            <span class="badge bg-secondary">Đã qua</span>
+                        ` : `
+                            <button type="button" class="btn btn-sm btn-outline-danger p-1 px-2" onclick="confirmDeleteShift(${s.scheduleId}, '${escapeHtml(s.name)}', '${escapeHtml(dateDisplay)}', 'Ca Sáng (08:00 - 12:00)')" title="Hủy ca">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        `}
+                    </div>
+                </div>`;
+            });
+            html += `</div>`;
+        }
+        html += `</div>`;
+
+        // SECTION 2: CA CHIỀU (13:30 - 17:30)
+        html += `
+        <div class="card border rounded-3 p-3 mb-3 bg-light shadow-xs">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                    <h6 class="fw-bold text-dark mb-0">
+                        <i class="bi bi-sunset-fill text-primary me-1"></i>Ca Chiều (13:30 - 17:30)
+                    </h6>
+                    <span class="small text-muted">${afternoonStaff.length} người trực</span>
+                </div>
+                ${!isPast ? `
+                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" onclick="openAssignModal('${date}', 'afternoon')">
+                    <i class="bi bi-plus-lg me-1"></i>Thêm vào ca
+                </button>` : ''}
+            </div>`;
+
+        if (afternoonStaff.length === 0) {
+            html += `<div class="p-3 text-center bg-white rounded border border-dashed small text-muted">Chưa có lễ tân trực ca chiều.</div>`;
+        } else {
+            html += `<div class="d-flex flex-column gap-2">`;
+            afternoonStaff.forEach(s => {
+                html += `
+                <div class="card p-2 bg-white border rounded shadow-xs d-flex flex-row justify-content-between align-items-center">
+                    <div>
+                        <div class="fw-bold text-dark small text-break">${escapeHtml(s.name)}</div>
+                        <div class="text-muted" style="font-size: 0.72rem;">${s.code ? escapeHtml(s.code) + ' · ' : ''}13:30 - 17:30</div>
+                    </div>
+                    <div>
+                        ${isPast ? `
+                            <span class="badge bg-secondary">Đã qua</span>
+                        ` : `
+                            <button type="button" class="btn btn-sm btn-outline-danger p-1 px-2" onclick="confirmDeleteShift(${s.scheduleId}, '${escapeHtml(s.name)}', '${escapeHtml(dateDisplay)}', 'Ca Chiều (13:30 - 17:30)')" title="Hủy ca">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        `}
+                    </div>
+                </div>`;
+            });
+            html += `</div>`;
+        }
+        html += `</div>`;
+
+        // Footer
+        html += `
+        <div class="d-flex justify-content-end pt-3 border-top mt-auto">
+            <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="offcanvas">
+                Đóng
+            </button>
+        </div>`;
+
+        contentEl.innerHTML = html;
+
+        const drawerEl = document.getElementById('shiftDetailsDrawer');
+        const drawerInstance = bootstrap.Offcanvas.getOrCreateInstance(drawerEl);
+        drawerInstance.show();
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
+        // Double-click prevention on create shift
+        const createForm = document.getElementById('createShiftForm');
+        if (createForm) {
+            createForm.addEventListener('submit', function () {
+                const btn = document.getElementById('btnSubmitCreateShift');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang lưu...';
+                }
+            });
+        }
+
+        // Double-click prevention on delete shift
+        const deleteForm = document.getElementById('deleteShiftForm');
+        if (deleteForm) {
+            deleteForm.addEventListener('submit', function () {
+                const btn = document.getElementById('btnConfirmDeleteShift');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang hủy...';
+                }
+            });
+        }
+
         // Bulk Preview
         const btnPreview = document.getElementById('btnPreviewBulk');
         if (btnPreview) {
@@ -1061,7 +2319,7 @@
                     document.getElementById('previewProposedCount').textContent = `Dự kiến tạo: ${json.data.proposedShiftsCount} ca trực. (Ghi đè: ${json.data.overwrittenShiftsCount})`;
                     document.getElementById('previewConflictCount').textContent = `Xung đột đơn nghỉ phép: ${json.data.conflictWithLeaveCount} ca (sẽ được bỏ qua).`;
                     const warnDiv = document.getElementById('previewWarnings');
-                    warnDiv.innerHTML = json.data.warnings.map(w => `<div>• ${w}</div>`).join('');
+                    warnDiv.innerHTML = json.data.warnings.map(w => `<div>• ${escapeHtml(w)}</div>`).join('');
                 }
             });
         }
@@ -1088,7 +2346,7 @@
 
                     if (data.validationMessages && data.validationMessages.length > 0) {
                         html += `<div class="alert alert-danger py-2 small">
-                            ${data.validationMessages.map(m => `<div>• ${m}</div>`).join('')}
+                            ${data.validationMessages.map(m => `<div>• ${escapeHtml(m)}</div>`).join('')}
                         </div>`;
                     }
 
@@ -1121,7 +2379,7 @@
                     html += `</tbody></table>`;
                     body.innerHTML = html;
                 } else {
-                    body.innerHTML = `<div class="alert alert-danger">Không thể kiểm tra tác động: ${json.message || 'Lỗi hệ thống'}</div>`;
+                    body.innerHTML = `<div class="alert alert-danger">Không thể kiểm tra tác động: ${escapeHtml(json.message) || 'Lỗi hệ thống'}</div>`;
                 }
             });
         });

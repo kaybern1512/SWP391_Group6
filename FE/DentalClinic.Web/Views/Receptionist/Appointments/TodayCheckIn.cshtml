@@ -350,7 +350,7 @@
                                         <span class="badge bg-success px-3 py-2">
                                             <i class="bi bi-check-all me-1"></i>Đã Check-in
                                         </span>
-                                        <div class="mt-1" data-timer-type="waiting" data-checkin-time="@(appt.CheckedInAt?.ToString("o") ?? appt.CreatedAt.ToString("o"))">
+                                        <div class="mt-1" data-timer-type="waiting" data-checkin-time="@(DateTime.SpecifyKind(appt.CheckedInAt ?? appt.CreatedAt, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ssZ"))">
                                             <span class="text-muted small"><i class="bi bi-clock me-1"></i>Đang chờ...</span>
                                         </div>
                                         <div class="waiting-alert-badge mt-1"></div>

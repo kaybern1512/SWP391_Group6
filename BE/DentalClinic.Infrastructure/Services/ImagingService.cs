@@ -395,6 +395,15 @@ public class ImagingService : IImagingService
         if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy phiên chụp X-quang.");
 
+        if (string.Equals(diagnostic.Status, "InProgress", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Phiên chụp X-quang đang được thực hiện bởi một bác sĩ khác.");
+
+        if (string.Equals(diagnostic.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Phiên chụp X-quang đã hoàn thành.");
+
+        if (string.Equals(diagnostic.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Phiên chụp X-quang đã bị hủy.");
+
         diagnostic.Status = "InProgress";
         await _dbContext.SaveChangesAsync(ct);
 

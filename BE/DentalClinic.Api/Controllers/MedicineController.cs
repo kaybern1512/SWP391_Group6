@@ -170,6 +170,29 @@ public class MedicineController : ControllerBase
         }
     }
 
+    [HttpPost("{id:long}/stock")]
+    [Authorize(Roles = "SystemAdministrator")]
+    [ProducesResponseType(typeof(ApiResponse<MedicineStockUpdateResultDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateStock(long id, [FromBody] UpdateMedicineStockRequest request)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            var result = await _medicineService.UpdateStockAsync(id, request, userId);
+            return Ok(ApiResponse<MedicineStockUpdateResultDto>.Ok(result, "Cập nhật tồn kho thành công."));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ApiResponse<object>.Fail(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<object>.Fail(ex.Message));
+        }
+    }
+
     [HttpPost("batches/{batchId:long}/adjust")]
     [Authorize(Roles = "SystemAdministrator")]
     [ProducesResponseType(typeof(ApiResponse<MedicineStockTransactionDto>), StatusCodes.Status200OK)]

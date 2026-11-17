@@ -9,6 +9,7 @@ using DentalClinic.Infrastructure.Persistence.Entities;
 using DentalClinic.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using AppointmentServiceEntity = DentalClinic.Infrastructure.Persistence.Entities.AppointmentService;
 
 namespace DentalClinic.Tests.Treatments;
 
@@ -24,18 +25,20 @@ public class TreatmentServiceTests
 
     private static async Task SeedBasicDataAsync(DentalClinicDbContext db)
     {
+        var now = DateTime.UtcNow;
         var patientUser = new UserAccount
         {
             UserId = 10,
             Email = "patient@test.com",
             Role = UserRole.Patient,
-            Status = AccountStatus.Active
+            Status = "Active",
+            CreatedAt = now
         };
         var patient = new PatientProfile
         {
             UserId = 10,
-            PatientCode = "PAT-001",
-            FullName = "Nguyễn Thị Hoa"
+            FullName = "Nguyễn Thị Hoa",
+            CreatedAt = now
         };
 
         var dentistUser = new UserAccount
@@ -43,18 +46,20 @@ public class TreatmentServiceTests
             UserId = 20,
             Email = "dentist@test.com",
             Role = UserRole.Dentist,
-            Status = AccountStatus.Active
+            Status = "Active",
+            CreatedAt = now
         };
         var dentistStaff = new StaffProfile
         {
             UserId = 20,
-            EmployeeCode = "DENT-001",
             FullName = "Bác Sĩ Lê Hoàng",
-            EmploymentStatus = "Active"
+            EmploymentStatus = "Active",
+            CreatedAt = now
         };
         var dentist = new DentistProfile
         {
             UserId = 20,
+            DepartmentId = 1,
             LicenseNumber = "LIC-001"
         };
 
@@ -62,40 +67,53 @@ public class TreatmentServiceTests
         {
             DepartmentId = 1,
             Name = "Nha Khoa Tổng Quát",
-            ManagerUserId = 20,
-            Status = "Active"
+            Status = "Active",
+            CreatedAt = now
         };
 
         var svc1 = new DepartmentService
         {
             DepartmentServiceId = 1,
             DepartmentId = 1,
+            ServiceCode = "SRV-01",
             ServiceName = "Cạo vôi răng & Đánh bóng",
-            Price = 250000,
-            Status = "Active"
+            Price = 250000m,
+            Status = "Active",
+            CreatedAt = now
         };
 
         var svc2 = new DepartmentService
         {
             DepartmentServiceId = 2,
             DepartmentId = 1,
+            ServiceCode = "SRV-02",
             ServiceName = "Trám răng Composite",
-            Price = 450000,
-            Status = "Active"
+            Price = 450000m,
+            Status = "Active",
+            CreatedAt = now
         };
 
         var appt = new Appointment
         {
             AppointmentId = 1,
-            AppointmentCode = "APT-20261012-001",
             PatientUserId = 10,
-            DepartmentId = 1,
-            AssignedDentistUserId = 20,
-            Status = AppointmentStatus.Completed,
+            Status = "InProgress",
             BookingSource = "Online",
             ReasonForVisit = "Khám răng định kỳ",
-            ScheduledStart = DateTime.UtcNow.AddHours(-2),
-            ScheduledEnd = DateTime.UtcNow.AddHours(-1)
+            CreatedAt = now
+        };
+
+        var apptSvc = new AppointmentServiceEntity
+        {
+            AppointmentServiceId = 100,
+            AppointmentId = 1,
+            DepartmentId = 1,
+            DepartmentServiceId = 1,
+            AssignedDentistUserId = 20,
+            RequestedDentistUserId = 20,
+            Status = "InProgress",
+            UnitPrice = 250000m,
+            CreatedAt = now
         };
 
         db.UserAccounts.AddRange(patientUser, dentistUser);
@@ -105,6 +123,7 @@ public class TreatmentServiceTests
         db.Departments.Add(dept);
         db.DepartmentServices.AddRange(svc1, svc2);
         db.Appointments.Add(appt);
+        db.AppointmentServices.Add(apptSvc);
 
         await db.SaveChangesAsync();
     }
@@ -266,5 +285,155 @@ public class TreatmentServiceTests
         Assert.Equal(1, summaryResult.Data.ActivePlans);
         Assert.Equal(0, summaryResult.Data.CompletedPlans);
         Assert.Equal(1, summaryResult.Data.PendingPhases);
+    }
+
+    [Fact]
+    public async Task CreateTreatmentPlanAsync_WithMismatchingAppointmentPatient_Fails()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedBasicDataAsync(db);
+
+        var service = new TreatmentService(db);
+        var request = new CreateTreatmentPlanRequest
+        {
+            PatientUserId = 999, // Mismatching patient ID
+            AppointmentId = 1,    // Appointment 1 belongs to Patient 10
+            DepartmentId = 1,
+            Status = "Active"
+        };
+
+        var result = await service.CreateTreatmentPlanAsync(20, request);
+
+        Assert.False(result.Success);
+        Assert.Contains("không khớp", result.Message);
+    }
+
+    [Fact]
+    public async Task CreateTreatmentSessionAsync_ClientTamperedUnitPrice_EnforcesServerAuthoritativePrice()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedBasicDataAsync(db);
+
+        var service = new TreatmentService(db);
+        var createRequest = new CreateTreatmentPlanRequest
+        {
+            PatientUserId = 10,
+            DepartmentId = 1,
+            Items = new List<CreateTreatmentPlanItemInput>
+            {
+                new() { DepartmentServiceId = 1, SequenceNo = 1, EstimatedCost = 250000, Status = "Pending" }
+            }
+        };
+        var planResult = await service.CreateTreatmentPlanAsync(20, createRequest);
+        long itemId = planResult.Data!.Items.First().TreatmentPlanItemId;
+
+        var sessionRequest = new CreateTreatmentSessionRequest
+        {
+            TreatmentPlanItemId = itemId,
+            AppointmentId = 1,
+            SessionDate = DateTime.UtcNow,
+            TreatmentResult = "Thành công",
+            ClinicalNote = "Đã thực hiện",
+            MarkPhaseStatus = "Completed",
+            Services = new List<CreatePerformedServiceInput>
+            {
+                new() { DepartmentServiceId = 1, Quantity = 1, UnitPrice = 1 } // Client tampered to 1 VNĐ!
+            }
+        };
+
+        var sessionResult = await service.CreateTreatmentSessionAsync(20, sessionRequest);
+
+        Assert.True(sessionResult.Success);
+        var perf = await db.PerformedServices.FirstAsync(p => p.DepartmentServiceId == 1);
+        Assert.Equal(250000, perf.UnitPrice); // Strictly authoritative catalog price (250,000đ), NOT 1đ!
+    }
+
+    [Fact]
+    public async Task CreateTreatmentSessionAsync_DoubleSubmitCompletedPhase_RejectsDuplicate()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedBasicDataAsync(db);
+
+        var service = new TreatmentService(db);
+        var createRequest = new CreateTreatmentPlanRequest
+        {
+            PatientUserId = 10,
+            DepartmentId = 1,
+            Items = new List<CreateTreatmentPlanItemInput>
+            {
+                new() { DepartmentServiceId = 1, SequenceNo = 1, EstimatedCost = 250000, Status = "Pending" }
+            }
+        };
+        var planResult = await service.CreateTreatmentPlanAsync(20, createRequest);
+        long itemId = planResult.Data!.Items.First().TreatmentPlanItemId;
+
+        var sessionRequest = new CreateTreatmentSessionRequest
+        {
+            TreatmentPlanItemId = itemId,
+            AppointmentId = 1,
+            SessionDate = DateTime.UtcNow,
+            TreatmentResult = "Thành công",
+            ClinicalNote = "Lần 1",
+            MarkPhaseStatus = "Completed"
+        };
+
+        // First submit: PASS
+        var firstResult = await service.CreateTreatmentSessionAsync(20, sessionRequest);
+        Assert.True(firstResult.Success);
+
+        // Second submit: REJECT
+        var secondResult = await service.CreateTreatmentSessionAsync(20, sessionRequest);
+        Assert.False(secondResult.Success);
+        Assert.Contains("trước đó", secondResult.Message);
+    }
+
+    [Fact]
+    public async Task CreateTreatmentSessionAsync_ReusesExistingPerformedServiceInSameAppointment()
+    {
+        var db = CreateDbContext(Guid.NewGuid().ToString());
+        await SeedBasicDataAsync(db);
+
+        // Pre-create an existing PerformedService for DepartmentService 1 (AppointmentService 100) in Appointment 1
+        var existingPerf = new PerformedService
+        {
+            AppointmentId = 1,
+            AppointmentServiceId = 100,
+            DepartmentServiceId = 1,
+            Quantity = 1,
+            UnitPrice = 250000,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.PerformedServices.Add(existingPerf);
+        await db.SaveChangesAsync();
+
+        var service = new TreatmentService(db);
+        var createRequest = new CreateTreatmentPlanRequest
+        {
+            PatientUserId = 10,
+            DepartmentId = 1,
+            Items = new List<CreateTreatmentPlanItemInput>
+            {
+                new() { DepartmentServiceId = 1, SequenceNo = 1, EstimatedCost = 250000, Status = "Pending" }
+            }
+        };
+        var planResult = await service.CreateTreatmentPlanAsync(20, createRequest);
+        long itemId = planResult.Data!.Items.First().TreatmentPlanItemId;
+
+        var sessionRequest = new CreateTreatmentSessionRequest
+        {
+            TreatmentPlanItemId = itemId,
+            AppointmentId = 1,
+            SessionDate = DateTime.UtcNow,
+            TreatmentResult = "Ghi nhận từ phác đồ",
+            ClinicalNote = "Cùng dịch vụ đã có task",
+            MarkPhaseStatus = "Completed"
+        };
+
+        var sessionResult = await service.CreateTreatmentSessionAsync(20, sessionRequest);
+        Assert.True(sessionResult.Success);
+
+        // Verify that PerformedServices still only has 1 record for this service, NOT 2!
+        var perfList = await db.PerformedServices.Where(p => p.AppointmentId == 1 && p.DepartmentServiceId == 1).ToListAsync();
+        Assert.Single(perfList);
     }
 }

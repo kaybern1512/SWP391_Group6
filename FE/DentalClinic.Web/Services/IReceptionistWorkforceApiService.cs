@@ -17,7 +17,7 @@ public interface IReceptionistWorkforceApiService
     Task<ApiResult<ReceptionistWorkScheduleDto>> UpdateScheduleAsync(long scheduleId, UpdateReceptionistScheduleRequest request);
     Task<ApiResult> DeleteScheduleAsync(long scheduleId);
     Task<ApiResult<ReceptionistBulkSchedulePreviewDto>> PreviewBulkScheduleAsync(ReceptionistBulkScheduleAssignmentRequest request);
-    Task<ApiResult> ApplyBulkScheduleAsync(ReceptionistBulkScheduleAssignmentRequest request);
+    Task<ApiResult<ReceptionistBulkApplyResultDto>> ApplyBulkScheduleAsync(ReceptionistBulkScheduleAssignmentRequest request);
     Task<ApiResult> CopyMonthScheduleAsync(ReceptionistCopyMonthScheduleRequest request);
     Task<ApiResult> ApplyDailyOverrideAsync(ReceptionistDailyOverrideRequest request);
 

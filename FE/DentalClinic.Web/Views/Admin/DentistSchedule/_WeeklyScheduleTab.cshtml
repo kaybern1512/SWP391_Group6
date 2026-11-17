@@ -1,5 +1,6 @@
 @model AdminDentistScheduleManageViewModel
 @using DentalClinic.Web.Helpers
+@using System.Text.Json
 @{
     var today = ClinicTimeHelper.TodayDateOnly;
     var startMon = Model.WeekStartDate;
@@ -12,92 +13,33 @@
     string[] dayNamesVn = { "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ Nhật" };
 }
 
-<!-- Filter Bar & Mode Toggle -->
-<div class="card-dc mb-4 shadow-sm">
-    <div class="card-dc-body p-3">
-        <form asp-controller="AdminDentistSchedule" asp-action="Index" method="get" class="row g-2 align-items-center">
-            <input type="hidden" name="tab" value="weekly" />
-            <input type="hidden" name="weekOffset" value="@Model.WeekOffset" />
-
-            <!-- Chuyên khoa -->
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold text-muted mb-1">Chuyên khoa</label>
-                <select name="departmentId" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="">-- Tất cả chuyên khoa --</option>
-                    @foreach (var d in Model.Departments)
-                    {
-                        <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
-                    }
-                </select>
-            </div>
-
-            <!-- Bác sĩ -->
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold text-muted mb-1">Bác sĩ</label>
-                <select name="dentistUserId" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="">-- Tất cả bác sĩ --</option>
-                    @foreach (var d in Model.Dentists)
-                    {
-                        <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
-                    }
-                </select>
-            </div>
-
-            <!-- Điều hướng tuần -->
-            <div class="col-md-3 d-flex align-items-end gap-1 pt-3">
-                <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
-                   asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
-                   asp-route-weekOffset="@(Model.WeekOffset - 1)" class="btn btn-sm btn-outline-secondary" title="Tuần trước">
-                    <i class="bi bi-chevron-left"></i>
-                </a>
-                <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
-                   asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
-                   asp-route-weekOffset="0" class="btn btn-sm @(Model.WeekOffset == 0 ? "btn-secondary text-white" : "btn-outline-secondary") flex-grow-1 text-nowrap">
-                    @(Model.WeekOffset == 0 ? "Tuần Này" : "Về Tuần Này")
-                </a>
-                <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
-                   asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
-                   asp-route-weekOffset="@(Model.WeekOffset + 1)" class="btn btn-sm btn-outline-secondary" title="Tuần sau">
-                    <i class="bi bi-chevron-right"></i>
-                </a>
-            </div>
-
-            <!-- View Switcher -->
-            <div class="col-md-3 d-flex align-items-end justify-content-end gap-1 pt-3">
-                <div class="btn-group btn-group-sm" role="group">
-                    <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
-                       asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
-                       asp-route-weekOffset="@Model.WeekOffset" class="btn btn-primary active">
-                        <i class="bi bi-calendar-week me-1"></i>Lịch Tuần
-                    </a>
-                    <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="monthly"
-                       asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
-                       asp-route-year="@startMon.Year" asp-route-month="@startMon.Month" class="btn btn-outline-secondary">
-                        <i class="bi bi-calendar3 me-1"></i>Lịch Tháng
-                    </a>
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Header info -->
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <div class="d-flex align-items-center gap-2">
-        <span class="fs-5 fw-bold text-dark">
-            <i class="bi bi-calendar2-range text-primary me-2"></i>Tuần từ @startMon.ToString("dd/MM/yyyy") đến @endSun.ToString("dd/MM/yyyy")
-        </span>
-        @if (Model.WeekOffset == 0)
-        {
-            <span class="badge bg-primary text-white rounded-pill px-2">Tuần hiện tại</span>
+<style>
+    /* DentalCare Doctor Scheduling Styles */
+    .schedule-shift-cell {
+        min-height: 125px;
+        cursor: pointer;
+        transition: all 0.15s ease-in-out;
+        border: 1px solid #e9ecef !important;
+        position: relative;
+    }
+    .schedule-shift-cell:hover {
+        background-color: #f8f9fa !important;
+        box-shadow: inset 0 0 0 1px #0d6efd;
+    }
+    .schedule-shift-cell.active-shift-cell {
+        background-color: #f0f7ff !important;
+        box-shadow: inset 0 0 0 2px #0d6efd !important;
+    }
+    #dentistShiftDetailsDrawer {
+        width: 460px;
+        max-width: 100vw;
+    }
+    @@media (max-width: 576px) {
+        #dentistShiftDetailsDrawer {
+            width: 100vw;
         }
-    </div>
-    <div class="d-flex gap-2">
-        <button type="button" class="btn btn-dc-primary btn-sm" data-bs-toggle="modal" data-bs-target="#bulkScheduleModal">
-            <i class="bi bi-calendar-plus me-1"></i> Phân Công Hàng Loạt
-        </button>
-    </div>
-</div>
+    }
+</style>
 
 <!-- Weekly 7-Column Grid Table -->
 <div class="card-dc shadow-sm mb-4">
@@ -107,7 +49,7 @@
                 <!-- Table Header: 7 Days -->
                 <thead class="table-light text-center">
                     <tr>
-                        <th style="width: 110px;" class="align-middle bg-light text-muted small fw-bold">Ca Trực</th>
+                        <th style="width: 120px;" class="align-middle bg-light text-muted small fw-bold">Ca Trực</th>
                         @for (int i = 0; i < 7; i++)
                         {
                             var d = weekDays[i];
@@ -135,6 +77,7 @@
                         @for (int i = 0; i < 7; i++)
                         {
                             var d = weekDays[i];
+                            bool isPast = d < today;
                             var morningSchedules = Model.Schedules
                                 .Where(s => s.WorkDate == d && s.StartTime < new TimeOnly(13, 0) && s.Status == "Scheduled")
                                 .ToList();
@@ -142,41 +85,71 @@
                                 .Where(l => l.Status == "Approved" && l.StartDate <= d && l.EndDate >= d)
                                 .ToList();
 
-                            <td class="p-2 @(d == today ? "bg-primary-subtle bg-opacity-10" : "bg-white")" style="min-height: 120px;">
-                                @if (morningSchedules.Any())
-                                {
-                                    <div class="d-flex flex-column gap-2">
-                                        @foreach (var s in morningSchedules)
+                            int mCount = morningSchedules.Count;
+                            int onLeaveCount = morningSchedules.Count(s => dayLeaves.Any(l => l.DentistUserId == s.DentistUserId));
+
+                            var doctorPayload = morningSchedules.Select(s => {
+                                var isOnLeave = dayLeaves.Any(l => l.DentistUserId == s.DentistUserId);
+                                var leaveItem = dayLeaves.FirstOrDefault(l => l.DentistUserId == s.DentistUserId);
+                                return new {
+                                    scheduleId = s.DentistScheduleId,
+                                    dentistUserId = s.DentistUserId,
+                                    dentistName = s.DentistName,
+                                    code = s.DentistEmployeeCode ?? "",
+                                    departmentId = s.DepartmentId,
+                                    departmentName = s.DepartmentName,
+                                    startTime = s.StartTime.ToString("HH:mm"),
+                                    endTime = s.EndTime.ToString("HH:mm"),
+                                    isOnLeave = isOnLeave,
+                                    leaveReason = leaveItem?.Reason ?? "",
+                                    status = s.Status,
+                                    notes = s.Note ?? ""
+                                };
+                            }).ToList();
+
+                            <td class="schedule-shift-cell p-2 align-middle text-center @(d == today ? "bg-primary-subtle bg-opacity-10" : "bg-white")"
+                                data-date="@d.ToString("yyyy-MM-dd")"
+                                data-date-display="@($"{dayNamesVn[i]}, {d:dd/MM/yyyy}")"
+                                data-shift="morning"
+                                data-shift-name="Ca Sáng"
+                                data-shift-time="08:00 - 12:00"
+                                data-is-past="@(isPast ? "true" : "false")"
+                                data-doctors-json="@JsonSerializer.Serialize(doctorPayload)"
+                                onclick="openDentistShiftDrawerFromCell(this)">
+                                
+                                <div class="d-flex flex-column align-items-center justify-content-center py-2">
+                                    <!-- Doctor Icon & Count -->
+                                    <div class="fw-bold fs-6 mb-1 text-dark">
+                                        <i class="bi bi-people-fill text-primary me-1"></i> @mCount bác sĩ
+                                    </div>
+
+                                    <!-- Staffing Requirement Status -->
+                                    <div class="mb-2">
+                                        @if (mCount == 0)
                                         {
-                                            bool isOnLeave = dayLeaves.Any(l => l.DentistUserId == s.DentistUserId);
-                                            <div class="card p-2 border shadow-sm rounded-3 @(isOnLeave ? "bg-warning-subtle border-warning" : "bg-white border-primary-subtle")">
-                                                <div class="d-flex justify-content-between align-items-start mb-1">
-                                                    <strong class="small text-dark text-truncate">@s.DentistName</strong>
-                                                    @if (isOnLeave)
-                                                    {
-                                                        <span class="badge bg-warning text-dark border border-warning" style="font-size: 8px;">Nghỉ phép</span>
-                                                    }
-                                                    else
-                                                    {
-                                                        <span class="badge bg-success-subtle text-success" style="font-size: 8px;">Đang trực</span>
-                                                    }
-                                                </div>
-                                                <div class="text-xs text-muted text-truncate mb-1">
-                                                    <i class="bi bi-building me-1"></i>@s.DepartmentName
-                                                </div>
-                                                <div class="text-xs text-primary fw-semibold">
-                                                    <i class="bi bi-clock me-1"></i>@s.StartTime.ToString("HH:mm") - @s.EndTime.ToString("HH:mm")
-                                                </div>
-                                            </div>
+                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-normal">
+                                                0 bác sĩ — Chưa phân công
+                                            </span>
+                                        }
+                                        else if (onLeaveCount > 0)
+                                        {
+                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small fw-normal">
+                                                @mCount BS (@onLeaveCount nghỉ phép)
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle small fw-normal">
+                                                @mCount bác sĩ trực
+                                            </span>
                                         }
                                     </div>
-                                }
-                                else
-                                {
-                                    <div class="text-center text-muted py-4 small fst-italic opacity-50">
-                                        Trống ca
+
+                                    <!-- Action Link -->
+                                    <div class="text-primary small fw-semibold d-inline-flex align-items-center">
+                                        <i class="bi bi-person-lines-fill me-1"></i>Xem danh sách
                                     </div>
-                                }
+                                </div>
                             </td>
                         }
                     </tr>
@@ -192,6 +165,7 @@
                         @for (int i = 0; i < 7; i++)
                         {
                             var d = weekDays[i];
+                            bool isPast = d < today;
                             var afternoonSchedules = Model.Schedules
                                 .Where(s => s.WorkDate == d && s.StartTime >= new TimeOnly(13, 0) && s.Status == "Scheduled")
                                 .ToList();
@@ -199,41 +173,71 @@
                                 .Where(l => l.Status == "Approved" && l.StartDate <= d && l.EndDate >= d)
                                 .ToList();
 
-                            <td class="p-2 @(d == today ? "bg-primary-subtle bg-opacity-10" : "bg-white")" style="min-height: 120px;">
-                                @if (afternoonSchedules.Any())
-                                {
-                                    <div class="d-flex flex-column gap-2">
-                                        @foreach (var s in afternoonSchedules)
+                            int aCount = afternoonSchedules.Count;
+                            int onLeaveCount = afternoonSchedules.Count(s => dayLeaves.Any(l => l.DentistUserId == s.DentistUserId));
+
+                            var doctorPayload = afternoonSchedules.Select(s => {
+                                var isOnLeave = dayLeaves.Any(l => l.DentistUserId == s.DentistUserId);
+                                var leaveItem = dayLeaves.FirstOrDefault(l => l.DentistUserId == s.DentistUserId);
+                                return new {
+                                    scheduleId = s.DentistScheduleId,
+                                    dentistUserId = s.DentistUserId,
+                                    dentistName = s.DentistName,
+                                    code = s.DentistEmployeeCode ?? "",
+                                    departmentId = s.DepartmentId,
+                                    departmentName = s.DepartmentName,
+                                    startTime = s.StartTime.ToString("HH:mm"),
+                                    endTime = s.EndTime.ToString("HH:mm"),
+                                    isOnLeave = isOnLeave,
+                                    leaveReason = leaveItem?.Reason ?? "",
+                                    status = s.Status,
+                                    notes = s.Note ?? ""
+                                };
+                            }).ToList();
+
+                            <td class="schedule-shift-cell p-2 align-middle text-center @(d == today ? "bg-primary-subtle bg-opacity-10" : "bg-white")"
+                                data-date="@d.ToString("yyyy-MM-dd")"
+                                data-date-display="@($"{dayNamesVn[i]}, {d:dd/MM/yyyy}")"
+                                data-shift="afternoon"
+                                data-shift-name="Ca Chiều"
+                                data-shift-time="13:30 - 17:30"
+                                data-is-past="@(isPast ? "true" : "false")"
+                                data-doctors-json="@JsonSerializer.Serialize(doctorPayload)"
+                                onclick="openDentistShiftDrawerFromCell(this)">
+                                
+                                <div class="d-flex flex-column align-items-center justify-content-center py-2">
+                                    <!-- Doctor Icon & Count -->
+                                    <div class="fw-bold fs-6 mb-1 text-dark">
+                                        <i class="bi bi-people-fill text-primary me-1"></i> @aCount bác sĩ
+                                    </div>
+
+                                    <!-- Staffing Requirement Status -->
+                                    <div class="mb-2">
+                                        @if (aCount == 0)
                                         {
-                                            bool isOnLeave = dayLeaves.Any(l => l.DentistUserId == s.DentistUserId);
-                                            <div class="card p-2 border shadow-sm rounded-3 @(isOnLeave ? "bg-warning-subtle border-warning" : "bg-white border-primary-subtle")">
-                                                <div class="d-flex justify-content-between align-items-start mb-1">
-                                                    <strong class="small text-dark text-truncate">@s.DentistName</strong>
-                                                    @if (isOnLeave)
-                                                    {
-                                                        <span class="badge bg-warning text-dark border border-warning" style="font-size: 8px;">Nghỉ phép</span>
-                                                    }
-                                                    else
-                                                    {
-                                                        <span class="badge bg-success-subtle text-success" style="font-size: 8px;">Đang trực</span>
-                                                    }
-                                                </div>
-                                                <div class="text-xs text-muted text-truncate mb-1">
-                                                    <i class="bi bi-building me-1"></i>@s.DepartmentName
-                                                </div>
-                                                <div class="text-xs text-primary fw-semibold">
-                                                    <i class="bi bi-clock me-1"></i>@s.StartTime.ToString("HH:mm") - @s.EndTime.ToString("HH:mm")
-                                                </div>
-                                            </div>
+                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-normal">
+                                                0 bác sĩ — Chưa phân công
+                                            </span>
+                                        }
+                                        else if (onLeaveCount > 0)
+                                        {
+                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small fw-normal">
+                                                @aCount BS (@onLeaveCount nghỉ phép)
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle small fw-normal">
+                                                @aCount bác sĩ trực
+                                            </span>
                                         }
                                     </div>
-                                }
-                                else
-                                {
-                                    <div class="text-center text-muted py-4 small fst-italic opacity-50">
-                                        Trống ca
+
+                                    <!-- Action Link -->
+                                    <div class="text-primary small fw-semibold d-inline-flex align-items-center">
+                                        <i class="bi bi-person-lines-fill me-1"></i>Xem danh sách
                                     </div>
-                                }
+                                </div>
                             </td>
                         }
                     </tr>
@@ -242,3 +246,273 @@
         </div>
     </div>
 </div>
+
+<!-- ========================================================================= -->
+<!-- RIGHT-SIDE OFFCANVAS DRAWER: CHI TIẾT CA TRỰC BÁC SĨ (PHASE 3.4 & 4.2)    -->
+<!-- ========================================================================= -->
+<div class="offcanvas offcanvas-end shadow-lg" tabindex="-1" id="dentistShiftDetailsDrawer" aria-labelledby="dentistShiftDetailsDrawerLabel">
+    <div class="offcanvas-header bg-light border-bottom py-3">
+        <div>
+            <span class="badge bg-primary text-white mb-1" id="dentistDrawerShiftBadge">Ca Sáng</span>
+            <h5 class="offcanvas-title fw-bold text-dark" id="dentistShiftDetailsDrawerLabel">Chi Tiết Ca Trực Bác Sĩ</h5>
+            <div class="text-muted small" id="dentistDrawerDateDisplay">Thứ Hai, 16/11/2026</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Đóng"></button>
+    </div>
+    <div class="offcanvas-body p-3">
+        <!-- Shift Overview Stats -->
+        <div class="d-flex align-items-center justify-content-between p-2 mb-3 bg-light rounded-3 border">
+            <div>
+                <span class="text-muted small">Thời gian ca:</span>
+                <strong class="d-block text-dark small" id="dentistDrawerShiftTime">08:00 - 12:00</strong>
+            </div>
+            <div class="text-end">
+                <span class="text-muted small">Số bác sĩ:</span>
+                <span class="badge bg-primary fs-6 px-2 py-1" id="dentistDrawerDoctorCount">0 bác sĩ</span>
+            </div>
+        </div>
+
+        <!-- Doctors List Container -->
+        <div id="dentistDrawerDoctorsList" class="d-flex flex-column gap-2 mb-3">
+            <!-- Populated dynamically via JS -->
+        </div>
+
+        <!-- Empty State Container -->
+        <div id="dentistDrawerEmptyState" class="text-center py-5 text-muted" style="display: none;">
+            <i class="bi bi-calendar-x fs-1 text-secondary opacity-50 mb-2"></i>
+            <div class="fw-semibold">Chưa có bác sĩ nào trực ca này</div>
+            <p class="text-xs text-muted mb-3">Nhấn nút bên dưới để gán ca trực nhanh cho bác sĩ vào ngày này.</p>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="btnAssignFromEmptyShift" onclick="openBulkAssignForCurrentCell()">
+                <i class="bi bi-calendar-plus me-1"></i>Phân công ca trực
+            </button>
+        </div>
+    </div>
+    <div class="offcanvas-footer bg-light p-3 border-top d-flex justify-content-between align-items-center">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="offcanvas">
+            <i class="bi bi-x me-1"></i>Đóng
+        </button>
+        <button type="button" class="btn btn-dc-primary btn-sm" id="btnBulkAssignFromDrawer" onclick="openBulkAssignForCurrentCell()">
+            <i class="bi bi-calendar-plus me-1"></i>Thêm phân công ca này
+        </button>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- MODAL: XÁC NHẬN HỦY CA TRỰC BÁC SĨ (VỚI SERVER CONFIRMATION)              -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="confirmCancelDentistShiftModal" tabindex="-1" aria-labelledby="confirmCancelDentistShiftModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form id="cancelDentistShiftForm" method="post" action="">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="returnDentistId" value="@Model.SelectedDentistId" />
+                <input type="hidden" name="returnTab" value="weekly" />
+                <input type="hidden" name="weekOffset" value="@Model.WeekOffset" />
+                <input type="hidden" name="departmentId" value="@Model.SelectedDepartmentId" />
+
+                <div class="modal-header bg-danger-subtle text-danger">
+                    <h5 class="modal-title font-heading fw-bold" id="confirmCancelDentistShiftModalLabel">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Xác Nhận Hủy Phân Công Ca Trực
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="mb-3">Bạn có chắc chắn muốn hủy phân công ca trực của bác sĩ dưới đây?</p>
+                    <div class="card p-3 border-danger-subtle bg-light mb-3">
+                        <div class="fw-bold text-dark fs-6" id="cancelDoctorName">Bác sĩ...</div>
+                        <div class="text-muted small" id="cancelDoctorDept">Chuyên khoa...</div>
+                        <div class="text-primary small fw-semibold mt-2" id="cancelShiftInfo">Ca Sáng (08:00 - 12:00) &bull; Thứ Hai, 16/11/2026</div>
+                    </div>
+                    <div class="alert alert-warning small py-2 mb-0">
+                        <i class="bi bi-info-circle me-1 fw-bold"></i>
+                        Hệ thống sẽ gỡ lịch trực này khỏi danh sách phân công. Các lịch hẹn (nếu có) sẽ cần được điều phối lại.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Không, Quay lại</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i>Xác Nhận Hủy Ca
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- JAVASCRIPT: DRAWER & CELL INTERACTION                                      -->
+<!-- ========================================================================= -->
+<script>
+    let currentDentistShiftData = null;
+
+    function openDentistShiftDrawerFromCell(cell) {
+        // Clear active cell highlight
+        document.querySelectorAll('.schedule-shift-cell').forEach(c => c.classList.remove('active-shift-cell'));
+        cell.classList.add('active-shift-cell');
+
+        const dateStr = cell.getAttribute('data-date');
+        const dateDisplay = cell.getAttribute('data-date-display');
+        const shift = cell.getAttribute('data-shift');
+        const shiftName = cell.getAttribute('data-shift-name');
+        const shiftTime = cell.getAttribute('data-shift-time');
+        const isPast = cell.getAttribute('data-is-past') === 'true';
+        let doctors = [];
+
+        try {
+            doctors = JSON.parse(cell.getAttribute('data-doctors-json') || '[]');
+        } catch (e) {
+            console.error('Failed to parse doctors JSON:', e);
+            doctors = [];
+        }
+
+        currentDentistShiftData = {
+            date: dateStr,
+            dateDisplay: dateDisplay,
+            shift: shift,
+            shiftName: shiftName,
+            shiftTime: shiftTime,
+            isPast: isPast,
+            doctors: doctors
+        };
+
+        // Update Drawer Header & Stats
+        document.getElementById('dentistDrawerShiftBadge').innerText = shiftName;
+        document.getElementById('dentistDrawerShiftBadge').className = shift === 'morning' ? 'badge bg-warning text-dark mb-1' : 'badge bg-primary text-white mb-1';
+        document.getElementById('dentistDrawerDateDisplay').innerText = dateDisplay;
+        document.getElementById('dentistDrawerShiftTime').innerText = shiftTime;
+        document.getElementById('dentistDrawerDoctorCount').innerText = `${doctors.length} bác sĩ`;
+
+        const listContainer = document.getElementById('dentistDrawerDoctorsList');
+        const emptyState = document.getElementById('dentistDrawerEmptyState');
+        listContainer.innerHTML = '';
+
+        if (doctors.length === 0) {
+            listContainer.style.display = 'none';
+            emptyState.style.display = 'block';
+        } else {
+            listContainer.style.display = 'flex';
+            emptyState.style.display = 'none';
+
+            doctors.forEach(doc => {
+                const card = document.createElement('div');
+                card.className = 'card border rounded-3 p-3 bg-white shadow-sm';
+
+                let leaveBadge = '';
+                if (doc.isOnLeave) {
+                    leaveBadge = `<span class="badge bg-warning text-dark border border-warning">Nghỉ phép</span>`;
+                } else {
+                    leaveBadge = `<span class="badge bg-success-subtle text-success">Đang trực</span>`;
+                }
+
+                let leaveReasonAlert = '';
+                if (doc.isOnLeave && doc.leaveReason) {
+                    leaveReasonAlert = `
+                        <div class="alert alert-warning py-1 px-2 small mb-2 text-xs">
+                            <i class="bi bi-info-circle me-1"></i>Lý do nghỉ: ${escapeHtml(doc.leaveReason)}
+                        </div>
+                    `;
+                }
+
+                let cancelBtn = '';
+                if (isPast) {
+                    cancelBtn = `<button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" disabled title="Không thể hủy ca trực đã qua"><i class="bi bi-trash me-1"></i>Đã qua</button>`;
+                } else {
+                    cancelBtn = `<button type="button" class="btn btn-outline-danger btn-xs py-1 px-2" onclick="openCancelModalFromDrawer(${doc.scheduleId}, '${escapeJs(doc.dentistName)}', '${escapeJs(doc.departmentName)}', '${shiftName} (${shiftTime})', '${escapeJs(dateDisplay)}')"><i class="bi bi-trash me-1"></i>Hủy ca</button>`;
+                }
+
+                card.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <div class="fw-bold text-dark fs-6">${escapeHtml(doc.dentistName)}</div>
+                            <div class="text-muted small"><i class="bi bi-building me-1"></i>${escapeHtml(doc.departmentName)} ${doc.code ? `<span class="badge bg-light text-secondary border ms-1">${escapeHtml(doc.code)}</span>` : ''}</div>
+                        </div>
+                        <div>${leaveBadge}</div>
+                    </div>
+                    ${leaveReasonAlert}
+                    <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                        <div class="small text-primary fw-semibold">
+                            <i class="bi bi-clock me-1"></i>${doc.startTime} - ${doc.endTime}
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-outline-primary btn-xs py-1 px-2" onclick="openDailyOverrideFromDrawer(${doc.dentistUserId}, '${dateStr}', ${doc.isOnLeave}, '${escapeJs(doc.leaveReason)}')">
+                                <i class="bi bi-pencil-square me-1"></i>Điều chỉnh
+                            </button>
+                            ${cancelBtn}
+                        </div>
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+        }
+
+        const drawerEl = document.getElementById('dentistShiftDetailsDrawer');
+        const offcanvas = bootstrap.Offcanvas.getOrCreateInstance(drawerEl);
+        offcanvas.show();
+    }
+
+    function openDailyOverrideFromDrawer(dentistUserId, dateStr, isOnLeave, leaveReason) {
+        const sel = document.getElementById('overrideDentistId');
+        if (sel && dentistUserId) {
+            sel.value = dentistUserId;
+        }
+        openDailyOverrideModal(dateStr, isOnLeave === true, leaveReason || '', 0, []);
+    }
+
+    function openCancelModalFromDrawer(scheduleId, doctorName, deptName, shiftInfo, dateDisplay) {
+        const form = document.getElementById('cancelDentistShiftForm');
+        form.action = `/Admin/DentistSchedule/CancelSchedule/${scheduleId}`;
+        document.getElementById('cancelDoctorName').innerText = doctorName;
+        document.getElementById('cancelDoctorDept').innerText = `Chuyên khoa: ${deptName}`;
+        document.getElementById('cancelShiftInfo').innerText = `${shiftInfo} • ${dateDisplay}`;
+
+        const modal = new bootstrap.Modal(document.getElementById('confirmCancelDentistShiftModal'));
+        modal.show();
+    }
+
+    function openBulkAssignForCurrentCell() {
+        if (!currentDentistShiftData) return;
+        const fromDateEl = document.getElementById('bulkFromDate');
+        const toDateEl = document.getElementById('bulkToDate');
+        if (fromDateEl) fromDateEl.value = currentDentistShiftData.date;
+        if (toDateEl) toDateEl.value = currentDentistShiftData.date;
+
+        const morningCb = document.getElementById('shiftMorning');
+        const afternoonCb = document.getElementById('shiftAfternoon');
+        if (morningCb && afternoonCb) {
+            if (currentDentistShiftData.shift === 'morning') {
+                morningCb.checked = true;
+                afternoonCb.checked = false;
+            } else if (currentDentistShiftData.shift === 'afternoon') {
+                morningCb.checked = false;
+                afternoonCb.checked = true;
+            }
+        }
+
+        const d = new Date(currentDentistShiftData.date);
+        let dow = d.getDay();
+        let dowVal = dow === 0 ? 7 : dow;
+        document.querySelectorAll('.bulk-dow').forEach(cb => {
+            cb.checked = (cb.value == dowVal);
+        });
+
+        // Hide drawer if open and show bulk modal
+        const drawerEl = document.getElementById('dentistShiftDetailsDrawer');
+        if (drawerEl) {
+            const bsOffcanvas = bootstrap.Offcanvas.getInstance(drawerEl);
+            if (bsOffcanvas) bsOffcanvas.hide();
+        }
+
+        const bulkModal = new bootstrap.Modal(document.getElementById('bulkScheduleModal'));
+        bulkModal.show();
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    function escapeJs(str) {
+        if (!str) return '';
+        return str.replace(/'/g, "\\'").replace(/"/g, "\\\"");
+    }
+</script>

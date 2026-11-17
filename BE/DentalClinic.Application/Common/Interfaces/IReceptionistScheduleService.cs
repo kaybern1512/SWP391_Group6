@@ -17,7 +17,7 @@ public interface IReceptionistScheduleService
     Task<ApiResponse<bool>> DeleteScheduleAsync(long scheduleId, long currentUserId, CancellationToken ct = default);
 
     Task<ApiResponse<ReceptionistBulkSchedulePreviewDto>> PreviewBulkScheduleAsync(ReceptionistBulkScheduleAssignmentRequest request, CancellationToken ct = default);
-    Task<ApiResponse<bool>> ApplyBulkScheduleAsync(ReceptionistBulkScheduleAssignmentRequest request, long currentUserId, CancellationToken ct = default);
+    Task<ApiResponse<ReceptionistBulkApplyResultDto>> ApplyBulkScheduleAsync(ReceptionistBulkScheduleAssignmentRequest request, long currentUserId, CancellationToken ct = default);
     Task<ApiResponse<bool>> CopyMonthScheduleAsync(ReceptionistCopyMonthScheduleRequest request, long currentUserId, CancellationToken ct = default);
     Task<ApiResponse<bool>> ApplyDailyOverrideAsync(ReceptionistDailyOverrideRequest request, long currentUserId, CancellationToken ct = default);
 }

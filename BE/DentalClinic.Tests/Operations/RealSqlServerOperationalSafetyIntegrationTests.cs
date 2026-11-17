@@ -744,9 +744,11 @@ public class RealSqlServerOperationalSafetyIntegrationTests
         db.AppointmentServices.Add(primarySvc);
         await db.SaveChangesAsync();
 
-        var today = DateOnly.FromDateTime(ClinicTimeHelper.ToClinicTime(now));
+        var testDate = new DateOnly(2026, 11, 30);
+        var shiftStart = new TimeOnly(8, 0);
+        var shiftEnd = new TimeOnly(17, 0);
         var existingShift = await db.StaffWorkSchedules.FirstOrDefaultAsync(
-            ws => ws.StaffUserId == 3 && ws.WorkDate == today && ws.Status == "Scheduled" && ws.StartTime <= new TimeOnly(7, 0) && ws.EndTime >= new TimeOnly(21, 0));
+            ws => ws.StaffUserId == 3 && ws.WorkDate == testDate && ws.Status == "Scheduled" && ws.StartTime <= shiftStart && ws.EndTime >= shiftEnd);
         StaffWorkSchedule? tempShift = null;
         if (existingShift == null)
         {
@@ -754,9 +756,9 @@ public class RealSqlServerOperationalSafetyIntegrationTests
             {
                 StaffUserId = 3,
                 StaffRole = "Dentist",
-                WorkDate = today,
-                StartTime = new TimeOnly(7, 0),
-                EndTime = new TimeOnly(21, 0),
+                WorkDate = testDate,
+                StartTime = shiftStart,
+                EndTime = shiftEnd,
                 Status = "Scheduled",
                 Notes = "Trực phòng X-quang [R003]"
             };
@@ -779,11 +781,13 @@ public class RealSqlServerOperationalSafetyIntegrationTests
             Assert.Equal("Ordered", createdOrder.Status);
 
             // Step 2: Receptionist assigns imaging session with Qualified X-ray Dentist 3 (Dentist 3 is in Dept 1)
+            var scheduledClinicTime = testDate.ToDateTime(new TimeOnly(10, 0));
+            var scheduledUtc = ClinicTimeHelper.ToUtc(scheduledClinicTime);
             var bookReq = new BookImagingSessionRequest
             {
                 DiagnosticOrderId = createdOrder.DiagnosticOrderId,
                 AssignedDentistUserId = 3,
-                ScheduledStartUtc = DateTime.UtcNow.AddMinutes(5),
+                ScheduledStartUtc = scheduledUtc,
                 Priority = "Normal",
                 Notes = "Chụp X-quang tại R003"
             };

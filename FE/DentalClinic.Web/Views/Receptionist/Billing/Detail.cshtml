@@ -373,8 +373,8 @@
 @if (Model.RemainingAmount > 0 && Model.Status != "Cancelled")
 {
     <div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <form asp-action="Pay" method="post" class="modal-content border-0 shadow">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <form asp-action="Pay" method="post" id="paymentForm" class="modal-content border-0 shadow">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="InvoiceId" value="@Model.InvoiceId" />
 
@@ -386,107 +386,135 @@
                 </div>
 
                 <div class="modal-body p-4">
-                    <div class="alert alert-light border mb-4">
-                        <div class="d-flex justify-content-between mb-1">
-                            <span class="text-muted">Hóa đơn:</span>
-                            <span class="fw-bold font-monospace">@Model.InvoiceCode</span>
-                        </div>
-                        <div class="d-flex justify-content-between mb-1">
-                            <span class="text-muted">Bệnh nhân:</span>
-                            <span class="fw-semibold">@Model.PatientName</span>
-                        </div>
-                        <div class="d-flex justify-content-between mb-1">
-                            <span class="text-muted">Tổng viện phí:</span>
-                            <span class="fw-bold">@Model.TotalAmount.ToString("N0") đ</span>
-                        </div>
-                        <div class="d-flex justify-content-between text-danger">
-                            <span class="fw-bold">Số tiền còn phải thu:</span>
-                            <span class="fw-bold fs-5">@Model.RemainingAmount.ToString("N0") đ</span>
-                        </div>
-                    </div>
+                    <div class="row g-3">
+                        <!-- Cột Trái: Thông tin viện phí & Phương thức & VietQR -->
+                        <div class="col-md-6 border-end">
+                            <div class="alert alert-light border mb-3">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Hóa đơn:</span>
+                                    <span class="fw-bold font-monospace">@Model.InvoiceCode</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Bệnh nhân:</span>
+                                    <span class="fw-semibold">@Model.PatientName</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Tổng viện phí:</span>
+                                    <span class="fw-bold">@Model.TotalAmount.ToString("N0") đ</span>
+                                </div>
+                                <div class="d-flex justify-content-between text-danger">
+                                    <span class="fw-bold">Số tiền còn phải thu:</span>
+                                    <span class="fw-bold fs-5">@Model.RemainingAmount.ToString("N0") đ</span>
+                                </div>
+                            </div>
 
-                    <!-- Payment Method -->
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold text-dark">Hình thức thanh toán <span class="text-danger">*</span></label>
-                        <div class="row g-2">
-                            <div class="col-4">
-                                <input type="radio" class="btn-check" name="Method" id="methodCash" value="Cash" checked>
-                                <label class="btn btn-outline-success w-100 py-2 d-flex flex-column align-items-center" for="methodCash">
-                                    <i class="bi bi-cash fs-4 mb-1"></i>
-                                    <span class="small fw-semibold">Tiền mặt</span>
-                                </label>
+                            <!-- Payment Method -->
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold text-dark">Hình thức thanh toán <span class="text-danger">*</span></label>
+                                <div class="row g-2">
+                                    <div class="col-4">
+                                        <input type="radio" class="btn-check" name="Method" id="methodCash" value="Cash" checked>
+                                        <label class="btn btn-outline-success w-100 py-2 d-flex flex-column align-items-center" for="methodCash">
+                                            <i class="bi bi-cash fs-4 mb-1"></i>
+                                            <span class="small fw-semibold">Tiền mặt</span>
+                                        </label>
+                                    </div>
+                                    <div class="col-4">
+                                        <input type="radio" class="btn-check" name="Method" id="methodBank" value="BankTransfer">
+                                        <label class="btn btn-outline-primary w-100 py-2 d-flex flex-column align-items-center" for="methodBank">
+                                            <i class="bi bi-qr-code fs-4 mb-1"></i>
+                                            <span class="small fw-semibold">VietQR / CK</span>
+                                        </label>
+                                    </div>
+                                    <div class="col-4">
+                                        <input type="radio" class="btn-check" name="Method" id="methodCard" value="CreditCard">
+                                        <label class="btn btn-outline-info w-100 py-2 d-flex flex-column align-items-center" for="methodCard">
+                                            <i class="bi bi-credit-card fs-4 mb-1"></i>
+                                            <span class="small fw-semibold">Quẹt thẻ POS</span>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="col-4">
-                                <input type="radio" class="btn-check" name="Method" id="methodBank" value="BankTransfer">
-                                <label class="btn btn-outline-primary w-100 py-2 d-flex flex-column align-items-center" for="methodBank">
-                                    <i class="bi bi-qr-code fs-4 mb-1"></i>
-                                    <span class="small fw-semibold">VietQR / CK</span>
-                                </label>
-                            </div>
-                            <div class="col-4">
-                                <input type="radio" class="btn-check" name="Method" id="methodCard" value="CreditCard">
-                                <label class="btn btn-outline-info w-100 py-2 d-flex flex-column align-items-center" for="methodCard">
-                                    <i class="bi bi-credit-card fs-4 mb-1"></i>
-                                    <span class="small fw-semibold">Quẹt thẻ POS</span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
 
-                    <!-- Dynamic VietQR Box (shown when BankTransfer selected) -->
-                    <div id="vietQrBox" class="p-3 bg-light rounded-3 border mb-3 d-none text-center">
-                        <div class="fw-bold text-primary mb-1">
-                            <i class="bi bi-qr-code-scan me-1"></i>Mã VietQR Tự Động Điền Chuẩn 100%
+                            <!-- Dynamic VietQR Box (shown when BankTransfer selected) -->
+                            <div id="vietQrBox" class="p-3 bg-light rounded-3 border mb-3 d-none text-center">
+                                <div class="fw-bold text-primary mb-1">
+                                    <i class="bi bi-qr-code-scan me-1"></i>Mã VietQR Tự Động Điền Chuẩn 100%
+                                </div>
+                                <p class="text-muted small mb-2">Bệnh nhân quét mã QR để chuyển khoản:</p>
+                                <div class="d-inline-block bg-white p-2 rounded shadow-sm border mb-2">
+                                    <img id="vietQrImg" src="@DentalClinic.Web.Helpers.VietQrHelper.GenerateQrUrl(Model.InvoiceCode, Model.RemainingAmount)" alt="VietQR" class="img-fluid" style="max-height: 170px;" />
+                                </div>
+                                <div class="small text-start bg-white p-2 rounded border">
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span class="text-muted">Ngân hàng:</span>
+                                        <span class="fw-bold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultBankName</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span class="text-muted">Số tài khoản:</span>
+                                        <span class="fw-bold font-monospace text-primary">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountNo</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span class="text-muted">Chủ tài khoản:</span>
+                                        <span class="fw-semibold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountName</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Nội dung CK:</span>
+                                        <span class="fw-bold font-monospace text-danger">THANH TOAN @Model.InvoiceCode</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <p class="text-muted small mb-2">Bệnh nhân mở ứng dụng ngân hàng quét mã QR dưới đây:</p>
-                        <div class="d-inline-block bg-white p-2 rounded shadow-sm border mb-2">
-                            <img id="vietQrImg" src="@DentalClinic.Web.Helpers.VietQrHelper.GenerateQrUrl(Model.InvoiceCode, Model.RemainingAmount)" alt="VietQR" class="img-fluid" style="max-height: 200px;" />
-                        </div>
-                        <div class="small text-start bg-white p-2 rounded border">
-                            <div class="d-flex justify-content-between mb-1">
-                                <span class="text-muted">Ngân hàng:</span>
-                                <span class="fw-bold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultBankName</span>
-                            </div>
-                            <div class="d-flex justify-content-between mb-1">
-                                <span class="text-muted">Số tài khoản:</span>
-                                <span class="fw-bold font-monospace text-primary">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountNo</span>
-                            </div>
-                            <div class="d-flex justify-content-between mb-1">
-                                <span class="text-muted">Chủ tài khoản:</span>
-                                <span class="fw-semibold">@DentalClinic.Web.Helpers.VietQrHelper.DefaultAccountName</span>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted">Nội dung CK:</span>
-                                <span class="fw-bold font-monospace text-danger">THANH TOAN @Model.InvoiceCode</span>
-                            </div>
-                        </div>
-                    </div>
 
-                    <!-- Amount -->
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <label class="form-label fw-semibold text-dark mb-0">Số tiền thu đợt này (đ) <span class="text-danger">*</span></label>
-                            <div class="d-flex gap-1">
-                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="btnPayFull">
-                                    [Thu toàn bộ: @Model.RemainingAmount.ToString("N0") đ]
-                                </button>
+                        <!-- Cột Phải: Chế độ thanh toán (Auto-Lock 100%), Số tiền, Tham chiếu & Ghi chú -->
+                        <div class="col-md-6">
+                            <!-- Chế độ thu tiền (Auto-Lock Full Payment) -->
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold text-dark">Chế độ thanh toán</label>
+                                <div class="d-flex gap-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="paymentMode" id="modeFull" value="full" checked onchange="onPaymentModeChanged()">
+                                        <label class="form-check-label fw-semibold text-success cursor-pointer" for="modeFull">
+                                            <i class="bi bi-check-circle-fill me-1"></i>Thanh toán toàn bộ (100%)
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="paymentMode" id="modePartial" value="partial" onchange="onPaymentModeChanged()">
+                                        <label class="form-check-label text-muted cursor-pointer" for="modePartial">
+                                            Thanh toán một phần
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Amount -->
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold text-dark mb-1">Số tiền thu đợt này (đ) <span class="text-danger">*</span></label>
+                                <div class="input-group input-group-lg">
+                                    <input type="number" name="Amount" id="payAmountInput" class="form-control fw-bold text-success bg-light" value="@Model.RemainingAmount" max="@Model.RemainingAmount" min="1000" step="1000" readonly required />
+                                    <span class="input-group-text fw-bold">đ</span>
+                                </div>
+                                <div class="form-text small text-muted mt-1" id="payAmountHint">
+                                    <i class="bi bi-lock-fill me-1 text-success"></i>Đã tự động khóa số tiền bằng đúng số dư còn lại của hóa đơn.
+                                </div>
+                            </div>
+
+                            <!-- Transaction Reference -->
+                            <div class="mb-3">
+                                <label class="form-label small text-muted">Mã tham chiếu / Mã bút toán giao dịch (nếu có):</label>
+                                <input type="text" name="TransactionReference" class="form-control form-control-sm" placeholder="VD: MB-839218, POS-49320..." />
+                            </div>
+
+                            <!-- Note -->
+                            <div class="mb-3">
+                                <label class="form-label small text-muted">Ghi chú thu tiền:</label>
+                                <input type="text" name="Note" class="form-control form-control-sm" placeholder="VD: Bệnh nhân thanh toán trực tiếp tại quầy..." />
+                            </div>
+
+                            <div class="alert alert-success-subtle border-success-subtle p-2 small mb-0">
+                                <i class="bi bi-shield-check text-success me-1"></i>Khi thu đủ <strong>@Model.RemainingAmount.ToString("N0") đ</strong>, hóa đơn sẽ tự động chuyển trạng thái sang <strong>Đã thanh toán (Paid)</strong>.
                             </div>
                         </div>
-                        <input type="number" name="Amount" id="payAmountInput" class="form-control form-control-lg fw-bold text-success" value="@Model.RemainingAmount" max="@Model.RemainingAmount" min="1000" step="1000" required />
-                        <div class="form-text small text-muted">
-                            <i class="bi bi-info-circle me-1"></i>Khi thu đủ @Model.RemainingAmount.ToString("N0") đ, hóa đơn sẽ chuyển sang trạng thái <strong>Đã thanh toán (Paid)</strong>. Trạng thái ca khám lâm sàng do Bác sĩ phụ trách hoàn tất.
-                        </div>
-                    </div>
-
-                    <!-- Transaction Reference -->
-                    <div class="mb-3">
-                        <label class="form-label small text-muted">Mã tham chiếu / Mã bút toán giao dịch (nếu có):</label>
-                        <input type="text" name="TransactionReference" class="form-control form-control-sm" placeholder="VD: MB-839218, POS-49320..." />
-                    </div>
-
-                    <div class="mb-0">
-                        <label class="form-label small text-muted">Ghi chú thu tiền:</label>
-                        <input type="text" name="Note" class="form-control form-control-sm" placeholder="VD: Bệnh nhân thanh toán trực tiếp tại quầy..." />
                     </div>
                 </div>
 
@@ -506,7 +534,7 @@
 {
     <div class="modal fade" id="refundModal" tabindex="-1" aria-labelledby="refundModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <form asp-action="Refund" method="post" class="modal-content border-0 shadow">
+            <form asp-action="Refund" method="post" id="refundForm" class="modal-content border-0 shadow">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="InvoiceId" value="@Model.InvoiceId" />
                 <div class="modal-header bg-danger text-white">
@@ -586,8 +614,35 @@
 
                 const paymentModal = document.getElementById('paymentModal');
                 if (paymentModal) {
-                    paymentModal.addEventListener('shown.bs.modal', toggleVietQr);
+                    paymentModal.addEventListener('shown.bs.modal', function() {
+                        toggleVietQr();
+                        window.onPaymentModeChanged();
+                    });
                 }
+
+                window.onPaymentModeChanged = function() {
+                    const isFull = document.getElementById('modeFull')?.checked;
+                    const amountInput = document.getElementById('payAmountInput');
+                    const amountHint = document.getElementById('payAmountHint');
+                    if (amountInput) {
+                        if (isFull) {
+                            amountInput.value = '@Model.RemainingAmount';
+                            amountInput.setAttribute('readonly', 'readonly');
+                            amountInput.classList.add('bg-light');
+                            if (amountHint) {
+                                amountHint.innerHTML = '<i class="bi bi-lock-fill me-1 text-success"></i>Đã tự động khóa số tiền bằng đúng số dư còn lại của hóa đơn.';
+                            }
+                        } else {
+                            amountInput.removeAttribute('readonly');
+                            amountInput.classList.remove('bg-light');
+                            amountInput.focus();
+                            if (amountHint) {
+                                amountHint.innerHTML = '<i class="bi bi-pencil-fill me-1 text-primary"></i>Nhập số tiền bệnh nhân thanh toán đợt này (tối đa @Model.RemainingAmount.ToString("N0") đ).';
+                            }
+                        }
+                    }
+                    updateQrCode();
+                };
 
                 function updateQrCode() {
                     if (!vietQrImg) return;
@@ -614,6 +669,43 @@
                         payAmountInput.value = '@Model.RemainingAmount';
                         if (methodBank && methodBank.checked) {
                             updateQrCode();
+                        }
+                    });
+                }
+
+                // Double-submit protection
+                const paymentForm = document.getElementById('paymentForm');
+                if (paymentForm) {
+                    paymentForm.addEventListener('submit', function (e) {
+                        const btn = paymentForm.querySelector('button[type="submit"]');
+                        if (btn) {
+                            if (btn.dataset.submitted === 'true') {
+                                e.preventDefault();
+                                return false;
+                            }
+                            btn.dataset.submitted = 'true';
+                            setTimeout(() => {
+                                btn.disabled = true;
+                                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang xử lý thu tiền...';
+                            }, 10);
+                        }
+                    });
+                }
+
+                const refundForm = document.getElementById('refundForm');
+                if (refundForm) {
+                    refundForm.addEventListener('submit', function (e) {
+                        const btn = refundForm.querySelector('button[type="submit"]');
+                        if (btn) {
+                            if (btn.dataset.submitted === 'true') {
+                                e.preventDefault();
+                                return false;
+                            }
+                            btn.dataset.submitted = 'true';
+                            setTimeout(() => {
+                                btn.disabled = true;
+                                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang xử lý hoàn tiền...';
+                            }, 10);
                         }
                     });
                 }
