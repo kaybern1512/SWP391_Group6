@@ -302,7 +302,17 @@
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label fw-semibold">Đơn Vị Tính <span class="text-danger">*</span></label>
-                            <input type="text" name="Unit" id="editUnit" class="form-control" placeholder="VD: Viên, Vỉ, Gói, Chai..." required />
+                            <select name="Unit" id="editUnit" class="form-select" required>
+                                <option value="Viên">Viên</option>
+                                <option value="Vỉ">Vỉ</option>
+                                <option value="Hộp">Hộp</option>
+                                <option value="Chai">Chai</option>
+                                <option value="Lọ">Lọ</option>
+                                <option value="Gói">Gói</option>
+                                <option value="Tuýp">Tuýp</option>
+                                <option value="Ống">Ống</option>
+                                <option value="Túi">Túi</option>
+                            </select>
                         </div>
 
                         <div class="col-12 col-md-4">
@@ -483,7 +493,17 @@
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label fw-semibold">Đơn Vị Tính <span class="text-danger">*</span></label>
-                            <input type="text" name="Unit" class="form-control" placeholder="VD: Viên, Vỉ, Gói, Chai..." required />
+                            <select name="Unit" class="form-select" required>
+                                <option value="Viên" selected>Viên</option>
+                                <option value="Vỉ">Vỉ</option>
+                                <option value="Hộp">Hộp</option>
+                                <option value="Chai">Chai</option>
+                                <option value="Lọ">Lọ</option>
+                                <option value="Gói">Gói</option>
+                                <option value="Tuýp">Tuýp</option>
+                                <option value="Ống">Ống</option>
+                                <option value="Túi">Túi</option>
+                            </select>
                         </div>
 
                         <div class="col-12 col-md-6">
@@ -541,7 +561,21 @@
                 document.getElementById('editMedicineCode').value = code;
                 document.getElementById('editMedicineName').value = name;
                 document.getElementById('editActiveIngredient').value = ingredient;
-                document.getElementById('editUnit').value = unit;
+                const unitSelect = document.getElementById('editUnit');
+                if (unitSelect) {
+                    let found = false;
+                    for (let i = 0; i < unitSelect.options.length; i++) {
+                        if (unitSelect.options[i].value.toLowerCase() === unit.toLowerCase()) {
+                            unitSelect.selectedIndex = i;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found && unit) {
+                        const newOpt = new Option(unit, unit, true, true);
+                        unitSelect.add(newOpt);
+                    }
+                }
                 document.getElementById('editUnitPrice').value = price;
                 document.getElementById('editMinimumStockAlert').value = alertThreshold;
                 document.getElementById('editUsageInstructions').value = instructions;
