@@ -403,15 +403,33 @@
                                             <div class="mb-2">
                                                 @if (mCount == 0)
                                                 {
-                                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-normal">
-                                                        0 người — Chưa phân công
-                                                    </span>
+                                                    @if (isPast)
+                                                    {
+                                                        <span class="badge bg-light text-muted border small fw-normal">
+                                                            0 người trực
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-normal">
+                                                            0 người — Chưa phân công
+                                                        </span>
+                                                    }
                                                 }
                                                 else if (morningReq > 0 && mCount < morningReq)
                                                 {
-                                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small fw-normal">
-                                                        @mCount người — Thiếu nhân sự
-                                                    </span>
+                                                    @if (isPast)
+                                                    {
+                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-normal">
+                                                            @mCount người trực
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small fw-normal">
+                                                            @mCount người — Thiếu nhân sự
+                                                        </span>
+                                                    }
                                                 }
                                                 else if (morningReq > 0 && mCount >= morningReq)
                                                 {
@@ -490,15 +508,33 @@
                                             <div class="mb-2">
                                                 @if (aCount == 0)
                                                 {
-                                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-normal">
-                                                        0 người — Chưa phân công
-                                                    </span>
+                                                    @if (isPast)
+                                                    {
+                                                        <span class="badge bg-light text-muted border small fw-normal">
+                                                            0 người trực
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-normal">
+                                                            0 người — Chưa phân công
+                                                        </span>
+                                                    }
                                                 }
                                                 else if (afternoonReq > 0 && aCount < afternoonReq)
                                                 {
-                                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small fw-normal">
-                                                        @aCount người — Thiếu nhân sự
-                                                    </span>
+                                                    @if (isPast)
+                                                    {
+                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small fw-normal">
+                                                            @aCount người trực
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small fw-normal">
+                                                            @aCount người — Thiếu nhân sự
+                                                        </span>
+                                                    }
                                                 }
                                                 else if (afternoonReq > 0 && aCount >= afternoonReq)
                                                 {
