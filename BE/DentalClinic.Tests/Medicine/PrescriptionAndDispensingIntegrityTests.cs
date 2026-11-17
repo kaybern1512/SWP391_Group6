@@ -342,5 +342,109 @@ public class PrescriptionAndDispensingIntegrityTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => medService.DispenseMedicineAsync(dispenseReq, 801, userRole: "Patient"));
     }
 
+    [Fact]
+    public async Task TestGroup3E_DispenseWithNullBatchId_UsesRealMedicineId_PartialDispenseAndDoubleSubmitProtected()
+    {
+        var db = CreateInMemoryDbContext();
+        await SeedPharmacyFixtureAsync(db);
+
+        var appt = new Appointment { AppointmentId = 86, PatientUserId = 801, Status = AppointmentStatus.InService, CreatedAt = DateTime.UtcNow };
+        var svc = new AppointmentServiceEntity { AppointmentServiceId = 806, AppointmentId = 86, DepartmentId = 1, DepartmentServiceId = 1, AssignedDentistUserId = 901, Status = AppointmentStatus.InService, CreatedAt = DateTime.UtcNow };
+        var session = new TreatmentSession { SessionId = 8060, AppointmentId = 86, AppointmentServiceId = 806, PatientUserId = 801, DentistUserId = 901, SessionDate = DateOnly.FromDateTime(DateTime.UtcNow), CreatedAt = DateTime.UtcNow };
+        var presc = new Prescription { PrescriptionId = 860, TreatmentSessionId = 8060, AppointmentId = 86, PatientUserId = 801, DentistUserId = 901, Status = "Active", CreatedAt = DateTime.UtcNow };
+        var pItem = new PrescriptionItem { PrescriptionItemId = 8601, PrescriptionId = 860, AppointmentId = 86, MedicineId = 1, Dosage = "500mg", Frequency = "Ngày 2 lần", Quantity = 10, QuantityDispensed = 0, CreatedAt = DateTime.UtcNow };
+
+        db.Appointments.Add(appt);
+        db.AppointmentServices.Add(svc);
+        db.TreatmentSessions.Add(session);
+        db.Prescriptions.Add(presc);
+        db.PrescriptionItems.Add(pItem);
+        await db.SaveChangesAsync();
+
+        var medService = new MedicineService(db);
+
+        // 1. Partial dispense: 4 units, MedicineBatchId explicitly null
+        var req1 = new CreateMedicineDispensationRequest
+        {
+            PrescriptionId = 860,
+            Notes = "Cấp đợt 1 tại ghế",
+            Items = new List<DispenseItemInput>
+            {
+                new DispenseItemInput
+                {
+                    PrescriptionItemId = 8601,
+                    MedicineId = 1,
+                    MedicineBatchId = null,
+                    Quantity = 4
+                }
+            }
+        };
+
+        var res1 = await medService.DispenseMedicineAsync(req1, 901, userRole: "Dentist");
+        Assert.NotNull(res1);
+        Assert.Equal("Active", res1.Status);
+        Assert.Single(res1.Items);
+        Assert.Null(res1.Items[0].MedicineBatchId);
+        Assert.Equal(1L, res1.Items[0].MedicineId);
+        Assert.Equal(4, res1.Items[0].QuantityDispensed);
+
+        var medAfter1 = await db.Medicines.FindAsync(1L);
+        Assert.Equal(46, medAfter1!.StockQuantity); // 50 - 4 = 46
+
+        var pItemAfter1 = await db.PrescriptionItems.FindAsync(8601L);
+        Assert.Equal(4, pItemAfter1!.QuantityDispensed);
+
+        // 2. Second partial dispense: remaining 6 units
+        var req2 = new CreateMedicineDispensationRequest
+        {
+            PrescriptionId = 860,
+            Notes = "Cấp đợt 2 đủ đơn",
+            Items = new List<DispenseItemInput>
+            {
+                new DispenseItemInput
+                {
+                    PrescriptionItemId = 8601,
+                    MedicineId = 1,
+                    MedicineBatchId = null,
+                    Quantity = 6
+                }
+            }
+        };
+
+        var res2 = await medService.DispenseMedicineAsync(req2, 901, userRole: "Dentist");
+        Assert.NotNull(res2);
+        Assert.Equal("Dispensed", res2.Status); // All 10 dispensed!
+
+        var medAfter2 = await db.Medicines.FindAsync(1L);
+        Assert.Equal(40, medAfter2!.StockQuantity); // 46 - 6 = 40
+
+        var pItemAfter2 = await db.PrescriptionItems.FindAsync(8601L);
+        Assert.Equal(10, pItemAfter2!.QuantityDispensed);
+
+        // 3. Double-submit / Over-dispense attempt: trying to dispense 1 more unit must fail
+        var req3 = new CreateMedicineDispensationRequest
+        {
+            PrescriptionId = 860,
+            Notes = "Cố cấp thêm",
+            Items = new List<DispenseItemInput>
+            {
+                new DispenseItemInput
+                {
+                    PrescriptionItemId = 8601,
+                    MedicineId = 1,
+                    MedicineBatchId = null,
+                    Quantity = 1
+                }
+            }
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => medService.DispenseMedicineAsync(req3, 901, userRole: "Dentist"));
+        Assert.Contains("đã được cấp 10/10 đơn vị", ex.Message);
+
+        // Verify stock is untouched after failed over-dispense
+        var medAfter3 = await db.Medicines.FindAsync(1L);
+        Assert.Equal(40, medAfter3!.StockQuantity);
+    }
+
     #endregion
 }

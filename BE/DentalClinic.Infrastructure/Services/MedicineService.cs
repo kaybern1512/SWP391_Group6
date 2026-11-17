@@ -606,7 +606,10 @@ public class MedicineService : IMedicineService
                     prescItem = prescription.PrescriptionItems.FirstOrDefault(pi => pi.MedicineId == item.MedicineId);
                 }
 
-                var medId = prescItem?.MedicineId ?? (item.MedicineId > 0 ? item.MedicineId : item.MedicineBatchId);
+                var medId = prescItem?.MedicineId ?? (item.MedicineId > 0 ? item.MedicineId : (item.MedicineBatchId ?? 0));
+                if (medId <= 0)
+                    throw new ArgumentException("Mã thuốc (MedicineId) không hợp lệ.");
+
                 var medicine = await _context.Medicines.FirstOrDefaultAsync(m => m.MedicineId == medId, ct);
                 if (medicine == null)
                     throw new KeyNotFoundException($"Không tìm thấy thuốc với ID {medId}.");
@@ -681,8 +684,8 @@ public class MedicineService : IMedicineService
                     MedicineCode = medicine.MedicineCode,
                     MedicineName = medicine.MedicineName,
                     Unit = medicine.Unit,
-                    MedicineBatchId = medicine.MedicineId,
-                    BatchNumber = $"STOCK-{medicine.MedicineCode}",
+                    MedicineBatchId = item.MedicineBatchId,
+                    BatchNumber = item.MedicineBatchId.HasValue ? $"BATCH-{item.MedicineBatchId.Value}" : $"STOCK-{medicine.MedicineCode}",
                     QuantityDispensed = item.Quantity,
                     UnitPriceSnapshot = snapshotPrice,
                     TotalPrice = lineTotal
@@ -785,7 +788,7 @@ public class MedicineService : IMedicineService
                         MedicineCode = pi.Medicine?.MedicineCode ?? string.Empty,
                         MedicineName = pi.Medicine?.MedicineName ?? string.Empty,
                         Unit = pi.Medicine?.Unit ?? string.Empty,
-                        MedicineBatchId = pi.MedicineId,
+                        MedicineBatchId = null,
                         BatchNumber = pi.Medicine != null ? $"STOCK-{pi.Medicine.MedicineCode}" : string.Empty,
                         QuantityDispensed = pi.QuantityDispensed,
                         UnitPriceSnapshot = unitPrice,
@@ -874,7 +877,7 @@ public class MedicineService : IMedicineService
                         MedicineCode = i.Medicine?.MedicineCode ?? string.Empty,
                         MedicineName = i.Medicine?.MedicineName ?? string.Empty,
                         Unit = i.Medicine?.Unit ?? string.Empty,
-                        MedicineBatchId = i.MedicineId,
+                        MedicineBatchId = null,
                         BatchNumber = i.Medicine != null ? $"STOCK-{i.Medicine.MedicineCode}" : string.Empty,
                         QuantityDispensed = i.QuantityDispensed,
                         UnitPriceSnapshot = unitPrice,

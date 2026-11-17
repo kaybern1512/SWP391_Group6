@@ -714,7 +714,7 @@ public class DentistMedicalRecordController : Controller
                 {
                     PrescriptionItemId = prescriptionItemId,
                     MedicineId = medicineId,
-                    MedicineBatchId = batchId > 0 ? batchId : medicineId,
+                    MedicineBatchId = batchId > 0 ? batchId : null,
                     Quantity = quantity
                 }
             }

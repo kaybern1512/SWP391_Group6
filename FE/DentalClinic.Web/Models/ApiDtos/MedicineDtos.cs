@@ -170,7 +170,7 @@ public class DispenseItemInput
 {
     public long? PrescriptionItemId { get; set; }
     public long MedicineId { get; set; }
-    public long MedicineBatchId { get; set; }
+    public long? MedicineBatchId { get; set; }
     public int Quantity { get; set; }
 }
 
@@ -200,7 +200,7 @@ public class MedicineDispensationItemDto
     public string MedicineCode { get; set; } = string.Empty;
     public string MedicineName { get; set; } = string.Empty;
     public string Unit { get; set; } = string.Empty;
-    public long MedicineBatchId { get; set; }
+    public long? MedicineBatchId { get; set; }
     public string BatchNumber { get; set; } = string.Empty;
     public int QuantityDispensed { get; set; }
     public decimal UnitPriceSnapshot { get; set; }
