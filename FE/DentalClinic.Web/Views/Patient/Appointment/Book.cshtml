@@ -289,7 +289,7 @@
                                                  data-name="@s.ServiceName"
                                                  data-duration="@s.DurationMinutes"
                                                  data-price="@((s.Price ?? 0).ToString("N0")) đ"
-                                                 data-price-num="@(s.Price ?? 0)">
+                                                 data-price-num="@((long)(s.Price ?? 0))">
                                                 <div class="card service-card p-3 h-100 rounded-3 border @(isSelected ? "active border-primary" : "")">
                                                     <div class="d-flex justify-content-between align-items-start mb-2">
                                                         <span class="badge bg-light text-primary border small text-truncate" style="max-width: 180px;">
@@ -306,10 +306,10 @@
                                                     <div class="mt-auto pt-2 border-top d-flex justify-content-between align-items-center">
                                                         <span class="fw-bold text-primary fs-6">@((s.Price ?? 0).ToString("N0")) đ</span>
                                                         <div class="d-flex gap-1">
-                                                            <button type="button" class="btn btn-outline-primary btn-sm px-2 fw-semibold btn-select-main" onclick="event.stopPropagation(); selectPrimaryService(@s.DepartmentServiceId, '@Html.Raw(s.ServiceName)', @s.DepartmentId, '@Html.Raw(s.DepartmentName)', @s.DurationMinutes, '@((s.Price ?? 0).ToString("N0")) đ', @(s.Price ?? 0))">
+                                                            <button type="button" class="btn btn-outline-primary btn-sm px-2 fw-semibold btn-select-main" onclick="event.stopPropagation(); selectPrimaryService(@s.DepartmentServiceId, '@Html.Raw(s.ServiceName)', @s.DepartmentId, '@Html.Raw(s.DepartmentName)', @s.DurationMinutes, '@((s.Price ?? 0).ToString("N0")) đ', @((long)(s.Price ?? 0)))">
                                                                 @(isSelected ? "Đã chọn" : "Chọn chính")
                                                             </button>
-                                                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 fw-semibold btn-toggle-addon" id="btn-addon-@s.DepartmentServiceId" onclick="event.stopPropagation(); toggleAdditionalService(@s.DepartmentServiceId, '@Html.Raw(s.ServiceName)', @s.DepartmentId, '@Html.Raw(s.DepartmentName)', @s.DurationMinutes, @(s.Price ?? 0))">
+                                                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 fw-semibold btn-toggle-addon" id="btn-addon-@s.DepartmentServiceId" onclick="event.stopPropagation(); toggleAdditionalService(@s.DepartmentServiceId, '@Html.Raw(s.ServiceName)', @s.DepartmentId, '@Html.Raw(s.DepartmentName)', @s.DurationMinutes, @((long)(s.Price ?? 0)))">
                                                                 + Thêm
                                                             </button>
                                                         </div>

@@ -227,5 +227,5 @@
      - Thành viên 3: `git checkout -b feature/imaging-cloudinary`
      - Thành viên 4: `git checkout -b feature/reports-analytics`
    - Sau khi hoàn thành và test kỹ $\rightarrow$ commit và tạo Pull Request (PR) về `develop`.
-3. **MẬT KHẨU TÀI KHOẢN TEST:**
-   - Dùng chung: `Password123@` (xem chi tiết bảng 22 tài khoản trong file `SETUP.md`).
+3. **MẬT KHẨU TÀI KHOẢN DEMO / TEST:**
+   - Dùng chung: `DentalCare@2026!` (xem chi tiết tài khoản theo vai trò trong file `docs/DEMO_GUIDE.md` và `release/INSTALLATION_GUIDE.md`).

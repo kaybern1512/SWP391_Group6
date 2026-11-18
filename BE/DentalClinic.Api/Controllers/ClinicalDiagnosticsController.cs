@@ -176,6 +176,38 @@ public class ClinicalDiagnosticsController : ControllerBase
         }
     }
 
+    private async Task<Diagnostic?> FindTargetDiagnosticAsync(long sessionId, CancellationToken ct)
+    {
+        var target = await _dbContext.Diagnostics.AsNoTracking()
+            .Include(d => d.AppointmentService)
+            .FirstOrDefaultAsync(d => d.DiagnosticId == sessionId, ct);
+        if (target != null) return target;
+
+        return await _dbContext.Diagnostics.AsNoTracking()
+            .Include(d => d.AppointmentService)
+            .FirstOrDefaultAsync(d => d.AppointmentServiceId == sessionId, ct);
+    }
+
+    private async Task<bool> IsDentistAuthorizedForDiagnosticAsync(Diagnostic targetDiagnostic, long userId, CancellationToken ct)
+    {
+        var isOrdering = targetDiagnostic.OrderingDentistUserId == userId;
+        var isAssigned = await _dbContext.AppointmentServices.AsNoTracking()
+            .AnyAsync(s => s.AppointmentServiceId == targetDiagnostic.AppointmentServiceId && s.AssignedDentistUserId == userId, ct);
+        var rawStart = (targetDiagnostic.AppointmentService != null && targetDiagnostic.AppointmentService.ScheduledStart > DateTime.MinValue)
+            ? targetDiagnostic.AppointmentService.ScheduledStart
+            : (targetDiagnostic.CreatedAt > DateTime.MinValue ? targetDiagnostic.CreatedAt : DateTime.UtcNow);
+        var rawEnd = (targetDiagnostic.AppointmentService != null && targetDiagnostic.AppointmentService.ScheduledEnd > rawStart)
+            ? targetDiagnostic.AppointmentService.ScheduledEnd
+            : rawStart.AddMinutes(30);
+        var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(userId, rawStart, rawEnd, ct);
+        var isQualifiedXrayDentist = await _dbContext.DentistProfiles.AsNoTracking()
+            .AnyAsync(dp => dp.UserId == userId &&
+                            ((dp.Qualification != null && (dp.Qualification.Contains("Chẩn đoán hình ảnh") || dp.Qualification.Contains("X-quang"))) ||
+                             (dp.Department != null && (dp.Department.Name.Contains("Chẩn đoán hình ảnh") || dp.Department.Name.Contains("X-quang") || dp.Department.Name.Contains("Imaging")))), ct);
+
+        return isOrdering || isAssigned || (isXrayDuty && isQualifiedXrayDentist);
+    }
+
     [HttpPost("sessions/{sessionId}/start")]
     [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<ImagingSessionDto>), StatusCodes.Status200OK)]
@@ -184,6 +216,15 @@ public class ClinicalDiagnosticsController : ControllerBase
         try
         {
             var userId = GetCurrentUserId();
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (role == UserRole.Dentist)
+            {
+                var targetDiagnostic = await FindTargetDiagnosticAsync(sessionId, ct);
+                if (targetDiagnostic != null && !await IsDentistAuthorizedForDiagnosticAsync(targetDiagnostic, userId, ct))
+                {
+                    return Forbid();
+                }
+            }
             var result = await _imagingService.StartImagingSessionAsync(sessionId, userId, ct);
             return Ok(ApiResponse<ImagingSessionDto>.Ok(result, "Bắt đầu ca chụp X-quang thành công."));
         }
@@ -200,6 +241,16 @@ public class ClinicalDiagnosticsController : ControllerBase
     {
         try
         {
+            var userId = GetCurrentUserId();
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (role == UserRole.Dentist)
+            {
+                var targetDiagnostic = await FindTargetDiagnosticAsync(sessionId, ct);
+                if (targetDiagnostic != null && !await IsDentistAuthorizedForDiagnosticAsync(targetDiagnostic, userId, ct))
+                {
+                    return Forbid();
+                }
+            }
             var result = await _imagingService.AcquireImageAsync(sessionId, ct);
             return Ok(ApiResponse<ImagingSessionDto>.Ok(result, "Ghi nhận hình ảnh thành công."));
         }
@@ -233,21 +284,7 @@ public class ClinicalDiagnosticsController : ControllerBase
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
             if (role == UserRole.Dentist)
             {
-                var isOrdering = targetDiagnostic.OrderingDentistUserId == userId;
-                var isAssigned = await _dbContext.AppointmentServices.AsNoTracking()
-                    .AnyAsync(s => s.AppointmentServiceId == targetDiagnostic.AppointmentServiceId && s.AssignedDentistUserId == userId, ct);
-                var rawTime = (targetDiagnostic.AppointmentService != null && targetDiagnostic.AppointmentService.ScheduledStart > DateTime.MinValue)
-                    ? targetDiagnostic.AppointmentService.ScheduledStart
-                    : (targetDiagnostic.CreatedAt > DateTime.MinValue ? targetDiagnostic.CreatedAt : DateTime.UtcNow);
-                var safeStart = rawTime > DateTime.MinValue.AddHours(1) ? rawTime.AddHours(-1) : DateTime.MinValue;
-                var safeEnd = rawTime < DateTime.MaxValue.AddHours(-12) ? rawTime.AddHours(12) : DateTime.MaxValue;
-                var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(userId, safeStart, safeEnd, ct);
-                var isQualifiedXrayDentist = await _dbContext.DentistProfiles.AsNoTracking()
-                    .AnyAsync(dp => dp.UserId == userId && dp.Qualification != null && (dp.Qualification.Contains("Chẩn đoán hình ảnh") || dp.Qualification.Contains("X-quang")), ct);
-
-                // DATA INTEGRITY: Never trust free-text metadata tags in ClinicalIndication as authorization evidence.
-                // Authorization must be verified strictly against canonical database relations and active work schedules.
-                if (!isOrdering && !isAssigned && !(isXrayDuty && isQualifiedXrayDentist))
+                if (!await IsDentistAuthorizedForDiagnosticAsync(targetDiagnostic, userId, ct))
                 {
                     return Forbid();
                 }
@@ -269,6 +306,16 @@ public class ClinicalDiagnosticsController : ControllerBase
     {
         try
         {
+            var userId = GetCurrentUserId();
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (role == UserRole.Dentist)
+            {
+                var targetDiagnostic = await FindTargetDiagnosticAsync(sessionId, ct);
+                if (targetDiagnostic != null && !await IsDentistAuthorizedForDiagnosticAsync(targetDiagnostic, userId, ct))
+                {
+                    return Forbid();
+                }
+            }
             var result = await _imagingService.CompleteImagingSessionAsync(sessionId, ct);
             return Ok(ApiResponse<ImagingSessionDto>.Ok(result, "Hoàn tất phiên chụp X-quang thành công."));
         }
@@ -441,7 +488,9 @@ public class ClinicalDiagnosticsController : ControllerBase
                 var safeEnd = rawTime < DateTime.MaxValue.AddHours(-12) ? rawTime.AddHours(12) : DateTime.MaxValue;
                 var isXrayDuty = await _xrayRosterService.IsDentistOnXrayDutyAsync(userId, safeStart, safeEnd, ct);
                 var isQualifiedXrayDentist = await _dbContext.DentistProfiles.AsNoTracking()
-                    .AnyAsync(dp => dp.UserId == userId && dp.Qualification != null && (dp.Qualification.Contains("Chẩn đoán hình ảnh") || dp.Qualification.Contains("X-quang")), ct);
+                    .AnyAsync(dp => dp.UserId == userId &&
+                                    ((dp.Qualification != null && (dp.Qualification.Contains("Chẩn đoán hình ảnh") || dp.Qualification.Contains("X-quang"))) ||
+                                     (dp.Department != null && (dp.Department.Name.Contains("Chẩn đoán hình ảnh") || dp.Department.Name.Contains("X-quang") || dp.Department.Name.Contains("Imaging")))), ct);
 
                 // DATA INTEGRITY: Never trust free-text metadata tags in ClinicalIndication as authorization evidence.
                 // Authorization must be verified strictly against canonical database relations and active work schedules.

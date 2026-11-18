@@ -36,16 +36,16 @@ DentalCare-DB-Simplification/
 │   ├── DentalClinic.Web.Tests/           # XUnit Tests cho Frontend (339 tests)
 │   └── DentalClinic.Web.sln              # Solution Frontend
 ├── DB/                                    # Tài nguyên Cơ sở dữ liệu
-│   ├── DentalClinic_Schema_Full_Standalone.sql # Schema DDL độc lập 38 bảng
-│   └── DentalClinic_UAT_Seed_Data.sql    # Dữ liệu khởi tạo mẫu
+│   ├── DentalCare_Schema.sql             # Schema DDL độc lập 38 bảng chuẩn
+│   ├── DentalCare_Seed.sql               # Dữ liệu khởi tạo mẫu chuẩn V2
+│   └── README.md                         # Hướng dẫn chi tiết thiết lập database
 ├── release/                               # Bộ tài liệu & cấu hình bàn giao
 │   ├── configuration/                    # File cấu hình mẫu & env
 │   ├── DATABASE_SETUP.md                 # Hướng dẫn thiết lập SQL Server
 │   ├── INSTALLATION_GUIDE.md             # Tài liệu này
 │   ├── RUN_GUIDE.md                      # Hướng dẫn chạy và tài khoản demo
 │   ├── TESTING_GUIDE.md                  # Hướng dẫn chạy test suite tự động
-│   ├── RELEASE_CHECKLIST.md              # Bảng kiểm tra trước nghiệm thu
-│   └── RELEASE_VERIFICATION_REPORT.md    # Báo cáo kỹ thuật xác minh hệ thống
+│   └── RELEASE_CHECKLIST.md              # Bảng kiểm tra trước nghiệm thu
 ├── run_demo.ps1                           # Script khởi động demo tự động 1-click
 └── stop_demo.ps1                          # Script dừng toàn bộ tiến trình hệ thống
 ```
@@ -57,7 +57,7 @@ DentalCare-DB-Simplification/
 ### Bước 3.1: Mở Terminal Tại Thư Mục Gốc Dự Án
 Mở PowerShell và chuyển đến thư mục repository:
 ```powershell
-cd D:\SWP391\DentalCare-DB-Simplification
+cd D:\SWP391\DentalCare-Integration
 ```
 
 ### Bước 3.2: Kiểm Tra Phiên Bản .NET SDK
@@ -67,18 +67,18 @@ dotnet --version
 *Kết quả phải trả về phiên bản dạng `8.0.xxx`.*
 
 ### Bước 3.3: Thiết Lập Cơ Sở Dữ Liệu SQL Server
-Thực hiện tạo database và nạp schema theo hướng dẫn tại [release/DATABASE_SETUP.md](file:///D:/SWP391/DentalCare-DB-Simplification/release/DATABASE_SETUP.md).
+Thực hiện tạo database và nạp schema theo hướng dẫn tại [DB/README.md](../DB/README.md).
 
 Tóm tắt lệnh tạo nhanh trên PowerShell:
 ```powershell
 # 1. Tạo database
-sqlcmd -S .\SQLEXPRESS -E -Q "CREATE DATABASE [DentalCare_SWP391_UAT_Fixture_TEST];"
+sqlcmd -S .\SQLEXPRESS -E -Q "CREATE DATABASE [DentalCare_SWP391_DEMO_V2_TEST];"
 
 # 2. Chạy DDL schema 38 bảng
-sqlcmd -S .\SQLEXPRESS -d DentalCare_SWP391_UAT_Fixture_TEST -E -i "DB\DentalClinic_Schema_Full_Standalone.sql"
+sqlcmd -S .\SQLEXPRESS -d DentalCare_SWP391_DEMO_V2_TEST -E -i "DB\DentalCare_Schema.sql"
 
 # 3. Nạp dữ liệu mẫu khởi tạo
-sqlcmd -S .\SQLEXPRESS -d DentalCare_SWP391_UAT_Fixture_TEST -E -i "DB\DentalClinic_UAT_Seed_Data.sql"
+sqlcmd -S .\SQLEXPRESS -d DentalCare_SWP391_DEMO_V2_TEST -E -i "DB\DentalCare_Seed.sql"
 ```
 
 ### Bước 3.4: Restore Các Gói Nuget Phụ Thuộc

@@ -191,21 +191,26 @@ public class TreatmentService : ITreatmentService
             int seq = 1;
             foreach (var itemInput in request.Items)
             {
-                var est = itemInput.EstimatedCost ?? 0m;
+                var svcId = (int)(itemInput.DepartmentServiceId ?? 1);
+                var catalogSvc = await _dbContext.DepartmentServices.FirstOrDefaultAsync(s => s.DepartmentServiceId == svcId, ct);
+                var authoritativePrice = catalogSvc?.Price ?? itemInput.EstimatedCost ?? 0m;
+                var itemSeq = itemInput.SequenceNo > 0 ? itemInput.SequenceNo : seq;
+                seq = Math.Max(seq + 1, itemSeq + 1);
+
                 var item = new TreatmentPlanItem
                 {
                     TreatmentPlanId = plan.TreatmentPlanId,
-                    DepartmentServiceId = (int)(itemInput.DepartmentServiceId ?? 1),
+                    DepartmentServiceId = svcId,
                     ToothNumber = itemInput.ToothNumber,
-                    SequenceNo = itemInput.SequenceNo > 0 ? itemInput.SequenceNo : seq++,
-                    EstimatedCost = est,
+                    SequenceNo = itemSeq,
+                    EstimatedCost = authoritativePrice,
                     Status = !string.IsNullOrWhiteSpace(itemInput.Status) ? itemInput.Status : "Planned",
                     Notes = itemInput.Note,
                     CreatedAt = now,
                     UpdatedAt = now
                 };
 
-                totalEstimated += est;
+                totalEstimated += authoritativePrice;
                 _dbContext.TreatmentPlanItems.Add(item);
             }
 

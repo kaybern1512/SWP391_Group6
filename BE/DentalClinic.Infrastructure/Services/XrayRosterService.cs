@@ -56,7 +56,12 @@ public class XrayRosterService : IXrayRosterService
         if (request.RoomId.HasValue)
         {
             var roomIdInt = (int)request.RoomId.Value;
-            var room = await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == roomIdInt, ct);
+            var room = await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == roomIdInt, ct)
+                ?? await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomCode == "R003" || r.RoomType == "Imaging", ct);
+            if (room != null)
+            {
+                roomIdInt = room.RoomId;
+            }
             var roomCode = room?.RoomCode ?? "R003";
             var roomTag = $"[XRAY:RoomId={roomIdInt}]";
             var roomCodeTag = $"[{roomCode}]";
@@ -109,7 +114,12 @@ public class XrayRosterService : IXrayRosterService
         var workDate = DateOnly.FromDateTime(localDateTime);
         var timeOfDay = TimeOnly.FromDateTime(localDateTime);
         var roomIdInt = (int)roomId;
-        var room = await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == roomIdInt, ct);
+        var room = await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == roomIdInt, ct)
+            ?? await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomCode == "R003" || r.RoomType == "Imaging", ct);
+        if (room != null)
+        {
+            roomIdInt = room.RoomId;
+        }
         var roomCode = room?.RoomCode ?? "R003";
         var roomTag = $"[XRAY:RoomId={roomIdInt}]";
         var roomCodeTag = $"[{roomCode}]";

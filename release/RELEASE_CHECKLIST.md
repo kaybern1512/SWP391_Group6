@@ -20,7 +20,7 @@
 | | Script chạy kiểm thử tự động `sync-and-test.ps1` | ✅ ĐẠT | Thực thi trơn tru, đường dẫn tương đối động |
 | **4. Cơ Sở Dữ Liệu** | Số lượng bảng vật lý chuẩn Entity Framework | ✅ ĐẠT | Đúng **38 bảng vật lý** (37 bảng nghiệp vụ + 1 bảng EF history) |
 | | Toàn vẹn khóa ngoại (Foreign Keys) & Ràng buộc (Check) | ✅ ĐẠT | 91 FKs, 80 CHECKs đang kích hoạt (Zero Global NOCHECK) |
-| | Script standalone DDL `DentalClinic_Schema_Full_Standalone.sql` | ✅ ĐẠT | Độc lập môi trường, có cơ chế an toàn chống chạy đè |
+| | Script standalone DDL `DentalCare_Schema.sql` | ✅ ĐẠT | Độc lập môi trường, có cơ chế an toàn chống chạy đè |
 | | Bảo vệ an toàn cơ sở dữ liệu gốc | ✅ ĐẠT | Tuyệt đối không can thiệp `DentalCare_SWP391` và `DentalCare_SWP391_Refactor_UAT` |
 | | Database kiểm thử / demo hoạt động | ✅ ĐẠT | `DentalCare_SWP391_UAT_Fixture_TEST` trên `.\SQLEXPRESS` |
 | **5. Kiến Trúc & RBAC** | Chuẩn 4 vai trò duy nhất theo đặc tả đề tài | ✅ ĐẠT | `Patient`, `Receptionist`, `Dentist`, `SystemAdministrator` |

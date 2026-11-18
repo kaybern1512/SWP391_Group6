@@ -31,11 +31,14 @@
 
   <ItemGroup>
     <Compile Remove="**/*.cs" />
+    <Compile Include="Appointments/AppointmentLifecycleWorkflowTests.cs" />
     <Compile Include="Booking/VietnamTimezoneStandardizationTests.cs" />
     <Compile Include="Booking/BookingCoreIntegrityTests.cs" />
     <Compile Include="Clinical/ClinicalExecutionIntegrityTests.cs" />
     <Compile Include="Clinical/ClinicalBillingAcceptanceTests.cs" />
+    <Compile Include="Clinical/ClinicalBugTriageAndLifecycleRegressionTests.cs" />
     <Compile Include="Diagnostics/DiagnosticsAndReferralIntegrityTests.cs" />
+    <Compile Include="ClinicalDiagnostics/DiagnosticTypeMappingTests.cs" />
     <Compile Include="Medicine/PrescriptionAndDispensingIntegrityTests.cs" />
     <Compile Include="Medicine/AdminMedicineSimplificationAcceptanceTests.cs" />
     <Compile Include="Billing/InvoiceAndPaymentIntegrityTests.cs" />

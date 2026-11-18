@@ -325,6 +325,38 @@ public class ReceptionistAppointmentController : Controller
         return RedirectToAction(nameof(Requests));
     }
 
+    [HttpPost("{id:long}/ApproveReschedule")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApproveReschedule(long id)
+    {
+        var result = await _appointmentApiService.ReceptionistApproveRescheduleAsync(id);
+        if (result != null && result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Đã phê duyệt yêu cầu đổi lịch thành công.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result?.Message ?? "Không thể phê duyệt yêu cầu đổi lịch.";
+        }
+        return RedirectToAction(nameof(TodayCheckIn));
+    }
+
+    [HttpPost("{id:long}/RejectReschedule")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RejectReschedule(long id, [FromForm] string reason)
+    {
+        var result = await _appointmentApiService.ReceptionistRejectRescheduleAsync(id, reason);
+        if (result != null && result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Đã từ chối yêu cầu đổi lịch thành công.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result?.Message ?? "Không thể từ chối yêu cầu đổi lịch.";
+        }
+        return RedirectToAction(nameof(TodayCheckIn));
+    }
+
     [HttpPost("Reject/{id:long}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Reject(long id, [FromForm] string reason)

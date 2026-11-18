@@ -89,6 +89,28 @@
         </div>
     }
 
+    <!-- PENDING RESCHEDULE REQUEST BANNER -->
+    @if (appt.PendingActionType == "RescheduleRequested")
+    {
+        <div class="card border-info shadow-sm mb-4 border-start border-5 border-info">
+            <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-info-subtle text-info p-3 rounded-circle">
+                        <i class="bi bi-clock-history fs-3"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-slate-800 mb-1">Yêu Cầu Dời Lịch Hẹn Đang Chờ Lễ Tân Tiếp Nhận</h5>
+                        <p class="text-secondary mb-0">
+                            Bạn đã gửi yêu cầu dời lịch hẹn sang: <strong>@(appt.PendingActionStart?.ToString("dd/MM/yyyy HH:mm") ?? "thời gian mới")</strong>.
+                            Lịch hẹn hiện tại của bạn vẫn được giữ nguyên cho đến khi Lễ tân xác nhận duyệt yêu cầu.
+                        </p>
+                    </div>
+                </div>
+                <span class="badge bg-info text-white px-3 py-2 fs-6">Đang Xử Lý</span>
+            </div>
+        </div>
+    }
+
     <!-- PROPOSAL BANNER IF AWAITING PATIENT RESPONSE -->
     @if (appt.Status == "AwaitingPatientResponse" && Model.ActiveProposal != null)
     {

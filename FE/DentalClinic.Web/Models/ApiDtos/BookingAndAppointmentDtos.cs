@@ -295,6 +295,8 @@ public class AppointmentDto
     public bool RequiresFollowUp { get; set; } = false;
     public long? TreatmentPlanId { get; set; }
     public long? TreatmentPlanItemId { get; set; }
+    public string? PendingActionType { get; set; }
+    public DateTime? PendingActionStart { get; set; }
 
     public AppointmentChangeProposalDto? ActiveProposal { get; set; }
     public List<AppointmentServiceItemDto> Services { get; set; } = new();
@@ -474,4 +476,30 @@ public class StartAppointmentResultDto
     public long PatientUserId { get; set; }
     public string Status { get; set; } = "InService";
     public long? DentalChairId { get; set; }
+}
+
+public class RescheduleRejectRequest
+{
+    public string Reason { get; set; } = string.Empty;
+}
+
+public class DentistContinueAfternoonRequest
+{
+    public DateTime ContinuationStartTime { get; set; }
+    public int ContinuationDurationMinutes { get; set; } = 45;
+    public string? ClinicalNotes { get; set; }
+}
+
+public class DentistRecommendAnotherDayRequest
+{
+    public DateTime RecommendedDate { get; set; }
+    public int? RecommendedServiceId { get; set; }
+    public string ClinicalReason { get; set; } = string.Empty;
+    public string? CompletedWorkNotes { get; set; }
+    public string? RemainingWorkNotes { get; set; }
+}
+
+public class DentistFlagDelayRequest
+{
+    public string Notes { get; set; } = string.Empty;
 }

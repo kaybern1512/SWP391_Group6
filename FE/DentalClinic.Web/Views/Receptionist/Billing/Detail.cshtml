@@ -491,7 +491,7 @@
                             <div class="mb-3">
                                 <label class="form-label fw-semibold text-dark mb-1">Số tiền thu đợt này (đ) <span class="text-danger">*</span></label>
                                 <div class="input-group input-group-lg">
-                                    <input type="number" name="Amount" id="payAmountInput" class="form-control fw-bold text-success bg-light" value="@Model.RemainingAmount" max="@Model.RemainingAmount" min="1000" step="1000" readonly required />
+                                    <input type="number" name="Amount" id="payAmountInput" class="form-control fw-bold text-success bg-light" value="@((long)Model.RemainingAmount)" max="@((long)Model.RemainingAmount)" min="1000" step="1000" readonly required />
                                     <span class="input-group-text fw-bold">đ</span>
                                 </div>
                                 <div class="form-text small text-muted mt-1" id="payAmountHint">
@@ -565,7 +565,7 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold text-dark">Số tiền hoàn trả (đ) <span class="text-danger">*</span></label>
-                        <input type="number" name="Amount" class="form-control form-control-lg fw-bold text-danger" value="@Model.PaidAmount" max="@Model.PaidAmount" min="1000" step="1000" required />
+                        <input type="number" name="Amount" class="form-control form-control-lg fw-bold text-danger" value="@((long)Model.PaidAmount)" max="@((long)Model.PaidAmount)" min="1000" step="1000" required />
                         <div class="form-text small text-muted">
                             <i class="bi bi-info-circle me-1"></i>Tối đa có thể hoàn: @Model.PaidAmount.ToString("N0") đ.
                         </div>
@@ -626,7 +626,7 @@
                     const amountHint = document.getElementById('payAmountHint');
                     if (amountInput) {
                         if (isFull) {
-                            amountInput.value = '@Model.RemainingAmount';
+                            amountInput.value = '@((long)Model.RemainingAmount)';
                             amountInput.setAttribute('readonly', 'readonly');
                             amountInput.classList.add('bg-light');
                             if (amountHint) {
@@ -646,7 +646,7 @@
 
                 function updateQrCode() {
                     if (!vietQrImg) return;
-                    const amount = Math.round(parseFloat(payAmountInput.value) || @Model.RemainingAmount);
+                    const amount = Math.round(parseFloat(payAmountInput.value) || @((long)Model.RemainingAmount));
                     const invoiceCode = '@Model.InvoiceCode';
                     const url = `https://img.vietqr.io/image/@DentalClinic.Web.Helpers.VietQrHelper.BankId-@DentalClinic.Web.Helpers.VietQrHelper.AccountNo-compact2.png?amount=${amount}&addInfo=THANH%20TOAN%20${encodeURIComponent(invoiceCode)}&accountName=@Uri.EscapeDataString(DentalClinic.Web.Helpers.VietQrHelper.AccountName)`;
                     vietQrImg.src = url;
@@ -666,7 +666,7 @@
 
                 if (btnPayFull && payAmountInput) {
                     btnPayFull.addEventListener('click', function () {
-                        payAmountInput.value = '@Model.RemainingAmount';
+                        payAmountInput.value = '@((long)Model.RemainingAmount)';
                         if (methodBank && methodBank.checked) {
                             updateQrCode();
                         }

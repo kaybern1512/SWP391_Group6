@@ -135,6 +135,61 @@ public class ClinicalStaffAvailabilityService : IClinicalStaffAvailabilityServic
         var startLocalTime = TimeOnly.FromDateTime(start);
         var endLocalTime = TimeOnly.FromDateTime(end);
 
+        if (start != default && start != DateTime.MinValue && start.Date != DateTime.MinValue.Date && startLocalTime != TimeOnly.MinValue)
+        {
+            // Shift Boundary Validations (Section 3.1 & Phase A)
+            // Morning shift boundary: 08:00 - 12:00
+            if (startLocalTime < new TimeOnly(12, 0) && endLocalTime > new TimeOnly(12, 0))
+            {
+                return (false, $"Khung giờ {startLocalTime:HH\\:mm} không đủ thời gian thực hiện dịch vụ trước khi kết thúc ca trực lúc 12:00. Vui lòng chọn khung giờ sớm hơn hoặc chuyển sang ca chiều.");
+            }
+
+            // Lunch break: 12:00 - 13:00
+            if (startLocalTime >= new TimeOnly(12, 0) && startLocalTime < new TimeOnly(13, 0))
+            {
+                return (false, $"Khung giờ {startLocalTime:HH\\:mm} nằm trong giờ nghỉ trưa của phòng khám (12:00 - 13:30). Vui lòng chọn ca sáng (08:00 - 12:00) hoặc ca chiều (13:30 - 17:30).");
+            }
+
+            // Afternoon shift boundary: 13:30 - 17:30
+            if (startLocalTime >= new TimeOnly(13, 0) && startLocalTime < new TimeOnly(17, 30) && endLocalTime > new TimeOnly(17, 30))
+            {
+                return (false, $"Khung giờ {startLocalTime:HH\\:mm} không đủ thời gian thực hiện dịch vụ trước khi kết thúc ca trực lúc 17:30. Vui lòng chọn khung giờ sớm hơn.");
+            }
+
+            // Outside clinic shift hours
+            if (startLocalTime < new TimeOnly(8, 0) || startLocalTime >= new TimeOnly(18, 0))
+            {
+                return (false, $"Khung giờ {startLocalTime:HH\\:mm} nằm ngoài thời gian làm việc của các ca trực phòng khám (Ca sáng: 08:00 - 12:00, Ca chiều: 13:30 - 17:30).");
+            }
+
+            // Check if doctor has specific work schedules on this date
+            var doctorSchedules = await _dbContext.StaffWorkSchedules
+                .AsNoTracking()
+                .Where(ws => ws.StaffUserId == dentistUserId &&
+                             ws.WorkDate >= reqStartDate &&
+                             ws.WorkDate <= reqEndDate &&
+                             ws.Status == "Scheduled")
+                .ToListAsync(ct);
+
+            // Check if doctor has specific clinical work schedules on this date (excluding dedicated X-ray duty shifts)
+            var clinicalSchedules = doctorSchedules
+                .Where(ws => ws.Notes == null || (!ws.Notes.Contains("X-quang") && !ws.Notes.Contains("X-ray") && !ws.Notes.Contains("R003")))
+                .ToList();
+
+            if (clinicalSchedules.Any())
+            {
+                var matchingShift = clinicalSchedules.FirstOrDefault(ws => ws.StartTime <= startLocalTime && ws.EndTime > startLocalTime);
+                if (matchingShift == null)
+                {
+                    return (false, $"Bác sĩ không có ca trực trong khung giờ {startLocalTime:HH\\:mm} - {endLocalTime:HH\\:mm} ngày {reqStartDate:dd/MM/yyyy}.");
+                }
+                if (endLocalTime > matchingShift.EndTime)
+                {
+                    return (false, $"Khung giờ {startLocalTime:HH\\:mm} không đủ thời gian thực hiện dịch vụ trước khi kết thúc ca trực lúc {matchingShift.EndTime:HH\\:mm}. Vui lòng chọn khung giờ sớm hơn hoặc chuyển sang ca chiều.");
+                }
+            }
+        }
+
         var isXrayDuty = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
             .AnyAsync(ws => ws.StaffRole == UserRole.Dentist &&

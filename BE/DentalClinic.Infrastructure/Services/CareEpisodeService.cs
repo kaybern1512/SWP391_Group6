@@ -406,6 +406,12 @@ public class CareEpisodeService : ICareEpisodeService
         CompleteServiceTaskRequest request,
         CancellationToken ct = default)
     {
+        using var taskLock = await SqlAppLockHelper.AcquireLocksAsync(
+            _dbContext,
+            new[] { $"CARE_TASK_{serviceTaskId}" },
+            10000,
+            ct);
+
         var apptService = await _dbContext.AppointmentServices
             .Include(s => s.Appointment)
             .Include(s => s.DepartmentService)
@@ -1425,7 +1431,8 @@ public class CareEpisodeService : ICareEpisodeService
         }
 
         var hasPerformed = await _dbContext.PerformedServices
-            .AnyAsync(ps => ps.AppointmentServiceId == apptService.AppointmentServiceId, ct);
+            .AnyAsync(ps => ps.AppointmentServiceId == apptService.AppointmentServiceId &&
+                            ps.DepartmentServiceId == apptService.DepartmentServiceId, ct);
 
         if (!hasPerformed)
         {

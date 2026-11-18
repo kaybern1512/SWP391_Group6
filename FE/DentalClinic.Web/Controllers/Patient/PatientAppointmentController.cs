@@ -138,13 +138,19 @@ var vm = new AppointmentListViewModel
 
     }
 
-private static readonly string[] ExcludedDepartmentKeywords = new[] { "hình ảnh", "chuẩn đoán", "chẩn đoán", "phục hình" };
+private static readonly string[] ExcludedDepartmentKeywords = new[] { "hình ảnh", "chuẩn đoán", "chẩn đoán", "x-quang", "xray" };
 
 private static bool IsAllowedBookingDepartment(DepartmentDto d)
 
     {
 
         if (d == null || string.IsNullOrWhiteSpace(d.Name)) return false;
+
+        if (d.Name.Contains("phục hình", StringComparison.OrdinalIgnoreCase) &&
+            !d.Name.Contains("chỉnh nha", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
 
         return !ExcludedDepartmentKeywords.Any(k => d.Name.Contains(k, StringComparison.OrdinalIgnoreCase));
 
@@ -1071,7 +1077,12 @@ var result = await _appointmentApiService.PatientRescheduleAsync(id, req);
 
         }
 
-TempData["SuccessMessage"] = result.Message ?? "Đã hủy lịch hẹn cũ và chuyển sang lịch khám mới thành công!";
+        TempData["SuccessMessage"] = result.Message ?? "Yêu cầu dời lịch hẹn đã được gửi thành công!";
+
+        if (result.Data?.PendingActionType == "RescheduleRequested" || result.Data?.Status == "Confirmed")
+        {
+            return RedirectToAction(nameof(Detail), new { id = result.Data.AppointmentId });
+        }
 
         return RedirectToAction(nameof(Success), new { id = result.Data!.AppointmentId });
 

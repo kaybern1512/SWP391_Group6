@@ -376,4 +376,119 @@ public class DentistAppointmentController : Controller
         }
         return RedirectToAction(nameof(Today));
     }
+
+    [HttpPost("{id:long}/ContinueAfternoon")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ContinueAfternoon(
+        long id,
+        [FromForm] DateTime continuationStart,
+        [FromForm] int durationMinutes,
+        [FromForm] string? notes = null,
+        [FromForm] string? returnUrl = null)
+    {
+        IActionResult RedirectTarget()
+        {
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+            return RedirectToAction(nameof(Today));
+        }
+
+        if (continuationStart == default)
+        {
+            TempData["ErrorMessage"] = "Vui lòng chọn thời gian bắt đầu ca chiều hợp lệ.";
+            return RedirectTarget();
+        }
+
+        var result = await _appointmentApiService.DentistContinueAfternoonAsync(id, continuationStart, durationMinutes, notes);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Đã tạm dừng ca sáng và thiết lập ca tiếp tục buổi chiều thành công!";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể tạo phiên tiếp tục ca chiều.";
+        }
+        return RedirectTarget();
+    }
+
+    [HttpPost("{id:long}/RecommendAnotherDay")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RecommendAnotherDay(
+        long id,
+        [FromForm] DateTime recommendedDate,
+        [FromForm] int? serviceId = null,
+        [FromForm] string? clinicalReason = null,
+        [FromForm] string? completedNotes = null,
+        [FromForm] string? remainingNotes = null,
+        [FromForm] string? returnUrl = null)
+    {
+        IActionResult RedirectTarget()
+        {
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+            return RedirectToAction(nameof(Today));
+        }
+
+        if (recommendedDate == default)
+        {
+            TempData["ErrorMessage"] = "Vui lòng chọn ngày hẹn điều trị tiếp theo.";
+            return RedirectTarget();
+        }
+
+        var result = await _appointmentApiService.DentistRecommendAnotherDayAsync(
+            id,
+            recommendedDate,
+            serviceId,
+            clinicalReason ?? "Hẹn tiếp tục điều trị giai đoạn sau do hết thời lượng ca trực",
+            completedNotes,
+            remainingNotes);
+
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Đã ghi nhận công việc hoàn tất và lập lịch hẹn tiếp theo thành công!";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể lập lịch hẹn tiếp theo.";
+        }
+        return RedirectTarget();
+    }
+
+    [HttpPost("{id:long}/FlagDelay")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> FlagDelay(
+        long id,
+        [FromForm] string notes,
+        [FromForm] string? returnUrl = null)
+    {
+        IActionResult RedirectTarget()
+        {
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+            return RedirectToAction(nameof(Today));
+        }
+
+        if (string.IsNullOrWhiteSpace(notes))
+        {
+            TempData["ErrorMessage"] = "Vui lòng nhập lý do cảnh báo trễ ca.";
+            return RedirectTarget();
+        }
+
+        var result = await _appointmentApiService.DentistFlagDelayAsync(id, notes);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Đã phát tín hiệu cảnh báo trễ ca ưu tiên cao đến Bàn Tiếp Đón & Lễ Tân thành công!";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể phát tín hiệu cảnh báo trễ ca.";
+        }
+        return RedirectTarget();
+    }
 }

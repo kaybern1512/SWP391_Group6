@@ -1,4 +1,11 @@
-﻿-- =====================================================================================
+﻿-- DENTALCARE CANONICAL DEMO V2 — SCHEMA
+-- Derived from user-provided DentalClinic_Schema_Full_Standalone(3).sql.
+-- Run ONLY on a separately created EMPTY database, using sqlcmd with -b -f 65001.
+-- DOES NOT create/drop/alter an existing database; original guard stops on non-empty DB.
+-- REFERENCE SNAPSHOT: actual current code/EF migrations are NOT available for live comparison here.
+-- Do not run on DentalCare_SWP391, DentalCare_SWP391_UAT_Fixture_TEST or a populated DB.
+
+-- =====================================================================================
 -- DENTALCARE CLINIC MANAGEMENT SYSTEM
 -- SWP391 - GROUP 6
 -- FULL CLEAN STANDALONE DATABASE SCHEMA (FINAL SIMPLIFIED ARCHITECTURE)
@@ -575,8 +582,9 @@ CREATE TABLE [dbo].[Appointments] (
     CONSTRAINT [FK_Appointments_CreatedBy] FOREIGN KEY ([CreatedByUserId]) REFERENCES [dbo].[UserAccounts] ([UserId]),
     CONSTRAINT [CK_Appointments_Source] CHECK ([BookingSource] IN ('Patient', 'Receptionist')),
     CONSTRAINT [CK_Appointments_Status] CHECK ([Status] IN (
-        'PendingReceptionReview', 'Confirmed', 'CheckedIn', 'InProgress',
-        'Completed', 'Cancelled', 'NoShow'
+        'PendingReceptionReview', 'PendingDepartmentReview', 'AwaitingPatientResponse',
+        'Confirmed', 'CheckedIn', 'InProgress',
+        'Completed', 'Cancelled', 'NoShow', 'Rejected', 'Withdrawn', 'Expired'
     ))
 );
 GO
@@ -655,10 +663,11 @@ CREATE TABLE [dbo].[AppointmentServices] (
     CONSTRAINT [CK_AppointmentServices_QueueNumber] CHECK ([QueueNumber] IS NULL OR [QueueNumber] > 0),
     CONSTRAINT [CK_AppointmentServices_Price] CHECK ([UnitPrice] >= 0),
     CONSTRAINT [CK_AppointmentServices_Status] CHECK ([Status] IN (
-        'PendingReceptionReview', 'Confirmed', 'CheckedIn', 'Waiting', 'Called',
-        'InService', 'Completed', 'Cancelled', 'NoShow'
+        'PendingReceptionReview', 'PendingDepartmentReview', 'AwaitingPatientResponse',
+        'Confirmed', 'CheckedIn', 'Waiting', 'Called',
+        'InService', 'Completed', 'Cancelled', 'NoShow', 'Rejected', 'Withdrawn', 'Expired'
     )),
-    CONSTRAINT [CK_AppointmentServices_PendingAction] CHECK ([PendingActionType] IS NULL OR [PendingActionType] IN ('Reschedule', 'ChangeDentist', 'ContactStaff')),
+    CONSTRAINT [CK_AppointmentServices_PendingAction] CHECK ([PendingActionType] IS NULL OR [PendingActionType] IN ('Reschedule', 'RescheduleRequested', 'ChangeDentist', 'ContactStaff')),
     CONSTRAINT [CK_AppointmentServices_PendingTime] CHECK ([PendingScheduledEnd] IS NULL OR [PendingScheduledStart] IS NULL OR [PendingScheduledEnd] > [PendingScheduledStart])
 );
 GO

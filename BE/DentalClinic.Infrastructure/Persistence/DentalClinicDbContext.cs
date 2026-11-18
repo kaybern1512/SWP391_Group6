@@ -609,7 +609,7 @@ public partial class DentalClinicDbContext : DbContext
             entity.ToTable("Appointments", t =>
             {
                 t.HasCheckConstraint("CK_Appointments_Source", "[BookingSource] IN ('Patient', 'Receptionist')");
-                t.HasCheckConstraint("CK_Appointments_Status", "[Status] IN ('PendingReceptionReview', 'Confirmed', 'CheckedIn', 'InProgress', 'Completed', 'Cancelled', 'NoShow')");
+                t.HasCheckConstraint("CK_Appointments_Status", "[Status] IN ('PendingReceptionReview', 'PendingDepartmentReview', 'AwaitingPatientResponse', 'Confirmed', 'CheckedIn', 'InProgress', 'Completed', 'Cancelled', 'NoShow', 'Rejected', 'Withdrawn', 'Expired')");
             });
 
             entity.HasIndex(e => new { e.AppointmentId, e.PatientUserId }, "UQ_Appointments_Id_Patient").IsUnique();
@@ -656,8 +656,8 @@ public partial class DentalClinicDbContext : DbContext
                 t.HasCheckConstraint("CK_AppointmentServices_QueueRequired", "[Status] NOT IN ('CheckedIn', 'Waiting', 'Called', 'InService') OR [QueueNumber] IS NOT NULL");
                 t.HasCheckConstraint("CK_AppointmentServices_QueueNumber", "[QueueNumber] IS NULL OR [QueueNumber] > 0");
                 t.HasCheckConstraint("CK_AppointmentServices_Price", "[UnitPrice] >= 0");
-                t.HasCheckConstraint("CK_AppointmentServices_Status", "[Status] IN ('PendingReceptionReview', 'Confirmed', 'CheckedIn', 'Waiting', 'Called', 'InService', 'Completed', 'Cancelled', 'NoShow')");
-                t.HasCheckConstraint("CK_AppointmentServices_PendingAction", "[PendingActionType] IS NULL OR [PendingActionType] IN ('Reschedule', 'ChangeDentist', 'ContactStaff')");
+                t.HasCheckConstraint("CK_AppointmentServices_Status", "[Status] IN ('PendingReceptionReview', 'PendingDepartmentReview', 'AwaitingPatientResponse', 'Confirmed', 'CheckedIn', 'Waiting', 'Called', 'InService', 'Completed', 'Cancelled', 'NoShow', 'Rejected', 'Withdrawn', 'Expired')");
+                t.HasCheckConstraint("CK_AppointmentServices_PendingAction", "[PendingActionType] IS NULL OR [PendingActionType] IN ('Reschedule', 'RescheduleRequested', 'ChangeDentist', 'ContactStaff')");
                 t.HasCheckConstraint("CK_AppointmentServices_PendingTime", "[PendingScheduledEnd] IS NULL OR [PendingScheduledStart] IS NULL OR [PendingScheduledEnd] > [PendingScheduledStart]");
             });
 

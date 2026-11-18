@@ -622,6 +622,12 @@ public class BlogService : IBlogService
     {
         try
         {
+            using var blogLock = await SqlAppLockHelper.AcquireLocksAsync(
+                _dbContext,
+                new[] { $"BLOG_POST_{postId}" },
+                10000,
+                ct);
+
             var post = await _dbContext.BlogPosts
                 .Include(p => p.Category)
                 .Include(p => p.AuthorUser).ThenInclude(u => u.StaffProfile)
@@ -635,6 +641,11 @@ public class BlogService : IBlogService
             if (!BlogPostStatus.IsValid(request.Status))
             {
                 return ApiResponse<BlogPostDto>.Fail("Trạng thái duyệt không hợp lệ.");
+            }
+
+            if (post.Status == request.Status && (!request.IsFeatured.HasValue || post.IsFeatured == request.IsFeatured.Value))
+            {
+                return ApiResponse<BlogPostDto>.Ok(MapToDetailDto(post), $"Bài viết đã ở trạng thái {request.Status}.");
             }
 
             var oldStatus = post.Status;

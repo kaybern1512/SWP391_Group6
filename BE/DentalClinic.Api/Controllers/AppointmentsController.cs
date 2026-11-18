@@ -437,6 +437,36 @@ public class AppointmentsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("api/receptionist/appointments/{id:long}/reschedule/approve")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse<AppointmentDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<AppointmentDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ReceptionistApproveReschedule(long id, CancellationToken ct)
+    {
+        var receptionistUserId = GetCurrentUserId();
+        var result = await _appointmentService.ReceptionistApproveRescheduleAsync(id, receptionistUserId, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("api/receptionist/appointments/{id:long}/reschedule/reject")]
+    [Authorize(Roles = $"{UserRole.Receptionist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ReceptionistRejectReschedule(long id, [FromBody] RescheduleRejectRequest request, CancellationToken ct)
+    {
+        var receptionistUserId = GetCurrentUserId();
+        var result = await _appointmentService.ReceptionistRejectRescheduleAsync(id, receptionistUserId, request.Reason, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
     // ==========================================
     // DENTIST ENDPOINTS
     // ==========================================
@@ -553,6 +583,51 @@ public class AppointmentsController : ControllerBase
     {
         var dentistUserId = GetCurrentUserId();
         var result = await _appointmentService.DentistAddAdditionalServiceAsync(id, dentistUserId, request, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("api/dentist/appointments/{id:long}/continue-afternoon")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DentistContinueAfternoon(long id, [FromBody] DentistContinueAfternoonRequest request, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _appointmentService.DentistContinueAfternoonAsync(id, dentistUserId, request, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("api/dentist/appointments/{id:long}/recommend-another-day")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DentistRecommendAnotherDay(long id, [FromBody] DentistRecommendAnotherDayRequest request, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _appointmentService.DentistRecommendAnotherDayAsync(id, dentistUserId, request, ct);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPost("api/dentist/appointments/{id:long}/flag-delay")]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DentistFlagDelay(long id, [FromBody] DentistFlagDelayRequest request, CancellationToken ct)
+    {
+        var dentistUserId = GetCurrentUserId();
+        var result = await _appointmentService.DentistFlagDelayAsync(id, dentistUserId, request.Notes, ct);
         if (!result.Success)
         {
             return BadRequest(result);
