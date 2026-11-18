@@ -100,6 +100,7 @@
             <input type="hidden" asp-for="DoctorSelectionMode" id="hiddenDoctorSelectionMode" value="@Model.DoctorSelectionMode" />
             <input type="hidden" asp-for="RequestedDentistUserId" id="hiddenDentistId" />
             <input type="hidden" asp-for="ScheduledStart" id="hiddenScheduledStart" />
+            <input type="hidden" asp-for="FollowUpId" id="hiddenFollowUpId" />
             <div id="hiddenAdditionalServicesContainer"></div>
 
             <div class="row g-4">
@@ -288,7 +289,7 @@
                                                  data-name="@s.ServiceName"
                                                  data-duration="@s.DurationMinutes"
                                                  data-price="@((s.Price ?? 0).ToString("N0")) đ"
-                                                 data-price-num="@(s.Price ?? 0)">
+                                                 data-price-num="@((long)(s.Price ?? 0))">
                                                 <div class="card service-card p-3 h-100 rounded-3 border @(isSelected ? "active border-primary" : "")">
                                                     <div class="d-flex justify-content-between align-items-start mb-2">
                                                         <span class="badge bg-light text-primary border small text-truncate" style="max-width: 180px;">
@@ -305,10 +306,10 @@
                                                     <div class="mt-auto pt-2 border-top d-flex justify-content-between align-items-center">
                                                         <span class="fw-bold text-primary fs-6">@((s.Price ?? 0).ToString("N0")) đ</span>
                                                         <div class="d-flex gap-1">
-                                                            <button type="button" class="btn btn-outline-primary btn-sm px-2 fw-semibold btn-select-main" onclick="event.stopPropagation(); selectPrimaryService(@s.DepartmentServiceId, '@Html.Raw(s.ServiceName)', @s.DepartmentId, '@Html.Raw(s.DepartmentName)', @s.DurationMinutes, '@((s.Price ?? 0).ToString("N0")) đ', @(s.Price ?? 0))">
+                                                            <button type="button" class="btn btn-outline-primary btn-sm px-2 fw-semibold btn-select-main" onclick="event.stopPropagation(); selectPrimaryService(@s.DepartmentServiceId, '@Html.Raw(s.ServiceName)', @s.DepartmentId, '@Html.Raw(s.DepartmentName)', @s.DurationMinutes, '@((s.Price ?? 0).ToString("N0")) đ', @((long)(s.Price ?? 0)))">
                                                                 @(isSelected ? "Đã chọn" : "Chọn chính")
                                                             </button>
-                                                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 fw-semibold btn-toggle-addon" id="btn-addon-@s.DepartmentServiceId" onclick="event.stopPropagation(); toggleAdditionalService(@s.DepartmentServiceId, '@Html.Raw(s.ServiceName)', @s.DepartmentId, '@Html.Raw(s.DepartmentName)', @s.DurationMinutes, @(s.Price ?? 0))">
+                                                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 fw-semibold btn-toggle-addon" id="btn-addon-@s.DepartmentServiceId" onclick="event.stopPropagation(); toggleAdditionalService(@s.DepartmentServiceId, '@Html.Raw(s.ServiceName)', @s.DepartmentId, '@Html.Raw(s.DepartmentName)', @s.DurationMinutes, @((long)(s.Price ?? 0)))">
                                                                 + Thêm
                                                             </button>
                                                         </div>
@@ -357,32 +358,7 @@
                                         </p>
                                     </div>
 
-                                    <!-- Nút bấm chọn triệu chứng nhanh -->
-                                    <div class="mb-4">
-                                        <label class="form-label fw-bold text-dark mb-2">
-                                            <i class="bi bi-tags text-primary me-1"></i>Chọn nhanh triệu chứng bạn đang gặp phải (nếu có):
-                                        </label>
-                                        <div class="d-flex flex-wrap gap-2" id="symptomQuickChips">
-                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill symptom-chip" onclick="quickSelectSymptom('Đau nhức / Ê buốt răng khi ăn uống')">
-                                                🦷 Đau nhức / Ê buốt khi ăn
-                                            </button>
-                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill symptom-chip" onclick="quickSelectSymptom('Chảy máu chân răng / Viêm sưng nướu')">
-                                                🩸 Chảy máu chân răng / Sưng nướu
-                                            </button>
-                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill symptom-chip" onclick="quickSelectSymptom('Răng bị sâu / Mẻ vỡ / Có lỗ hổng')">
-                                                ⚡ Sâu răng / Mẻ vỡ
-                                            </button>
-                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill symptom-chip" onclick="quickSelectSymptom('Răng khấp khểnh, muốn tư vấn niềng răng')">
-                                                ✨ Muốn tư vấn niềng răng
-                                            </button>
-                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill symptom-chip" onclick="quickSelectSymptom('Răng ố vàng, muốn tẩy trắng / dán sứ')">
-                                                💎 Muốn làm trắng răng / Thẩm mỹ
-                                            </button>
-                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill symptom-chip" onclick="quickSelectSymptom('Khám định kỳ 6 tháng / Vệ sinh răng miệng')">
-                                                🩺 Khám sức khỏe định kỳ
-                                            </button>
-                                        </div>
-                                    </div>
+
 
                                     <div class="text-center pt-2">
                                         <button type="button" class="btn btn-success btn-lg px-5 py-2 fw-bold shadow-sm" onclick="selectGeneralCheckup()">
@@ -546,9 +522,14 @@
                                     <div id="noSlotsMessage" class="alert alert-warning border-warning d-none my-3">
                                         <div class="d-flex align-items-center gap-2">
                                             <i class="bi bi-exclamation-circle-fill fs-5 text-warning"></i>
-                                            <div>
-                                                <strong>Không còn khung giờ trống trong ngày này!</strong>
+                                            <div class="w-100">
+                                                <strong id="noSlotsTitle">Ngày này chưa có khung giờ phù hợp.</strong>
                                                 <div class="small" id="noSlotsDetailText">Vui lòng chọn ngày khác hoặc chuyển sang hình thức "Để phòng khám phân công bác sĩ phù hợp".</div>
+                                                <div class="mt-2">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnNextAvailableDate" onclick="advanceToNextDay()">
+                                                        <i class="bi bi-calendar-plus me-1"></i>Xem ngày tiếp theo
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1048,12 +1029,12 @@
         let selectedCombo = null;
         let selectedService = {
             id: parseInt('@Model.RequestedServiceId') || 1,
-            name: 'Khám tổng quát & Tư vấn',
+            name: '@Html.Raw(Model.Services.FirstOrDefault(s => s.DepartmentServiceId == Model.RequestedServiceId)?.ServiceName ?? "Khám & Lấy Cao Răng")',
             deptId: parseInt('@Model.DepartmentId') || 1,
-            deptName: 'Khoa Răng Hàm Mặt Tổng Quát',
-            duration: 30,
-            price: '100.000 đ',
-            priceNum: 100000
+            deptName: '@Html.Raw(Model.Departments.FirstOrDefault(d => d.DepartmentId == Model.DepartmentId)?.Name ?? "Khoa Răng Tổng Quát")',
+            duration: parseInt('@(Model.Services.FirstOrDefault(s => s.DepartmentServiceId == Model.RequestedServiceId)?.DurationMinutes ?? 30)') || 30,
+            price: '@((Model.Services.FirstOrDefault(s => s.DepartmentServiceId == Model.RequestedServiceId)?.Price ?? 200000).ToString("N0")) đ',
+            priceNum: parseInt('@((long)(Model.Services.FirstOrDefault(s => s.DepartmentServiceId == Model.RequestedServiceId)?.Price ?? 200000))') || 200000
         };
         let additionalServices = [];
         let doctorSelectionMode = '@Model.DoctorSelectionMode' || 'ClinicAssignment';
@@ -1190,7 +1171,15 @@
             document.getElementById('hiddenBookingCategory').value = 'GeneralCheckup';
             document.getElementById('hiddenSelectedComboCode').value = '';
 
-            selectService(1, 'Khám tổng quát & Tư vấn', 1, 'Khoa Răng Hàm Mặt Tổng Quát', 30, '100.000 đ', 100000);
+            const generalSrvId = parseInt('@Model.RequestedServiceId') || 1;
+            const generalDeptId = parseInt('@Model.DepartmentId') || 1;
+            const generalSrvName = '@Html.Raw(Model.Services.FirstOrDefault(s => s.DepartmentServiceId == Model.RequestedServiceId)?.ServiceName ?? "Khám & Lấy Cao Răng")';
+            const generalDeptName = '@Html.Raw(Model.Departments.FirstOrDefault(d => d.DepartmentId == Model.DepartmentId)?.Name ?? "Khoa Răng Tổng Quát")';
+            const generalPrice = '@((Model.Services.FirstOrDefault(s => s.DepartmentServiceId == Model.RequestedServiceId)?.Price ?? 200000).ToString("N0")) đ';
+            const generalPriceNum = parseInt('@((long)(Model.Services.FirstOrDefault(s => s.DepartmentServiceId == Model.RequestedServiceId)?.Price ?? 200000))') || 200000;
+            const generalDuration = parseInt('@(Model.Services.FirstOrDefault(s => s.DepartmentServiceId == Model.RequestedServiceId)?.DurationMinutes ?? 30)') || 30;
+
+            selectService(generalSrvId, generalSrvName, generalDeptId, generalDeptName, generalDuration, generalPrice, generalPriceNum);
 
             if (proceedToStep2) {
                 goToStep(2);
@@ -1599,7 +1588,19 @@
             const url = `/Patient/Appointment/GetSlots?departmentId=${deptId}&serviceId=${serviceId}&date=${date}&dentistUserId=${dentistId || ''}`;
 
             fetch(url)
-                .then(r => r.json())
+                .then(r => {
+                    const errorHeader = r.headers.get('X-Slot-Error');
+                    if (errorHeader) {
+                        try {
+                            window._lastSlotError = decodeURIComponent(errorHeader);
+                        } catch (e) {
+                            window._lastSlotError = errorHeader;
+                        }
+                    } else {
+                        window._lastSlotError = null;
+                    }
+                    return r.json();
+                })
                 .then(slots => {
                     if (loading) loading.classList.add('d-none');
 
@@ -1607,10 +1608,16 @@
                         if (noSlots) noSlots.classList.remove('d-none');
                         const detail = document.getElementById('noSlotsDetailText');
                         if (detail) {
-                            detail.innerText = doctorSelectionMode === 'PreferredDentist'
-                                ? `Bác sĩ ${selectedDentist.name} đã kín lịch ngày ${date}. Bạn có thể chọn ngày khác hoặc chọn "Để phòng khám phân công bác sĩ phù hợp".`
-                                : `Không còn khung giờ trống ngày ${date}. Vui lòng chọn ngày tiếp theo.`;
+                            if (window._lastSlotError) {
+                                detail.innerText = window._lastSlotError;
+                            } else if (doctorSelectionMode === 'PreferredDentist') {
+                                detail.innerText = `Bác sĩ ${selectedDentist.name} đã kín lịch ngày ${date}. Bạn có thể chọn ngày khác hoặc chọn "Để phòng khám phân công bác sĩ phù hợp".`;
+                            } else {
+                                detail.innerText = `Ngày ${date} chưa có khung giờ phù hợp. Vui lòng chọn ngày tiếp theo hoặc đổi dịch vụ.`;
+                            }
                         }
+                        const btnNext3 = document.getElementById('btnNext3');
+                        if (btnNext3) btnNext3.disabled = true;
                         return;
                     }
 
@@ -1660,7 +1667,23 @@
                 .catch(() => {
                     if (loading) loading.classList.add('d-none');
                     if (noSlots) noSlots.classList.remove('d-none');
+                    const btnNext3 = document.getElementById('btnNext3');
+                    if (btnNext3) btnNext3.disabled = true;
                 });
+        }
+
+        function advanceToNextDay() {
+            const dateInput = document.getElementById('inputAppointmentDate');
+            if (!dateInput || !dateInput.value) return;
+            const parts = dateInput.value.split('-');
+            if (parts.length !== 3) return;
+            const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            d.setDate(d.getDate() + 1);
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            dateInput.value = `${yyyy}-${mm}-${dd}`;
+            onDateChanged();
         }
 
         function selectSlot(isoStart, displayTime) {

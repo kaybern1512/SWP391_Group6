@@ -45,6 +45,8 @@ public interface IAppointmentApiService
     Task<ApiResult> ReceptionistCheckInAsync(long id, string? note = null);
     Task<ApiResult> ReceptionistMarkNoShowAsync(long id, string? note = null);
     Task<ApiResult> ReceptionistCancelAsync(long id, string reason);
+    Task<ApiResult<AppointmentDto>> ReceptionistApproveRescheduleAsync(long id);
+    Task<ApiResult> ReceptionistRejectRescheduleAsync(long id, string reason);
 
     // Department Manager
     Task<ApiResult<List<AppointmentDto>>> GetDepartmentRequestsAsync();
@@ -83,4 +85,7 @@ public interface IAppointmentApiService
     Task<ApiResult<List<DentalChairOptionDto>>> GetDentistRoomChairsAsync(long appointmentId);
     Task<ApiResult> DentistAssignChairAsync(long appointmentId, long chairId);
     Task<ApiResult> DentistAddAdditionalServiceAsync(long appointmentId, long serviceId, int quantity = 1, string? executionMode = null, long? dentalChairId = null, long? targetDentistUserId = null, string? notes = null);
+    Task<ApiResult> DentistContinueAfternoonAsync(long id, DateTime continuationStart, int durationMinutes, string? notes);
+    Task<ApiResult> DentistRecommendAnotherDayAsync(long id, DateTime recommendedDate, int? recommendedServiceId, string clinicalReason, string? completedNotes, string? remainingNotes);
+    Task<ApiResult> DentistFlagDelayAsync(long id, string notes);
 }

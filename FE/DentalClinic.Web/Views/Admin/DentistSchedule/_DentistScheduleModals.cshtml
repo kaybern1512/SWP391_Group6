@@ -1,0 +1,962 @@
+﻿@model AdminDentistScheduleManageViewModel
+@using DentalClinic.Web.Helpers
+@{
+    var today = ClinicTimeHelper.TodayDateOnly;
+    int currentYear = Model.SelectedYear;
+    int currentMonth = Model.SelectedMonth;
+    var minDateStr = today.ToString("yyyy-MM-dd");
+}
+
+<!-- ========================================================================= -->
+<!-- MODAL 1: BULK SCHEDULE ASSIGNMENT (TWO FIXED SHIFTS ONLY)               -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="bulkScheduleModal" tabindex="-1" aria-labelledby="bulkScheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title font-heading fw-bold" id="bulkScheduleModalLabel">
+                    <i class="bi bi-calendar-plus text-primary me-2"></i>Phân Công Lịch Trực Bác Sĩ Hàng Loạt
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="bulkScheduleForm" onsubmit="return false;">
+                    <!-- Step 1: Doctor & Department -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold small">1. Chuyên khoa làm việc <span class="text-danger">*</span></label>
+                            <select id="bulkDepartmentId" class="form-select" onchange="handleBulkDepartmentChange()" required>
+                                <option value="">-- Chọn chuyên khoa --</option>
+                                @foreach (var d in Model.Departments)
+                                {
+                                    <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
+                                }
+                            </select>
+                            <div class="form-text text-xs text-muted">Lọc bác sĩ và phân công theo khoa.</div>
+                        </div>
+                        <div class="col-md-7">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-semibold small mb-0">2. Bác sĩ áp dụng <span class="text-danger">*</span></label>
+                                <div class="btn-group btn-group-sm" id="bulkDoctorSelectAllGroup">
+                                    <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none me-2 text-primary" id="btnBulkSelectAll" onclick="bulkSelectAllDoctors(true)">Chọn tất cả</button>
+                                    <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" id="btnBulkDeselectAll" onclick="bulkSelectAllDoctors(false)">Bỏ chọn</button>
+                                </div>
+                            </div>
+
+                            <!-- Search box -->
+                            <div class="input-group input-group-sm mb-1" id="bulkDoctorSearchGroup">
+                                <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                                <input type="text" id="bulkDoctorSearch" class="form-control" placeholder="Tìm theo tên hoặc mã bác sĩ..." oninput="filterBulkDoctors()">
+                            </div>
+
+                            <!-- Guidance Notice when no Department selected -->
+                            <div id="bulkDoctorEmptyDeptNotice" class="border rounded p-3 text-center text-muted small bg-light mb-1" style="display: none;">
+                                <i class="bi bi-info-circle me-1 text-primary"></i>Vui lòng chọn chuyên khoa làm việc trước để tải danh sách bác sĩ tương ứng.
+                            </div>
+
+                            <!-- Doctor Checkbox List Container -->
+                            <div id="bulkDoctorListContainer" class="border rounded p-2 bg-white" style="max-height: 150px; overflow-y: auto;">
+                                @foreach (var d in Model.Dentists)
+                                {
+                                    var deptIds = Model.Allocations.Where(a => a.DentistUserId == d.UserId).Select(a => a.DepartmentId.ToString()).ToList();
+                                    var deptNames = Model.Allocations.Where(a => a.DentistUserId == d.UserId).Select(a => a.DepartmentName).ToList();
+                                    var deptStr = deptNames.Any() ? string.Join(", ", deptNames) : "Chưa phân khoa";
+                                    var deptAttr = string.Join(",", deptIds);
+                                    var isSelected = Model.SelectedDentistId == d.UserId;
+
+                                    <div class="form-check doctor-item py-1 border-bottom border-light"
+                                         data-dentist-id="@d.UserId"
+                                         data-dept-ids="@deptAttr"
+                                         data-search="@d.FullName.ToLowerInvariant() @(d.Code?.ToLowerInvariant() ?? "")">
+                                        <input class="form-check-input bulk-dentist-checkbox"
+                                               type="checkbox"
+                                               value="@d.UserId"
+                                               data-dentist-id="@d.UserId"
+                                               id="chk_dentist_@d.UserId"
+                                               @(isSelected ? "checked" : "")
+                                               onchange="syncBulkDentistSelection()">
+                                        <label class="form-check-label d-flex justify-content-between align-items-center w-100 cursor-pointer" for="chk_dentist_@d.UserId">
+                                            <div>
+                                                <span class="fw-semibold text-dark">@d.FullName</span>
+                                                @if (!string.IsNullOrEmpty(d.Code))
+                                                {
+                                                    <span class="badge bg-light text-secondary border ms-1">@d.Code</span>
+                                                }
+                                                <div class="text-xs text-muted">@deptStr</div>
+                                            </div>
+                                            <div>
+                                                @if (d.Status == "Active")
+                                                {
+                                                    <span class="badge bg-success-subtle text-success" style="font-size: 9px;">Hoạt động</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary-subtle text-muted" style="font-size: 9px;">@d.Status</span>
+                                                }
+                                            </div>
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+
+                            <!-- Hidden multi-select for form submission / compatibility -->
+                            <select id="bulkDentistIds" multiple style="display: none;">
+                                @foreach (var d in Model.Dentists)
+                                {
+                                    <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
+                                }
+                            </select>
+                            <div class="form-text text-xs text-muted mt-1">Đã chọn: <span id="bulkSelectedCount" class="fw-bold text-primary">0</span> bác sĩ</div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Date Range (Strictly Future Dates) -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">3. Từ ngày (Tương lai) <span class="text-danger">*</span></label>
+                            <input type="date" id="bulkFromDate" class="form-control" min="@minDateStr" value="@(today.ToString("yyyy-MM-dd"))" required />
+                            <div class="form-text text-xs text-muted">Chỉ áp dụng từ ngày hiện tại (@today.ToString("dd/MM/yyyy")) trở đi.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Đến ngày <span class="text-danger">*</span></label>
+                            <input type="date" id="bulkToDate" class="form-control" min="@minDateStr" value="@(today.AddDays(14).ToString("yyyy-MM-dd"))" required />
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Days of Week Selection -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small mb-2">4. Các ngày trong tuần áp dụng <span class="text-danger">*</span></label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow1" value="1" checked>
+                                <label class="form-check-label fw-semibold" for="dow1">Thứ 2</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow2" value="2" checked>
+                                <label class="form-check-label fw-semibold" for="dow2">Thứ 3</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow3" value="3" checked>
+                                <label class="form-check-label fw-semibold" for="dow3">Thứ 4</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow4" value="4" checked>
+                                <label class="form-check-label fw-semibold" for="dow4">Thứ 5</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow5" value="5" checked>
+                                <label class="form-check-label fw-semibold" for="dow5">Thứ 6</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow6" value="6">
+                                <label class="form-check-label text-primary fw-semibold" for="dow6">Thứ 7</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input bulk-dow" type="checkbox" id="dow7" value="7">
+                                <label class="form-check-label text-danger fw-semibold" for="dow7">Chủ Nhật</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: TWO FIXED SHIFTS ONLY -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small mb-2">5. Ca trực cố định áp dụng <span class="text-danger">*</span></label>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <div class="card p-3 border rounded-3 h-100 bg-white">
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" id="shiftMorning" value="morning" checked>
+                                        <label class="form-check-label fw-bold text-dark" for="shiftMorning">
+                                            <i class="bi bi-sun-fill text-warning me-1"></i>Ca Sáng
+                                        </label>
+                                    </div>
+                                    <div class="text-muted small ps-4">
+                                        <span class="badge bg-warning-subtle text-warning border">08:00 – 12:00</span>
+                                        <span class="ms-1">&bull; 4 giờ làm việc</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card p-3 border rounded-3 h-100 bg-white">
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" id="shiftAfternoon" value="afternoon" checked>
+                                        <label class="form-check-label fw-bold text-dark" for="shiftAfternoon">
+                                            <i class="bi bi-sunset-fill text-primary me-1"></i>Ca Chiều
+                                        </label>
+                                    </div>
+                                    <div class="text-muted small ps-4">
+                                        <span class="badge bg-primary-subtle text-primary border">13:30 – 17:30</span>
+                                        <span class="ms-1">&bull; 4 giờ làm việc</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 5: Options -->
+                    <div class="form-check mb-1">
+                        <input class="form-check-input" type="checkbox" id="bulkOverwrite">
+                        <label class="form-check-label small" for="bulkOverwrite">
+                            Ghi đè ca trực cũ nếu chưa có lịch hẹn của bệnh nhân
+                        </label>
+                    </div>
+                    <div class="text-xs text-muted fst-italic ps-4 mb-3">
+                        <i class="bi bi-shield-lock text-success me-1"></i>Lưu ý: Không bao giờ ghi đè lịch nghỉ phép đã được duyệt hoặc đang chờ duyệt.
+                    </div>
+
+                    <!-- Preview Section -->
+                    <div id="bulkPreviewSection" class="mt-3 p-3 border rounded bg-white" style="display: none;">
+                        <h6 class="fw-bold d-flex align-items-center justify-content-between mb-2">
+                            <span><i class="bi bi-shield-check text-success me-2"></i>Kết Quả Kiểm Tra Xung Đột (Preview)</span>
+                            <span id="bulkPreviewBadge" class="badge bg-secondary">0 ca đề xuất</span>
+                        </h6>
+                        <div class="row g-2 mb-2 text-center text-xs">
+                            <div class="col"><span class="badge bg-success-subtle text-success w-100 py-1" id="statValid">0 Hợp lệ</span></div>
+                            <div class="col"><span class="badge bg-warning-subtle text-warning w-100 py-1" id="statDuplicate">0 Đã có sẵn</span></div>
+                            <div class="col"><span class="badge bg-danger-subtle text-danger w-100 py-1" id="statConflict">0 Xung đột/Lịch hẹn</span></div>
+                            <div class="col"><span class="badge bg-danger text-white w-100 py-1" id="statLeave">0 Nghỉ phép đã duyệt</span></div>
+                            <div class="col"><span class="badge bg-warning-subtle text-warning border border-warning w-100 py-1" id="statPendingLeave">0 Nghỉ chờ duyệt</span></div>
+                        </div>
+                        <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                            <table class="table table-sm table-bordered text-xs mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Bác sĩ</th>
+                                        <th>Ngày trực</th>
+                                        <th>Ca trực</th>
+                                        <th>Trạng thái</th>
+                                        <th>Ghi chú / Cảnh báo</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bulkPreviewTableBody">
+                                    <!-- Items will be populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light d-flex justify-content-between">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-primary" id="btnBulkPreview" onclick="handleBulkPreview()">
+                        <i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột (Preview)
+                    </button>
+                    <button type="button" class="btn btn-dc-primary" id="btnBulkApply" onclick="handleBulkApply()" disabled>
+                        <i class="bi bi-check2-circle me-1"></i>Chỉ Áp Dụng Các Ca Hợp Lệ
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- MODAL 2: DAILY SCHEDULE OVERRIDE (LEAVE STATE LEAKAGE FIXED)             -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="dailyOverrideModal" tabindex="-1" aria-labelledby="dailyOverrideModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title font-heading fw-bold" id="dailyOverrideModalLabel">
+                    <i class="bi bi-pencil-square text-primary me-2"></i>Chỉnh Sửa Ca Trực Riêng Lẻ Trong Ngày
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="dailyOverrideForm" onsubmit="return false;">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-muted">Ngày làm việc</label>
+                        <input type="text" id="overrideDateDisplay" class="form-control fw-bold bg-light" readonly />
+                        <input type="hidden" id="overrideDate" />
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Bác sĩ <span class="text-danger">*</span></label>
+                            <select id="overrideDentistId" class="form-select form-select-sm" required onchange="handleOverrideDentistChange()">
+                                @foreach (var d in Model.Allocations)
+                                {
+                                    <option value="@d.DentistUserId" data-department-id="@d.DepartmentId" data-department-name="@d.DepartmentName" selected="@(Model.SelectedDentistId == d.DentistUserId)">@d.DentistName</option>
+                                }
+                                @if (!Model.Allocations.Any())
+                                {
+                                    @foreach (var d in Model.Dentists)
+                                    {
+                                        <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold text-muted">Chuyên khoa trực thuộc</label>
+                            <input type="text" id="overrideDepartmentName" class="form-control form-control-sm bg-light" readonly placeholder="Tự động điền theo bác sĩ" />
+                            <input type="hidden" id="overrideDepartmentId" value="@(Model.SelectedDepartmentId ?? 1)" />
+                        </div>
+                    </div>
+
+                    <!-- Appointment Guard Warning Banner -->
+                    <div id="appointmentGuardAlert" class="alert alert-warning py-2 small mb-3" style="display: none;">
+                        <i class="bi bi-shield-exclamation me-1 fw-bold"></i>
+                        <strong>CẢNH BÁO:</strong> Ngày này đang có <strong id="guardApptCount">0</strong> lịch hẹn đã xác nhận. Mọi thay đổi hoặc gỡ ca sẽ được hệ thống kiểm tra an toàn!
+                    </div>
+
+                    <!-- Toggle Day Off -->
+                    <div class="card p-3 mb-3 border-warning bg-warning-subtle bg-opacity-25 rounded-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="overrideIsDayOff" onchange="toggleDayOffSection()">
+                            <label class="form-check-label fw-bold text-dark" for="overrideIsDayOff">
+                                Đánh dấu nghỉ phép / Không nhận khám ngày này
+                            </label>
+                        </div>
+                        <div id="dayOffReasonGroup" class="mt-2" style="display: none;">
+                            <label class="form-label small text-muted">Lý do nghỉ phép / vắng mặt <span class="text-danger">*</span></label>
+                            <input type="text" id="overrideLeaveReason" class="form-control form-control-sm" placeholder="VD: Nghỉ phép cá nhân, đi công tác, bận việc đột xuất..." />
+                        </div>
+                    </div>
+
+                    <!-- Shifts Editor: Two Fixed Shifts -->
+                    <div id="shiftsEditorGroup">
+                        <label class="form-label small fw-semibold mb-2">Ca trực cố định trong ngày</label>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <div class="card p-2 border rounded bg-white">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="overrideShiftMorning" checked>
+                                        <label class="form-check-label small fw-bold text-dark" for="overrideShiftMorning">
+                                            <i class="bi bi-sun text-warning me-1"></i>Sáng (08:00-12:00)
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="card p-2 border rounded bg-white">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="overrideShiftAfternoon" checked>
+                                        <label class="form-check-label small fw-bold text-dark" for="overrideShiftAfternoon">
+                                            <i class="bi bi-sunset text-primary me-1"></i>Chiều (13:30-17:30)
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-dc-primary" id="btnSaveOverride" onclick="handleSaveOverride()">
+                    <i class="bi bi-save me-1"></i>Lưu Thay Đổi Ca Trực
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- MODAL 3: REGISTER / RECORD DENTIST LEAVE (REDESIGNED PROCESS)             -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="registerLeaveModal" tabindex="-1" aria-labelledby="registerLeaveModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content shadow-lg border-0">
+            <form asp-controller="AdminDentistSchedule" asp-action="RegisterLeave" method="post" id="registerLeaveForm">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title font-heading fw-bold" id="registerLeaveModalLabel">
+                        <i class="bi bi-calendar-plus text-primary me-2"></i>Đăng Ký / Ghi Nhận Nghỉ Phép Bác Sĩ
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <!-- Dentist Selection -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Bác sĩ xin nghỉ <span class="text-danger">*</span></label>
+                            <select name="dentistUserId" id="registerLeaveDentistId" class="form-select" required onchange="handleRegisterLeaveDentistChange()">
+                                <option value="">-- Chọn bác sĩ --</option>
+                                @foreach (var d in Model.Allocations)
+                                {
+                                    <option value="@d.DentistUserId" data-department-name="@d.DepartmentName">
+                                        @d.DentistName (@d.DepartmentName)
+                                    </option>
+                                }
+                                @if (!Model.Allocations.Any())
+                                {
+                                    @foreach (var d in Model.Dentists)
+                                    {
+                                        <option value="@d.UserId" data-department-name="Nha khoa Tổng quát">
+                                            @d.FullName
+                                        </option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <!-- Read-only Department -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-muted">Chuyên khoa trực thuộc</label>
+                            <input type="text" id="registerLeaveDeptName" class="form-control bg-light" readonly placeholder="Tự động điền theo hồ sơ bác sĩ" />
+                        </div>
+
+                        <!-- Date Range -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Từ ngày <span class="text-danger">*</span></label>
+                            <input type="date" name="startDate" id="registerLeaveStartDate" class="form-control" value="@minDateStr" min="@minDateStr" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Đến ngày <span class="text-danger">*</span></label>
+                            <input type="date" name="endDate" id="registerLeaveEndDate" class="form-control" value="@minDateStr" min="@minDateStr" required />
+                        </div>
+
+                        <!-- Shift Scope -->
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold mb-2">Phạm vi ca nghỉ <span class="text-danger">*</span></label>
+                            <div class="d-flex flex-wrap gap-3 p-3 bg-light rounded-3 border">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="shiftScope" id="scopeFullDay" value="FullDay" checked>
+                                    <label class="form-check-label fw-semibold text-dark" for="scopeFullDay">
+                                        <i class="bi bi-clock-history me-1 text-primary"></i>Nghỉ cả ngày (08:00 - 17:30)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="shiftScope" id="scopeMorning" value="Morning">
+                                    <label class="form-check-label fw-semibold text-dark" for="scopeMorning">
+                                        <i class="bi bi-sun me-1 text-warning"></i>Chỉ nghỉ ca sáng (08:00 - 12:00)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="shiftScope" id="scopeAfternoon" value="Afternoon">
+                                    <label class="form-check-label fw-semibold text-dark" for="scopeAfternoon">
+                                        <i class="bi bi-sunset me-1 text-info"></i>Chỉ nghỉ ca chiều (13:30 - 17:30)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Leave Type -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Loại nghỉ phép <span class="text-danger">*</span></label>
+                            <select name="leaveType" id="registerLeaveType" class="form-select" required>
+                                <option value="AnnualLeave" selected>Nghỉ phép năm (Annual Leave)</option>
+                                <option value="SickLeave">Nghỉ ốm / Khám chữa bệnh (Sick Leave)</option>
+                                <option value="UnpaidLeave">Nghỉ không lương (Unpaid Leave)</option>
+                                <option value="ConferenceLeave">Hội nghị / Đào tạo Y khoa (Conference Leave)</option>
+                            </select>
+                        </div>
+
+                        <!-- Reason -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Lý do nghỉ phép <span class="text-danger">*</span></label>
+                            <input type="text" name="reason" id="registerLeaveReason" class="form-control" placeholder="VD: Việc cá nhân, khám sức khỏe, tham gia hội thảo..." required />
+                        </div>
+
+                        <!-- Notes -->
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Ghi chú vận hành / Bàn giao ca trực</label>
+                            <textarea name="notes" id="registerLeaveNotes" class="form-control" rows="2" placeholder="Ghi chú nội bộ cho quản trị viên và điều phối lịch khám..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-dc-primary">
+                        <i class="bi bi-check2-circle me-1"></i>Ghi Nhận Nghỉ Phép
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- JAVASCRIPT LOGIC (TWO FIXED SHIFTS, LEAVE ISOLATION, SINGLE AJAX)        -->
+<!-- ========================================================================= -->
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Enforce minimum future date on date pickers
+        const todayVn = '@minDateStr';
+        const fromDateEl = document.getElementById('bulkFromDate');
+        const toDateEl = document.getElementById('bulkToDate');
+        if (fromDateEl) fromDateEl.min = todayVn;
+        if (toDateEl) toDateEl.min = todayVn;
+
+        // Initialize doctor list and department filter
+        handleBulkDepartmentChange();
+
+        // Attach listeners to invalidate preview whenever inputs change
+        ['bulkFromDate', 'bulkToDate'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', invalidateBulkPreview);
+        });
+        document.querySelectorAll('.bulk-dow').forEach(cb => {
+            cb.addEventListener('change', invalidateBulkPreview);
+        });
+        ['shiftMorning', 'shiftAfternoon', 'bulkOverwrite'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', invalidateBulkPreview);
+        });
+
+        // Reset leave state when switching doctors in override modal (Fixes leave state leakage!)
+        const overrideDentistSelect = document.getElementById('overrideDentistId');
+        if (overrideDentistSelect) {
+            handleOverrideDentistChange();
+            overrideDentistSelect.addEventListener('change', function () {
+                handleOverrideDentistChange();
+            });
+        }
+    });
+
+    let isBulkPreviewing = false;
+    let isBulkApplying = false;
+
+    // Invalidate Bulk Preview when parameters change
+    function invalidateBulkPreview() {
+        const previewSec = document.getElementById('bulkPreviewSection');
+        if (previewSec) previewSec.style.display = 'none';
+        const btnApply = document.getElementById('btnBulkApply');
+        if (btnApply) btnApply.disabled = true;
+    }
+
+    // Filter bulk doctor list based on search term
+    function filterBulkDoctors() {
+        const term = (document.getElementById('bulkDoctorSearch')?.value || '').toLowerCase().trim();
+        const deptId = document.getElementById('bulkDepartmentId')?.value;
+        const items = document.querySelectorAll('#bulkDoctorListContainer .doctor-item');
+
+        items.forEach(item => {
+            const searchData = item.getAttribute('data-search') || '';
+            const deptIdsStr = item.getAttribute('data-dept-ids') || '';
+            const deptIds = deptIdsStr ? deptIdsStr.split(',') : [];
+
+            const matchesDept = !deptId || deptIds.includes(deptId);
+            const matchesSearch = !term || searchData.includes(term);
+
+            if (matchesDept && matchesSearch) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    // Handle department change in bulk schedule modal
+    function handleBulkDepartmentChange() {
+        const deptId = document.getElementById('bulkDepartmentId')?.value;
+        const container = document.getElementById('bulkDoctorListContainer');
+        const emptyNotice = document.getElementById('bulkDoctorEmptyDeptNotice');
+        const searchGroup = document.getElementById('bulkDoctorSearchGroup');
+        const btnSelectAll = document.getElementById('btnBulkSelectAll');
+        const btnDeselectAll = document.getElementById('btnBulkDeselectAll');
+
+        if (!deptId) {
+            if (container) container.style.display = 'none';
+            if (searchGroup) searchGroup.style.display = 'none';
+            if (emptyNotice) emptyNotice.style.display = 'block';
+            if (btnSelectAll) btnSelectAll.disabled = true;
+            if (btnDeselectAll) btnDeselectAll.disabled = true;
+
+            // Uncheck all doctors when no department is selected
+            document.querySelectorAll('.bulk-dentist-checkbox').forEach(cb => cb.checked = false);
+            syncBulkDentistSelection();
+            invalidateBulkPreview();
+            return;
+        }
+
+        if (container) container.style.display = 'block';
+        if (searchGroup) searchGroup.style.display = 'flex';
+        if (emptyNotice) emptyNotice.style.display = 'none';
+        if (btnSelectAll) btnSelectAll.disabled = false;
+        if (btnDeselectAll) btnDeselectAll.disabled = false;
+
+        const items = document.querySelectorAll('#bulkDoctorListContainer .doctor-item');
+        items.forEach(item => {
+            const deptIdsStr = item.getAttribute('data-dept-ids') || '';
+            const deptIds = deptIdsStr ? deptIdsStr.split(',') : [];
+            const matchesDept = deptIds.includes(deptId);
+
+            if (matchesDept) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+                const cb = item.querySelector('.bulk-dentist-checkbox');
+                if (cb) cb.checked = false;
+            }
+        });
+
+        // Re-filter with current search term
+        filterBulkDoctors();
+        syncBulkDentistSelection();
+        invalidateBulkPreview();
+    }
+
+    // Select/Deselect all visible doctors
+    function bulkSelectAllDoctors(selectAll) {
+        const items = document.querySelectorAll('#bulkDoctorListContainer .doctor-item');
+        items.forEach(item => {
+            if (item.style.display !== 'none') {
+                const cb = item.querySelector('.bulk-dentist-checkbox');
+                if (cb) cb.checked = selectAll;
+            }
+        });
+        syncBulkDentistSelection();
+        invalidateBulkPreview();
+    }
+
+    // Synchronize checkboxes with hidden select and count display
+    function syncBulkDentistSelection() {
+        const checkedBoxes = document.querySelectorAll('.bulk-dentist-checkbox:checked');
+        const selectedIds = Array.from(checkedBoxes).map(cb => {
+            return cb.value || cb.getAttribute('value') || cb.getAttribute('data-dentist-id') || cb.id.replace('chk_dentist_', '');
+        }).filter(id => id && String(id).trim().length > 0).map(id => String(id).trim());
+
+        const selectEl = document.getElementById('bulkDentistIds');
+        if (selectEl) {
+            Array.from(selectEl.options).forEach(opt => {
+                opt.selected = selectedIds.includes(String(opt.value).trim());
+            });
+        }
+
+        const countEl = document.getElementById('bulkSelectedCount');
+        if (countEl) countEl.innerText = selectedIds.length;
+
+        invalidateBulkPreview();
+    }
+
+    function handleOverrideDentistChange() {
+        const sel = document.getElementById('overrideDentistId');
+        const opt = sel ? sel.selectedOptions[0] : null;
+        if (opt) {
+            const deptName = opt.getAttribute('data-department-name') || '';
+            const deptId = opt.getAttribute('data-department-id') || '';
+            const nameEl = document.getElementById('overrideDepartmentName');
+            const idEl = document.getElementById('overrideDepartmentId');
+            if (nameEl) nameEl.value = deptName;
+            if (idEl) idEl.value = deptId;
+        }
+        document.getElementById('overrideIsDayOff').checked = false;
+        document.getElementById('overrideLeaveReason').value = '';
+        toggleDayOffSection();
+    }
+
+    function handleRegisterLeaveDentistChange() {
+        const sel = document.getElementById('registerLeaveDentistId');
+        const opt = sel ? sel.selectedOptions[0] : null;
+        const deptNameInput = document.getElementById('registerLeaveDeptName');
+        if (opt && opt.value) {
+            deptNameInput.value = opt.getAttribute('data-department-name') || '';
+        } else {
+            deptNameInput.value = '';
+        }
+        document.getElementById('registerLeaveReason').value = '';
+        document.getElementById('registerLeaveNotes').value = '';
+        document.getElementById('scopeFullDay').checked = true;
+    }
+
+    // Handle Bulk Preview AJAX
+    async function handleBulkPreview() {
+        if (isBulkPreviewing) return;
+
+        const deptId = document.getElementById('bulkDepartmentId').value;
+        const dentistSelect = document.getElementById('bulkDentistIds');
+        const dentistIds = Array.from(dentistSelect.selectedOptions).map(opt => parseInt(opt.value));
+        const fromDate = document.getElementById('bulkFromDate').value;
+        const toDate = document.getElementById('bulkToDate').value;
+        const overwrite = document.getElementById('bulkOverwrite').checked;
+
+        const dowCheckboxes = document.querySelectorAll('.bulk-dow:checked');
+        const daysOfWeek = Array.from(dowCheckboxes).map(cb => parseInt(cb.value));
+
+        if (!deptId) { alert('Vui lòng chọn Chuyên khoa làm việc.'); return; }
+        if (dentistIds.length === 0) { alert('Vui lòng chọn ít nhất một Bác sĩ.'); return; }
+        if (!fromDate || !toDate) { alert('Vui lòng chọn khoảng ngày phân công.'); return; }
+
+        const todayVn = '@minDateStr';
+        if (fromDate < todayVn) {
+            alert(`Không thể phân công lịch trực cho ngày trong quá khứ. Vui lòng chọn từ ngày hôm nay (${todayVn}) trở đi.`);
+            return;
+        }
+        if (toDate < fromDate) {
+            alert('Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu.');
+            return;
+        }
+        if (daysOfWeek.length === 0) { alert('Vui lòng chọn ít nhất một ngày trong tuần.'); return; }
+
+        // TWO FIXED SHIFTS ONLY
+        const shifts = [];
+        const shiftIdentifiers = [];
+        if (document.getElementById('shiftMorning').checked) {
+            shifts.push({ shiftIdentifier: 'Morning', startTime: '08:00:00', endTime: '12:00:00', note: 'Ca Sáng' });
+            shiftIdentifiers.push('Morning');
+        }
+        if (document.getElementById('shiftAfternoon').checked) {
+            shifts.push({ shiftIdentifier: 'Afternoon', startTime: '13:30:00', endTime: '17:30:00', note: 'Ca Chiều' });
+            shiftIdentifiers.push('Afternoon');
+        }
+        if (shifts.length === 0) {
+            alert('Vui lòng chọn ít nhất một ca trực (Ca Sáng 08:00-12:00 hoặc Ca Chiều 13:30-17:30).');
+            return;
+        }
+
+        const payload = {
+            departmentId: parseInt(deptId),
+            dentistUserIds: dentistIds,
+            fromDate: fromDate,
+            toDate: toDate,
+            daysOfWeek: daysOfWeek,
+            shifts: shifts,
+            shiftIdentifiers: shiftIdentifiers,
+            overwriteExisting: overwrite
+        };
+
+        const btnPreview = document.getElementById('btnBulkPreview');
+        isBulkPreviewing = true;
+        btnPreview.disabled = true;
+        btnPreview.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang kiểm tra...';
+
+        try {
+            const resp = await fetch('/Admin/DentistSchedule/BulkPreview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+
+            if (res.isSuccess && res.data) {
+                const data = res.data;
+                document.getElementById('bulkPreviewSection').style.display = 'block';
+                document.getElementById('bulkPreviewBadge').innerText = `${data.totalProposedShifts} ca đề xuất`;
+
+                document.getElementById('statValid').innerText = `${data.validShiftsCount} Hợp lệ`;
+                document.getElementById('statDuplicate').innerText = `${data.duplicateShiftsCount} Đã có sẵn`;
+                document.getElementById('statConflict').innerText = `${data.overlapShiftsCount + data.appointmentConflictCount} Xung đột/Lịch hẹn`;
+                document.getElementById('statLeave').innerText = `${data.leaveConflictCount} Nghỉ phép đã duyệt`;
+                if (document.getElementById('statPendingLeave')) {
+                    document.getElementById('statPendingLeave').innerText = `${data.pendingLeaveConflictCount || 0} Nghỉ chờ duyệt`;
+                }
+
+                const tbody = document.getElementById('bulkPreviewTableBody');
+                tbody.innerHTML = '';
+
+                data.items.slice(0, 100).forEach(item => {
+                    const tr = document.createElement('tr');
+                    let statusBadge = '<span class="badge bg-success-subtle text-success">Hợp lệ</span>';
+                    if (item.status === 'Duplicate' || item.status === 'AlreadyExists') {
+                        statusBadge = '<span class="badge bg-warning-subtle text-warning">Trùng lặp</span>';
+                    } else if (item.status === 'Overlap' || item.status === 'Conflict') {
+                        statusBadge = '<span class="badge bg-warning text-dark">Giao thoa giờ</span>';
+                    } else if (item.status === 'OnApprovedLeave' || item.status === 'LeaveConflict' || item.status === 'OnLeave') {
+                        statusBadge = '<span class="badge bg-danger text-white">Nghỉ phép đã duyệt</span>';
+                    } else if (item.status === 'PendingLeaveConflict' || item.status === 'PendingLeave') {
+                        statusBadge = '<span class="badge bg-warning text-dark border border-warning">Nghỉ chờ duyệt</span>';
+                    } else if (item.status === 'AppointmentConflict' || item.status === 'AppointmentImpact') {
+                        statusBadge = '<span class="badge bg-danger text-white">Xung đột lịch hẹn</span>';
+                    } else if (item.status === 'DepartmentMismatch') {
+                        statusBadge = '<span class="badge bg-secondary">Sai chuyên khoa</span>';
+                    } else if (item.status === 'PastOrStarted') {
+                        statusBadge = '<span class="badge bg-secondary-subtle text-muted">Đã qua / Đang diễn ra</span>';
+                    }
+
+                    tr.innerHTML = `
+                        <td class="fw-bold">${escapeHtml(item.dentistName)}</td>
+                        <td>${item.workDate}</td>
+                        <td>${item.startTime.substring(0, 5)} - ${item.endTime.substring(0, 5)}</td>
+                        <td>${statusBadge}</td>
+                        <td class="small text-muted">${escapeHtml(item.message || '')}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                document.getElementById('btnBulkApply').disabled = (data.validShiftsCount === 0 && !overwrite);
+            } else {
+                alert(res.message || 'Lỗi khi kiểm tra lịch trực.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối khi kiểm tra lịch trực: ' + err.message);
+        } finally {
+            isBulkPreviewing = false;
+            btnPreview.disabled = false;
+            btnPreview.innerHTML = '<i class="bi bi-eye me-1"></i>Kiểm Tra Xung Đột (Preview)';
+        }
+    }
+
+    // Handle Bulk Apply AJAX
+    async function handleBulkApply() {
+        if (isBulkApplying) return;
+
+        const deptId = document.getElementById('bulkDepartmentId').value;
+        const dentistSelect = document.getElementById('bulkDentistIds');
+        const dentistIds = Array.from(dentistSelect.selectedOptions).map(opt => parseInt(opt.value));
+        const fromDate = document.getElementById('bulkFromDate').value;
+        const toDate = document.getElementById('bulkToDate').value;
+        const overwrite = document.getElementById('bulkOverwrite').checked;
+
+        const dowCheckboxes = document.querySelectorAll('.bulk-dow:checked');
+        const daysOfWeek = Array.from(dowCheckboxes).map(cb => parseInt(cb.value));
+
+        const shifts = [];
+        const shiftIdentifiers = [];
+        if (document.getElementById('shiftMorning').checked) {
+            shifts.push({ shiftIdentifier: 'Morning', startTime: '08:00:00', endTime: '12:00:00', note: 'Ca Sáng' });
+            shiftIdentifiers.push('Morning');
+        }
+        if (document.getElementById('shiftAfternoon').checked) {
+            shifts.push({ shiftIdentifier: 'Afternoon', startTime: '13:30:00', endTime: '17:30:00', note: 'Ca Chiều' });
+            shiftIdentifiers.push('Afternoon');
+        }
+
+        const payload = {
+            departmentId: parseInt(deptId),
+            dentistUserIds: dentistIds,
+            fromDate: fromDate,
+            toDate: toDate,
+            daysOfWeek: daysOfWeek,
+            shifts: shifts,
+            shiftIdentifiers: shiftIdentifiers,
+            overwriteExisting: overwrite,
+            skipConflicts: true
+        };
+
+        const btnApply = document.getElementById('btnBulkApply');
+        isBulkApplying = true;
+        btnApply.disabled = true;
+        btnApply.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang lưu...';
+
+        try {
+            const resp = await fetch('/Admin/DentistSchedule/BulkApply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+
+            if (res.isSuccess && res.data) {
+                alert(`Áp dụng thành công! Đã tạo ${res.data.createdCount} ca trực mới.`);
+                window.location.reload();
+            } else {
+                alert(res.message || 'Lỗi khi áp dụng lịch trực.');
+                btnApply.disabled = false;
+                btnApply.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Áp Dụng Phân Công';
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối máy chủ.');
+            btnApply.disabled = false;
+            btnApply.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Áp Dụng Phân Công';
+        } finally {
+            isBulkApplying = false;
+        }
+    }
+
+    // Daily Override Modal Logic
+    function handleDailyOverrideClick(btn) {
+        const dateStr = btn.getAttribute('data-date');
+        const isOnLeave = btn.getAttribute('data-on-leave') === 'true';
+        const leaveReason = btn.getAttribute('data-leave-reason') || '';
+        const apptCount = parseInt(btn.getAttribute('data-appt-count') || '0', 10);
+        const shiftsJson = btn.getAttribute('data-shifts');
+        openDailyOverrideModal(dateStr, isOnLeave, leaveReason, apptCount, shiftsJson);
+    }
+
+    function openDailyOverrideModal(dateStr, isOnLeave, leaveReason, apptCount, shiftsJson) {
+        document.getElementById('overrideDate').value = dateStr;
+        document.getElementById('overrideDateDisplay').value = dateStr;
+        handleOverrideDentistChange();
+
+        const isDayOffCb = document.getElementById('overrideIsDayOff');
+        isDayOffCb.checked = isOnLeave;
+        document.getElementById('overrideLeaveReason').value = leaveReason || '';
+        toggleDayOffSection();
+
+        const guardAlert = document.getElementById('appointmentGuardAlert');
+        if (apptCount > 0) {
+            guardAlert.style.display = 'block';
+            document.getElementById('guardApptCount').innerText = apptCount;
+        } else {
+            guardAlert.style.display = 'none';
+        }
+
+        try {
+            const shifts = typeof shiftsJson === 'string' ? JSON.parse(shiftsJson) : (shiftsJson || []);
+            const hasMorning = shifts.some(s => s.startTime && (s.startTime.startsWith('08') || s.startTime.startsWith('09')));
+            const hasAfternoon = shifts.some(s => s.startTime && (s.startTime.startsWith('13') || s.startTime.startsWith('14')));
+            document.getElementById('overrideShiftMorning').checked = hasMorning || (!isOnLeave && shifts.length === 0);
+            document.getElementById('overrideShiftAfternoon').checked = hasAfternoon || (!isOnLeave && shifts.length === 0);
+        } catch (e) {
+            document.getElementById('overrideShiftMorning').checked = !isOnLeave;
+            document.getElementById('overrideShiftAfternoon').checked = !isOnLeave;
+        }
+
+        const modal = new bootstrap.Modal(document.getElementById('dailyOverrideModal'));
+        modal.show();
+    }
+
+    function toggleDayOffSection() {
+        const isDayOff = document.getElementById('overrideIsDayOff').checked;
+        document.getElementById('dayOffReasonGroup').style.display = isDayOff ? 'block' : 'none';
+        document.getElementById('shiftsEditorGroup').style.display = isDayOff ? 'none' : 'block';
+    }
+
+    async function handleSaveOverride() {
+        const dateStr = document.getElementById('overrideDate').value;
+        const dentistId = parseInt(document.getElementById('overrideDentistId').value);
+        const deptId = parseInt(document.getElementById('overrideDepartmentId').value);
+        const isDayOff = document.getElementById('overrideIsDayOff').checked;
+        const leaveReason = document.getElementById('overrideLeaveReason').value;
+
+        if (!dentistId || !deptId || !dateStr) {
+            alert('Thông tin không đầy đủ.');
+            return;
+        }
+
+        const shifts = [];
+        if (!isDayOff) {
+            if (document.getElementById('overrideShiftMorning').checked) {
+                shifts.push({ startTime: '08:00:00', endTime: '12:00:00', note: 'Ca Sáng' });
+            }
+            if (document.getElementById('overrideShiftAfternoon').checked) {
+                shifts.push({ startTime: '13:30:00', endTime: '17:30:00', note: 'Ca Chiều' });
+            }
+        }
+
+        const payload = {
+            dentistUserId: dentistId,
+            departmentId: deptId,
+            workDate: dateStr,
+            isDayOff: isDayOff,
+            leaveReason: leaveReason,
+            shifts: shifts
+        };
+
+        const btnSave = document.getElementById('btnSaveOverride');
+        btnSave.disabled = true;
+        btnSave.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang lưu...';
+
+        try {
+            const resp = await fetch('/Admin/DentistSchedule/DailyOverride', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+
+            if (res.isSuccess) {
+                alert('Đã cập nhật ca trực ngày thành công!');
+                window.location.reload();
+            } else {
+                alert(res.message || 'Không thể lưu ca trực.');
+                btnSave.disabled = false;
+                btnSave.innerHTML = '<i class="bi bi-save me-1"></i>Lưu Thay Đổi Ca Trực';
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Lỗi kết nối máy chủ.');
+            btnSave.disabled = false;
+            btnSave.innerHTML = '<i class="bi bi-save me-1"></i>Lưu Thay Đổi Ca Trực';
+        }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+</script>

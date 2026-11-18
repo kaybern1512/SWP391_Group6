@@ -101,31 +101,6 @@
         var ops = Model.Operations;
     }
 
-    @if (ops != null && ops.ActiveAlerts != null && ops.ActiveAlerts.Any())
-    {
-        <div class="mb-4">
-            @foreach (var alert in ops.ActiveAlerts)
-            {
-                var isCritical = alert.Severity == "Critical";
-                <div class="alert @(isCritical ? "alert-danger" : "alert-warning") border d-flex align-items-center justify-content-between py-2 px-3 mb-2 shadow-sm rounded-3">
-                    <div class="d-flex align-items-center gap-2">
-                        <i class="bi @(isCritical ? "bi-exclamation-triangle-fill fs-5" : "bi-exclamation-circle-fill fs-5")"></i>
-                        <div>
-                            <strong class="d-block">@alert.Title</strong>
-                            <span class="small">@alert.Message</span>
-                        </div>
-                    </div>
-                    @if (!string.IsNullOrEmpty(alert.ActionUrl))
-                    {
-                        <a href="@alert.ActionUrl" class="btn btn-sm @(isCritical ? "btn-danger" : "btn-warning") text-nowrap ms-3">
-                            @(string.IsNullOrEmpty(alert.ActionLabel) ? "Chi tiết" : alert.ActionLabel)
-                        </a>
-                    }
-                </div>
-            }
-        </div>
-    }
-
     @if (ops != null)
     {
         <div class="card-dc mb-4">
@@ -176,19 +151,41 @@
 
                             @if (ops.ReceptionistCoverage != null && ops.ReceptionistCoverage.Any())
                             {
+                                var todayDateOnly = DentalClinic.Web.Helpers.ClinicTimeHelper.TodayDateOnly;
+                                var isPastDate = ops.OperationDate < todayDateOnly;
+                                var isFutureDate = ops.OperationDate > todayDateOnly;
+
                                 <div class="mt-2 pt-2 border-top">
                                     <div class="small fw-semibold text-muted mb-1">Độ phủ Lễ tân (tối thiểu 2):</div>
                                     @foreach (var rc in ops.ReceptionistCoverage)
                                     {
                                         <div class="d-flex justify-content-between align-items-center small py-1">
                                             <span>@rc.ShiftName:</span>
-                                            @if (rc.HasShortage)
+                                            @if (isPastDate)
                                             {
-                                                <span class="badge bg-danger text-white">Thiếu: @rc.PresentCount/2</span>
+                                                <span class="badge bg-secondary-subtle text-secondary border">@rc.PresentCount người trực</span>
+                                            }
+                                            else if (isFutureDate)
+                                            {
+                                                @if (rc.ScheduledCount >= 2)
+                                                {
+                                                    <span class="badge bg-success-subtle text-success border">Đã xếp: @rc.ScheduledCount/2</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-warning-subtle text-warning border">Chưa đủ: @rc.ScheduledCount/2</span>
+                                                }
                                             }
                                             else
                                             {
-                                                <span class="badge bg-success text-white">Đủ: @rc.PresentCount</span>
+                                                @if (rc.HasShortage)
+                                                {
+                                                    <span class="badge bg-danger text-white">Thiếu: @rc.PresentCount/2</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-success text-white">Đủ: @rc.PresentCount</span>
+                                                }
                                             }
                                         </div>
                                     }

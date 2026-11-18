@@ -775,8 +775,80 @@ public class BillingService : IBillingService
             }
         }
 
-        // Only actual performed services from treatment sessions may be preloaded.
+        // Only actual performed services from treatment sessions (plus completed internal diagnostics) may be preloaded.
         // Unperformed services without a PerformedService entity cannot be billed per CK_InvoiceItems_SourceLink.
+        var completedDiagnostics = await _dbContext.Diagnostics
+            .Include(d => d.DepartmentService)
+            .Include(d => d.AppointmentService)
+            .Where(d => d.AppointmentService.AppointmentId == appt.AppointmentId &&
+                        d.Status == "Completed" &&
+                        !d.ClinicalIndication.StartsWith("[External:"))
+            .ToListAsync(ct);
+
+        foreach (var diag in completedDiagnostics)
+        {
+            if (diag.DepartmentServiceId <= 0) continue;
+
+            var existingPs = await _dbContext.PerformedServices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ps => ps.AppointmentId == appt.AppointmentId &&
+                                           ps.DepartmentServiceId == diag.DepartmentServiceId, ct);
+
+            if (existingPs == null)
+            {
+                var session = await _dbContext.TreatmentSessions
+                    .OrderByDescending(ts => ts.SessionId)
+                    .FirstOrDefaultAsync(ts => ts.AppointmentId == appt.AppointmentId &&
+                                               ts.AppointmentServiceId == diag.AppointmentServiceId, ct);
+
+                if (session == null)
+                {
+                    var isUploaderDentist = diag.UploadedByUserId.HasValue &&
+                        await _dbContext.DentistProfiles.AnyAsync(dp => dp.UserId == diag.UploadedByUserId.Value, ct);
+                    var sessionDentistId = isUploaderDentist ? diag.UploadedByUserId!.Value : diag.OrderingDentistUserId;
+
+                    session = new TreatmentSession
+                    {
+                        AppointmentId = appt.AppointmentId,
+                        AppointmentServiceId = diag.AppointmentServiceId,
+                        PatientUserId = appt.PatientUserId,
+                        DentistUserId = sessionDentistId,
+                        SessionDate = diag.AppointmentService?.ServiceDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+                        Notes = $"Chẩn đoán hình ảnh #{diag.DiagnosticId}",
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _dbContext.TreatmentSessions.Add(session);
+                    await _dbContext.SaveChangesAsync(ct);
+                }
+
+                var newPs = new PerformedService
+                {
+                    TreatmentSessionId = session.SessionId,
+                    AppointmentId = appt.AppointmentId,
+                    AppointmentServiceId = diag.AppointmentServiceId,
+                    DepartmentServiceId = diag.DepartmentServiceId,
+                    Quantity = 1,
+                    UnitPrice = diag.DepartmentService?.Price ?? 0m,
+                    Notes = $"[X-quang #{diag.DiagnosticId}] {diag.Findings ?? diag.ImagingType}",
+                    CreatedAt = DateTime.UtcNow
+                };
+                _dbContext.PerformedServices.Add(newPs);
+                await _dbContext.SaveChangesAsync(ct);
+                existingPs = newPs;
+            }
+
+            if (!performedItems.Any(pi => pi.PerformedServiceId == existingPs.PerformedServiceId))
+            {
+                performedItems.Add(new BillingPreloadedItemDto
+                {
+                    PerformedServiceId = existingPs.PerformedServiceId,
+                    DepartmentServiceId = existingPs.DepartmentServiceId,
+                    Description = diag.DepartmentService?.ServiceName ?? $"X-quang {diag.ImagingType}",
+                    Quantity = existingPs.Quantity > 0 ? existingPs.Quantity : 1,
+                    UnitPrice = existingPs.UnitPrice > 0 ? existingPs.UnitPrice : (diag.DepartmentService?.Price ?? 0m)
+                });
+            }
+        }
 
         // Load dispensed medicines from PrescriptionItems (3-table pharmacy)
         var dispensedItems = await _dbContext.PrescriptionItems

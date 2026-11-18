@@ -33,12 +33,15 @@ public class DentistLeaveController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = UserRole.Dentist)]
+    [Authorize(Roles = $"{UserRole.Dentist},{UserRole.SystemAdministrator}")]
     [ProducesResponseType(typeof(ApiResponse<DentistLeaveRequestDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> SubmitLeaveRequest([FromBody] CreateDentistLeaveRequest request, CancellationToken ct)
     {
         var currentUserId = GetCurrentUserId();
-        var result = await _leaveService.SubmitLeaveRequestAsync(request, currentUserId, ct);
+        var targetDentistUserId = (User.IsInRole(UserRole.SystemAdministrator) && request.DentistUserId.HasValue && request.DentistUserId.Value > 0)
+            ? request.DentistUserId.Value
+            : currentUserId;
+        var result = await _leaveService.SubmitLeaveRequestAsync(request, targetDentistUserId, ct);
         if (!result.Success)
             return BadRequest(result);
 

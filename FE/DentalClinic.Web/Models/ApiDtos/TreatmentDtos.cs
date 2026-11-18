@@ -87,6 +87,7 @@ public class PerformedServiceDto
 public class CreateTreatmentPlanRequest
 {
     public long PatientUserId { get; set; }
+    public long? AppointmentId { get; set; }
     public long DepartmentId { get; set; }
     public string? Status { get; set; } = "Active";
     public List<CreateTreatmentPlanItemInput> Items { get; set; } = new();
@@ -112,6 +113,7 @@ public class CreateTreatmentSessionRequest
 {
     public long? TreatmentPlanItemId { get; set; }
     public long AppointmentId { get; set; }
+    public long? AppointmentServiceId { get; set; }
     public DateTime SessionDate { get; set; } = DateTime.UtcNow;
     public string? TreatmentResult { get; set; }
     public string? ClinicalNote { get; set; }

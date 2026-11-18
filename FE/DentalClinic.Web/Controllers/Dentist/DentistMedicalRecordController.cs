@@ -494,14 +494,16 @@ public class DentistMedicalRecordController : Controller
         long appointmentId,
         long patientUserId,
         string? clinicalFindings,
-        string? notes)
+        string? notes,
+        string? evidenceUrl = null)
     {
         if (_careEpisodeApi != null)
         {
             var req = new CompleteServiceTaskRequest
             {
                 ClinicalFindings = clinicalFindings,
-                Notes = notes
+                Notes = notes,
+                EvidenceUrl = evidenceUrl
             };
             var result = await _careEpisodeApi.CompleteServiceTaskAsync(serviceTaskId, req);
             if (result.IsSuccess)
@@ -564,23 +566,9 @@ public class DentistMedicalRecordController : Controller
             }
         }
 
-        // Section 6: Ghi nhận đúng PerformedServices thực tế tại ghế điều trị khi bác sĩ tự thực hiện
-        if (executionMode != "delegate" && _treatmentApi != null && appointmentId > 0)
-        {
-            var req = new AddPerformedServiceToAppointmentRequest
-            {
-                DepartmentServiceId = serviceId,
-                Quantity = quantity > 0 ? quantity : 1,
-                UnitPrice = unitPrice,
-                Note = notes
-            };
-            var addRes = await _treatmentApi.AddPerformedServiceToAppointmentAsync(appointmentId, req);
-            if (!addRes.IsSuccess)
-            {
-                TempData["ErrorMessage"] = addRes.Message ?? "Không thể ghi nhận dịch vụ đã thực hiện.";
-                return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
-            }
-        }
+        // Thêm dịch vụ chưa đồng nghĩa với đã thực hiện (P0 Billing Integrity).
+        // Chỉ tạo tác vụ điều trị trong AppointmentServices.
+        // PerformedService chỉ được ghi nhận khi bác sĩ thực hiện và bấm "Hoàn thành thủ thuật" (CompleteServiceTask).
 
         // If doctor performs self and picked chair
         if (executionMode != "delegate" && dentalChairId.HasValue && dentalChairId.Value > 0 && _appointmentApiService != null)
@@ -598,7 +586,7 @@ public class DentistMedicalRecordController : Controller
         }
         else
         {
-            TempData["SuccessMessage"] = "Đã ghi nhận dịch vụ thực hiện tại ghế thành công! Dịch vụ đã được cập nhật vào danh mục thanh toán viện phí.";
+            TempData["SuccessMessage"] = "Đã thêm chỉ định dịch vụ điều trị thành công! Bác sĩ hãy bấm 'Hoàn thành thủ thuật' tại ghế sau khi thực hiện để ghi nhận thanh toán.";
         }
 
         return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
@@ -693,14 +681,14 @@ public class DentistMedicalRecordController : Controller
         long patientUserId,
         long prescriptionId,
         long medicineId,
-        long batchId,
-        int quantity,
+        long batchId = 0,
+        int quantity = 1,
         long? prescriptionItemId = null,
         string? notes = null)
     {
-        if (_medicineApi == null || prescriptionId <= 0 || batchId <= 0 || quantity <= 0)
+        if (_medicineApi == null || prescriptionId <= 0 || medicineId <= 0 || quantity <= 0)
         {
-            TempData["ErrorMessage"] = "Thông tin cấp phát thuốc không hợp lệ. Vui lòng chọn lô thuốc và nhập số lượng lớn hơn 0.";
+            TempData["ErrorMessage"] = "Thông tin cấp phát thuốc không hợp lệ. Vui lòng chọn thuốc và nhập số lượng lớn hơn 0.";
             return RedirectToAction(nameof(Index), new { patientId = patientUserId, appointmentId, isExamining = true });
         }
 
@@ -714,7 +702,7 @@ public class DentistMedicalRecordController : Controller
                 {
                     PrescriptionItemId = prescriptionItemId,
                     MedicineId = medicineId,
-                    MedicineBatchId = batchId,
+                    MedicineBatchId = batchId > 0 ? batchId : null,
                     Quantity = quantity
                 }
             }

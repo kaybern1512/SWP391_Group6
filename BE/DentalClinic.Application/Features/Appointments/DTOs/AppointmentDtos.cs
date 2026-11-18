@@ -28,6 +28,7 @@ public class CreateReceptionistAppointmentRequest
     public bool AutoCheckIn { get; set; } = false;
     public DateTime ScheduledStart { get; set; }
     public string ReasonForVisit { get; set; } = string.Empty;
+    public long? FollowUpId { get; set; }
 }
 
 public class CreateAppointmentRequest
@@ -45,6 +46,7 @@ public class CreateAppointmentRequest
     public bool AutoConfirm { get; set; } = false;
     public DateTime ScheduledStart { get; set; }
     public string ReasonForVisit { get; set; } = string.Empty;
+    public long? FollowUpId { get; set; }
 }
 
 public class AppointmentServiceItemDto
@@ -120,6 +122,8 @@ public class AppointmentDto
     public bool RequiresFollowUp { get; set; } = false;
     public long? TreatmentPlanId { get; set; }
     public long? TreatmentPlanItemId { get; set; }
+    public string? PendingActionType { get; set; }
+    public DateTime? PendingActionStart { get; set; }
 
     public List<AppointmentServiceItemDto> Services { get; set; } = new();
     public List<AppointmentChangeProposalDto> Proposals { get; set; } = new();
@@ -201,6 +205,32 @@ public class PatientRescheduleRequest
     public string Reason { get; set; } = string.Empty;
 }
 
+public class RescheduleRejectRequest
+{
+    public string Reason { get; set; } = string.Empty;
+}
+
+public class DentistContinueAfternoonRequest
+{
+    public DateTime ContinuationStartTime { get; set; }
+    public int ContinuationDurationMinutes { get; set; } = 30;
+    public string? ClinicalNotes { get; set; }
+}
+
+public class DentistRecommendAnotherDayRequest
+{
+    public DateTime RecommendedDate { get; set; }
+    public int? RecommendedServiceId { get; set; }
+    public string ClinicalReason { get; set; } = string.Empty;
+    public string? CompletedWorkNotes { get; set; }
+    public string? RemainingWorkNotes { get; set; }
+}
+
+public class DentistFlagDelayRequest
+{
+    public string Notes { get; set; } = string.Empty;
+}
+
 public class PatientProposalResponseRequest
 {
     public bool Accept { get; set; }
@@ -217,8 +247,9 @@ public class RoomOptionDto
     public string RoomCode { get; set; } = string.Empty;
     public string? RoomName { get; set; }
     public long? DepartmentId { get; set; }
-public string Status { get; set; } = "Active";
+    public string Status { get; set; } = "Active";
     public bool IsExclusive { get; set; } = false;
+    public string? RoomType { get; set; }
 }
 
 public class ChairOptionDto

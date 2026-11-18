@@ -13,7 +13,7 @@
 [CmdletBinding()]
 param(
     [string]$SqlServerInstance = ".\SQLEXPRESS",
-    [string]$TargetDatabase = "DentalCare_SWP391_UAT_Fixture_TEST",
+    [string]$TargetDatabase = "DentalCare_SWP391_DEMO_V2_TEST",
     [switch]$SkipBrowserLaunch
 )
 
@@ -27,7 +27,7 @@ Write-Host "====================================================================
 # --------------------------------------------------------------------
 # 1. STRICT SAFETY GATES: Database Protection
 # --------------------------------------------------------------------
-$ProtectedDatabases = @("DentalCare_SWP391", "DentalCare_SWP391_Refactor_UAT")
+$ProtectedDatabases = @("DentalCare_SWP391", "DentalCare_SWP391_Refactor_UAT", "DentalCare_SWP391_UAT_Fixture_TEST")
 if ($ProtectedDatabases -contains $TargetDatabase) {
     Write-Host "[FATAL SAFETY VIOLATION] TargetDatabase '$TargetDatabase' is a PROTECTED database." -ForegroundColor Red
     Write-Host "The demo launcher is strictly prohibited from running against protected databases." -ForegroundColor Red

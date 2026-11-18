@@ -44,6 +44,7 @@ public class ServiceManageViewModel
     public List<AdminDepartmentDto> Departments { get; set; } = new();
     public long? SelectedDepartmentId { get; set; }
     public string? SearchKeyword { get; set; }
+    public string? SelectedStatus { get; set; }
     public ServiceFormModel FormModel { get; set; } = new();
 }
 
@@ -85,6 +86,14 @@ public class ServiceFormModel
     public string? BookingInstructions { get; set; }
 
     public string? WorkflowStepsJson { get; set; }
+
+    [StringLength(150, ErrorMessage = "Tên bước xác nhận không quá 150 ký tự")]
+    public string? ConfirmationStepName { get; set; }
+
+    [StringLength(500, ErrorMessage = "Hướng dẫn xác nhận không quá 500 ký tự")]
+    public string? ConfirmationInstructions { get; set; }
+
+    public string? ConfirmationResultType { get; set; }
 }
 
 public class RoomChairManageViewModel
@@ -165,14 +174,17 @@ public class AdminDentistScheduleManageViewModel
     public List<AdminUserDto> Dentists { get; set; } = new();
     public List<AdminDepartmentDto> Departments { get; set; } = new();
     public List<AdminRoomDto> Rooms { get; set; } = new();
-    public string ActiveTab { get; set; } = "allocations";
+    public string ActiveTab { get; set; } = "weekly";
     public long? SelectedDepartmentId { get; set; }
     public long? SelectedDentistId { get; set; }
     public DateOnly? FromDate { get; set; }
     public DateOnly? ToDate { get; set; }
     public MonthlyDentistScheduleDto? MonthlySchedule { get; set; }
     public int SelectedYear { get; set; } = DateTime.Today.Year;
-        public int SelectedMonth { get; set; } = DateTime.Today.Month;
+    public int SelectedMonth { get; set; } = DateTime.Today.Month;
+    public int WeekOffset { get; set; } = 0;
+    public DateOnly WeekStartDate { get; set; }
+    public DateOnly WeekEndDate { get; set; }
     public List<DentistLeaveRequestDto> LeaveRequests { get; set; } = new();
 }
 

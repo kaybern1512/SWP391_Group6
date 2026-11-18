@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Features.DentistSchedule.DTOs;
 using DentalClinic.Application.Features.ReceptionistWorkforce.DTOs;
 using DentalClinic.Domain.Common;
 using DentalClinic.Domain.Enums;
@@ -28,17 +29,17 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             TemplateName = "Ca Sáng (08:00 - 12:00)",
             StartTime = new TimeOnly(8, 0),
             EndTime = new TimeOnly(12, 0),
-            MinStaffRequired = 2,
+            MinStaffRequired = 1,
             IsActive = true,
             DisplayOrder = 1
         },
         new ReceptionistShiftTemplateDto
         {
             ShiftTemplateId = 2,
-            TemplateName = "Ca Chiều (13:00 - 17:00)",
-            StartTime = new TimeOnly(13, 0),
-            EndTime = new TimeOnly(17, 0),
-            MinStaffRequired = 2,
+            TemplateName = "Ca Chiều (13:30 - 17:30)",
+            StartTime = new TimeOnly(13, 30),
+            EndTime = new TimeOnly(17, 30),
+            MinStaffRequired = 1,
             IsActive = true,
             DisplayOrder = 2
         }
@@ -178,7 +179,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             {
                 var covering = dayShifts.Where(s => s.Status == "Scheduled" && s.StartTime < tmpl.EndTime && s.EndTime > tmpl.StartTime).ToList();
                 var availStaff = covering.Where(s => !dayApprovedLeaves.Any(al => al.ReceptionistUserId == s.StaffUserId)).Select(s => s.StaffUserId).Distinct().Count();
-                if (covering.Any() && availStaff < (tmpl.MinStaffRequired > 0 ? tmpl.MinStaffRequired : 2))
+                if (covering.Any() && availStaff < (tmpl.MinStaffRequired > 0 ? tmpl.MinStaffRequired : 1))
                 {
                     hasShortage = true;
                     break;
@@ -275,6 +276,26 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         long currentUserId,
         CancellationToken ct = default)
     {
+        if (request.StartTime == default && request.EndTime == default && request.ShiftTemplateId.HasValue)
+        {
+            var tmpl = DefaultShiftTemplates.FirstOrDefault(t => t.ShiftTemplateId == request.ShiftTemplateId.Value);
+            if (tmpl != null)
+            {
+                request.StartTime = tmpl.StartTime;
+                request.EndTime = tmpl.EndTime;
+            }
+        }
+
+        try
+        {
+            StandardWorkShiftPolicy.ValidateNewWorkDate(request.WorkDate);
+            StandardWorkShiftPolicy.ValidateStandardShiftHours(request.StartTime, request.EndTime);
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse<ReceptionistWorkScheduleDto>.Fail(ex.Message);
+        }
+
         if (request.EndTime <= request.StartTime)
         {
             return ApiResponse<ReceptionistWorkScheduleDto>.Fail("Giờ kết thúc ca trực phải lớn hơn giờ bắt đầu.");
@@ -298,6 +319,57 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         if (hasLeave)
         {
             return ApiResponse<ReceptionistWorkScheduleDto>.Fail("Không thể phân ca vì lễ tân đã được duyệt nghỉ phép trong khoảng thời gian này.");
+        }
+
+        var existing = await _dbContext.StaffWorkSchedules
+            .FirstOrDefaultAsync(s => s.StaffRole == UserRole.Receptionist &&
+                                      s.StaffUserId == request.ReceptionistUserId &&
+                                      s.WorkDate == request.WorkDate &&
+                                      s.StartTime == request.StartTime &&
+                                      s.EndTime == request.EndTime, ct);
+
+        if (existing != null)
+        {
+            if (existing.Status == "Cancelled")
+            {
+                existing.Status = "Scheduled";
+                existing.Notes = request.Notes ?? existing.Notes;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync(ct);
+
+                await _auditLogService.LogAsync(
+                    currentUserId,
+                    "REACTIVATE_RECEPTIONIST_SCHEDULE",
+                    "StaffWorkSchedule",
+                    existing.WorkScheduleId.ToString(),
+                    "Cancelled",
+                    $"Reactivated shift {request.StartTime}-{request.EndTime} for receptionist {request.ReceptionistUserId} on {request.WorkDate:yyyy-MM-dd}",
+                    ct);
+
+                var userExisting = await _dbContext.UserAccounts
+                    .Include(u => u.StaffProfile)
+                    .FirstOrDefaultAsync(u => u.UserId == request.ReceptionistUserId, ct);
+
+                var dtoExisting = new ReceptionistWorkScheduleDto
+                {
+                    ReceptionistScheduleId = existing.WorkScheduleId,
+                    ReceptionistUserId = existing.StaffUserId,
+                    ReceptionistName = userExisting?.StaffProfile?.FullName ?? userExisting?.Email ?? "Lễ tân",
+                    EmployeeCode = $"EMP-{existing.StaffUserId}",
+                    ShiftTemplateId = request.ShiftTemplateId,
+                    WorkDate = existing.WorkDate,
+                    StartTime = existing.StartTime,
+                    EndTime = existing.EndTime,
+                    Status = existing.Status,
+                    IsPublished = true,
+                    Notes = existing.Notes,
+                    CreatedAt = existing.CreatedAt
+                };
+
+                return ApiResponse<ReceptionistWorkScheduleDto>.Ok(dtoExisting, "Khôi phục và kích hoạt ca làm việc thành công.");
+            }
+
+            return ApiResponse<ReceptionistWorkScheduleDto>.Fail("Ca trực này đã tồn tại trong hệ thống.");
         }
 
         bool overlapping = await _dbContext.StaffWorkSchedules
@@ -365,6 +437,25 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         long currentUserId,
         CancellationToken ct = default)
     {
+        if (request.StartTime == default && request.EndTime == default && request.ShiftTemplateId.HasValue)
+        {
+            var tmpl = DefaultShiftTemplates.FirstOrDefault(t => t.ShiftTemplateId == request.ShiftTemplateId.Value);
+            if (tmpl != null)
+            {
+                request.StartTime = tmpl.StartTime;
+                request.EndTime = tmpl.EndTime;
+            }
+        }
+
+        try
+        {
+            StandardWorkShiftPolicy.ValidateStandardShiftHours(request.StartTime, request.EndTime);
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse<ReceptionistWorkScheduleDto>.Fail(ex.Message);
+        }
+
         if (request.EndTime <= request.StartTime)
         {
             return ApiResponse<ReceptionistWorkScheduleDto>.Fail("Giờ kết thúc ca trực phải lớn hơn giờ bắt đầu.");
@@ -476,9 +567,34 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         ReceptionistBulkScheduleAssignmentRequest request,
         CancellationToken ct = default)
     {
-        if (request.Year < 2020 || request.Year > 2100 || request.Month < 1 || request.Month > 12)
+        DateOnly startDate;
+        DateOnly endDate;
+        var today = ClinicTimeHelper.TodayDateOnly;
+
+        if (request.FromDate.HasValue && request.ToDate.HasValue)
         {
-            return ApiResponse<ReceptionistBulkSchedulePreviewDto>.Fail("Tháng hoặc năm không hợp lệ.");
+            startDate = request.FromDate.Value;
+            endDate = request.ToDate.Value;
+        }
+        else if (request.Year >= 2020 && request.Year <= 2100 && request.Month >= 1 && request.Month <= 12)
+        {
+            int daysInMonth = DateTime.DaysInMonth(request.Year, request.Month);
+            startDate = new DateOnly(request.Year, request.Month, 1);
+            endDate = new DateOnly(request.Year, request.Month, daysInMonth);
+        }
+        else
+        {
+            return ApiResponse<ReceptionistBulkSchedulePreviewDto>.Fail("Khoảng ngày hoặc tháng phân công không hợp lệ.");
+        }
+
+        if (startDate < today)
+        {
+            return ApiResponse<ReceptionistBulkSchedulePreviewDto>.Fail("Không thể phân công ca trực trong quá khứ.");
+        }
+
+        if (endDate < startDate)
+        {
+            return ApiResponse<ReceptionistBulkSchedulePreviewDto>.Fail("Ngày kết thúc không được nhỏ hơn ngày bắt đầu.");
         }
 
         if (request.ReceptionistUserIds == null || !request.ReceptionistUserIds.Any())
@@ -491,174 +607,409 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             return ApiResponse<ReceptionistBulkSchedulePreviewDto>.Fail("Vui lòng chọn các thứ trong tuần để áp dụng.");
         }
 
-        var template = DefaultShiftTemplates.FirstOrDefault(t => t.ShiftTemplateId == request.ShiftTemplateId)
-                       ?? DefaultShiftTemplates.First();
+        var targetShifts = new List<(string Name, TimeOnly Start, TimeOnly End, long? TmplId)>();
+        if (request.ShiftIdentifiers != null && request.ShiftIdentifiers.Any())
+        {
+            foreach (var id in request.ShiftIdentifiers)
+            {
+                if (string.Equals(id, "Morning", StringComparison.OrdinalIgnoreCase) || string.Equals(id, "morning", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetShifts.Add(("Ca Sáng", ClinicShiftConstants.MorningStartTime, ClinicShiftConstants.MorningEndTime, 1));
+                }
+                else if (string.Equals(id, "Afternoon", StringComparison.OrdinalIgnoreCase) || string.Equals(id, "afternoon", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetShifts.Add(("Ca Chiều", ClinicShiftConstants.AfternoonStartTime, ClinicShiftConstants.AfternoonEndTime, 2));
+                }
+            }
+        }
+        if (!targetShifts.Any() && request.ShiftTemplateIds != null && request.ShiftTemplateIds.Any())
+        {
+            foreach (var tmplId in request.ShiftTemplateIds)
+            {
+                var tmpl = DefaultShiftTemplates.FirstOrDefault(t => t.ShiftTemplateId == tmplId);
+                if (tmpl != null)
+                {
+                    targetShifts.Add((tmpl.TemplateName, tmpl.StartTime, tmpl.EndTime, tmpl.ShiftTemplateId));
+                }
+            }
+        }
+        if (!targetShifts.Any())
+        {
+            var template = DefaultShiftTemplates.FirstOrDefault(t => t.ShiftTemplateId == request.ShiftTemplateId)
+                           ?? DefaultShiftTemplates.First();
+            targetShifts.Add((template.TemplateName, template.StartTime, template.EndTime, template.ShiftTemplateId));
+        }
 
-        int daysInMonth = DateTime.DaysInMonth(request.Year, request.Month);
-        int proposedCount = 0;
-        int overwrittenCount = 0;
-        int conflictWithLeave = 0;
-        var warnings = new List<string>();
-        var errors = new List<string>();
+        var staffProfiles = await _dbContext.UserAccounts
+            .AsNoTracking()
+            .Include(u => u.StaffProfile)
+            .Where(u => request.ReceptionistUserIds.Contains(u.UserId))
+            .ToListAsync(ct);
 
-        var startDate = new DateOnly(request.Year, request.Month, 1);
-        var endDate = new DateOnly(request.Year, request.Month, daysInMonth);
+        var staffMap = staffProfiles.ToDictionary(
+            u => u.UserId,
+            u => (
+                Name: u.StaffProfile?.FullName ?? u.Email ?? "Lễ tân",
+                Code: $"EMP-{u.UserId}",
+                IsValid: u.Role == UserRole.Receptionist && u.Status == AccountStatus.Active
+            )
+        );
 
         var approvedLeaves = await _dbContext.StaffLeaveRequests
             .AsNoTracking()
-            .Where(l => l.StaffRole == UserRole.Receptionist && l.Status == "Approved" && l.StartDate <= endDate && l.EndDate >= startDate)
+            .Where(l => request.ReceptionistUserIds.Contains(l.StaffUserId) &&
+                        l.StaffRole == UserRole.Receptionist &&
+                        (l.Status == "Approved" || l.Status == "Pending") &&
+                        l.StartDate <= endDate &&
+                        l.EndDate >= startDate)
             .ToListAsync(ct);
 
         var existingShifts = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
-            .Where(s => s.StaffRole == UserRole.Receptionist && s.WorkDate >= startDate && s.WorkDate <= endDate && s.Status == "Scheduled")
+            .Where(s => request.ReceptionistUserIds.Contains(s.StaffUserId) &&
+                        s.StaffRole == UserRole.Receptionist &&
+                        s.WorkDate >= startDate &&
+                        s.WorkDate <= endDate &&
+                        s.Status == "Scheduled")
             .ToListAsync(ct);
 
-        for (int day = 1; day <= daysInMonth; day++)
-        {
-            var date = new DateOnly(request.Year, request.Month, day);
-            int dayOfWeek = (int)date.DayOfWeek == 0 ? 7 : (int)date.DayOfWeek;
+        var previewItems = new List<ReceptionistBulkPreviewItemDto>();
+        int totalProposed = 0;
+        int validCount = 0;
+        int duplicateCount = 0;
+        int conflictCount = 0;
+        int leaveConflictCount = 0;
+        int pendingLeaveConflictCount = 0;
+        int pastOrStartedCount = 0;
+        int invalidStaffCount = 0;
+        var warnings = new List<string>();
+        var errors = new List<string>();
 
-            if (!request.DaysOfWeek.Contains(dayOfWeek)) continue;
+        var nowClinicTime = TimeOnly.FromDateTime(ClinicTimeHelper.Now);
+
+        for (var date = startDate; date <= endDate; date = date.AddDays(1))
+        {
+            int dayOfWeek = (int)date.DayOfWeek == 0 ? 7 : (int)date.DayOfWeek;
+            int dow07 = (int)date.DayOfWeek;
+            if (!request.DaysOfWeek.Contains(dayOfWeek) && !request.DaysOfWeek.Contains(dow07))
+                continue;
 
             foreach (var userId in request.ReceptionistUserIds)
             {
-                bool hasLeave = approvedLeaves.Any(l => l.StaffUserId == userId && l.StartDate <= date && l.EndDate >= date);
-                if (hasLeave)
-                {
-                    conflictWithLeave++;
-                    warnings.Add($"Lễ tân ID {userId} có đơn nghỉ phép đã duyệt vào ngày {date:dd/MM/yyyy} nên sẽ không phân ca ngày này.");
-                    continue;
-                }
+                var staffInfo = staffMap.GetValueOrDefault(userId, (Name: $"Lễ tân {userId}", Code: $"EMP-{userId}", IsValid: false));
 
-                bool alreadyScheduled = existingShifts.Any(s => s.StaffUserId == userId && s.WorkDate == date);
-                if (alreadyScheduled)
+                foreach (var shift in targetShifts)
                 {
-                    if (request.OverwriteExisting)
+                    totalProposed++;
+
+                    var item = new ReceptionistBulkPreviewItemDto
                     {
-                        overwrittenCount++;
-                        proposedCount++;
+                        ReceptionistUserId = userId,
+                        ReceptionistName = staffInfo.Name,
+                        EmployeeCode = staffInfo.Code,
+                        WorkDate = date,
+                        StartTime = shift.Start,
+                        EndTime = shift.End,
+                        ShiftName = shift.Name,
+                        CanApply = true,
+                        Status = "Available",
+                        Message = "Có thể tạo"
+                    };
+
+                    if (!staffInfo.IsValid)
+                    {
+                        item.Status = "InvalidStaff";
+                        item.Message = "Tài khoản nhân sự không hợp lệ hoặc đã bị khóa";
+                        item.CanApply = false;
+                        invalidStaffCount++;
+                        previewItems.Add(item);
+                        continue;
                     }
-                }
-                else
-                {
-                    proposedCount++;
+
+                    if (date < today)
+                    {
+                        item.Status = "PastOrStarted";
+                        item.Message = "Ca trực thuộc quá khứ";
+                        item.CanApply = false;
+                        pastOrStartedCount++;
+                        previewItems.Add(item);
+                        continue;
+                    }
+
+                    if (date == today && shift.Start <= nowClinicTime)
+                    {
+                        item.Status = "PastOrStarted";
+                        item.Message = "Ca trực đã bắt đầu hoặc đã qua trong ngày";
+                        item.CanApply = false;
+                        pastOrStartedCount++;
+                        previewItems.Add(item);
+                        continue;
+                    }
+
+                    var matchingLeave = approvedLeaves.FirstOrDefault(l =>
+                        l.StaffUserId == userId &&
+                        l.StartDate <= date &&
+                        l.EndDate >= date &&
+                        (!l.StartTime.HasValue || !l.EndTime.HasValue ||
+                         (shift.Start < l.EndTime.Value && shift.End > l.StartTime.Value)));
+
+                    if (matchingLeave != null)
+                    {
+                        if (matchingLeave.Status == "Approved")
+                        {
+                            item.Status = "OnApprovedLeave";
+                            item.Message = "Trùng với lịch NGHỈ PHÉP ĐÃ DUYỆT (bảo vệ tuyệt đối)";
+                            item.CanApply = false;
+                            leaveConflictCount++;
+                            warnings.Add($"Lễ tân {staffInfo.Name} đã được duyệt nghỉ phép ngày {date:dd/MM/yyyy} ({shift.Name}).");
+                        }
+                        else
+                        {
+                            item.Status = "PendingLeave";
+                            item.Message = "Trùng với đơn xin nghỉ phép ĐANG CHỜ DUYỆT";
+                            item.CanApply = false;
+                            pendingLeaveConflictCount++;
+                            warnings.Add($"Lễ tân {staffInfo.Name} có đơn nghỉ phép đang chờ duyệt ngày {date:dd/MM/yyyy} ({shift.Name}).");
+                        }
+                        previewItems.Add(item);
+                        continue;
+                    }
+
+                    bool isDuplicate = existingShifts.Any(s =>
+                        s.StaffUserId == userId &&
+                        s.WorkDate == date &&
+                        s.StartTime == shift.Start &&
+                        s.EndTime == shift.End);
+
+                    if (isDuplicate)
+                    {
+                        item.Status = "AlreadyExists";
+                        item.Message = "Ca tương đương đã tồn tại";
+                        item.CanApply = false;
+                        duplicateCount++;
+                        previewItems.Add(item);
+                        continue;
+                    }
+
+                    bool isOverlap = existingShifts.Any(s =>
+                        s.StaffUserId == userId &&
+                        s.WorkDate == date &&
+                        s.StartTime < shift.End &&
+                        s.EndTime > shift.Start);
+
+                    if (isOverlap)
+                    {
+                        item.Status = "Conflict";
+                        item.Message = "Trùng/chồng lấn với ca trực khác";
+                        item.CanApply = false;
+                        conflictCount++;
+                        previewItems.Add(item);
+                        continue;
+                    }
+
+                    validCount++;
+                    previewItems.Add(item);
                 }
             }
         }
 
         var preview = new ReceptionistBulkSchedulePreviewDto
         {
-            ProposedShiftsCount = proposedCount,
-            OverwrittenShiftsCount = overwrittenCount,
-            ConflictWithLeaveCount = conflictWithLeave,
+            // 5 primary summary cards
+            TotalProposedShifts = totalProposed,
+            AvailableCount = validCount,
+            AlreadyExistsCount = duplicateCount,
+            LeaveBlockedCount = leaveConflictCount + pendingLeaveConflictCount,
+            OtherConflictCount = conflictCount + pastOrStartedCount + invalidStaffCount,
+
+            // Detailed breakdown
+            ProposedShiftsCount = totalProposed,
+            ValidShiftsCount = validCount,
+            DuplicateShiftsCount = duplicateCount,
+            ConflictCount = conflictCount,
+            OnApprovedLeaveCount = leaveConflictCount,
+            PendingLeaveCount = pendingLeaveConflictCount,
+            LeaveConflictCount = leaveConflictCount,
+            PendingLeaveConflictCount = pendingLeaveConflictCount,
+            PastOrStartedCount = pastOrStartedCount,
+            InvalidStaffCount = invalidStaffCount,
+            OverwrittenShiftsCount = 0,
+            ConflictWithLeaveCount = leaveConflictCount + pendingLeaveConflictCount,
+
             Warnings = warnings,
             Errors = errors,
-            IsValid = errors.Count == 0
+            IsValid = errors.Count == 0,
+            Items = previewItems
         };
 
         return ApiResponse<ReceptionistBulkSchedulePreviewDto>.Ok(preview);
     }
 
-    public async Task<ApiResponse<bool>> ApplyBulkScheduleAsync(
+    public async Task<ApiResponse<ReceptionistBulkApplyResultDto>> ApplyBulkScheduleAsync(
         ReceptionistBulkScheduleAssignmentRequest request,
         long currentUserId,
         CancellationToken ct = default)
     {
         var previewRes = await PreviewBulkScheduleAsync(request, ct);
-        if (!previewRes.Success || !previewRes.Data!.IsValid)
+        if (!previewRes.Success || previewRes.Data == null)
         {
-            return ApiResponse<bool>.Fail(previewRes.Message ?? "Dữ liệu phân ca hàng loạt không hợp lệ.");
+            return ApiResponse<ReceptionistBulkApplyResultDto>.Fail(previewRes.Message ?? "Dữ liệu phân ca hàng loạt không hợp lệ.");
         }
 
-        var template = DefaultShiftTemplates.FirstOrDefault(t => t.ShiftTemplateId == request.ShiftTemplateId)
-                       ?? DefaultShiftTemplates.First();
+        var preview = previewRes.Data;
+        var applicableItems = preview.Items.Where(i => i.CanApply).ToList();
 
-        int daysInMonth = DateTime.DaysInMonth(request.Year, request.Month);
-        var startDate = new DateOnly(request.Year, request.Month, 1);
-        var endDate = new DateOnly(request.Year, request.Month, daysInMonth);
-
-        var lockKeys = new List<string>();
-        for (int day = 1; day <= daysInMonth; day++)
+        if (!applicableItems.Any())
         {
-            var date = new DateOnly(request.Year, request.Month, day);
-            int dayOfWeek = (int)date.DayOfWeek == 0 ? 7 : (int)date.DayOfWeek;
-            if (request.DaysOfWeek.Contains(dayOfWeek))
+            var noOpResult = new ReceptionistBulkApplyResultDto
             {
-                lockKeys.Add(SqlAppLockHelper.ReceptionistCoverageDateKey(date));
-            }
+                RequestedCount = preview.TotalProposedShifts,
+                CreatedCount = 0,
+                AlreadyExistsCount = preview.AlreadyExistsCount,
+                SkippedLeaveCount = preview.LeaveBlockedCount,
+                SkippedConflictCount = preview.OtherConflictCount,
+                Message = "Không có ca trực mới nào cần tạo (đã bỏ qua các ca trùng lặp hoặc nghỉ phép).",
+                Items = preview.Items
+            };
+            return ApiResponse<ReceptionistBulkApplyResultDto>.Ok(noOpResult, noOpResult.Message);
         }
+
+        var lockKeys = applicableItems.Select(i => SqlAppLockHelper.ReceptionistCoverageDateKey(i.WorkDate)).Distinct().ToList();
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 15000, ct);
 
-        var approvedLeaves = await _dbContext.StaffLeaveRequests
-            .AsNoTracking()
-            .Where(l => l.StaffRole == UserRole.Receptionist && l.Status == "Approved" && l.StartDate <= endDate && l.EndDate >= startDate)
-            .ToListAsync(ct);
-
-        var newShifts = new List<StaffWorkSchedule>();
-
-        for (int day = 1; day <= daysInMonth; day++)
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? tx = null;
+        if (_dbContext.Database.IsRelational())
         {
-            var date = new DateOnly(request.Year, request.Month, day);
-            int dayOfWeek = (int)date.DayOfWeek == 0 ? 7 : (int)date.DayOfWeek;
+            tx = await _dbContext.Database.BeginTransactionAsync(ct);
+        }
 
-            if (!request.DaysOfWeek.Contains(dayOfWeek)) continue;
+        try
+        {
+            int created = 0;
+            int concurrentLeaveSkipped = 0;
+            int concurrentDuplicateSkipped = 0;
+            int concurrentConflictSkipped = 0;
+            var now = DateTime.UtcNow;
 
-            foreach (var userId in request.ReceptionistUserIds)
+            foreach (var item in applicableItems)
             {
-                if (approvedLeaves.Any(l => l.StaffUserId == userId && l.StartDate <= date && l.EndDate >= date))
+                // Invariant & Concurrency Guard: Approved & Pending Leave is ALWAYS protected
+                bool hasApprovedOrPendingLeave = await _dbContext.StaffLeaveRequests
+                    .AsNoTracking()
+                    .AnyAsync(l => l.StaffUserId == item.ReceptionistUserId &&
+                                   l.StaffRole == UserRole.Receptionist &&
+                                   (l.Status == "Approved" || l.Status == "Pending") &&
+                                   l.StartDate <= item.WorkDate &&
+                                   l.EndDate >= item.WorkDate &&
+                                   (!l.StartTime.HasValue || !l.EndTime.HasValue ||
+                                    (item.StartTime < l.EndTime.Value && item.EndTime > l.StartTime.Value)), ct);
+
+                if (hasApprovedOrPendingLeave)
                 {
+                    item.Status = "OnApprovedLeave";
+                    item.CanApply = false;
+                    item.Message = "Bỏ qua do phát hiện lịch nghỉ phép tương tranh";
+                    concurrentLeaveSkipped++;
                     continue;
                 }
 
-                if (request.OverwriteExisting)
+                // Idempotency check: don't create duplicates or violate UQ_StaffWorkSchedules_User_Shift
+                var existingRow = await _dbContext.StaffWorkSchedules
+                    .FirstOrDefaultAsync(s => s.StaffRole == UserRole.Receptionist &&
+                                              s.StaffUserId == item.ReceptionistUserId &&
+                                              s.WorkDate == item.WorkDate &&
+                                              s.StartTime == item.StartTime &&
+                                              s.EndTime == item.EndTime, ct);
+
+                if (existingRow != null)
                 {
-                    var existing = await _dbContext.StaffWorkSchedules
-                        .Where(s => s.StaffRole == UserRole.Receptionist && s.StaffUserId == userId && s.WorkDate == date && s.Status == "Scheduled")
-                        .ToListAsync(ct);
-                    foreach (var ex in existing)
+                    if (existingRow.Status == "Scheduled")
                     {
-                        ex.Status = "Cancelled";
-                        ex.UpdatedAt = DateTime.UtcNow;
+                        item.Status = "AlreadyExists";
+                        item.CanApply = false;
+                        item.Message = "Ca tương đương đã tồn tại";
+                        concurrentDuplicateSkipped++;
+                        continue;
+                    }
+                    if (existingRow.Status == "Cancelled")
+                    {
+                        existingRow.Status = "Scheduled";
+                        existingRow.Notes = $"[Phân công hàng loạt - Khôi phục] {item.ShiftName}";
+                        existingRow.UpdatedAt = now;
+                        created++;
+                        continue;
                     }
                 }
-                else
+
+                bool isOverlap = await _dbContext.StaffWorkSchedules
+                    .AsNoTracking()
+                    .AnyAsync(s => s.StaffRole == UserRole.Receptionist &&
+                                   s.StaffUserId == item.ReceptionistUserId &&
+                                   s.WorkDate == item.WorkDate &&
+                                   s.StartTime < item.EndTime &&
+                                   s.EndTime > item.StartTime &&
+                                   s.Status == "Scheduled", ct);
+
+                if (isOverlap)
                 {
-                    bool exists = await _dbContext.StaffWorkSchedules
-                        .AnyAsync(s => s.StaffRole == UserRole.Receptionist && s.StaffUserId == userId && s.WorkDate == date && s.Status == "Scheduled", ct);
-                    if (exists) continue;
+                    item.Status = "Conflict";
+                    item.CanApply = false;
+                    item.Message = "Trùng giờ với ca trực khác";
+                    concurrentConflictSkipped++;
+                    continue;
                 }
 
-                newShifts.Add(new StaffWorkSchedule
+                _dbContext.StaffWorkSchedules.Add(new StaffWorkSchedule
                 {
-                    StaffUserId = userId,
+                    StaffUserId = item.ReceptionistUserId,
                     StaffRole = UserRole.Receptionist,
-                    WorkDate = date,
-                    StartTime = template.StartTime,
-                    EndTime = template.EndTime,
+                    WorkDate = item.WorkDate,
+                    StartTime = item.StartTime,
+                    EndTime = item.EndTime,
                     Status = "Scheduled",
-                    Notes = $"Phân ca tự động ({template.TemplateName})",
-                    CreatedAt = DateTime.UtcNow
+                    Notes = $"[Phân công hàng loạt] {item.ShiftName}",
+                    CreatedAt = now,
+                    UpdatedAt = now
                 });
+                created++;
             }
-        }
 
-        if (newShifts.Any())
-        {
-            _dbContext.StaffWorkSchedules.AddRange(newShifts);
             await _dbContext.SaveChangesAsync(ct);
+            if (tx != null)
+            {
+                await tx.CommitAsync(ct);
+            }
 
             await _auditLogService.LogAsync(
                 currentUserId,
                 "APPLY_BULK_RECEPTIONIST_SCHEDULE",
                 "StaffWorkSchedule",
-                $"{request.Year}-{request.Month}",
+                $"BulkAssign_{created}",
                 null,
-                $"Created {newShifts.Count} shifts for template {template.TemplateName}",
+                $"Đã tạo {created} ca trực lễ tân thành công",
                 ct);
-        }
 
-        return ApiResponse<bool>.Ok(true, $"Đã áp dụng thành công {newShifts.Count} ca trực cho tháng {request.Month}/{request.Year}.");
+            var resultDto = new ReceptionistBulkApplyResultDto
+            {
+                RequestedCount = preview.TotalProposedShifts,
+                CreatedCount = created,
+                AlreadyExistsCount = preview.AlreadyExistsCount + concurrentDuplicateSkipped,
+                SkippedLeaveCount = preview.LeaveBlockedCount + concurrentLeaveSkipped,
+                SkippedConflictCount = preview.OtherConflictCount + concurrentConflictSkipped,
+                Message = $"Đã áp dụng thành công {created} ca trực mới cho lễ tân (Đã có sẵn: {preview.AlreadyExistsCount + concurrentDuplicateSkipped}, Nghỉ phép: {preview.LeaveBlockedCount + concurrentLeaveSkipped}, Xung đột khác: {preview.OtherConflictCount + concurrentConflictSkipped}).",
+                Items = preview.Items
+            };
+
+            return ApiResponse<ReceptionistBulkApplyResultDto>.Ok(resultDto, resultDto.Message);
+        }
+        catch (Exception ex)
+        {
+            if (tx != null)
+            {
+                await tx.RollbackAsync(ct);
+            }
+            return ApiResponse<ReceptionistBulkApplyResultDto>.Fail($"Lỗi khi lưu phân ca hàng loạt: {ex.Message}");
+        }
     }
 
     public async Task<ApiResponse<bool>> CopyMonthScheduleAsync(
@@ -723,11 +1074,18 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
                     continue;
                 }
 
-                if (!request.OverwriteExisting)
+                var existingShift = await _dbContext.StaffWorkSchedules
+                    .FirstOrDefaultAsync(ws => ws.StaffRole == UserRole.Receptionist && ws.StaffUserId == s.StaffUserId && ws.WorkDate == tgtDate && ws.StartTime == s.StartTime && ws.EndTime == s.EndTime, ct);
+
+                if (existingShift != null)
                 {
-                    bool exists = await _dbContext.StaffWorkSchedules
-                        .AnyAsync(ws => ws.StaffRole == UserRole.Receptionist && ws.StaffUserId == s.StaffUserId && ws.WorkDate == tgtDate && ws.Status == "Scheduled", ct);
-                    if (exists) continue;
+                    if (existingShift.Status == "Scheduled" && !request.OverwriteExisting)
+                        continue;
+
+                    existingShift.Status = "Scheduled";
+                    existingShift.Notes = $"Sao chép từ ngày {srcDate:dd/MM/yyyy}";
+                    existingShift.UpdatedAt = DateTime.UtcNow;
+                    continue;
                 }
 
                 newShifts.Add(new StaffWorkSchedule
@@ -775,32 +1133,51 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
         using var lockScope = await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 10000, ct);
 
         var existing = await _dbContext.StaffWorkSchedules
-            .Where(s => s.StaffRole == UserRole.Receptionist && s.WorkDate == request.Date && s.Status == "Scheduled")
+            .Where(s => s.StaffRole == UserRole.Receptionist && s.WorkDate == request.Date)
             .ToListAsync(ct);
 
-        foreach (var ex in existing)
+        var now = DateTime.UtcNow;
+
+        // Cancel previously scheduled shifts that are not in the new request
+        foreach (var ex in existing.Where(s => s.Status == "Scheduled"))
         {
-            ex.Status = "Cancelled";
-            ex.UpdatedAt = DateTime.UtcNow;
+            bool stillRequested = request.Shifts.Any(r => r.ReceptionistUserId == ex.StaffUserId && r.StartTime == ex.StartTime && r.EndTime == ex.EndTime);
+            if (!stillRequested)
+            {
+                ex.Status = "Cancelled";
+                ex.UpdatedAt = now;
+            }
         }
 
-        var newShifts = new List<StaffWorkSchedule>();
+        int appliedCount = 0;
         foreach (var req in request.Shifts)
         {
-            newShifts.Add(new StaffWorkSchedule
+            var match = existing.FirstOrDefault(s => s.StaffUserId == req.ReceptionistUserId && s.StartTime == req.StartTime && s.EndTime == req.EndTime);
+            if (match != null)
             {
-                StaffUserId = req.ReceptionistUserId,
-                StaffRole = UserRole.Receptionist,
-                WorkDate = request.Date,
-                StartTime = req.StartTime,
-                EndTime = req.EndTime,
-                Status = "Scheduled",
-                Notes = req.Notes ?? "Điều chỉnh lịch trong ngày",
-                CreatedAt = DateTime.UtcNow
-            });
+                match.Status = "Scheduled";
+                match.Notes = req.Notes ?? "Điều chỉnh lịch trong ngày";
+                match.UpdatedAt = now;
+                appliedCount++;
+            }
+            else
+            {
+                _dbContext.StaffWorkSchedules.Add(new StaffWorkSchedule
+                {
+                    StaffUserId = req.ReceptionistUserId,
+                    StaffRole = UserRole.Receptionist,
+                    WorkDate = request.Date,
+                    StartTime = req.StartTime,
+                    EndTime = req.EndTime,
+                    Status = "Scheduled",
+                    Notes = req.Notes ?? "Điều chỉnh lịch trong ngày",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+                appliedCount++;
+            }
         }
 
-        _dbContext.StaffWorkSchedules.AddRange(newShifts);
         await _dbContext.SaveChangesAsync(ct);
 
         await _auditLogService.LogAsync(
@@ -809,7 +1186,7 @@ public class ReceptionistScheduleService : IReceptionistScheduleService
             "StaffWorkSchedule",
             request.Date.ToString("yyyy-MM-dd"),
             null,
-            $"Applied {newShifts.Count} overridden shifts on {request.Date:yyyy-MM-dd}",
+            $"Applied {appliedCount} overridden shifts on {request.Date:yyyy-MM-dd}",
             ct);
 
         return ApiResponse<bool>.Ok(true, $"Đã cập nhật lịch làm việc ngày {request.Date:dd/MM/yyyy} thành công.");

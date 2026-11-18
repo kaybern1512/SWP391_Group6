@@ -26,7 +26,11 @@ public class ReceptionistImagingQueueController : Controller
         var equipmentsRes = await _imagingApiService.GetAllEquipmentsAsync();
         var equipments = equipmentsRes.Data ?? new();
 
-        var targetRoomId = roomId ?? equipments.FirstOrDefault()?.RoomId ?? 1;
+        var defaultImagingRoom = equipments.FirstOrDefault(r =>
+            string.Equals(r.RoomCode, "R003", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(r.EquipmentType, "Imaging", StringComparison.OrdinalIgnoreCase))
+            ?? equipments.FirstOrDefault();
+        var targetRoomId = roomId ?? defaultImagingRoom?.RoomId ?? 0;
 
         var queueRes = await _imagingApiService.GetQueueStatusAsync(targetRoomId);
         var queue = queueRes.Data ?? new ImagingQueueSummaryDto

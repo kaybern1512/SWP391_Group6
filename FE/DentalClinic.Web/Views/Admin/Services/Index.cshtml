@@ -1,37 +1,49 @@
-@model ServiceManageViewModel
+@model DentalClinic.Web.ViewModels.Admin.ServiceManageViewModel
 @{
-    ViewData["Title"] = "Quản lý Bảng giá Dịch vụ";
+    ViewData["Title"] = "Dịch vụ nha khoa";
 }
 
 <div class="container-fluid p-0">
     <!-- Header -->
-    <div class="page-header-dc">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
         <div>
             <div class="d-flex align-items-center gap-2 mb-1">
                 <a asp-controller="AdminDashboard" asp-action="Dashboard" class="text-decoration-none text-muted small">
                     <i class="bi bi-chevron-left"></i> Tổng quan
                 </a>
                 <span class="text-muted small">&bull;</span>
-                <span class="badge-dc badge-role-systemadministrator">Danh mục hệ thống</span>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 small">Quản trị hệ thống</span>
             </div>
-            <h1 class="page-title">Quản lý Danh mục & Bảng giá Dịch vụ Nha khoa</h1>
-            <p class="page-subtitle">Quản lý dịch vụ theo chuyên khoa, cấu hình mã dịch vụ duy nhất, thời lượng, giá niêm yết và quy trình lâm sàng chuẩn</p>
+            <h1 class="h3 fw-bold text-dark mb-1">Dịch vụ nha khoa</h1>
+            <p class="text-muted small mb-0">Quản lý dịch vụ, giá và xác nhận thực hiện</p>
         </div>
-        <div class="page-actions">
-            <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createServiceModal">
-                <i class="bi bi-plus-lg me-1"></i> Thêm Dịch vụ Mới
+        <div>
+            <button type="button" class="btn btn-primary px-3 shadow-sm" onclick="openCreateServiceModal()">
+                <i class="bi bi-plus-lg me-1"></i> Thêm dịch vụ
             </button>
         </div>
     </div>
 
-    <!-- Filter & Search Bar -->
-    <div class="card-dc mb-4">
-        <div class="card-dc-body p-3">
-            <form asp-controller="AdminService" asp-action="Index" method="get" class="row g-2 align-items-center">
-                <div class="col-md-4">
-                    <label class="form-label small fw-semibold text-muted mb-1">Lọc theo chuyên khoa</label>
-                    <select name="departmentId" class="form-select form-select-sm" onchange="this.form.submit()">
-                        <option value="">-- Tất cả các chuyên khoa --</option>
+    <!-- Search & Filter Bar -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-3">
+            <div class="row g-2 align-items-center">
+                <div class="col-12 col-md-5">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" id="serviceSearchInput" class="form-control border-start-0 ps-0" 
+                               placeholder="Tìm kiếm theo mã hoặc tên dịch vụ..." 
+                               value="@Model.SearchKeyword" autocomplete="off" />
+                        <button class="btn btn-outline-secondary border-start-0 d-none" type="button" id="clearSearchBtn">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <select id="departmentFilter" class="form-select">
+                        <option value="">-- Tất cả chuyên khoa --</option>
                         @foreach (var dept in Model.Departments)
                         {
                             <option value="@dept.DepartmentId" selected="@(Model.SelectedDepartmentId == dept.DepartmentId)">
@@ -40,848 +52,883 @@
                         }
                     </select>
                 </div>
-                <div class="col-md-5">
-                    <label class="form-label small fw-semibold text-muted mb-1">Tìm kiếm dịch vụ</label>
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text"><i class="bi bi-search"></i></span>
-                        <input type="text" name="search" class="form-control" placeholder="Nhập tên dịch vụ, mã dịch vụ hoặc mô tả..." value="@Model.SearchKeyword" />
-                    </div>
+                <div class="col-12 col-sm-6 col-md-3">
+                    <select id="statusFilter" class="form-select">
+                        <option value="">Tất cả trạng thái</option>
+                        <option value="Active" selected="@(Model.SelectedStatus == "Active")">Đang cung cấp</option>
+                        <option value="Inactive" selected="@(Model.SelectedStatus == "Inactive")">Ngừng cung cấp</option>
+                    </select>
                 </div>
-                <div class="col-md-3 d-flex align-items-end gap-2 pt-3">
-                    <button type="submit" class="btn btn-sm btn-dc-primary">
-                        <i class="bi bi-filter me-1"></i> Áp dụng
-                    </button>
-                    <a asp-controller="AdminService" asp-action="Index" class="btn btn-sm btn-outline-secondary">
-                        Đặt lại
-                    </a>
-                </div>
-            </form>
+            </div>
         </div>
     </div>
 
-    <!-- Services Table -->
-    <div class="card-dc">
-        <div class="card-dc-header d-flex justify-content-between align-items-center">
+    <!-- Services Table / Card Container -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-tags text-teal"></i>
-                <span class="fw-bold">Danh sách Dịch vụ Nha khoa (@Model.Services.Count)</span>
+                <i class="bi bi-card-checklist text-primary fs-5"></i>
+                <span class="fw-bold text-dark">Danh sách dịch vụ</span>
+                <span class="badge bg-secondary-subtle text-secondary rounded-pill px-2" id="serviceCountBadge">@Model.Services.Count</span>
             </div>
         </div>
-        <div class="card-dc-body p-0">
-            <div class="table-responsive">
-                <table class="table-dc mb-0">
-                    <thead>
+        <div class="card-body p-0">
+            <!-- Table View (Desktop & Tablet) -->
+            <div class="table-responsive d-none d-md-block">
+                <table class="table table-hover align-middle mb-0" id="servicesTable">
+                    <thead class="table-light text-muted small text-uppercase">
                         <tr>
-                            <th style="width: 50px;">#</th>
-                            <th>Mã & Tên Dịch vụ</th>
-                            <th>Chuyên khoa</th>
-                            <th class="text-center">Thời lượng riêng</th>
-                            <th class="text-end">Đơn giá niêm yết</th>
-                            <th>Quy trình lâm sàng</th>
-                            <th>Trạng thái</th>
-                            <th class="text-end">Hành động</th>
+                            <th class="ps-4" style="width: 32%;">Dịch vụ</th>
+                            <th style="width: 20%;">Chuyên khoa</th>
+                            <th style="width: 20%;">Giá & thời lượng</th>
+                            <th style="width: 15%;">Trạng thái</th>
+                            <th class="text-end pe-4" style="width: 13%;">Thao tác</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="servicesTableBody">
                         @if (Model.Services.Any())
                         {
-                            int index = 1;
-                            foreach (var srv in Model.Services)
+                            foreach (var s in Model.Services)
                             {
-                                <tr>
-                                    <td class="text-muted fw-bold">@(index++)</td>
-                                    <td>
+                                var isXray = string.Equals(s.ServiceType, "XRay", StringComparison.OrdinalIgnoreCase);
+                                var isActive = string.Equals(s.Status, "Active", StringComparison.OrdinalIgnoreCase);
+                                <tr class="service-row" 
+                                    data-id="@s.DepartmentServiceId"
+                                    data-code="@s.ServiceCode"
+                                    data-name="@s.ServiceName"
+                                    data-dept-id="@s.DepartmentId"
+                                    data-dept-name="@s.DepartmentName"
+                                    data-price="@s.Price"
+                                    data-duration="@(s.DurationMinutes ?? 30)"
+                                    data-type="@s.ServiceType"
+                                    data-status="@s.Status"
+                                    data-desc="@s.Description"
+                                    data-search-text="@($"{s.ServiceCode} {s.ServiceName} {s.DepartmentName}".ToLower())">
+                                    <td class="ps-4">
                                         <div class="d-flex align-items-center gap-2">
-                                            <span class="badge bg-secondary-subtle text-dark border font-monospace">
-                                                @(string.IsNullOrWhiteSpace(srv.ServiceCode) ? $"SRV-{srv.DepartmentServiceId}" : srv.ServiceCode)
-                                            </span>
-                                            <span class="fw-bold text-dark">@srv.ServiceName</span>
-                                        </div>
-                                        <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
-                                            @switch (srv.ServiceType)
-                                            {
-                                                case "Consultation":
-                                                    <span class="badge bg-info-subtle text-info border border-info-subtle">
-                                                        <i class="bi bi-chat-square-text me-1"></i>Khám & Tư vấn
-                                                    </span>
-                                                    break;
-                                                case "Surgery":
-                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
-                                                        <i class="bi bi-heart-pulse me-1"></i>Phẫu thuật
-                                                    </span>
-                                                    break;
-                                                case "Cosmetic":
-                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
-                                                        <i class="bi bi-stars me-1"></i>Thẩm mỹ
-                                                    </span>
-                                                    break;
-                                                case "Pediatric":
-                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
-                                                        <i class="bi bi-emoji-smile me-1"></i>Nha khoa trẻ em
-                                                    </span>
-                                                    break;
-                                                default:
-                                                    <span class="badge bg-success-subtle text-success border border-success-subtle">
-                                                        <i class="bi bi-tools me-1"></i>Điều trị
-                                                    </span>
-                                                    break;
-                                            }
-                                            @if (srv.RequiresExclusiveRoom)
-                                            {
-                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
-                                                    <i class="bi bi-shield-lock me-1"></i>Phòng vô trùng
-                                                </span>
-                                            }
-                                        </div>
-                                        @if (!string.IsNullOrEmpty(srv.Description))
-                                        {
-                                            <div class="text-muted small mt-1 text-truncate" style="max-width: 320px;" title="@srv.Description">
-                                                @srv.Description
+                                            <div>
+                                                <div class="fw-bold text-dark fs-6 service-title-text">
+                                                    @s.ServiceName
+                                                    @if (isXray)
+                                                    {
+                                                        <span class="badge bg-info-subtle text-info border border-info-subtle ms-1 px-2 py-0 align-middle small">
+                                                            <i class="bi bi-camera me-1"></i>X-quang
+                                                        </span>
+                                                    }
+                                                </div>
+                                                <div class="text-muted small font-monospace">@s.ServiceCode</div>
                                             </div>
-                                        }
+                                        </div>
                                     </td>
                                     <td>
-                                        <span class="badge bg-light text-primary border">@srv.DepartmentName</span>
-                                    </td>
-                                    <td class="text-center">
-                                        <span class="badge bg-dark-subtle text-dark border px-2 py-1">
-                                            <i class="bi bi-clock me-1 text-primary"></i>@(srv.DurationMinutes.HasValue ? srv.DurationMinutes + " phút" : "30 phút")
-                                        </span>
-                                    </td>
-                                    <td class="text-end fw-bold text-success">
-                                        @srv.Price.ToString("N0") đ
+                                        <span class="text-dark">@s.DepartmentName</span>
                                     </td>
                                     <td>
-                                        @if (srv.WorkflowStepCount > 0)
-                                        {
-                                            if (srv.HasActiveWorkflow)
-                                            {
-                                                <button type="button" class="btn btn-sm btn-outline-success py-0 px-2 btn-open-wf"
-                                                        data-id="@srv.DepartmentServiceId"
-                                                        data-name="@srv.ServiceName"
-                                                        title="Quy trình đã duyệt đang áp dụng (@srv.WorkflowStepCount bước)">
-                                                    <i class="bi bi-diagram-3-fill me-1"></i>Đang áp dụng (@srv.WorkflowStepCount bước)
-                                                </button>
-                                            }
-                                            else
-                                            {
-                                                <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2 btn-open-wf"
-                                                        data-id="@srv.DepartmentServiceId"
-                                                        data-name="@srv.ServiceName"
-                                                        title="Bản thảo tham khảo - Chờ bác sĩ chuyên khoa duyệt (@srv.WorkflowStepCount bước)">
-                                                    <i class="bi bi-clock-history me-1"></i>Bản thảo (@srv.WorkflowStepCount bước)
-                                                </button>
-                                            }
-                                        }
-                                        else
-                                        {
-                                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 btn-open-wf"
-                                                    data-id="@srv.DepartmentServiceId"
-                                                    data-name="@srv.ServiceName"
-                                                    title="Thiết lập các bước quy trình">
-                                                <i class="bi bi-diagram-3 me-1"></i>Chưa thiết lập
-                                            </button>
-                                        }
+                                        <div class="fw-bold text-dark">@s.Price.ToString("N0") đ</div>
+                                        <div class="text-muted small"><i class="bi bi-clock me-1"></i>@(s.DurationMinutes ?? 30) phút</div>
                                     </td>
                                     <td>
-                                        @if (srv.Status == "Active")
+                                        @if (isActive)
                                         {
-                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
-                                                <i class="bi bi-check-circle me-1"></i> Hoạt động
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                                <i class="bi bi-check-circle me-1"></i>Đang cung cấp
                                             </span>
                                         }
                                         else
                                         {
-                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
-                                                <i class="bi bi-pause-circle me-1"></i> Tạm ngưng
+                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1">
+                                                <i class="bi bi-slash-circle me-1"></i>Ngừng cung cấp
                                             </span>
                                         }
                                     </td>
-                                    <td class="text-end text-nowrap">
-                                        <button type="button" class="btn btn-sm btn-outline-info me-1 btn-open-wf"
-                                                data-id="@srv.DepartmentServiceId"
-                                                data-name="@srv.ServiceName"
-                                                title="Cấu hình quy trình lâm sàng">
-                                            <i class="bi bi-diagram-3"></i> Quy trình
-                                        </button>
-                                        <button type="button" class="btn btn-sm btn-outline-primary me-1 btn-edit-srv"
-                                                data-id="@srv.DepartmentServiceId"
-                                                data-code="@srv.ServiceCode"
-                                                data-deptid="@srv.DepartmentId"
-                                                data-name="@srv.ServiceName"
-                                                data-desc="@srv.Description"
-                                                data-duration="@srv.DurationMinutes"
-                                                data-price="@srv.Price"
-                                                data-status="@srv.Status"
-                                                data-servicetype="@srv.ServiceType"
-                                                data-exclusive="@(srv.RequiresExclusiveRoom ? "true" : "false")"
-                                                data-consultation="@(srv.RequiresConsultationFirst ? "true" : "false")"
-                                                data-leadtime="@srv.MinLeadTimeHours"
-                                                data-instructions="@srv.BookingInstructions">
-                                            <i class="bi bi-pencil-square"></i> Sửa
-                                        </button>
-                                        <form asp-controller="AdminService" asp-action="ToggleStatus" asp-route-id="@srv.DepartmentServiceId" method="post" class="d-inline" data-confirm="Bạn có chắc chắn muốn thay đổi trạng thái dịch vụ này?">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-sm @(srv.Status == "Active" ? "btn-outline-warning" : "btn-outline-success")">
-                                                <i class="bi @(srv.Status == "Active" ? "bi-pause" : "bi-play")"></i>
-                                                @(srv.Status == "Active" ? "Tạm dừng" : "Kích hoạt")
+                                    <td class="text-end pe-4">
+                                        <div class="d-inline-flex align-items-center gap-1">
+                                            <button type="button" class="btn btn-sm btn-outline-primary px-2 py-1 btn-edit-service" 
+                                                    onclick="openEditServiceModal(@s.DepartmentServiceId)">
+                                                <i class="bi bi-pencil-square me-1"></i>Sửa
                                             </button>
-                                        </form>
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-light border text-muted px-2 py-1 action-menu-btn" 
+                                                        type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Thao tác khác">
+                                                    <i class="bi bi-three-dots"></i>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 py-1">
+                                                    <li>
+                                                        <form asp-controller="AdminService" asp-action="ToggleStatus" asp-route-id="@s.DepartmentServiceId" method="post" class="d-inline">
+                                                            @Html.AntiForgeryToken()
+                                                            <button type="submit" class="dropdown-item text-start py-2">
+                                                                @if (isActive)
+                                                                {
+                                                                    <i class="bi bi-slash-circle text-warning me-2"></i><span>Ngừng cung cấp</span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <i class="bi bi-check-circle text-success me-2"></i><span>Kích hoạt lại</span>
+                                                                }
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                    <li><hr class="dropdown-divider my-1"></li>
+                                                    <li>
+                                                        <button type="button" class="dropdown-item text-danger py-2 btn-delete-trigger" 
+                                                                onclick="requestDeleteService(@s.DepartmentServiceId, '@s.ServiceCode', '@Html.Raw(Html.Encode(s.ServiceName))')">
+                                                            <i class="bi bi-trash3 me-2"></i>Xóa dịch vụ
+                                                        </button>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
                                     </td>
                                 </tr>
                             }
                         }
-                        else
-                        {
-                            <tr>
-                                <td colspan="8" class="text-center py-4 text-muted">
-                                    <i class="bi bi-tags fs-3 d-block mb-1"></i>
-                                    Không tìm thấy dịch vụ nào phù hợp với điều kiện tìm kiếm.
-                                </td>
-                            </tr>
-                        }
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Mobile Card View (< 768px) -->
+            <div class="d-md-none p-3" id="mobileCardsContainer">
+                @if (Model.Services.Any())
+                {
+                    foreach (var s in Model.Services)
+                    {
+                        var isXray = string.Equals(s.ServiceType, "XRay", StringComparison.OrdinalIgnoreCase);
+                        var isActive = string.Equals(s.Status, "Active", StringComparison.OrdinalIgnoreCase);
+                        <div class="card border rounded-3 p-3 mb-3 shadow-none service-card"
+                             data-id="@s.DepartmentServiceId"
+                             data-code="@s.ServiceCode"
+                             data-name="@s.ServiceName"
+                             data-dept-id="@s.DepartmentId"
+                             data-dept-name="@s.DepartmentName"
+                             data-price="@s.Price"
+                             data-duration="@(s.DurationMinutes ?? 30)"
+                             data-type="@s.ServiceType"
+                             data-status="@s.Status"
+                             data-desc="@s.Description"
+                             data-search-text="@($"{s.ServiceCode} {s.ServiceName} {s.DepartmentName}".ToLower())">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <div class="fw-bold text-dark fs-6">
+                                        @s.ServiceName
+                                        @if (isXray)
+                                        {
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle ms-1 px-2 py-0 small">
+                                                <i class="bi bi-camera me-1"></i>X-quang
+                                            </span>
+                                        }
+                                    </div>
+                                    <div class="text-muted small font-monospace">@s.ServiceCode</div>
+                                </div>
+                                <div>
+                                    @if (isActive)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 small">
+                                            Đang cung cấp
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1 small">
+                                            Ngừng cung cấp
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="text-muted small mb-2">
+                                <i class="bi bi-building me-1"></i>@s.DepartmentName
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                                <div>
+                                    <span class="fw-bold text-primary fs-6">@s.Price.ToString("N0") đ</span>
+                                    <span class="text-muted small ms-1">(@(s.DurationMinutes ?? 30) phút)</span>
+                                </div>
+                                <div class="d-flex align-items-center gap-1">
+                                    <button type="button" class="btn btn-sm btn-outline-primary px-2 py-1" 
+                                            onclick="openEditServiceModal(@s.DepartmentServiceId)">
+                                        <i class="bi bi-pencil-square me-1"></i>Sửa
+                                    </button>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-light border text-muted px-2 py-1" 
+                                                type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                            <i class="bi bi-three-dots"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 py-1">
+                                            <li>
+                                                <form asp-controller="AdminService" asp-action="ToggleStatus" asp-route-id="@s.DepartmentServiceId" method="post" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <button type="submit" class="dropdown-item text-start py-2">
+                                                        @if (isActive)
+                                                        {
+                                                            <i class="bi bi-slash-circle text-warning me-2"></i><span>Ngừng cung cấp</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <i class="bi bi-check-circle text-success me-2"></i><span>Kích hoạt lại</span>
+                                                        }
+                                                    </button>
+                                                </form>
+                                            </li>
+                                            <li><hr class="dropdown-divider my-1"></li>
+                                            <li>
+                                                <button type="button" class="dropdown-item text-danger py-2" 
+                                                        onclick="requestDeleteService(@s.DepartmentServiceId, '@s.ServiceCode', '@Html.Raw(Html.Encode(s.ServiceName))')">
+                                                    <i class="bi bi-trash3 me-2"></i>Xóa dịch vụ
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- Empty State -->
+            <div id="noServicesFound" class="text-center py-5 @(Model.Services.Any() ? "d-none" : "")">
+                <div class="mb-3 text-muted">
+                    <i class="bi bi-search fs-1 opacity-50"></i>
+                </div>
+                <h5 class="fw-bold text-dark mb-1">Chưa có dịch vụ nào phù hợp</h5>
+                <p class="text-muted small mb-3">Vui lòng điều chỉnh tiêu chí tìm kiếm hoặc tạo thêm dịch vụ mới.</p>
+                <div class="d-flex justify-content-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Đặt lại bộ lọc
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="openCreateServiceModal()">
+                        <i class="bi bi-plus-lg me-1"></i>Thêm dịch vụ đầu tiên
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modal Thêm Dịch vụ -->
-<div class="modal fade" id="createServiceModal" tabindex="-1" aria-labelledby="createServiceLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <form asp-controller="AdminService" asp-action="Create" method="post" id="createServiceForm">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="WorkflowStepsJson" id="createWorkflowStepsJson" />
-                <div class="modal-header">
-                    <h5 class="modal-title font-heading" id="createServiceLabel">
-                        <i class="bi bi-plus-circle text-teal me-2"></i>Thêm Mới Dịch Vụ Nha Khoa
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Thuộc chuyên khoa <span class="text-danger">*</span></label>
-                            <select name="DepartmentId" class="form-select" required>
-                                <option value="">-- Chọn chuyên khoa --</option>
-                                @foreach (var dept in Model.Departments)
-                                {
-                                    <option value="@dept.DepartmentId" selected="@(Model.SelectedDepartmentId == dept.DepartmentId)">
-                                        @dept.Name
-                                    </option>
-                                }
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Mã dịch vụ <span class="text-muted small">(Unique)</span></label>
-                            <input type="text" name="ServiceCode" class="form-control" placeholder="VD: SRV-GEN-010 (Để trống tự sinh)" maxlength="50" />
-                        </div>
-                        <div class="col-md-8">
-                            <label class="form-label fw-semibold">Tên dịch vụ <span class="text-danger">*</span></label>
-                            <input type="text" name="ServiceName" class="form-control" placeholder="Ví dụ: Lấy cao răng, Cấy ghép Implant..." required maxlength="150" />
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Trạng thái</label>
-                            <select name="Status" class="form-select">
-                                <option value="Active">Đang hoạt động (Active)</option>
-                                <option value="Inactive">Tạm dừng (Inactive)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Thời lượng riêng cho slot đặt lịch (phút) <span class="text-danger">*</span></label>
-                            <input type="number" name="DurationMinutes" class="form-control" value="30" min="5" max="480" required />
-                            <div class="form-text small">Thời lượng riêng từng dịch vụ, KHÔNG ép chung vào thời lượng khám thông thường.</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Đơn giá niêm yết (VNĐ) <span class="text-danger">*</span></label>
-                            <input type="number" name="Price" class="form-control" placeholder="0" min="0" step="1000" required />
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Loại hình dịch vụ <span class="text-danger">*</span></label>
-                            <select name="ServiceType" class="form-select" required>
-                                <option value="Treatment" selected>Điều trị nha khoa (Treatment)</option>
-                                <option value="Consultation">Khám & Tư vấn (Consultation)</option>
-                                <option value="Surgery">Phẫu thuật / Tiểu phẫu (Surgery)</option>
-                                <option value="Cosmetic">Nha khoa Thẩm mỹ (Cosmetic)</option>
-                                <option value="Pediatric">Nha khoa Trẻ em (Pediatric)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Thời gian đặt trước tối thiểu (giờ)</label>
-                            <input type="number" name="MinLeadTimeHours" class="form-control" value="0" min="0" max="168" />
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label fw-semibold">Mô tả dịch vụ</label>
-                            <textarea name="Description" class="form-control" rows="2" placeholder="Mô tả kỹ thuật, chỉ định chuyên môn..." maxlength="500"></textarea>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card bg-light border-0 p-3 rounded-3 h-100">
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" name="RequiresExclusiveRoom" value="true" id="createReqRoom" />
-                                    <label class="form-check-label fw-semibold" for="createReqRoom">Yêu cầu phòng vô trùng độc quyền</label>
-                                </div>
-                                <div class="small text-muted">Áp dụng cho phẫu thuật Implant, nhổ răng khôn phức tạp.</div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card bg-light border-0 p-3 rounded-3 h-100">
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" name="RequiresConsultationFirst" value="true" id="createReqConsult" />
-                                    <label class="form-check-label fw-semibold" for="createReqConsult">Bắt buộc khám tư vấn trước</label>
-                                </div>
-                                <div class="small text-muted">Bệnh nhân cần khám tổng quát hoặc chụp X-Quang trước khi thực hiện.</div>
-                            </div>
-                        </div>
+<!-- ========================================================================= -->
+<!-- ADD / EDIT SERVICE MODAL (~720px max-width, unified 1-step workflow)      -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="serviceModal" tabindex="-1" aria-labelledby="serviceModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 720px;">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <div class="modal-header bg-light border-bottom py-3 px-4">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="avatar-sm bg-primary-subtle text-primary rounded p-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                        <i class="bi bi-journal-medical fs-5" id="modalHeaderIcon"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold text-dark mb-0" id="serviceModalLabel">Thêm dịch vụ mới</h5>
+                        <small class="text-muted" id="serviceModalSubtitle">Thiết lập thông tin dịch vụ và bước xác nhận hoàn tất</small>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
-                    <button type="submit" class="btn btn-dc-primary">Lưu Dịch Vụ</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+            </div>
 
-<!-- Modal Sửa Dịch vụ -->
-<div class="modal fade" id="editServiceModal" tabindex="-1" aria-labelledby="editServiceLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <form asp-controller="AdminService" asp-action="Edit" method="post">
+            <form id="serviceForm" method="post" asp-controller="AdminService" asp-action="Create">
                 @Html.AntiForgeryToken()
-                <input type="hidden" name="DepartmentServiceId" id="editSrvId" />
-                <div class="modal-header">
-                    <h5 class="modal-title font-heading" id="editServiceLabel">
-                        <i class="bi bi-pencil-square text-teal me-2"></i>Chỉnh Sửa Dịch Vụ Nha Khoa
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
+                <input type="hidden" id="serviceForm_DepartmentServiceId" name="DepartmentServiceId" value="" />
+                
+                <div class="modal-body p-4">
                     <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Thuộc chuyên khoa <span class="text-danger">*</span></label>
-                            <select name="DepartmentId" id="editSrvDeptId" class="form-select" required>
+                        <!-- 1. Tên dịch vụ (bắt buộc) -->
+                        <div class="col-12">
+                            <label class="form-label fw-semibold text-dark mb-1">
+                                Tên dịch vụ <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" id="serviceForm_ServiceName" name="ServiceName" class="form-control" 
+                                   placeholder="Ví dụ: Nhổ răng khôn hàm dưới, Chụp X-quang Panorama..." required maxlength="150" />
+                            <div class="invalid-feedback">Vui lòng nhập tên dịch vụ.</div>
+                        </div>
+
+                        <!-- 2. Mã dịch vụ (bắt buộc, readonly khi sửa) -->
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold text-dark mb-1">
+                                Mã dịch vụ <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" id="serviceForm_ServiceCode" name="ServiceCode" class="form-control font-monospace" 
+                                   placeholder="Ví dụ: SVC-EXT-01, SVC-XRAY-01..." required maxlength="50" />
+                            <div class="form-text small" id="serviceCodeHelp">Mã duy nhất viết hoa không dấu, không thể đổi sau khi tạo.</div>
+                            <div class="invalid-feedback">Vui lòng nhập mã dịch vụ.</div>
+                        </div>
+
+                        <!-- 3. Chuyên khoa (bắt buộc) -->
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold text-dark mb-1">
+                                Chuyên khoa <span class="text-danger">*</span>
+                            </label>
+                            <select id="serviceForm_DepartmentId" name="DepartmentId" class="form-select" required>
+                                <option value="">-- Chọn chuyên khoa --</option>
                                 @foreach (var dept in Model.Departments)
                                 {
                                     <option value="@dept.DepartmentId">@dept.Name</option>
                                 }
                             </select>
+                            <div class="invalid-feedback">Vui lòng chọn chuyên khoa phụ trách.</div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Mã dịch vụ <span class="text-muted small">(Unique)</span></label>
-                            <input type="text" name="ServiceCode" id="editSrvCode" class="form-control" maxlength="50" />
+
+                        <!-- 4. Giá niêm yết (VNĐ, bắt buộc, >= 0) -->
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold text-dark mb-1">
+                                Giá niêm yết (VNĐ) <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <input type="number" id="serviceForm_Price" name="Price" class="form-control fw-bold" 
+                                       placeholder="0" min="0" step="1000" required />
+                                <span class="input-group-text bg-light text-muted">đ</span>
+                            </div>
+                            <div class="form-text small" id="formattedPricePreview">0 đ</div>
+                            <div class="invalid-feedback">Giá dịch vụ phải lớn hơn hoặc bằng 0.</div>
                         </div>
-                        <div class="col-md-8">
-                            <label class="form-label fw-semibold">Tên dịch vụ <span class="text-danger">*</span></label>
-                            <input type="text" name="ServiceName" id="editSrvName" class="form-control" required maxlength="150" />
+
+                        <!-- 5. Thời lượng thực hiện (phút, bắt buộc, > 0) -->
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold text-dark mb-1">
+                                Thời lượng thực hiện (phút) <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <input type="number" id="serviceForm_DurationMinutes" name="DurationMinutes" class="form-control" 
+                                       placeholder="30" min="5" max="480" required value="30" />
+                                <span class="input-group-text bg-light text-muted">phút</span>
+                            </div>
+                            <div class="d-flex gap-1 mt-1">
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 small duration-chip" onclick="setDuration(15)">15p</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 small duration-chip" onclick="setDuration(30)">30p</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 small duration-chip" onclick="setDuration(45)">45p</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 small duration-chip" onclick="setDuration(60)">60p</button>
+                            </div>
+                            <div class="invalid-feedback">Thời lượng thực hiện từ 5 đến 480 phút.</div>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Trạng thái</label>
-                            <select name="Status" id="editSrvStatus" class="form-select">
-                                <option value="Active">Đang hoạt động (Active)</option>
-                                <option value="Inactive">Tạm dừng (Inactive)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Thời lượng riêng cho slot đặt lịch (phút) <span class="text-danger">*</span></label>
-                            <input type="number" name="DurationMinutes" id="editSrvDuration" class="form-control" min="5" max="480" required />
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Đơn giá niêm yết (VNĐ) <span class="text-danger">*</span></label>
-                            <input type="number" name="Price" id="editSrvPrice" class="form-control" min="0" step="1000" required />
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Loại hình dịch vụ <span class="text-danger">*</span></label>
-                            <select name="ServiceType" id="editSrvType" class="form-select" required>
-                                <option value="Treatment">Điều trị nha khoa (Treatment)</option>
-                                <option value="Consultation">Khám & Tư vấn (Consultation)</option>
-                                <option value="Surgery">Phẫu thuật / Tiểu phẫu (Surgery)</option>
-                                <option value="Cosmetic">Nha khoa Thẩm mỹ (Cosmetic)</option>
-                                <option value="Pediatric">Nha khoa Trẻ em (Pediatric)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Thời gian đặt trước tối thiểu (giờ)</label>
-                            <input type="number" name="MinLeadTimeHours" id="editSrvLeadTime" class="form-control" min="0" max="168" />
-                        </div>
+
+                        <!-- 6. Loại dịch vụ (Treatment vs XRay) -->
                         <div class="col-12">
-                            <label class="form-label fw-semibold">Mô tả dịch vụ</label>
-                            <textarea name="Description" id="editSrvDesc" class="form-control" rows="2" maxlength="500"></textarea>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card bg-light border-0 p-3 rounded-3 h-100">
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" name="RequiresExclusiveRoom" value="true" id="editReqRoom" />
-                                    <label class="form-check-label fw-semibold" for="editReqRoom">Yêu cầu phòng vô trùng độc quyền</label>
+                            <label class="form-label fw-semibold text-dark mb-2">Loại dịch vụ</label>
+                            <div class="row g-2">
+                                <div class="col-12 col-sm-6">
+                                    <label class="border rounded-3 p-3 d-flex align-items-start gap-2 h-100 cursor-pointer service-type-card active" id="serviceTypeCard_Treatment">
+                                        <input type="radio" name="ServiceType" id="serviceType_Treatment" value="Treatment" class="form-check-input mt-1" checked onchange="onServiceTypeChanged()" />
+                                        <div>
+                                            <div class="fw-semibold text-dark">Dịch vụ điều trị thông thường</div>
+                                            <div class="text-muted small">Khám, hàn răng, nhổ răng, làm sạch, điều trị tủy...</div>
+                                        </div>
+                                    </label>
                                 </div>
-                                <div class="small text-muted">Áp dụng cho phẫu thuật Implant, nhổ răng khôn phức tạp.</div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="border rounded-3 p-3 d-flex align-items-start gap-2 h-100 cursor-pointer service-type-card" id="serviceTypeCard_XRay">
+                                        <input type="radio" name="ServiceType" id="serviceType_XRay" value="XRay" class="form-check-input mt-1" onchange="onServiceTypeChanged()" />
+                                        <div>
+                                            <div class="fw-semibold text-dark"><i class="bi bi-camera me-1 text-info"></i>Chẩn đoán hình ảnh / X-quang</div>
+                                            <div class="text-muted small">Yêu cầu chụp phim và đính kèm file ảnh X-quang.</div>
+                                        </div>
+                                    </label>
+                                </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="card bg-light border-0 p-3 rounded-3 h-100">
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" name="RequiresConsultationFirst" value="true" id="editReqConsult" />
-                                    <label class="form-check-label fw-semibold" for="editReqConsult">Bắt buộc khám tư vấn trước</label>
+
+                        <!-- 7. Mô tả dịch vụ (textarea 2-3 dòng, tùy chọn) -->
+                        <div class="col-12">
+                            <label class="form-label fw-semibold text-dark mb-1">Mô tả dịch vụ</label>
+                            <textarea id="serviceForm_Description" name="Description" class="form-control" rows="2" 
+                                      placeholder="Mô tả tóm tắt kỹ thuật thực hiện, chỉ định lâm sàng hoặc lưu ý bệnh nhân..."></textarea>
+                        </div>
+
+                        <!-- SUB-SECTION: XÁC NHẬN THỰC HIỆN -->
+                        <div class="col-12 mt-3">
+                            <div class="card border border-primary-subtle bg-light-subtle rounded-3 p-3">
+                                <div class="d-flex align-items-center gap-2 mb-1">
+                                    <i class="bi bi-check2-circle text-primary fs-5"></i>
+                                    <span class="fw-bold text-dark">Xác nhận thực hiện</span>
                                 </div>
-                                <div class="small text-muted">Bệnh nhân cần khám tư vấn trước khi làm thủ thuật.</div>
+                                <p class="text-muted small mb-3">Thiết lập bước ghi nhận kết quả khi bác sĩ thực hiện dịch vụ này</p>
+
+                                <div class="row g-2">
+                                    <div class="col-12 col-md-7">
+                                        <label class="form-label small fw-semibold text-dark mb-1">
+                                            Tên bước xác nhận <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" id="serviceForm_ConfirmationStepName" name="ConfirmationStepName" 
+                                               class="form-control form-control-sm bg-white" 
+                                               value="Xác nhận đã thực hiện dịch vụ" required maxlength="150" />
+                                    </div>
+                                    <div class="col-12 col-md-5">
+                                        <label class="form-label small fw-semibold text-dark mb-1">Kiểu kết quả</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text bg-white text-muted"><i class="bi bi-file-earmark-check" id="resultTypeIcon"></i></span>
+                                            <input type="text" id="serviceForm_ConfirmationResultTypeDisplay" class="form-control form-control-sm bg-white" readonly value="Không yêu cầu file" />
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label small fw-semibold text-dark mb-1">Hướng dẫn ngắn cho người thực hiện</label>
+                                        <textarea id="serviceForm_ConfirmationInstructions" name="ConfirmationInstructions" 
+                                                  class="form-control form-control-sm bg-white" rows="2" 
+                                                  placeholder="Ví dụ: Bác sĩ kiểm tra kết quả điều trị và ghi chú lâm sàng..."></textarea>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
-                    <button type="submit" class="btn btn-dc-primary">Lưu Thay Đổi</button>
+
+                <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary px-3" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary px-4" id="submitServiceBtn">
+                        <span class="spinner-border spinner-border-sm me-1 d-none" id="submitSpinner" role="status" aria-hidden="true"></span>
+                        <span id="submitServiceBtnText">Thêm dịch vụ</span>
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Modal Cấu hình & Xem trước Quy trình Lâm sàng -->
-<div class="modal fade" id="workflowConfigModal" tabindex="-1" aria-labelledby="wfModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header bg-light">
-                <div>
-                    <h5 class="modal-title font-heading fw-bold" id="wfModalLabel">
-                        <i class="bi bi-diagram-3 text-info me-2"></i>Quy Trình Thực Hiện Lâm Sàng: <span id="wfServiceName" class="text-teal"></span>
+<!-- ========================================================================= -->
+<!-- DELETE CONFIRMATION & PROTECTION MODAL                                    -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="deleteServiceModal" tabindex="-1" aria-labelledby="deleteServiceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 520px;">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <!-- Loading state -->
+            <div id="deleteModalLoading" class="p-5 text-center">
+                <div class="spinner-border text-primary mb-3" role="status"></div>
+                <div class="text-muted small">Đang kiểm tra lịch sử liên kết dịch vụ...</div>
+            </div>
+
+            <!-- Case A: Can Delete (No References) -->
+            <div id="deleteModalCanDelete" class="d-none">
+                <div class="modal-header border-bottom py-3 px-4">
+                    <h5 class="modal-title fw-bold text-danger d-flex align-items-center gap-2">
+                        <i class="bi bi-exclamation-triangle-fill text-danger"></i> Xác nhận xóa dịch vụ
                     </h5>
-                    <div class="text-muted small mt-1">
-                        Thiết lập các bước thực hiện tuần tự, tiêu chuẩn hoàn thành và bảo vệ phiên bản quy trình cho bác sĩ điều trị.
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-dark mb-2">
+                        Bạn có chắc chắn muốn xóa vĩnh viễn dịch vụ:
+                    </p>
+                    <div class="p-3 bg-light rounded-3 border mb-3">
+                        <div class="fw-bold text-dark fs-6" id="deleteTargetServiceName">Tên dịch vụ</div>
+                        <div class="text-muted small font-monospace" id="deleteTargetServiceCode">Mã dịch vụ</div>
+                    </div>
+                    <div class="alert alert-warning py-2 px-3 small mb-0 d-flex align-items-center gap-2">
+                        <i class="bi bi-info-circle-fill text-warning flex-shrink-0"></i>
+                        <span>Thao tác này sẽ xóa hoàn toàn dịch vụ khỏi danh mục. Hành động này không thể hoàn tác.</span>
                     </div>
                 </div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-4">
-                <!-- Nav tabs: Thiết lập bước vs Xem trước -->
-                <ul class="nav nav-pills mb-3" id="wfTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="wf-editor-tab" data-bs-toggle="pill" data-bs-target="#wfEditorPane" type="button" role="tab">
-                            <i class="bi bi-pencil-square me-1"></i>Cấu hình danh sách bước (<span id="wfStepCountBadge">0</span>)
+                <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary px-3" data-bs-dismiss="modal">Hủy</button>
+                    <form id="deleteServiceForm" method="post" asp-controller="AdminService" asp-action="Delete">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-danger px-4" id="confirmDeleteBtn">
+                            <span class="spinner-border spinner-border-sm me-1 d-none" id="deleteSpinner" role="status"></span>
+                            Xác nhận xóa
                         </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="wf-preview-tab" data-bs-toggle="pill" data-bs-target="#wfPreviewPane" type="button" role="tab">
-                            <i class="bi bi-eye me-1"></i>Xem trước quy trình lâm sàng
-                        </button>
-                    </li>
-                </ul>
-
-                <div class="tab-content" id="wfTabsContent">
-                    <!-- Tab Editor -->
-                    <div class="tab-pane fade show active" id="wfEditorPane" role="tabpanel">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <span class="badge bg-primary-subtle text-primary border" id="wfVersionBadge">Phiên bản hiện tại: v1</span>
-                                <span class="badge bg-warning-subtle text-warning border" id="wfApprovalBadge">Bản thảo (Chờ duyệt)</span>
-                                <span class="text-muted small">Lưu thay đổi sẽ tự động tạo một phiên bản quy trình mới để bảo toàn các ca khám lịch sử.</span>
-                            </div>
-                            <button type="button" class="btn btn-sm btn-outline-primary" id="btnWfAddStep">
-                                <i class="bi bi-plus-circle me-1"></i>Thêm Bước Mới
-                            </button>
-                        </div>
-
-                        <div class="alert alert-warning py-2 mb-3 small d-flex align-items-center justify-content-between" id="wfDraftAlert">
-                            <div>
-                                <i class="bi bi-shield-exclamation me-1"></i>
-                                <strong>Lưu ý thẩm định y khoa:</strong> Bản thảo tham khảo cần Bác sĩ Chuyên khoa thẩm định trước khi phê duyệt áp dụng chính thức.
-                            </div>
-                            <div class="form-check form-switch m-0 ms-3 text-nowrap">
-                                <input class="form-check-input" type="checkbox" id="wfActivateImmediate" checked />
-                                <label class="form-check-label fw-bold text-dark" for="wfActivateImmediate">Phê duyệt & Kích hoạt</label>
-                            </div>
-                        </div>
-
-                        <div class="table-responsive border rounded-3">
-                            <table class="table table-hover align-middle mb-0" id="wfStepsTable">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width: 50px;" class="text-center">#</th>
-                                        <th style="width: 25%;">Tên bước lâm sàng <span class="text-danger">*</span></th>
-                                        <th style="width: 30%;">Tiêu chuẩn hoàn thành (Requirement) <span class="text-danger">*</span></th>
-                                        <th style="width: 15%;">Kiểu dữ liệu</th>
-                                        <th style="width: 10%;" class="text-center">Bắt buộc</th>
-                                        <th style="width: 15%;" class="text-end">Thao tác</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="wfStepsTbody">
-                                    <!-- Dynamic rows -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- Tab Preview -->
-                    <div class="tab-pane fade" id="wfPreviewPane" role="tabpanel">
-                        <div class="alert alert-info py-2 d-flex align-items-center gap-2 mb-3">
-                            <i class="bi bi-info-circle-fill fs-5"></i>
-                            <div>
-                                <strong>Mô phỏng giao diện Bác sĩ:</strong> Dưới đây là các bước quy trình lâm sàng tuần tự và tiêu chuẩn nghiệm thu mà bác sĩ điều trị sẽ tuân thủ trong đợt khám.
-                            </div>
-                        </div>
-
-                        <div id="wfPreviewContainer" class="p-3 bg-light rounded-3">
-                            <!-- Dynamic preview stepper -->
-                        </div>
-                    </div>
+                    </form>
                 </div>
             </div>
-            <div class="modal-footer bg-light d-flex justify-content-between">
-                <div class="text-muted small" id="wfStatusMsg"></div>
-                <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
-                    <button type="button" class="btn btn-dc-primary" id="btnSaveWorkflow">
-                        <i class="bi bi-check-lg me-1"></i>Lưu Quy Trình Mới
-                    </button>
+
+            <!-- Case B: Cannot Delete (Has Historical References) -->
+            <div id="deleteModalCannotDelete" class="d-none">
+                <div class="modal-header border-bottom py-3 px-4">
+                    <h5 class="modal-title fw-bold text-warning d-flex align-items-center gap-2">
+                        <i class="bi bi-shield-lock-fill text-warning"></i> Không thể xóa dịch vụ
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="p-3 bg-light rounded-3 border mb-3">
+                        <div class="fw-bold text-dark fs-6" id="cannotDeleteServiceName">Tên dịch vụ</div>
+                        <div class="text-muted small font-monospace" id="cannotDeleteServiceCode">Mã dịch vụ</div>
+                    </div>
+                    <div class="alert alert-danger py-2 px-3 small mb-3">
+                        <div class="fw-semibold mb-1">Lý do bảo toàn dữ liệu:</div>
+                        <div id="cannotDeleteReasonText">
+                            Dịch vụ đã phát sinh dữ liệu lịch sử liên kết (lịch hẹn, điều trị, hóa đơn...). Để bảo toàn hồ sơ bệnh án và lịch sử kế toán, hệ thống không cho phép xóa vĩnh viễn dịch vụ này.
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        Giải pháp khuyến nghị: Chuyển trạng thái sang <strong>Ngừng cung cấp</strong> để không nhận đặt hẹn mới mà vẫn bảo toàn toàn bộ dữ liệu lịch sử.
+                    </p>
+                </div>
+                <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary px-3" data-bs-dismiss="modal">Đóng</button>
+                    <form id="proposeDeactivateForm" method="post" asp-controller="AdminService" asp-action="ToggleStatus">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-warning px-3" id="proposeDeactivateBtn">
+                            <i class="bi bi-slash-circle me-1"></i>Ngừng cung cấp dịch vụ này
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<form id="antiForgeryForm" style="display:none;">
-    @Html.AntiForgeryToken()
-</form>
+<style>
+    .cursor-pointer {
+        cursor: pointer;
+    }
+    .service-type-card {
+        transition: all 0.2s ease-in-out;
+    }
+    .service-type-card.active {
+        border-color: #0d6efd !important;
+        background-color: #f0f7ff !important;
+    }
+    .duration-chip {
+        font-size: 0.75rem;
+    }
+    /* Responsive card styling */
+    @@media (max-width: 767.98px) {
+        .service-card {
+            background-color: #fff;
+        }
+    }
+</style>
 
 @section Scripts {
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            // Edit Service Modal handler
-            const editModalEl = document.getElementById('editServiceModal');
-            if (editModalEl) {
-                const editModal = new bootstrap.Modal(editModalEl);
-                document.querySelectorAll('.btn-edit-srv').forEach(btn => {
-                    btn.addEventListener('click', function () {
-                        document.getElementById('editSrvId').value = this.dataset.id;
-                        document.getElementById('editSrvCode').value = this.dataset.code || '';
-                        document.getElementById('editSrvDeptId').value = this.dataset.deptid;
-                        document.getElementById('editSrvName').value = this.dataset.name;
-                        document.getElementById('editSrvDesc').value = this.dataset.desc || '';
-                        document.getElementById('editSrvDuration').value = this.dataset.duration || 30;
-                        document.getElementById('editSrvPrice').value = this.dataset.price;
-                        document.getElementById('editSrvStatus').value = this.dataset.status || 'Active';
-                        document.getElementById('editSrvType').value = this.dataset.servicetype || 'Treatment';
-                        document.getElementById('editReqRoom').checked = (this.dataset.exclusive === 'true');
-                        document.getElementById('editReqConsult').checked = (this.dataset.consultation === 'true');
-                        document.getElementById('editSrvLeadTime').value = this.dataset.leadtime || 0;
-                        document.getElementById('editSrvInstructions').value = this.dataset.instructions || '';
-                        editModal.show();
-                    });
-                });
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        initSearchAndFilter();
+        initPriceFormatListener();
+        initFormValidation();
+    });
+
+    // =========================================================================
+    // SEARCH & FILTER LOGIC (Debounce 300ms + Instant Client-Side Feedback)
+    // =========================================================================
+    let searchTimeout = null;
+
+    function initSearchAndFilter() {
+        const searchInput = document.getElementById('serviceSearchInput');
+        const deptFilter = document.getElementById('departmentFilter');
+        const statusFilter = document.getElementById('statusFilter');
+        const clearBtn = document.getElementById('clearSearchBtn');
+
+        function applyFilter() {
+            const query = (searchInput.value || '').trim().toLowerCase();
+            const deptId = deptFilter.value;
+            const status = statusFilter.value;
+
+            if (query.length > 0) {
+                clearBtn.classList.remove('d-none');
+            } else {
+                clearBtn.classList.add('d-none');
             }
 
-            // Workflow Config Modal state
-            let currentServiceId = null;
-            let currentServiceName = '';
-            let currentWorkflowSteps = [];
-            const wfModalEl = document.getElementById('workflowConfigModal');
-            const wfModal = wfModalEl ? new bootstrap.Modal(wfModalEl) : null;
-            const wfStepsTbody = document.getElementById('wfStepsTbody');
-            const wfPreviewContainer = document.getElementById('wfPreviewContainer');
-            const wfStepCountBadge = document.getElementById('wfStepCountBadge');
-            const wfVersionBadge = document.getElementById('wfVersionBadge');
-            const wfApprovalBadge = document.getElementById('wfApprovalBadge');
-            const wfStatusMsg = document.getElementById('wfStatusMsg');
+            const rows = document.querySelectorAll('.service-row');
+            const cards = document.querySelectorAll('.service-card');
+            let visibleCount = 0;
 
-            function getCsrfToken() {
-                const input = document.querySelector('#antiForgeryForm input[name="__RequestVerificationToken"]');
-                return input ? input.value : '';
+            function checkMatch(elem) {
+                const searchText = elem.getAttribute('data-search-text') || '';
+                const code = (elem.getAttribute('data-code') || '').toLowerCase();
+                const name = (elem.getAttribute('data-name') || '').toLowerCase();
+                const rowDeptId = elem.getAttribute('data-dept-id') || '';
+                const rowStatus = elem.getAttribute('data-status') || '';
+
+                const matchesQuery = !query || code.includes(query) || name.includes(query) || searchText.includes(query);
+                const matchesDept = !deptId || rowDeptId === deptId;
+                const matchesStatus = !status || rowStatus.toLowerCase() === status.toLowerCase();
+
+                return matchesQuery && matchesDept && matchesStatus;
             }
 
-            function renderWorkflowEditor() {
-                wfStepsTbody.innerHTML = '';
-                wfStepCountBadge.innerText = currentWorkflowSteps.length;
-
-                if (currentWorkflowSteps.length === 0) {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `<td colspan="6" class="text-center py-4 text-muted">
-                        <i class="bi bi-diagram-3 fs-3 d-block mb-1"></i>
-                        Chưa có bước quy trình nào. Nhấn "Thêm Bước Mới" để thiết lập.
-                    </td>`;
-                    wfStepsTbody.appendChild(tr);
-                    renderWorkflowPreview();
-                    return;
-                }
-
-                currentWorkflowSteps.forEach((step, idx) => {
-                    const tr = document.createElement('tr');
-                    tr.dataset.index = idx;
-                    tr.innerHTML = `
-                        <td class="text-center fw-bold text-muted">${idx + 1}</td>
-                        <td>
-                            <input type="text" class="form-control form-control-sm step-name-input" value="${escapeHtml(step.stepName || '')}" placeholder="VD: Khám khoang miệng..." />
-                            <input type="text" class="form-control form-control-sm mt-1 text-muted step-desc-input" value="${escapeHtml(step.description || '')}" placeholder="Mô tả chi tiết (tùy chọn)" />
-                        </td>
-                        <td>
-                            <textarea class="form-control form-control-sm step-req-input" rows="2" placeholder="Tiêu chuẩn đạt được...">${escapeHtml(step.completionRequirement || '')}</textarea>
-                        </td>
-                        <td>
-                            <select class="form-select form-select-sm step-type-select">
-                                <option value="Text" ${step.expectedDataType === 'Text' ? 'selected' : ''}>Văn bản (Text)</option>
-                                <option value="Boolean" ${step.expectedDataType === 'Boolean' ? 'selected' : ''}>Đạt / Chưa đạt (Boolean)</option>
-                                <option value="Number" ${step.expectedDataType === 'Number' ? 'selected' : ''}>Số liệu đo (Number)</option>
-                                <option value="Image" ${step.expectedDataType === 'Image' ? 'selected' : ''}>Hình ảnh / X-Quang (Image)</option>
-                                <option value="Selection" ${step.expectedDataType === 'Selection' ? 'selected' : ''}>Lựa chọn (Selection)</option>
-                            </select>
-                        </td>
-                        <td class="text-center">
-                            <input type="checkbox" class="form-check-input step-required-checkbox" ${step.isRequired ? 'checked' : ''} />
-                        </td>
-                        <td class="text-end text-nowrap">
-                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 btn-move-up" ${idx === 0 ? 'disabled' : ''} title="Chuyển lên">
-                                <i class="bi bi-arrow-up"></i>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 btn-move-down" ${idx === currentWorkflowSteps.length - 1 ? 'disabled' : ''} title="Chuyển xuống">
-                                <i class="bi bi-arrow-down"></i>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 btn-delete-step" title="Xóa bước này">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </td>
-                    `;
-
-                    // Bind inputs to array model
-                    tr.querySelector('.step-name-input').addEventListener('input', e => {
-                        step.stepName = e.target.value;
-                        renderWorkflowPreview();
-                    });
-                    tr.querySelector('.step-desc-input').addEventListener('input', e => {
-                        step.description = e.target.value;
-                        renderWorkflowPreview();
-                    });
-                    tr.querySelector('.step-req-input').addEventListener('input', e => {
-                        step.completionRequirement = e.target.value;
-                        renderWorkflowPreview();
-                    });
-                    tr.querySelector('.step-type-select').addEventListener('change', e => {
-                        step.expectedDataType = e.target.value;
-                        renderWorkflowPreview();
-                    });
-                    tr.querySelector('.step-required-checkbox').addEventListener('change', e => {
-                        step.isRequired = e.target.checked;
-                        renderWorkflowPreview();
-                    });
-
-                    tr.querySelector('.btn-move-up').addEventListener('click', () => {
-                        if (idx > 0) {
-                            const tmp = currentWorkflowSteps[idx];
-                            currentWorkflowSteps[idx] = currentWorkflowSteps[idx - 1];
-                            currentWorkflowSteps[idx - 1] = tmp;
-                            renderWorkflowEditor();
-                        }
-                    });
-
-                    tr.querySelector('.btn-move-down').addEventListener('click', () => {
-                        if (idx < currentWorkflowSteps.length - 1) {
-                            const tmp = currentWorkflowSteps[idx];
-                            currentWorkflowSteps[idx] = currentWorkflowSteps[idx + 1];
-                            currentWorkflowSteps[idx + 1] = tmp;
-                            renderWorkflowEditor();
-                        }
-                    });
-
-                    tr.querySelector('.btn-delete-step').addEventListener('click', () => {
-                        currentWorkflowSteps.splice(idx, 1);
-                        renderWorkflowEditor();
-                    });
-
-                    wfStepsTbody.appendChild(tr);
-                });
-
-                renderWorkflowPreview();
-            }
-
-            function renderWorkflowPreview() {
-                if (currentWorkflowSteps.length === 0) {
-                    wfPreviewContainer.innerHTML = '<div class="text-center py-4 text-muted">Chưa có bước quy trình nào để hiển thị xem trước.</div>';
-                    return;
-                }
-
-                let html = '<div class="d-flex flex-column gap-3">';
-                currentWorkflowSteps.forEach((step, idx) => {
-                    const typeBadge = getTypeBadge(step.expectedDataType);
-                    const reqBadge = step.isRequired
-                        ? '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">Bắt buộc</span>'
-                        : '<span class="badge bg-secondary-subtle text-muted border">Tùy chọn</span>';
-
-                    html += `
-                        <div class="card border rounded-3 p-3 shadow-sm bg-white">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div class="d-flex align-items-center gap-2">
-                                    <span class="badge bg-teal text-white rounded-pill px-3 py-1 fs-6">Bước ${idx + 1}</span>
-                                    <h6 class="mb-0 fw-bold text-dark">${escapeHtml(step.stepName || 'Chưa đặt tên bước')}</h6>
-                                    ${reqBadge}
-                                </div>
-                                <div>${typeBadge}</div>
-                            </div>
-                            ${step.description ? `<p class="text-muted small mb-2"><i class="bi bi-info-circle me-1"></i>${escapeHtml(step.description)}</p>` : ''}
-                            <div class="p-2 bg-light rounded border small">
-                                <strong class="text-primary"><i class="bi bi-check2-circle me-1"></i>Tiêu chuẩn hoàn thành:</strong>
-                                <span class="text-dark">${escapeHtml(step.completionRequirement || 'Chưa có điều kiện')}</span>
-                            </div>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-                wfPreviewContainer.innerHTML = html;
-            }
-
-            function getTypeBadge(type) {
-                switch (type) {
-                    case 'Boolean':
-                        return '<span class="badge bg-success-subtle text-success border"><i class="bi bi-toggle-on me-1"></i>Đạt / Chưa đạt</span>';
-                    case 'Number':
-                        return '<span class="badge bg-info-subtle text-info border"><i class="bi bi-123 me-1"></i>Số liệu đo</span>';
-                    case 'Image':
-                        return '<span class="badge bg-warning-subtle text-warning border"><i class="bi bi-image me-1"></i>Ảnh / X-Quang</span>';
-                    case 'Selection':
-                        return '<span class="badge bg-primary-subtle text-primary border"><i class="bi bi-list-check me-1"></i>Lựa chọn</span>';
-                    default:
-                        return '<span class="badge bg-light text-dark border"><i class="bi bi-fonts me-1"></i>Văn bản</span>';
-                }
-            }
-
-            function escapeHtml(str) {
-                if (!str) return '';
-                return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-            }
-
-            // Open Workflow Modal
-            document.querySelectorAll('.btn-open-wf').forEach(btn => {
-                btn.addEventListener('click', async function () {
-                    currentServiceId = this.dataset.id;
-                    currentServiceName = this.dataset.name;
-                    document.getElementById('wfServiceName').innerText = currentServiceName;
-                    wfStatusMsg.innerText = 'Đang tải dữ liệu quy trình...';
-
-                    try {
-                        const res = await fetch(`/Admin/Services/${currentServiceId}/Workflow`);
-                        const json = await res.json();
-                        if (json.success && json.data) {
-                            wfVersionBadge.innerText = `Phiên bản hiện tại: v${json.data.version}`;
-                            const isApproved = (json.data.approvalStatus === 'Approved') || (json.data.isActive);
-                            if (wfApprovalBadge) {
-                                if (isApproved) {
-                                    wfApprovalBadge.className = 'badge bg-success-subtle text-success border';
-                                    wfApprovalBadge.innerText = 'Đang áp dụng';
-                                } else {
-                                    wfApprovalBadge.className = 'badge bg-warning-subtle text-warning border';
-                                    wfApprovalBadge.innerText = 'Bản thảo (Chờ duyệt)';
-                                }
-                            }
-                            const chk = document.getElementById('wfActivateImmediate');
-                            if (chk) chk.checked = true;
-
-                            currentWorkflowSteps = (json.data.steps || []).map(s => ({
-                                stepName: s.stepName,
-                                description: s.description,
-                                isRequired: s.isRequired,
-                                completionRequirement: s.completionRequirement,
-                                expectedDataType: s.expectedDataType || 'Text'
-                            }));
-                        } else {
-                            wfVersionBadge.innerText = 'Chưa có phiên bản (sẽ tạo v1)';
-                            if (wfApprovalBadge) {
-                                wfApprovalBadge.className = 'badge bg-secondary-subtle text-secondary border';
-                                wfApprovalBadge.innerText = 'Chưa thiết lập';
-                            }
-                            const chk = document.getElementById('wfActivateImmediate');
-                            if (chk) chk.checked = true;
-                            currentWorkflowSteps = [];
-                        }
-                    } catch (e) {
-                        wfVersionBadge.innerText = 'Chưa có quy trình';
-                        if (wfApprovalBadge) {
-                            wfApprovalBadge.className = 'badge bg-secondary-subtle text-secondary border';
-                            wfApprovalBadge.innerText = 'Chưa thiết lập';
-                        }
-                        currentWorkflowSteps = [];
-                    }
-
-                    renderWorkflowEditor();
-                    wfStatusMsg.innerText = '';
-                    if (wfModal) wfModal.show();
-                });
-            });
-
-            // Add step button
-            document.getElementById('btnWfAddStep').addEventListener('click', () => {
-                currentWorkflowSteps.push({
-                    stepName: `Bước ${currentWorkflowSteps.length + 1}`,
-                    description: '',
-                    isRequired: true,
-                    completionRequirement: 'Xác nhận hoàn thành kỹ thuật lâm sàng',
-                    expectedDataType: 'Text'
-                });
-                renderWorkflowEditor();
-            });
-
-            // Save Workflow button
-            document.getElementById('btnSaveWorkflow').addEventListener('click', async () => {
-                if (!currentServiceId) return;
-
-                // Validation
-                for (let i = 0; i < currentWorkflowSteps.length; i++) {
-                    const st = currentWorkflowSteps[i];
-                    if (!st.stepName || !st.stepName.trim()) {
-                        alert(`Vui lòng nhập tên cho bước số ${i + 1}`);
-                        return;
-                    }
-                    if (!st.completionRequirement || !st.completionRequirement.trim()) {
-                        alert(`Vui lòng nhập tiêu chuẩn hoàn thành cho bước số ${i + 1}`);
-                        return;
-                    }
-                }
-
-                const chk = document.getElementById('wfActivateImmediate');
-                const activateImmediate = chk ? chk.checked : true;
-
-                const payload = {
-                    workflowName: `Quy trình ${currentServiceName}`,
-                    description: `Cấu hình quy trình lâm sàng chuẩn cho dịch vụ ${currentServiceName}`,
-                    activateImmediately: activateImmediate,
-                    approvalStatus: activateImmediate ? 'Approved' : 'Draft',
-                    steps: currentWorkflowSteps.map((st, idx) => ({
-                        stepName: st.stepName.trim(),
-                        description: st.description ? st.description.trim() : null,
-                        stepOrder: idx + 1,
-                        isRequired: st.isRequired,
-                        completionRequirement: st.completionRequirement.trim(),
-                        expectedDataType: st.expectedDataType || 'Text'
-                    }))
-                };
-
-                wfStatusMsg.innerText = 'Đang lưu quy trình mới...';
-                document.getElementById('btnSaveWorkflow').disabled = true;
-
-                try {
-                    const resp = await fetch(`/Admin/Services/${currentServiceId}/Workflow`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'RequestVerificationToken': getCsrfToken()
-                        },
-                        body: JSON.stringify(payload)
-                    });
-
-                    const json = await resp.json();
-                    if (json.success) {
-                        alert(`Đã lưu quy trình thành công! Phiên bản mới: v${json.data ? json.data.version : ''}`);
-                        if (wfModal) wfModal.hide();
-                        window.location.reload();
-                    } else {
-                        alert(json.message || 'Không thể lưu quy trình.');
-                        wfStatusMsg.innerText = json.message || 'Lỗi khi lưu';
-                    }
-                } catch (err) {
-                    alert('Lỗi kết nối khi lưu quy trình: ' + err.message);
-                    wfStatusMsg.innerText = 'Lỗi kết nối';
-                } finally {
-                    document.getElementById('btnSaveWorkflow').disabled = false;
+            rows.forEach(function (row) {
+                if (checkMatch(row)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
                 }
             });
+
+            cards.forEach(function (card) {
+                if (checkMatch(card)) {
+                    card.style.display = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            const countBadge = document.getElementById('serviceCountBadge');
+            if (countBadge) countBadge.textContent = visibleCount;
+
+            const noServicesFound = document.getElementById('noServicesFound');
+            const table = document.getElementById('servicesTable');
+            if (noServicesFound) {
+                if (visibleCount === 0) {
+                    noServicesFound.classList.remove('d-none');
+                    if (table) table.classList.add('d-none');
+                } else {
+                    noServicesFound.classList.add('d-none');
+                    if (table) table.classList.remove('d-none');
+                }
+            }
+        }
+
+        searchInput.addEventListener('input', function () {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(applyFilter, 300);
         });
-    </script>
+
+        clearBtn.addEventListener('click', function () {
+            searchInput.value = '';
+            applyFilter();
+            searchInput.focus();
+        });
+
+        deptFilter.addEventListener('change', applyFilter);
+        statusFilter.addEventListener('change', applyFilter);
+    }
+
+    function resetFilters() {
+        document.getElementById('serviceSearchInput').value = '';
+        document.getElementById('departmentFilter').value = '';
+        document.getElementById('statusFilter').value = '';
+        document.getElementById('clearSearchBtn').classList.add('d-none');
+        
+        // Trigger filter
+        const event = new Event('input');
+        document.getElementById('serviceSearchInput').dispatchEvent(event);
+    }
+
+    // =========================================================================
+    // PRICE PREVIEW & DURATION CHIPS
+    // =========================================================================
+    function initPriceFormatListener() {
+        const priceInput = document.getElementById('serviceForm_Price');
+        const preview = document.getElementById('formattedPricePreview');
+
+        function updatePricePreview() {
+            const val = parseFloat(priceInput.value);
+            if (!isNaN(val) && val >= 0) {
+                preview.textContent = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+            } else {
+                preview.textContent = '0 đ';
+            }
+        }
+
+        priceInput.addEventListener('input', updatePricePreview);
+    }
+
+    function setDuration(mins) {
+        const input = document.getElementById('serviceForm_DurationMinutes');
+        input.value = mins;
+        input.dispatchEvent(new Event('input'));
+    }
+
+    // =========================================================================
+    // SERVICE TYPE TOGGLE (TREATMENT VS X-RAY)
+    // =========================================================================
+    function onServiceTypeChanged() {
+        const isXray = document.getElementById('serviceType_XRay').checked;
+        const treatmentCard = document.getElementById('serviceTypeCard_Treatment');
+        const xrayCard = document.getElementById('serviceTypeCard_XRay');
+        const stepNameInput = document.getElementById('serviceForm_ConfirmationStepName');
+        const resultTypeDisplay = document.getElementById('serviceForm_ConfirmationResultTypeDisplay');
+        const resultTypeIcon = document.getElementById('resultTypeIcon');
+        const instructionsInput = document.getElementById('serviceForm_ConfirmationInstructions');
+
+        if (isXray) {
+            treatmentCard.classList.remove('active');
+            xrayCard.classList.add('active');
+
+            if (!stepNameInput.value || stepNameInput.value === 'Xác nhận đã thực hiện dịch vụ') {
+                stepNameInput.value = 'Xác nhận đã chụp X-quang';
+            }
+            resultTypeDisplay.value = 'Yêu cầu tải lên hình ảnh (Image)';
+            resultTypeIcon.className = 'bi bi-camera-fill text-info';
+            if (!instructionsInput.value || instructionsInput.value.includes('Bác sĩ kiểm tra kết quả điều trị')) {
+                instructionsInput.value = 'Kỹ thuật viên / Bác sĩ chụp phim và tải lên hình ảnh X-quang hợp lệ.';
+            }
+        } else {
+            treatmentCard.classList.add('active');
+            xrayCard.classList.remove('active');
+
+            if (!stepNameInput.value || stepNameInput.value === 'Xác nhận đã chụp X-quang') {
+                stepNameInput.value = 'Xác nhận đã thực hiện dịch vụ';
+            }
+            resultTypeDisplay.value = 'Không yêu cầu file (None)';
+            resultTypeIcon.className = 'bi bi-file-earmark-check';
+            if (!instructionsInput.value || instructionsInput.value.includes('tải lên hình ảnh X-quang')) {
+                instructionsInput.value = 'Bác sĩ kiểm tra kết quả điều trị và ghi chú lâm sàng.';
+            }
+        }
+    }
+
+    // =========================================================================
+    // MODAL OPENERS (ADD VS EDIT)
+    // =========================================================================
+    function openCreateServiceModal() {
+        const modalEl = document.getElementById('serviceModal');
+        const form = document.getElementById('serviceForm');
+        form.reset();
+        form.action = '/Admin/Services/Create';
+
+        document.getElementById('serviceModalLabel').textContent = 'Thêm dịch vụ mới';
+        document.getElementById('serviceModalSubtitle').textContent = 'Thiết lập thông tin dịch vụ và bước xác nhận hoàn tất';
+        document.getElementById('modalHeaderIcon').className = 'bi bi-journal-medical fs-5';
+        document.getElementById('submitServiceBtnText').textContent = 'Thêm dịch vụ';
+
+        document.getElementById('serviceForm_DepartmentServiceId').value = '';
+        const codeInput = document.getElementById('serviceForm_ServiceCode');
+        codeInput.removeAttribute('readonly');
+        codeInput.classList.remove('bg-light');
+        document.getElementById('serviceCodeHelp').textContent = 'Mã duy nhất viết hoa không dấu, không thể đổi sau khi tạo.';
+
+        document.getElementById('serviceType_Treatment').checked = true;
+        onServiceTypeChanged();
+
+        document.getElementById('serviceForm_DurationMinutes').value = 30;
+        document.getElementById('formattedPricePreview').textContent = '0 đ';
+
+        // Preselect department from filter if filtered
+        const currentDeptFilter = document.getElementById('departmentFilter').value;
+        if (currentDeptFilter) {
+            document.getElementById('serviceForm_DepartmentId').value = currentDeptFilter;
+        }
+
+        form.classList.remove('was-validated');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+
+    async function openEditServiceModal(serviceId) {
+        const modalEl = document.getElementById('serviceModal');
+        const form = document.getElementById('serviceForm');
+        form.reset();
+        form.action = '/Admin/Services/Edit';
+
+        document.getElementById('serviceModalLabel').textContent = 'Chỉnh sửa dịch vụ';
+        document.getElementById('serviceModalSubtitle').textContent = 'Cập nhật thông tin dịch vụ và bước xác nhận thực hiện';
+        document.getElementById('modalHeaderIcon').className = 'bi bi-pencil-square fs-5';
+        document.getElementById('submitServiceBtnText').textContent = 'Lưu thay đổi';
+
+        // Find row to fill initial data instantly
+        const row = document.querySelector(`.service-row[data-id="${serviceId}"]`);
+        if (row) {
+            document.getElementById('serviceForm_DepartmentServiceId').value = serviceId;
+            document.getElementById('serviceForm_ServiceName').value = row.getAttribute('data-name') || '';
+            
+            const codeInput = document.getElementById('serviceForm_ServiceCode');
+            codeInput.value = row.getAttribute('data-code') || '';
+            codeInput.setAttribute('readonly', 'readonly');
+            codeInput.classList.add('bg-light');
+            document.getElementById('serviceCodeHelp').textContent = 'Mã dịch vụ là định danh duy nhất và không thể thay đổi.';
+
+            document.getElementById('serviceForm_DepartmentId').value = row.getAttribute('data-dept-id') || '';
+            
+            const price = parseFloat(row.getAttribute('data-price') || 0);
+            document.getElementById('serviceForm_Price').value = price;
+            document.getElementById('formattedPricePreview').textContent = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
+
+            document.getElementById('serviceForm_DurationMinutes').value = row.getAttribute('data-duration') || 30;
+            document.getElementById('serviceForm_Description').value = row.getAttribute('data-desc') || '';
+
+            const isXray = (row.getAttribute('data-type') || '').toLowerCase() === 'xray';
+            if (isXray) {
+                document.getElementById('serviceType_XRay').checked = true;
+            } else {
+                document.getElementById('serviceType_Treatment').checked = true;
+            }
+            onServiceTypeChanged();
+        }
+
+        // Fetch workflow from server to populate step details precisely
+        try {
+            const resp = await fetch(`/Admin/Services/${serviceId}/Workflow`);
+            if (resp.ok) {
+                const res = await resp.json();
+                if (res.success && res.data && res.data.steps && res.data.steps.length > 0) {
+                    const step = res.data.steps[0];
+                    if (step.stepName) {
+                        document.getElementById('serviceForm_ConfirmationStepName').value = step.stepName;
+                    }
+                    if (step.description) {
+                        document.getElementById('serviceForm_ConfirmationInstructions').value = step.description;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Could not fetch existing workflow steps, using defaults', e);
+        }
+
+        form.classList.remove('was-validated');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+
+    // =========================================================================
+    // DELETE MODAL (PROTECTION & CONFIRMATION)
+    // =========================================================================
+    async function requestDeleteService(serviceId, serviceCode, serviceName) {
+        const modalEl = document.getElementById('deleteServiceModal');
+        const loadingDiv = document.getElementById('deleteModalLoading');
+        const canDeleteDiv = document.getElementById('deleteModalCanDelete');
+        const cannotDeleteDiv = document.getElementById('deleteModalCannotDelete');
+
+        loadingDiv.classList.remove('d-none');
+        canDeleteDiv.classList.add('d-none');
+        cannotDeleteDiv.classList.add('d-none');
+
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        try {
+            const resp = await fetch(`/Admin/Services/CanDelete/${serviceId}`);
+            const result = await resp.json();
+
+            loadingDiv.classList.add('d-none');
+
+            if (result.success && result.data && result.data.canDelete) {
+                // Can delete safely
+                document.getElementById('deleteTargetServiceName').textContent = serviceName;
+                document.getElementById('deleteTargetServiceCode').textContent = serviceCode;
+                document.getElementById('deleteServiceForm').action = `/Admin/Services/Delete/${serviceId}`;
+                canDeleteDiv.classList.remove('d-none');
+            } else {
+                // Cannot delete because of historical references
+                document.getElementById('cannotDeleteServiceName').textContent = serviceName;
+                document.getElementById('cannotDeleteServiceCode').textContent = serviceCode;
+                const reason = (result.data && result.data.reason) || 'Dịch vụ đã phát sinh dữ liệu lịch sử liên kết (lịch hẹn, điều trị, hóa đơn...). Không thể xóa vĩnh viễn.';
+                document.getElementById('cannotDeleteReasonText').textContent = reason;
+                document.getElementById('proposeDeactivateForm').action = `/Admin/Services/ToggleStatus/${serviceId}`;
+                cannotDeleteDiv.classList.remove('d-none');
+            }
+        } catch (e) {
+            loadingDiv.classList.add('d-none');
+            alert('Lỗi khi kiểm tra dữ liệu dịch vụ. Vui lòng thử lại.');
+            modal.hide();
+        }
+    }
+
+    // =========================================================================
+    // FORM VALIDATION & ANTI-DOUBLE CLICK
+    // =========================================================================
+    function initFormValidation() {
+        const form = document.getElementById('serviceForm');
+        const submitBtn = document.getElementById('submitServiceBtn');
+        const spinner = document.getElementById('submitSpinner');
+
+        form.addEventListener('submit', function (event) {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+                form.classList.add('was-validated');
+                return;
+            }
+
+            // Anti-double click protection
+            submitBtn.setAttribute('disabled', 'disabled');
+            spinner.classList.remove('d-none');
+        });
+
+        const deleteForm = document.getElementById('deleteServiceForm');
+        if (deleteForm) {
+            deleteForm.addEventListener('submit', function () {
+                const btn = document.getElementById('confirmDeleteBtn');
+                btn.setAttribute('disabled', 'disabled');
+                document.getElementById('deleteSpinner').classList.remove('d-none');
+            });
+        }
+    }
+</script>
 }

@@ -211,6 +211,17 @@ public class AppointmentApiService : IAppointmentApiService
         return await SendPostActionAsync($"/api/receptionist/appointments/{id}/cancel", request);
     }
 
+    public async Task<ApiResult<AppointmentDto>> ReceptionistApproveRescheduleAsync(long id)
+    {
+        return await SendPostAsync<object, AppointmentDto>($"/api/receptionist/appointments/{id}/reschedule/approve", new { });
+    }
+
+    public async Task<ApiResult> ReceptionistRejectRescheduleAsync(long id, string reason)
+    {
+        var request = new RescheduleRejectRequest { Reason = reason };
+        return await SendPostActionAsync($"/api/receptionist/appointments/{id}/reschedule/reject", request);
+    }
+
     // ==========================================
     // DEPARTMENT MANAGER
     // ==========================================
@@ -342,6 +353,36 @@ public class AppointmentApiService : IAppointmentApiService
             targetDentistUserId,
             notes
         });
+    }
+
+    public async Task<ApiResult> DentistContinueAfternoonAsync(long id, DateTime continuationStart, int durationMinutes, string? notes)
+    {
+        var request = new DentistContinueAfternoonRequest
+        {
+            ContinuationStartTime = continuationStart,
+            ContinuationDurationMinutes = durationMinutes,
+            ClinicalNotes = notes
+        };
+        return await SendPostActionAsync($"/api/dentist/appointments/{id}/continue-afternoon", request);
+    }
+
+    public async Task<ApiResult> DentistRecommendAnotherDayAsync(long id, DateTime recommendedDate, int? recommendedServiceId, string clinicalReason, string? completedNotes, string? remainingNotes)
+    {
+        var request = new DentistRecommendAnotherDayRequest
+        {
+            RecommendedDate = recommendedDate,
+            RecommendedServiceId = recommendedServiceId,
+            ClinicalReason = clinicalReason,
+            CompletedWorkNotes = completedNotes,
+            RemainingWorkNotes = remainingNotes
+        };
+        return await SendPostActionAsync($"/api/dentist/appointments/{id}/recommend-another-day", request);
+    }
+
+    public async Task<ApiResult> DentistFlagDelayAsync(long id, string notes)
+    {
+        var request = new DentistFlagDelayRequest { Notes = notes };
+        return await SendPostActionAsync($"/api/dentist/appointments/{id}/flag-delay", request);
     }
 
     // ==========================================

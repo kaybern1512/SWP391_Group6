@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Features.ClinicalDiagnostics.DTOs;
+using DentalClinic.Domain.Common;
 using DentalClinic.Domain.Enums;
 using DentalClinic.Infrastructure.Persistence;
 using DentalClinic.Infrastructure.Persistence.Entities;
@@ -55,8 +56,19 @@ public class XrayRosterService : IXrayRosterService
         if (request.RoomId.HasValue)
         {
             var roomIdInt = (int)request.RoomId.Value;
-            query = query.Where(ws => ws.StaffUser.DentistProfile != null &&
-                                      ws.StaffUser.DentistProfile.Department.Rooms.Any(rm => rm.RoomId == roomIdInt));
+            var room = await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == roomIdInt, ct)
+                ?? await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomCode == "R003" || r.RoomType == "Imaging", ct);
+            if (room != null)
+            {
+                roomIdInt = room.RoomId;
+            }
+            var roomCode = room?.RoomCode ?? "R003";
+            var roomTag = $"[XRAY:RoomId={roomIdInt}]";
+            var roomCodeTag = $"[{roomCode}]";
+
+            query = query.Where(ws => (ws.Notes != null && (ws.Notes.Contains(roomTag) || ws.Notes.Contains(roomCodeTag))) ||
+                                      (ws.StaffUser.DentistProfile != null &&
+                                       ws.StaffUser.DentistProfile.Department.Rooms.Any(rm => rm.RoomId == roomIdInt)));
         }
 
         var schedules = await query
@@ -102,6 +114,15 @@ public class XrayRosterService : IXrayRosterService
         var workDate = DateOnly.FromDateTime(localDateTime);
         var timeOfDay = TimeOnly.FromDateTime(localDateTime);
         var roomIdInt = (int)roomId;
+        var room = await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == roomIdInt, ct)
+            ?? await _dbContext.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomCode == "R003" || r.RoomType == "Imaging", ct);
+        if (room != null)
+        {
+            roomIdInt = room.RoomId;
+        }
+        var roomCode = room?.RoomCode ?? "R003";
+        var roomTag = $"[XRAY:RoomId={roomIdInt}]";
+        var roomCodeTag = $"[{roomCode}]";
 
         var wsList = await _dbContext.StaffWorkSchedules
             .AsNoTracking()
@@ -116,8 +137,9 @@ public class XrayRosterService : IXrayRosterService
                         x.Status == "Scheduled" &&
                         x.StartTime <= timeOfDay &&
                         x.EndTime >= timeOfDay &&
-                        x.StaffUser.DentistProfile != null &&
-                        x.StaffUser.DentistProfile.Department.Rooms.Any(rm => rm.RoomId == roomIdInt))
+                        ((x.Notes != null && (x.Notes.Contains(roomTag) || x.Notes.Contains(roomCodeTag))) ||
+                         (x.StaffUser.DentistProfile != null &&
+                          x.StaffUser.DentistProfile.Department.Rooms.Any(rm => rm.RoomId == roomIdInt))))
             .ToListAsync(ct);
 
         if (!wsList.Any()) return null;
@@ -158,18 +180,32 @@ public class XrayRosterService : IXrayRosterService
             Email = u.Email ?? string.Empty,
             PhoneNumber = u.PhoneNumber,
             LicenseNumber = u.StaffProfile?.DentistProfile?.LicenseNumber,
-            Qualification = u.StaffProfile?.DentistProfile?.Qualification,
-            HasRadiationSafetyCert = !string.IsNullOrWhiteSpace(u.StaffProfile?.DentistProfile?.LicenseNumber),
-            RadiationCertNumber = u.StaffProfile?.DentistProfile?.LicenseNumber,
+            Qualification = u.StaffProfile?.DentistProfile?.Department?.Name != null
+                ? $"{u.StaffProfile.DentistProfile.Qualification} ({u.StaffProfile.DentistProfile.Department.Name})"
+                : u.StaffProfile?.DentistProfile?.Qualification,
+            HasRadiationSafetyCert = true,
+            RadiationCertNumber = null,
             RadiationCertExpiryDate = null
         })
-        .OrderByDescending(d => d.HasRadiationSafetyCert)
-        .ThenBy(d => d.FullName)
+        .OrderBy(d => d.FullName)
         .ToList();
     }
 
     public async Task<XrayDentistRosterDto> AssignRosterAsync(AssignXrayRosterRequest request, long adminUserId, CancellationToken ct = default)
     {
+        StandardWorkShiftPolicy.ValidateNewWorkDate(request.WorkDate);
+
+        if (request.StartTime == default && request.EndTime == default)
+        {
+            if (StandardWorkShiftPolicy.TryGetShiftTimes(request.ShiftType, out var sStart, out var sEnd))
+            {
+                request.StartTime = sStart;
+                request.EndTime = sEnd;
+            }
+        }
+
+        StandardWorkShiftPolicy.ValidateStandardShiftHours(request.StartTime, request.EndTime);
+
         if (request.EndTime <= request.StartTime)
         {
             throw new InvalidOperationException("Thời gian kết thúc ca trực phải lớn hơn thời gian bắt đầu.");
@@ -215,6 +251,11 @@ public class XrayRosterService : IXrayRosterService
                 $"trong khung giờ {clinicalConflict.ScheduledStart:HH\\:mm} - {clinicalConflict.ScheduledEnd:HH\\:mm}.");
         }
 
+        var roomTag = request.RoomId > 0 ? $"[XRAY:RoomId={request.RoomId}]" : string.Empty;
+        var finalNotes = string.IsNullOrWhiteSpace(request.Notes)
+            ? roomTag
+            : (string.IsNullOrEmpty(roomTag) ? request.Notes.Trim() : $"{roomTag} {request.Notes.Trim()}");
+
         var schedule = new StaffWorkSchedule
         {
             StaffUserId = request.DentistUserId,
@@ -223,7 +264,7 @@ public class XrayRosterService : IXrayRosterService
             StartTime = request.StartTime,
             EndTime = request.EndTime,
             Status = "Scheduled",
-            Notes = request.Notes?.Trim(),
+            Notes = string.IsNullOrWhiteSpace(finalNotes) ? null : finalNotes,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -376,20 +417,36 @@ public class XrayRosterService : IXrayRosterService
             ? deptRooms?.FirstOrDefault(rm => rm.RoomId == preferredRoomId.Value)
             : deptRooms?.FirstOrDefault();
 
+        var roomId = room?.RoomId ?? 0;
+        var roomCode = room?.RoomCode ?? "R003";
+        var roomName = room?.RoomName ?? ws.StaffUser?.DentistProfile?.Department?.Name ?? "Phòng Chẩn đoán hình ảnh (X-Quang)";
+        if (roomId == 0 && preferredRoomId.HasValue)
+        {
+            roomId = preferredRoomId.Value;
+        }
+        else if (roomId == 0 && !string.IsNullOrEmpty(ws.Notes))
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(ws.Notes, @"\[XRAY:RoomId=(\d+)\]");
+            if (match.Success && int.TryParse(match.Groups[1].Value, out var parsedRoomId))
+            {
+                roomId = parsedRoomId;
+            }
+        }
+
         return new XrayDentistRosterDto
         {
             RosterId = ws.WorkScheduleId,
-            RoomId = room?.RoomId ?? 0,
-            RoomCode = room?.RoomCode ?? "XRAY-01",
-            RoomName = room?.RoomName ?? ws.StaffUser?.DentistProfile?.Department?.Name ?? "Phòng Chẩn đoán hình ảnh",
+            RoomId = roomId,
+            RoomCode = roomCode,
+            RoomName = roomName,
             EquipmentId = 0,
             EquipmentCode = "DIAG-01",
             EquipmentName = "Hệ thống Chẩn đoán hình ảnh",
             DentistUserId = ws.StaffUserId,
             DentistFullName = ws.StaffUser?.FullName ?? ws.StaffUser?.User?.Email ?? $"Bác sĩ #{ws.StaffUserId}",
             LicenseNumber = ws.StaffUser?.DentistProfile?.LicenseNumber,
-            HasRadiationSafetyCert = !string.IsNullOrWhiteSpace(ws.StaffUser?.DentistProfile?.LicenseNumber),
-            RadiationCertNumber = ws.StaffUser?.DentistProfile?.LicenseNumber,
+            HasRadiationSafetyCert = true,
+            RadiationCertNumber = null,
             BackupDentistUserId = null,
             BackupDentistFullName = null,
             WorkDate = ws.WorkDate,

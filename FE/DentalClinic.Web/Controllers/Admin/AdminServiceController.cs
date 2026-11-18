@@ -23,7 +23,7 @@ public class AdminServiceController : Controller
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index(long? departmentId = null, string? search = null)
+    public async Task<IActionResult> Index(long? departmentId = null, string? search = null, string? status = null)
     {
         var servicesResult = await _adminApi.GetServicesAsync(departmentId, search);
         var deptsResult = await _adminApi.GetDepartmentsAsync();
@@ -31,12 +31,25 @@ public class AdminServiceController : Controller
         var services = servicesResult.IsSuccess && servicesResult.Data != null ? servicesResult.Data : new();
         var departments = deptsResult.IsSuccess && deptsResult.Data != null ? deptsResult.Data : new();
 
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            if (string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase))
+            {
+                services = services.Where(s => s.Status == "Active").ToList();
+            }
+            else if (string.Equals(status, "Inactive", StringComparison.OrdinalIgnoreCase))
+            {
+                services = services.Where(s => s.Status == "Inactive").ToList();
+            }
+        }
+
         var vm = new ServiceManageViewModel
         {
             Services = services,
             Departments = departments,
             SelectedDepartmentId = departmentId,
-            SearchKeyword = search
+            SearchKeyword = search,
+            SelectedStatus = status
         };
 
         return View("~/Views/Admin/Services/Index.cshtml", vm);
@@ -66,6 +79,31 @@ public class AdminServiceController : Controller
             }
         }
 
+        if (steps == null || !steps.Any())
+        {
+            bool isXray = string.Equals(model.ServiceType, "XRay", StringComparison.OrdinalIgnoreCase);
+            var stepName = !string.IsNullOrWhiteSpace(model.ConfirmationStepName)
+                ? model.ConfirmationStepName.Trim()
+                : (isXray ? "Xác nhận đã chụp X-quang" : "Xác nhận đã thực hiện dịch vụ");
+            var instructions = !string.IsNullOrWhiteSpace(model.ConfirmationInstructions)
+                ? model.ConfirmationInstructions.Trim()
+                : (isXray ? "Kỹ thuật viên / Bác sĩ chụp phim và tải lên hình ảnh X-quang hợp lệ." : "Bác sĩ kiểm tra kết quả điều trị và ghi chú lâm sàng.");
+
+            steps = new List<ServiceWorkflowStepInputDto>
+            {
+                new()
+                {
+                    StepId = 1,
+                    StepName = stepName,
+                    Description = instructions,
+                    StepOrder = 1,
+                    IsRequired = true,
+                    CompletionRequirement = isXray ? "Hình ảnh X-quang hợp lệ" : "Hoàn tất khám/điều trị",
+                    ExpectedDataType = isXray ? "Image" : "None"
+                }
+            };
+        }
+
         var req = new CreateDepartmentServiceRequest
         {
             DepartmentId = model.DepartmentId,
@@ -75,6 +113,11 @@ public class AdminServiceController : Controller
             DurationMinutes = model.DurationMinutes,
             Price = model.Price,
             Status = model.Status ?? "Active",
+            ServiceType = model.ServiceType ?? "Treatment",
+            RequiresExclusiveRoom = model.RequiresExclusiveRoom,
+            RequiresConsultationFirst = model.RequiresConsultationFirst,
+            MinLeadTimeHours = model.MinLeadTimeHours ?? 0,
+            BookingInstructions = model.BookingInstructions?.Trim(),
             WorkflowSteps = steps
         };
 
@@ -115,6 +158,31 @@ public class AdminServiceController : Controller
             }
         }
 
+        if (steps == null || !steps.Any())
+        {
+            bool isXray = string.Equals(model.ServiceType, "XRay", StringComparison.OrdinalIgnoreCase);
+            var stepName = !string.IsNullOrWhiteSpace(model.ConfirmationStepName)
+                ? model.ConfirmationStepName.Trim()
+                : (isXray ? "Xác nhận đã chụp X-quang" : "Xác nhận đã thực hiện dịch vụ");
+            var instructions = !string.IsNullOrWhiteSpace(model.ConfirmationInstructions)
+                ? model.ConfirmationInstructions.Trim()
+                : (isXray ? "Kỹ thuật viên / Bác sĩ chụp phim và tải lên hình ảnh X-quang hợp lệ." : "Bác sĩ kiểm tra kết quả điều trị và ghi chú lâm sàng.");
+
+            steps = new List<ServiceWorkflowStepInputDto>
+            {
+                new()
+                {
+                    StepId = 1,
+                    StepName = stepName,
+                    Description = instructions,
+                    StepOrder = 1,
+                    IsRequired = true,
+                    CompletionRequirement = isXray ? "Hình ảnh X-quang hợp lệ" : "Hoàn tất khám/điều trị",
+                    ExpectedDataType = isXray ? "Image" : "None"
+                }
+            };
+        }
+
         var req = new UpdateDepartmentServiceRequest
         {
             DepartmentId = model.DepartmentId,
@@ -124,6 +192,11 @@ public class AdminServiceController : Controller
             DurationMinutes = model.DurationMinutes,
             Price = model.Price,
             Status = model.Status ?? "Active",
+            ServiceType = model.ServiceType ?? "Treatment",
+            RequiresExclusiveRoom = model.RequiresExclusiveRoom,
+            RequiresConsultationFirst = model.RequiresConsultationFirst,
+            MinLeadTimeHours = model.MinLeadTimeHours ?? 0,
+            BookingInstructions = model.BookingInstructions?.Trim(),
             WorkflowSteps = steps
         };
 
@@ -144,14 +217,42 @@ public class AdminServiceController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ToggleStatus(long id)
     {
+        var svcResult = await _adminApi.GetServiceByIdAsync(id);
         var result = await _adminApi.ToggleServiceStatusAsync(id);
         if (result.IsSuccess)
         {
-            TempData["SuccessMessage"] = "Đã thay đổi trạng thái hoạt động của dịch vụ.";
+            var svcName = svcResult.Data?.ServiceName ?? $"#{id}";
+            var wasActive = svcResult.Data?.Status == "Active";
+            var actionText = wasActive ? $"Đã ngừng cung cấp dịch vụ '{svcName}'." : $"Đã kích hoạt lại dịch vụ '{svcName}'.";
+            TempData["SuccessMessage"] = result.Message ?? actionText;
         }
         else
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể chuyển trạng thái dịch vụ.";
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpGet("CanDelete/{id}")]
+    public async Task<IActionResult> CanDelete(long id)
+    {
+        var result = await _adminApi.CheckServiceCanDeleteAsync(id);
+        return Json(new { success = result.IsSuccess, data = result.Data, message = result.Message });
+    }
+
+    [HttpPost("Delete/{id}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(long id)
+    {
+        var result = await _adminApi.DeleteServiceAsync(id);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Đã xóa dịch vụ thành công.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể xóa dịch vụ.";
         }
 
         return RedirectToAction(nameof(Index));

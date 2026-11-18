@@ -124,6 +124,7 @@ public class CompleteServiceTaskRequest
     public long? ClinicalRecordId { get; set; }
     public string? ClinicalFindings { get; set; }
     public string? Notes { get; set; }
+    public string? EvidenceUrl { get; set; }
 }
 
 public class CareEpisodeReferralSummaryDto

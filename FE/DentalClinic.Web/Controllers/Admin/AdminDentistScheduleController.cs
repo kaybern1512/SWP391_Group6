@@ -32,21 +32,39 @@ public class AdminDentistScheduleController : Controller
     [HttpGet("")]
     [HttpGet("Index")]
     public async Task<IActionResult> Index(
-        string tab = "monthly",
+        string tab = "weekly",
         long? departmentId = null,
         long? dentistUserId = null,
         int? year = null,
         int? month = null,
         string? fromDate = null,
-        string? toDate = null)
+        string? toDate = null,
+        int? weekOffset = 0)
     {
-        int targetYear = year ?? ClinicTimeHelper.Today.Year;
-        int targetMonth = month ?? ClinicTimeHelper.Today.Month;
+        var today = ClinicTimeHelper.TodayDateOnly;
+        int targetYear = year ?? today.Year;
+        int targetMonth = month ?? today.Month;
         if (targetMonth < 1) { targetMonth = 12; targetYear--; }
         if (targetMonth > 12) { targetMonth = 1; targetYear++; }
 
-        DateOnly? parsedFrom = DateOnly.TryParse(fromDate, out var f) ? f : new DateOnly(targetYear, targetMonth, 1);
-        DateOnly? parsedTo = DateOnly.TryParse(toDate, out var t) ? t : new DateOnly(targetYear, targetMonth, DateTime.DaysInMonth(targetYear, targetMonth));
+        int offset = weekOffset ?? 0;
+        int diffToMon = ((int)today.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        var startOfWeek = today.AddDays(-diffToMon + (offset * 7));
+        var endOfWeek = startOfWeek.AddDays(6);
+
+        DateOnly? parsedFrom;
+        DateOnly? parsedTo;
+
+        if (string.Equals(tab, "weekly", StringComparison.OrdinalIgnoreCase))
+        {
+            parsedFrom = DateOnly.TryParse(fromDate, out var f) ? f : startOfWeek;
+            parsedTo = DateOnly.TryParse(toDate, out var t) ? t : endOfWeek;
+        }
+        else
+        {
+            parsedFrom = DateOnly.TryParse(fromDate, out var f) ? f : new DateOnly(targetYear, targetMonth, 1);
+            parsedTo = DateOnly.TryParse(toDate, out var t) ? t : new DateOnly(targetYear, targetMonth, DateTime.DaysInMonth(targetYear, targetMonth));
+        }
 
         var allocationsTask = _adminApi.GetDentistAllocationsAsync(departmentId);
         var deptsTask = _adminApi.GetDepartmentsAsync();
@@ -100,10 +118,22 @@ public class AdminDentistScheduleController : Controller
             SelectedYear = targetYear,
             SelectedMonth = targetMonth,
             FromDate = parsedFrom,
-            ToDate = parsedTo
+            ToDate = parsedTo,
+            WeekOffset = offset,
+            WeekStartDate = startOfWeek,
+            WeekEndDate = endOfWeek
         };
 
         return View("~/Views/Admin/DentistSchedule/Index.cshtml", vm);
+    }
+
+    [HttpGet("Weekly")]
+    public Task<IActionResult> Weekly(
+        long? departmentId = null,
+        long? dentistUserId = null,
+        int? weekOffset = 0)
+    {
+        return Index("weekly", departmentId, dentistUserId, null, null, null, null, weekOffset);
     }
 
     [HttpGet("Monthly")]
@@ -226,7 +256,12 @@ public class AdminDentistScheduleController : Controller
 
     [HttpPost("CancelSchedule/{id}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> CancelSchedule(long id, long? returnDentistId)
+    public async Task<IActionResult> CancelSchedule(
+        long id, 
+        long? returnDentistId, 
+        string? returnTab = "schedules", 
+        int? weekOffset = 0, 
+        long? departmentId = null)
     {
         var result = await _scheduleApi.CancelScheduleAsync(id);
         if (result.IsSuccess)
@@ -238,7 +273,13 @@ public class AdminDentistScheduleController : Controller
             TempData["ErrorMessage"] = result.Message ?? "Không thể hủy ca trực.";
         }
 
-        return RedirectToAction(nameof(Index), new { tab = "schedules", dentistUserId = returnDentistId });
+        string targetTab = !string.IsNullOrEmpty(returnTab) ? returnTab : "schedules";
+        return RedirectToAction(nameof(Index), new { 
+            tab = targetTab, 
+            dentistUserId = returnDentistId,
+            departmentId = departmentId,
+            weekOffset = weekOffset
+        });
     }
 
     [HttpPost("CreateAvailability")]
@@ -321,6 +362,85 @@ public class AdminDentistScheduleController : Controller
         {
             TempData["ErrorMessage"] = result.Message ?? "Không thể từ chối đơn nghỉ phép.";
         }
+        return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+    }
+
+    [HttpPost("RegisterLeave")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RegisterLeave(
+        long dentistUserId,
+        string leaveType,
+        string startDate,
+        string endDate,
+        string shiftScope,
+        string reason,
+        string? notes)
+    {
+        if (_leaveApi == null)
+        {
+            TempData["ErrorMessage"] = "Dịch vụ quản lý nghỉ phép chưa được khởi tạo.";
+            return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+        }
+
+        if (dentistUserId <= 0)
+        {
+            TempData["ErrorMessage"] = "Vui lòng chọn bác sĩ cần ghi nhận nghỉ phép.";
+            return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+        }
+
+        if (!DateOnly.TryParse(startDate, out var parsedStart) || !DateOnly.TryParse(endDate, out var parsedEnd))
+        {
+            TempData["ErrorMessage"] = "Khoảng ngày nghỉ phép không hợp lệ.";
+            return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+        }
+
+        if (parsedStart < ClinicTimeHelper.TodayDateOnly)
+        {
+            TempData["ErrorMessage"] = "Ngày bắt đầu nghỉ không được ở trong quá khứ.";
+            return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+        }
+
+        if (parsedEnd < parsedStart)
+        {
+            TempData["ErrorMessage"] = "Ngày kết thúc không thể trước ngày bắt đầu.";
+            return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
+        }
+
+        TimeOnly? startTime = null;
+        TimeOnly? endTime = null;
+        if (string.Equals(shiftScope, "Morning", StringComparison.OrdinalIgnoreCase))
+        {
+            startTime = new TimeOnly(8, 0);
+            endTime = new TimeOnly(12, 0);
+        }
+        else if (string.Equals(shiftScope, "Afternoon", StringComparison.OrdinalIgnoreCase))
+        {
+            startTime = new TimeOnly(13, 30);
+            endTime = new TimeOnly(17, 30);
+        }
+
+        var req = new CreateDentistLeaveRequest
+        {
+            DentistUserId = dentistUserId,
+            LeaveType = string.IsNullOrWhiteSpace(leaveType) ? "AnnualLeave" : leaveType,
+            StartDate = parsedStart,
+            EndDate = parsedEnd,
+            StartTime = startTime,
+            EndTime = endTime,
+            Reason = string.IsNullOrWhiteSpace(reason) ? "Đăng ký nghỉ phép (Quản trị viên ghi nhận)" : reason.Trim(),
+            Notes = notes?.Trim()
+        };
+
+        var result = await _leaveApi.SubmitLeaveRequestAsync(req);
+        if (result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = "Đăng ký / ghi nhận đơn nghỉ phép thành công.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Message ?? "Không thể đăng ký nghỉ phép.";
+        }
+
         return RedirectToAction(nameof(Index), new { tab = "leave-requests" });
     }
 }

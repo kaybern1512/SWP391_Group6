@@ -437,25 +437,16 @@
                                                     <i class="bi bi-door-open text-primary me-1"></i>@roster.RoomCode - @roster.RoomName
                                                 </div>
                                                 <div class="text-muted small">
-                                                    <i class="bi bi-cpu me-1"></i>@roster.EquipmentName (@roster.EquipmentCode)
+                                                    <i class="bi bi-camera me-1"></i>Hệ thống Chẩn đoán hình ảnh KTS
                                                 </div>
                                             </td>
                                             <td>
                                                 <div class="fw-bold text-dark">
                                                     <i class="bi bi-person-badge text-teal me-1"></i>@roster.DentistFullName
                                                 </div>
-                                                @if (roster.HasRadiationSafetyCert)
-                                                {
-                                                    <span class="badge bg-success-subtle text-success border border-success-subtle small">
-                                                        <i class="bi bi-shield-check me-1"></i>ATBX: @(roster.RadiationCertNumber ?? "Đã cấp")
-                                                    </span>
-                                                }
-                                                else
-                                                {
-                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle small">
-                                                        <i class="bi bi-exclamation-triangle me-1"></i>Chưa có ATBX
-                                                    </span>
-                                                }
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle small">
+                                                    <i class="bi bi-shield-check me-1"></i>Bác sĩ phụ trách
+                                                </span>
                                                 @if (roster.IsDentistOnLeave)
                                                 {
                                                     <div class="mt-1">
@@ -754,11 +745,11 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Phòng X-quang <span class="text-danger">*</span></label>
                             <select name="roomId" id="assignRoomId" class="form-select" required>
-                                @foreach (var rm in Model.Rooms.Where(r => r.RoomCode.Contains("XRAY", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(r.RoomName) && r.RoomName.Contains("X-quang", StringComparison.OrdinalIgnoreCase))))
+                                @foreach (var rm in Model.Rooms.Where(r => r.RoomCode.Contains("XRAY", StringComparison.OrdinalIgnoreCase) || r.RoomCode.Contains("R003", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(r.RoomName) && r.RoomName.Contains("X-quang", StringComparison.OrdinalIgnoreCase))))
                                 {
-                                    <option value="@rm.RoomId" selected="@(rm.RoomCode == "XRAY-01")">Phòng @rm.RoomCode - @rm.RoomName</option>
+                                    <option value="@rm.RoomId" selected="@(rm.RoomCode == "R003" || rm.RoomCode == "XRAY-01")">Phòng @rm.RoomCode - @rm.RoomName</option>
                                 }
-                                @if (!Model.Rooms.Any(r => r.RoomCode.Contains("XRAY", StringComparison.OrdinalIgnoreCase)))
+                                @if (!Model.Rooms.Any(r => r.RoomCode.Contains("XRAY", StringComparison.OrdinalIgnoreCase) || r.RoomCode.Contains("R003", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(r.RoomName) && r.RoomName.Contains("X-quang", StringComparison.OrdinalIgnoreCase))))
                                 {
                                     @foreach (var rm in Model.Rooms)
                                     {
@@ -766,57 +757,34 @@
                                     }
                                 }
                             </select>
+                            <input type="hidden" name="equipmentId" id="assignEquipmentId" value="1" />
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Thiết bị chụp <span class="text-danger">*</span></label>
-                            <select name="equipmentId" id="assignEquipmentId" class="form-select" required>
-                                @if (equipments.Any())
-                                {
-                                    foreach (var eq in equipments)
-                                    {
-                                        <option value="@eq.EquipmentId" selected="@(eq.EquipmentCode == "XRAY-MACH-01")">@eq.EquipmentCode - @eq.EquipmentName</option>
-                                    }
-                                }
-                                else
-                                {
-                                    <option value="1">XRAY-MACH-01 - Máy chụp X-quang KTS Vatech Pax-i</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label fw-semibold">Ngày trực <span class="text-danger">*</span></label>
                             <input type="date" name="workDate" class="form-control" value="@rosterDate" required />
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Ca làm việc <span class="text-danger">*</span></label>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Ca làm việc cố định <span class="text-danger">*</span></label>
                             <select name="shiftType" id="assignShiftType" class="form-select" required>
-                                <option value="Morning" selected>Ca Sáng (07:30 - 11:30)</option>
+                                <option value="Morning" selected>Ca Sáng (08:00 - 12:00)</option>
                                 <option value="Afternoon">Ca Chiều (13:30 - 17:30)</option>
-                                <option value="Evening">Ca Tối (17:30 - 20:30)</option>
-                                <option value="Custom">Khung giờ tùy chọn</option>
                             </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label fw-semibold">Bắt đầu</label>
-                            <input type="time" name="startTime" id="assignStartTime" class="form-control" value="07:30" required />
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label fw-semibold">Kết thúc</label>
-                            <input type="time" name="endTime" id="assignEndTime" class="form-control" value="11:30" required />
+                            <input type="hidden" name="startTime" id="assignStartTime" value="08:00" />
+                            <input type="hidden" name="endTime" id="assignEndTime" value="12:00" />
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Bác sĩ phụ trách chính <span class="text-danger">*</span></label>
                             <select name="dentistUserId" class="form-select" required>
-                                <option value="">-- Chọn bác sĩ có chứng chỉ ATBX --</option>
+                                <option value="">-- Chọn bác sĩ phụ trách ca trực --</option>
                                 @foreach (var d in qualifiedDentists)
                                 {
                                     <option value="@d.UserId">
-                                        BS. @d.FullName (@(string.IsNullOrEmpty(d.RadiationCertNumber) ? "Có chứng chỉ ATBX" : d.RadiationCertNumber))
+                                        BS. @d.FullName (@d.Qualification)
                                     </option>
                                 }
                             </select>
                             <div class="form-text small text-muted">
-                                <i class="bi bi-shield-check text-success me-1"></i>Chỉ bác sĩ có chứng chỉ An toàn bức xạ mới được phân công.
+                                <i class="bi bi-info-circle text-primary me-1"></i>Hệ thống cho phép phân công bác sĩ từ bất kỳ chuyên khoa nào trực phòng X-quang.
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -826,7 +794,7 @@
                                 @foreach (var d in qualifiedDentists)
                                 {
                                     <option value="@d.UserId">
-                                        BS. @d.FullName (@(string.IsNullOrEmpty(d.RadiationCertNumber) ? "Có chứng chỉ ATBX" : d.RadiationCertNumber))
+                                        BS. @d.FullName (@d.Qualification)
                                     </option>
                                 }
                             </select>
@@ -878,11 +846,11 @@
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Bác sĩ thay thế mới <span class="text-danger">*</span></label>
                         <select name="newDentistUserId" class="form-select" required>
-                            <option value="">-- Chọn bác sĩ có chứng chỉ ATBX --</option>
+                            <option value="">-- Chọn bác sĩ thay thế --</option>
                             @foreach (var d in qualifiedDentists)
                             {
                                 <option value="@d.UserId">
-                                    BS. @d.FullName (@(string.IsNullOrEmpty(d.RadiationCertNumber) ? "Có ATBX" : d.RadiationCertNumber))
+                                    BS. @d.FullName (@d.Qualification)
                                 </option>
                             }
                         </select>
@@ -925,7 +893,8 @@
                     document.getElementById('editRoomName').value = this.dataset.name || '';
                     document.getElementById('editRoomDepartmentId').value = this.dataset.departmentid || '';
                     document.getElementById('editRoomStatus').value = this.dataset.status || 'Active';
-                    document.getElementById('editRoomIsExclusive').checked = (this.dataset.exclusive === 'true');
+                    const excl = document.getElementById('editRoomIsExclusive');
+                    if (excl) excl.checked = (this.dataset.exclusive === 'true');
                     editRoomModal.show();
                 });
             });
@@ -942,7 +911,7 @@
                 });
             });
 
-            // Shift selector time sync
+            // Shift selector time sync - strictly two fixed shifts
             const shiftSelect = document.getElementById('assignShiftType');
             const startTimeInput = document.getElementById('assignStartTime');
             const endTimeInput = document.getElementById('assignEndTime');
@@ -950,16 +919,16 @@
                 shiftSelect.addEventListener('change', function () {
                     switch (this.value) {
                         case 'Morning':
-                            startTimeInput.value = '07:30';
-                            endTimeInput.value = '11:30';
+                            startTimeInput.value = '08:00';
+                            endTimeInput.value = '12:00';
                             break;
                         case 'Afternoon':
                             startTimeInput.value = '13:30';
                             endTimeInput.value = '17:30';
                             break;
-                        case 'Evening':
-                            startTimeInput.value = '17:30';
-                            endTimeInput.value = '20:30';
+                        default:
+                            startTimeInput.value = '08:00';
+                            endTimeInput.value = '12:00';
                             break;
                     }
                 });

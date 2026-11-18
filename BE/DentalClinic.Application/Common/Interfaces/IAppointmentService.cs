@@ -44,6 +44,8 @@ public interface IAppointmentService
     Task<ApiResponse> StaffCancelAppointmentAsync(long appointmentId, long staffUserId, string reason, CancellationToken ct = default);
     Task<ApiResponse<AppointmentDto>> ReceptionistConfirmAsync(long appointmentId, long receptionistUserId, ManagerConfirmRequest request, CancellationToken ct = default);
     Task<ApiResponse> ReceptionistProposeChangeAsync(long appointmentId, long receptionistUserId, ManagerProposeChangeRequest request, CancellationToken ct = default);
+    Task<ApiResponse<AppointmentDto>> ReceptionistApproveRescheduleAsync(long appointmentId, long receptionistUserId, CancellationToken ct = default);
+    Task<ApiResponse> ReceptionistRejectRescheduleAsync(long appointmentId, long receptionistUserId, string reason, CancellationToken ct = default);
 
     // Department Manager Operations
     Task<ApiResponse<List<AppointmentDto>>> GetDepartmentRequestsAsync(long managerUserId, CancellationToken ct = default);
@@ -83,4 +85,7 @@ public interface IAppointmentService
     Task<ApiResponse<List<ChairOptionDto>>> GetDentistRoomChairsAsync(long appointmentId, long dentistUserId, CancellationToken ct = default);
     Task<ApiResponse> DentistAssignChairAsync(long appointmentId, long dentistUserId, long dentalChairId, CancellationToken ct = default);
     Task<ApiResponse> DentistAddAdditionalServiceAsync(long appointmentId, long dentistUserId, DentistAddAdditionalServiceRequest request, CancellationToken ct = default);
+    Task<ApiResponse> DentistContinueAfternoonAsync(long appointmentId, long dentistUserId, DentistContinueAfternoonRequest request, CancellationToken ct = default);
+    Task<ApiResponse> DentistRecommendAnotherDayAsync(long appointmentId, long dentistUserId, DentistRecommendAnotherDayRequest request, CancellationToken ct = default);
+    Task<ApiResponse> DentistFlagDelayAsync(long appointmentId, long dentistUserId, string notes, CancellationToken ct = default);
 }

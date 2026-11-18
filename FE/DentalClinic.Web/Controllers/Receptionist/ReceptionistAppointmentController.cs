@@ -212,10 +212,23 @@ public class ReceptionistAppointmentController : Controller
         var dentistsResult = await _appointmentApiService.GetAvailableDentistsForAppointmentAsync(id);
         var resourcesResult = await _appointmentApiService.GetAvailableResourcesAsync(appt.DepartmentId, start, end);
 
-        var rooms = resourcesResult.Data?.Rooms ?? new();
+        var isXRayService = appt.ServiceName?.Contains("X-quang", StringComparison.OrdinalIgnoreCase) == true;
+
+        var allRooms = resourcesResult.Data?.Rooms ?? new();
+        var rooms = isXRayService
+            ? allRooms.Where(r => string.Equals(r.RoomType, "Imaging", StringComparison.OrdinalIgnoreCase) || r.RoomCode == "R003").ToList()
+            : allRooms.Where(r => !string.Equals(r.RoomType, "Imaging", StringComparison.OrdinalIgnoreCase) && r.RoomCode != "R003").ToList();
+
         var chairs = resourcesResult.Data?.Chairs ?? new();
-        var selectedRoomId = appt.RoomId ?? (rooms.Count > 0 ? rooms[0].RoomId : 0);
+        var selectedRoomId = appt.RoomId.HasValue && rooms.Any(r => r.RoomId == appt.RoomId.Value)
+            ? appt.RoomId.Value
+            : (rooms.Count > 0 ? rooms[0].RoomId : 0);
         var selectedChairId = appt.DentalChairId;
+        if (selectedChairId.HasValue && !chairs.Any(c => c.DentalChairId == selectedChairId.Value && c.RoomId == selectedRoomId))
+        {
+            var validChair = chairs.FirstOrDefault(c => c.RoomId == selectedRoomId);
+            selectedChairId = validChair?.DentalChairId;
+        }
 
         var vm = new DepartmentReviewViewModel
         {
@@ -310,6 +323,38 @@ public class ReceptionistAppointmentController : Controller
         }
 
         return RedirectToAction(nameof(Requests));
+    }
+
+    [HttpPost("{id:long}/ApproveReschedule")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApproveReschedule(long id)
+    {
+        var result = await _appointmentApiService.ReceptionistApproveRescheduleAsync(id);
+        if (result != null && result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Đã phê duyệt yêu cầu đổi lịch thành công.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result?.Message ?? "Không thể phê duyệt yêu cầu đổi lịch.";
+        }
+        return RedirectToAction(nameof(TodayCheckIn));
+    }
+
+    [HttpPost("{id:long}/RejectReschedule")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RejectReschedule(long id, [FromForm] string reason)
+    {
+        var result = await _appointmentApiService.ReceptionistRejectRescheduleAsync(id, reason);
+        if (result != null && result.IsSuccess)
+        {
+            TempData["SuccessMessage"] = result.Message ?? "Đã từ chối yêu cầu đổi lịch thành công.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result?.Message ?? "Không thể từ chối yêu cầu đổi lịch.";
+        }
+        return RedirectToAction(nameof(TodayCheckIn));
     }
 
     [HttpPost("Reject/{id:long}")]

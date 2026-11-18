@@ -6,6 +6,7 @@ namespace DentalClinic.Application.Features.DentistLeave.DTOs;
 
 public class CreateDentistLeaveRequest
 {
+    public long? DentistUserId { get; set; }
     public string LeaveType { get; set; } = DentistLeaveType.AnnualLeave;
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }

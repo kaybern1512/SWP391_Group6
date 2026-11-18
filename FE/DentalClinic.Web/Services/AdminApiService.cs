@@ -120,6 +120,16 @@ public class AdminApiService : IAdminApiService
         return await SendPostAsync<ConfigureWorkflowRequest, ServiceWorkflowDto>($"/api/admin/services/{serviceId}/workflow", request);
     }
 
+    public async Task<ApiResult<ServiceDeleteCheckDto>> CheckServiceCanDeleteAsync(long id)
+    {
+        return await SendGetAsync<ServiceDeleteCheckDto>($"/api/admin/services/{id}/can-delete");
+    }
+
+    public async Task<ApiResult> DeleteServiceAsync(long id)
+    {
+        return await SendDeleteActionAsync($"/api/admin/services/{id}");
+    }
+
     // ==========================================
     // ROOMS
     // ==========================================
@@ -440,6 +450,29 @@ public class AdminApiService : IAdminApiService
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Lỗi kết nối khi gọi POST {Endpoint}", endpoint);
+            return ApiResult.Failure("Không thể kết nối đến máy chủ API.", statusCode: (int)HttpStatusCode.ServiceUnavailable);
+        }
+    }
+
+    private async Task<ApiResult> SendDeleteActionAsync(string endpoint)
+    {
+        try
+        {
+            var response = await _httpClient.DeleteAsync(endpoint);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var apiResponse = TryDeserialize<ApiResponse>(body);
+                return ApiResult.Success(apiResponse?.Message ?? "Thao tác thành công.", (int)response.StatusCode);
+            }
+
+            var err = ParseError<object>(response.StatusCode, body);
+            return ApiResult.Failure(err.Message ?? "Thao tác thất bại.", err.Errors, err.StatusCode);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Lỗi kết nối khi gọi DELETE {Endpoint}", endpoint);
             return ApiResult.Failure("Không thể kết nối đến máy chủ API.", statusCode: (int)HttpStatusCode.ServiceUnavailable);
         }
     }

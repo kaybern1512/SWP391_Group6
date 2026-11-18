@@ -138,13 +138,19 @@ var vm = new AppointmentListViewModel
 
     }
 
-private static readonly string[] ExcludedDepartmentKeywords = new[] { "hình ảnh", "chuẩn đoán", "chẩn đoán", "phục hình" };
+private static readonly string[] ExcludedDepartmentKeywords = new[] { "hình ảnh", "chuẩn đoán", "chẩn đoán", "x-quang", "xray" };
 
 private static bool IsAllowedBookingDepartment(DepartmentDto d)
 
     {
 
         if (d == null || string.IsNullOrWhiteSpace(d.Name)) return false;
+
+        if (d.Name.Contains("phục hình", StringComparison.OrdinalIgnoreCase) &&
+            !d.Name.Contains("chỉnh nha", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
 
         return !ExcludedDepartmentKeywords.Any(k => d.Name.Contains(k, StringComparison.OrdinalIgnoreCase));
 
@@ -398,13 +404,14 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
         [FromQuery] string? date = null,
         [FromQuery] string? reason = null,
         [FromQuery] string? category = null,
-        [FromQuery] string? combo = null)
+        [FromQuery] string? combo = null,
+        [FromQuery] long? followUpId = null)
     {
         var eligibilityResult = await _appointmentApiService.GetBookingEligibilityAsync();
         if (eligibilityResult?.StatusCode == 401)
         {
             TempData["ErrorMessage"] = "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.";
-            return RedirectToAction("Login", "Account", new { returnUrl = Url.Action(nameof(Book), "PatientAppointment", new { departmentId, serviceId, dentistId, date, reason, category, combo }) });
+            return RedirectToAction("Login", "Account", new { returnUrl = Url.Action(nameof(Book), "PatientAppointment", new { departmentId, serviceId, dentistId, date, reason, category, combo, followUpId }) });
         }
 
         var eligibility = eligibilityResult?.Data ?? new BookingEligibilityDto();
@@ -420,11 +427,18 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
             DepartmentId = departmentId ?? 0,
             RequestedServiceId = serviceId ?? 0,
             RequestedDentistUserId = dentistId,
+            FollowUpId = followUpId,
             AppointmentDate = !string.IsNullOrWhiteSpace(date) ? date : GetClinicToday().AddDays(1).ToString("yyyy-MM-dd"),
             ReasonForVisit = reason ?? string.Empty,
             PatientFullName = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? User.FindFirst("unique_name")?.Value,
             PatientEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
         };
+
+        var defaultGeneralService = filteredServices.FirstOrDefault(s => s.DepartmentId == 1 && s.ServiceName.Contains("Khám", StringComparison.OrdinalIgnoreCase))
+            ?? filteredServices.FirstOrDefault(s => s.DepartmentId == 1)
+            ?? filteredServices.FirstOrDefault();
+        long defaultGeneralDeptId = defaultGeneralService?.DepartmentId ?? 1;
+        long defaultGeneralServiceId = defaultGeneralService?.DepartmentServiceId ?? 1;
 
         // Categorization & pre-selection based on query parameters or defaults
         if (!string.IsNullOrEmpty(category))
@@ -432,8 +446,8 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
             vm.BookingCategory = category;
             if (category == "GeneralCheckup")
             {
-                vm.DepartmentId = 1;
-                vm.RequestedServiceId = 1;
+                vm.DepartmentId = defaultGeneralDeptId;
+                vm.RequestedServiceId = defaultGeneralServiceId;
             }
             else if (category == "Combo" && availableCombos.Any())
             {
@@ -493,8 +507,8 @@ return View("~/Views/Patient/Services/Index.cshtml", vm);
         {
             // Default: Khám tổng quát / Chưa biết nhu cầu
             vm.BookingCategory = "GeneralCheckup";
-            vm.DepartmentId = 1;
-            vm.RequestedServiceId = 1;
+            vm.DepartmentId = defaultGeneralDeptId;
+            vm.RequestedServiceId = defaultGeneralServiceId;
         }
 
         return View("~/Views/Patient/Appointment/Book.cshtml", vm);
@@ -545,46 +559,35 @@ var filtered = services.Where(s => allowedDeptIds.Contains(s.DepartmentId)).ToLi
 
     }
 
-[HttpGet("GetSlots")]
-
+    [HttpGet("GetSlots")]
     public async Task<IActionResult> GetSlots(long departmentId, long serviceId, string date, long? dentistUserId)
-
     {
-
         if (!DateOnly.TryParse(date, out var parsedDate))
-
         {
-
             return BadRequest(new { message = "Định dạng ngày không hợp lệ." });
-
         }
 
-var clinicToday = GetClinicToday();
-
+        var clinicToday = GetClinicToday();
         if (parsedDate < clinicToday)
-
         {
-
             return Json(new List<AvailableSlotDto>());
-
         }
 
-var result = await _appointmentApiService.GetAvailableSlotsAsync(departmentId, serviceId, parsedDate, dentistUserId);
+        var result = await _appointmentApiService.GetAvailableSlotsAsync(departmentId, serviceId, parsedDate, dentistUserId);
+        if (result != null && !result.IsSuccess)
+        {
+            Response.Headers["X-Slot-Error"] = Uri.EscapeDataString(result.Message ?? "Không thể lấy khung giờ.");
+        }
 
         var slots = result?.Data ?? new List<AvailableSlotDto>();
 
-if (parsedDate == clinicToday)
-
+        if (parsedDate == clinicToday)
         {
-
             var clinicNow = GetClinicNow();
-
             slots = slots.Where(s => s.StartTime > clinicNow.AddMinutes(15)).ToList();
-
         }
 
-return Json(slots);
-
+        return Json(slots);
     }
 
 [HttpPost("Book")]
@@ -659,7 +662,8 @@ return Json(slots);
             ComboId = model.BookingCategory == "Combo" && matchedCombo != null && matchedCombo.ComboId > 0 ? matchedCombo.ComboId : null,
             RequestedDentistUserId = string.Equals(model.DoctorSelectionMode, "ClinicAssignment", StringComparison.OrdinalIgnoreCase) ? null : model.RequestedDentistUserId,
             ScheduledStart = model.ScheduledStart!.Value,
-            ReasonForVisit = reasonToSubmit
+            ReasonForVisit = reasonToSubmit,
+            FollowUpId = model.FollowUpId
         };
 
         var result = await _appointmentApiService.BookAppointmentAsync(request);
@@ -1073,7 +1077,12 @@ var result = await _appointmentApiService.PatientRescheduleAsync(id, req);
 
         }
 
-TempData["SuccessMessage"] = result.Message ?? "Đã hủy lịch hẹn cũ và chuyển sang lịch khám mới thành công!";
+        TempData["SuccessMessage"] = result.Message ?? "Yêu cầu dời lịch hẹn đã được gửi thành công!";
+
+        if (result.Data?.PendingActionType == "RescheduleRequested" || result.Data?.Status == "Confirmed")
+        {
+            return RedirectToAction(nameof(Detail), new { id = result.Data.AppointmentId });
+        }
 
         return RedirectToAction(nameof(Success), new { id = result.Data!.AppointmentId });
 

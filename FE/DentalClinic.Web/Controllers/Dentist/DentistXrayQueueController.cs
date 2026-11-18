@@ -25,12 +25,30 @@ public class DentistXrayQueueController : Controller
     [HttpGet("")]
     public async Task<IActionResult> Index([FromQuery] long? roomId = null)
     {
-        var targetRoomId = roomId ?? 9; // Default XRAY-01 is RoomId 9
         var today = ClinicTimeHelper.TodayDateOnly;
 
         // Fetch dentist's own duty roster
         var dutyRes = await _imagingApiService.GetMyXrayDutyAsync(today, today);
         var activeDuty = dutyRes?.Data?.FirstOrDefault(r => r.Status == "Active");
+
+        long targetRoomId;
+        if (roomId.HasValue && roomId.Value > 0)
+        {
+            targetRoomId = roomId.Value;
+        }
+        else if (activeDuty != null && activeDuty.RoomId > 0)
+        {
+            targetRoomId = activeDuty.RoomId;
+        }
+        else
+        {
+            var equipmentsRes = await _imagingApiService.GetAllEquipmentsAsync();
+            var r003Room = equipmentsRes?.Data?.FirstOrDefault(r =>
+                string.Equals(r.RoomCode, "R003", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(r.EquipmentType, "Imaging", StringComparison.OrdinalIgnoreCase))
+                ?? equipmentsRes?.Data?.FirstOrDefault();
+            targetRoomId = r003Room?.RoomId ?? 0;
+        }
 
         // Fetch current queue status for room
         var queueRes = await _imagingApiService.GetQueueStatusAsync(targetRoomId);

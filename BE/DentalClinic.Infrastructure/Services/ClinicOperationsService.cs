@@ -313,30 +313,55 @@ public class ClinicOperationsService : IClinicOperationsService
         // 9. Actionable Alerts
         var alerts = new List<ClinicOperationalAlertDto>();
 
-        foreach (var cov in receptionistCoverage.Where(c => c.HasShortage))
-        {
-            alerts.Add(new ClinicOperationalAlertDto
-            {
-                AlertType = "WorkforceShortage",
-                Severity = "Critical",
-                Title = "Thiếu định biên tiếp tân tại quầy",
-                Message = $"{cov.ShiftName} hiện chỉ có {cov.PresentCount}/2 tiếp tân có mặt điểm danh. Cần bổ sung nhân sự trực quầy gấp.",
-                ActionUrl = "/Admin/Workforce/Report?role=Receptionist",
-                ActionLabel = "Kiểm tra bảng công Tiếp tân"
-            });
-        }
+        var today = ClinicTimeHelper.TodayDateOnly;
 
-        foreach (var d in dentistStatuses.Where(d => d.HasAlert))
+        // Chỉ tạo cảnh báo thiếu hụt nhân sự / trực khám cho ngày hôm nay và tương lai (tuần tới).
+        // Quá khứ đã qua không thể bổ sung nhân sự trực quầy khẩn cấp.
+        if (opDate >= today)
         {
-            alerts.Add(new ClinicOperationalAlertDto
+            if (opDate == today)
             {
-                AlertType = "DentistDutyMissing",
-                Severity = "Critical",
-                Title = "Bác sĩ chưa có mặt trực khám",
-                Message = $"Bác sĩ {d.DentistName} có {d.ScheduledAppointmentsCount} lịch hẹn hôm nay nhưng chưa thực hiện chấm công vào.",
-                ActionUrl = "/Admin/DentistSchedules",
-                ActionLabel = "Kiểm tra lịch trực Bác sĩ"
-            });
+                foreach (var cov in receptionistCoverage.Where(c => c.HasShortage))
+                {
+                    alerts.Add(new ClinicOperationalAlertDto
+                    {
+                        AlertType = "WorkforceShortage",
+                        Severity = "Critical",
+                        Title = "Thiếu định biên tiếp tân tại quầy",
+                        Message = $"{cov.ShiftName} hiện chỉ có {cov.PresentCount}/2 tiếp tân có mặt điểm danh. Cần bổ sung nhân sự trực quầy gấp.",
+                        ActionUrl = "/Admin/Workforce/Report?role=Receptionist",
+                        ActionLabel = "Kiểm tra bảng công Tiếp tân"
+                    });
+                }
+
+                foreach (var d in dentistStatuses.Where(d => d.HasAlert))
+                {
+                    alerts.Add(new ClinicOperationalAlertDto
+                    {
+                        AlertType = "DentistDutyMissing",
+                        Severity = "Critical",
+                        Title = "Bác sĩ chưa có mặt trực khám",
+                        Message = $"Bác sĩ {d.DentistName} có {d.ScheduledAppointmentsCount} lịch hẹn hôm nay nhưng chưa thực hiện chấm công vào.",
+                        ActionUrl = "/Admin/DentistSchedules",
+                        ActionLabel = "Kiểm tra lịch trực Bác sĩ"
+                    });
+                }
+            }
+            else // opDate > today (tuần tới / tương lai)
+            {
+                foreach (var cov in receptionistCoverage.Where(c => c.ScheduledCount < 2))
+                {
+                    alerts.Add(new ClinicOperationalAlertDto
+                    {
+                        AlertType = "WorkforceShortage",
+                        Severity = "Warning",
+                        Title = "Chưa xếp đủ định biên tiếp tân",
+                        Message = $"{cov.ShiftName} (ngày {opDate:dd/MM/yyyy}) chỉ mới xếp lịch {cov.ScheduledCount}/2 tiếp tân. Cần phân công thêm nhân sự trực quầy.",
+                        ActionUrl = "/Admin/ReceptionistSchedule",
+                        ActionLabel = "Kiểm tra lịch trực Tiếp tân"
+                    });
+                }
+            }
         }
 
         if (urgentDisruptionsCount > 0)

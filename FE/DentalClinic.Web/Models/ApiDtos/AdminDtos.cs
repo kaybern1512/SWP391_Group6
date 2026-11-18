@@ -143,6 +143,16 @@ public class ConfigureWorkflowRequest
     public List<ServiceWorkflowStepInputDto> Steps { get; set; } = new();
 }
 
+public class ServiceDeleteCheckDto
+{
+    public long DepartmentServiceId { get; set; }
+    public string ServiceCode { get; set; } = string.Empty;
+    public string ServiceName { get; set; } = string.Empty;
+    public bool CanDelete { get; set; }
+    public string? Reason { get; set; }
+    public int ActiveReferenceCount { get; set; }
+}
+
 // ==========================================
 // ROOM DTOS (Phase 0 Extended)
 // ==========================================

@@ -180,6 +180,30 @@
                         title="Chỉ định chụp X-quang cho bệnh nhân">
                     <i class="bi bi-camera-fill text-warning me-1"></i>Chỉ Định X-Quang
                 </button>
+
+                <div class="dropdown d-inline">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle fw-semibold text-nowrap" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Điều phối ca điều trị khi sắp hết ca trực">
+                        <i class="bi bi-hourglass-split me-1"></i>Hết Ca Trực
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow">
+                        <li>
+                            <button class="dropdown-item py-2" type="button" data-bs-toggle="modal" data-bs-target="#continueAfternoonModal-@Model.AppointmentId">
+                                <i class="bi bi-sun text-warning me-2"></i><strong>Tiếp Tục Ca Chiều (Nghỉ trưa)</strong>
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item py-2" type="button" data-bs-toggle="modal" data-bs-target="#recommendAnotherDayModal-@Model.AppointmentId">
+                                <i class="bi bi-calendar-event text-primary me-2"></i><strong>Hẹn Điều Trị Ngày Khác</strong>
+                            </button>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item py-2 text-danger" type="button" data-bs-toggle="modal" data-bs-target="#flagDelayModal-@Model.AppointmentId">
+                                <i class="bi bi-exclamation-triangle-fill text-danger me-2"></i><strong>Báo Trễ Ca (Ưu tiên cao)</strong>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
             }
 
             @if (Model.Status == "InService" || Model.Status == "InProgress" || Model.Status == "Completed")
@@ -227,7 +251,8 @@
                                     <select name="diagnosticType" id="selectDiagType-@Model.AppointmentId" class="form-select" required>
                                         <option value="Panorama" selected>Panorama (Toàn cảnh hàm răng)</option>
                                         <option value="Intraoral">Intraoral (Cận chóp răng)</option>
-                                        <option value="CBCT">CBCT (Cone Beam CT 3D)</option>
+                                        <option value="Cephalometric">Cephalometric (Sọ nghiêng)</option>
+                                        <option value="CBCT" disabled>CBCT (Cone Beam CT 3D) - Chưa hỗ trợ</option>
                                     </select>
                                 </div>
                                 <div class="mb-3">
@@ -239,6 +264,134 @@
                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
                                 <button type="submit" class="btn btn-primary fw-semibold" id="btnSubmitOrderXray-@Model.AppointmentId">
                                     <i class="bi bi-send-check me-1"></i>Xác Nhận Chỉ Định
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Tiếp Tục Ca Chiều -->
+            <div class="modal fade text-start" id="continueAfternoonModal-@Model.AppointmentId" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <form asp-controller="DentistAppointment" asp-action="ContinueAfternoon" asp-route-id="@Model.AppointmentId" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="returnUrl" value="@returnUrl" />
+                            <div class="modal-header bg-warning text-dark">
+                                <h5 class="modal-title fw-bold">
+                                    <i class="bi bi-sun text-dark me-2"></i>Tiếp Tục Ca Khám Buổi Chiều (Option A)
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert alert-info py-2 px-3 small mb-3">
+                                    <strong>Bệnh nhân:</strong> @Model.PatientName (@Model.PatientCode) &bull; <strong>Dịch vụ:</strong> @Model.ServiceName
+                                </div>
+                                <div class="alert alert-success small mb-3">
+                                    <i class="bi bi-shield-check me-1"></i>
+                                    Hệ thống tạm dừng phiên sáng an toàn, giải phóng ghế điều trị trong giờ nghỉ trưa (12:00–13:00) và tạo phiên tiếp nối buổi chiều với <strong>Đơn giá 0 đ</strong> (không tính tiền hai lần, không trừ kép kho thuốc).
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Thời gian bắt đầu ca chiều <span class="text-danger">*</span></label>
+                                    <input type="datetime-local" name="continuationStart" class="form-control" value="@(DateTime.Today.AddHours(13).AddMinutes(30).ToString("yyyy-MM-ddTHH:mm"))" required />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Thời lượng dự kiến (phút) <span class="text-danger">*</span></label>
+                                    <input type="number" name="durationMinutes" class="form-control" value="45" min="15" max="240" step="15" required />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Ghi chú lâm sàng / Lý do tiếp tục</label>
+                                    <textarea name="notes" class="form-control" rows="2" placeholder="Tạm dừng ca sáng do hết giờ ca trực, giải phóng ghế và tiếp tục lúc 13:30..."></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer bg-light">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                                <button type="submit" class="btn btn-warning fw-bold text-dark">
+                                    <i class="bi bi-pause-circle me-1"></i>Tạm Dừng &amp; Chuyển Ca Chiều
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Hẹn Điều Trị Ngày Khác -->
+            <div class="modal fade text-start" id="recommendAnotherDayModal-@Model.AppointmentId" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <form asp-controller="DentistAppointment" asp-action="RecommendAnotherDay" asp-route-id="@Model.AppointmentId" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="returnUrl" value="@returnUrl" />
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title fw-bold">
+                                    <i class="bi bi-calendar-event me-2"></i>Hẹn Điều Trị Ngày Khác (Option B)
+                                </h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert alert-info py-2 px-3 small mb-3">
+                                    <strong>Bệnh nhân:</strong> @Model.PatientName (@Model.PatientCode) &bull; <strong>Dịch vụ:</strong> @Model.ServiceName
+                                </div>
+                                <div class="alert alert-warning small mb-3">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Hệ thống ghi nhận khối lượng công việc đã hoàn thành và còn lại, tạo lịch tái khám đề xuất (Proposed) và giữ nguyên phác đồ điều trị đang thực hiện.
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Ngày hẹn điều trị tiếp theo <span class="text-danger">*</span></label>
+                                    <input type="date" name="recommendedDate" class="form-control" value="@(DateTime.Today.AddDays(7).ToString("yyyy-MM-dd"))" min="@(DateTime.Today.AddDays(1).ToString("yyyy-MM-dd"))" required />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Lý do chuyên môn <span class="text-danger">*</span></label>
+                                    <input type="text" name="clinicalReason" class="form-control" value="Hết thời lượng ca trực, hẹn tiếp tục giai đoạn tiếp theo" required />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Nội dung công việc đã hoàn tất</label>
+                                    <textarea name="completedNotes" class="form-control" rows="2" placeholder="Ví dụ: Đã mở tủy, làm sạch ống tủy số 1..."></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Nội dung điều trị còn lại</label>
+                                    <textarea name="remainingNotes" class="form-control" rows="2" placeholder="Ví dụ: Trám bít ống tủy vĩnh viễn và hàn thẩm mỹ răng..."></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer bg-light">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                                <button type="submit" class="btn btn-primary fw-bold">
+                                    <i class="bi bi-calendar-check me-1"></i>Xác Nhận Hẹn Ngày Khác
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Báo Trễ Ca -->
+            <div class="modal fade text-start" id="flagDelayModal-@Model.AppointmentId" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <form asp-controller="DentistAppointment" asp-action="FlagDelay" asp-route-id="@Model.AppointmentId" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="returnUrl" value="@returnUrl" />
+                            <div class="modal-header bg-danger text-white">
+                                <h5 class="modal-title fw-bold">
+                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Báo Trễ Ca Lâm Sàng (Option C)
+                                </h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert alert-danger py-2 px-3 small mb-3">
+                                    <strong>Cảnh báo khẩn:</strong> Ca khám đang diễn ra phức tạp, chưa thể tạm dừng an toàn và cần thêm thời gian can thiệp lâm sàng.
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Lý do chuyên môn chưa thể dừng ca <span class="text-danger">*</span></label>
+                                    <textarea name="notes" class="form-control" rows="3" required placeholder="Ví dụ: Ống tủy vôi hóa phức tạp đang cầm máu, không thể tạm dừng an toàn trước 12:00..."></textarea>
+                                </div>
+                                <p class="text-muted small mb-0">Hệ thống sẽ gửi thông báo ưu tiên cao đến Quầy Lễ Tân để điều phối các bệnh nhân kế tiếp.</p>
+                            </div>
+                            <div class="modal-footer bg-light">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                                <button type="submit" class="btn btn-danger fw-bold">
+                                    <i class="bi bi-broadcast me-1"></i>Phát Tín Hiệu Cảnh Báo
                                 </button>
                             </div>
                         </form>

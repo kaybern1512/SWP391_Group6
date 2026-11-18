@@ -49,8 +49,26 @@ public class ImagingService : IImagingService
             throw new InvalidOperationException($"Không thể tạo chỉ định chẩn đoán cho cuộc hẹn ở trạng thái '{appt.Status}'.");
 
         var normalizedType = request.DiagnosticType?.Trim();
-        if (!ImagingDiagnosticType.IsValid(normalizedType))
-            throw new InvalidOperationException($"Loại chẩn đoán '{request.DiagnosticType}' không hợp lệ. Hỗ trợ: Intraoral, Panorama, CBCT.");
+        if (string.IsNullOrWhiteSpace(normalizedType))
+            throw new InvalidOperationException("Loại chỉ định chẩn đoán hình ảnh không được để trống.");
+
+        var isPanorama = string.Equals(normalizedType, "Panorama", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(normalizedType, "XR-PANO", StringComparison.OrdinalIgnoreCase);
+        var isCeph = string.Equals(normalizedType, "Cephalometric", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(normalizedType, "XR-CEPH", StringComparison.OrdinalIgnoreCase);
+        var isPeri = string.Equals(normalizedType, "Periapical", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(normalizedType, "Intraoral", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(normalizedType, "XR-PERI", StringComparison.OrdinalIgnoreCase);
+        var isBite = string.Equals(normalizedType, "Bitewing", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(normalizedType, "XR-BITE", StringComparison.OrdinalIgnoreCase);
+        var isCbct = string.Equals(normalizedType, "CBCT", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(normalizedType, "XR-CBCT", StringComparison.OrdinalIgnoreCase);
+
+        if (!isPanorama && !isCeph && !isPeri && !isBite && !isCbct &&
+            !ImagingDiagnosticType.IsValid(normalizedType) && !DentalImagingType.IsValid(normalizedType))
+        {
+            throw new InvalidOperationException($"Loại chẩn đoán '{request.DiagnosticType}' không hợp lệ. Các kỹ thuật hỗ trợ: Panorama, Intraoral/Periapical, Cephalometric.");
+        }
 
         if (string.IsNullOrWhiteSpace(request.ClinicalIndication))
             throw new InvalidOperationException("Chỉ định lâm sàng (ClinicalIndication) không được để trống.");
@@ -58,13 +76,59 @@ public class ImagingService : IImagingService
         if (request.IsExternal && string.IsNullOrWhiteSpace(request.ExternalFacilityName))
             throw new InvalidOperationException("Khi chỉ định chụp ngoại viện, bắt buộc phải nhập tên cơ sở thực hiện (ExternalFacilityName).");
 
-        var diagService = await _dbContext.DepartmentServices
-            .AsNoTracking()
-            .FirstOrDefaultAsync(ds => ds.DiagnosticType == normalizedType && ds.Status == "Active", ct)
-            ?? await _dbContext.DepartmentServices.AsNoTracking().FirstOrDefaultAsync(ds => ds.DiagnosticType != null && ds.Status == "Active", ct);
+        DepartmentService? diagService = null;
+
+        if (isPanorama)
+        {
+            diagService = await _dbContext.DepartmentServices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ds => (ds.ServiceCode == "XR-PANO" || ds.DiagnosticType == "Panorama" || ds.ServiceName.Contains("Panorama")) && ds.Status == "Active", ct);
+        }
+        else if (isCeph)
+        {
+            diagService = await _dbContext.DepartmentServices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ds => (ds.ServiceCode == "XR-CEPH" || ds.DiagnosticType == "Cephalometric" || ds.ServiceName.Contains("Cephalometric")) && ds.Status == "Active", ct);
+        }
+        else if (isPeri)
+        {
+            diagService = await _dbContext.DepartmentServices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ds => (ds.ServiceCode == "XR-PERI" || ds.DiagnosticType == "Periapical" || ds.DiagnosticType == "Intraoral" || ds.ServiceName.Contains("quanh chóp") || ds.ServiceName.Contains("cận chóp") || ds.ServiceName.Contains("Periapical")) && ds.Status == "Active", ct);
+        }
+        else if (isBite)
+        {
+            diagService = await _dbContext.DepartmentServices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ds => (ds.ServiceCode == "XR-BITE" || ds.DiagnosticType == "Bitewing" || ds.ServiceName.Contains("cánh cắn") || ds.ServiceName.Contains("Bitewing")) && ds.Status == "Active", ct);
+        }
+        else if (isCbct)
+        {
+            diagService = await _dbContext.DepartmentServices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ds => (ds.ServiceCode == "XR-CBCT" || ds.DiagnosticType == "CBCT" || ds.ServiceName.Contains("CBCT")) && ds.Status == "Active", ct);
+
+            if (diagService == null)
+            {
+                throw new InvalidOperationException("Dịch vụ chụp cắt lớp CBCT (Cone Beam CT 3D) hiện chưa được cấu hình hoặc chưa kích hoạt tại phòng khám. Vui lòng chọn kỹ thuật chụp khác (Panorama, Quanh chóp hoặc Cephalometric).");
+            }
+        }
+        else
+        {
+            diagService = await _dbContext.DepartmentServices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ds => ds.DiagnosticType == normalizedType && ds.Status == "Active", ct);
+        }
 
         if (diagService == null)
             throw new InvalidOperationException($"Không tìm thấy dịch vụ chẩn đoán hình ảnh đang hoạt động cho loại '{normalizedType}'.");
+
+        var canonicalType = isPanorama ? "Panorama"
+            : isCeph ? "Cephalometric"
+            : isPeri ? "Periapical"
+            : isBite ? "Bitewing"
+            : isCbct ? "CBCT"
+            : normalizedType;
 
         var primaryApptService = appt.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
         if (primaryApptService == null)
@@ -101,7 +165,7 @@ public class ImagingService : IImagingService
             DepartmentServiceId = diagService.DepartmentServiceId,
             OrderingDentistUserId = effectiveDentistId,
             ClinicalIndication = indication,
-            ImagingType = normalizedType,
+            ImagingType = canonicalType,
             Status = "Ordered",
             CreatedAt = DateTime.UtcNow
         };
@@ -147,9 +211,17 @@ public class ImagingService : IImagingService
             return new List<AvailableSlotDto>();
         }
 
+        var normSlotType = diagnosticType?.Trim();
+        var preferredSlotCode = string.Equals(normSlotType, "Panorama", StringComparison.OrdinalIgnoreCase) ? "XR-PANO"
+            : string.Equals(normSlotType, "Cephalometric", StringComparison.OrdinalIgnoreCase) ? "XR-CEPH"
+            : (string.Equals(normSlotType, "Periapical", StringComparison.OrdinalIgnoreCase) || string.Equals(normSlotType, "Intraoral", StringComparison.OrdinalIgnoreCase)) ? "XR-PERI"
+            : string.Equals(normSlotType, "Bitewing", StringComparison.OrdinalIgnoreCase) ? "XR-BITE"
+            : string.Equals(normSlotType, "CBCT", StringComparison.OrdinalIgnoreCase) ? "XR-CBCT"
+            : normSlotType;
+
         var service = await _dbContext.DepartmentServices
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.DiagnosticType == diagnosticType && c.Status == "Active", ct);
+            .FirstOrDefaultAsync(c => (c.DiagnosticType == normSlotType || c.ServiceCode == preferredSlotCode || c.ServiceCode == normSlotType) && c.Status == "Active", ct);
 
         var durationMinutes = service?.DurationMinutes ?? 15;
         var startOfDay = dateUtc.Date.AddHours(7);
@@ -362,10 +434,22 @@ public class ImagingService : IImagingService
         return MapSessionToDto(diagnostic);
     }
 
-    public async Task<ImagingSessionDto> CheckInImagingSessionAsync(long imagingSessionId, CancellationToken ct = default)
+    private async Task<Diagnostic?> FindDiagnosticSessionAsync(long imagingSessionId, CancellationToken ct)
     {
         var diagnostic = await BuildDiagnosticsQuery()
-            .FirstOrDefaultAsync(d => d.DiagnosticId == imagingSessionId || d.AppointmentServiceId == imagingSessionId, ct);
+            .FirstOrDefaultAsync(d => d.DiagnosticId == imagingSessionId, ct);
+        if (diagnostic != null)
+        {
+            return diagnostic;
+        }
+
+        return await BuildDiagnosticsQuery()
+            .FirstOrDefaultAsync(d => d.AppointmentServiceId == imagingSessionId, ct);
+    }
+
+    public async Task<ImagingSessionDto> CheckInImagingSessionAsync(long imagingSessionId, CancellationToken ct = default)
+    {
+        var diagnostic = await FindDiagnosticSessionAsync(imagingSessionId, ct);
 
         if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy phiên chụp X-quang.");
@@ -389,11 +473,25 @@ public class ImagingService : IImagingService
 
     public async Task<ImagingSessionDto> StartImagingSessionAsync(long imagingSessionId, long operatorUserId, CancellationToken ct = default)
     {
-        var diagnostic = await BuildDiagnosticsQuery()
-            .FirstOrDefaultAsync(d => d.DiagnosticId == imagingSessionId || d.AppointmentServiceId == imagingSessionId, ct);
+        using var diagLock = await SqlAppLockHelper.AcquireLocksAsync(
+            _dbContext,
+            new[] { $"XRAY_DIAG_{imagingSessionId}" },
+            10000,
+            ct);
+
+        var diagnostic = await FindDiagnosticSessionAsync(imagingSessionId, ct);
 
         if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy phiên chụp X-quang.");
+
+        if (string.Equals(diagnostic.Status, "InProgress", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Phiên chụp X-quang đang được thực hiện bởi một bác sĩ khác.");
+
+        if (string.Equals(diagnostic.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Phiên chụp X-quang đã hoàn thành.");
+
+        if (string.Equals(diagnostic.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Phiên chụp X-quang đã bị hủy.");
 
         diagnostic.Status = "InProgress";
         await _dbContext.SaveChangesAsync(ct);
@@ -403,8 +501,7 @@ public class ImagingService : IImagingService
 
     public async Task<ImagingSessionDto> AcquireImageAsync(long imagingSessionId, CancellationToken ct = default)
     {
-        var diagnostic = await BuildDiagnosticsQuery()
-            .FirstOrDefaultAsync(d => d.DiagnosticId == imagingSessionId || d.AppointmentServiceId == imagingSessionId, ct);
+        var diagnostic = await FindDiagnosticSessionAsync(imagingSessionId, ct);
 
         if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy phiên chụp X-quang.");
@@ -418,6 +515,13 @@ public class ImagingService : IImagingService
     public async Task<DiagnosticResultDto> UploadDiagnosticResultAsync(UploadDiagnosticResultRequest request, long uploadedByUserId, CancellationToken ct = default)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
+
+        var targetDiagId = request.DiagnosticOrderId > 0 ? request.DiagnosticOrderId : request.ImagingSessionId;
+        using var diagLock = await SqlAppLockHelper.AcquireLocksAsync(
+            _dbContext,
+            new[] { $"XRAY_DIAG_{targetDiagId}" },
+            10000,
+            ct);
 
         var diagnostic = await BuildDiagnosticsQuery()
             .FirstOrDefaultAsync(d => d.DiagnosticId == request.DiagnosticOrderId || d.DiagnosticId == request.ImagingSessionId, ct);
@@ -470,11 +574,22 @@ public class ImagingService : IImagingService
 
     public async Task<ImagingSessionDto> CompleteImagingSessionAsync(long imagingSessionId, CancellationToken ct = default)
     {
-        var diagnostic = await BuildDiagnosticsQuery()
-            .FirstOrDefaultAsync(d => d.DiagnosticId == imagingSessionId || d.AppointmentServiceId == imagingSessionId, ct);
+        using var diagLock = await SqlAppLockHelper.AcquireLocksAsync(
+            _dbContext,
+            new[] { $"XRAY_DIAG_{imagingSessionId}" },
+            10000,
+            ct);
+
+        var diagnostic = await FindDiagnosticSessionAsync(imagingSessionId, ct);
 
         if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy phiên chụp X-quang.");
+
+        if (string.Equals(diagnostic.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Không thể hoàn tất phiên chụp X-quang đã bị hủy.");
+
+        if (string.IsNullOrWhiteSpace(diagnostic.FileUrl))
+            throw new InvalidOperationException("Không thể hoàn tất phiên chụp X-quang khi chưa tải lên tệp hình ảnh kết quả hợp lệ.");
 
         diagnostic.Status = "Completed";
         diagnostic.CompletedAt = DateTime.UtcNow;
@@ -542,8 +657,7 @@ public class ImagingService : IImagingService
 
     public async Task<ImagingSessionDto> CancelImagingSessionAsync(long imagingSessionId, string reason, long cancelledByUserId, CancellationToken ct = default)
     {
-        var diagnostic = await BuildDiagnosticsQuery()
-            .FirstOrDefaultAsync(d => d.DiagnosticId == imagingSessionId || d.AppointmentServiceId == imagingSessionId, ct);
+        var diagnostic = await FindDiagnosticSessionAsync(imagingSessionId, ct);
 
         if (diagnostic == null)
             throw new InvalidOperationException("Không tìm thấy phiên chụp X-quang.");
@@ -566,6 +680,17 @@ public class ImagingService : IImagingService
         var room = await _dbContext.Rooms
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.RoomId == roomIdInt, ct);
+
+        if (room == null)
+        {
+            room = await _dbContext.Rooms
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.RoomCode == "R003" || r.RoomType == "Imaging", ct);
+            if (room != null)
+            {
+                roomIdInt = room.RoomId;
+            }
+        }
 
         if (room == null)
             throw new InvalidOperationException("Không tìm thấy phòng chụp.");
@@ -659,19 +784,34 @@ public class ImagingService : IImagingService
     {
         var list = await _dbContext.DepartmentServices
             .AsNoTracking()
-            .Where(s => s.DiagnosticType != null)
+            .Include(s => s.Department)
+            .Where(s => (s.Department != null && (s.Department.Name.Contains("Hình ảnh") || s.Department.Name.Contains("X-quang") || s.Department.Name.Contains("Imaging"))) ||
+                        (s.DiagnosticType != null && s.DiagnosticType != "None" && s.DiagnosticType != "Treatment"))
             .OrderBy(s => s.DepartmentServiceId)
             .ToListAsync(ct);
 
-        return list.Select(c => new ImagingServiceConfigDto
+        return list.Select(c =>
         {
-            ConfigId = c.DepartmentServiceId,
-            DiagnosticType = c.DiagnosticType ?? "Intraoral",
-            ServiceName = c.ServiceName,
-            SlotDurationMinutes = c.DurationMinutes,
-            BufferMinutes = 0,
-            Price = c.Price,
-            IsActive = c.Status == "Active"
+            var diagType = c.ServiceCode switch
+            {
+                "XR-PANO" => "Panorama",
+                "XR-CEPH" => "Cephalometric",
+                "XR-PERI" => "Periapical",
+                "XR-BITE" => "Bitewing",
+                "XR-CBCT" => "CBCT",
+                _ => (c.DiagnosticType != null && c.DiagnosticType != "XRay" ? c.DiagnosticType : "Intraoral")
+            };
+
+            return new ImagingServiceConfigDto
+            {
+                ConfigId = c.DepartmentServiceId,
+                DiagnosticType = diagType,
+                ServiceName = c.ServiceName,
+                SlotDurationMinutes = c.DurationMinutes,
+                BufferMinutes = 0,
+                Price = c.Price,
+                IsActive = c.Status == "Active"
+            };
         }).ToList();
     }
 
@@ -953,8 +1093,8 @@ public class ImagingService : IImagingService
         if (!string.IsNullOrEmpty(roomTag) && int.TryParse(roomTag, out var parsedRoomId) && parsedRoomId > 0)
         {
             roomId = parsedRoomId;
-            roomCode = !string.IsNullOrWhiteSpace(roomCodeTag) ? roomCodeTag : (parsedRoomId == 5 ? "R003" : $"ROOM-{parsedRoomId}");
-            roomName = !string.IsNullOrWhiteSpace(roomNameTag) ? roomNameTag : (parsedRoomId == 5 ? "Phòng X-quang" : $"Phòng #{parsedRoomId}");
+            roomCode = !string.IsNullOrWhiteSpace(roomCodeTag) ? roomCodeTag : (room?.RoomCode ?? "R003");
+            roomName = !string.IsNullOrWhiteSpace(roomNameTag) ? roomNameTag : (room?.RoomName ?? "Phòng X-quang");
         }
 
         var dentistTag = GetMetadataTag(d.ClinicalIndication, "Dentist");
@@ -964,7 +1104,7 @@ public class ImagingService : IImagingService
         if (!string.IsNullOrEmpty(dentistTag) && long.TryParse(dentistTag, out var parsedDentistId) && parsedDentistId > 0)
         {
             assignedDentistId = parsedDentistId;
-            assignedDentistName = !string.IsNullOrWhiteSpace(dentistNameTag) ? dentistNameTag : (parsedDentistId == 9 ? "BS. Tran Hung" : $"Bác sĩ #{parsedDentistId}");
+            assignedDentistName = !string.IsNullOrWhiteSpace(dentistNameTag) ? dentistNameTag : (s?.AssignedDentist?.StaffProfile?.FullName ?? $"Bác sĩ #{parsedDentistId}");
         }
 
         var slotTag = GetMetadataTag(d.ClinicalIndication, "Slot");
@@ -1029,7 +1169,7 @@ public class ImagingService : IImagingService
         if (!string.IsNullOrEmpty(roomTag) && int.TryParse(roomTag, out var parsedRoomId) && parsedRoomId > 0)
         {
             roomId = parsedRoomId;
-            roomName = !string.IsNullOrWhiteSpace(roomNameTag) ? roomNameTag : (parsedRoomId == 5 ? "Phòng X-quang" : $"Phòng #{parsedRoomId}");
+            roomName = !string.IsNullOrWhiteSpace(roomNameTag) ? roomNameTag : (d.AppointmentService?.Room?.RoomName ?? "Phòng X-quang");
         }
 
         return new DiagnosticResultDto

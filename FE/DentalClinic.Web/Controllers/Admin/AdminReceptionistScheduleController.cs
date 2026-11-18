@@ -27,19 +27,29 @@ public class AdminReceptionistScheduleController : Controller
     [HttpGet("")]
     [HttpGet("Index")]
     public async Task<IActionResult> Index(
-        string tab = "monthly",
+        string tab = "weekly",
         int? year = null,
         int? month = null,
+        int? weekOffset = 0,
         long? receptionistUserId = null)
     {
-        int targetYear = year ?? ClinicTimeHelper.Today.Year;
-        int targetMonth = month ?? ClinicTimeHelper.Today.Month;
+        var today = ClinicTimeHelper.TodayDateOnly;
+        int offset = weekOffset ?? 0;
+        int diffToMon = ((int)today.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        var startOfWeek = today.AddDays(-diffToMon + (offset * 7));
+        var endOfWeek = startOfWeek.AddDays(6);
+
+        int targetYear = year ?? (tab == "weekly" ? startOfWeek.Year : today.Year);
+        int targetMonth = month ?? (tab == "weekly" ? startOfWeek.Month : today.Month);
         if (targetMonth < 1) { targetMonth = 12; targetYear--; }
         if (targetMonth > 12) { targetMonth = 1; targetYear++; }
 
         ViewBag.ActiveTab = tab;
         ViewBag.Year = targetYear;
         ViewBag.Month = targetMonth;
+        ViewBag.WeekOffset = offset;
+        ViewBag.WeekStartDate = startOfWeek;
+        ViewBag.WeekEndDate = endOfWeek;
         ViewBag.ReceptionistUserId = receptionistUserId;
 
         var monthlyRes = await _workforceApi.GetMonthlyScheduleAsync(targetYear, targetMonth, receptionistUserId);
@@ -49,7 +59,17 @@ public class AdminReceptionistScheduleController : Controller
         var templatesRes = await _workforceApi.GetShiftTemplatesAsync();
         var staffRes = await _adminApi.GetUsersAsync("Receptionist");
 
-        ViewBag.MonthlyData = monthlyRes.Data;
+        var monthlyData = monthlyRes.Data;
+        if (tab == "weekly" && startOfWeek.Month != endOfWeek.Month)
+        {
+            var nextMonthRes = await _workforceApi.GetMonthlyScheduleAsync(endOfWeek.Year, endOfWeek.Month, receptionistUserId);
+            if (nextMonthRes.Data != null && monthlyData != null)
+            {
+                monthlyData.Days.AddRange(nextMonthRes.Data.Days);
+            }
+        }
+
+        ViewBag.MonthlyData = monthlyData;
         ViewBag.Leaves = leavesRes.Data ?? new List<ReceptionistLeaveRequestDto>();
         ViewBag.Swaps = swapsRes.Data ?? new List<ReceptionistShiftSwapRequestDto>();
         ViewBag.Incidents = incidentsRes.Data ?? new List<ReceptionistCoverageIncidentDto>();
@@ -60,7 +80,7 @@ public class AdminReceptionistScheduleController : Controller
     }
 
     [HttpPost("CreateSchedule")]
-    public async Task<IActionResult> CreateSchedule([FromForm] CreateReceptionistScheduleRequest request)
+    public async Task<IActionResult> CreateSchedule([FromForm] CreateReceptionistScheduleRequest request, [FromForm] string? tab = "weekly", [FromForm] int? weekOffset = 0)
     {
         var res = await _workforceApi.CreateScheduleAsync(request);
         if (!res.IsSuccess)
@@ -71,11 +91,12 @@ public class AdminReceptionistScheduleController : Controller
         {
             TempData["SuccessMessage"] = "Đã phân công ca trực thành công.";
         }
-        return RedirectToAction(nameof(Index), new { tab = "monthly", year = request.WorkDate.Year, month = request.WorkDate.Month });
+        string returnTab = !string.IsNullOrEmpty(tab) ? tab : "weekly";
+        return RedirectToAction(nameof(Index), new { tab = returnTab, year = request.WorkDate.Year, month = request.WorkDate.Month, weekOffset = weekOffset ?? 0 });
     }
 
     [HttpPost("DeleteSchedule")]
-    public async Task<IActionResult> DeleteSchedule(long scheduleId, int year, int month)
+    public async Task<IActionResult> DeleteSchedule(long scheduleId, int year, int month, [FromForm] string? tab = "weekly", [FromForm] int? weekOffset = 0)
     {
         var res = await _workforceApi.DeleteScheduleAsync(scheduleId);
         if (!res.IsSuccess)
@@ -86,7 +107,8 @@ public class AdminReceptionistScheduleController : Controller
         {
             TempData["SuccessMessage"] = "Đã hủy ca trực thành công.";
         }
-        return RedirectToAction(nameof(Index), new { tab = "monthly", year, month });
+        string returnTab = !string.IsNullOrEmpty(tab) ? tab : "weekly";
+        return RedirectToAction(nameof(Index), new { tab = returnTab, year, month, weekOffset = weekOffset ?? 0 });
     }
 
     [HttpPost("BulkPreview")]
@@ -110,6 +132,14 @@ public class AdminReceptionistScheduleController : Controller
             TempData["SuccessMessage"] = res.Message ?? "Đã áp dụng phân ca hàng loạt thành công.";
         }
         return RedirectToAction(nameof(Index), new { tab = "monthly", year = request.Year, month = request.Month });
+    }
+
+    [HttpPost("BulkApplyJson")]
+    [Produces("application/json")]
+    public async Task<IActionResult> BulkApplyJson([FromBody] ReceptionistBulkScheduleAssignmentRequest request)
+    {
+        var res = await _workforceApi.ApplyBulkScheduleAsync(request);
+        return Json(res);
     }
 
     [HttpPost("CopyMonth")]

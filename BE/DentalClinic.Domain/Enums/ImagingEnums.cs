@@ -47,8 +47,11 @@ public static class ImagingDiagnosticType
     public const string Intraoral = "Intraoral";
     public const string Panorama = "Panorama";
     public const string CBCT = "CBCT";
+    public const string Cephalometric = "Cephalometric";
+    public const string Periapical = "Periapical";
+    public const string Bitewing = "Bitewing";
 
-    public static readonly string[] All = { Intraoral, Panorama, CBCT };
+    public static readonly string[] All = { Intraoral, Panorama, CBCT, Cephalometric, Periapical, Bitewing };
 
     public static bool IsValid(string? type)
     {
@@ -62,7 +65,10 @@ public static class ImagingDiagnosticType
         return type.Trim().ToUpperInvariant() switch
         {
             "INTRAORAL" => "Chụp cận chóp / Trong miệng (Intraoral)",
+            "PERIAPICAL" => "Chụp quanh chóp (Periapical)",
+            "BITEWING" => "Chụp cánh cắn (Bitewing)",
             "PANORAMA" => "Chụp toàn cảnh (Panorama)",
+            "CEPHALOMETRIC" => "Chụp sọ nghiêng (Cephalometric)",
             "CBCT" => "Chụp cắt lớp 3D Cone Beam (CBCT)",
             _ => type
         };

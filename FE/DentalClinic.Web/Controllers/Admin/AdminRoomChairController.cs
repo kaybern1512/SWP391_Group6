@@ -224,18 +224,30 @@ public class AdminRoomChairController : Controller
         string endTime,
         string? notes)
     {
-        if (!DateOnly.TryParse(workDate, out var parsedDate) ||
-            !TimeOnly.TryParse(startTime, out var startT) ||
-            !TimeOnly.TryParse(endTime, out var endT))
+        if (!DateOnly.TryParse(workDate, out var parsedDate))
         {
-            TempData["ErrorMessage"] = "Thông tin ngày hoặc giờ trực không hợp lệ.";
+            TempData["ErrorMessage"] = "Thông tin ngày làm việc không hợp lệ.";
             return RedirectToAction(nameof(Index), new { tab = "xray-roster" });
+        }
+
+        TimeOnly startT, endT;
+        if (string.Equals(shiftType, "Afternoon", StringComparison.OrdinalIgnoreCase))
+        {
+            startT = new TimeOnly(13, 30);
+            endT = new TimeOnly(17, 30);
+            shiftType = "Afternoon";
+        }
+        else
+        {
+            startT = new TimeOnly(8, 0);
+            endT = new TimeOnly(12, 0);
+            shiftType = "Morning";
         }
 
         var req = new AssignXrayRosterRequest
         {
             RoomId = roomId,
-            EquipmentId = equipmentId,
+            EquipmentId = equipmentId <= 0 ? 1 : equipmentId,
             DentistUserId = dentistUserId,
             BackupDentistUserId = backupDentistUserId,
             WorkDate = parsedDate,

@@ -15,7 +15,7 @@
                 <span class="badge-dc badge-role-systemadministrator">Audit Trail</span>
             </div>
             <h1 class="page-title"><i class="bi bi-clock-history me-2 text-primary"></i>Nhật Ký Biến Động Kho Thuốc</h1>
-            <p class="page-subtitle">Truy vết toàn bộ lịch sử Nhập kho, Xuất cấp phát, Điều chỉnh kiểm kê thừa/thiếu theo lô và người thực hiện</p>
+            <p class="page-subtitle">Truy vết toàn bộ lịch sử Nhập kho, Xuất cấp phát, Điều chỉnh kiểm kê tồn kho và người thực hiện</p>
         </div>
         <div class="page-actions">
             <a asp-controller="AdminMedicine" asp-action="Index" class="btn btn-outline-secondary">
@@ -41,7 +41,6 @@
                             <th>Thời Gian</th>
                             <th>Loại Giao Dịch</th>
                             <th>Mặt Hàng Thuốc</th>
-                            <th>Số Lô (Batch)</th>
                             <th class="text-center">Biến Động</th>
                             <th class="text-center">Trước $\rightarrow$ Sau</th>
                             <th>Lý Do Giải Trình</th>
@@ -53,7 +52,7 @@
                         @if (Model.Transactions.Count == 0)
                         {
                             <tr>
-                                <td colspan="9" class="text-center py-4 text-muted">
+                                <td colspan="8" class="text-center py-4 text-muted">
                                     <i class="bi bi-inbox fs-2 d-block mb-2"></i>
                                     Chưa có giao dịch biến động nào được ghi nhận.
                                 </td>
@@ -92,9 +91,6 @@
                                             @tx.MedicineName
                                         </a>
                                         <div class="text-muted small font-monospace">@tx.MedicineCode</div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-light text-dark border font-monospace">@tx.BatchNumber</span>
                                     </td>
                                     <td class="text-center fw-bold @(tx.TransactionType == "AdjustmentDecrease" || tx.TransactionType == "Dispense" ? "text-danger" : "text-success")">
                                         @(tx.TransactionType == "AdjustmentDecrease" || tx.TransactionType == "Dispense" ? "-" : "+")@tx.Quantity

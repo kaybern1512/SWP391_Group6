@@ -350,7 +350,7 @@
                                         <span class="badge bg-success px-3 py-2">
                                             <i class="bi bi-check-all me-1"></i>Đã Check-in
                                         </span>
-                                        <div class="mt-1" data-timer-type="waiting" data-checkin-time="@(appt.CheckedInAt?.ToString("o") ?? appt.CreatedAt.ToString("o"))">
+                                        <div class="mt-1" data-timer-type="waiting" data-checkin-time="@(DateTime.SpecifyKind(appt.CheckedInAt ?? appt.CreatedAt, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ssZ"))">
                                             <span class="text-muted small"><i class="bi bi-clock me-1"></i>Đang chờ...</span>
                                         </div>
                                         <div class="waiting-alert-badge mt-1"></div>
@@ -385,12 +385,26 @@
                                         <span class="badge bg-info text-dark px-3 py-2">
                                             <i class="bi bi-clock me-1"></i>Chờ đến khám
                                         </span>
+                                        @if (appt.PendingActionType == "RescheduleRequested")
+                                        {
+                                            <div class="mt-1">
+                                                <span class="badge bg-warning text-dark px-2 py-1">
+                                                    <i class="bi bi-clock-history me-1"></i>Yêu cầu dời lịch
+                                                </span>
+                                            </div>
+                                        }
                                     }
                                 </td>
                                 <td class="text-end pe-3">
                                     @if (appt.Status == "Confirmed")
                                     {
                                         <div class="d-flex gap-2 justify-content-end">
+                                            @if (appt.PendingActionType == "RescheduleRequested")
+                                            {
+                                                <button type="button" class="btn btn-warning text-dark btn-sm px-2 shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#rescheduleModal-@appt.AppointmentId" title="Duyệt / Từ chối yêu cầu dời lịch">
+                                                    <i class="bi bi-calendar2-range me-1"></i> Xử Lý Dời Lịch
+                                                </button>
+                                            }
                                             <button type="button" class="btn btn-success btn-sm px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#checkInModal-@appt.AppointmentId">
                                                 <i class="bi bi-person-check-fill me-1"></i> Check-in
                                             </button>
@@ -492,6 +506,46 @@
                                                 </form>
                                             </div>
                                         </div>
+
+                                        @if (appt.PendingActionType == "RescheduleRequested")
+                                        {
+                                            <!-- Reschedule Modal -->
+                                            <div class="modal fade text-start" id="rescheduleModal-@appt.AppointmentId" tabindex="-1">
+                                                <div class="modal-dialog">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header bg-warning text-dark">
+                                                            <h5 class="modal-title"><i class="bi bi-calendar2-range me-2"></i>Xử Lý Yêu Cầu Dời Lịch Hẹn</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            <p>Bệnh nhân <strong>@appt.PatientName</strong> (Mã hẹn: @appt.AppointmentCode) yêu cầu dời lịch hẹn.</p>
+                                                            <div class="p-3 bg-light rounded mb-3">
+                                                                <div class="d-flex justify-content-between mb-2">
+                                                                    <span class="text-muted">Lịch hiện tại:</span>
+                                                                    <span class="fw-bold text-dark">@(appt.ScheduledStart?.ToString("dd/MM/yyyy HH:mm") ?? "N/A")</span>
+                                                                </div>
+                                                                <div class="d-flex justify-content-between">
+                                                                    <span class="text-muted">Thời gian muốn dời sang:</span>
+                                                                    <span class="fw-bold text-primary">@(appt.PendingActionStart?.ToString("dd/MM/yyyy HH:mm") ?? "N/A")</span>
+                                                                </div>
+                                                            </div>
+                                                            <p class="text-muted small mb-0">Khi duyệt, hệ thống sẽ tự động cập nhật lịch hẹn và kiểm tra ca trực, tránh xung đột tài nguyên.</p>
+                                                        </div>
+                                                        <div class="modal-footer d-flex justify-content-between">
+                                                            <form asp-action="RejectReschedule" asp-route-id="@appt.AppointmentId" method="post" class="d-inline">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="reason" value="Lễ tân từ chối yêu cầu do không thể bố trí ca khám phù hợp." />
+                                                                <button type="submit" class="btn btn-outline-danger btn-sm">Từ Chối</button>
+                                                            </form>
+                                                            <form asp-action="ApproveReschedule" asp-route-id="@appt.AppointmentId" method="post" class="d-inline">
+                                                                @Html.AntiForgeryToken()
+                                                                <button type="submit" class="btn btn-success fw-bold">Duyệt Dời Lịch</button>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
                                     }
                                     else if (appt.Status == "Completed")
                                     {

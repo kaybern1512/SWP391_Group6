@@ -86,16 +86,69 @@ public class AdminMedicineController : Controller
 
     [HttpPost("Edit/{id:long}")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(long id, UpdateMedicineRequest request)
+    public async Task<IActionResult> Edit(long id, UpdateMedicineRequest request, [FromForm] string? returnUrl = null)
     {
         var res = await _medicineApiService.UpdateMedicineAsync(id, request);
         if (res.IsSuccess)
         {
-            TempData["SuccessMessage"] = "Cập nhật thông tin thuốc thành công.";
+            TempData["SuccessMessage"] = $"Cập nhật thông tin thuốc '{request.MedicineName}' thành công.";
         }
         else
         {
             TempData["ErrorMessage"] = res.Message ?? "Không thể cập nhật thông tin thuốc.";
+        }
+
+        if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+        {
+            if (res.IsSuccess)
+            {
+                return Json(new { success = true, message = TempData["SuccessMessage"], data = res.Data });
+            }
+            return Json(new { success = false, message = res.Message ?? "Không thể cập nhật thông tin thuốc." });
+        }
+
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+        {
+            return Redirect(returnUrl);
+        }
+
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost("UpdateStock/{id:long}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateStock(long id, UpdateMedicineStockRequest request, [FromForm] string? returnUrl = null)
+    {
+        request.MedicineId = id;
+        var res = await _medicineApiService.UpdateStockAsync(id, request);
+        if (res.IsSuccess && res.Data != null)
+        {
+            var opName = request.OperationType switch
+            {
+                "Add" => "Nhập thêm",
+                "Deduct" => "Giảm tồn",
+                "Reconcile" => "Kiểm kê lại",
+                _ => "Cập nhật tồn kho"
+            };
+            TempData["SuccessMessage"] = $"{opName} thành công cho thuốc '{res.Data.MedicineName}'. Tồn kho trước: {res.Data.QuantityBefore}, sau: {res.Data.QuantityAfter} {res.Data.Unit}.";
+        }
+        else
+        {
+            TempData["ErrorMessage"] = res.Message ?? "Không thể cập nhật tồn kho.";
+        }
+
+        if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+        {
+            if (res.IsSuccess)
+            {
+                return Json(new { success = true, message = TempData["SuccessMessage"], data = res.Data });
+            }
+            return Json(new { success = false, message = res.Message ?? "Không thể cập nhật tồn kho." });
+        }
+
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+        {
+            return Redirect(returnUrl);
         }
 
         return RedirectToAction(nameof(Detail), new { id });

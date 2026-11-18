@@ -56,9 +56,9 @@ public class ReceptionistWorkforceApiService : IReceptionistWorkforceApiService
         return await SendPostAsync<ReceptionistBulkSchedulePreviewDto>("/api/admin/receptionist-schedules/bulk-preview", request);
     }
 
-    public async Task<ApiResult> ApplyBulkScheduleAsync(ReceptionistBulkScheduleAssignmentRequest request)
+    public async Task<ApiResult<ReceptionistBulkApplyResultDto>> ApplyBulkScheduleAsync(ReceptionistBulkScheduleAssignmentRequest request)
     {
-        return await SendPostAsync("/api/admin/receptionist-schedules/bulk-apply", request);
+        return await SendPostAsync<ReceptionistBulkApplyResultDto>("/api/admin/receptionist-schedules/bulk-apply", request);
     }
 
     public async Task<ApiResult> CopyMonthScheduleAsync(ReceptionistCopyMonthScheduleRequest request)

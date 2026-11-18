@@ -9,7 +9,7 @@
 
 > [!IMPORTANT]
 > **Quy Tắc An Toàn Tuyệt Đối (Safety Boundary):**
-> 1. Script DDL `DB/DentalClinic_Schema_Full_Standalone.sql` được thiết kế **độc lập môi trường** (Environment-agnostic). File này **không** chứa lệnh `CREATE DATABASE`, `DROP DATABASE` hay `USE [Database]`.
+> 1. Script DDL `DB/DentalCare_Schema.sql` được thiết kế **độc lập môi trường** (Environment-agnostic). File này **không** chứa lệnh `CREATE DATABASE`, `DROP DATABASE` hay `USE [Database]`.
 > 2. Script có cơ chế tự bảo vệ: Sẽ tự động hủy (`RAISERROR` + `SET NOEXEC ON`) nếu chạy trên cơ sở dữ liệu hệ thống (`master`, `model`, `msdb`, `tempdb`) hoặc cơ sở dữ liệu đã có sẵn bảng.
 > 3. Tuyệt đối **không** can thiệp, xóa hoặc sửa đổi cơ sở dữ liệu bảo vệ (`DentalCare_SWP391` và `DentalCare_SWP391_Refactor_UAT`).
 > 4. Môi trường kiểm thử / chấm điểm mặc định sử dụng database: `DentalCare_SWP391_UAT_Fixture_TEST` trên instance `.\SQLEXPRESS`.
@@ -39,14 +39,14 @@ GO
 Chạy script standalone DDL trực tiếp vào database vừa tạo:
 
 #### Cách 1: Sử dụng Command Line (`sqlcmd`)
-Mở PowerShell tại thư mục gốc repository (`D:\SWP391\DentalCare-DB-Simplification`):
+Mở PowerShell tại thư mục gốc repository:
 ```powershell
-sqlcmd -S .\SQLEXPRESS -d DentalCare_SWP391_UAT_Fixture_TEST -E -i "DB\DentalClinic_Schema_Full_Standalone.sql"
+sqlcmd -S .\SQLEXPRESS -d DentalCare_SWP391_DEMO_V2_TEST -E -i "DB\DentalCare_Schema.sql"
 ```
 
 #### Cách 2: Sử dụng SSMS (SQL Server Management Studio)
-1. Mở file `DB\DentalClinic_Schema_Full_Standalone.sql` trong SSMS.
-2. Chọn database mục tiêu trong dropdown menu: `DentalCare_SWP391_UAT_Fixture_TEST`.
+1. Mở file `DB\DentalCare_Schema.sql` trong SSMS.
+2. Chọn database mục tiêu trong dropdown menu: `DentalCare_SWP391_DEMO_V2_TEST`.
 3. Bấm **Execute** (hoặc nhấn `F5`).
 4. Kết quả thông báo: `Command(s) completed successfully.`
 
@@ -58,7 +58,42 @@ Nha khoa DentalCare cung cấp sẵn bộ dữ liệu mẫu với đầy đủ 4
 
 #### Nạp Seed Data Qua `sqlcmd`:
 ```powershell
-sqlcmd -S .\SQLEXPRESS -d DentalCare_SWP391_UAT_Fixture_TEST -E -i "DB\DentalClinic_UAT_Seed_Data.sql"
+sqlcmd -S .\SQLEXPRESS -d DentalCare_SWP391_DEMO_V2_TEST -E -i "DB\DentalCare_Seed.sql"
+```
+
+---
+
+### Bước 2.4: Nâng Cấp In-Place Cho Database Hiện Hữu (Tùy Chọn)
+
+Nếu thành viên trong nhóm hoặc hội đồng đã có sẵn cơ sở dữ liệu từ trước và muốn cập nhật các ràng buộc trạng thái mới (`AwaitingPatientResponse`, `PendingDepartmentReview`, `Rejected`, `Withdrawn`, `Expired`) mà **không muốn xóa database hoặc mất dữ liệu cũ**, hãy chạy đoạn script sau:
+
+```sql
+-- Cập nhật đồng bộ CHECK constraints cho Appointments & AppointmentServices
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_Appointments_Status')
+    ALTER TABLE dbo.Appointments DROP CONSTRAINT CK_Appointments_Status;
+GO
+
+ALTER TABLE dbo.Appointments ADD CONSTRAINT [CK_Appointments_Status] CHECK (
+    [Status] IN (
+        'PendingReceptionReview', 'PendingDepartmentReview', 'AwaitingPatientResponse',
+        'Confirmed', 'CheckedIn', 'InProgress', 'Waiting', 'Called',
+        'Completed', 'Cancelled', 'NoShow', 'Rejected', 'Withdrawn', 'Expired'
+    )
+);
+GO
+
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_AppointmentServices_Status')
+    ALTER TABLE dbo.AppointmentServices DROP CONSTRAINT CK_AppointmentServices_Status;
+GO
+
+ALTER TABLE dbo.AppointmentServices ADD CONSTRAINT [CK_AppointmentServices_Status] CHECK (
+    [Status] IN (
+        'PendingReceptionReview', 'PendingDepartmentReview', 'AwaitingPatientResponse',
+        'Confirmed', 'CheckedIn', 'Waiting', 'Called',
+        'InService', 'Completed', 'Cancelled', 'NoShow', 'Rejected', 'Withdrawn', 'Expired'
+    )
+);
+GO
 ```
 
 ---

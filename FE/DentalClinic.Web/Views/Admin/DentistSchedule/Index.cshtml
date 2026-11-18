@@ -1,6 +1,7 @@
 @model AdminDentistScheduleManageViewModel
 @{
     ViewData["Title"] = "Quản lý Bác Sĩ & Lịch Làm Việc";
+    int pendingLeaveCount = Model.LeaveRequests.Count(l => l.Status == "Pending");
 }
 
 <div class="container-fluid p-0">
@@ -18,11 +19,14 @@
             <p class="page-subtitle">Phân bổ bác sĩ vào chuyên khoa, điều phối ca trực tuần và theo dõi trạng thái nghỉ phép/bận</p>
         </div>
         <div class="page-actions d-flex gap-2">
-            @if (Model.ActiveTab == "monthly")
+            @if (Model.ActiveTab == "weekly" || Model.ActiveTab == "monthly")
             {
-                <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#copyMonthModal">
-                    <i class="bi bi-copy me-1"></i> Sao Chép Tháng Trước
-                </button>
+                if (Model.ActiveTab == "monthly")
+                {
+                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#copyMonthModal">
+                        <i class="bi bi-copy me-1"></i> Sao Chép Tháng Trước
+                    </button>
+                }
                 <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#bulkScheduleModal">
                     <i class="bi bi-calendar-plus me-1"></i> Phân Công Hàng Loạt
                 </button>
@@ -41,48 +45,179 @@
             }
             else
             {
-                <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#createAvailabilityModal">
-                    <i class="bi bi-calendar-x me-1"></i> Ghi Nhận Nghỉ Phép / Bận
+                <button type="button" class="btn btn-dc-primary" data-bs-toggle="modal" data-bs-target="#registerLeaveModal">
+                    <i class="bi bi-calendar-plus me-1"></i> Đăng Ký / Ghi Nhận Nghỉ Phép
                 </button>
             }
         </div>
     </div>
 
-    <!-- Navigation Tabs -->
-    <ul class="nav nav-tabs-dc mb-4" role="tablist">
-        <li class="nav-item">
-            <a class="nav-link @(Model.ActiveTab == "monthly" ? "active" : "")"
-               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="monthly"
-               asp-route-year="@Model.SelectedYear" asp-route-month="@Model.SelectedMonth"
-               asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId">
-                <i class="bi bi-calendar3 me-2"></i>Lịch Trực Theo Tháng
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link @(Model.ActiveTab == "allocations" ? "active" : "")"
-               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="allocations">
-                <i class="bi bi-diagram-3 me-2"></i>Phân Công Chuyên Khoa (@Model.Allocations.Count)
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link @(Model.ActiveTab == "schedules" ? "active" : "")"
-               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="schedules">
-                <i class="bi bi-calendar-week me-2"></i>Lịch Trực Ca Tuần (@Model.Schedules.Count)
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link @(Model.ActiveTab == "availabilities" ? "active" : "")"
-               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="availabilities">
-                <i class="bi bi-calendar-range me-2"></i>Trạng Thái Nghỉ Phép & Bận (@Model.Availabilities.Count)
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link @(Model.ActiveTab == "leave-requests" ? "active" : "")"
-               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="leave-requests">
-                <i class="bi bi-envelope-paper me-2"></i>Duyệt Đơn Nghỉ Phép (@Model.LeaveRequests.Count(l => l.Status == "Pending"))
-            </a>
-        </li>
-    </ul>
+    <!-- Action Bar & Reorganized Navigation (Phase 3.1) -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white p-2">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <!-- Nhóm xem lịch & Quản lý -->
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="btn-group p-1 bg-light rounded-pill border" role="group">
+                    <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
+                       asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
+                       asp-route-weekOffset="@Model.WeekOffset"
+                       class="btn btn-sm rounded-pill px-3 @(Model.ActiveTab == "weekly" ? "btn-primary text-white shadow-sm" : "btn-light text-secondary")" id="btnDentistTabWeekly">
+                        <i class="bi bi-calendar-week me-1"></i> Lịch Tuần
+                    </a>
+                    <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="monthly"
+                       asp-route-year="@Model.SelectedYear" asp-route-month="@Model.SelectedMonth"
+                       asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
+                       class="btn btn-sm rounded-pill px-3 @(Model.ActiveTab == "monthly" ? "btn-primary text-white shadow-sm" : "btn-light text-secondary")" id="btnDentistTabMonthly">
+                        <i class="bi bi-calendar3 me-1"></i> Lịch Tháng
+                    </a>
+                </div>
+
+                <!-- Menu Quản Lý Phân Công & Nghỉ Phép -->
+                <div class="dropdown">
+                    <button class="btn btn-sm @(Model.ActiveTab != "weekly" && Model.ActiveTab != "monthly" ? "btn-primary text-white" : "btn-outline-secondary") dropdown-toggle rounded-pill px-3" 
+                            type="button" data-bs-toggle="dropdown" aria-expanded="false" id="dentistWorkforceDropdown">
+                        <i class="bi bi-sliders me-1"></i> Quản Lý Phân Công & Nghỉ Phép
+                        @if (pendingLeaveCount > 0)
+                        {
+                            <span class="badge bg-danger rounded-pill ms-1">@pendingLeaveCount</span>
+                        }
+                    </button>
+                    <ul class="dropdown-menu shadow border-0 rounded-3 mt-1">
+                        <li>
+                            <a class="dropdown-item @(Model.ActiveTab == "allocations" ? "active" : "") d-flex justify-content-between align-items-center py-2" 
+                               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="allocations">
+                                <span><i class="bi bi-diagram-3 me-2 text-primary"></i>Phân Công Chuyên Khoa</span>
+                                <span class="badge bg-light text-dark rounded-pill ms-2">@Model.Allocations.Count</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item @(Model.ActiveTab == "schedules" ? "active" : "") d-flex justify-content-between align-items-center py-2" 
+                               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="schedules">
+                                <span><i class="bi bi-calendar-check me-2 text-success"></i>Lịch Trực Ca Tuần</span>
+                                <span class="badge bg-light text-dark rounded-pill ms-2">@Model.Schedules.Count</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item @(Model.ActiveTab == "availabilities" ? "active" : "") d-flex justify-content-between align-items-center py-2" 
+                               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="availabilities">
+                                <span><i class="bi bi-calendar-range me-2 text-info"></i>Trạng Thái Nghỉ Phép & Bận</span>
+                                <span class="badge bg-light text-dark rounded-pill ms-2">@Model.Availabilities.Count</span>
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider my-1"></li>
+                        <li>
+                            <a class="dropdown-item @(Model.ActiveTab == "leave-requests" ? "active" : "") d-flex justify-content-between align-items-center py-2" 
+                               asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="leave-requests">
+                                <span><i class="bi bi-envelope-paper me-2 text-warning"></i>Duyệt Đơn Nghỉ Phép</span>
+                                @if (pendingLeaveCount > 0)
+                                {
+                                    <span class="badge bg-warning text-dark rounded-pill ms-2">@pendingLeaveCount chờ duyệt</span>
+                                }
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Điều Hướng Thời Gian & Bộ Lọc -->
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                @if (Model.ActiveTab == "weekly")
+                {
+                    <div class="d-flex align-items-center gap-1 bg-light p-1 rounded-pill border">
+                        <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
+                           asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
+                           asp-route-weekOffset="@(Model.WeekOffset - 1)" class="btn btn-outline-secondary btn-sm border-0 rounded-circle" title="Tuần trước" id="btnDentistPrevWeek">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                        <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
+                           asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
+                           asp-route-weekOffset="0" class="btn btn-sm border-0 rounded-pill px-2 @(Model.WeekOffset == 0 ? "btn-primary text-white" : "btn-light text-secondary")" id="btnDentistTodayWeek">
+                            Hôm nay
+                        </a>
+                        <span class="fw-bold px-2 text-dark small" id="dentistWeekRangeLabel">@Model.WeekStartDate.ToString("dd/MM") - @Model.WeekEndDate.ToString("dd/MM/yyyy")</span>
+                        <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="weekly"
+                           asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
+                           asp-route-weekOffset="@(Model.WeekOffset + 1)" class="btn btn-outline-secondary btn-sm border-0 rounded-circle" title="Tuần sau" id="btnDentistNextWeek">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </div>
+                }
+                else if (Model.ActiveTab == "monthly")
+                {
+                    int prevMonth = Model.SelectedMonth - 1;
+                    int prevYear = Model.SelectedYear;
+                    if (prevMonth < 1) { prevMonth = 12; prevYear--; }
+
+                    int nextMonth = Model.SelectedMonth + 1;
+                    int nextYear = Model.SelectedYear;
+                    if (nextMonth > 12) { nextMonth = 1; nextYear++; }
+
+                    <div class="d-flex align-items-center gap-1 bg-light p-1 rounded-pill border">
+                        <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="monthly"
+                           asp-route-year="@prevYear" asp-route-month="@prevMonth"
+                           asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
+                           class="btn btn-outline-secondary btn-sm border-0 rounded-circle" title="Tháng trước" id="btnDentistPrevMonth">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                        <span class="fw-bold px-3 text-dark small" id="dentistMonthLabel">Tháng @Model.SelectedMonth/@Model.SelectedYear</span>
+                        <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="monthly"
+                           asp-route-year="@nextYear" asp-route-month="@nextMonth"
+                           asp-route-departmentId="@Model.SelectedDepartmentId" asp-route-dentistUserId="@Model.SelectedDentistId"
+                           class="btn btn-outline-secondary btn-sm border-0 rounded-circle" title="Tháng sau" id="btnDentistNextMonth">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </div>
+                }
+
+                @if (Model.ActiveTab == "weekly" || Model.ActiveTab == "monthly")
+                {
+                    <form asp-controller="AdminDentistSchedule" asp-action="Index" method="get" class="d-flex align-items-center gap-2 m-0" id="dentistScheduleFilterForm">
+                        <input type="hidden" name="tab" value="@Model.ActiveTab" />
+                        @if (Model.ActiveTab == "weekly")
+                        {
+                            <input type="hidden" name="weekOffset" value="@Model.WeekOffset" />
+                        }
+                        else
+                        {
+                            <input type="hidden" name="year" value="@Model.SelectedYear" />
+                            <input type="hidden" name="month" value="@Model.SelectedMonth" />
+                        }
+
+                        <select name="departmentId" class="form-select form-select-sm rounded-pill" style="min-width: 170px;" onchange="this.form.submit()" id="selectDepartmentFilter">
+                            <option value="">-- Tất cả chuyên khoa --</option>
+                            @foreach (var d in Model.Departments)
+                            {
+                                <option value="@d.DepartmentId" selected="@(Model.SelectedDepartmentId == d.DepartmentId)">@d.Name</option>
+                            }
+                        </select>
+
+                        <select name="dentistUserId" class="form-select form-select-sm rounded-pill" style="min-width: 170px;" onchange="this.form.submit()" id="selectDentistFilter">
+                            <option value="">-- Tất cả bác sĩ --</option>
+                            @foreach (var d in Model.Dentists)
+                            {
+                                <option value="@d.UserId" selected="@(Model.SelectedDentistId == d.UserId)">@d.FullName @(!string.IsNullOrEmpty(d.Code) ? $"({d.Code})" : "")</option>
+                            }
+                        </select>
+
+                        @if (Model.SelectedDepartmentId.HasValue || Model.SelectedDentistId.HasValue)
+                        {
+                            <a asp-controller="AdminDentistSchedule" asp-action="Index" asp-route-tab="@Model.ActiveTab"
+                               asp-route-weekOffset="@Model.WeekOffset" asp-route-year="@Model.SelectedYear" asp-route-month="@Model.SelectedMonth"
+                               class="btn btn-outline-secondary btn-sm rounded-pill" title="Đặt lại bộ lọc" id="btnResetFilters">
+                                <i class="bi bi-x-circle me-1"></i>Đặt lại
+                            </a>
+                        }
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB: WEEKLY SCHEDULING (DEFAULT) -->
+    @if (Model.ActiveTab == "weekly")
+    {
+        <partial name="~/Views/Admin/DentistSchedule/_WeeklyScheduleTab.cshtml" model="Model" />
+    }
 
     <!-- TAB: LEAVE REQUESTS -->
     @if (Model.ActiveTab == "leave-requests")
@@ -613,3 +748,5 @@
         </div>
     </div>
 </div>
+
+<partial name="~/Views/Admin/DentistSchedule/_DentistScheduleModals.cshtml" model="Model" />
