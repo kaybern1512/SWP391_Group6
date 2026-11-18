@@ -155,7 +155,7 @@ public class DentistMedicalRecordController : Controller
             else
             {
                 var allDepts = await _appointmentApiService.GetDepartmentsAsync();
-                if (allDepts.IsSuccess && allDepts.Data != null && allDepts.Data.Count > 0)
+                if (allDepts != null && allDepts.IsSuccess && allDepts.Data != null && allDepts.Data.Count > 0)
                 {
                     var sResult = await _appointmentApiService.GetServicesAsync(allDepts.Data[0].DepartmentId);
                     if (sResult.IsSuccess && sResult.Data != null) services = sResult.Data;
@@ -168,7 +168,7 @@ public class DentistMedicalRecordController : Controller
             if (appointmentId.HasValue && appointmentId.Value > 0)
             {
                 var cResult = await _appointmentApiService.GetDentistRoomChairsAsync(appointmentId.Value);
-                if (cResult.IsSuccess && cResult.Data != null)
+                if (cResult != null && cResult.IsSuccess && cResult.Data != null)
                 {
                     chairs = cResult.Data;
                 }
@@ -180,7 +180,7 @@ public class DentistMedicalRecordController : Controller
         if (appointmentId.HasValue && appointmentId.Value > 0 && _treatmentApi != null)
         {
             var perfResult = await _treatmentApi.GetPerformedServicesByAppointmentAsync(appointmentId.Value);
-            if (perfResult.IsSuccess && perfResult.Data != null)
+            if (perfResult != null && perfResult.IsSuccess && perfResult.Data != null)
             {
                 performedServices = perfResult.Data;
             }
@@ -191,7 +191,7 @@ public class DentistMedicalRecordController : Controller
         if (targetPatientId.HasValue && _treatmentApi != null)
         {
             var plansResult = await _treatmentApi.GetDentistTreatmentPlansAsync(search: null);
-            if (plansResult.IsSuccess && plansResult.Data != null)
+            if (plansResult != null && plansResult.IsSuccess && plansResult.Data != null)
             {
                 patientPlans = plansResult.Data.Where(p => p.PatientUserId == targetPatientId.Value).ToList();
             }
@@ -207,7 +207,7 @@ public class DentistMedicalRecordController : Controller
             if (_prescriptionApi != null)
             {
                 var presList = await _prescriptionApi.GetDentistPrescriptionsAsync();
-                if (presList.IsSuccess && presList.Data != null)
+                if (presList != null && presList.IsSuccess && presList.Data != null)
                 {
                     activePrescription = presList.Data.FirstOrDefault(p => p.AppointmentId == appointmentId.Value);
                 }
@@ -216,13 +216,13 @@ public class DentistMedicalRecordController : Controller
             if (_medicineApi != null)
             {
                 var dispResult = await _medicineApi.GetDispensationsByAppointmentIdAsync(appointmentId.Value);
-                if (dispResult.IsSuccess && dispResult.Data != null)
+                if (dispResult != null && dispResult.IsSuccess && dispResult.Data != null)
                 {
                     dispensations = dispResult.Data;
                 }
 
                 var medResult = await _medicineApi.GetAvailableForPrescriptionAsync();
-                if (medResult.IsSuccess && medResult.Data != null)
+                if (medResult != null && medResult.IsSuccess && medResult.Data != null)
                 {
                     availableMedicines = medResult.Data;
                 }
@@ -237,7 +237,7 @@ public class DentistMedicalRecordController : Controller
         if (appointmentId.HasValue && appointmentId.Value > 0 && _careEpisodeApi != null)
         {
             var epRes = await _careEpisodeApi.GetEpisodeByAppointmentIdAsync(appointmentId.Value);
-            if (epRes.IsSuccess && epRes.Data != null)
+            if (epRes != null && epRes.IsSuccess && epRes.Data != null)
             {
                 activeCareEpisode = epRes.Data;
                 serviceTasks = epRes.Data.ServiceTasks
