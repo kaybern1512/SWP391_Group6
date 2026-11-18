@@ -953,4 +953,83 @@ public class MedicalRecordWebControllerTests
 
         _apiMock.Verify(x => x.UploadImagingRecordAsync(It.IsAny<long>(), It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Never);
     }
+
+    [Fact]
+    public async Task DentistMedicalRecordController_Index_WhenAppointmentIdProvided_PopulatesActiveDiagnostics()
+    {
+        var apptMock = new Mock<IAppointmentApiService>();
+        var imagingMock = new Mock<IImagingApiService>();
+
+        apptMock.Setup(x => x.GetAppointmentDetailAsync(59))
+            .ReturnsAsync(ApiResult<AppointmentDto>.Success(new AppointmentDto
+            {
+                AppointmentId = 59,
+                AppointmentCode = "APT-000059",
+                PatientUserId = 31,
+                PatientName = "Test Patient",
+                ServiceName = "Khám tổng quát",
+                Status = "InProgress"
+            }));
+
+        _apiMock.Setup(x => x.SearchPatientsAsync(It.IsAny<string?>()))
+            .ReturnsAsync(ApiResult<List<PatientLookupDto>>.Success(new List<PatientLookupDto>
+            {
+                new() { PatientUserId = 31, FullName = "Test Patient", PatientCode = "BN31" }
+            }));
+
+        _apiMock.Setup(x => x.GetByPatientIdAsync(31))
+            .ReturnsAsync(ApiResult<MedicalRecordDto>.Success(new MedicalRecordDto
+            {
+                PatientUserId = 31,
+                PatientName = "Test Patient",
+                ClinicalEntries = new List<ClinicalEntryDto>()
+            }));
+
+        var expectedDiagnostics = new List<DiagnosticOrderDto>
+        {
+            new()
+            {
+                DiagnosticOrderId = 18,
+                AppointmentId = 59,
+                PatientUserId = 31,
+                DiagnosticType = "Cephalometric",
+                Status = "Completed",
+                Results = new List<DiagnosticResultDto>
+                {
+                    new()
+                    {
+                        DiagnosticResultId = 18,
+                        FileUrl = "local://medical-imaging/clinical-imaging/img_test.jpg",
+                        Findings = "Bình thường"
+                    }
+                }
+            }
+        };
+
+        imagingMock.Setup(x => x.GetOrdersByAppointmentAsync(59))
+            .ReturnsAsync(ApiResult<List<DiagnosticOrderDto>>.Success(expectedDiagnostics));
+
+        var controller = new DentistMedicalRecordController(
+            _apiMock.Object,
+            apptMock.Object,
+            Mock.Of<IPostCareApiService>(),
+            Mock.Of<ITreatmentApiService>(),
+            Mock.Of<IPrescriptionApiService>(),
+            Mock.Of<IMedicineApiService>(),
+            Mock.Of<ICareEpisodeApiService>(),
+            imagingMock.Object)
+        {
+            ControllerContext = CreateContextWithUser(5, "Dentist")
+        };
+
+        var result = await controller.Index(appointmentId: 59, isExamining: true);
+
+        var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+        var vm = viewResult.Model.Should().BeOfType<DentistMedicalRecordIndexViewModel>().Subject;
+        vm.ActiveDiagnostics.Should().NotBeNull();
+        vm.ActiveDiagnostics.Should().HaveCount(1);
+        vm.ActiveDiagnostics[0].DiagnosticOrderId.Should().Be(18);
+        vm.ActiveDiagnostics[0].Results.Should().HaveCount(1);
+        vm.ActiveDiagnostics[0].Results[0].FileUrl.Should().Be("local://medical-imaging/clinical-imaging/img_test.jpg");
+    }
 }

@@ -36,6 +36,9 @@ public class DentistMedicalRecordIndexViewModel
     public CareEpisodeDto? ActiveCareEpisode { get; set; }
     public List<EpisodeServiceTaskDto> ServiceTasks { get; set; } = new();
     public List<CareEpisodeReferralSummaryDto> InternalReferrals { get; set; } = new();
+
+    // Diagnostics & X-Rays for active appointment / patient (Station B / Imaging Queue / Chairside)
+    public List<DiagnosticOrderDto> ActiveDiagnostics { get; set; } = new();
 }
 
 public class CreateClinicalEntryFormModel

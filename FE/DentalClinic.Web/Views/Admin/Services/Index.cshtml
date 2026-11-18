@@ -323,7 +323,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
             </div>
 
-            <form id="serviceForm" method="post" asp-controller="AdminService" asp-action="Create">
+            <form id="serviceForm" method="post" asp-controller="AdminService" asp-action="Create" class="d-flex flex-column" style="min-height: 0; overflow: hidden; flex: 1 1 auto;">
                 @Html.AntiForgeryToken()
                 <input type="hidden" id="serviceForm_DepartmentServiceId" name="DepartmentServiceId" value="" />
                 

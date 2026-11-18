@@ -25,6 +25,7 @@ public class DentistMedicalRecordController : Controller
     private readonly IPrescriptionApiService? _prescriptionApi;
     private readonly IMedicineApiService? _medicineApi;
     private readonly ICareEpisodeApiService? _careEpisodeApi;
+    private readonly IImagingApiService? _imagingApi;
 
     [ActivatorUtilitiesConstructor]
     public DentistMedicalRecordController(
@@ -34,7 +35,8 @@ public class DentistMedicalRecordController : Controller
         ITreatmentApiService treatmentApi,
         IPrescriptionApiService prescriptionApi,
         IMedicineApiService medicineApi,
-        ICareEpisodeApiService? careEpisodeApi = null)
+        ICareEpisodeApiService? careEpisodeApi = null,
+        IImagingApiService? imagingApi = null)
     {
         _medicalRecordApi = medicalRecordApi;
         _appointmentApiService = appointmentApiService;
@@ -43,32 +45,44 @@ public class DentistMedicalRecordController : Controller
         _prescriptionApi = prescriptionApi;
         _medicineApi = medicineApi;
         _careEpisodeApi = careEpisodeApi;
+        _imagingApi = imagingApi;
+    }
+
+    public DentistMedicalRecordController(
+        IMedicalRecordApiService medicalRecordApi,
+        IAppointmentApiService appointmentApiService,
+        IPostCareApiService postCareApi,
+        ITreatmentApiService treatmentApi,
+        IPrescriptionApiService prescriptionApi,
+        IMedicineApiService medicineApi)
+        : this(medicalRecordApi, appointmentApiService, postCareApi, treatmentApi, prescriptionApi, medicineApi, null, null)
+    {
     }
 
     public DentistMedicalRecordController(
         IMedicalRecordApiService medicalRecordApi,
         IAppointmentApiService appointmentApiService,
         IPostCareApiService postCareApi)
-        : this(medicalRecordApi, appointmentApiService, postCareApi, null!, null!, null!)
+        : this(medicalRecordApi, appointmentApiService, postCareApi, null!, null!, null!, null, null)
     {
     }
 
     public DentistMedicalRecordController(
         IMedicalRecordApiService medicalRecordApi,
         IPostCareApiService postCareApi)
-        : this(medicalRecordApi, null!, postCareApi, null!, null!, null!)
+        : this(medicalRecordApi, null!, postCareApi, null!, null!, null!, null, null)
     {
     }
 
     public DentistMedicalRecordController(
         IMedicalRecordApiService medicalRecordApi,
         IAppointmentApiService appointmentApiService)
-        : this(medicalRecordApi, appointmentApiService, null!, null!, null!, null!)
+        : this(medicalRecordApi, appointmentApiService, null!, null!, null!, null!, null, null)
     {
     }
 
     public DentistMedicalRecordController(IMedicalRecordApiService medicalRecordApi)
-        : this(medicalRecordApi, null!, null!, null!, null!, null!)
+        : this(medicalRecordApi, null!, null!, null!, null!, null!, null, null)
     {
     }
 
@@ -234,6 +248,17 @@ public class DentistMedicalRecordController : Controller
             }
         }
 
+        // Active appointment diagnostics & X-Rays
+        var activeDiagnostics = new List<DiagnosticOrderDto>();
+        if (appointmentId.HasValue && appointmentId.Value > 0 && _imagingApi != null)
+        {
+            var diagRes = await _imagingApi.GetOrdersByAppointmentAsync(appointmentId.Value);
+            if (diagRes.IsSuccess && diagRes.Data != null)
+            {
+                activeDiagnostics = diagRes.Data;
+            }
+        }
+
         var isCompleted = activeAppt != null && (activeAppt.Status == "Completed" || activeAppt.Status == "Cancelled");
         var isCurrentlyExamining = !isCompleted && (isExamining || (activeAppt != null && activeAppt.Status == "InService"));
 
@@ -257,6 +282,7 @@ public class DentistMedicalRecordController : Controller
             ActiveCareEpisode = activeCareEpisode,
             ServiceTasks = serviceTasks,
             InternalReferrals = internalReferrals,
+            ActiveDiagnostics = activeDiagnostics,
             NewEntryForm = new CreateClinicalEntryFormModel
             {
                 PatientUserId = targetPatientId ?? 0,
