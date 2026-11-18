@@ -1245,4 +1245,305 @@ public class AppointmentLifecycleWorkflowTests
         Assert.Equal("Paid", preservedInvoice.Status);
         Assert.Equal("Successful", preservedPayment.Status);
     }
+
+    // =========================================================================
+    // SECTION 4: HOTFIX DETERMINISTIC REGRESSION TESTS (TC31–TC34)
+    // =========================================================================
+
+    [Fact]
+    public async Task TC31_PatientWithdraw_BlockedForInProgressAndCompleted_AllowedForPending()
+    {
+        using var db = CreateDbContext(nameof(TC31_PatientWithdraw_BlockedForInProgressAndCompleted_AllowedForPending));
+        await SeedLifecycleDataAsync(db);
+        var service = CreateService(db);
+
+        // Case 1: InProgress appointment cannot be withdrawn
+        var apptInProgress = new Appointment
+        {
+            PatientUserId = 1001,
+            Status = AppointmentStatus.InProgress,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(apptInProgress);
+        await db.SaveChangesAsync();
+
+        var resInProgress = await service.PatientWithdrawAsync(apptInProgress.AppointmentId, 1001, "Cố rút ca đang khám");
+        Assert.False(resInProgress.Success);
+        Assert.Contains("Chỉ có thể rút yêu cầu đặt lịch khi đang ở trạng thái chờ duyệt", resInProgress.Message);
+        Assert.Equal(AppointmentStatus.InProgress, (await db.Appointments.FindAsync(apptInProgress.AppointmentId))!.Status);
+
+        // Case 2: Completed appointment cannot be withdrawn
+        var apptCompleted = new Appointment
+        {
+            PatientUserId = 1001,
+            Status = AppointmentStatus.Completed,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(apptCompleted);
+        await db.SaveChangesAsync();
+
+        var resCompleted = await service.PatientWithdrawAsync(apptCompleted.AppointmentId, 1001, "Cố rút ca đã khám xong");
+        Assert.False(resCompleted.Success);
+        Assert.Contains("Chỉ có thể rút yêu cầu đặt lịch khi đang ở trạng thái chờ duyệt", resCompleted.Message);
+        Assert.Equal(AppointmentStatus.Completed, (await db.Appointments.FindAsync(apptCompleted.AppointmentId))!.Status);
+
+        // Case 3: Confirmed appointment cannot be withdrawn
+        var apptConfirmed = new Appointment
+        {
+            PatientUserId = 1001,
+            Status = AppointmentStatus.Confirmed,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(apptConfirmed);
+        await db.SaveChangesAsync();
+
+        var resConfirmed = await service.PatientWithdrawAsync(apptConfirmed.AppointmentId, 1001, "Cố rút ca đã xác nhận");
+        Assert.False(resConfirmed.Success);
+        Assert.Contains("Chỉ có thể rút yêu cầu đặt lịch khi đang ở trạng thái chờ duyệt", resConfirmed.Message);
+        Assert.Equal(AppointmentStatus.Confirmed, (await db.Appointments.FindAsync(apptConfirmed.AppointmentId))!.Status);
+
+        // Case 4: PendingReceptionReview appointment CAN be withdrawn
+        var apptPending = new Appointment
+        {
+            PatientUserId = 1001,
+            Status = AppointmentStatus.PendingReceptionReview,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(apptPending);
+        await db.SaveChangesAsync();
+
+        var resPending = await service.PatientWithdrawAsync(apptPending.AppointmentId, 1001, "Bệnh nhân rút yêu cầu hợp lệ");
+        Assert.True(resPending.Success);
+        Assert.Equal(AppointmentStatus.Withdrawn, (await db.Appointments.FindAsync(apptPending.AppointmentId))!.Status);
+    }
+
+    [Fact]
+    public async Task TC32_CancelVsCheckin_CannotBothSucceed_DeterministicAndStateEnforced()
+    {
+        var dbName = nameof(TC32_CancelVsCheckin_CannotBothSucceed_DeterministicAndStateEnforced);
+        using var db = CreateDbContext(dbName);
+        await SeedLifecycleDataAsync(db);
+        var service = CreateService(db);
+
+        // Case A: When already CheckedIn, Cancel MUST fail
+        var apptA = new Appointment
+        {
+            PatientUserId = 1001,
+            Status = AppointmentStatus.CheckedIn,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(apptA);
+        await db.SaveChangesAsync();
+
+        var cancelOnCheckedIn = await service.PatientCancelAsync(apptA.AppointmentId, 1001, "Hủy ca đã check-in");
+        Assert.False(cancelOnCheckedIn.Success);
+        Assert.Equal(AppointmentStatus.CheckedIn, (await db.Appointments.FindAsync(apptA.AppointmentId))!.Status);
+
+        // Case B: When already Cancelled, CheckIn MUST fail
+        var apptB = new Appointment
+        {
+            PatientUserId = 1001,
+            Status = AppointmentStatus.Cancelled,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(apptB);
+        await db.SaveChangesAsync();
+
+        var checkInOnCancelled = await service.ReceptionistCheckInAsync(apptB.AppointmentId, 2001);
+        Assert.False(checkInOnCancelled.Success);
+        Assert.Contains("Confirmed", checkInOnCancelled.Message);
+        Assert.Equal(AppointmentStatus.Cancelled, (await db.Appointments.FindAsync(apptB.AppointmentId))!.Status);
+
+        // Case C: Concurrency race test between Cancel and CheckIn on a Confirmed appointment
+        var start = DateTime.Today.AddDays(2).AddHours(9);
+        var apptC = new Appointment
+        {
+            PatientUserId = 1001,
+            Status = AppointmentStatus.Confirmed,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(apptC);
+        await db.SaveChangesAsync();
+
+        db.AppointmentServices.Add(new AppointmentServiceEntity
+        {
+            AppointmentId = apptC.AppointmentId,
+            DepartmentId = 1,
+            DepartmentServiceId = 10,
+            ScheduledStart = start,
+            ScheduledEnd = start.AddMinutes(30),
+            AssignedDentistUserId = 3001,
+            Status = AppointmentStatus.Confirmed
+        });
+        await db.SaveChangesAsync();
+
+        // Run concurrently with separate service instances sharing the same in-memory lock semaphores
+        using var dbCancel = CreateDbContext(dbName);
+        using var dbCheckIn = CreateDbContext(dbName);
+        var serviceCancel = CreateService(dbCancel);
+        var serviceCheckIn = CreateService(dbCheckIn);
+
+        var taskCancel = serviceCancel.PatientCancelAsync(apptC.AppointmentId, 1001, "Race cancel");
+        var taskCheckIn = serviceCheckIn.ReceptionistCheckInAsync(apptC.AppointmentId, 2001, "Race check-in");
+        await Task.WhenAll(taskCancel, taskCheckIn);
+
+        var cancelRes = await taskCancel;
+        var checkInRes = await taskCheckIn;
+
+        // Exactly one must succeed and one must fail - NEVER both succeed
+        var countSuccess = (cancelRes.Success ? 1 : 0) + (checkInRes.Success ? 1 : 0);
+        var countFail = (!cancelRes.Success ? 1 : 0) + (!checkInRes.Success ? 1 : 0);
+        Assert.Equal(1, countSuccess);
+        Assert.Equal(1, countFail);
+
+        using var verifyDb = CreateDbContext(dbName);
+        var finalAppt = await verifyDb.Appointments.Include(a => a.AppointmentServices).FirstAsync(a => a.AppointmentId == apptC.AppointmentId);
+        if (cancelRes.Success)
+        {
+            Assert.Equal(AppointmentStatus.Cancelled, finalAppt.Status);
+            Assert.Null(finalAppt.AppointmentServices.First().QueueNumber);
+        }
+        else
+        {
+            Assert.Equal(AppointmentStatus.CheckedIn, finalAppt.Status);
+            Assert.NotNull(finalAppt.AppointmentServices.First().QueueNumber);
+        }
+    }
+
+    [Fact]
+    public async Task TC33_ApproveVsRejectReschedule_CannotCreateConflictingDecisions()
+    {
+        var dbName = nameof(TC33_ApproveVsRejectReschedule_CannotCreateConflictingDecisions);
+        using (var setupDb = CreateDbContext(dbName))
+        {
+            await SeedLifecycleDataAsync(setupDb);
+            var start = DateTime.Today.AddDays(2).AddHours(9);
+            var newStart = DateTime.Today.AddDays(3).AddHours(10);
+
+            var appt = new Appointment
+            {
+                PatientUserId = 1001,
+                Status = AppointmentStatus.Confirmed,
+                CreatedAt = DateTime.UtcNow
+            };
+            setupDb.Appointments.Add(appt);
+            await setupDb.SaveChangesAsync();
+
+            setupDb.AppointmentServices.Add(new AppointmentServiceEntity
+            {
+                AppointmentId = appt.AppointmentId,
+                DepartmentId = 1,
+                DepartmentServiceId = 10,
+                ScheduledStart = start,
+                ScheduledEnd = start.AddMinutes(30),
+                AssignedDentistUserId = 3001,
+                PendingActionType = "RescheduleRequested",
+                PendingScheduledStart = newStart,
+                PendingScheduledEnd = newStart.AddMinutes(30),
+                Status = AppointmentStatus.Confirmed
+            });
+            await setupDb.SaveChangesAsync();
+        }
+
+        // Case A: Concurrent Approve vs Reject with independent DbContext instances
+        using var db1 = CreateDbContext(dbName);
+        using var db2 = CreateDbContext(dbName);
+        var service1 = CreateService(db1);
+        var service2 = CreateService(db2);
+
+        var apptId = (await db1.Appointments.FirstAsync()).AppointmentId;
+
+        var taskApprove = service1.ReceptionistApproveRescheduleAsync(apptId, 2001);
+        var taskReject = service2.ReceptionistRejectRescheduleAsync(apptId, 2001, "Từ chối dời lịch");
+
+        await Task.WhenAll(taskApprove, taskReject);
+        var approveRes = await taskApprove;
+        var rejectRes = await taskReject;
+
+        // Exactly one must succeed and one must fail
+        var successCount = (approveRes.Success ? 1 : 0) + (rejectRes.Success ? 1 : 0);
+        var failCount = (!approveRes.Success ? 1 : 0) + (!rejectRes.Success ? 1 : 0);
+        Assert.Equal(1, successCount);
+        Assert.Equal(1, failCount);
+
+        // Case B: Secondary attempt on now-processed proposal must fail deterministically
+        using var verifyDb = CreateDbContext(dbName);
+        var verifyService = CreateService(verifyDb);
+        if (approveRes.Success)
+        {
+            var secondReject = await verifyService.ReceptionistRejectRescheduleAsync(apptId, 2001, "Cố từ chối sau khi đã duyệt");
+            Assert.False(secondReject.Success);
+        }
+        else
+        {
+            var secondApprove = await verifyService.ReceptionistApproveRescheduleAsync(apptId, 2001);
+            Assert.False(secondApprove.Success);
+        }
+
+        var finalSvc = await verifyDb.AppointmentServices.FirstAsync(s => s.AppointmentId == apptId);
+        Assert.Null(finalSvc.PendingActionType);
+    }
+
+    [Fact]
+    public async Task TC34_RescheduleNewDate_DoesNotGrantQueueNumberBeforeCheckIn()
+    {
+        using var db = CreateDbContext(nameof(TC34_RescheduleNewDate_DoesNotGrantQueueNumberBeforeCheckIn));
+        await SeedLifecycleDataAsync(db);
+        var service = CreateService(db);
+
+        var day1Start = DateTime.Today.AddDays(2).AddHours(9);
+        var day2Start = DateTime.Today.AddDays(4).AddHours(14);
+
+        var appt = new Appointment
+        {
+            PatientUserId = 1001,
+            Status = AppointmentStatus.Confirmed,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Appointments.Add(appt);
+        await db.SaveChangesAsync();
+
+        var svcItem = new AppointmentServiceEntity
+        {
+            AppointmentId = appt.AppointmentId,
+            DepartmentId = 1,
+            DepartmentServiceId = 10,
+            ScheduledStart = day1Start,
+            ScheduledEnd = day1Start.AddMinutes(30),
+            ServiceDate = DateOnly.FromDateTime(day1Start),
+            AssignedDentistUserId = 3001,
+            DentalChairId = 11,
+            RoomId = 1,
+            QueueNumber = 5, // Had a previous queue number on Day 1
+            Status = AppointmentStatus.Confirmed
+        };
+        db.AppointmentServices.Add(svcItem);
+        await db.SaveChangesAsync();
+
+        // 1. Patient requests reschedule to Day 2
+        var reschedReq = new PatientRescheduleRequest
+        {
+            NewScheduledStart = day2Start,
+            Reason = "Xin dời sang ngày mới"
+        };
+        var reqResult = await service.PatientRescheduleAsync(appt.AppointmentId, 1001, reschedReq);
+        Assert.True(reqResult.Success);
+
+        // 2. Receptionist approves reschedule to Day 2
+        var approveResult = await service.ReceptionistApproveRescheduleAsync(appt.AppointmentId, 2001);
+        Assert.True(approveResult.Success);
+
+        // 3. Verify: Date updated to Day 2 AND QueueNumber is NULL (must NOT be pre-allocated)
+        var updatedItem = await db.AppointmentServices.FirstAsync(s => s.AppointmentId == appt.AppointmentId);
+        Assert.Equal(DateOnly.FromDateTime(day2Start), updatedItem.ServiceDate);
+        Assert.Null(updatedItem.QueueNumber);
+
+        // 4. Receptionist checks in on Day 2 -> QueueNumber is now issued
+        var checkInResult = await service.ReceptionistCheckInAsync(appt.AppointmentId, 2001);
+        Assert.True(checkInResult.Success);
+
+        var checkedInItem = await db.AppointmentServices.FirstAsync(s => s.AppointmentId == appt.AppointmentId);
+        Assert.NotNull(checkedInItem.QueueNumber);
+        Assert.True(checkedInItem.QueueNumber > 0);
+    }
 }

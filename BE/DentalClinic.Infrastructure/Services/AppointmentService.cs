@@ -803,12 +803,15 @@ public class AppointmentService : IAppointmentService
                     return ApiResponse<AppointmentDto>.Fail("Bác sĩ đã có lịch hẹn khác trong khung giờ này.");
                 }
 
-                var dentistOnLeave = await _dbContext.StaffLeaveRequests
+                var dentistOnLeaveList = await _dbContext.StaffLeaveRequests
                     .AsNoTracking()
-                    .AnyAsync(l => l.StaffUserId == request.AssignedDentistUserId.Value &&
-                                   l.Status == "Approved" &&
-                                   l.StartDate <= serviceDate &&
-                                   l.EndDate >= serviceDate, ct);
+                    .Where(l => l.StaffUserId == request.AssignedDentistUserId.Value &&
+                                l.Status == "Approved" &&
+                                l.StartDate <= serviceDate &&
+                                l.EndDate >= serviceDate)
+                    .ToListAsync(ct);
+                var dentistOnLeave = dentistOnLeaveList.Any(l => (!l.StartTime.HasValue || !l.EndTime.HasValue) ||
+                    (TimeOnly.FromDateTime(overallStart) < l.EndTime.Value && TimeOnly.FromDateTime(overallEnd) > l.StartTime.Value));
                 if (dentistOnLeave)
                 {
                     return ApiResponse<AppointmentDto>.Fail("Bác sĩ đang trong lịch nghỉ phép được phê duyệt.");
@@ -1006,6 +1009,11 @@ public class AppointmentService : IAppointmentService
         if (appointment == null || appointment.PatientUserId != patientUserId)
         {
             return ApiResponse.Fail("Không tìm thấy lịch hẹn hoặc bạn không có quyền rút yêu cầu.");
+        }
+
+        if (appointment.Status != AppointmentStatus.PendingReceptionReview && appointment.Status != AppointmentStatus.PendingDepartmentReview)
+        {
+            return ApiResponse.Fail($"Chỉ có thể rút yêu cầu đặt lịch khi đang ở trạng thái chờ duyệt (Trạng thái hiện tại: {appointment.Status}).");
         }
 
         var now = DateTime.UtcNow;
@@ -1378,13 +1386,29 @@ public class AppointmentService : IAppointmentService
             }
         }
 
-        var lockKeys = new List<string>();
+        var lockKeys = new List<string> { SqlAppLockHelper.ApptKey(appointmentId) };
         if (targetDentistId.HasValue) lockKeys.Add(SqlAppLockHelper.DentistKey(targetDentistId.Value, newStart));
         if (primaryItem.DentalChairId.HasValue) lockKeys.Add(SqlAppLockHelper.ChairKey(primaryItem.DentalChairId.Value, newStart));
         if (primaryItem.RoomId.HasValue) lockKeys.Add(SqlAppLockHelper.RoomKey(primaryItem.RoomId.Value, newStart));
 
         using (await SqlAppLockHelper.AcquireLocksAsync(_dbContext, lockKeys, 5000, ct))
         {
+            await _dbContext.Entry(appointment).ReloadAsync(ct);
+            foreach (var sItem in appointment.AppointmentServices)
+            {
+                await _dbContext.Entry(sItem).ReloadAsync(ct);
+            }
+            primaryItem = appointment.AppointmentServices.OrderBy(s => s.ScheduledStart).FirstOrDefault();
+
+            if (appointment.Status != AppointmentStatus.Confirmed)
+            {
+                return ApiResponse<AppointmentDto>.Fail($"Không thể phê duyệt đổi lịch cho cuộc hẹn ở trạng thái '{appointment.Status}'. Lịch hẹn đã chuyển sang quy trình khám tại quầy hoặc đã kết thúc.");
+            }
+
+            if (primaryItem == null || primaryItem.PendingActionType != "RescheduleRequested" || !primaryItem.PendingScheduledStart.HasValue)
+            {
+                return ApiResponse<AppointmentDto>.Fail("Không tìm thấy yêu cầu đổi lịch đang chờ duyệt hoặc yêu cầu đã được xử lý trước đó.");
+            }
             if (targetDentistId.HasValue)
             {
                 var occupiedStatuses = new[]
@@ -1414,9 +1438,20 @@ public class AppointmentService : IAppointmentService
 
             foreach (var item in appointment.AppointmentServices)
             {
-                item.ScheduledStart = item.ScheduledStart.Add(delta);
+                var oldItemDate = item.ServiceDate;
+                var newItemStart = item.ScheduledStart.Add(delta);
+                var newItemDate = DateOnly.FromDateTime(newItemStart);
+
+                item.ScheduledStart = newItemStart;
                 item.ScheduledEnd = item.ScheduledEnd.Add(delta);
-                item.ServiceDate = DateOnly.FromDateTime(item.ScheduledStart);
+                item.ServiceDate = newItemDate;
+
+                if (oldItemDate != newItemDate)
+                {
+                    // RT-11: QueueNumber must be issued at Check-in, not pre-allocated across dates
+                    item.QueueNumber = null;
+                }
+
                 if (targetDentistId.HasValue)
                 {
                     item.AssignedDentistUserId = targetDentistId.Value;
@@ -1457,6 +1492,12 @@ public class AppointmentService : IAppointmentService
         {
             return ApiResponse.Fail("Vui lòng cung cấp lý do từ chối yêu cầu đổi lịch.");
         }
+
+        using var rejectLock = await SqlAppLockHelper.AcquireLocksAsync(
+            _dbContext,
+            new[] { SqlAppLockHelper.ApptKey(appointmentId) },
+            5000,
+            ct);
 
         var appointment = await _dbContext.Appointments
             .Include(a => a.AppointmentServices)
@@ -1834,6 +1875,12 @@ public class AppointmentService : IAppointmentService
         string? note = null,
         CancellationToken ct = default)
     {
+        using var apptLock = await SqlAppLockHelper.AcquireLocksAsync(
+            _dbContext,
+            new[] { SqlAppLockHelper.ApptKey(appointmentId) },
+            10000,
+            ct);
+
         var appointment = await _dbContext.Appointments
             .Include(a => a.AppointmentServices)
             .FirstOrDefaultAsync(a => a.AppointmentId == appointmentId, ct);
@@ -2411,12 +2458,15 @@ public class AppointmentService : IAppointmentService
                 return ApiResponse<AppointmentDto>.Fail("Bác sĩ đã có lịch hẹn khác trong khung giờ này.");
             }
 
-            var dentistOnLeave = await _dbContext.StaffLeaveRequests
+            var dentistOnLeaveList = await _dbContext.StaffLeaveRequests
                 .AsNoTracking()
-                .AnyAsync(l => l.StaffUserId == request.AssignedDentistUserId &&
-                               l.Status == "Approved" &&
-                               l.StartDate <= targetDateOnly &&
-                               l.EndDate >= targetDateOnly, ct);
+                .Where(l => l.StaffUserId == request.AssignedDentistUserId &&
+                            l.Status == "Approved" &&
+                            l.StartDate <= targetDateOnly &&
+                            l.EndDate >= targetDateOnly)
+                .ToListAsync(ct);
+            var dentistOnLeave = dentistOnLeaveList.Any(l => (!l.StartTime.HasValue || !l.EndTime.HasValue) ||
+                (TimeOnly.FromDateTime(overallStart) < l.EndTime.Value && TimeOnly.FromDateTime(overallEnd) > l.StartTime.Value));
             if (dentistOnLeave)
             {
                 return ApiResponse<AppointmentDto>.Fail("Bác sĩ đang trong lịch nghỉ phép được phê duyệt.");
