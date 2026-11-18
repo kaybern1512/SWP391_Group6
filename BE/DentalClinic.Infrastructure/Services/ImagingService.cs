@@ -55,6 +55,7 @@ public class ImagingService : IImagingService
         var isPanorama = string.Equals(normalizedType, "Panorama", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(normalizedType, "XR-PANO", StringComparison.OrdinalIgnoreCase);
         var isCeph = string.Equals(normalizedType, "Cephalometric", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(normalizedType, "Cephalo", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(normalizedType, "XR-CEPH", StringComparison.OrdinalIgnoreCase);
         var isPeri = string.Equals(normalizedType, "Periapical", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(normalizedType, "Intraoral", StringComparison.OrdinalIgnoreCase) ||
